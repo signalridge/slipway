@@ -15,12 +15,25 @@ Wave planning SHALL normalize tasks into graph-ready nodes with fields:
 - `checkpoint_type` (optional: `decision|human_verify|human_action`)
 
 Input sources:
-- L2/L3: `tasks.md` from governed `S4_SPEC_BUNDLE`
+- L2/L3: canonical task-node payload parsed from governed `tasks.md` (`## Task Nodes` YAML contract)
 - L1: direct brief normalized into synthetic node(s)
 
 #### Scenario: L1 synthetic node
 - **WHEN** level is L1 and no `tasks.md` exists
 - **THEN** planner SHALL create synthetic normalized task node(s) from direct brief
+
+### Requirement: Governed `tasks.md` Parse Contract
+For governed lanes (`L2/L3`), wave planner SHALL parse task nodes only from canonical `tasks.md` structure defined by artifact-lifecycle.
+
+Parse contract:
+- loader SHALL read `tasks[]` from `## Task Nodes` fenced YAML block
+- each parsed node SHALL satisfy required field set before planning
+- missing/invalid canonical block SHALL block wave planning before DAG construction
+- parser SHALL enforce artifact-lifecycle strictness rules (UTF-8/LF normalization, no duplicate keys, no anchors/aliases/custom tags, no unknown task-node keys)
+
+#### Scenario: Governed planning blocked by malformed tasks structure
+- **WHEN** governed `tasks.md` is missing canonical task-node structure or required fields
+- **THEN** planner SHALL fail fast with deterministic remediation and SHALL NOT build execution waves
 
 ### Requirement: L1 Synthetic Normalization Contract
 When L1 uses direct-brief synthesis, planner SHALL generate deterministic normalized node fields.
@@ -273,4 +286,3 @@ Run-summary version contract applies to all lanes (`L1/L2/L3`):
 #### Scenario: L1 run summary version is present
 - **WHEN** an L1 request finishes one `S6_RUN_WAVES` execution cycle
 - **THEN** emitted task runs and frozen summary SHALL include `run_summary_version>=1` before lightweight `S7/S8` checks
-

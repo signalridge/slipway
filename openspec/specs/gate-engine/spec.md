@@ -78,6 +78,7 @@ Metadata source contract:
 
 Approval requires:
 - required governed planning artifacts are present and non-stale
+- governed `tasks.md` canonical task-node structure is valid and parseable for wave planning
 - plan-audit evidence is passing
 - pre-run checks pass
 
@@ -270,4 +271,3 @@ For `reject` and `conditional_approve`, at least one actionable reason SHALL be 
 #### Scenario: Approve maps to approved
 - **WHEN** decision is `approve`
 - **THEN** gate status SHALL be `approved`
-

@@ -93,6 +93,48 @@ Canonical markdown heading contract:
 - **WHEN** level is L3 and `explore.md` lacks one or more required sections
 - **THEN** governed scope readiness SHALL fail until sections are completed
 
+### Requirement: Governed `tasks.md` Minimum Structure (MVP)
+For governed lanes (`L2/L3`), `tasks.md` SHALL provide a deterministic machine-parseable task-node contract.
+
+Canonical contract:
+- required heading `## Task Nodes`
+- required fenced YAML block directly under `## Task Nodes`
+- YAML root key SHALL be `tasks` with a non-empty list
+
+Each `tasks[]` entry SHALL include:
+- `task_id` (unique within file)
+- `objective`
+- `task_kind` (`code|test|doc|ops|other`)
+- `depends_on` (list; empty list allowed)
+- `target_files` (list; empty list allowed)
+- `verify_cmd` (string; empty string allowed)
+- `autonomous` (boolean)
+- optional `checkpoint_type` (`decision|human_verify|human_action`)
+
+Deterministic validation rules:
+- every `depends_on` reference SHALL resolve to an existing `task_id`
+- dependency graph SHALL be acyclic
+- additional narrative sections MAY exist, but SHALL NOT replace required heading/YAML contract
+
+Parser strictness contract:
+- canonical block fence SHALL be labeled `yaml`
+- parser input SHALL be UTF-8 with LF-normalized line endings
+- YAML duplicate keys are not allowed
+- YAML anchors/aliases/custom tags are not allowed in MVP task-node payload
+- unknown keys inside `tasks[]` entries SHALL fail validation in MVP (no silent ignore)
+
+#### Scenario: Missing canonical task-node block fails governed readiness
+- **WHEN** governed `tasks.md` lacks `## Task Nodes` or the required YAML task-node block
+- **THEN** governed planning readiness SHALL fail with deterministic remediation to repair `tasks.md` structure
+
+#### Scenario: Invalid dependency references fail governed readiness
+- **WHEN** any `depends_on` value does not match an existing `task_id`
+- **THEN** governed planning readiness SHALL fail until dependency references are repaired
+
+#### Scenario: Non-strict YAML payload fails governed readiness
+- **WHEN** governed task-node YAML uses duplicate keys, anchors/aliases, custom tags, or unknown node keys
+- **THEN** governed planning readiness SHALL fail with deterministic parser remediation
+
 ### Requirement: Assurance Minimum Structure (MVP)
 For governed lanes (`L2/L3`), `assurance.md` SHALL satisfy a minimal closeout structure:
 - `Scope Summary`
@@ -180,4 +222,3 @@ Admission artifacts are audit records and SHALL NOT be auto-deleted by runtime p
 #### Scenario: Sealed handoff admission record
 - **WHEN** L1 pivots to L2 and governed handoff completes
 - **THEN** admission artifact status SHALL be `sealed_handoff` and further execution mutations SHALL occur only in change artifact
-

@@ -232,6 +232,7 @@ When `current_state=S4_SPEC_BUNDLE`, `spln do` SHALL reconcile governed artifact
 - ensure required governed artifacts exist for routed level
   - `L2`: `change.yaml`, `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `assurance.md`
   - `L3`: L2 set + `explore.md`
+- validate governed `tasks.md` canonical task-node structure (heading + YAML block + required node fields) before plan-audit entry
 - ensure required artifact identifiers align with runtime keys (`request_id`, `slug`)
 - clear stale-planning blockers required for entering `S5_PLAN_AUDIT`
 
@@ -394,4 +395,3 @@ When `level_source=user_selected`:
 #### Scenario: Analyze override conflict blocks progression without reroute
 - **WHEN** active request runs `spln analyze` and fixed-level safety detects hard conflict
 - **THEN** workflow SHALL persist analyze blockers in `route_snapshot.blocking_conflicts[]` while `current_state=S1_ANALYZE`, and SHALL NOT apply lane/level reroute until explicit `spln pivot`
-

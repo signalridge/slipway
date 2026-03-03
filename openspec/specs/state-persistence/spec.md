@@ -11,7 +11,7 @@ Persistent files:
 - `.spln/runtime/admissions/<request_id>.yaml`
 - `.spln/runtime/changes/<request_id>.yaml` (governed runtime state only)
 - `aircraft/changes/<slug>/change.yaml` (governed manifest artifact)
-- `.spln/evidence/skills/<evidence-file>.json` (governance evidence)
+- `.spln/evidence/skills/<request_id>/<evidence-file>.json` (governance evidence)
 - `.spln/evidence/tasks/<request_id>/rv<run_summary_version>/<task_id>.json` (task evidence records)
 - `.spln/evidence/runs/<request_id>/rv<run_summary_version>.json` (frozen run summary snapshots)
 - `.spln/archive/admissions/<request_id>.yaml` (archived admission records: direct-lane done/cancel and governed sealed-handoff snapshots)
@@ -587,6 +587,7 @@ Cancel archive MUST NOT require governed `change_status=active`; terminal `chang
 
 ### Requirement: Evidence Schema Persistence
 Governance evidence records SHALL persist core fields:
+- `request_id`
 - `run_summary_version`
 - `session_id`
 - `skill_name`
@@ -603,6 +604,11 @@ Optional traceability fields:
 - `mitigation_target`
 - `actor_id`
 - `role`
+
+Write-minimization guidance:
+- `mitigation_target` is optional denormalized metadata and SHOULD be omitted by default in MVP
+- when omitted, consumers SHALL derive mitigation mapping from `skill_name`
+- when present, value MUST match registered skill-to-mitigation mapping
 
 `run_summary_version` value domain:
 - pre-run-summary governance evidence (`S1_ANALYZE`, `S3_SCOPE_CONFIRMATION`, `S5_PLAN_AUDIT`) SHALL use `run_summary_version=0`
@@ -631,6 +637,10 @@ Mitigation mapping contract:
 
 #### Scenario: Missing session_id evidence rejected
 - **WHEN** governance evidence lacks `session_id`
+- **THEN** evidence validation SHALL fail for readiness checks
+
+#### Scenario: Missing request_id evidence rejected
+- **WHEN** governance evidence lacks `request_id`
 - **THEN** evidence validation SHALL fail for readiness checks
 
 #### Scenario: Missing run_summary_version evidence rejected
@@ -677,4 +687,3 @@ Commands requiring project context SHALL locate root by upward search for `.spln
 #### Scenario: Root not found
 - **WHEN** no `.spln/` exists in parents
 - **THEN** command SHALL fail with `spln init` remediation hint
-

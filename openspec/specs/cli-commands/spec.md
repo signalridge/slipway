@@ -23,8 +23,8 @@ Governance override commands:
 Command failures SHALL be deterministic and machine-integrable.
 
 Source-of-truth binding:
-- exit-code taxonomy and error envelope schema SHALL match `design.md` DEC-30 exactly
-- this command spec is a usage/application contract and MUST NOT redefine conflicting taxonomy values or envelope fields
+- exit-code taxonomy and error envelope schema defined in this requirement are the canonical MVP contract for CLI/runtime behavior
+- design/proposal documents MAY restate this contract for rationale, but SHALL NOT redefine conflicting taxonomy values or envelope fields
 
 Exit code taxonomy:
 - `0`: success
@@ -619,4 +619,3 @@ Help output SHALL be grouped by:
 #### Scenario: Help organization
 - **WHEN** `spln --help` is run
 - **THEN** command groups SHALL reflect the progressive disclosure model
-

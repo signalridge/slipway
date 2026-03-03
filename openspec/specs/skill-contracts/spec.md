@@ -43,6 +43,7 @@ Consistency contract:
 - if `mitigation_target` is present, value SHALL match the registered mitigation mapping for emitting `skill_name`
 - if `mitigation_target` is omitted, consumers SHALL derive mitigation mapping from skill registry without failing readiness
 - mismatched `skill_name` and `mitigation_target` SHALL invalidate evidence for governance readiness
+- writers SHOULD omit `mitigation_target` by default in MVP to reduce denormalized state drift surface; include only when explicit audit/reporting consumers require materialized value
 
 #### Scenario: Mitigation mismatch invalidates evidence
 - **WHEN** evidence emits `skill_name=plan-audit` with mitigation target mapped to another skill
@@ -90,9 +91,10 @@ Skill-state bindings SHALL be:
 - **THEN** transition SHALL be blocked with explicit missing-skill reasons
 
 ### Requirement: Evidence Output Contract
-Each governance skill execution SHALL write one JSON evidence file under `.spln/evidence/skills/`.
+Each governance skill execution SHALL write one JSON evidence file under `.spln/evidence/skills/<request_id>/`.
 
 Required fields:
+- `request_id`
 - `skill_name`
 - `version`
 - `run_summary_version`
@@ -122,6 +124,9 @@ Conditional requiredness:
 Evidence filename SHALL use deterministic, collision-safe pattern:
 - `<session_id>--<skill_name>.json`
 
+Resolved deterministic path:
+- `.spln/evidence/skills/<request_id>/<session_id>--<skill_name>.json`
+
 If the same filename already exists, writer SHALL append `--<n>` suffix (`n` starts at `1`) instead of overwriting.
 
 Session identity contract:
@@ -148,6 +153,10 @@ Input hash contract:
 
 #### Scenario: Run-summary-bound evidence missing input hash
 - **WHEN** run-summary-bound evidence (`S6/S7/S8`) lacks `input_hash`
+- **THEN** evidence SHALL be invalid for governance readiness
+
+#### Scenario: Evidence missing request id
+- **WHEN** governance evidence omits `request_id`
 - **THEN** evidence SHALL be invalid for governance readiness
 
 #### Scenario: Evidence missing run summary version
@@ -233,4 +242,3 @@ Guidance contract:
 #### Scenario: Helper hints cannot override gate decisions
 - **WHEN** advisory helper hint conflicts with required gate/skill contract
 - **THEN** required gate/skill contract SHALL prevail and helper hint remains non-blocking
-
