@@ -53,7 +53,7 @@ func TestTaskRunKeyContract(t *testing.T) {
 		"task-a__rv2": {
 			TaskID:            "task-a",
 			RunSummaryVersion: 2,
-			TaskKind:          TaskKindImplementation,
+			TaskKind:          TaskKindCode,
 			Verdict:           TaskVerdictPass,
 		},
 	}
@@ -62,7 +62,7 @@ func TestTaskRunKeyContract(t *testing.T) {
 	taskRuns["task-a__rv2"] = TaskRun{
 		TaskID:            "task-a",
 		RunSummaryVersion: 1,
-		TaskKind:          TaskKindImplementation,
+		TaskKind:          TaskKindCode,
 		Verdict:           TaskVerdictPass,
 	}
 	require.Error(t, ValidateTaskRunMap(taskRuns))

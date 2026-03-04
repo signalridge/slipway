@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -173,15 +172,4 @@ func asCLIError(err error) *CLIError {
 			nil,
 		)
 	}
-}
-
-func mustCLIError(err error) error {
-	if err == nil {
-		return nil
-	}
-	cliErr := asCLIError(err)
-	if cliErr == nil {
-		return fmt.Errorf("unknown command failure")
-	}
-	return cliErr
 }

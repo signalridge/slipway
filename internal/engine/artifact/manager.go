@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/signalridge/speclane/internal/model"
 	"github.com/signalridge/speclane/internal/tmpl"
@@ -37,20 +38,26 @@ var assuranceHeadings = []string{
 }
 
 var staleGraph = map[string][]string{
-	"change.yaml":  {"proposal.md", "spec.md", "design.md", "tasks.md", "assurance.md"},
 	"proposal.md":  {"spec.md", "design.md", "tasks.md", "assurance.md"},
 	"spec.md":      {"design.md", "tasks.md", "assurance.md"},
 	"design.md":    {"tasks.md", "assurance.md"},
 	"tasks.md":     {"assurance.md"},
 	"assurance.md": {},
-	"explore.md":   {"proposal.md", "spec.md", "design.md", "tasks.md", "assurance.md"},
+	"explore.md":   {"design.md"},
+	"change.yaml":  {},
 }
 
 func TemplateContent(name string) (string, error) {
 	return tmpl.Content(name)
 }
 
-func ScaffoldGovernedBundle(root, slug string, level model.Level) error {
+type templateData struct {
+	RequestID      string
+	Slug           string
+	CreatedAtLevel string
+}
+
+func ScaffoldGovernedBundle(root, requestID, slug string, level model.Level) error {
 	if level == model.LevelL1 {
 		return nil
 	}
@@ -80,11 +87,15 @@ func ScaffoldGovernedBundle(root, slug string, level model.Level) error {
 			return err
 		}
 
-		content, err := TemplateContent(file)
+		rendered, err := renderTemplate(file, templateData{
+			RequestID:      strings.TrimSpace(requestID),
+			Slug:           strings.TrimSpace(slug),
+			CreatedAtLevel: string(level),
+		})
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(rendered), 0o644); err != nil {
 			return err
 		}
 	}
@@ -99,7 +110,7 @@ func StalePropagationOrder(start string) ([]string, error) {
 
 	order := make([]string, 0)
 	visited := map[string]struct{}{}
-	queue := []string{start}
+	queue := append([]string(nil), staleGraph[start]...)
 
 	for len(queue) > 0 {
 		node := queue[0]
@@ -175,6 +186,22 @@ func ValidateAssuranceStructure(content string) error {
 		searchFrom = idx + 1
 	}
 	return nil
+}
+
+func renderTemplate(name string, data templateData) (string, error) {
+	content, err := TemplateContent(name)
+	if err != nil {
+		return "", err
+	}
+	t, err := template.New(name).Option("missingkey=error").Parse(content)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, data); err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }
 
 func ArchiveBundle(root, slug string) error {

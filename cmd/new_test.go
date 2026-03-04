@@ -37,6 +37,31 @@ func TestNewCommandRejectsNonSplnIntentWithoutState(t *testing.T) {
 	})
 }
 
+func TestNewCommandRequiresAssessmentFileWhenHeuristicFallbackDisabled(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		original, hadOriginal := os.LookupEnv(heuristicFallbackEnv)
+		_ = os.Unsetenv(heuristicFallbackEnv)
+		t.Cleanup(func() {
+			if hadOriginal {
+				_ = os.Setenv(heuristicFallbackEnv, original)
+			} else {
+				_ = os.Unsetenv(heuristicFallbackEnv)
+			}
+		})
+
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		cmd := newNewCmd()
+		cmd.SetArgs([]string{"fix login timeout"})
+
+		err := cmd.Execute()
+		require.Error(t, err)
+		var cliErr *CLIError
+		require.True(t, errors.As(err, &cliErr))
+		assert.Equal(t, "assessment_input_required", cliErr.ErrorCode)
+	})
+}
+
 func TestNewCommandUnclearLowConfidenceClarificationRejected(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

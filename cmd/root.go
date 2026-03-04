@@ -22,7 +22,7 @@ type commandGroup struct {
 
 var helpGroups = []commandGroup{
 	{
-		Title:       "Daily",
+		Title:       "Daily path",
 		Description: "Common day-to-day workflow commands.",
 		Commands: []groupedCommand{
 			{Name: "new", Description: "Create and route a new executable request"},
@@ -44,7 +44,7 @@ var helpGroups = []commandGroup{
 		},
 	},
 	{
-		Title:       "Expert",
+		Title:       "Expert override",
 		Description: "Workspace and environment setup commands.",
 		Commands: []groupedCommand{
 			{Name: "init", Description: "Initialize .spln runtime directories and defaults"},
@@ -77,23 +77,26 @@ func Execute() error {
 }
 
 func writeRootHelp(w io.Writer) {
-	fmt.Fprintln(w, "SpecLane governance-first workflow CLI")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  spln [command]")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Command Groups:")
+	writeLine := func(format string, args ...any) {
+		_, _ = fmt.Fprintf(w, format, args...)
+	}
+	writeLine("SpecLane governance-first workflow CLI\n")
+	writeLine("\n")
+	writeLine("Usage:\n")
+	writeLine("  spln [command]\n")
+	writeLine("\n")
+	writeLine("Command Groups:\n")
 
 	for _, group := range helpGroups {
-		fmt.Fprintf(w, "  %s\n", group.Title)
-		fmt.Fprintf(w, "    %s\n", group.Description)
+		writeLine("  %s\n", group.Title)
+		writeLine("    %s\n", group.Description)
 		for _, cmd := range group.Commands {
-			fmt.Fprintf(w, "    %-12s %s\n", cmd.Name, cmd.Description)
+			writeLine("    %-12s %s\n", cmd.Name, cmd.Description)
 		}
-		fmt.Fprintln(w)
+		writeLine("\n")
 	}
 
-	fmt.Fprintln(w, "Use \"spln [command] --help\" for details on a specific command.")
+	writeLine("Use \"spln [command] --help\" for details on a specific command.\n")
 }
 
 func init() {

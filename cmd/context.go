@@ -142,42 +142,45 @@ func newContextCmd() *cobra.Command {
 
 func printContextText(cmd *cobra.Command, pack ctxpack.Pack) {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "lane_mode: %s\n", pack.LaneMode)
-	fmt.Fprintf(out, "evidence_freshness: %s\n", pack.EvidenceFreshness)
+	write := func(format string, args ...any) {
+		_, _ = fmt.Fprintf(out, format, args...)
+	}
+	write("lane_mode: %s\n", pack.LaneMode)
+	write("evidence_freshness: %s\n", pack.EvidenceFreshness)
 	if pack.Level != "" {
-		fmt.Fprintf(out, "level: %s (%s)\n", pack.Level, pack.LevelSource)
+		write("level: %s (%s)\n", pack.Level, pack.LevelSource)
 	}
 	if pack.CurrentState != "" {
-		fmt.Fprintf(out, "current_state: %s\n", pack.CurrentState)
+		write("current_state: %s\n", pack.CurrentState)
 	}
 	if pack.IntentSummary != "" {
-		fmt.Fprintf(out, "intent: %s\n", pack.IntentSummary)
+		write("intent: %s\n", pack.IntentSummary)
 	}
 	if len(pack.NextReadyActions) > 0 {
-		fmt.Fprintf(out, "next_ready_actions: %s\n", strings.Join(pack.NextReadyActions, ", "))
+		write("next_ready_actions: %s\n", strings.Join(pack.NextReadyActions, ", "))
 	}
 	if len(pack.Blockers) > 0 {
-		fmt.Fprintf(out, "blockers: %s\n", strings.Join(pack.Blockers, ", "))
+		write("blockers: %s\n", strings.Join(pack.Blockers, ", "))
 	}
 	if len(pack.Remediation) > 0 {
-		fmt.Fprintf(out, "remediation: %s\n", strings.Join(pack.Remediation, "; "))
+		write("remediation: %s\n", strings.Join(pack.Remediation, "; "))
 	}
 	if pack.WaveEnvelope != nil {
-		fmt.Fprintf(out, "wave_id: %s\n", pack.WaveEnvelope.WaveID)
-		fmt.Fprintf(out, "task_id: %s\n", pack.WaveEnvelope.TaskID)
+		write("wave_id: %s\n", pack.WaveEnvelope.WaveID)
+		write("task_id: %s\n", pack.WaveEnvelope.TaskID)
 		if len(pack.WaveEnvelope.DependsOn) > 0 {
-			fmt.Fprintf(out, "depends_on: %s\n", strings.Join(pack.WaveEnvelope.DependsOn, ", "))
+			write("depends_on: %s\n", strings.Join(pack.WaveEnvelope.DependsOn, ", "))
 		}
 		if len(pack.WaveEnvelope.MustHaves) > 0 {
-			fmt.Fprintf(out, "must_haves: %s\n", strings.Join(pack.WaveEnvelope.MustHaves, ", "))
+			write("must_haves: %s\n", strings.Join(pack.WaveEnvelope.MustHaves, ", "))
 		}
 		if pack.WaveEnvelope.CheckpointType != "" {
-			fmt.Fprintf(out, "checkpoint_type: %s\n", pack.WaveEnvelope.CheckpointType)
+			write("checkpoint_type: %s\n", pack.WaveEnvelope.CheckpointType)
 		}
 	}
 	if pack.CheckpointResume != nil {
-		fmt.Fprintf(out, "resume_from: %s\n", pack.CheckpointResume.PriorRunID)
-		fmt.Fprintf(out, "paused_task_id: %s\n", pack.CheckpointResume.PausedTaskID)
+		write("resume_from: %s\n", pack.CheckpointResume.PriorRunID)
+		write("paused_task_id: %s\n", pack.CheckpointResume.PausedTaskID)
 	}
 }
 
@@ -238,9 +241,9 @@ func detectCheckpointType(taskRuns map[string]model.TaskRun, latestRunSummaryVer
 
 func defaultMustHaves(taskKind model.TaskKind) []string {
 	switch taskKind {
-	case model.TaskKindReview:
+	case model.TaskKindDoc:
 		return []string{"review_verdict_recorded", "blockers_accounted"}
-	case model.TaskKindVerification:
+	case model.TaskKindTest:
 		return []string{"verification_passes", "goals_met"}
 	default:
 		return []string{"changes_applied", "evidence_recorded"}

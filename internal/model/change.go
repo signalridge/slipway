@@ -40,7 +40,7 @@ func NewChangeState(requestID, slug string) ChangeState {
 	}
 }
 
-func (s *ChangeState) Normalize(maxLevelHistoryEntries int) {
+func (s *ChangeState) normalizeCollections() {
 	if s.LevelHistory == nil {
 		s.LevelHistory = []LevelHistoryEvent{}
 	}
@@ -56,6 +56,10 @@ func (s *ChangeState) Normalize(maxLevelHistoryEntries int) {
 	if s.Artifacts == nil {
 		s.Artifacts = map[string]ArtifactState{}
 	}
+}
+
+func (s *ChangeState) Normalize(maxLevelHistoryEntries int) {
+	s.normalizeCollections()
 	s.LevelHistory = TruncateLevelHistory(s.LevelHistory, maxLevelHistoryEntries)
 }
 
@@ -92,6 +96,14 @@ func (s ChangeState) Validate() error {
 			return fmt.Errorf("gates[%q] has invalid decision: %q", key, gate.Decision)
 		}
 	}
+	for key, artifact := range s.Artifacts {
+		if artifact.ID == "" {
+			return fmt.Errorf("artifacts[%q] is missing id", key)
+		}
+		if !artifact.State.IsValid() {
+			return fmt.Errorf("artifacts[%q] has invalid state: %q", key, artifact.State)
+		}
+	}
 	if err := ValidateTaskRunMap(s.TaskRuns); err != nil {
 		return err
 	}
@@ -103,7 +115,7 @@ func (s ChangeState) Validate() error {
 
 func (s ChangeState) MarshalYAML() (interface{}, error) {
 	normalized := s
-	normalized.Normalize(0)
+	normalized.normalizeCollections()
 	type alias ChangeState
 	return alias(normalized), nil
 }
@@ -115,7 +127,7 @@ func (s *ChangeState) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 	*s = ChangeState(parsed)
-	s.Normalize(0)
+	s.normalizeCollections()
 	return nil
 }
 

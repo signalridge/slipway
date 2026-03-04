@@ -121,13 +121,21 @@ type RouteSnapshot struct {
 type ArtifactLifecycle string
 
 const (
-	ArtifactLifecycleFresh      ArtifactLifecycle = "fresh"
-	ArtifactLifecycleStale      ArtifactLifecycle = "stale"
-	ArtifactLifecycleMissing    ArtifactLifecycle = "missing"
-	ArtifactLifecycleUnapproved ArtifactLifecycle = "unapproved"
-	ArtifactLifecycleInvalid    ArtifactLifecycle = "invalid"
-	ArtifactLifecycleFrozen     ArtifactLifecycle = "frozen"
+	ArtifactLifecycleDraft    ArtifactLifecycle = "draft"
+	ArtifactLifecycleInReview ArtifactLifecycle = "in_review"
+	ArtifactLifecycleApproved ArtifactLifecycle = "approved"
+	ArtifactLifecycleFrozen   ArtifactLifecycle = "frozen"
+	ArtifactLifecycleStale    ArtifactLifecycle = "stale"
 )
+
+func (s ArtifactLifecycle) IsValid() bool {
+	switch s {
+	case ArtifactLifecycleDraft, ArtifactLifecycleInReview, ArtifactLifecycleApproved, ArtifactLifecycleFrozen, ArtifactLifecycleStale:
+		return true
+	default:
+		return false
+	}
+}
 
 type ArtifactState struct {
 	ID        string            `yaml:"id" json:"id"`
@@ -182,14 +190,16 @@ type GateRecord struct {
 type TaskVerdict string
 
 const (
-	TaskVerdictPass    TaskVerdict = "pass"
-	TaskVerdictFail    TaskVerdict = "fail"
-	TaskVerdictBlocked TaskVerdict = "blocked"
+	TaskVerdictPass       TaskVerdict = "pass"
+	TaskVerdictFail       TaskVerdict = "fail"
+	TaskVerdictBlocked    TaskVerdict = "blocked"
+	TaskVerdictTimeout    TaskVerdict = "timeout"
+	TaskVerdictIncomplete TaskVerdict = "incomplete"
 )
 
 func (v TaskVerdict) IsValid() bool {
 	switch v {
-	case TaskVerdictPass, TaskVerdictFail, TaskVerdictBlocked:
+	case TaskVerdictPass, TaskVerdictFail, TaskVerdictBlocked, TaskVerdictTimeout, TaskVerdictIncomplete:
 		return true
 	default:
 		return false

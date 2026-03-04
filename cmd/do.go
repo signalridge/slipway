@@ -180,7 +180,7 @@ func runAdmissionDo(root, requestID, resumeResponse string) (doView, error) {
 		run := model.TaskRun{
 			TaskID:            taskID,
 			RunSummaryVersion: runSummaryVersion,
-			TaskKind:          model.TaskKindImplementation,
+			TaskKind:          model.TaskKindCode,
 			Verdict:           model.TaskVerdictPass,
 			TargetFiles:       []string{},
 			ChangedFiles:      []string{},
@@ -302,24 +302,53 @@ func runGovernedDo(root, requestID, resumeResponse string) (doView, error) {
 			return doView{}, err
 		}
 	case model.StateS3ScopeConfirmation:
-		branch, err := currentBranch(root)
+		worktreePath, err := os.Getwd()
 		if err != nil {
 			return doView{}, err
 		}
-		if err := state.PersistScopeWorktreeMetadata(&change, root, branch); err != nil {
+		branch, err := currentBranch(worktreePath)
+		if err != nil {
 			return doView{}, err
 		}
-		if err := state.ValidateWorktreeAuthenticity(root, root, branch); err != nil {
-			blockers = append(blockers, err.Error())
-			break
+		if err := state.PersistScopeWorktreeMetadata(&change, worktreePath, branch); err != nil {
+			return doView{}, err
 		}
+		worktreeReasons, err := state.ValidateWorktreeAuthenticityReasons(
+			root,
+			change.WorktreePath,
+			change.WorktreeBranch,
+		)
+		if err != nil {
+			return doView{}, err
+		}
+
+		_, skillBlockers, err := evaluateRequiredSkills(
+			root,
+			change.RequestID,
+			change.Level,
+			model.StateS3ScopeConfirmation,
+			change.LatestFrozenRunSummaryVersion,
+			false,
+		)
+		if err != nil {
+			return doView{}, err
+		}
+
 		explorePath := filepath.Join(root, "aircraft", "changes", change.Slug, "explore.md")
 		exploreRaw, err := os.ReadFile(explorePath)
 		if err != nil {
 			blockers = append(blockers, "missing_explore_md")
 			break
 		}
-		eval := gate.EvaluateGScope(change, string(exploreRaw), true, true, true)
+		scopeEvidenceOK := len(skillBlockers) == 0
+		eval := gate.EvaluateGScope(
+			change,
+			string(exploreRaw),
+			scopeEvidenceOK,
+			scopeEvidenceOK,
+			worktreeReasons,
+		)
+		eval.Reasons = uniqueSorted(append(eval.Reasons, skillBlockers...))
 		change.Gates[string(gate.GateScope)] = model.GateRecord{
 			GateID:    string(gate.GateScope),
 			Status:    eval.Status,
@@ -337,7 +366,20 @@ func runGovernedDo(root, requestID, resumeResponse string) (doView, error) {
 			blockers = append(blockers, err.Error())
 		}
 	case model.StateS5PlanAudit:
-		eval := gate.EvaluateGPlan(true, true, change.RouteSnapshot.BlockingConflicts)
+		_, skillBlockers, err := evaluateRequiredSkills(
+			root,
+			change.RequestID,
+			change.Level,
+			model.StateS5PlanAudit,
+			change.LatestFrozenRunSummaryVersion,
+			false,
+		)
+		if err != nil {
+			return doView{}, err
+		}
+		blockersForGate := append([]string{}, change.RouteSnapshot.BlockingConflicts...)
+		blockersForGate = append(blockersForGate, skillBlockers...)
+		eval := gate.EvaluateGPlan(true, len(skillBlockers) == 0, blockersForGate)
 		change.Gates[string(gate.GatePlan)] = model.GateRecord{
 			GateID:    string(gate.GatePlan),
 			Status:    eval.Status,
@@ -449,7 +491,7 @@ func runGovernedDo(root, requestID, resumeResponse string) (doView, error) {
 		run := model.TaskRun{
 			TaskID:            taskID,
 			RunSummaryVersion: runSummaryVersion,
-			TaskKind:          model.TaskKindImplementation,
+			TaskKind:          model.TaskKindCode,
 			Verdict:           model.TaskVerdictPass,
 			TargetFiles:       []string{},
 			ChangedFiles:      []string{},
@@ -499,11 +541,39 @@ func runGovernedDo(root, requestID, resumeResponse string) (doView, error) {
 			unresolved = append(unresolved, "assurance_structure_invalid:"+err.Error())
 		}
 
-		checks := map[string]bool{}
-		for _, checkID := range gate.RequiredHighRiskChecks(change.RouteSnapshot.GuardrailDomain) {
-			checks[checkID] = true
+		closeoutRequired := len(change.RouteSnapshot.BlockingConflicts) > 0
+		verificationSkills, verificationBlockers, err := evaluateRequiredSkills(
+			root,
+			change.RequestID,
+			change.Level,
+			model.StateS8Verify,
+			change.LatestFrozenRunSummaryVersion,
+			closeoutRequired,
+		)
+		if err != nil {
+			return doView{}, err
 		}
-		eval := gate.EvaluateGShip(change, artifactReady, true, true, unresolved, checks)
+		unresolved = append(unresolved, verificationBlockers...)
+
+		manifestPath := filepath.Join(root, "aircraft", "changes", change.Slug, "change.yaml")
+		manifestR0Valid, manifestReasons := validateChangeManifestR0(
+			manifestPath,
+			change.RequestID,
+			change.Slug,
+			change.Level,
+		)
+		unresolved = append(unresolved, manifestReasons...)
+
+		checks := extractHighRiskChecks(verificationSkills, change.EvidenceRefs)
+
+		eval := gate.EvaluateGShip(
+			change,
+			artifactReady,
+			len(verificationBlockers) == 0,
+			manifestR0Valid,
+			unresolved,
+			checks,
+		)
 		change.Gates[string(gate.GateShip)] = model.GateRecord{
 			GateID:    string(gate.GateShip),
 			Status:    eval.Status,

@@ -67,7 +67,12 @@ func newPivotCmd() *cobra.Command {
 						return fmt.Errorf("pivot is allowed only in S6/S7/S8")
 					}
 
-					route, err := routeForAnalyze(admission.Level, admission.LevelSource, admission.IntakeAssessment)
+					route, err := routeForAnalyze(
+						admission.Level,
+						admission.LevelSource,
+						admission.IntakeAssessment,
+						admission.RouteSnapshot,
+					)
 					if err != nil {
 						return err
 					}
@@ -95,13 +100,19 @@ func newPivotCmd() *cobra.Command {
 						if err != nil {
 							return err
 						}
-						if err := artifact.ScaffoldGovernedBundle(root, slug, route.Level); err != nil {
+						if err := artifact.ScaffoldGovernedBundle(root, admission.RequestID, slug, route.Level); err != nil {
 							return err
 						}
-						if err := writeChangeManifest(root, admission.RequestID, slug, route.Level); err != nil {
+						cfg, err := loadConfigAtRoot(root)
+						if err != nil {
 							return err
 						}
-						sealed, change, err := state.HandoffAdmissionToGoverned(admission, slug, route.Level)
+						sealed, change, err := state.HandoffAdmissionToGoverned(
+							admission,
+							slug,
+							route.Level,
+							cfg.Execution.MaxLevelHistoryEntries,
+						)
 						if err != nil {
 							return err
 						}
@@ -170,7 +181,12 @@ func newPivotCmd() *cobra.Command {
 					if admission, err := state.LoadAdmission(root, active.RequestID); err == nil {
 						assessment = admission.IntakeAssessment
 					}
-					route, err := routeForAnalyze(change.Level, change.LevelSource, assessment)
+					route, err := routeForAnalyze(
+						change.Level,
+						change.LevelSource,
+						assessment,
+						change.RouteSnapshot,
+					)
 					if err != nil {
 						return err
 					}
@@ -189,7 +205,7 @@ func newPivotCmd() *cobra.Command {
 					}
 
 					change.RouteSnapshot = route.RouteSnapshot
-					nextState := model.StateS1Analyze
+					var nextState model.WorkflowState
 					if kindEnum == gate.PivotKindRescope {
 						next, err := action.ResolveLoopTransition(action.LoopTransitionInput{
 							Level:             change.Level,
@@ -203,11 +219,12 @@ func newPivotCmd() *cobra.Command {
 						}
 						nextState = next
 					} else {
-						if route.Level == model.LevelL3 {
+						switch route.Level {
+						case model.LevelL3:
 							nextState = model.StateS2Discover
-						} else if route.Level == model.LevelL2 {
+						case model.LevelL2:
 							nextState = model.StateS4SpecBundle
-						} else {
+						default:
 							nextState = model.StateS6RunWaves
 						}
 					}

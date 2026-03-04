@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/speclane/internal/model"
@@ -98,31 +99,32 @@ func ClassifyIntake(assessment model.IntakeAssessment) (Classification, []string
 
 func DeriveRouteSignals(assessment model.IntakeAssessment, ws WorkspaceSignals) RouteSignals {
 	s := RouteSignals{Rationale: []string{}}
-
-	text := strings.ToLower(strings.TrimSpace(assessment.IntendedDelta))
-	if assessment.Confidence >= 0.65 &&
-		(strings.Contains(text, "greenfield") ||
-			strings.Contains(text, "from scratch") ||
-			strings.Contains(text, "new project") ||
-			(!ws.HasInScopeSourceFiles && len(assessment.ChangeTargets) > 0)) {
-		s.NewProject = true
+	aux := make([]string, 0, len(assessment.AuxiliarySignals))
+	for _, signal := range assessment.AuxiliarySignals {
+		signal = strings.ToLower(strings.TrimSpace(signal))
+		if signal == "" {
+			continue
+		}
+		aux = append(aux, signal)
 	}
 
-	if assessment.Confidence >= 0.65 {
-		multiScope := len(assessment.ChangeTargets) >= 2 || ws.ScopeTouchCount >= 2 || ws.WholeSystemScope
-		refactorIntent := strings.Contains(text, "re-architect") ||
-			strings.Contains(text, "major refactor") ||
-			strings.Contains(text, "migration") ||
-			strings.Contains(text, "across")
-		if multiScope && refactorIntent {
+	hasNewProjectSignal := slices.Contains(aux, "new_project")
+	hasMajorRefactorSignal := slices.Contains(aux, "major_refactor")
+	multiScope := len(assessment.ChangeTargets) >= 2 || ws.ScopeTouchCount >= 2 || ws.WholeSystemScope
+
+	if assessment.Confidence >= 0.65 && assessment.IsExecutable {
+		if hasNewProjectSignal || (!ws.HasInScopeSourceFiles && len(assessment.ChangeTargets) > 0) {
+			s.NewProject = true
+		}
+		if hasMajorRefactorSignal && multiScope {
 			s.MajorRefactor = true
 		}
 	}
 
-	if !s.NewProject && strings.Contains(text, "new project") && assessment.Confidence < 0.65 {
+	if hasNewProjectSignal && assessment.Confidence < 0.65 {
 		s.Rationale = append(s.Rationale, "signal_uncertain:new_project")
 	}
-	if !s.MajorRefactor && strings.Contains(text, "refactor") && assessment.Confidence < 0.65 {
+	if hasMajorRefactorSignal && assessment.Confidence < 0.65 {
 		s.Rationale = append(s.Rationale, "signal_uncertain:major_refactor")
 	}
 
@@ -136,16 +138,17 @@ func Route(input RouteInput) (RouteResult, error) {
 
 	classification, rationale := ClassifyIntake(input.IntakeAssessment)
 	guardrailDomain := CanonicalizeGuardrailDomain(input.GuardrailDomain)
-	scores := input.Scores
-	if guardrailDomain != "" && scores.Risk < 3 {
-		scores.Risk = 3
+	effectiveScores := input.Scores
+	if guardrailDomain != "" && effectiveScores.Risk < 3 {
+		effectiveScores.Risk = 3
 	}
 
 	snapshot := model.RouteSnapshot{
-		Scores:           scores,
+		Scores:           input.Scores,
 		GuardrailDomain:  guardrailDomain,
 		RoutingRationale: append([]string{}, rationale...),
 	}
+	snapshot.RoutingRationale = append(snapshot.RoutingRationale, input.Signals.Rationale...)
 
 	result := RouteResult{
 		Classification:   classification,
@@ -159,7 +162,7 @@ func Route(input RouteInput) (RouteResult, error) {
 
 	switch input.Mode {
 	case LevelModeAuto:
-		level := autoLevel(scores, guardrailDomain, input.IntakeAssessment, input.Signals, &snapshot)
+		level := autoLevel(effectiveScores, guardrailDomain, input.IntakeAssessment, input.Signals, &snapshot)
 		result.Level = level
 		result.LevelSource = model.LevelSourceAuto
 	case LevelModeFixed:
@@ -168,7 +171,7 @@ func Route(input RouteInput) (RouteResult, error) {
 		}
 		result.Level = input.FixedLevel
 		result.LevelSource = model.LevelSourceUserSelected
-		if guardrailDomain != "" && input.FixedLevel == model.LevelL1 {
+		if guardrailDomain != "" && input.FixedLevel != model.LevelL3 {
 			result.RouteSnapshot.BlockingConflicts = append(result.RouteSnapshot.BlockingConflicts, "fixed_level_guardrail_conflict")
 		}
 	default:

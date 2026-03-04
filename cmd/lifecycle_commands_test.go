@@ -214,6 +214,29 @@ func TestReviewFromS6WithoutSummaryFails(t *testing.T) {
 	})
 }
 
+func TestReviewChangedOnlyFalseBehavesAsFullReview(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		create := newNewCmd()
+		create.SetArgs([]string{"--level", "L1", "fix login timeout"})
+		require.NoError(t, create.Execute())
+
+		doCmd := newDoCmd()
+		require.NoError(t, doCmd.Execute())
+
+		var out bytes.Buffer
+		reviewCmd := newReviewCmd()
+		reviewCmd.SetOut(&out)
+		reviewCmd.SetArgs([]string{"--changed-only=false"})
+		require.NoError(t, reviewCmd.Execute())
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(out.Bytes(), &payload))
+		assert.Equal(t, "pass", payload["verdict"])
+	})
+}
+
 func TestPivotDefaultsToRerouteWithoutReason(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -416,7 +439,7 @@ func TestWaveRuntimeOverlapBlocksUntilSerializedRetry(t *testing.T) {
 			"task-a__rv1": {
 				TaskID:            "task-a",
 				RunSummaryVersion: 1,
-				TaskKind:          model.TaskKindImplementation,
+				TaskKind:          model.TaskKindCode,
 				Verdict:           model.TaskVerdictPass,
 				ChangedFiles:      []string{"internal/service/auth.go"},
 				EvidenceRef:       ".spln/evidence/tasks/r/rv1/task-a.json",
@@ -424,7 +447,7 @@ func TestWaveRuntimeOverlapBlocksUntilSerializedRetry(t *testing.T) {
 			"task-b__rv1": {
 				TaskID:            "task-b",
 				RunSummaryVersion: 1,
-				TaskKind:          model.TaskKindImplementation,
+				TaskKind:          model.TaskKindCode,
 				Verdict:           model.TaskVerdictPass,
 				ChangedFiles:      []string{"internal/service/auth.go"},
 				EvidenceRef:       ".spln/evidence/tasks/r/rv1/task-b.json",
@@ -485,7 +508,7 @@ func TestCheckpointContinuationAndFreshnessStaleAfterAnalyzeUpdate(t *testing.T)
 			taskID + "__rv1": {
 				TaskID:            taskID,
 				RunSummaryVersion: 1,
-				TaskKind:          model.TaskKindImplementation,
+				TaskKind:          model.TaskKindCode,
 				Verdict:           model.TaskVerdictBlocked,
 				Blockers:          []string{"requires_human_decision"},
 			},
@@ -669,6 +692,29 @@ func TestL2FlowEnforcesPlanAndShip(t *testing.T) {
 		create.SetArgs([]string{"--level", "L2", "refactor service modules"})
 		require.NoError(t, create.Execute())
 		requestID := singleRequestID(t, filepath.Join(root, ".spln", "runtime", "changes"))
+		writeSkillEvidenceForRequest(t, root, requestID, model.EvidenceRecord{
+			RunSummaryVersion: 0,
+			SessionID:         mustSessionID(t),
+			SkillName:         "plan-audit",
+			Version:           "v1",
+			State:             model.StateS5PlanAudit,
+			Verdict:           model.EvidenceVerdictPass,
+			Blockers:          []string{},
+			References:        []string{},
+			Timestamp:         time.Now().UTC(),
+		})
+		writeSkillEvidenceForRequest(t, root, requestID, model.EvidenceRecord{
+			RunSummaryVersion: 1,
+			SessionID:         mustSessionID(t),
+			SkillName:         "goal-verification",
+			Version:           "v1",
+			State:             model.StateS8Verify,
+			Verdict:           model.EvidenceVerdictPass,
+			Blockers:          []string{},
+			References:        []string{},
+			InputHash:         strings.Repeat("a", 64),
+			Timestamp:         time.Now().UTC(),
+		})
 
 		for i := 0; i < 5; i++ {
 			doCmd := newDoCmd()
@@ -715,6 +761,17 @@ func TestL3FlowScopeReadinessAndMetadata(t *testing.T) {
 		assert.Equal(t, model.StateS3ScopeConfirmation, change.CurrentState)
 
 		require.NoError(t, os.WriteFile(explorePath, []byte(validExploreContent()), 0o644))
+		writeSkillEvidenceForRequest(t, root, requestID, model.EvidenceRecord{
+			RunSummaryVersion: 0,
+			SessionID:         mustSessionID(t),
+			SkillName:         "scope-confirmation",
+			Version:           "v1",
+			State:             model.StateS3ScopeConfirmation,
+			Verdict:           model.EvidenceVerdictPass,
+			Blockers:          []string{},
+			References:        []string{},
+			Timestamp:         time.Now().UTC(),
+		})
 		doCmd = newDoCmd() // S3 -> S4 with G_scope approved
 		require.NoError(t, doCmd.Execute())
 
@@ -861,6 +918,17 @@ func TestL3PivotRescopeReturnsToS3AndReevaluatesScopeBeforeS4(t *testing.T) {
 		assert.Equal(t, model.GateStatusBlocked, blocked.Gates[string(gate.GateScope)].Status)
 
 		require.NoError(t, os.WriteFile(explorePath, []byte(validExploreContent()), 0o644))
+		writeSkillEvidenceForRequest(t, root, requestID, model.EvidenceRecord{
+			RunSummaryVersion: 0,
+			SessionID:         mustSessionID(t),
+			SkillName:         "scope-confirmation",
+			Version:           "v1",
+			State:             model.StateS3ScopeConfirmation,
+			Verdict:           model.EvidenceVerdictPass,
+			Blockers:          []string{},
+			References:        []string{},
+			Timestamp:         time.Now().UTC(),
+		})
 		doCmd = newDoCmd()
 		require.NoError(t, doCmd.Execute())
 
@@ -987,4 +1055,19 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+}
+
+func writeSkillEvidenceForRequest(t *testing.T, root, requestID string, record model.EvidenceRecord) string {
+	t.Helper()
+	dir := filepath.Join(root, ".spln", "evidence", "skills", requestID)
+	path, err := model.WriteEvidenceFile(dir, record)
+	require.NoError(t, err)
+	return path
+}
+
+func mustSessionID(t *testing.T) string {
+	t.Helper()
+	id, err := model.NewRequestID()
+	require.NoError(t, err)
+	return id
 }

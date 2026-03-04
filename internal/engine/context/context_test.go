@@ -74,7 +74,7 @@ func TestInjectSubagentContextScopesToTaskAndGeneratesUniqueSession(t *testing.T
 		TaskID:      "task-a",
 		DependsOn:   []string{"task-0"},
 		TargetFiles: []string{"internal/a.go"},
-		TaskKind:    model.TaskKindImplementation,
+		TaskKind:    model.TaskKindCode,
 		Autonomous:  true,
 		MustHaves:   []string{"tests_pass"},
 	}

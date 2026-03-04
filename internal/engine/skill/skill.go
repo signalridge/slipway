@@ -8,60 +8,75 @@ import (
 )
 
 type Definition struct {
-	Name            string              `json:"name"`
-	State           model.WorkflowState `json:"state"`
-	Mitigation      string              `json:"mitigation"`
-	RunSummaryBound bool                `json:"run_summary_bound"`
+	Name                string              `json:"name"`
+	State               model.WorkflowState `json:"state"`
+	Mitigation          string              `json:"mitigation"`
+	RunSummaryBound     bool                `json:"run_summary_bound"`
+	RequiredLevels      []model.Level       `json:"required_levels,omitempty"`
+	AutoModeRequired    bool                `json:"auto_mode_required,omitempty"`
+	CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
+	ReviewerIndependent bool                `json:"reviewer_independent,omitempty"`
 }
 
-var governanceRegistry = map[string]Definition{
+var defaultGovernanceRegistry = map[string]Definition{
 	"intake-analysis": {
-		Name:            "intake-analysis",
-		State:           model.StateS1Analyze,
-		Mitigation:      "unclear intent and hidden guardrail risk",
-		RunSummaryBound: false,
+		Name:             "intake-analysis",
+		State:            model.StateS1Analyze,
+		Mitigation:       "unclear intent and hidden guardrail risk",
+		RunSummaryBound:  false,
+		RequiredLevels:   []model.Level{model.LevelL2, model.LevelL3},
+		AutoModeRequired: true,
 	},
 	"scope-confirmation": {
 		Name:            "scope-confirmation",
 		State:           model.StateS3ScopeConfirmation,
 		Mitigation:      "L3 discovery/scope drift",
 		RunSummaryBound: false,
+		RequiredLevels:  []model.Level{model.LevelL3},
 	},
 	"plan-audit": {
 		Name:            "plan-audit",
 		State:           model.StateS5PlanAudit,
 		Mitigation:      "stale or incomplete plan bundle",
 		RunSummaryBound: false,
+		RequiredLevels:  []model.Level{model.LevelL2, model.LevelL3},
 	},
 	"wave-orchestration": {
 		Name:            "wave-orchestration",
 		State:           model.StateS6RunWaves,
 		Mitigation:      "uncontrolled parallel execution drift",
 		RunSummaryBound: true,
+		RequiredLevels:  []model.Level{model.LevelL2, model.LevelL3},
 	},
 	"artifact-review": {
-		Name:            "artifact-review",
-		State:           model.StateS7Review,
-		Mitigation:      "cross-artifact inconsistency",
-		RunSummaryBound: true,
+		Name:                "artifact-review",
+		State:               model.StateS7Review,
+		Mitigation:          "cross-artifact inconsistency",
+		RunSummaryBound:     true,
+		RequiredLevels:      []model.Level{model.LevelL2, model.LevelL3},
+		ReviewerIndependent: true,
 	},
 	"goal-verification": {
 		Name:            "goal-verification",
 		State:           model.StateS8Verify,
 		Mitigation:      "false completion claims",
 		RunSummaryBound: true,
+		RequiredLevels:  []model.Level{model.LevelL2, model.LevelL3},
 	},
 	"final-closeout": {
-		Name:            "final-closeout",
-		State:           model.StateS8Verify,
-		Mitigation:      "stale final evidence before governed ship decision",
-		RunSummaryBound: true,
+		Name:                "final-closeout",
+		State:               model.StateS8Verify,
+		Mitigation:          "stale final evidence before governed ship decision",
+		RunSummaryBound:     true,
+		RequiredLevels:      []model.Level{model.LevelL2, model.LevelL3},
+		CloseoutConditional: true,
+		ReviewerIndependent: true,
 	},
 }
 
 func GovernanceRegistry() []Definition {
-	out := make([]Definition, 0, len(governanceRegistry))
-	for _, def := range governanceRegistry {
+	out := make([]Definition, 0, len(defaultGovernanceRegistry))
+	for _, def := range defaultGovernanceRegistry {
 		out = append(out, def)
 	}
 	slices.SortFunc(out, func(a, b Definition) int {
@@ -77,7 +92,15 @@ func GovernanceRegistry() []Definition {
 }
 
 func IsGovernanceSkill(name string) bool {
-	_, ok := governanceRegistry[name]
+	_, ok := defaultGovernanceRegistry[name]
+	return ok
+}
+
+func IsGovernanceSkillFromRegistry(registry []Definition, name string) bool {
+	if stringsTrim(name) == "" {
+		return false
+	}
+	_, ok := governanceDefinitionByName(registry)[name]
 	return ok
 }
 
@@ -88,40 +111,43 @@ func RequiredSkillsForState(
 	autoMode bool,
 	closeoutRequired bool,
 ) []string {
-	governed := level == model.LevelL2 || level == model.LevelL3
+	return RequiredSkillsForStateWithRegistry(
+		GovernanceRegistry(),
+		level,
+		state,
+		autoMode,
+		closeoutRequired,
+	)
+}
 
-	switch state {
-	case model.StateS1Analyze:
-		if autoMode || governed {
-			return []string{"intake-analysis"}
+func RequiredSkillsForStateWithRegistry(
+	registry []Definition,
+	level model.Level,
+	state model.WorkflowState,
+	autoMode bool,
+	closeoutRequired bool,
+) []string {
+	required := []string{}
+	for _, def := range registry {
+		if def.State != state {
+			continue
 		}
-		return nil
-	case model.StateS3ScopeConfirmation:
-		if level == model.LevelL3 {
-			return []string{"scope-confirmation"}
+		if def.CloseoutConditional && !closeoutRequired {
+			continue
 		}
-	case model.StateS5PlanAudit:
-		if governed {
-			return []string{"plan-audit"}
+		if def.AutoModeRequired && autoMode && state == model.StateS1Analyze {
+			required = append(required, def.Name)
+			continue
 		}
-	case model.StateS6RunWaves:
-		if governed {
-			return []string{"wave-orchestration"}
-		}
-	case model.StateS7Review:
-		if governed {
-			return []string{"artifact-review"}
-		}
-	case model.StateS8Verify:
-		if governed {
-			skills := []string{"goal-verification"}
-			if closeoutRequired {
-				skills = append(skills, "final-closeout")
-			}
-			return skills
+		if requiredForLevel(def, level) {
+			required = append(required, def.Name)
 		}
 	}
-	return nil
+	if len(required) == 0 {
+		return nil
+	}
+	slices.Sort(required)
+	return required
 }
 
 type EvidenceReadinessInput struct {
@@ -132,7 +158,12 @@ type EvidenceReadinessInput struct {
 }
 
 func ValidateGovernanceEvidenceReadiness(input EvidenceReadinessInput) error {
-	def, ok := governanceRegistry[input.Record.SkillName]
+	return ValidateGovernanceEvidenceReadinessWithRegistry(GovernanceRegistry(), input)
+}
+
+func ValidateGovernanceEvidenceReadinessWithRegistry(registry []Definition, input EvidenceReadinessInput) error {
+	definitions := governanceDefinitionByName(registry)
+	def, ok := definitions[input.Record.SkillName]
 	if !ok {
 		return fmt.Errorf("unknown governance skill %q", input.Record.SkillName)
 	}
@@ -146,6 +177,14 @@ func ValidateGovernanceEvidenceReadiness(input EvidenceReadinessInput) error {
 	}
 	if err := input.Record.Validate(); err != nil {
 		return err
+	}
+	if input.Record.MitigationTarget != "" && input.Record.MitigationTarget != def.Mitigation {
+		return fmt.Errorf(
+			"mitigation_target mismatch for skill_name=%q: expected %q got %q",
+			input.Record.SkillName,
+			def.Mitigation,
+			input.Record.MitigationTarget,
+		)
 	}
 
 	if def.RunSummaryBound {
@@ -161,7 +200,7 @@ func ValidateGovernanceEvidenceReadiness(input EvidenceReadinessInput) error {
 		}
 	}
 
-	if isGovernedReviewerSkill(input.Level, input.Record.SkillName) {
+	if def.ReviewerIndependent && isGovernedLevel(input.Level) {
 		if !model.IsUUIDv7(input.ImplementerBaselineSessionID) {
 			return fmt.Errorf("missing implementer baseline session for governed reviewer independence")
 		}
@@ -185,9 +224,51 @@ func CanonicalInputHash(payload map[string]any) (string, error) {
 	return model.ComputeInputHash(payload)
 }
 
-func isGovernedReviewerSkill(level model.Level, skillName string) bool {
-	if level != model.LevelL2 && level != model.LevelL3 {
+func requiredForLevel(def Definition, level model.Level) bool {
+	if level != model.LevelL1 && level != model.LevelL2 && level != model.LevelL3 {
 		return false
 	}
-	return skillName == "artifact-review" || skillName == "final-closeout"
+	for _, allowed := range def.RequiredLevels {
+		if allowed == level {
+			return true
+		}
+	}
+	return false
+}
+
+func isGovernedLevel(level model.Level) bool {
+	return level == model.LevelL2 || level == model.LevelL3
+}
+
+func governanceDefinitionByName(registry []Definition) map[string]Definition {
+	out := map[string]Definition{}
+	for _, def := range registry {
+		if stringsTrim(def.Name) == "" {
+			continue
+		}
+		out[def.Name] = def
+	}
+	return out
+}
+
+func defaultGovernanceRegistryMap() map[string]Definition {
+	out := map[string]Definition{}
+	for key, def := range defaultGovernanceRegistry {
+		copied := def
+		copied.RequiredLevels = append([]model.Level(nil), def.RequiredLevels...)
+		out[key] = copied
+	}
+	return out
+}
+
+func stringsTrim(s string) string {
+	start := 0
+	for start < len(s) && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	end := len(s)
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
 }

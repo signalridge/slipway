@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/signalridge/speclane/internal/engine/artifact"
 	"github.com/signalridge/speclane/internal/model"
@@ -73,7 +74,7 @@ func LevelPath(level model.Level) []model.WorkflowState {
 
 func EvaluateFixedLevelSafety(level model.Level, guardrailDomain string) []string {
 	conflicts := []string{}
-	if level == model.LevelL1 && strings.TrimSpace(guardrailDomain) != "" {
+	if level != model.LevelL3 && strings.TrimSpace(guardrailDomain) != "" {
 		conflicts = append(conflicts, "fixed_level_guardrail_conflict")
 	}
 	return conflicts
@@ -303,6 +304,39 @@ func RunS4SpecBundle(root string, change *model.ChangeState) error {
 			}
 			return err
 		}
+	}
+
+	now := time.Now().UTC()
+	for _, file := range required {
+		path := filepath.Join(base, file)
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		artifactID := strings.TrimSuffix(file, filepath.Ext(file))
+		current := change.Artifacts[artifactID]
+		if current.ID == "" {
+			current.ID = artifactID
+			current.Path = path
+			current.Version = 1
+			current.State = model.ArtifactLifecycleDraft
+			current.UpdatedAt = now
+			change.Artifacts[artifactID] = current
+			continue
+		}
+		if current.Version < 1 {
+			current.Version = 1
+		}
+		if current.Path == "" {
+			current.Path = path
+		}
+		modified := !current.UpdatedAt.IsZero() && info.ModTime().UTC().After(current.UpdatedAt.UTC())
+		if modified {
+			current.Version++
+			current.State = model.ArtifactLifecycleDraft
+			current.UpdatedAt = now
+		}
+		change.Artifacts[artifactID] = current
 	}
 
 	if change.Level == model.LevelL3 {

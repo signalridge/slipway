@@ -73,7 +73,7 @@ func LoadAdmission(root, requestID string) (model.AdmissionState, error) {
 	if err := yaml.Unmarshal(b, &st); err != nil {
 		return model.AdmissionState{}, err
 	}
-	st.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	st.Normalize(maxLevelHistoryEntriesForRoot(root))
 	if err := st.Validate(); err != nil {
 		return model.AdmissionState{}, err
 	}
@@ -89,7 +89,7 @@ func SaveAdmission(root string, st model.AdmissionState) error {
 	if existing, err := LoadAdmission(root, st.RequestID); err == nil {
 		if existing.AdmissionStatus == model.AdmissionStatusSealedHandoff {
 			incoming := st
-			incoming.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+			incoming.Normalize(maxLevelHistoryEntriesForRoot(root))
 			if !reflect.DeepEqual(existing, incoming) {
 				return ErrSealedAdmissionImmutable
 			}
@@ -99,7 +99,7 @@ func SaveAdmission(root string, st model.AdmissionState) error {
 		return err
 	}
 
-	st.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	st.Normalize(maxLevelHistoryEntriesForRoot(root))
 	if err := st.Validate(); err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func LoadChange(root, requestID string) (model.ChangeState, error) {
 	if err := yaml.Unmarshal(b, &st); err != nil {
 		return model.ChangeState{}, err
 	}
-	st.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	st.Normalize(maxLevelHistoryEntriesForRoot(root))
 	if err := st.Validate(); err != nil {
 		return model.ChangeState{}, err
 	}
@@ -130,7 +130,7 @@ func SaveChange(root string, st model.ChangeState) error {
 	if st.RequestID == "" {
 		return errors.New("request_id is required")
 	}
-	st.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	st.Normalize(maxLevelHistoryEntriesForRoot(root))
 	if err := st.Validate(); err != nil {
 		return err
 	}
@@ -255,4 +255,16 @@ func listYAMLFiles(dir string) ([]string, error) {
 	}
 	slices.Sort(files)
 	return files, nil
+}
+
+func maxLevelHistoryEntriesForRoot(root string) int {
+	cfgPath := filepath.Join(root, ".spln", "config.yaml")
+	cfg, err := model.LoadConfig(cfgPath)
+	if err != nil {
+		return model.DefaultConfig().Execution.MaxLevelHistoryEntries
+	}
+	if cfg.Execution.MaxLevelHistoryEntries <= 0 {
+		return model.DefaultConfig().Execution.MaxLevelHistoryEntries
+	}
+	return cfg.Execution.MaxLevelHistoryEntries
 }

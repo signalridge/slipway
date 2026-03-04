@@ -35,7 +35,7 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "initialized speclane workspace")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "initialized speclane workspace")
 			return nil
 		},
 	}

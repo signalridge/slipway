@@ -10,8 +10,10 @@ import (
 
 func TestMandatoryGatesForLevel(t *testing.T) {
 	assert.Empty(t, MandatoryGatesForLevel(model.LevelL1))
-	assert.Equal(t, []GateID{GatePlan, GatePivot, GateShip}, MandatoryGatesForLevel(model.LevelL2))
-	assert.Equal(t, []GateID{GateScope, GatePlan, GatePivot, GateShip}, MandatoryGatesForLevel(model.LevelL3))
+	assert.Equal(t, []GateID{GatePlan, GateShip}, MandatoryGatesForLevel(model.LevelL2))
+	assert.Equal(t, []GateID{GateScope, GatePlan, GateShip}, MandatoryGatesForLevel(model.LevelL3))
+	assert.Equal(t, []GateID{GatePlan, GateShip, GatePivot}, MandatoryGatesForLevelWithPivot(model.LevelL2, true))
+	assert.Equal(t, []GateID{GateScope, GatePlan, GateShip, GatePivot}, MandatoryGatesForLevelWithPivot(model.LevelL3, true))
 }
 
 func TestMapGateDecision(t *testing.T) {
@@ -45,13 +47,14 @@ Four
 ## Validation Plan
 Five`
 
-	eval := EvaluateGScope(change, explore, true, true, true)
+	eval := EvaluateGScope(change, explore, true, true, nil)
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 	assert.Empty(t, eval.Reasons)
 
-	eval = EvaluateGScope(change, "", true, true, true)
+	eval = EvaluateGScope(change, "", true, true, []string{"dedicated_worktree_branch_mismatch"})
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.NotEmpty(t, eval.Reasons)
+	assert.Contains(t, eval.Reasons, "dedicated_worktree_branch_mismatch")
 }
 
 func TestEvaluateGPlan(t *testing.T) {
@@ -77,11 +80,11 @@ func TestEvaluateGShip(t *testing.T) {
 
 func TestGuardrailHighRiskChecks(t *testing.T) {
 	required := RequiredHighRiskChecks("security_credentials")
-	require.Equal(t, []string{"security_credentials.baseline"}, required)
-	assert.True(t, IsRegisteredCheckID("security_credentials.baseline"))
+	require.Equal(t, []string{"security_credentials.safety_baseline"}, required)
+	assert.True(t, IsRegisteredCheckID("security_credentials.safety_baseline"))
 
 	reasons := EvaluateHighRiskChecks("security_credentials", map[string]bool{})
-	assert.Contains(t, reasons, "high_risk_check_missing:security_credentials.baseline")
+	assert.Contains(t, reasons, "high_risk_check_missing:security_credentials.safety_baseline")
 }
 
 func TestEvaluateGPivot(t *testing.T) {

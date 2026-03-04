@@ -28,7 +28,12 @@ func TestHandoffAdmissionToGovernedSealsAdmissionAndKeepsLaneLocalTraces(t *test
 	admission.ActionHistory = []model.ActionEvent{{Action: "do", State: model.StateS6RunWaves}}
 	admission.EvidenceRefs = map[string]string{"non-task": ".spln/evidence/skills/e1.json"}
 
-	sealed, change, err := HandoffAdmissionToGoverned(admission, "my-change", model.LevelL2)
+	sealed, change, err := HandoffAdmissionToGoverned(
+		admission,
+		"my-change",
+		model.LevelL2,
+		model.DefaultConfig().Execution.MaxLevelHistoryEntries,
+	)
 	require.NoError(t, err)
 
 	assert.Equal(t, admission.RequestID, change.RequestID)
@@ -60,7 +65,7 @@ func TestArchiveGovernedDoneFreezesArtifactsAndMigratesPaths(t *testing.T) {
 	change.LevelSource = model.LevelSourceAuto
 	change.RouteSnapshot = model.RouteSnapshot{Scores: model.Scores{}}
 	change.Artifacts = map[string]model.ArtifactState{
-		"proposal": {ID: "proposal", State: model.ArtifactLifecycleFresh},
+		"proposal": {ID: "proposal", State: model.ArtifactLifecycleDraft},
 		"spec":     {ID: "spec", State: model.ArtifactLifecycleStale},
 	}
 	require.NoError(t, SaveChange(root, change))
@@ -116,7 +121,7 @@ func TestArchiveGovernedCancelAcceptsCancelled(t *testing.T) {
 	change.RouteSnapshot = model.RouteSnapshot{Scores: model.Scores{}}
 	change.ChangeStatus = model.ChangeStatusCancelled
 	change.Artifacts = map[string]model.ArtifactState{
-		"proposal": {ID: "proposal", State: model.ArtifactLifecycleFresh},
+		"proposal": {ID: "proposal", State: model.ArtifactLifecycleDraft},
 	}
 	require.NoError(t, SaveChange(root, change))
 
@@ -179,7 +184,12 @@ func TestRouteSnapshotDurabilityAcrossHandoff(t *testing.T) {
 	}
 	require.NoError(t, SaveAdmission(root, admission))
 
-	sealed, change, err := HandoffAdmissionToGoverned(admission, "my-change", model.LevelL2)
+	sealed, change, err := HandoffAdmissionToGoverned(
+		admission,
+		"my-change",
+		model.LevelL2,
+		model.DefaultConfig().Execution.MaxLevelHistoryEntries,
+	)
 	require.NoError(t, err)
 	require.NoError(t, SaveAdmission(root, sealed))
 	require.NoError(t, SaveChange(root, change))

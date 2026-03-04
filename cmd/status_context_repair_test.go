@@ -225,7 +225,7 @@ func TestContextIncludesWaveEnvelopeAtS6(t *testing.T) {
 			"task-1__rv1": {
 				TaskID:            "task-1",
 				RunSummaryVersion: 1,
-				TaskKind:          model.TaskKindImplementation,
+				TaskKind:          model.TaskKindCode,
 				Verdict:           model.TaskVerdictPass,
 				TargetFiles:       []string{"a.go"},
 				EvidenceRef:       "e1",
@@ -279,7 +279,7 @@ func TestContextIncludesCheckpointResumeBundle(t *testing.T) {
 			"task-1__rv1": {
 				TaskID:            "task-1",
 				RunSummaryVersion: 1,
-				TaskKind:          model.TaskKindImplementation,
+				TaskKind:          model.TaskKindCode,
 				Verdict:           model.TaskVerdictBlocked,
 				TargetFiles:       []string{"a.go"},
 				EvidenceRef:       filepath.Join(root, ".spln", "evidence", "tasks", requestID, "rv1", "task-1.json"),

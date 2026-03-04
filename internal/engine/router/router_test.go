@@ -108,6 +108,9 @@ func TestDeriveRouteSignals(t *testing.T) {
 		Confidence:    0.9,
 		ChangeTargets: []string{"service-a", "service-b"},
 		IntendedDelta: "re-architect auth and session modules across middleware and api boundaries",
+		AuxiliarySignals: []string{
+			"major_refactor",
+		},
 	}
 	signals := DeriveRouteSignals(assessment, WorkspaceSignals{
 		HasInScopeSourceFiles: true,

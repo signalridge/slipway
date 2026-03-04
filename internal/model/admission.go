@@ -34,7 +34,7 @@ func NewAdmissionState(requestID string) AdmissionState {
 	}
 }
 
-func (s *AdmissionState) Normalize(maxLevelHistoryEntries int) {
+func (s *AdmissionState) normalizeCollections() {
 	if s.LevelHistory == nil {
 		s.LevelHistory = []LevelHistoryEvent{}
 	}
@@ -44,6 +44,10 @@ func (s *AdmissionState) Normalize(maxLevelHistoryEntries int) {
 	if s.TaskRuns == nil {
 		s.TaskRuns = map[string]TaskRun{}
 	}
+}
+
+func (s *AdmissionState) Normalize(maxLevelHistoryEntries int) {
+	s.normalizeCollections()
 	s.LevelHistory = TruncateLevelHistory(s.LevelHistory, maxLevelHistoryEntries)
 }
 
@@ -86,7 +90,7 @@ func (s AdmissionState) Validate() error {
 
 func (s AdmissionState) MarshalYAML() (interface{}, error) {
 	normalized := s
-	normalized.Normalize(0)
+	normalized.normalizeCollections()
 	type alias AdmissionState
 	return alias(normalized), nil
 }
@@ -98,6 +102,6 @@ func (s *AdmissionState) UnmarshalYAML(unmarshal func(interface{}) error) error 
 		return err
 	}
 	*s = AdmissionState(parsed)
-	s.Normalize(0)
+	s.normalizeCollections()
 	return nil
 }

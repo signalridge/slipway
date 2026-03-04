@@ -12,7 +12,7 @@ import (
 
 func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	root := t.TempDir()
-	err := ScaffoldGovernedBundle(root, "my-change", model.LevelL2)
+	err := ScaffoldGovernedBundle(root, "019cb6d2-3a03-74df-80a6-1b9e6f745f1a", "my-change", model.LevelL2)
 	require.NoError(t, err)
 
 	base := filepath.Join(root, "aircraft", "changes", "my-change")
@@ -35,7 +35,7 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 
 func TestScaffoldGovernedBundleL3AddsExplore(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, ScaffoldGovernedBundle(root, "my-change", model.LevelL3))
+	require.NoError(t, ScaffoldGovernedBundle(root, "019cb6d2-3a03-74df-80a6-1b9e6f745f1a", "my-change", model.LevelL3))
 
 	_, err := os.Stat(filepath.Join(root, "aircraft", "changes", "my-change", "explore.md"))
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestScaffoldGovernedBundleL3AddsExplore(t *testing.T) {
 
 func TestScaffoldGovernedBundleL1Noop(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, ScaffoldGovernedBundle(root, "my-change", model.LevelL1))
+	require.NoError(t, ScaffoldGovernedBundle(root, "019cb6d2-3a03-74df-80a6-1b9e6f745f1a", "my-change", model.LevelL1))
 
 	_, err := os.Stat(filepath.Join(root, "aircraft", "changes", "my-change"))
 	require.Error(t, err)
@@ -138,7 +138,8 @@ func TestStalePropagationOrderBFS(t *testing.T) {
 	order, err := StalePropagationOrder("proposal.md")
 	require.NoError(t, err)
 	require.NotEmpty(t, order)
-	assert.Equal(t, "proposal.md", order[0])
+	assert.NotContains(t, order, "proposal.md")
+	assert.Equal(t, "spec.md", order[0])
 	assert.Contains(t, order, "spec.md")
 	assert.Contains(t, order, "design.md")
 	assert.Contains(t, order, "tasks.md")

@@ -5,11 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/signalridge/speclane/internal/engine/artifact"
 	"github.com/signalridge/speclane/internal/fsutil"
 	"github.com/signalridge/speclane/internal/model"
 	"github.com/signalridge/speclane/internal/state"
@@ -62,7 +60,7 @@ func newRepairCmd() *cobra.Command {
 				}
 				summary.EvidenceDeleted = gcResult.DeletedPaths
 
-				governedRepairs, err := repairOrphanedGovernedAdmissions(root)
+				governedRepairs, err := state.RepairOrphanedGovernedAdmissions(root)
 				if err != nil {
 					return err
 				}
@@ -155,76 +153,4 @@ func isPIDAlive(pid int) bool {
 	}
 	err := syscall.Kill(pid, 0)
 	return err == nil
-}
-
-func repairOrphanedGovernedAdmissions(root string) ([]string, error) {
-	entries, err := os.ReadDir(filepath.Join(root, ".spln", "runtime", "admissions"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	repaired := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
-			continue
-		}
-		requestID := entry.Name()[:len(entry.Name())-len(".yaml")]
-		admission, err := state.LoadAdmission(root, requestID)
-		if err != nil {
-			return nil, err
-		}
-		if admission.AdmissionStatus != model.AdmissionStatusActive {
-			continue
-		}
-		if admission.Level != model.LevelL2 && admission.Level != model.LevelL3 {
-			continue
-		}
-		if _, err := state.LoadChange(root, requestID); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return nil, err
-		}
-
-		slug, err := recoveredSlug(root, requestID)
-		if err != nil {
-			return nil, err
-		}
-		if err := artifact.ScaffoldGovernedBundle(root, slug, admission.Level); err != nil {
-			return nil, err
-		}
-		if err := writeChangeManifest(root, requestID, slug, admission.Level); err != nil {
-			return nil, err
-		}
-		sealed, change, err := state.HandoffAdmissionToGoverned(admission, slug, admission.Level)
-		if err != nil {
-			return nil, err
-		}
-		if err := state.SaveAdmission(root, sealed); err != nil {
-			return nil, err
-		}
-		if err := state.SaveChange(root, change); err != nil {
-			return nil, err
-		}
-		repaired = append(repaired, requestID)
-	}
-	slices.Sort(repaired)
-	return repaired, nil
-}
-
-func recoveredSlug(root, requestID string) (string, error) {
-	base := "recovered-" + shortRequestID(requestID)
-	if base == "recovered-" {
-		base = "recovered-request"
-	}
-	candidate := base
-	for i := 2; ; i++ {
-		path := filepath.Join(root, "aircraft", "changes", candidate)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return candidate, nil
-		}
-		candidate = base + "-" + strconv.Itoa(i)
-	}
 }

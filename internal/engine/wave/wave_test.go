@@ -23,9 +23,9 @@ func TestNormalizeL1Brief(t *testing.T) {
 
 func TestPlanWavesDeterministicAndConflictSplit(t *testing.T) {
 	nodes := []Node{
-		{TaskID: "b", DependsOn: nil, TargetFiles: []string{"x.go"}, TaskKind: model.TaskKindImplementation, Priority: 99},
-		{TaskID: "a", DependsOn: nil, TargetFiles: []string{"x.go"}, TaskKind: model.TaskKindImplementation, Priority: 1},
-		{TaskID: "c", DependsOn: []string{"a"}, TargetFiles: []string{"y.go"}, TaskKind: model.TaskKindImplementation},
+		{TaskID: "b", DependsOn: nil, TargetFiles: []string{"x.go"}, TaskKind: model.TaskKindCode, Priority: 99},
+		{TaskID: "a", DependsOn: nil, TargetFiles: []string{"x.go"}, TaskKind: model.TaskKindCode, Priority: 1},
+		{TaskID: "c", DependsOn: []string{"a"}, TargetFiles: []string{"y.go"}, TaskKind: model.TaskKindCode},
 	}
 	waves, err := PlanWaves(nodes)
 	require.NoError(t, err)
@@ -42,7 +42,7 @@ func TestPlanWavesDeterministicAndConflictSplit(t *testing.T) {
 
 func TestPlanWavesOtherIsolation(t *testing.T) {
 	nodes := []Node{
-		{TaskID: "a", TargetFiles: []string{"a.go"}, TaskKind: model.TaskKindImplementation},
+		{TaskID: "a", TargetFiles: []string{"a.go"}, TaskKind: model.TaskKindCode},
 		{TaskID: "z", TaskKind: model.TaskKindOther},
 	}
 	waves, err := PlanWaves(nodes)
@@ -58,8 +58,8 @@ func TestPlanWavesOtherIsolation(t *testing.T) {
 
 func TestPlanWavesEmptyTargetIsolated(t *testing.T) {
 	nodes := []Node{
-		{TaskID: "a", TaskKind: model.TaskKindImplementation},
-		{TaskID: "b", TargetFiles: []string{"b.go"}, TaskKind: model.TaskKindImplementation},
+		{TaskID: "a", TaskKind: model.TaskKindCode},
+		{TaskID: "b", TargetFiles: []string{"b.go"}, TaskKind: model.TaskKindCode},
 	}
 	waves, err := PlanWaves(nodes)
 	require.NoError(t, err)
@@ -110,6 +110,138 @@ func TestPersistFrozenRunSummaryAndPointer(t *testing.T) {
 	loaded, err := state.LoadAdmission(root, requestID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, loaded.LatestFrozenRunSummaryVersion)
+}
+
+func TestExecutePlanRetryThenPass(t *testing.T) {
+	plan := []Wave{
+		{
+			Nodes: []Node{
+				{TaskID: "task-a", TaskKind: model.TaskKindCode},
+			},
+		},
+	}
+
+	attempts := map[string]int{}
+	executor := func(node Node, _ int) model.TaskRun {
+		attempts[node.TaskID]++
+		verdict := model.TaskVerdictFail
+		if attempts[node.TaskID] >= 2 {
+			verdict = model.TaskVerdictPass
+		}
+		return model.TaskRun{
+			TaskID:       node.TaskID,
+			TaskKind:     node.TaskKind,
+			Verdict:      verdict,
+			ChangedFiles: []string{node.TaskID + ".go"},
+			Blockers:     blockersForVerdict(verdict),
+		}
+	}
+
+	decider := func(checkpoint ControlCheckpoint) ControlDecision {
+		return ControlDecisionRetry
+	}
+
+	result, err := ExecutePlan(plan, 1, ExecutionOptions{
+		Parallelization:   false,
+		MaxRetriesPerTask: 2,
+	}, executor, decider)
+	require.NoError(t, err)
+	require.False(t, result.Aborted)
+	require.False(t, result.PivotRequired)
+	require.Nil(t, result.Checkpoint)
+
+	run := result.TaskRuns["task-a__rv1"]
+	assert.Equal(t, model.TaskVerdictPass, run.Verdict)
+}
+
+func TestExecutePlanRetryBudgetExhaustedReturnsCheckpoint(t *testing.T) {
+	plan := []Wave{
+		{
+			Nodes: []Node{
+				{TaskID: "task-a", TaskKind: model.TaskKindCode},
+			},
+		},
+	}
+
+	executor := func(node Node, _ int) model.TaskRun {
+		return model.TaskRun{
+			TaskID:   node.TaskID,
+			TaskKind: node.TaskKind,
+			Verdict:  model.TaskVerdictFail,
+			Blockers: []string{"failed"},
+		}
+	}
+	decider := func(_ ControlCheckpoint) ControlDecision {
+		return ControlDecisionRetry
+	}
+
+	result, err := ExecutePlan(plan, 1, ExecutionOptions{
+		Parallelization:   false,
+		MaxRetriesPerTask: 1,
+	}, executor, decider)
+	require.NoError(t, err)
+	require.NotNil(t, result.Checkpoint)
+	assert.Contains(t, result.Checkpoint.NonPassTaskIDs, "task-a")
+}
+
+func TestExecutePlanOtherTaskRequiresManualCheckpoint(t *testing.T) {
+	plan := []Wave{
+		{
+			Nodes: []Node{
+				{TaskID: "task-other", TaskKind: model.TaskKindOther},
+			},
+		},
+	}
+	executor := func(node Node, _ int) model.TaskRun {
+		return model.TaskRun{
+			TaskID:   node.TaskID,
+			TaskKind: node.TaskKind,
+			Verdict:  model.TaskVerdictPass,
+		}
+	}
+
+	result, err := ExecutePlan(plan, 1, ExecutionOptions{}, executor, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result.Checkpoint)
+	assert.True(t, result.Aborted)
+
+	run := result.TaskRuns["task-other__rv1"]
+	assert.Equal(t, model.TaskVerdictIncomplete, run.Verdict)
+	assert.Contains(t, run.Blockers, "manual_checkpoint_required")
+}
+
+func TestExecutePlanPivotDecision(t *testing.T) {
+	plan := []Wave{
+		{
+			Nodes: []Node{
+				{TaskID: "task-a", TaskKind: model.TaskKindCode},
+			},
+		},
+	}
+	executor := func(node Node, _ int) model.TaskRun {
+		return model.TaskRun{
+			TaskID:   node.TaskID,
+			TaskKind: node.TaskKind,
+			Verdict:  model.TaskVerdictBlocked,
+			Blockers: []string{"blocked"},
+		}
+	}
+	decider := func(_ ControlCheckpoint) ControlDecision {
+		return ControlDecisionPivot
+	}
+
+	result, err := ExecutePlan(plan, 1, ExecutionOptions{}, executor, decider)
+	require.NoError(t, err)
+	assert.True(t, result.PivotRequired)
+	require.NotNil(t, result.Checkpoint)
+	assert.Equal(t, 0, result.Checkpoint.WaveIndex)
+}
+
+func blockersForVerdict(verdict model.TaskVerdict) []string {
+	if verdict == model.TaskVerdictPass {
+		return nil
+	}
+	return []string{"retryable"}
 }
 
 func containsAll(haystack []string, values ...string) bool {

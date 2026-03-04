@@ -54,7 +54,12 @@ func newAnalyzeCmd() *cobra.Command {
 					if strings.TrimSpace(assessment.IntendedDelta) == "" {
 						assessment.IntendedDelta = "refresh active request analysis"
 					}
-					route, err := routeForAnalyze(admission.Level, admission.LevelSource, assessment)
+					route, err := routeForAnalyze(
+						admission.Level,
+						admission.LevelSource,
+						assessment,
+						admission.RouteSnapshot,
+					)
 					if err != nil {
 						return err
 					}
@@ -105,7 +110,12 @@ func newAnalyzeCmd() *cobra.Command {
 					if admission, err := state.LoadAdmission(root, active.RequestID); err == nil {
 						assessment = admission.IntakeAssessment
 					}
-					route, err := routeForAnalyze(change.Level, change.LevelSource, assessment)
+					route, err := routeForAnalyze(
+						change.Level,
+						change.LevelSource,
+						assessment,
+						change.RouteSnapshot,
+					)
 					if err != nil {
 						return err
 					}
@@ -150,6 +160,7 @@ func routeForAnalyze(
 	level model.Level,
 	levelSource model.LevelSource,
 	assessment model.IntakeAssessment,
+	existingSnapshot model.RouteSnapshot,
 ) (router.RouteResult, error) {
 	mode := router.LevelModeAuto
 	fixed := model.Level("")
@@ -158,12 +169,29 @@ func routeForAnalyze(
 		fixed = level
 	}
 
+	scores := existingSnapshot.Scores
+	guardrailDomain := existingSnapshot.GuardrailDomain
+	signals := router.DeriveRouteSignals(assessment, router.WorkspaceSignals{HasInScopeSourceFiles: true})
+	if scores == (model.Scores{}) {
+		if !heuristicFallbackEnabled() {
+			return router.RouteResult{}, fmt.Errorf(
+				"analyze requires route_snapshot.scores; provide LLM routing inputs or set %s=1 for legacy heuristics",
+				heuristicFallbackEnv,
+			)
+		}
+		scores = inferScores(assessment.IntendedDelta)
+		signals.Rationale = append(signals.Rationale, "routing_input:fallback_heuristics")
+	}
+	if strings.TrimSpace(guardrailDomain) == "" && heuristicFallbackEnabled() {
+		guardrailDomain = inferGuardrailDomain(assessment.IntendedDelta)
+	}
+
 	return router.Route(router.RouteInput{
 		Mode:             mode,
 		FixedLevel:       fixed,
 		IntakeAssessment: assessment,
-		Scores:           inferScores(assessment.IntendedDelta),
-		GuardrailDomain:  inferGuardrailDomain(assessment.IntendedDelta),
-		Signals:          router.DeriveRouteSignals(assessment, router.WorkspaceSignals{HasInScopeSourceFiles: true}),
+		Scores:           scores,
+		GuardrailDomain:  guardrailDomain,
+		Signals:          signals,
 	})
 }

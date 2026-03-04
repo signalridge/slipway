@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/signalridge/speclane/internal/fsutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,6 +42,8 @@ type ConfigExecution struct {
 	CancelGracePeriodSeconds int `yaml:"cancel_grace_period_seconds" json:"cancel_grace_period_seconds"`
 	EvidenceRetentionDays    int `yaml:"evidence_retention_days" json:"evidence_retention_days"`
 	EvidenceGCLowDiskFreeMB  int `yaml:"evidence_gc_low_disk_free_mb" json:"evidence_gc_low_disk_free_mb"`
+	Parallelization          bool `yaml:"parallelization" json:"parallelization"`
+	MaxRetriesPerTask        int  `yaml:"max_retries_per_task" json:"max_retries_per_task"`
 	MaxLevelHistoryEntries   int `yaml:"max_level_history_entries" json:"max_level_history_entries"`
 }
 
@@ -55,6 +58,8 @@ func DefaultConfig() Config {
 			CancelGracePeriodSeconds: 10,
 			EvidenceRetentionDays:    30,
 			EvidenceGCLowDiskFreeMB:  512,
+			Parallelization:          true,
+			MaxRetriesPerTask:        2,
 			MaxLevelHistoryEntries:   100,
 		},
 		UnknownTopLevel: map[string]*yaml.Node{},
@@ -80,6 +85,9 @@ func (c *Config) Normalize() {
 	}
 	if c.Execution.EvidenceGCLowDiskFreeMB <= 0 {
 		c.Execution.EvidenceGCLowDiskFreeMB = defaults.Execution.EvidenceGCLowDiskFreeMB
+	}
+	if c.Execution.MaxRetriesPerTask <= 0 {
+		c.Execution.MaxRetriesPerTask = defaults.Execution.MaxRetriesPerTask
 	}
 	if c.Execution.MaxLevelHistoryEntries <= 0 {
 		c.Execution.MaxLevelHistoryEntries = defaults.Execution.MaxLevelHistoryEntries
@@ -111,6 +119,9 @@ func (c Config) Validate() error {
 	}
 	if c.Execution.EvidenceGCLowDiskFreeMB <= 0 {
 		return fmt.Errorf("execution.evidence_gc_low_disk_free_mb must be > 0")
+	}
+	if c.Execution.MaxRetriesPerTask <= 0 {
+		return fmt.Errorf("execution.max_retries_per_task must be > 0")
 	}
 	if c.Execution.MaxLevelHistoryEntries <= 0 {
 		return fmt.Errorf("execution.max_level_history_entries must be > 0")
@@ -213,7 +224,7 @@ func SaveConfig(path string, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 func encodeYAMLNode(v any) (*yaml.Node, error) {

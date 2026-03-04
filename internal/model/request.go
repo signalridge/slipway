@@ -10,6 +10,8 @@ import (
 
 var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
+const slugCollisionMaxAttempts = 10000
+
 func NewRequestID() (string, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -43,10 +45,11 @@ func ResolveSlugCollision(baseSlug string, exists func(string) bool) string {
 	if !exists(baseSlug) {
 		return baseSlug
 	}
-	for n := 2; ; n++ {
+	for n := 2; n <= slugCollisionMaxAttempts; n++ {
 		candidate := fmt.Sprintf("%s-%d", baseSlug, n)
 		if !exists(candidate) {
 			return candidate
 		}
 	}
+	return fmt.Sprintf("%s-%d", baseSlug, slugCollisionMaxAttempts+1)
 }

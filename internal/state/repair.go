@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"time"
 
+	"github.com/signalridge/speclane/internal/engine/artifact"
 	"github.com/signalridge/speclane/internal/fsutil"
 	"github.com/signalridge/speclane/internal/model"
 )
@@ -15,6 +17,8 @@ import (
 type EvidenceGCResult struct {
 	DeletedPaths []string `json:"deleted_paths" yaml:"deleted_paths"`
 }
+
+const recoveredSlugMaxAttempts = 10000
 
 func RepairCorruptConfig(root string, now time.Time) (string, error) {
 	configPath := filepath.Join(root, ".spln", "config.yaml")
@@ -61,6 +65,7 @@ func RunEvidenceRetentionGC(root string, retentionDays int, now time.Time) (Evid
 	for _, baseDir := range []string{
 		filepath.Join(root, ".spln", "evidence", "tasks"),
 		filepath.Join(root, ".spln", "evidence", "runs"),
+		filepath.Join(root, ".spln", "evidence", "skills"),
 	} {
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
@@ -71,6 +76,20 @@ func RunEvidenceRetentionGC(root string, retentionDays int, now time.Time) (Evid
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() {
+				if baseDir == filepath.Join(root, ".spln", "evidence", "skills") {
+					filePath := filepath.Join(baseDir, entry.Name())
+					info, statErr := entry.Info()
+					if statErr != nil {
+						return EvidenceGCResult{}, statErr
+					}
+					if info.ModTime().After(cutoff) {
+						continue
+					}
+					if err := os.Remove(filePath); err != nil && !isNotExist(err) {
+						return EvidenceGCResult{}, err
+					}
+					result.DeletedPaths = append(result.DeletedPaths, filePath)
+				}
 				continue
 			}
 			requestID := entry.Name()
@@ -89,6 +108,67 @@ func RunEvidenceRetentionGC(root string, retentionDays int, now time.Time) (Evid
 
 	slices.Sort(result.DeletedPaths)
 	return result, nil
+}
+
+func RepairOrphanedGovernedAdmissions(root string) ([]string, error) {
+	entries, err := os.ReadDir(AdmissionsDir(root))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	repaired := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
+			continue
+		}
+
+		requestID := entry.Name()[:len(entry.Name())-len(".yaml")]
+		admission, err := LoadAdmission(root, requestID)
+		if err != nil {
+			return nil, err
+		}
+		if admission.AdmissionStatus != model.AdmissionStatusActive {
+			continue
+		}
+		if admission.Level != model.LevelL2 && admission.Level != model.LevelL3 {
+			continue
+		}
+		if _, err := LoadChange(root, requestID); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+
+		slug, err := recoveredSlug(root, requestID)
+		if err != nil {
+			return nil, err
+		}
+		if err := artifact.ScaffoldGovernedBundle(root, requestID, slug, admission.Level); err != nil {
+			return nil, err
+		}
+		sealed, change, err := HandoffAdmissionToGoverned(
+			admission,
+			slug,
+			admission.Level,
+			maxLevelHistoryEntriesForRoot(root),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := SaveAdmission(root, sealed); err != nil {
+			return nil, err
+		}
+		if err := SaveChange(root, change); err != nil {
+			return nil, err
+		}
+		repaired = append(repaired, requestID)
+	}
+
+	slices.Sort(repaired)
+	return repaired, nil
 }
 
 // RepairInterruptedTerminalArchive repair-forwards partially migrated terminal archives.
@@ -190,6 +270,29 @@ func removeEmptyDirs(root string) error {
 		}
 	}
 	return nil
+}
+
+func recoveredSlug(root, requestID string) (string, error) {
+	base := "recovered-" + shortRequestID(requestID)
+	if base == "recovered-" {
+		base = "recovered-request"
+	}
+	candidate := base
+	for i := 2; i <= recoveredSlugMaxAttempts; i++ {
+		path := filepath.Join(root, "aircraft", "changes", candidate)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return candidate, nil
+		}
+		candidate = base + "-" + strconv.Itoa(i)
+	}
+	return "", fmt.Errorf("unable to allocate recovered slug after %d attempts", recoveredSlugMaxAttempts)
+}
+
+func shortRequestID(requestID string) string {
+	if len(requestID) <= 8 {
+		return requestID
+	}
+	return requestID[:8]
 }
 
 func isNotExist(err error) bool {

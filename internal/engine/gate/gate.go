@@ -31,13 +31,28 @@ type GateEvaluation struct {
 }
 
 func MandatoryGatesForLevel(level model.Level) []GateID {
+	return MandatoryGatesForLevelWithPivot(level, false)
+}
+
+func MandatoryGatesForLevelWithPivot(level model.Level, pivoting bool) []GateID {
 	switch level {
 	case model.LevelL1:
+		if pivoting {
+			return []GateID{GatePivot}
+		}
 		return nil
 	case model.LevelL2:
-		return []GateID{GatePlan, GatePivot, GateShip}
+		gates := []GateID{GatePlan, GateShip}
+		if pivoting {
+			gates = append(gates, GatePivot)
+		}
+		return gates
 	case model.LevelL3:
-		return []GateID{GateScope, GatePlan, GatePivot, GateShip}
+		gates := []GateID{GateScope, GatePlan, GateShip}
+		if pivoting {
+			gates = append(gates, GatePivot)
+		}
+		return gates
 	default:
 		return nil
 	}
@@ -67,23 +82,26 @@ func EvaluateGScope(
 	exploreContent string,
 	discoveryEvidenceOK bool,
 	scopeEvidenceOK bool,
-	worktreeMetadataValid bool,
+	worktreeValidationReasons []string,
 ) GateEvaluation {
 	reasons := []string{}
-	if !discoveryEvidenceOK {
-		reasons = append(reasons, "missing_discovery_evidence")
-	}
-	if !scopeEvidenceOK {
-		reasons = append(reasons, "missing_scope_confirmation_evidence")
-	}
-	if change.WorktreePath == "" || change.WorktreeBranch == "" {
-		reasons = append(reasons, "missing_worktree_metadata")
-	}
-	if !worktreeMetadataValid {
-		reasons = append(reasons, "worktree_authenticity_failed")
-	}
-	if err := artifact.ValidateExploreStructure(exploreContent); err != nil {
-		reasons = append(reasons, "explore_structure_invalid:"+err.Error())
+	if change.Level == model.LevelL3 {
+		if !discoveryEvidenceOK {
+			reasons = append(reasons, "missing_discovery_evidence")
+		}
+		if !scopeEvidenceOK {
+			reasons = append(reasons, "missing_scope_confirmation_evidence")
+		}
+		if change.WorktreePath == "" {
+			reasons = append(reasons, "missing_worktree_path")
+		}
+		if change.WorktreeBranch == "" {
+			reasons = append(reasons, "missing_worktree_branch")
+		}
+		reasons = append(reasons, worktreeValidationReasons...)
+		if err := artifact.ValidateExploreStructure(exploreContent); err != nil {
+			reasons = append(reasons, "explore_structure_invalid:"+err.Error())
+		}
 	}
 
 	status := model.GateStatusApproved
@@ -167,13 +185,13 @@ func EvaluateGShip(
 }
 
 var highRiskCatalog = map[string][]string{
-	"auth_authz":              {"auth_authz.baseline"},
-	"security_credentials":    {"security_credentials.baseline"},
-	"privacy_pii":             {"privacy_pii.baseline"},
-	"financial_flows":         {"financial_flows.baseline"},
-	"schema_data_migration":   {"schema_data_migration.baseline"},
-	"irreversible_operations": {"irreversible_operations.baseline"},
-	"external_api_contracts":  {"external_api_contracts.baseline"},
+	"auth_authz":              {"auth_authz.safety_baseline"},
+	"security_credentials":    {"security_credentials.safety_baseline"},
+	"privacy_pii":             {"privacy_pii.safety_baseline"},
+	"financial_flows":         {"financial_flows.safety_baseline"},
+	"schema_data_migration":   {"schema_data_migration.safety_baseline"},
+	"irreversible_operations": {"irreversible_operations.safety_baseline"},
+	"external_api_contracts":  {"external_api_contracts.safety_baseline"},
 }
 
 func RequiredHighRiskChecks(domain string) []string {

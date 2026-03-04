@@ -30,6 +30,10 @@ func TestValidateWorktreeAuthenticityMissingPath(t *testing.T) {
 
 	err := ValidateWorktreeAuthenticity(repoRoot, filepath.Join(repoRoot, "missing"), "feature")
 	require.Error(t, err)
+
+	reasons, reasonErr := ValidateWorktreeAuthenticityReasons(repoRoot, filepath.Join(repoRoot, "missing"), "feature")
+	require.NoError(t, reasonErr)
+	assert.Contains(t, reasons, WorktreeReasonPathInvalid)
 }
 
 func TestValidateWorktreeAuthenticityNonWorktreePath(t *testing.T) {
@@ -45,6 +49,18 @@ func TestValidateWorktreeAuthenticityBranchMismatch(t *testing.T) {
 
 	err := ValidateWorktreeAuthenticity(repoRoot, worktreePath, "main")
 	require.Error(t, err)
+
+	reasons, reasonErr := ValidateWorktreeAuthenticityReasons(repoRoot, worktreePath, "main")
+	require.NoError(t, reasonErr)
+	assert.Contains(t, reasons, WorktreeReasonBranchMismatch)
+}
+
+func TestValidateWorktreeAuthenticityMetadataMissing(t *testing.T) {
+	repoRoot, _ := setupRepoWithWorktree(t)
+
+	reasons, err := ValidateWorktreeAuthenticityReasons(repoRoot, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{WorktreeReasonMetadataRequired}, reasons)
 }
 
 func setupRepoWithWorktree(t *testing.T) (repoRoot string, worktreePath string) {

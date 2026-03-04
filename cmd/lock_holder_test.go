@@ -35,10 +35,7 @@ func startStateLockHolder(t *testing.T, root string) func() {
 	}
 
 	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if strings.Contains(stdout.String(), "lock-holder-ready") {
-			break
-		}
+	for !strings.Contains(stdout.String(), "lock-holder-ready") {
 		if time.Now().After(deadline) {
 			_ = stdin.Close()
 			_ = helper.Process.Kill()
@@ -79,7 +76,7 @@ func TestStateLockHolderProcess(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "acquire lock: %v\n", err)
 		os.Exit(3)
 	}
-	fmt.Fprintln(os.Stdout, "lock-holder-ready")
+	_, _ = fmt.Fprintln(os.Stdout, "lock-holder-ready")
 	_ = os.Stdout.Sync()
 	_, _ = io.Copy(io.Discard, os.Stdin)
 	_ = held.Release()

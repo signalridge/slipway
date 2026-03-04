@@ -84,6 +84,128 @@ var governanceSkills = []string{
 	"final-closeout",
 }
 
+type governanceSkillSpec struct {
+	State               string
+	Mitigation          string
+	RunSummaryBound     bool
+	RequiredLevels      []string
+	AutoModeRequired    bool
+	CloseoutConditional bool
+	ReviewerIndependent bool
+	ExecutionProtocol   []string
+	FailureLoop         []string
+}
+
+var governanceSkillSpecs = map[string]governanceSkillSpec{
+	"intake-analysis": {
+		State:            "S1_ANALYZE",
+		Mitigation:       "unclear intent and hidden guardrail risk",
+		RunSummaryBound:  false,
+		RequiredLevels:   []string{"L2", "L3"},
+		AutoModeRequired: true,
+		ExecutionProtocol: []string{
+			"Normalize structured intake_assessment from model output and persist route_snapshot raw scores only.",
+			"Emit executable vs non_spln classification rationale with confidence and blocking_unknowns.",
+			"Do not mutate lane state beyond analyze ownership boundaries.",
+		},
+		FailureLoop: []string{
+			"If executable anchors are missing, emit fail with remediation to clarify target and intended delta.",
+			"If guardrail domain is uncertain, emit explicit uncertainty markers instead of forcing a domain.",
+		},
+	},
+	"scope-confirmation": {
+		State:           "S3_SCOPE_CONFIRMATION",
+		Mitigation:      "L3 discovery/scope drift",
+		RunSummaryBound: false,
+		RequiredLevels:  []string{"L3"},
+		ExecutionProtocol: []string{
+			"Verify explore.md section completeness and non-empty entries for all required headings.",
+			"Validate dedicated worktree metadata authenticity (path accessibility, registration, branch match).",
+			"Emit explicit blockers for metadata missing/invalid/mismatch reasons.",
+		},
+		FailureLoop: []string{
+			"If worktree authenticity fails, keep scope gate blocked and require metadata repair before progression.",
+			"If explore structure is incomplete, emit actionable missing-section blockers.",
+		},
+	},
+	"plan-audit": {
+		State:           "S5_PLAN_AUDIT",
+		Mitigation:      "stale or incomplete plan bundle",
+		RunSummaryBound: false,
+		RequiredLevels:  []string{"L2", "L3"},
+		ExecutionProtocol: []string{
+			"Validate governed artifact bundle readiness and stale propagation impacts before S6 entry.",
+			"Confirm required planning artifacts exist and are structurally valid for current level.",
+			"Emit deterministic blockers for missing/stale artifacts and pre-run contract violations.",
+		},
+		FailureLoop: []string{
+			"On bundle failure, route back to S4 with explicit stale/missing artifact reasons.",
+			"Re-run plan-audit only after artifact refresh evidence is available.",
+		},
+	},
+	"wave-orchestration": {
+		State:           "S6_RUN_WAVES",
+		Mitigation:      "uncontrolled parallel execution drift",
+		RunSummaryBound: true,
+		RequiredLevels:  []string{"L2", "L3"},
+		ExecutionProtocol: []string{
+			"Execute dependency-derived waves with deterministic ordering and conflict partitioning.",
+			"Record run_summary_version-bound outcomes, evidence pointers, and changed_files surfaces.",
+			"Apply non-pass control loop decisions (retry/skip/abort/pivot) with retry budget enforcement.",
+		},
+		FailureLoop: []string{
+			"Post-wave file overlap must downgrade conflicting tasks and require serialized retry path.",
+			"Retry exhaustion must surface alternatives instead of silent retries.",
+		},
+	},
+	"artifact-review": {
+		State:               "S7_REVIEW",
+		Mitigation:          "cross-artifact inconsistency",
+		RunSummaryBound:     true,
+		RequiredLevels:      []string{"L2", "L3"},
+		ReviewerIndependent: true,
+		ExecutionProtocol: []string{
+			"Consume immutable frozen run summary for reviewed run_summary_version; never read in-flight wave state.",
+			"Execute required review layers in order (IR1 before IR3, R0 before R3 when guardrail-sensitive).",
+			"Emit pass/fail layer outcomes with blockers and intent-drift markers when applicable.",
+		},
+		FailureLoop: []string{
+			"On review blocker, route back to S6 fix/re-run loop and require fresh review evidence.",
+			"Two consecutive intent-drift failures must raise pivot_required guidance.",
+		},
+	},
+	"goal-verification": {
+		State:           "S8_VERIFY",
+		Mitigation:      "false completion claims",
+		RunSummaryBound: true,
+		RequiredLevels:  []string{"L2", "L3"},
+		ExecutionProtocol: []string{
+			"Validate final verification signals against latest frozen run summary and unresolved blockers.",
+			"Ensure claimed pass outcomes map to resolvable evidence references.",
+			"Emit high-risk check outcomes for active guardrail domains when required.",
+		},
+		FailureLoop: []string{
+			"If verification evidence is stale/missing, keep ship gate blocked until refreshed evidence is emitted.",
+		},
+	},
+	"final-closeout": {
+		State:               "S8_VERIFY",
+		Mitigation:          "stale final evidence before governed ship decision",
+		RunSummaryBound:     true,
+		RequiredLevels:      []string{"L2", "L3"},
+		CloseoutConditional: true,
+		ReviewerIndependent: true,
+		ExecutionProtocol: []string{
+			"Run only when governed closeout refresh is required before ship approval.",
+			"Re-check assurance and final evidence index freshness for current run_summary_version.",
+			"Emit reviewer-independent closeout verdict bound to latest implementer baseline run.",
+		},
+		FailureLoop: []string{
+			"If closeout evidence is stale, keep S8 blocked and require refreshed reviewer evidence.",
+		},
+	},
+}
+
 var techniqueSkills = []string{
 	"spln-tdd",
 	"spln-systematic-debugging",
@@ -199,6 +321,7 @@ func commandSkillContent(cfg ToolConfig, commandID string) string {
 name: "spln-%s"
 type: command
 tool: "%s"
+command_id: "%s"
 trigger: "%s"
 ---
 
@@ -216,61 +339,108 @@ Route to the CLI command "%s".
 - Discovery/uncertainty reduction hints are advisory only.
 - Worktree/review/verification hints are advisory only.
 - Runtime gate and evidence checks remain authoritative.
-`, commandID, cfg.ID, trigger, commandID, trigger, commandID))
+`, commandID, cfg.ID, commandID, trigger, commandID, trigger, commandID))
 }
 
 func commandFileContent(cfg ToolConfig, commandID string) string {
 	trigger := commandTrigger(cfg, commandID)
 	return strings.TrimSpace(fmt.Sprintf(`
+---
+command_id: "%s"
+trigger: "%s"
+skill: "spln-%s"
+---
+
 # %s
 
 - Trigger: "%s"
 - Route to: "spln-%s" command skill
 - Invocation: "spln %s"
 - Policy source: runtime CLI/state engine (not this file)
-`, commandID, trigger, commandID, commandID))
+`, commandID, trigger, commandID, commandID, trigger, commandID, commandID))
 }
 
 func governanceSkillContent(cfg ToolConfig, skillName string) string {
+	spec := governanceSkillSpecs[skillName]
+	requiredLevels := make([]string, 0, len(spec.RequiredLevels))
+	for _, level := range spec.RequiredLevels {
+		requiredLevels = append(requiredLevels, fmt.Sprintf("  - %s", level))
+	}
+	slices.Sort(requiredLevels)
+
+	executionProtocol := []string{}
+	for _, line := range spec.ExecutionProtocol {
+		executionProtocol = append(executionProtocol, "- "+line)
+	}
+	failureLoop := []string{}
+	for _, line := range spec.FailureLoop {
+		failureLoop = append(failureLoop, "- "+line)
+	}
+
+	reviewerPolicy := "Reviewer/implementer session separation is advisory metadata for this skill."
+	if spec.ReviewerIndependent {
+		reviewerPolicy = "Reviewer evidence must use a different session_id from implementer baseline for same run_summary_version."
+	}
+
 	return strings.TrimSpace(fmt.Sprintf(`
 ---
 name: "spln-%s"
 type: governance
 tool: "%s"
+skill_name: "%s"
+state: "%s"
+mitigation_target: "%s"
+run_summary_bound: %t
+required_levels:
+%s
+auto_mode_required: %t
+closeout_conditional: %t
+reviewer_independent: %t
 ---
 
 Governance contract skill "%s".
 
 ## Execution Protocol
-- Validate required state preconditions.
-- Produce evidence with deterministic schema.
+%s
 
 ## Step Invariants
 - Preserve lane/state ownership boundaries.
 - Keep transitions deterministic and auditable.
+- Mitigation target: "%s".
 
 ## Evidence Contract
 - Required fields: skill_name, version, run_summary_version, session_id, state, verdict, blockers, references, timestamp.
-- Run-summary-bound stages require "input_hash".
+- Run-summary-bound stages require "input_hash": %t.
 
 ## Failure Loop Rules
-- On blockers, return to remediation loop and re-run required checks.
-- Do not claim pass without fresh evidence.
+%s
 
 ## Context Budget
 - Use compact, task-scoped context.
 - Reference long logs via ".spln/evidence/*".
 
 ## Subagent Roles
-- Implementer and reviewer sessions must remain independent for governed review/closeout.
+- %s
 
 ## Helper Hints (Advisory)
 - Discovery/review/verification hints are advisory metadata only.
 - Gate decisions are determined by runtime state and evidence.
-`, skillName, cfg.ID, skillName))
+`, skillName, cfg.ID, skillName, spec.State, spec.Mitigation, spec.RunSummaryBound, strings.Join(requiredLevels, "\n"), spec.AutoModeRequired, spec.CloseoutConditional, spec.ReviewerIndependent, skillName, strings.Join(executionProtocol, "\n"), spec.Mitigation, spec.RunSummaryBound, strings.Join(failureLoop, "\n"), reviewerPolicy))
 }
 
 func techniqueSkillContent(cfg ToolConfig, skillName string) string {
+	antiRationalization := []string{
+		"- Do not mark pass based on intent alone; require concrete evidence references.",
+		"- Do not skip required tests or reviews by claiming low risk without proof.",
+		"- Do not collapse blockers into vague summaries; keep deterministic reason codes.",
+	}
+
+	csoDescription := map[string]string{
+		"spln-tdd":                  "Prioritize behavior-contract tests before implementation deltas to minimize governance drift and rework debt.",
+		"spln-systematic-debugging": "Use reproducible symptom->cause->fix loops with bounded hypotheses to reduce risk of speculative patches.",
+		"spln-code-review-protocol": "Apply independent review discipline with explicit severity and evidence pointers to protect ship-stage safety.",
+	}
+
 	return strings.TrimSpace(fmt.Sprintf(`
 ---
 name: "%s"
@@ -280,14 +450,17 @@ tool: "%s"
 
 Technique helper "%s".
 
-## Use
-- Apply this technique to improve implementation quality.
+## CSO-Optimized Purpose
+- %s
 - This technique is optional and non-gating.
+
+## Anti-Rationalization
+%s
 
 ## Guardrail
 - Never override required runtime gate/evidence contracts.
 - Use deterministic outputs and explicit evidence references.
-`, skillName, cfg.ID, skillName))
+`, skillName, cfg.ID, skillName, csoDescription[skillName], strings.Join(antiRationalization, "\n")))
 }
 
 func commandTrigger(cfg ToolConfig, commandID string) string {

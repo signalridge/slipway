@@ -50,7 +50,9 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer dirFile.Close()
+	defer func() {
+		_ = dirFile.Close()
+	}()
 
 	return dirFile.Sync()
 }

@@ -6,9 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/speclane/internal/model"
+)
+
+const (
+	WorktreeReasonMetadataRequired = "dedicated_worktree_metadata_required"
+	WorktreeReasonPathInvalid      = "dedicated_worktree_path_invalid"
+	WorktreeReasonBranchMismatch   = "dedicated_worktree_branch_mismatch"
 )
 
 func PersistScopeWorktreeMetadata(change *model.ChangeState, worktreePath, worktreeBranch string) error {
@@ -27,40 +34,57 @@ func PersistScopeWorktreeMetadata(change *model.ChangeState, worktreePath, workt
 }
 
 func ValidateWorktreeAuthenticity(repoRoot, worktreePath, expectedBranch string) error {
-	normalizedPath, err := normalizePath(worktreePath)
+	reasons, err := ValidateWorktreeAuthenticityReasons(repoRoot, worktreePath, expectedBranch)
 	if err != nil {
-		return fmt.Errorf("invalid worktree_path: %w", err)
+		return err
 	}
-	if strings.TrimSpace(expectedBranch) == "" {
-		return fmt.Errorf("worktree_branch is required")
+	if len(reasons) == 0 {
+		return nil
+	}
+	return fmt.Errorf("worktree authenticity failed: %s", strings.Join(reasons, ", "))
+}
+
+func ValidateWorktreeAuthenticityReasons(repoRoot, worktreePath, expectedBranch string) ([]string, error) {
+	reasons := []string{}
+	if strings.TrimSpace(worktreePath) == "" || strings.TrimSpace(expectedBranch) == "" {
+		reasons = append(reasons, WorktreeReasonMetadataRequired)
+		return reasons, nil
 	}
 
+	normalizedPath, err := normalizePath(worktreePath)
+	if err != nil {
+		reasons = append(reasons, WorktreeReasonPathInvalid)
+		return reasons, nil
+	}
 	stat, err := os.Stat(normalizedPath)
 	if err != nil {
-		return fmt.Errorf("worktree_path does not exist: %w", err)
+		reasons = append(reasons, WorktreeReasonPathInvalid)
+		return reasons, nil
 	}
 	if !stat.IsDir() {
-		return fmt.Errorf("worktree_path is not a directory: %q", normalizedPath)
+		reasons = append(reasons, WorktreeReasonPathInvalid)
+		return reasons, nil
 	}
 
 	registered, err := listGitWorktrees(repoRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, exists := registered[normalizedPath]; !exists {
-		return fmt.Errorf("worktree_path is not a registered git worktree: %q", normalizedPath)
+		reasons = append(reasons, WorktreeReasonPathInvalid)
+		return uniqueSortedReasons(reasons), nil
 	}
 
 	cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	actualBranch := strings.TrimSpace(string(out))
 	if actualBranch != expectedBranch {
-		return fmt.Errorf("worktree branch mismatch: expected %q got %q", expectedBranch, actualBranch)
+		reasons = append(reasons, WorktreeReasonBranchMismatch)
 	}
-	return nil
+	return uniqueSortedReasons(reasons), nil
 }
 
 func listGitWorktrees(repoRoot string) (map[string]struct{}, error) {
@@ -98,4 +122,21 @@ func normalizePath(path string) (string, error) {
 		abs = real
 	}
 	return filepath.Clean(abs), nil
+}
+
+func uniqueSortedReasons(reasons []string) []string {
+	if len(reasons) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(reasons))
+	for _, reason := range reasons {
+		if _, ok := seen[reason]; ok {
+			continue
+		}
+		seen[reason] = struct{}{}
+		out = append(out, reason)
+	}
+	slices.Sort(out)
+	return out
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/signalridge/speclane/internal/model"
@@ -31,6 +32,37 @@ type TaskResult struct {
 	ChangedFiles []string `json:"changed_files,omitempty"`
 }
 
+type ExecutionOptions struct {
+	Parallelization   bool `json:"parallelization"`
+	MaxRetriesPerTask int  `json:"max_retries_per_task"`
+}
+
+type ControlDecision string
+
+const (
+	ControlDecisionRetry     ControlDecision = "retry"
+	ControlDecisionSkip      ControlDecision = "skip"
+	ControlDecisionAbortWave ControlDecision = "abort_wave"
+	ControlDecisionPivot     ControlDecision = "pivot"
+)
+
+type ControlCheckpoint struct {
+	WaveIndex        int               `json:"wave_index"`
+	NonPassTaskIDs   []string          `json:"non_pass_task_ids"`
+	AllowedDecisions []ControlDecision `json:"allowed_decisions"`
+}
+
+type NodeExecutor func(node Node, attempt int) model.TaskRun
+
+type ControlDecider func(checkpoint ControlCheckpoint) ControlDecision
+
+type ExecutionResult struct {
+	TaskRuns      map[string]model.TaskRun `json:"task_runs"`
+	Checkpoint    *ControlCheckpoint       `json:"checkpoint,omitempty"`
+	PivotRequired bool                     `json:"pivot_required,omitempty"`
+	Aborted       bool                     `json:"aborted,omitempty"`
+}
+
 type RunSummary struct {
 	RequestID         string    `json:"request_id"`
 	RunSummaryVersion int       `json:"run_summary_version"`
@@ -53,7 +85,7 @@ func NormalizeL1Brief(requestID string, checklist []string) []Node {
 		taskID := fmt.Sprintf("l1-%s-%02d", short, i+1)
 		node := Node{
 			TaskID:      taskID,
-			TaskKind:    model.TaskKindImplementation,
+			TaskKind:    model.TaskKindCode,
 			TargetFiles: []string{},
 		}
 		if prevID != "" {
@@ -210,6 +242,288 @@ func DetectPostWaveFileOverlap(results []TaskResult) []string {
 	return out
 }
 
+func ExecutePlan(
+	plan []Wave,
+	runSummaryVersion int,
+	options ExecutionOptions,
+	execute NodeExecutor,
+	decide ControlDecider,
+) (ExecutionResult, error) {
+	if runSummaryVersion < 1 {
+		return ExecutionResult{}, fmt.Errorf("run_summary_version must be >= 1")
+	}
+	if options.MaxRetriesPerTask <= 0 {
+		options.MaxRetriesPerTask = 2
+	}
+
+	result := ExecutionResult{
+		TaskRuns: map[string]model.TaskRun{},
+	}
+	retryCounts := map[string]int{}
+
+	for waveIndex := 0; waveIndex < len(plan); waveIndex++ {
+		nodes := append([]Node(nil), plan[waveIndex].Nodes...)
+		for {
+			runs := executeWaveNodes(nodes, runSummaryVersion, options.Parallelization, execute, retryCounts)
+			runs = applyPostWaveConflictResolution(runs)
+			mergeTaskRuns(result.TaskRuns, runs)
+
+			nonPassTaskIDs := collectNonPassTaskIDs(runs)
+			if len(nonPassTaskIDs) == 0 {
+				break
+			}
+
+			checkpoint := ControlCheckpoint{
+				WaveIndex:      waveIndex,
+				NonPassTaskIDs: nonPassTaskIDs,
+				AllowedDecisions: []ControlDecision{
+					ControlDecisionRetry,
+					ControlDecisionSkip,
+					ControlDecisionAbortWave,
+					ControlDecisionPivot,
+				},
+			}
+			decision := ControlDecisionAbortWave
+			if decide != nil {
+				decision = decide(checkpoint)
+			}
+
+			switch decision {
+			case ControlDecisionRetry:
+				retryNodes, exhausted := selectRetryNodes(nodes, nonPassTaskIDs, retryCounts, options.MaxRetriesPerTask)
+				if exhausted {
+					result.Checkpoint = &checkpoint
+					return result, nil
+				}
+				nodes = retryNodes
+				continue
+			case ControlDecisionSkip:
+				markSkippedRuns(result.TaskRuns, nonPassTaskIDs)
+			case ControlDecisionAbortWave:
+				result.Aborted = true
+				result.Checkpoint = &checkpoint
+				return result, nil
+			case ControlDecisionPivot:
+				result.PivotRequired = true
+				result.Checkpoint = &checkpoint
+				return result, nil
+			default:
+				return ExecutionResult{}, fmt.Errorf("invalid control decision %q", decision)
+			}
+			break
+		}
+	}
+
+	return result, nil
+}
+
+func executeWaveNodes(
+	nodes []Node,
+	runSummaryVersion int,
+	parallel bool,
+	execute NodeExecutor,
+	retryCounts map[string]int,
+) []model.TaskRun {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	runNode := func(node Node) model.TaskRun {
+		attempt := retryCounts[node.TaskID] + 1
+		run := defaultTaskRun(node, runSummaryVersion)
+		if execute != nil {
+			executed := execute(node, attempt)
+			if strings.TrimSpace(executed.TaskID) != "" {
+				run.TaskID = executed.TaskID
+			}
+			run.ChangedFiles = append([]string(nil), executed.ChangedFiles...)
+			run.TargetFiles = append([]string(nil), executed.TargetFiles...)
+			run.EvidenceRef = executed.EvidenceRef
+			run.Verdict = executed.Verdict
+			run.Blockers = uniqueSorted(append(run.Blockers, executed.Blockers...))
+		}
+		if run.TaskKind == model.TaskKindOther && run.Verdict == model.TaskVerdictPass {
+			run.Verdict = model.TaskVerdictIncomplete
+			run.Blockers = uniqueSorted(append(run.Blockers, "manual_checkpoint_required"))
+		}
+		return run
+	}
+
+	if !parallel || len(nodes) == 1 {
+		runs := make([]model.TaskRun, 0, len(nodes))
+		for _, node := range nodes {
+			runs = append(runs, runNode(node))
+		}
+		return runs
+	}
+
+	runs := make([]model.TaskRun, len(nodes))
+	var wg sync.WaitGroup
+	for i := range nodes {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			runs[idx] = runNode(nodes[idx])
+		}(i)
+	}
+	wg.Wait()
+	slices.SortFunc(runs, func(a, b model.TaskRun) int {
+		if a.TaskID < b.TaskID {
+			return -1
+		}
+		if a.TaskID > b.TaskID {
+			return 1
+		}
+		return 0
+	})
+	return runs
+}
+
+func defaultTaskRun(node Node, runSummaryVersion int) model.TaskRun {
+	taskKind := node.TaskKind
+	if taskKind == "" {
+		taskKind = model.TaskKindCode
+	}
+	return model.TaskRun{
+		TaskID:            node.TaskID,
+		RunSummaryVersion: runSummaryVersion,
+		TaskKind:          taskKind,
+		Verdict:           model.TaskVerdictPass,
+		TargetFiles:       append([]string(nil), node.TargetFiles...),
+		ChangedFiles:      []string{},
+		Blockers:          []string{},
+	}
+}
+
+func applyPostWaveConflictResolution(runs []model.TaskRun) []model.TaskRun {
+	if len(runs) < 2 {
+		return runs
+	}
+	results := make([]TaskResult, 0, len(runs))
+	for _, run := range runs {
+		results = append(results, TaskResult{
+			TaskID:       run.TaskID,
+			ChangedFiles: append([]string(nil), run.ChangedFiles...),
+		})
+	}
+	conflicts := DetectPostWaveFileOverlap(results)
+	if len(conflicts) == 0 {
+		return runs
+	}
+
+	ownerByFile := map[string]string{}
+	conflictedTasks := map[string]struct{}{}
+	for _, result := range results {
+		for _, file := range result.ChangedFiles {
+			if owner, ok := ownerByFile[file]; ok && owner != result.TaskID {
+				conflictedTasks[owner] = struct{}{}
+				conflictedTasks[result.TaskID] = struct{}{}
+				continue
+			}
+			ownerByFile[file] = result.TaskID
+		}
+	}
+
+	updated := make([]model.TaskRun, 0, len(runs))
+	for _, run := range runs {
+		if _, conflicted := conflictedTasks[run.TaskID]; conflicted {
+			run.Verdict = model.TaskVerdictBlocked
+			run.Blockers = uniqueSorted(append(run.Blockers, conflicts...))
+		}
+		updated = append(updated, run)
+	}
+	return updated
+}
+
+func collectNonPassTaskIDs(runs []model.TaskRun) []string {
+	out := []string{}
+	for _, run := range runs {
+		if run.Verdict != model.TaskVerdictPass || len(run.Blockers) > 0 {
+			out = append(out, run.TaskID)
+		}
+	}
+	return uniqueSorted(out)
+}
+
+func mergeTaskRuns(target map[string]model.TaskRun, runs []model.TaskRun) {
+	for _, run := range runs {
+		key, err := model.BuildTaskRunKey(run.TaskID, run.RunSummaryVersion)
+		if err != nil {
+			continue
+		}
+		target[key] = run
+	}
+}
+
+func selectRetryNodes(
+	allNodes []Node,
+	nonPassTaskIDs []string,
+	retryCounts map[string]int,
+	maxRetries int,
+) ([]Node, bool) {
+	retrySet := map[string]struct{}{}
+	for _, taskID := range nonPassTaskIDs {
+		retrySet[taskID] = struct{}{}
+	}
+
+	retryNodes := []Node{}
+	exhausted := false
+	for _, node := range allNodes {
+		if _, shouldRetry := retrySet[node.TaskID]; !shouldRetry {
+			continue
+		}
+		if retryCounts[node.TaskID] >= maxRetries {
+			exhausted = true
+			continue
+		}
+		retryCounts[node.TaskID]++
+		retryNodes = append(retryNodes, node)
+	}
+	if exhausted || len(retryNodes) == 0 {
+		return nil, true
+	}
+	return retryNodes, false
+}
+
+func markSkippedRuns(taskRuns map[string]model.TaskRun, taskIDs []string) {
+	if len(taskIDs) == 0 {
+		return
+	}
+	taskSet := map[string]struct{}{}
+	for _, taskID := range taskIDs {
+		taskSet[taskID] = struct{}{}
+	}
+	for key, run := range taskRuns {
+		if _, ok := taskSet[run.TaskID]; !ok {
+			continue
+		}
+		run.Verdict = model.TaskVerdictIncomplete
+		run.Blockers = uniqueSorted(append(run.Blockers, "skipped_by_operator"))
+		taskRuns[key] = run
+	}
+}
+
+func uniqueSorted(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func PersistFrozenRunSummary(root string, summary RunSummary) (string, error) {
 	if !model.IsUUIDv7(summary.RequestID) {
 		return "", fmt.Errorf("request_id must be UUIDv7")
@@ -237,7 +551,9 @@ func PersistFrozenRunSummary(root string, summary RunSummary) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")

@@ -17,6 +17,8 @@ import (
 	"github.com/signalridge/speclane/internal/state"
 )
 
+const heuristicFallbackEnv = "SPLN_ALLOW_HEURISTIC_FALLBACK"
+
 func projectRootFromWD() (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -290,6 +292,16 @@ func collectTaskEvidenceFreshnessInputs(
 		})
 	}
 	return inputs
+}
+
+func heuristicFallbackEnabled() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(heuristicFallbackEnv)))
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 type taskEvidenceRecord struct {

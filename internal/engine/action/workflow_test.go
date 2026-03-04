@@ -38,6 +38,9 @@ func TestEvaluateFixedLevelSafety(t *testing.T) {
 	conflicts := EvaluateFixedLevelSafety(model.LevelL1, "auth_authz")
 	assert.Contains(t, conflicts, "fixed_level_guardrail_conflict")
 
+	conflicts = EvaluateFixedLevelSafety(model.LevelL2, "auth_authz")
+	assert.Contains(t, conflicts, "fixed_level_guardrail_conflict")
+
 	conflicts = EvaluateFixedLevelSafety(model.LevelL3, "auth_authz")
 	assert.Empty(t, conflicts)
 }

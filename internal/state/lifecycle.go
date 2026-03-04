@@ -53,8 +53,8 @@ func governedArtifactsArchivePath(root, slug string) string {
 }
 
 func ValidateGovernedDoneArchivePreconditions(change model.ChangeState) error {
-	if change.ChangeStatus != model.ChangeStatusActive {
-		return fmt.Errorf("governed done archive requires change_status=active, got %q", change.ChangeStatus)
+	if change.ChangeStatus != model.ChangeStatusActive && change.ChangeStatus != model.ChangeStatusDone {
+		return fmt.Errorf("governed done archive requires change_status in {active,done}, got %q", change.ChangeStatus)
 	}
 	if change.Level == "" || !change.Level.IsValid() {
 		return errors.New("governed done archive requires valid level")
@@ -81,6 +81,7 @@ func HandoffAdmissionToGoverned(
 	admission model.AdmissionState,
 	slug string,
 	level model.Level,
+	maxLevelHistoryEntries int,
 ) (sealedAdmission model.AdmissionState, change model.ChangeState, err error) {
 	if !level.IsValid() || level == model.LevelL1 {
 		return model.AdmissionState{}, model.ChangeState{}, fmt.Errorf("handoff requires governed level L2/L3, got %q", level)
@@ -117,8 +118,11 @@ func HandoffAdmissionToGoverned(
 	changeState.ActionHistory = []model.ActionEvent{}
 	changeState.EvidenceRefs = map[string]string{}
 
-	sealed.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
-	changeState.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	if maxLevelHistoryEntries <= 0 {
+		maxLevelHistoryEntries = model.DefaultConfig().Execution.MaxLevelHistoryEntries
+	}
+	sealed.Normalize(maxLevelHistoryEntries)
+	changeState.Normalize(maxLevelHistoryEntries)
 	return sealed, changeState, nil
 }
 
@@ -135,30 +139,37 @@ func ArchiveGoverned(
 	admission *model.AdmissionState,
 	finalStatus model.ChangeStatus,
 ) (model.ChangeState, error) {
-	if finalStatus == model.ChangeStatusDone {
+	switch finalStatus {
+	case model.ChangeStatusDone:
 		if err := ValidateGovernedDoneArchivePreconditions(change); err != nil {
 			return model.ChangeState{}, err
 		}
-	} else if finalStatus == model.ChangeStatusCancelled {
+	case model.ChangeStatusCancelled:
 		if change.ChangeStatus != model.ChangeStatusCancelled && change.ChangeStatus != model.ChangeStatusActive {
 			return model.ChangeState{}, fmt.Errorf(
 				"governed cancel archive requires change_status in {active,cancelled}, got %q",
 				change.ChangeStatus,
 			)
 		}
-	} else {
+	default:
 		return model.ChangeState{}, fmt.Errorf("unsupported finalStatus %q", finalStatus)
 	}
 
 	archived := change
 	archived.Artifacts = FreezeArtifacts(change.Artifacts)
 	archived.ChangeStatus = finalStatus
-	archived.Normalize(model.DefaultConfig().Execution.MaxLevelHistoryEntries)
+	archived.Normalize(maxLevelHistoryEntriesForRoot(root))
 
-	// Order: validate -> migrate archive targets -> persist archived lifecycle.
-	srcChange := ChangePath(root, change.RequestID)
+	// Crash-safe order:
+	// 1) persist final archived lifecycle snapshot
+	// 2) migrate artifact/admission targets
+	// 3) remove runtime governed source
 	dstChange := ArchiveChangePath(root, change.RequestID)
-	if err := moveFile(srcChange, dstChange); err != nil {
+	b, err := yaml.Marshal(archived)
+	if err != nil {
+		return model.ChangeState{}, err
+	}
+	if err := fsutil.WriteFileAtomic(dstChange, b, 0o644); err != nil {
 		return model.ChangeState{}, err
 	}
 
@@ -176,11 +187,8 @@ func ArchiveGoverned(
 		}
 	}
 
-	b, err := yaml.Marshal(archived)
-	if err != nil {
-		return model.ChangeState{}, err
-	}
-	if err := fsutil.WriteFileAtomic(dstChange, b, 0o644); err != nil {
+	srcChange := ChangePath(root, change.RequestID)
+	if err := os.Remove(srcChange); err != nil && !os.IsNotExist(err) {
 		return model.ChangeState{}, err
 	}
 
@@ -188,13 +196,25 @@ func ArchiveGoverned(
 }
 
 func moveFile(src, dst string) error {
+	srcParent := filepath.Dir(src)
+	dstParent := filepath.Dir(dst)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.Rename(src, dst)
+	if err := os.Rename(src, dst); err != nil {
+		return err
+	}
+	if srcParent != dstParent {
+		if err := syncDir(srcParent); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return syncDir(dstParent)
 }
 
 func moveDirIfExists(src, dst string) error {
+	srcParent := filepath.Dir(src)
+	dstParent := filepath.Dir(dst)
 	_, err := os.Stat(src)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -205,5 +225,25 @@ func moveDirIfExists(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.Rename(src, dst)
+	if err := os.Rename(src, dst); err != nil {
+		return err
+	}
+	if srcParent != dstParent {
+		if err := syncDir(srcParent); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return syncDir(dstParent)
+}
+
+func syncDir(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return err
+	}
+	return dir.Close()
 }

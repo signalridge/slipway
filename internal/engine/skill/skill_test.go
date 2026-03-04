@@ -1,10 +1,13 @@
 package skill
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/signalridge/speclane/internal/model"
+	"github.com/signalridge/speclane/internal/toolgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,9 +34,50 @@ func TestRequiredSkillsByLevelAndState(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		[]string{"goal-verification", "final-closeout"},
+		[]string{"final-closeout", "goal-verification"},
 		RequiredSkillsForState(model.LevelL3, model.StateS8Verify, false, true),
 	)
+}
+
+func TestLoadGovernanceRegistryFromMarkdownFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+	registry, err := LoadGovernanceRegistry(root)
+	require.NoError(t, err)
+	require.Len(t, registry, 7)
+
+	defByName := map[string]Definition{}
+	for _, def := range registry {
+		defByName[def.Name] = def
+	}
+
+	planAudit := defByName["plan-audit"]
+	assert.Equal(t, model.StateS5PlanAudit, planAudit.State)
+	assert.Equal(t, "stale or incomplete plan bundle", planAudit.Mitigation)
+	assert.False(t, planAudit.RunSummaryBound)
+	assert.Contains(t, planAudit.RequiredLevels, model.LevelL2)
+	assert.Contains(t, planAudit.RequiredLevels, model.LevelL3)
+}
+
+func TestLoadGovernanceRegistryRejectsUnknownSkillName(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "spln-custom")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
+---
+type: governance
+skill_name: custom-skill
+state: S1_ANALYZE
+mitigation_target: custom
+run_summary_bound: false
+---
+body
+`), 0o644))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown governance skill_name")
 }
 
 func TestValidateGovernanceEvidenceReadinessPass(t *testing.T) {
