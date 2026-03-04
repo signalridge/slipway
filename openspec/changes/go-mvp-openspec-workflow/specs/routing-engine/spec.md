@@ -23,10 +23,10 @@ Compatibility note:
 ### Requirement: Score Input Source
 Scores SHALL be produced by analyze logic at `S1_ANALYZE` (human-assisted or model-assisted).
 
-`speclane new` SHALL NOT expose manual `--scores` CLI input in MVP.
+`spln new` SHALL NOT expose manual `--scores` CLI input in MVP.
 
 #### Scenario: No scores flag
-- **WHEN** operator runs `speclane new --help`
+- **WHEN** operator runs `spln new --help`
 - **THEN** `--scores` SHALL NOT appear as a supported option
 
 ### Requirement: Canonical Score Persistence
@@ -44,7 +44,7 @@ For executable intake classifications, routing SHALL output a single final gover
 - `L1 | L2 | L3`
 
 No secondary grade SHALL be treated as final outcome.
-For `non_speclane` classifications, level fields SHALL be omitted.
+For `non_spln` classifications, level fields SHALL be omitted.
 
 #### Scenario: Single level output for executable routing
 - **WHEN** routing classifies intake as executable
@@ -54,8 +54,8 @@ For `non_speclane` classifications, level fields SHALL be omitted.
 Before level routing, `S1_ANALYZE` SHALL classify whether the request is executable within speclane scope.
 
 If intent is pure Q&A/advisory, or semantic analysis returns clarification-required (non-executable in current pass):
-- routing SHALL return `non_speclane` classification (no level grade)
-- `speclane new` SHALL reject request creation with remediation to use normal chat flow
+- routing SHALL return `non_spln` classification (no level grade)
+- `spln new` SHALL reject request creation with remediation to use normal chat flow
 - no `request_id` or runtime state files SHALL be created
 
 MVP AI-first semantic classification contract:
@@ -72,7 +72,7 @@ MVP AI-first semantic classification contract:
 - built-in language lexicons SHALL NOT be required for executable-intent classification
 
 Deterministic consumer rule over `intake_assessment`:
-1. classify as `non_speclane` when all are true:
+1. classify as `non_spln` when all are true:
    - `intent_type in {advisory, question}`
    - `is_executable=false`
    - `confidence >= 0.75`
@@ -81,18 +81,18 @@ Deterministic consumer rule over `intake_assessment`:
    - `confidence >= 0.65`
    - (`change_targets[]` is non-empty OR `intended_delta` is non-empty)
 3. otherwise (`mixed|unclear`, low confidence, or missing executable anchors):
-   - classify as `non_speclane`
-   - emit remediation to clarify executable target/delta and rerun `speclane new`
-   - emit rationale marker `non_speclane:clarification_required`
+   - classify as `non_spln`
+   - emit remediation to clarify executable target/delta and rerun `spln new`
+   - emit rationale marker `non_spln:clarification_required`
 
 `blocking_unknowns[]` handling:
-- non-empty `blocking_unknowns[]` SHALL NOT force `non_speclane` by itself when executable criteria are met
+- non-empty `blocking_unknowns[]` SHALL NOT force `non_spln` by itself when executable criteria are met
 - executable requests with non-empty `blocking_unknowns[]` SHALL carry rationale marker `execution_unknowns_present`
 - in auto mode, executable requests with non-empty `blocking_unknowns[]` SHALL route to `L3` discovery path
 
 #### Scenario: Pure Q&A rejected from speclane
 - **WHEN** intake is a pure question with no actionable change intent
-- **THEN** routing SHALL classify as `non_speclane` and block level assignment
+- **THEN** routing SHALL classify as `non_spln` and block level assignment
 
 #### Scenario: Executable request passes intake gate
 - **WHEN** intake semantically describes a concrete code/config change and classifier confidence meets executable threshold (for example: "update auth middleware timeout in `internal/auth/mw.go`")
@@ -108,11 +108,11 @@ Deterministic consumer rule over `intake_assessment`:
 
 #### Scenario: Low-confidence intent requires clarification
 - **WHEN** intake intent is mixed/unclear or confidence is below threshold
-- **THEN** routing SHALL classify as `non_speclane` with remediation asking for explicit target + intended delta
+- **THEN** routing SHALL classify as `non_spln` with remediation asking for explicit target + intended delta
 
 #### Scenario: Executable request with blocking unknowns stays in speclane
 - **WHEN** intake is executable by semantic threshold but `blocking_unknowns[]` is non-empty
-- **THEN** routing SHALL keep `classification=executable`, attach unknowns rationale, and avoid `non_speclane` rejection
+- **THEN** routing SHALL keep `classification=executable`, attach unknowns rationale, and avoid `non_spln` rejection
 
 ### Requirement: Guardrail Detection and Risk Floor
 Guardrail domains SHALL be detected from request/context and persisted as canonical `domain_slug` values:
@@ -144,10 +144,10 @@ When guardrail domain is detected, effective risk for routing SHALL be at least 
 - **THEN** persisted `guardrail_domain` SHALL be canonical `security_credentials`
 
 ### Requirement: Level Selection Mode
-`speclane new` SHALL resolve level mode before routing:
+`spln new` SHALL resolve level mode before routing:
 - `--level L1|L2|L3` => fixed level mode
 - `--level auto` => auto mode
-- omitted `--level` => use `.speclane/config.yaml` `defaults.level_mode` when valid (`auto|L1|L2|L3`)
+- omitted `--level` => use `.spln/config.yaml` `defaults.level_mode` when valid (`auto|L1|L2|L3`)
 - omitted `--level` in interactive mode => prompt `auto|L1|L2|L3` with config-derived default preselected
 - omitted `--level` in non-interactive mode => apply config-derived default directly
 - if config value is missing/invalid => fallback to `auto` with deterministic remediation hint
@@ -159,10 +159,10 @@ Mode outputs:
 Fixed-level safety contract:
 - fixed mode keeps selected `level` as route output
 - hard safety conflicts SHALL be emitted as `blocking_conflicts[]` for command-layer enforcement
-- command layer SHALL reject `speclane new` persistence when `blocking_conflicts[]` is non-empty
+- command layer SHALL reject `spln new` persistence when `blocking_conflicts[]` is non-empty
 
 #### Scenario: Fixed level selection
-- **WHEN** `speclane new "fix login" --level L1` is run
+- **WHEN** `spln new "fix login" --level L1` is run
 - **THEN** route result SHALL be `level=L1` and `level_source=user_selected`
 
 #### Scenario: Config default level mode is applied
@@ -195,7 +195,7 @@ Compatibility note:
 
 ### Requirement: Auto-Level Algorithm
 Auto mode SHALL compute level in this order:
-1. classify executable intent; if non-executable, return `non_speclane`
+1. classify executable intent; if non-executable, return `non_spln`
 2. apply guardrail risk floor
 3. executable `blocking_unknowns[]` non-empty => `L3`
 4. `new_project` or `major_refactor` => `L3`
@@ -217,19 +217,16 @@ Tie rule:
 
 ### Requirement: Route Result Contract
 Route result SHALL include:
-- `classification` (`executable|non_speclane`)
+- `classification` (`executable|non_spln`)
 - `intake_assessment` (at minimum: `intent_type`, `is_executable`, `confidence`, `change_targets[]`, `intended_delta`, `acceptance_anchor`, `blocking_unknowns[]`)
 - `scores` (raw)
 - `guardrail_domain` (canonical `domain_slug`)
 - `routing_rationale[]`
 - `blocking_conflicts[]` (optional; non-empty only when fixed-level safety conflicts are present)
 
-Optional intake-assessment hints:
-- `auxiliary_signals[]` MAY be included as non-authoritative diagnostics/audit hints
-
 Conditional fields:
 - when `classification=executable`, route result SHALL include `level` and `level_source`
-- when `classification=non_speclane`, route result SHALL omit `level` and `level_source`
+- when `classification=non_spln`, route result SHALL omit `level` and `level_source`
 
 Route result SHALL not require kind fields.
 
@@ -243,19 +240,19 @@ Admission persistence SHALL also include full `intake_assessment` payload from `
 
 Derived values (`discovery_score`, `control_score`) SHALL be recomputed from raw scores and SHALL NOT be persisted as standalone fields.
 
-Derived contract metadata (`required_artifacts`, `required_gates`, `required_checks`) SHALL be computed at read time from routed `level` rules and SHALL NOT be persisted in `route_snapshot` in MVP.
+Derived contract metadata (`required_artifacts`, `required_gates`, `required_skills`) SHALL be computed at read time from routed `level` + guardrail/domain rules and SHALL NOT be persisted in `route_snapshot` in MVP.
 
 #### Scenario: Guardrail route result
 - **WHEN** guardrail domain is detected
 - **THEN** route result SHALL include guardrail domain and rationale entries
 
-#### Scenario: `non_speclane` route omits level fields
-- **WHEN** routing classifies intake as `non_speclane`
-- **THEN** route result SHALL include `classification=non_speclane` and SHALL NOT include `level` or `level_source`
+#### Scenario: `non_spln` route omits level fields
+- **WHEN** routing classifies intake as `non_spln`
+- **THEN** route result SHALL include `classification=non_spln` and SHALL NOT include `level` or `level_source`
 
 #### Scenario: Required contract metadata is derived, not persisted
-- **WHEN** status/context needs required artifacts/gates/checks for current request
-- **THEN** values SHALL be derived from routed level rules instead of loading persisted `route_snapshot` contract lists
+- **WHEN** status/context needs required artifacts/gates/skills for current request
+- **THEN** values SHALL be derived from routed level and guardrail rules instead of loading persisted `route_snapshot` contract lists
 
 ### Requirement: State Persistence Target
 Route output SHALL first persist to admission state.
@@ -278,14 +275,11 @@ Pivot entry states SHALL be `S6_RUN_WAVES`, `S7_REVIEW`, or `S8_VERIFY`.
 
 Execution contract:
 - triggers above produce deterministic `pivot_required` guidance
-- actual pivot processing still requires explicit operator command `speclane pivot`
+- actual pivot processing still requires explicit operator command `spln pivot`
 - after explicit pivot invocation, workflow SHALL transition to `S1_ANALYZE` and refresh analyze evidence first
 - `G_pivot` SHALL be evaluated using refreshed analyze evidence and explicit pivot intent (`reroute` or `rescope`)
 - `rescope` intent is valid only when pivot is requested from governed `S6_RUN_WAVES`; `S7/S8` `rescope` requests are precondition-rejected
 - reroute/rescope SHALL be applied only after `G_pivot` is approved
-- approved unchanged-level `rescope` targets are compound via analyze:
-  - unchanged `L2`: `S6 -> S1 -> S4`
-  - unchanged `L3`: `S6 -> S1 -> S3` (scope revalidation without discovery replay)
 
 After pivot:
 - recompute or reselect level

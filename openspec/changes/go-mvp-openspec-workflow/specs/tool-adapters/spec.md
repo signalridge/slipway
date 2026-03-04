@@ -1,105 +1,101 @@
 ## ADDED Requirements
 
-### Requirement: Four Tool Targets
-Tool adapter generation SHALL support four targets:
-- `claude`
-- `cursor`
-- `codex`
-- `opencode`
+### Requirement: Four tool targets
+The system SHALL support generating skill and command files for four tools: Claude Code (claude), Cursor (cursor), Codex (codex), OpenCode (opencode). Each tool SHALL have a ToolConfig defining: skills_dir, commands_dir, trigger_prefix, trigger_style, auto_detect_paths.
 
-Each target SHALL define:
-- `commands_dir`
-- trigger prefix/style
-- auto-detect paths
+#### Scenario: Tool registry
+- **WHEN** the tool registry is queried
+- **THEN** it SHALL contain exactly four entries: claude, cursor, codex, opencode
 
-#### Scenario: Tool registry completeness
-- **WHEN** adapter registry is loaded
-- **THEN** it SHALL contain exactly four targets
+### Requirement: Core Workflow Independence from Tool Generation
+Tool adapter generation is an auxiliary capability and SHALL NOT be a runtime dependency for core workflow execution.
 
-### Requirement: CLI Canonical Name
-Runtime CLI canonical command SHALL be `speclane`.
+- core lifecycle commands (`new/do/status/context/done/cancel/pivot/repair/analyze/review`) SHALL run correctly when no tool artifacts are generated
+- `spln init --tools none` is a valid baseline bootstrap path for core governance workflow
+- adapter-generation failures SHALL be reported in adapter context and SHALL NOT corrupt runtime state layout
 
-AI-tool command aliases are adapter-layer triggers only and SHALL route to the canonical CLI command.
+#### Scenario: Core workflow runs without tool artifacts
+- **WHEN** repository is initialized with `spln init --tools none`
+- **THEN** core workflow commands SHALL remain fully functional without generated skill/command files
 
-#### Scenario: Adapter trigger routes to canonical CLI
-- **WHEN** any generated AI-tool trigger is invoked
-- **THEN** wrapper execution SHALL invoke `speclane <command>` semantics
+### Requirement: Trigger style mapping
+Each tool SHALL use its defined trigger style: claude uses slash-colon (`/spln:`), cursor uses slash-hyphen (`/spln-`), codex uses dollar-mention (`$spln-`), opencode uses slash-hyphen (`/spln-`). Command meaning SHALL NOT change by tool.
 
-### Requirement: Core Workflow Independence
-Core workflow SHALL NOT depend on generated tool artifacts.
+#### Scenario: Claude trigger format
+- **WHEN** a command file is generated for claude tool and command "new"
+- **THEN** the trigger SHALL be `/spln:new`
 
-- lifecycle commands MUST run without generated adapter files
-- `speclane init --tools none` SHALL be valid
-- adapter generation failure SHALL not corrupt runtime state
+#### Scenario: Codex trigger format
+- **WHEN** a command file is generated for codex tool and command "new"
+- **THEN** the trigger SHALL be `$spln-new`
 
-#### Scenario: Core-only bootstrap
-- **WHEN** repo is initialized with `--tools none`
-- **THEN** `new/do/status/context/done/cancel/pivot/repair/analyze/review` SHALL still function
+### Requirement: Command skill file generation
+The system SHALL generate one command skill file per CLI command per tool. Command skill IDs are: init, new, do, status, context, done, cancel, pivot, repair, analyze, review. Skill files SHALL follow the layout `<skills_dir>/spln-<skill-name>/SKILL.md`.
 
-### Requirement: Trigger Mapping
-Command trigger short-name family SHALL be `spl` across AI tools.
-Exact trigger syntax SHALL remain adapter-specific.
-Each tool SHALL use a distinct short-name structure:
-- claude: `/spl:<command>`
-- cursor: `/spl.<command>`
-- codex: `/prompts:spl-<command>`
-- opencode: `/spl-<command>`
+#### Scenario: Skill file path for claude
+- **WHEN** skill "do" is generated for claude
+- **THEN** the command skill file SHALL be at `.claude/skills/spln-do/SKILL.md`
 
-Command semantics SHALL be identical across tools.
+### Requirement: Governance contract skill generation
+The system SHALL generate governance contract skills per tool aligned to canonical states:
+- intake-analysis
+- scope-confirmation
+- plan-audit
+- wave-orchestration
+- artifact-review
+- goal-verification
+- final-closeout
 
-#### Scenario: Codex trigger example
-- **WHEN** command `new` is generated for codex
-- **THEN** trigger SHALL be `/prompts:spl-new`
+Governance contract skill files SHALL follow `<skills_dir>/spln-<skill-name>/SKILL.md` and SHALL include: execution protocol, step invariants, evidence contract, failure loop rules, context budget section, and embedded subagent role instructions where applicable.
 
-### Requirement: Command Wrapper Generation
-Adapter generation SHALL create one command wrapper file per CLI command per target.
+#### Scenario: Governance contract skill path for claude
+- **WHEN** governance contract skill "plan-audit" is generated for claude
+- **THEN** the file SHALL be at `.claude/skills/spln-plan-audit/SKILL.md`
 
-Command set:
-- `init`, `new`, `do`, `status`, `context`, `done`, `cancel`, `pivot`, `repair`, `analyze`, `review`
+### Requirement: Helper skill trigger metadata
+Generated skill files SHALL include trigger metadata for helper workflows:
+- discovery/discussion trigger hints sourced from Superpowers + GSD + OPSX contracts
+- worktree isolation trigger hints sourced from Superpowers + execution workflows
+- review trigger hints sourced from review commands/skills
+- pre-completion verification trigger hints sourced from verify/archive command contracts
 
-Wrapper files SHALL:
-- stay concise (< 50 lines)
-- describe invocation syntax
-- route to CLI command
-- avoid embedding governance logic
+This metadata SHALL be descriptive only and SHALL NOT change runtime gate decisions.
 
-#### Scenario: Wrapper contains no gate logic
-- **WHEN** generated wrapper file is inspected
-- **THEN** it SHALL not define gate rules or policy tables
+#### Scenario: Helper trigger metadata present
+- **WHEN** `spln-do` command skill is generated
+- **THEN** file content SHALL include source-grounded helper trigger guidance for discovery/worktree/review/verification usage
 
-### Requirement: Optional Helper Guides (Non-Blocking)
-Optional helper guides SHALL remain advisory and SHALL NOT become runtime gates.
+### Requirement: Command file generation
+The system SHALL generate one command file per command per tool. Command files SHALL be < 50 lines, route to the corresponding command skill, and contain: invocation syntax, argument handoff, "when to invoke", handoff target. Command files SHALL NOT contain execution policy or governance logic.
 
-Adapters MAY generate optional helper guides for:
-- wave execution discipline
-- command-check interpretation
-- review/verification checklist usage
+#### Scenario: Command file for cursor
+- **WHEN** command "new" is generated for cursor
+- **THEN** the file SHALL be at `.cursor/commands/spln-new.md` and SHALL route to the `spln-new` command skill
 
-These guides are advisory only and SHALL NOT define runtime pass/fail.
+### Requirement: Technique skill generation
+The system SHALL generate technique skill files alongside command skills and governance contract skills. Three technique skills: spln-tdd, spln-systematic-debugging, spln-code-review-protocol. Each SHALL have `type: technique` frontmatter, < 500 words, anti-rationalization blocks, and CSO-optimized descriptions.
 
-#### Scenario: Missing helper guide
-- **WHEN** optional helper guide is absent
-- **THEN** runtime behavior SHALL remain unchanged
+#### Scenario: Technique skill generation
+- **WHEN** `spln init --tools claude` is run
+- **THEN** technique skills SHALL be generated at `.claude/skills/spln-tdd/SKILL.md`, `.claude/skills/spln-systematic-debugging/SKILL.md`, `.claude/skills/spln-code-review-protocol/SKILL.md`
 
-### Requirement: Deterministic Generation
-Given same tool config and command set, generated adapter artifacts SHALL be byte-identical.
+### Requirement: Deterministic output
+Tool adapter generation SHALL be deterministic: same command ID + same tool config SHALL produce byte-identical output across runs. No timestamps, random values, or non-deterministic content in generated files.
 
-No timestamps/random IDs are allowed in generated content.
+#### Scenario: Byte-stable generation
+- **WHEN** the same skill is generated twice with the same configuration
+- **THEN** the output SHALL be byte-identical
 
-#### Scenario: Repeat generation stability
-- **WHEN** generation is run twice with same inputs
-- **THEN** produced files SHALL be byte-identical
+### Requirement: Command-skill boundary
+Command files SHALL route; skill files SHALL govern. Command files SHALL NOT duplicate skill policy tables. Command skills SHALL NOT redefine command syntax per tool. Governance pass/fail decisions SHALL always be produced by CLI/runtime state, never by command/skill text alone.
 
-### Requirement: Init Tools Flag
-`speclane init --tools <list>` SHALL control adapter generation.
+#### Scenario: Command does not contain policy
+- **WHEN** a command file is generated
+- **THEN** it SHALL NOT contain review layer definitions, gate logic, or evidence contracts
 
-Supported values:
-- explicit list (`claude,cursor` etc.)
-- `all`
-- `none`
+### Requirement: Init with tools flag
+`spln init --tools <tool-list>` SHALL generate all skill and command files for the specified tools. `--tools all` generates for all 4 tools. `--tools none` generates no tool files. `spln init --refresh` SHALL regenerate all tool files.
 
-`speclane init --refresh` SHALL regenerate selected adapter files deterministically.
-
-#### Scenario: Multi-tool generation
-- **WHEN** `speclane init --tools claude,cursor` runs
-- **THEN** wrapper files SHALL be generated for both targets
+#### Scenario: Init with multiple tools
+- **WHEN** `spln init --tools claude,cursor` is run
+- **THEN** skill and command files SHALL be generated for both claude and cursor tools

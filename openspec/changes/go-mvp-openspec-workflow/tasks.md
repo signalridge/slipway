@@ -1,163 +1,424 @@
-Task policy:
-- task IDs are stable within this simplified MVP plan
-- this file intentionally replaces prior over-designed governance task set
-- completion standard is: behavior + tests + `openspec validate`
+Task numbering contract:
+- task IDs are append-only stable identifiers for traceability across review rounds
+- numeric order may be non-sequential when new tasks are inserted without renumbering the full list
 
 ## 1. Bootstrap
 
-- [ ] 1.1 Wire CLI entrypoint (`main.go`, `cmd/root.go`) for 11 commands
-- [ ] 1.2 Add core dependencies (`cobra`, `yaml.v3`, `gofrs/flock`, DAG helper, `testify`, `uuid`)
-- [ ] 1.3 Add deterministic error envelope helpers and exit-code mapper (`2/3/4/5/6`)
+- [x] 1.1 Add Go dependencies (`cobra`, `yaml.v3`, `gofrs/flock`, `dominikbraun/graph`, `testify`, `google/uuid`)
+- [x] 1.2 Create `main.go` with `cmd.Execute()`
+- [x] 1.3 Create `cmd/root.go` with grouped command help (daily/situational/expert)
 
 ## 2. Core Models (`internal/model/`)
 
-- [ ] 2.1 Implement score model (`N/A/I/R/V`) + derived methods (`discovery/control`)
-- [ ] 2.2 Implement `AdmissionState` model (request metadata, intake assessment, route snapshot, state/action history)
-- [ ] 2.3 Implement `ChangeState` model (slug, artifacts, gates, worktree metadata, state/action history)
-- [ ] 2.4 Implement `RunRecord` ledger model (`checks[]`, `human_confirmations[]`, wave summaries, override events; no authoritative lifecycle state mirror)
-- [ ] 2.7 Add `RunRecord.history[]` append-only event stream model and persistence helpers
-- [ ] 2.8 Normalize check record identity to `check_id` (type inferred by `checks[]` vs `human_confirmations[]`)
-- [ ] 2.9 Implement `RunRecord` frozen-summary contract (`wave_summaries[]` append-only + `latest_summary_version` pointer)
-- [ ] 2.10 Implement command-check override trace fields (`override`, `override_note`, `override_at`) in `RunRecord.checks[]`
-- [ ] 2.5 Implement config model (`defaults.level_mode`, execution knobs, unknown top-level key preservation)
-- [ ] 2.6 Implement typed enums and validators (`Level`, statuses, gate status, verdicts)
+- [x] 2.1 Create `scores.go`: readable five-dimension score fields + derived methods + validation
+- [x] 2.2 Create `admission.go`: `AdmissionState` (includes immutable `request_id`, `admission_status`, `level` metadata, `route_snapshot`, `latest_frozen_run_summary_version`, `task_runs`, `evidence_refs` [non-task index only], `action_history`, `sealed_at`)
+- [x] 2.3 Create `change.go`: governed `ChangeState` (L2/L3), including `request_id`, `route_snapshot`, `latest_frozen_run_summary_version`, gate/artifact/task/evidence/action structures
+- [x] 2.4 Keep score persistence in `route_snapshot.scores` only (no duplicated top-level `scores` fields in lane states)
+- [x] 2.5 Ensure `level_history` is always serialized (empty array allowed, no omit)
+- [x] 2.6 Add worktree metadata fields (`worktree_path`, `worktree_branch`) for governed scope checks
+- [x] 2.7 Create `evidence.go`: implement lean evidence schema (core required + conditional traceability):
+  - core required: `run_summary_version`, `session_id`, `skill_name`, `version`, `state`, `verdict`, `blockers[]`, `references[]`, `timestamp`
+  - conditional/optional: `input_hash` (required for run-summary-bound skills only), optional `input_scope`, optional `mitigation_target`, optional `actor_id`/`role`
+  - deterministic filename writer and collision suffixing
+- [x] 2.8 Enforce mitigation mapping consistency (`mitigation_target` optional; when present must match registry mapping, otherwise derive from `skill_name`)
+- [x] 2.9 Create `wave.go`: add `task_kind` enum with `other` support
+- [x] 2.10 Add monotonic run-summary version contract (`run_summary_version`) and persist it in `TaskRun` traces and governance evidence
+- [x] 2.11 Create `types.go`: explicit MVP support types (`Level`, `LevelSource`, `AdmissionStatus`, `ChangeStatus`, `LevelHistoryEvent`, `IntakeAssessment`, `RouteSnapshot`, `ArtifactState`, `GateStatus`, `GateDecision`, `TaskRun`, `ActionEvent`)
+- [x] 2.12 Create `config.go`: `.spln/config.yaml` schema/defaults (`defaults.level_mode`) + `ConfigExecution` controls (`lock_wait_timeout_seconds=10`, `lock_stale_after_seconds=120`, `cancel_grace_period_seconds=10`, `evidence_retention_days=30`, `evidence_gc_low_disk_free_mb=512`, `max_level_history_entries=100`) and top-level unknown-key-preserving read/write (nested unknown keys under known sections are out of MVP compatibility scope)
+- [x] 2.13 Implement fixed `request_v1` ID generation contract (`request_id=uuidv7`, governed slug suffix collision handling), non-configurable in MVP
+- [x] 2.14 Enforce bounded `level_history` persistence using `execution.max_level_history_entries` and deterministic oldest-entry truncation
+- [x] 2.15 Ensure `evidence_refs` is always serialized for admission/change states (`{}` allowed, no omit)
+- [x] 2.16 Enforce `task_runs` map-key contract `<task_id>__rv<run_summary_version>`, prevent historical overwrite across retries, and validate key/payload identity consistency
+- [x] 2.17 Persist `intake_assessment` in admission state (no `workspace_id` field in MVP runtime models)
 
-## 3. Filesystem & State (`internal/fsutil/`, `internal/state/`)
+## 3. Filesystem and State (`internal/fsutil/`, `internal/state/`)
 
-- [ ] 3.1 Implement project-root and required path detection for `.speclane/`
-- [ ] 3.2 Implement atomic write utility (`temp -> fsync -> rename -> fsync dir`)
-- [ ] 3.3 Implement mutation lock utility (`.speclane/state.lock`) with timeout handling
-- [ ] 3.4 Implement stale-lock cleanup path in `speclane repair` only
-- [ ] 3.5 Implement `Load/SaveAdmission` for `.speclane/runtime/admissions/<request_id>.yaml`
-- [ ] 3.6 Implement `Load/SaveChange` for `.speclane/runtime/changes/<request_id>.yaml`
-- [ ] 3.7 Implement `Load/SaveRunRecord` for `.speclane/runs/<request_id>.yaml`
-- [ ] 3.8 Implement active-request resolver (exactly one active request for scoped commands)
-- [ ] 3.9 Implement archive migration helpers for done/cancel (direct vs governed, including run-record archive path)
-- [ ] 3.10 Enforce no runtime dependency on `.speclane/evidence/**` directories and no creation of those paths
+- [x] 3.1 Create project root detection for `.spln/`
+- [x] 3.2 Create atomic write utility (`temp-in-dir -> fsync temp -> rename -> fsync parent dir`) and global lock utility (`.spln/state.lock`)
+- [x] 3.3 Add active-request resolver over runtime lane files with MVP single-active invariant (exactly one active request required for request-scoped commands; `context/status` support diagnostics fallback; detect same-request dual-active handoff fault)
+- [x] 3.4 Enforce bounded lock acquisition using `execution.lock_wait_timeout_seconds` with deterministic timeout errors
+- [x] 3.5 Add lock-holder diagnostics sidecar `.spln/state.lock.meta` (`holder_pid`, `acquired_at`, `command`)
+- [x] 3.6 Restrict stale-lock cleanup to explicit `spln repair` using `execution.lock_stale_after_seconds` + dead-holder validation; mutating commands must not force-unlock
+- [x] 3.7 Create `LoadAdmission/SaveAdmission` for `.spln/runtime/admissions/<request_id>.yaml`
+- [x] 3.8 Create `LoadChange/SaveChange` for `.spln/runtime/changes/<request_id>.yaml` (governed runtime state only)
+- [x] 3.9 Add guard validations for completion-archive preconditions on governed changes (`spln done` path requires runtime `change_status=active` before migration)
+- [x] 3.10 Implement governed done archive ordering (`validate -> migrate archive targets -> persist archived lifecycle done`)
+- [x] 3.11 Implement governed archive freeze semantics for both `done` and `cancel` paths (all governed `Artifacts[*].State` become `frozen` in archived change state)
+- [x] 3.12 Add migration-safe helper: admission -> governed state handoff when escalating L1 to L2/L3, then seal admission snapshot
+- [x] 3.13 Add archive migration helper:
+  - governed archive: move runtime change state to `.spln/archive/changes/<request_id>.yaml` and linked `sealed_handoff` admission to `.spln/archive/admissions/<request_id>.yaml`
+  - direct-lane archive: move runtime admission state to `.spln/archive/admissions/<request_id>.yaml`
+- [x] 3.14 Enforce evidence ownership boundary (`task_runs[*].evidence_ref` authoritative; `evidence_refs` non-task index only)
+- [x] 3.15 Treat `aircraft/changes/<slug>/change.yaml` `created_at_level` as governed-creation snapshot; pivots update top-level runtime level metadata only (`level`, `level_source`, `level_history`, `last_level_update_at`)
+- [x] 3.16 Add governed-handoff sealing contract: sealed admission snapshot keeps `current_state=S1_ANALYZE` and is immutable after handoff
+- [x] 3.17 Persist L3 `S3_SCOPE_CONFIRMATION` worktree metadata (`worktree_path`, `worktree_branch`) before `G_scope` evaluation and enforce authenticity validation (path exists, repo worktree membership, branch match)
+- [x] 3.18 Add repair-safe cleanup for interrupted atomic-write temp artifacts
+- [x] 3.19 Implement evidence retention GC helper keyed by `execution.evidence_retention_days` (exclude active-request evidence)
+- [x] 3.20 Implement config corruption recovery path (`spln repair` backs up broken config to `.spln/archive/config/config.yaml.broken.<timestamp>.yaml` and rewrites deterministic defaults)
+- [x] 3.21 Enforce lane-local handoff trace rule (`task_runs`/`action_history` not copied from admission to governed state during L1->L2/L3 handoff)
+- [x] 3.22 Implement repair-forward for interrupted terminal archive migration (`done`/`cancel` source already terminal but archive incomplete): idempotent archive completion without reopening active lifecycle
 
-## 4. Artifact Lifecycle (`internal/engine/artifact/`)
+## 4. Template and Artifact Management (`internal/tmpl/`, `internal/engine/artifact/`)
 
-- [ ] 4.1 Scaffold governed bundle for L2/L3 only (`change.yaml`, `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `assurance.md`)
-- [ ] 4.2 Add L3-only `explore.md` scaffold and required section checks
-- [ ] 4.3 Implement artifact staleness propagation DAG (`proposal -> spec -> design -> tasks -> assurance`, `explore -> design`)
-- [ ] 4.4 Implement archive freeze + move (`aircraft/changes/<slug>/` -> `aircraft/changes/archived/<slug>/`)
-- [ ] 4.5 Implement `assurance.md` ownership timing (`S7` updates scope/evidence/risks, `S8` updates verdict/archive-decision)
+- [x] 4.1 Embed artifact templates via `//go:embed`
+- [x] 4.2 Define governed required bundle templates under `aircraft/changes/<slug>/`: `change.yaml`, `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `assurance.md`
+- [x] 4.3 Seed `assurance.md` template with required MVP sections (`Scope Summary`, `Verification Verdict`, `Evidence Index`, `Residual Risks and Exceptions`, `Archive Decision`)
+- [x] 4.4 Add L3-specific template `explore.md`
+- [x] 4.5 Seed `explore.md` template with required MVP sections (`Objectives`, `Unknowns`, `Assumptions`, `Scope Boundaries`, `Validation Plan`)
+- [x] 4.6 Add explicit risk section template block inside `design.md` (replace standalone `risk.md` in MVP)
+- [x] 4.7 Implement scaffolding only when entering governed lane (`L2/L3`)
+- [x] 4.8 Keep stale-propagation DAG for governed artifacts (BFS)
+- [x] 4.9 On governed archive, move artifact bundle from `aircraft/changes/<slug>/` to `aircraft/changes/archived/<slug>/`
+- [x] 4.10 Ensure archive write path preserves frozen artifact lifecycle snapshot in archived runtime change record
+- [x] 4.11 Enforce L3 `explore.md` canonical heading contract (`## Objectives/Unknowns/Assumptions/Scope Boundaries/Validation Plan` in required order; non-empty content required)
 
 ## 5. Routing Engine (`internal/engine/router/`)
 
-- [ ] 5.1 Implement executable vs non-executable intake classification (`non_speclane` boundary)
-- [ ] 5.2 Implement guardrail domain detection + canonicalization + risk floor
-- [ ] 5.3 Implement auto-level routing (`L1|L2|L3`) and fixed-level path with conflict blocking
-- [ ] 5.4 Persist route snapshot + intake assessment in admission state
-- [ ] 5.5 Keep derived contract metadata read-time only (`required_artifacts/gates/checks`)
-- [ ] 5.6 Implement omitted `--level` behavior split for interactive vs non-interactive mode using `defaults.level_mode`
-- [ ] 5.7 Implement deterministic `new_project` / `major_refactor` signal derivation and auto-route integration
+- [x] 5.1 Implement guardrail-domain detection, canonicalization to `domain_slug` enum, and risk floor
+- [x] 5.2 Enforce auto-route guardrail floor to `L3` (keep `L2` for non-guardrail high-control path)
+- [x] 5.3 Implement auto-route algorithm to single final level `L1|L2|L3`
+- [x] 5.4 Implement fixed-level mode with `level_source=user_selected`
+- [x] 5.5 Remove CLI dependency on manual `--scores`; scoring is produced during analyze phase
+- [x] 5.6 Emit route result with readable fields/rationale/contracts (`classification`, executable-only `level` fields, optional `blocking_conflicts[]`) and persist `route_snapshot` to lane state; persist `intake_assessment` in admission state
+- [x] 5.7 Implement non-executable intent detection (pure Q&A/advisory) and return `non_spln` route outcome using AI-first structured semantic intake assessment + deterministic threshold consumption:
+  - required assessment fields: `intent_type`, `is_executable`, `confidence`, `change_targets[]`, `intended_delta`, `acceptance_anchor`, `blocking_unknowns[]`
+  - executable/advisory/clarification decision thresholds MUST consume routing-engine canonical constants (do not hardcode duplicated values in command/action layers)
+  - mixed/unclear or low-confidence input returns clarification-required `non_spln` remediation
+  - executable requests with non-empty `blocking_unknowns[]` remain in speclane and route to `L3` in auto mode (do not force `non_spln` solely due to unknowns)
+  - lexical/path/domain matches are auxiliary only and never authoritative predicates
+- [x] 5.8 Implement `request_v1` generation:
+  - `request_id=uuidv7` (all in-scope speclane levels)
+  - governed `slug={title_kebab}` with numeric suffix collision handling
+- [x] 5.9 Implement deterministic `new_project` / `major_refactor` signal derivation at analyze time and feed auto-route rule inputs
 
-## 6. Action Workflow (`internal/engine/action/`)
+## 6. Action Workflow Engine (`internal/engine/action/`, `internal/engine/executor/`)
 
-- [ ] 6.1 Implement canonical states (`S0..S8`, `DONE`) and transition graph
-- [ ] 6.2 Implement level paths (`L1: S0,S1,S6,S7,S8`; `L2: S0,S1,S4..S8`; `L3: S0,S1,S2..S8`)
-- [ ] 6.3 Implement `speclane new` landing states (`L1->S6`, `L2->S4`, `L3->S2`)
-- [ ] 6.4 Implement remediation loops (`S5->S4`, `S7->S6`, `S8->S6`, pivot analyze-first)
-- [ ] 6.5 Implement L1 `S7/S8` behavior contract (summary-based lightweight review, lightweight verify, explicit `done` gate)
+- [x] 6.1 Define canonical state taxonomy (`S0..S8`, `DONE`)
+- [x] 6.2 Implement phase split: admission (`S0/S1`) vs governed/direct execution
+- [x] 6.3 Enforce level paths:
+  - L1: `S0->S1->S6->S7->S8->DONE`
+  - L2: `S0->S1->S4->S5->S6->S7->S8->DONE`
+  - L3: `S0->S1->S2->S3->S4->S5->S6->S7->S8->DONE`
+- [x] 6.4 Implement fixed-level safety checks at `S1` (block hard conflicts, no silent level rewrite)
+- [x] 6.5 For active-request `spln analyze`, persist hard-conflict blockers in `S1` while keeping lane/level unchanged (reroute remains `pivot`-only)
+- [x] 6.6 Add remediation loops (`S5->S4`, `S6->S6`, `S6->S1`, `S6->S4`, `S6->S3`, `S7->S6`, `S7->S1`, `S8->S7`, `S8->S6`, `S8->S1`)
+- [x] 6.7 Enforce explicit governed rescope trigger semantics:
+  - `L2`: `S6->S4` only after explicit `spln pivot` rescope + analyze result with unchanged `L2`
+  - `L3`: `S6->S3` only after explicit `spln pivot` rescope + analyze result with unchanged `L3`
+- [x] 6.8 Implement concrete L1 lightweight checks:
+  - `S7`: run-summary consistency + no non-pass task verdicts
+  - `S8`: all task verdicts pass + pass tasks require resolvable evidence refs + no unresolved blockers
+- [x] 6.9 Implement L1 command-owned auto-check trigger semantics (`spln do` same invocation executes `S6` work + ordered `S7/S8` lightweight checks; pass => persist `S8` done-ready, fail => return `S6` with blockers)
+- [x] 6.10 Keep `S8 -> DONE` command-gated: auto-checks can make lane done-ready, but lifecycle finalization occurs only via `spln done`
+- [x] 6.11 Implement `S2_DISCOVER` execution semantics (discovery content generation + pass/fail criteria + deterministic `S2->S3`)
+- [x] 6.12 Implement `S3_SCOPE_CONFIRMATION` execution semantics (scope-confirmation validation + authoritative `worktree_path/worktree_branch` persistence + worktree authenticity validation + deterministic `S3->S4` gate entry)
+- [x] 6.13 Implement `S4_SPEC_BUNDLE` execution semantics (required bundle reconciliation + stale/missing blocker handling + deterministic `S4->S5`)
 
-## 7. Gate + Check Engine (`internal/engine/gate/`)
+## 7. Gate Engine (`internal/engine/gate/`)
 
-- [ ] 7.1 Implement gates: `G_scope`, `G_plan`, `G_pivot`, `G_ship`
-- [ ] 7.2 Implement check types: `command_check` and `human_confirmation`
-- [ ] 7.3 Implement `G_scope` checks (`explore` sections, worktree authenticity) + `scope_confirmed`
-- [ ] 7.4 Implement `G_plan` checks (`plan_artifacts_ready`, `openspec_validate_pass`) + `execute_ready`
-- [ ] 7.5 Implement `G_ship` baseline check IDs (`tests_pass`, `lint_pass`, `tasks_all_checked`) + `review_done` + `ship_ready`
-- [ ] 7.9 Implement deterministic gate-check catalog + gate-to-check mapping contract as single source for gate engine
-- [ ] 7.6 Keep MVP `G_ship` fixed-baseline only (defer domain-specific extra ship checks to post-MVP)
-- [ ] 7.7 Implement failed-check default block + explicit user override flow (`override=true`, note persisted in run record)
-- [ ] 7.8 Remove gate dependency on governance-skill evidence/session_id comparators
-- [ ] 7.10 Implement `G_pivot` as rule gate in MVP (entry-state/kind validity/analyze-first), without catalog check IDs
+- [x] 7.1 Implement four gates: `G_scope`, `G_plan`, `G_pivot`, `G_ship`
+- [x] 7.2 Restrict mandatory gate evaluation to governed lane (`L2/L3`)
+- [x] 7.3 Implement `G_scope` checks: discovery evidence + scope confirmation + worktree metadata
+- [x] 7.4 Ensure `G_scope` reads worktree metadata from governed runtime state written during `S3_SCOPE_CONFIRMATION`
+- [x] 7.5 Enforce L3 `explore.md` minimum-structure checks in `G_scope` (`Objectives`, `Unknowns`, `Assumptions`, `Scope Boundaries`, `Validation Plan`; non-empty content required)
+- [x] 7.6 Implement `G_plan` checks at `S5->S6`
+- [x] 7.7 Implement simplified `G_ship` checks at `S8->DONE` for governed lane only:
+  - ship-stage artifact readiness (`missing|unapproved|invalid`)
+  - unresolved blockers
+  - required `S8` verification evidence readiness
+  - guardrail high-risk checks (when domain exists)
+- [x] 7.8 Implement gate decision mapping (`approve/reject/conditional_approve` -> `approved/blocked/pending`) with reason requirements
+- [x] 7.9 Implement guardrail high-risk check catalog for `G_ship` with deterministic check IDs and missing/failing reason codes (`high_risk_check_missing:*`, `high_risk_check_failed:*`)
+- [x] 7.10 Implement `G_pivot` request-kind semantics (`reroute` vs `rescope`) and enforce rescope approval requirement before governed rescope transitions (`L2: S6->S4`, `L3: S6->S3`)
+- [x] 7.11 Enforce `change.yaml` MVP boundary in `G_ship` (require R0 structure/identifier integrity only; do not require R1/R2/R3 content quality layers for manifest)
 
-## 8. Wave / Review / Context (`internal/engine/wave`, `review`, `context`)
+## 8. Wave / Review / Skill Engines
 
-- [ ] 8.1 Implement DAG wave builder (topological layers + conflict split)
-- [ ] 8.2 Implement L1 synthetic task normalization from direct brief
-- [ ] 8.10 Implement `task_kind=other` isolation + manual-checkpoint execution behavior
-- [ ] 8.12 Document and enforce `task_kind` semantics (`code|test|doc|ops` are reporting labels; only `other` changes scheduling)
-- [ ] 8.3 Implement in-wave execution (parallel/sequential by config)
-- [ ] 8.4 Implement post-wave changed-files overlap detection (`post_wave_file_conflict`)
-- [ ] 8.5 Implement non-pass loop (`retry`, `skip`, `abort_wave`, `pivot`)
-- [ ] 8.11 Implement retry guard enforcement (`max_retries_per_task`, default 2)
-- [ ] 8.6 Implement checkpoint pause/resume with response persistence
-- [ ] 8.7 Implement frozen wave summary snapshots in run record (`wave_summaries[]` append-only, `summary_version` monotonic, `latest_summary_version` pointer update)
-- [ ] 8.8 Implement review engine to consume latest frozen summary from run record
-- [ ] 8.13 Implement review entry preconditions (`S6/S8` require frozen summary and state constraints)
-- [ ] 8.9 Implement compact context pack (intent/scope/blockers/next action/checks/confirmations)
+- [x] 8.1 Implement GSD-style wave planner (dependency layers + conflict split)
+- [x] 8.2 Implement L1 direct-brief synthetic node normalization (`task_id=l1-<request_short>-NN`, `request_short` = first 8 chars of `request_id`, deterministic field defaults, checklist decomposition + sequential dependency chaining)
+- [x] 8.3 Implement `task_kind=other` handling as non-wave-governed/manual path (single-task isolated wave, no parallel execution with non-`other` tasks)
+- [x] 8.4 Freeze run summary before review attempts
+- [x] 8.5 Ensure each frozen summary emits/increments `run_summary_version` per request
+- [x] 8.6 Implement review layers with MVP-minimal required set:
+  - baseline governed path: `R0 + IR1`
+  - guardrail-sensitive governed path: `R0 + R3 + IR1 + IR3`
+  - `R1/R2/IR2` remain optional and non-blocking unless explicitly enabled by policy/operator
+- [x] 8.7 Enforce guardrail precedence in simplified review matrix resolution (`R3`/`IR3` mandatory under guardrail scope; optional layers cannot replace or bypass them)
+- [x] 8.8 Enforce MVP manifest-review simplification (`change.yaml` stays `R0`-only in reviewed scope)
+- [x] 8.9 Implement/export consolidated review matrix reference table (baseline vs guardrail, artifact vs implementation layers, `change.yaml` and `explore.md` special-casing)
+- [x] 8.10 Implement governance skill bindings by state and level (L1 optional, L2/L3 level-enforced)
+- [x] 8.11 Enforce lean evidence contract across governance skills (core required fields + conditional `input_hash` for run-summary-bound skills)
+- [x] 8.12 Enforce optional `mitigation_target` consistency with `skill_name` (derive mapping when field omitted)
+- [x] 8.13 Enforce governed reviewer independence comparator (`artifact-review`/`final-closeout` reviewer `session_id` must differ from latest `wave-orchestration` implementer baseline for same `(request_id, run_summary_version)`)
+- [x] 8.14 Enforce `run_summary_version` domain rules (`0` for pre-run-summary skills in `S1/S3/S5`; `>=1` for run-summary-bound `S6/S7/S8`; version-match checks in review/verify readiness)
+- [x] 8.15 Implement context-pack builder (`internal/engine/context`) for dual-lane compact context output (intent/scope/blockers/next action)
+- [x] 8.16 Implement S6 wave envelope + subagent context injection (task-scoped payload, technique-skill hints, unrelated-context exclusion, unique `session_id`)
+- [x] 8.17 Implement checkpoint resume bundle emission (`prior_run_id`, `paused_task_id`, `checkpoint_type`, `user_response_payload`, `pause_blockers`)
+- [x] 8.18 Implement evidence freshness evaluator (`input_hash` compatibility + timestamp ordering) consumed by `spln context` and status projections
+- [x] 8.19 Implement canonical `input_hash` algorithm (SHA-256 over canonical JSON payload) and UUIDv7 `session_id` generation/validation for governance evidence
+- [x] 8.20 Enforce wave planner ordering determinism without priority/weight overrides (DAG layer + conflict split + lexical `task_id`)
+- [x] 8.21 Implement post-wave runtime file-overlap detection from `changed_files[]`, downgrade overlaps to `blocked` (`post_wave_file_conflict`), and require serialized retry
+- [x] 8.22 Implement pre-execution static conflict partition using normalized `target_files[]` intersection and conservative isolation for empty `target_files[]`
+- [x] 8.23 Persist frozen run summaries as immutable files at `.spln/evidence/runs/<request_id>/rv<run_summary_version>.json` and maintain lane-state pointer `latest_frozen_run_summary_version`
 
 ## 9. CLI Commands (`cmd/`)
 
-- [ ] 9.1 `init`: create minimal runtime layout (`.speclane/runs/` included, no evidence dirs)
-- [ ] 9.2 `new`: intake/analyze/route/persist landing state + governed scaffold when needed
-- [ ] 9.11 `new`: `non_speclane` returns successful classification contract (exit `0`, parse-stable payload, no runtime writes)
-- [ ] 9.3 `do`: execute exactly one next action per invocation (including L1; no same-invocation `S6->S7/S8` auto-chain) and include checkpoint handling
-- [ ] 9.4 `status`: default JSON, diagnostics mode for `0` or `>1` active requests
-- [ ] 9.5 `context`: compact view with `text|yaml|json` formats
-- [ ] 9.6 `done`: strict finalizer with checks/confirmations and optional explicit override
-- [ ] 9.7 `cancel`: terminal cancel + in-flight preemption + archive (including run record)
-- [ ] 9.8 `pivot`: analyze-first reroute/rescope semantics
-- [ ] 9.9 `repair`: stale lock cleanup, malformed config recovery, partial archive repair
-- [ ] 9.10 `analyze` and `review`: explicit override commands with strict preconditions
+- [x] 9.1 `spln init`: create runtime-minimal `.spln/` layout (`.spln/config.yaml`, `.spln/runtime/admissions/`, `.spln/runtime/changes/`, `.spln/archive/`, `.spln/archive/admissions/`, `.spln/archive/changes/`, `.spln/archive/config/`, `.spln/evidence/skills/`, `.spln/evidence/tasks/`, `.spln/evidence/runs/`); create `aircraft/changes/`, `aircraft/changes/archived/`; enforce no non-executable narrative files under `.spln/` (for example `.spln/README.md`); write `config.yaml` defaults schema (`level_mode`, lock controls, evidence retention, level-history cap)
+- [x] 9.2 `spln init` tools-flag behavior: support `--tools all`, `--tools none`, and `--refresh` deterministic regeneration
+- [x] 9.3 `spln new`: intake + analyze + route (`--level auto|L1|L2|L3`, no `--scores`), and consume `defaults.level_mode` when `--level` is omitted (fallback `auto` on invalid config)
+- [x] 9.4 `spln new`: create governed change only for `L2/L3`; keep `L1` in admission lane
+- [x] 9.5 `spln new`: reject pure Q&A/advisory intents with explicit remediation; do not create `request_id` or runtime state
+- [x] 9.6 `spln new`: persist routed landing state (`L1->S6`, `L2->S4`, `L3->S2`) before command returns
+- [x] 9.7 `spln new`: fixed-level hard conflicts fail before `request_id`/state creation with deterministic remediation (`--level auto|L3`)
+- [x] 9.8 `spln do`: execute one next action from current lane state
+- [x] 9.9 Enforce active-context preconditions for request-scoped commands (`do/done/cancel/pivot/analyze/review`): resolve exactly one active request; block on zero/multiple active requests
+- [x] 9.10 Add diagnostics-first `spln status` and `spln context` behavior for zero/multiple active requests (status is read-only; `spln repair` handles mutating diagnostics fixes without request-scoped resolution)
+- [x] 9.11 Implement `spln do` decision/resume contract for paused/non-pass S6 states:
+  - emit/consume checkpoint `resume_signal` and allowed-response options
+  - support non-interactive continuation via `--resume-response "<text>"`
+  - persist `user_response_payload` in continuation evidence
+  - enforce response validation against active checkpoint contract with deterministic remediation
+- [x] 9.12 Implement `spln do` L1 lightweight auto-check pipeline output contract (same invocation `S6->S7->S8` evaluation path, done-ready projection messaging, deterministic fallback to `S6` on check failure)
+- [x] 9.13 `spln status` / `spln context`: support both admission-only and governed-linked views, with runtime-projected `next_ready_actions` and `blockers`
+- [x] 9.14 Enforce status/context value domains:
+  - `lane_mode`: `admission_only|governed|diagnostics`
+  - `evidence_freshness`: `fresh|stale|unknown`
+- [x] 9.15 `spln done`: completion behavior split by lane, require governed `S8` closeout sub-step completion before `G_ship`, and default to request-scoped archive
+- [x] 9.16 `spln cancel`: terminal cancellation for active requests (`admission_status=cancelled` or `change_status=cancelled`), immediate archive migration, and terminal lifecycle summary payload
+- [x] 9.17 `spln pivot`: rescore/reroute; support direct->governed escalation; enforce allowed entry states (`S6|S7|S8`) with deterministic rejection outside allowed states
+- [x] 9.18 Enforce `spln pivot --kind reroute|rescope` contract (default `reroute`; `rescope` requires explicit kind and is valid only from governed `S6`; no required reason argument gate)
+- [x] 9.19 `spln analyze`, `spln review` with explicit precondition/state-transition rules (`analyze` transitions to `S1` for revalidation only; reroute/rescope is `pivot`-only; `review` requires frozen run summary when entering from `S6`; both reject when no active request context)
+  - `analyze` override keeps historical `task_runs/action_history`, marks prior run-summary readiness superseded, refreshes route metadata/projections, and requires recomputed review/verify readiness on next execution
+  - `analyze` hard conflicts persist blockers in `route_snapshot.blocking_conflicts[]` while in `S1` and keep lane/level unchanged until explicit `pivot`
+- [x] 9.20 `spln repair`: run safe local integrity/layout repairs and emit repaired/non-repairable result summary
+- [x] 9.21 Implement governed-create partial-failure repair (`spln new` interrupted after admission write for L2/L3):
+  - detect orphaned active admission with missing governed change/runtime artifacts
+  - on `spln repair`, repair forward by creating missing governed state/artifacts and sealing admission handoff
+- [x] 9.22 Implement structured JSON error envelope on command failure (`error_code`, `category`, `message`, `remediation`, `exit_code`, optional `request_id/details`)
+- [x] 9.23 Implement stable CLI exit-code taxonomy (`2/3/4/5/6`) and deterministic mapping by failure category
+- [x] 9.24 Extend `spln repair` to include stale-lock cleanup report under lock-timeout diagnostics
+- [x] 9.25 `spln done` / `spln cancel`: request-scoped archive target resolution
+  - if governed change exists: archive governed runtime + governed artifact bundle + linked sealed admission snapshot
+  - otherwise: archive direct-lane admission runtime record only
+- [x] 9.26 Extend `spln repair` to normalize same-request dual-active handoff faults (governed-active + sealed admission)
+- [x] 9.27 Extend `spln repair` to report (not auto-mutate) different-request multi-active ambiguity as non-repairable diagnostics
+- [x] 9.28 Extend `spln repair` with evidence retention GC (`execution.evidence_retention_days`, skip active-request evidence)
+- [x] 9.29 Implement malformed config failure/remediation contract (state-integrity error + deterministic remediation to run `spln repair`)
+- [x] 9.30 Implement low-disk opportunistic retention-GC trigger for evidence-writing flows (`execution.evidence_gc_low_disk_free_mb`)
+- [x] 9.31 Implement `spln cancel` in-flight task preemption (`SIGINT` -> grace wait -> `SIGKILL`) with `execution.cancel_grace_period_seconds`
+- [x] 9.32 Extend `spln repair` with interrupted terminal archive forward repair (`done`/`cancel` source terminal + archive incomplete)
+- [x] 9.33 Map `spln new` `non_spln` rejection to deterministic failure envelope (`category=precondition_blocked`, `exit_code=3`, `error_code=non_spln_intent`)
 
-## 10. Tool Adapters (Optional Sidecar)
+## 10. Tool Adapter Generation (Optional Sidecar, Post-Core MVP) (`internal/toolgen/`)
 
-- [ ] 10.1 Keep four-target adapter registry (`claude/cursor/codex/opencode`)
-- [ ] 10.2 Generate concise command wrappers only (no embedded governance policy)
-- [ ] 10.3 Keep helper guides advisory-only and non-blocking
-- [ ] 10.4 Ensure deterministic byte-identical generation on repeat runs
-- [ ] 10.5 Enforce canonical CLI command name `speclane` in adapter wrappers (AI triggers route to canonical CLI)
-- [ ] 10.6 Enforce `spl` short-name trigger family with tool-distinct structures:
-  - claude `/spl:<command>`
-  - cursor `/spl.<command>`
-  - codex `/prompts:spl-<command>`
-  - opencode `/spl-<command>`
-- [ ] 10.7 Use English canonical confirmation prompt templates in generated artifacts; runtime localization remains AI-layer concern
+Core-MVP completion SHALL NOT be blocked by unfinished section 10 items.
 
-## 11. Unit Tests
+- [x] 10.1 Keep 4-tool registry (`claude/cursor/codex/opencode`)
+- [x] 10.2 Regenerate command skills and governance skills with updated lane semantics
+- [x] 10.3 Update helper trigger metadata as advisory hints only (source catalogs optional when available; no hard dependency on local snapshot paths)
+- [x] 10.4 Keep deterministic generation (byte-identical outputs)
 
-- [ ] 11.1 Routing tests: executable boundary + auto/fixed-level outcomes
-- [ ] 11.10 Routing mode tests: omitted `--level` interactive/non-interactive behavior with config fallback
-- [ ] 11.11 Routing signal tests: `new_project` / `major_refactor` derivation fixtures
-- [ ] 11.2 State tests: admission/change/run-record round-trip + lock timeout + atomic writes
-- [ ] 11.3 Gate tests: `G_scope/G_plan/G_ship/G_pivot` pass/block paths
-- [ ] 11.4 Override tests: failed command check + explicit override continuation trace
-- [ ] 11.12 RunRecord schema tests: `history[]` append behavior, ledger-only ownership, and `check_id` identity contracts
-- [ ] 11.16 Override persistence tests: overridden command check stores `override=true`, optional `override_note`, and `override_at`
-- [ ] 11.5 Wave tests: DAG layering, conflict split, overlap downgrade, retry loop
-- [ ] 11.13 `task_kind=other` tests: isolated wave + manual checkpoint before pass
-- [ ] 11.14 Retry guard tests: retries exhausted path blocks additional retry
-- [ ] 11.6 Review/context tests: frozen-summary consumption + diagnostics payloads
-- [ ] 11.7 CLI error-envelope and exit-code taxonomy tests
-- [ ] 11.8 Archive tests: direct vs governed done/cancel migration and freeze behavior
-- [ ] 11.9 Config-repair tests: malformed config backup + default rewrite
-- [ ] 11.15 `do` single-step tests: L1 does not auto-chain `S6->S7/S8` in one invocation
-- [ ] 11.17 Tool adapter trigger tests: all four tools use `spl` short-name family with distinct per-tool syntax (including Codex `/prompts:spl-*`)
-- [ ] 11.18 Prompt-template tests: canonical prompts are English while runtime keeps check-id semantics stable under localization
-- [ ] 11.19 `non_speclane` classification tests: `speclane new` exits `0` with parse-stable classification payload
-- [ ] 11.20 Review precondition tests: `review` from `S6/S8` enforces frozen-summary/state preconditions
-- [ ] 11.21 Assurance ownership tests: `S7` and `S8` update the required assurance sections
+## 11. Tests — Unit
 
-## 12. Integration Tests
+- [x] 11.1 Routing tests for fixed-level and auto-level paths
+- [x] 11.2 Admission state persistence tests (round-trip, lock safety, history presence)
+- [x] 11.3 Lock timeout unit tests (bounded wait + no state mutation on timeout)
+- [x] 11.4 Stale-lock repair unit tests (`spln repair` only, dead-holder + age-threshold conditions)
+- [x] 11.5 Governed change persistence tests (round-trip, archive guards)
+- [x] 11.6 Governed done-archive ordering tests (`change_status=active` required pre-migration; archived record ends as `change_status=done`)
+- [x] 11.7 Governed archive freeze tests (`done` and `cancel` archive paths persist all governed artifact states as `frozen`)
+- [x] 11.8 Gate tests (`G_scope/G_plan/G_ship/G_pivot`) under new applicability rules
+- [x] 11.9 `G_scope` structure tests (missing `explore.md`, missing required section, empty section content => blocked with missing-section remediation)
+- [x] 11.10 Review matrix guardrail-precedence tests (guardrail scope requires `R3`/`IR3`; optional `R1/R2/IR2` do not become implicit blockers)
+- [x] 11.11 Manifest review-scope tests (`change.yaml` remains `R0`-only in MVP regardless guardrail sensitivity)
+- [x] 11.12 `assurance.md` structure tests (missing required section heading => governed closeout blocked; empty content handled by review-layer depth, not structure gate)
+- [x] 11.13 Gate decision mapping tests (`approve/reject/conditional_approve`)
+- [x] 11.55 Guardrail high-risk check catalog tests (`G_ship` blocks on missing/failing required check IDs; passes only when all required checks pass)
+- [x] 11.78 Simplified `G_ship` contract tests (`G_ship` blocks only on artifact readiness, unresolved blockers, required verification evidence, or guardrail high-risk checks)
+- [x] 11.14 Action-graph tests for all level paths and loops
+- [x] 11.15 Evidence schema tests for lean requiredness:
+  - always-required core fields (`run_summary_version`, `session_id`, `skill_name`, `version`, `state`, `verdict`, `blockers[]`, `references[]`, `timestamp`)
+  - conditional `input_hash` requiredness (`S6/S7/S8` required; `S1/S3/S5` optional)
+  - optional `input_scope`/`mitigation_target`/`actor_id`/`role` handling
+- [x] 11.16 Reviewer-independence comparator tests (missing implementer baseline blocks readiness; same reviewer/implementer `session_id` blocks governed review readiness for same `(request_id, run_summary_version)`; run-summary-version mismatch blocks readiness)
+- [x] 11.17 `run_summary_version` domain tests (`S1/S3/S5` evidence requires version `0`; `S6/S7/S8` requires `>=1`)
+- [x] 11.18 Mitigation-target consistency tests (`mitigation_target` mismatch fails; omitted field derives mapping from `skill_name`)
+- [x] 11.19 Route snapshot durability tests (admission + governed handoff)
+- [x] 11.20 Config rewrite tests for top-level unknown-key preservation
+- [x] 11.21 Fixed ID-generation tests (`request_v1` always active in MVP; `request_id` UUIDv7 + slug collision suffixing)
+- [x] 11.22 Evidence ownership tests (reject duplicated task evidence pointers in `evidence_refs`)
+- [x] 11.23 Task-run key/value integrity tests (reject key/payload mismatch for `<task_id>__rv<run_summary_version>`)
+- [x] 11.24 Wave parser/planner tests including `task_kind=other` isolation (single-task wave; no parallel with non-`other`)
+- [x] 11.56 Explore heading contract tests (`explore.md` requires canonical `##` headings in required order; missing/reordered headings block `G_scope`)
+- [x] 11.57 `G_pivot` kind tests (`reroute` and `rescope` approval paths; `L2 S6->S4` and `L3 S6->S3` blocked without approved `rescope` pivot)
+- [x] 11.58 Wave ordering tests (planner ignores optional priority/weight metadata and uses deterministic DAG+lexical ordering)
+- [x] 11.59 Post-wave overlap tests (same-wave overlapping `changed_files[]` => `post_wave_file_conflict`, verdict downgrade to `blocked`, serialized retry required)
+- [x] 11.60 Cancel ordering tests (terminal cancelled lifecycle status is persisted before archive migration in both direct and governed lanes)
+- [x] 11.25 L1 lightweight check tests (`S7`/`S8` pass/fail criteria)
+- [x] 11.26 L1 auto-check trigger tests (`spln do` same invocation evaluates `S6->S7->S8`; pass persists `S8` done-ready; fail returns `S6`)
+- [x] 11.27 L3 scope-confirmation worktree write tests (`S3` persists `worktree_path/worktree_branch` before `G_scope`)
+- [x] 11.28 Analyze-override hard-conflict tests (persist blockers in `route_snapshot.blocking_conflicts[]` while in `S1` without lane/level reroute)
+- [x] 11.29 Cancellation lifecycle tests (direct/gov lanes become terminal, no next-ready actions, immediate archive migration on cancel, cancelled status preserved in archive)
+- [x] 11.30 `non_spln` rejection + clarification tests (pure Q&A/advisory requests are rejected without state creation; verify low-confidence mixed/unclear intake returns clarification remediation; verify multilingual executable-intent fixtures are accepted when semantic confidence crosses threshold; verify executable intake with non-empty `blocking_unknowns[]` is routed to `L3` instead of rejected)
+- [x] 11.31 Override precondition tests (`spln analyze` / `spln review` reject without active request context)
+- [x] 11.32 Review flag boundary tests (`spln review --artifact ...` is rejected in MVP with deterministic remediation)
+- [x] 11.33 Pivot state-boundary tests (`spln pivot` allowed only in `S6/S7/S8`; deterministic rejection in other states)
+- [x] 11.34 Pivot kind-contract tests (`spln pivot` defaults to `reroute`; `--kind rescope` required for rescope path; rescope from `S7/S8` rejected; no required reason argument)
+- [x] 11.35 Active-request resolution tests (single active passes; zero/multiple active requests block request-scoped commands with deterministic errors)
+- [x] 11.36 L1 synthetic normalization tests (single-brief defaults, checklist decomposition, deterministic `task_id` sequencing, sequential dependency chaining)
+- [x] 11.37 Manifest level snapshot tests (pivot updates runtime level metadata while `change.yaml` `created_at_level` snapshot remains stable)
+- [x] 11.38 Admission route-snapshot requiredness tests (admission state write fails when `route_snapshot` is missing for executable requests)
+- [x] 11.39 Route snapshot schema tests (snapshot persists raw scores + guardrail + rationale + optional `blocking_conflicts[]`; required contracts are derived, not persisted)
+- [x] 11.40 Context-pack unit tests (dual-lane pack shape, compact required fields, source-state labeling)
+- [x] 11.41 Subagent-context unit tests (wave envelope completeness, task-scoped filtering, unique `session_id` per subagent run)
+- [x] 11.42 Resume/freshness unit tests (checkpoint bundle integrity + evidence freshness detection from `input_hash`/timestamps)
+- [x] 11.43 Repair command unit tests (`spln repair` runs only when explicitly invoked and keeps non-repairable issues read-only)
+- [x] 11.44 CLI error-contract unit tests (structured stderr JSON envelope fields + exit-code mapping by failure category)
+- [x] 11.45 Status/context value-domain unit tests (`lane_mode` and `evidence_freshness` enums including diagnostics/unknown paths)
+- [x] 11.46 Context diagnostics-mode unit tests (`spln context` returns compact diagnostics payload when active set is `0` or `>1`)
+- [x] 11.47 S6 decision/resume unit tests (checkpoint-response validation, non-interactive `--resume-response` requirement, `user_response_payload` persistence)
+- [x] 11.48 Workflow-entry/state semantics tests:
+  - `spln new` landing states (`L1->S6`, `L2->S4`, `L3->S2`)
+  - sealed admission keeps `current_state=S1_ANALYZE`
+  - `S2` and `S4` pass/fail transitions follow deterministic criteria
+- [x] 11.49 Init-tools flag unit tests (optional sidecar: `--tools all|none` and `--refresh` deterministic regeneration behavior)
+- [x] 11.50 Level-mode defaulting unit tests (`--level` omitted uses `defaults.level_mode`; invalid config value falls back to `auto` with remediation)
+- [x] 11.51 Task-run identity unit tests (`task_runs` key format `<task_id>__rv<run_summary_version>`, retry preserves historical entries)
+- [x] 11.52 `input_hash` and `session_id` contract unit tests (canonical hash reproducibility for run-summary-bound skills, UUIDv7 format validation)
+- [x] 11.53 Route-signal derivation unit tests (`new_project` and `major_refactor` deterministic classification fixtures)
+- [x] 11.54 `G_scope` worktree-authenticity tests (non-existent path, non-worktree path, branch mismatch => blocked with deterministic remediation)
+- [x] 11.61 Intake-assessment persistence tests (required semantic fields persisted in admission state and stable across handoff/archive)
+- [x] 11.62 Bounded `level_history` tests (append overflow truncates oldest entries using `execution.max_level_history_entries`)
+- [x] 11.63 Atomic-write crash-safety tests (`fsync` + rename contract leaves target old-or-new only; stale temp artifacts repairable)
+- [x] 11.64 Multi-active repair boundary tests (same-request dual-active normalized; different-request ambiguity reported non-repairable)
+- [x] 11.65 Evidence retention GC unit tests (expired non-active evidence pruned by `spln repair`; active-request evidence retained)
+- [x] 11.66 L3 rescope transition tests (`spln pivot` rescope with unchanged `L3` transitions `S6->S3`, re-runs `G_scope`, then returns to `S4`)
+- [x] 11.67 Pre-execution static conflict partition tests (overlapping normalized `target_files[]` split before execution; empty `target_files[]` isolated)
+- [x] 11.68 L1 synthetic task-id short-format tests (`l1-<request_short>-NN`; deterministic first-8-char `request_short`)
+- [x] 11.69 Cancel preemption tests (`SIGINT` then `SIGKILL` after `execution.cancel_grace_period_seconds`)
+- [x] 11.70 Config corruption recovery tests (malformed config triggers state-integrity failure; `spln repair` backup + default rewrite)
+- [x] 11.71 Low-disk opportunistic GC tests (below threshold triggers one GC pass before evidence write retry)
+- [x] 11.72 Handoff trace-ownership tests (`task_runs` and `action_history` remain lane-local and are not copied admission->governed)
+- [x] 11.73 Guardrail check-id registry tests (only registered `<domain_slug>.<check_slug>` IDs accepted in missing/failing reasons)
+- [x] 11.74 Guardrail domain canonicalization tests (routing normalizes legacy domain labels to canonical `domain_slug` before persistence/gate evaluation)
+- [x] 11.75 Interrupted terminal archive repair tests (`spln repair` completes `done`/`cancel` archive migration idempotently without reopening active lifecycle)
+- [x] 11.76 `non_spln` failure-envelope tests (`spln new` non-executable rejection maps to `precondition_blocked` + exit code `3` + `error_code=non_spln_intent`)
+- [x] 11.77 Frozen run-summary persistence tests (immutable `.spln/evidence/runs/<request_id>/rv<run_summary_version>.json` records + monotonic `latest_frozen_run_summary_version` pointer)
 
-- [ ] 12.1 `non_speclane` request creates no runtime/admission/change/run files
-- [ ] 12.2 L1 end-to-end: `new -> do -> done` using admission + run record only
-- [ ] 12.3 L2 end-to-end: governed scaffold + `G_plan/G_ship` command checks + confirmations
-- [ ] 12.4 L3 end-to-end: discover/scope + `G_scope` + governed run to done
-- [ ] 12.9 Routing behavior integration: omitted `--level` mode split and `new_project/major_refactor`-driven L3 routing
-- [ ] 12.5 Failed check override flow: user approves continuation and done succeeds with override trace
-- [ ] 12.6 Cancel in-flight wave: graceful-stop then force-kill then archive
-- [ ] 12.10 Terminal archive integration: run record moves to `.speclane/archive/runs/<request_id>.yaml` on done/cancel
-- [ ] 12.7 `status/context` diagnostics behavior under zero/multi-active contexts
-- [ ] 12.8 `openspec validate` and `openspec validate --strict` pass after updates
+## 12. Tests — Integration
 
-## 13. Verification Commands
-
-- [ ] 13.1 `openspec validate go-mvp-openspec-workflow`
-- [ ] 13.2 `openspec validate --strict go-mvp-openspec-workflow`
-- [ ] 13.3 `openspec status --change go-mvp-openspec-workflow`
-- [ ] 13.4 Repo grep sweep confirms no runtime contract dependency on `.speclane/evidence/skills/`
+- [x] 12.1 `non_spln` intake rejection: pure Q&A/advisory request is rejected and no request state is created
+- [x] 12.2 Fixed-level guardrail conflict rejection: `spln new --level L1` hard conflict fails before request-state creation
+- [x] 12.3 Language-agnostic intake routing: multilingual or mixed-language executable requests (for example Chinese+English mixed phrasing) enter speclane lifecycle instead of `non_spln`
+- [x] 12.4 L1 flow: `new --level L1` -> `S6/S7/S8` -> done (no change dir), with direct-lane task traces persisted in admission
+- [x] 12.5 L2 flow: auto/fixed L2 creates change dir and governed bundle, enforces `G_plan` and `G_ship`
+- [x] 12.6 L3 flow: creates change dir, enforces discover/scope and `G_scope`
+- [x] 12.7 L3 scope readiness integration: incomplete `explore.md` blocks `S3->S4`; completing required sections unblocks progression
+- [x] 12.8 L3 scope metadata integration: `S3_SCOPE_CONFIRMATION` persists non-empty `worktree_path/worktree_branch` before successful `G_scope`
+- [x] 12.9 L1 pivot escalation: direct lane escalates to governed lane and creates change at escalation point
+- [x] 12.10 `status` default-JSON contract in admission-only and governed-linked modes
+- [x] 12.11 `go build ./...` and `go test ./...` green
+- [x] 12.12 Governed handoff seal: post-handoff progression mutates only change state, admission remains sealed snapshot
+- [x] 12.13 Handoff history-boundary check: admission pre-handoff `action_history` is not duplicated into change history; full timeline is joinable by `request_id`
+- [x] 12.14 Governed archive migration: linked `sealed_handoff` admission moves from runtime admissions to archive admissions via runtime change state `request_id`
+- [x] 12.15 Analyze-override hard-conflict integration: `spln analyze` persists blockers in `S1` and keeps lane/level unchanged until explicit `pivot`
+- [x] 12.16 Fixed ID-generation integration: `spln new` always emits UUIDv7 `request_id` and deterministic slug suffixing for collisions
+- [x] 12.17 Cancellation flows:
+  - L1 `spln cancel` sets `admission_status=cancelled`
+  - L2/L3 `spln cancel` sets `change_status=cancelled`
+  - cancel command response includes terminal lifecycle summary payload
+  - `spln cancel` archives request-scoped targets while preserving cancelled lifecycle status
+- [x] 12.18 Governed archive storage split:
+  - runtime change state moves `.spln/runtime/changes/<request_id>.yaml` -> `.spln/archive/changes/<request_id>.yaml`
+  - governed artifact bundle moves `aircraft/changes/<slug>/` -> `aircraft/changes/archived/<slug>/`
+  - archived governed runtime record keeps all artifact lifecycle states as `frozen`
+  - archived governed state persists terminal lifecycle `change_status=done` for `spln done` path
+- [x] 12.19 Direct-lane archive storage:
+  - runtime admission state moves `.spln/runtime/admissions/<request_id>.yaml` -> `.spln/archive/admissions/<request_id>.yaml` when `spln done` runs without governed change
+- [x] 12.20 Wave runtime-overlap integration: same-wave overlapping file writes trigger `post_wave_file_conflict` and block automatic progression until serialized retry
+- [x] 12.21 Override command rejection after `non_spln` intake (`spln analyze` / `spln review` fail because no request state exists)
+- [x] 12.22 Review unsupported-flag integration check (`spln review --artifact ...` fails with deterministic remediation)
+- [x] 12.23 Pivot kind-contract integration check (`spln pivot` default kind is `reroute`; governed rescope requires explicit `--kind rescope` and is rejected outside `S6`; no reason argument required)
+- [x] 12.24 Active-context integration checks:
+  - `spln new` blocked when one active request already exists
+  - request-scoped active-context commands fail on intentionally injected multi-active runtime ambiguity
+  - `spln status` still returns diagnostics under multi-active ambiguity
+  - `spln repair` normalizes same-request dual-active handoff faults
+  - `spln repair` reports different-request multi-active ambiguity as non-repairable without mutation
+  - `spln context` still returns compact diagnostics under multi-active ambiguity
+- [x] 12.25 Context integration checks:
+  - `spln context` returns compact dual-lane payload with required fields
+  - S6 context includes wave envelope fields for current task
+- [x] 12.26 Context diagnostics integration check:
+  - under zero/multi-active ambiguity, `spln context` returns `lane_mode=diagnostics` and `evidence_freshness=unknown`
+- [x] 12.27 Checkpoint/freshness integration checks:
+  - checkpoint pause/resume emits expected continuation bundle references
+  - non-interactive resume/non-pass checkpoints require explicit `spln do --resume-response`
+  - evidence freshness is marked stale after relevant input updates
+- [x] 12.28 Governed-create partial-failure repair integration checks:
+  - interrupted `spln new` leaves orphaned active L2/L3 admission with missing governed state
+  - `spln repair` repairs forward (create governed runtime/artifacts + seal admission handoff)
+- [x] 12.29 Status diagnostics-domain integration check:
+  - under zero/multi-active ambiguity, `spln status` returns `lane_mode=diagnostics` and `evidence_freshness=unknown`
+- [x] 12.30 Init-tools integration checks (optional sidecar):
+  - `spln init --tools none` creates runtime layout without tool artifacts
+  - `spln init --tools all` creates tool artifacts for all supported adapters
+  - `spln init --refresh` regenerates deterministic tool outputs
+- [x] 12.31 Lock resilience integration checks:
+  - lock timeout returns deterministic precondition-blocked error contract
+  - stale lock is repairable only via `spln repair`
+- [x] 12.32 CLI machine-integration checks:
+  - representative failure paths emit structured stderr JSON envelope
+  - exit codes follow taxonomy (`2/3/4/5/6`) for invalid-usage/precondition/integrity/governance/runtime categories
+- [x] 12.33 Config-driven level default integration:
+  - omit `--level` and verify `defaults.level_mode` controls mode/value in both TTY and non-TTY paths
+  - invalid `defaults.level_mode` falls back to `auto` with deterministic remediation
+- [x] 12.34 L1 run-summary integration:
+  - L1 `S6` emits frozen run summary with `run_summary_version>=1`
+  - L1 lightweight `S7/S8` consumes latest frozen summary version
+- [x] 12.35 Task evidence reference integration:
+  - task `evidence_ref` resolves deterministic `.spln/evidence/tasks/<request_id>/rv<run_summary_version>/<task_id>.json` path
+  - path collision uses suffixing without overwrite
+- [x] 12.36 Evidence retention integration:
+  - expired non-active evidence is pruned only by explicit `spln repair`
+  - active-request evidence is preserved during retention GC
+- [x] 12.37 Level-history cap integration:
+  - repeated pivot operations retain only most-recent entries under `execution.max_level_history_entries`
+  - `last_level_update_at` remains monotonic with truncation behavior
+- [x] 12.38 L3 rescope integration:
+  - `spln pivot` rescope from `S6` with unchanged `L3` returns to `S3_SCOPE_CONFIRMATION` (not direct `S4`)
+  - `G_scope` is re-evaluated before re-entering `S4_SPEC_BUNDLE`
+- [x] 12.39 Wave static-conflict partition integration:
+  - same-layer tasks with overlapping normalized `target_files[]` are split before execution
+  - tasks with empty `target_files[]` are isolated into single-task waves
+- [x] 12.40 Cancel preemption integration:
+  - cancel during active wave sends `SIGINT`, waits `execution.cancel_grace_period_seconds`, then sends `SIGKILL` if still running
+  - archive migration starts only after preemption sequence completes
+- [x] 12.41 Config corruption recovery integration:
+  - malformed `.spln/config.yaml` causes deterministic state-integrity failure
+  - `spln repair` writes backup to `.spln/archive/config/config.yaml.broken.<timestamp>.yaml` and restores defaults
+- [x] 12.42 Low-disk opportunistic GC integration:
+  - below `execution.evidence_gc_low_disk_free_mb`, evidence-writing flow runs one opportunistic GC pass before retry
+- [x] 12.43 Handoff trace-ownership integration:
+  - L1->L2/L3 handoff keeps admission `task_runs`/`action_history` as sealed lane-local history
+  - governed change state starts with lane-local traces only (no admission trace copy)
+- [x] 12.44 Guardrail check-id registry integration:
+  - missing/failing reasons use only registered `<domain_slug>.<check_slug>` IDs
+- [x] 12.45 Init runtime-minimality integration:
+  - `spln init` does not create `.spln/README.md`
+  - runtime layout contains only contract runtime artifacts (plus `.spln/config.yaml`) and no non-executable narrative files
+  - runtime layout includes contract evidence roots (`.spln/evidence/skills/`, `.spln/evidence/tasks/`, `.spln/evidence/runs/`)
+- [x] 12.46 Guardrail domain canonicalization integration:
+  - intake with legacy guardrail labels (for example `security/credentials`) persists canonical `guardrail_domain` (`security_credentials`)
+  - `G_ship` catalog resolution uses canonical domain key without fallback ambiguity
+- [x] 12.47 Interrupted terminal archive repair integration:
+  - simulate interrupted `done`/`cancel` after terminal status persisted but before full archive migration
+  - `spln repair` completes archive migration idempotently and keeps terminal lifecycle unchanged
+- [x] 12.48 `non_spln` failure-envelope integration:
+  - `spln new` pure advisory intake exits with deterministic envelope (`category=precondition_blocked`, `exit_code=3`, `error_code=non_spln_intent`)
+- [x] 12.49 Frozen run-summary persistence integration:
+  - frozen summaries are emitted under `.spln/evidence/runs/<request_id>/rv<run_summary_version>.json`
+  - lane-state `latest_frozen_run_summary_version` advances monotonically with each new frozen summary
+- [x] 12.50 Unknowns-aware intake routing integration:
+  - executable intake with non-empty `blocking_unknowns[]` stays in speclane lifecycle
+  - auto-mode routing lands request at `L3` discovery path (not `non_spln` rejection)

@@ -1,116 +1,179 @@
 ## ADDED Requirements
 
-### Requirement: Artifact Lifecycle States
-Governed artifacts SHALL use:
-`draft -> in_review -> approved -> frozen`, with `stale` as non-frozen cross-cut state.
+### Requirement: Artifact Lifecycle State Model
+Governed artifacts SHALL follow lifecycle states:
+`draft -> in_review -> approved -> frozen`, with `stale` as a cross-cut state for non-frozen artifacts.
 
-#### Scenario: Stale propagation
-- **WHEN** upstream artifact changes
-- **THEN** dependent artifacts SHALL be marked `stale`
+Stale artifacts SHALL NOT satisfy governed readiness checks.
 
-### Requirement: Lane Artifact Boundary
-Artifact requirements SHALL vary by lane level.
+#### Scenario: Stale after upstream update
+- **WHEN** `spec.md` is updated after `design.md` approval
+- **THEN** `design.md` SHALL be marked `stale`
 
-- L1/direct lane: no governed artifact bundle required by default
-- L2/L3/governed lane: required bundle under `aircraft/changes/<slug>/`
+### Requirement: Governance Boundary for Artifacts
+Artifact governance SHALL distinguish lane types:
 
-#### Scenario: L1 no governed artifacts by default
+- Admission/direct lane (L1): runtime state artifact only
+  - `.spln/runtime/admissions/<request_id>.yaml`
+- Governed lane (L2/L3): change artifact set under `aircraft/changes/<slug>/`
+
+`L1` SHALL NOT require governed artifact creation by default.
+
+#### Scenario: L1 direct lane artifact boundary
 - **WHEN** level is L1
 - **THEN** governed artifact files SHALL not be mandatory
 
-### Requirement: Governed Required Bundle
-Governed lanes SHALL enforce minimum required artifact bundle.
+### Requirement: Governed Artifact Classes
+Governed artifacts SHALL be classified as:
 
-Required for L2:
-- `change.yaml`, `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `assurance.md`
+- Governance state:
+  - `change.yaml`
+  - `assurance.md`
+- Plan/spec bundle:
+  - `proposal.md`
+  - `spec.md`
+  - `design.md`
+  - `tasks.md`
+  - `explore.md` (L3)
+- Evidence artifacts:
+  - `.spln/evidence/**`
 
-L3 adds:
-- `explore.md`
+#### Scenario: Governed state lookup
+- **WHEN** system evaluates governed action/gate status
+- **THEN** runtime control data SHALL be read from `.spln/runtime/changes/<request_id>.yaml`, while governed manifest/artifact contract SHALL be read from `aircraft/changes/<slug>/change.yaml`
 
-#### Scenario: L3 requires explore
+### Requirement: MVP risk documentation strategy
+MVP SHALL NOT require a standalone `risk.md` artifact.
+Risk analysis SHALL be documented in the risk section of `design.md`.
+`assurance.md` SHALL reference risk decisions from `design.md` and record final closeout/verification outcomes.
+
+#### Scenario: Guardrail change without risk.md file
+- **WHEN** a guardrail-sensitive L2/L3 change is processed
+- **THEN** risk findings SHALL be captured in `design.md` and SHALL NOT require creating `risk.md`
+
+### Requirement: Required Artifact Sets by Level
+Required artifacts SHALL be:
+
+- L1: admission state only (no governed artifact requirement)
+- L2: `change.yaml`, `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `assurance.md`
+- L3: L2 set + `explore.md`
+
+Ship-stage boundary:
+- ship-stage approval set for `G_ship` is defined by gate-engine and excludes `explore.md`
+- `explore.md` is required for L3 discovery/scope progression (`S2/S3 + G_scope`)
+
+#### Scenario: L2 requires proposal.md
+- **WHEN** level is L2
+- **THEN** `proposal.md` SHALL be in the required governed artifact set
+
+#### Scenario: L3 requires explore.md
 - **WHEN** level is L3
-- **THEN** `explore.md` SHALL be required before scope gate pass
+- **THEN** `explore.md` SHALL be required before L3 scope readiness (`S2/S3 + G_scope`) passes
 
-### Requirement: Explore Minimum Structure
-`explore.md` SHALL include ordered headings:
-- `## Objectives`
-- `## Unknowns`
-- `## Assumptions`
-- `## Scope Boundaries`
-- `## Validation Plan`
+### Requirement: L3 Explore Minimum Structure (MVP)
+For L3, `explore.md` SHALL satisfy a minimal structure contract (validated at `G_scope`):
+- `Objectives`
+- `Unknowns`
+- `Assumptions`
+- `Scope Boundaries`
+- `Validation Plan`
 
-Each section SHALL contain non-empty content.
+Each section SHALL contain at least one non-empty bullet or paragraph.
 
-#### Scenario: Missing explore section blocks scope
-- **WHEN** any required heading is missing or empty
-- **THEN** scope readiness SHALL fail
+Canonical markdown heading contract:
+- section headings SHALL appear in the same order as above
+- each required section SHALL use canonical heading form `## <Section Name>`
+- additional subsections MAY exist, but SHALL NOT replace required canonical headings
+- localized wording MAY appear in section body, but required canonical headings remain mandatory for deterministic parser checks
 
-### Requirement: Assurance Minimum Structure
-`assurance.md` SHALL include:
-- `## Scope Summary`
-- `## Verification Verdict`
-- `## Evidence Index`
-- `## Residual Risks and Exceptions`
-- `## Archive Decision`
+#### Scenario: Explore structure required for L3 scope readiness
+- **WHEN** level is L3 and `explore.md` lacks one or more required sections
+- **THEN** governed scope readiness SHALL fail until sections are completed
 
-#### Scenario: Missing assurance section blocks closeout
-- **WHEN** required heading is missing
-- **THEN** closeout readiness SHALL fail
+### Requirement: Assurance Minimum Structure (MVP)
+For governed lanes (`L2/L3`), `assurance.md` SHALL satisfy a minimal closeout structure:
+- `Scope Summary`
+- `Verification Verdict`
+- `Evidence Index`
+- `Residual Risks and Exceptions`
+- `Archive Decision`
 
-### Requirement: Assurance Ownership and Update Timing
-Governed assurance content SHALL be updated by review/verify stages (not by ad-hoc manual timing).
+Structure gate in MVP validates heading/section presence only.
+Content-depth quality is evaluated by applicable review layers (`R1+`) when enabled.
 
-Ownership contract:
-- at `S7_REVIEW`, review stage SHALL update:
-  - `## Scope Summary`
-  - `## Evidence Index`
-  - `## Residual Risks and Exceptions`
-- at `S8_VERIFY`, verify stage SHALL update:
-  - `## Verification Verdict`
-  - `## Archive Decision`
+#### Scenario: Assurance structure required for governed closeout
+- **WHEN** `assurance.md` lacks one or more required sections
+- **THEN** governed closeout readiness SHALL fail until required sections are completed
 
-Closeout readiness SHALL require these sections to reflect latest frozen summary version.
+### Requirement: Governed Artifact DAG
+The governed artifact dependency graph SHALL be:
 
-#### Scenario: Verify updates archive decision
-- **WHEN** governed flow reaches `S8_VERIFY`
-- **THEN** assurance SHALL include updated verification verdict and archive decision before closeout pass
+- `proposal.md -> spec.md -> design.md -> tasks.md -> assurance.md`
+- `explore.md -> design.md`
 
-### Requirement: Artifact DAG
-Governed artifacts SHALL follow deterministic dependency DAG.
+Stale propagation SHALL traverse downstream dependencies via BFS.
 
-Governed artifact dependency graph:
-- `proposal -> spec -> design -> tasks -> assurance`
-- `explore -> design`
-
-#### Scenario: Proposal update propagates staleness
-- **WHEN** `proposal.md` changes
-- **THEN** downstream artifacts SHALL be marked stale
+#### Scenario: Proposal update propagation
+- **WHEN** `proposal.md` is updated
+- **THEN** downstream governed artifacts (`spec/design/tasks/assurance`) SHALL be marked stale
 
 ### Requirement: Scaffold Policy
-Artifact scaffolding SHALL follow lane-aware entry rules.
+Artifact scaffolding SHALL be lane-aware:
 
-- L2/L3: scaffold governed bundle on governed entry
-- L1: no governed scaffold by default
-- L1 -> governed escalation: scaffold at escalation point
+- `spln new` in L2/L3 SHALL scaffold required governed artifacts from templates
+- `spln new` in L1 SHALL not scaffold governed artifact bundle by default
+- escalations to governed lane SHALL scaffold at escalation time
 
-#### Scenario: L1 escalates to L2
-- **WHEN** pivot escalates L1 to governed lane
-- **THEN** governed bundle SHALL be scaffolded at escalation time
+#### Scenario: L1 to L2 escalation scaffold
+- **WHEN** pivot escalates L1 direct lane to L2
+- **THEN** governed artifact scaffold SHALL be created during escalation
+
+### Requirement: Artifact Versioning
+Governed artifacts SHALL track versions in governed runtime change state `artifacts` map (`.spln/runtime/changes/<request_id>.yaml`).
+`aircraft/changes/<slug>/change.yaml` SHALL remain minimal manifest metadata and SHALL NOT carry per-artifact version map in MVP.
+Version increments on each approved content update.
+
+#### Scenario: Design version increment
+- **WHEN** `design.md` is updated and approved
+- **THEN** `design.md` version in governed state SHALL increment by 1
 
 ### Requirement: Archive Freeze Rules
-Archive flow SHALL freeze governed artifacts before completion.
+Archive freeze behavior SHALL follow the governed archive rules below.
 
-On governed archive (`done` or `cancel`):
-- all governed artifacts become `frozen`
-- move `aircraft/changes/<slug>/` -> `aircraft/changes/archived/<slug>/`
-- move runtime change file to `.speclane/archive/changes/<request_id>.yaml`
-- move linked sealed admission snapshot to `.speclane/archive/admissions/<request_id>.yaml`
-- move run record to `.speclane/archive/runs/<request_id>.yaml`
+On governed archive (`spln done` or `spln cancel`):
+- all governed artifacts SHALL transition to `frozen`
+- change artifact directory SHALL move to `aircraft/changes/archived/<slug>/`
+- governed runtime change state SHALL move from `.spln/runtime/changes/<request_id>.yaml` to `.spln/archive/changes/<request_id>.yaml`
+- linked `sealed_handoff` admission snapshot SHALL move from `.spln/runtime/admissions/<request_id>.yaml` to `.spln/archive/admissions/<request_id>.yaml`
 
-On direct-lane archive:
-- move runtime admission to `.speclane/archive/admissions/<request_id>.yaml`
-- move run record to `.speclane/archive/runs/<request_id>.yaml`
+Admission/direct-lane records SHALL keep runtime/audit boundary:
+- runtime admissions for active/direct execution history
+- archived admissions for:
+  - governed handoff snapshots after governed archive
+  - direct-lane records archived by `spln done`
+  - direct-lane and governed cancellation records archived by `spln cancel`
+- no automatic deletion
 
 #### Scenario: Governed archive freeze
-- **WHEN** governed archive completes
-- **THEN** archived governed artifacts SHALL all be `frozen`
+- **WHEN** governed archive completes for L2/L3 via `spln done` or `spln cancel`
+- **THEN** governed artifacts SHALL be frozen and archived
+
+#### Scenario: Governed archive migrates linked admission snapshot
+- **WHEN** governed archive completes for governed change with linked `sealed_handoff` admission
+- **THEN** linked admission snapshot SHALL be migrated to `.spln/archive/admissions/` and removed from runtime admissions
+
+### Requirement: Admission Record Lifecycle
+Admission artifacts SHALL follow explicit lifecycle statuses:
+- `active`: admission/direct lane in progress
+- `done`: L1 finished
+- `cancelled`: L1 explicitly cancelled
+- `sealed_handoff`: governed handoff completed (`L2/L3`)
+
+For `sealed_handoff`, admission artifact SHALL remain immutable snapshot and SHALL only provide link/reference to governed change.
+For `sealed_handoff`, admission artifact `current_state` SHALL remain `S1_ANALYZE` (last admission-phase executed state).
+
+Admission artifacts are audit records and SHALL NOT be auto-deleted by runtime progression.
+
+#### Scenario: Sealed handoff admission record
+- **WHEN** L1 pivots to L2 and governed handoff completes
+- **THEN** admission artifact status SHALL be `sealed_handoff` and further execution mutations SHALL occur only in change artifact
