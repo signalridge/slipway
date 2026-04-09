@@ -1,0 +1,20 @@
+---
+name: slipway-init
+description: "{{.Description}}"
+tool: "{{.ToolID}}"
+command_id: "init"
+trigger: "{{.Trigger}}"
+---
+
+# slipway-init
+
+- Trigger: {{.Trigger}}
+- Description: Initialize Slipway in the current project
+
+Command:
+```bash
+slipway init --tools all
+```
+
+This command is setup-only and executes the CLI directly.
+No skill routing is required.

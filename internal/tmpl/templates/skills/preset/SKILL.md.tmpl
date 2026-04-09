@@ -1,0 +1,38 @@
+---
+name: slipway-preset
+type: orchestration
+tool: "{{.ToolID}}"
+trigger: "{{.Trigger}}"
+description: "{{.Description}}"
+---
+
+# Confirm Or Override Workflow Preset
+
+Use `slipway preset` when a governed change is waiting for preset confirmation
+or when the user explicitly wants to tighten or relax the active change's
+governance posture.
+
+## Command
+```bash
+slipway preset <light|standard|strict> --json
+```
+
+## Runtime Contract
+- Confirms or overrides the active change's persisted `workflow_preset`.
+- On the first confirmation for a pending change, scaffolds the governed bundle
+  before artifact authoring continues.
+- Keeps the change in `S1_PLAN`; preset confirmation is not a separate workflow
+  state.
+- `effective_workflow_preset` may still upgrade above the confirmed preset when
+  project minimums or guardrail floors apply.
+
+## Workflow
+1. Run `slipway preset <light|standard|strict> --json`.
+2. Read the JSON output for `workflow_preset` and, when present,
+   `effective_workflow_preset`.
+3. Continue with `slipway next`.
+
+## Do Not
+- Do not ask the user to edit `change.yaml` manually.
+- Do not assume `light` bypasses discovery, review, or guardrail protections.
+- Do not use this command when there is no active governed change.

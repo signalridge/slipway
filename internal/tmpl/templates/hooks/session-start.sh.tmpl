@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Slipway session-start hook helper for {{.ToolID}}.
+# This hook is intentionally read-only:
+# - status provides active change and lifecycle health
+# - next --preview provides next skill context without state advancement
+
+if ! command -v slipway >/dev/null 2>&1; then
+  exit 0
+fi
+
+normalize_hook_message() {
+  printf '%s' "$1" | tr '\r\n' ' ' | sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//'
+}
+
+diagnostics=()
+hook_cwd="$(pwd -P 2>/dev/null || pwd)"
+project_root=""
+if project_root_output="$(slipway root 2>&1)"; then
+  project_root="${project_root_output}"
+else
+  diagnostics+=("hook_diagnostic: slipway root failed: $(normalize_hook_message "${project_root_output}")")
+fi
+if [ -z "${project_root}" ]; then
+  if [ "${#diagnostics[@]}" -eq 0 ]; then
+    exit 0
+  fi
+  diagnostics_text="$(printf '%s\n' "${diagnostics[@]}")"
+  cat <<EOF
+<slipway-session-start tool="{{.ToolID}}">
+${diagnostics_text}
+</slipway-session-start>
+EOF
+  exit 0
+fi
+
+run_slipway_readonly() {
+  local output
+  local status
+  set +e
+  output="$(cd "${hook_cwd}" && slipway "$@" 2>&1)"
+  status=$?
+  set -e
+  printf '%s' "${output}"
+  return "${status}"
+}
+
+status_json=""
+if status_output="$(run_slipway_readonly status --json)"; then
+  status_json="${status_output}"
+else
+  diagnostics+=("hook_diagnostic: slipway status --json failed: $(normalize_hook_message "${status_output}")")
+fi
+
+next_json=""
+if next_output="$(run_slipway_readonly next --json --preview)"; then
+  next_json="${next_output}"
+else
+  diagnostics+=("hook_diagnostic: slipway next --json --preview failed: $(normalize_hook_message "${next_output}")")
+fi
+
+context_guard_msg=""
+if context_guard_output="$(run_slipway_readonly next --preview --context-guard)"; then
+  context_guard_msg="${context_guard_output}"
+else
+  diagnostics+=("hook_diagnostic: slipway next --preview --context-guard failed: $(normalize_hook_message "${context_guard_output}")")
+fi
+
+diagnostics_text=""
+if [ "${#diagnostics[@]}" -gt 0 ]; then
+  diagnostics_text="$(printf '%s\n' "${diagnostics[@]}")"
+fi
+
+handoff=""
+handoff_path=""
+git_common_dir="$(git -C "${project_root}" rev-parse --git-common-dir 2>/dev/null || true)"
+if [ -n "${git_common_dir}" ]; then
+  # Make absolute relative to project_root when git returns a relative path.
+  if [ "${git_common_dir}" = "${git_common_dir#/}" ]; then
+    git_common_dir="${project_root}/${git_common_dir}"
+  fi
+  canonical_project_root="$(cd "${project_root}" 2>/dev/null && pwd -P || printf '%s\n' "${project_root}")"
+  repo_root="$(git -C "${project_root}" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "${repo_root}" ]; then
+    repo_root="$(cd "${repo_root}" 2>/dev/null && pwd -P || printf '%s\n' "${repo_root}")"
+  fi
+  scope_rel=""
+  if [ -n "${repo_root}" ] && [ "${canonical_project_root}" != "${repo_root}" ]; then
+    case "${canonical_project_root}" in
+      "${repo_root}"/*)
+        scope_rel="${canonical_project_root#${repo_root}/}"
+        ;;
+    esac
+  fi
+  if [ -n "${scope_rel}" ]; then
+    handoff_path="${git_common_dir%/}/slipway/scopes/${scope_rel}/runtime/handoff.md"
+  else
+    handoff_path="${git_common_dir%/}/slipway/runtime/handoff.md"
+  fi
+fi
+if [ -f "${handoff_path}" ]; then
+  handoff="$(cat "${handoff_path}")"
+fi
+
+if [ -z "${status_json}" ] && [ -z "${next_json}" ] && [ -z "${context_guard_msg}" ] && [ -z "${handoff}" ] && [ -z "${diagnostics_text}" ]; then
+  exit 0
+fi
+
+cat <<EOF
+<slipway-session-start tool="{{.ToolID}}">
+${status_json}
+${next_json}
+${context_guard_msg}
+${diagnostics_text}
+${handoff:+<session-handoff>
+${handoff}
+</session-handoff>}
+</slipway-session-start>
+EOF

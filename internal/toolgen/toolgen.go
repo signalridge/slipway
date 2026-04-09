@@ -1,0 +1,970 @@
+package toolgen
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/signalridge/slipway/internal/tmpl"
+)
+
+// ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
+type ToolConfig struct {
+	ID             string
+	SkillsDir      string
+	CommandsDir    string // "" = no project-local commands (Codex)
+	CommandStyle   string // "nested", "flat", "" = no project-local commands
+	CommandFormat  string // "md" (default), "toml" (Gemini)
+	AgentStyle     string // "md" (default), "toml" (Codex), "" = no agents (Cursor)
+	AgentsDir      string // "" = no agents (Cursor)
+	PromptsStyle   string // "global" (Codex), "" = no global prompts
+	SettingsPath   string
+	SessionEvent   string
+	SessionHook    string
+	PostToolEvent  string
+	PostToolHook   string
+	TriggerPrefix  string
+	TriggerStyle   string
+	AutoDetectPath []string
+}
+
+var toolRegistry = map[string]ToolConfig{
+	"claude": {
+		ID:            "claude",
+		SkillsDir:     ".claude/skills",
+		CommandsDir:   ".claude/commands",
+		CommandStyle:  "nested",
+		CommandFormat: "md",
+		AgentStyle:    "md",
+		AgentsDir:     ".claude/agents",
+		PromptsStyle:  "",
+		SettingsPath:  ".claude/settings.json",
+		SessionEvent:  "SessionStart",
+		SessionHook:   ".claude/hooks/slipway-session-start.sh",
+		PostToolEvent: "PostToolUse",
+		PostToolHook:  ".claude/hooks/slipway-context-monitor.js",
+		TriggerPrefix: "/slipway",
+		TriggerStyle:  "slash-colon",
+		AutoDetectPath: []string{
+			".claude",
+		},
+	},
+	"cursor": {
+		ID:            "cursor",
+		SkillsDir:     ".cursor/skills",
+		CommandsDir:   ".cursor/commands",
+		CommandStyle:  "flat",
+		CommandFormat: "md",
+		AgentStyle:    "",
+		AgentsDir:     "",
+		PromptsStyle:  "",
+		SettingsPath:  "",
+		SessionEvent:  "",
+		SessionHook:   ".cursor/hooks/slipway-session-start.sh",
+		PostToolEvent: "",
+		PostToolHook:  "",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		AutoDetectPath: []string{
+			".cursor",
+		},
+	},
+	"codex": {
+		ID:            "codex",
+		SkillsDir:     ".codex/skills",
+		CommandsDir:   "",
+		CommandStyle:  "",
+		CommandFormat: "",
+		AgentStyle:    "toml",
+		AgentsDir:     ".codex/agents",
+		PromptsStyle:  "global",
+		SettingsPath:  "",
+		SessionEvent:  "",
+		SessionHook:   "",
+		PostToolEvent: "",
+		PostToolHook:  "",
+		TriggerPrefix: "$slipway-",
+		TriggerStyle:  "dollar-mention",
+		AutoDetectPath: []string{
+			".codex",
+		},
+	},
+	"opencode": {
+		ID:            "opencode",
+		SkillsDir:     ".opencode/skills",
+		CommandsDir:   ".opencode/commands",
+		CommandStyle:  "nested",
+		CommandFormat: "md",
+		AgentStyle:    "md",
+		AgentsDir:     ".opencode/agents",
+		PromptsStyle:  "",
+		SettingsPath:  "",
+		SessionEvent:  "",
+		SessionHook:   ".opencode/hooks/slipway-session-start.sh",
+		PostToolEvent: "",
+		PostToolHook:  "",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		AutoDetectPath: []string{
+			".opencode",
+		},
+	},
+	"gemini": {
+		ID:            "gemini",
+		SkillsDir:     ".gemini/skills",
+		CommandsDir:   ".gemini/commands",
+		CommandStyle:  "nested",
+		CommandFormat: "toml",
+		AgentStyle:    "md",
+		AgentsDir:     ".gemini/agents",
+		PromptsStyle:  "",
+		SettingsPath:  ".gemini/settings.json",
+		SessionEvent:  "SessionStart",
+		SessionHook:   ".gemini/hooks/slipway-session-start.sh",
+		PostToolEvent: "AfterTool",
+		PostToolHook:  ".gemini/hooks/slipway-context-monitor.js",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		AutoDetectPath: []string{
+			".gemini",
+		},
+	},
+}
+
+// CommandDef describes a single adapter command with all metadata consolidated.
+type CommandDef struct {
+	ID              string
+	Description     string
+	Arguments       string
+	Prerequisites   []string
+	Tier            string // "core" | "situational" | "diagnostics"
+	HasAdapterSkill bool   // true = generates skills/<id>/SKILL.md; false reserved for future CLI-only adapters
+}
+
+// commandRegistry is the single source of truth for adapter command metadata.
+// Entry order is for readability; commandIDs() returns IDs sorted alphabetically.
+var commandRegistry = []CommandDef{
+	// Core (5)
+	{ID: "new", Description: "Create a governed change with intake-first workflow", Tier: "core", HasAdapterSkill: true,
+		Arguments:     `"<description>" [--preset light|standard|strict] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
+	{ID: "next", Description: "Validate evidence, advance state, and show next skill", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--auto] [--preview] [--context-guard] [--resume-response \"<text>\"]"},
+	{ID: "status", Description: "Show lifecycle status and blockers", Tier: "core", HasAdapterSkill: true,
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
+	{ID: "done", Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--all-ready]"},
+	// Situational (9)
+	{ID: "init", Description: "Initialize Slipway in the current project", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
+		Prerequisites: []string{"Run from the target project root or any child directory inside it."}},
+	{ID: "cancel", Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json]"},
+	{ID: "review", Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json] [--all|--changed-only]"},
+	{ID: "validate", Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "[--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
+	{ID: "checkpoint", Description: "Record a checkpoint decision for the current state", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json]"},
+	{ID: "preset", Description: "Confirm or override the active change workflow preset", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "<light|standard|strict> [--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change should already exist, or pass `--change <slug>`."}},
+	{ID: "sync", Description: "Merge active delta spec into main spec", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json]"},
+	{ID: "pivot", Description: "Reroute or rescope an active change", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--reroute|--rescope] [--json]"},
+	{ID: "repair", Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "[--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+	// Diagnostics (3) — CLI-only, no adapter skill templates
+	{ID: "stats", Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
+		Arguments:     "[--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+	{ID: "health", Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
+		Arguments:     "[--json] [--governance] [--all] [--observations]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+	{ID: "codebase-map", Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
+		Arguments:     "[--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+}
+
+// commandRegistryMap provides O(1) lookup by command ID.
+var commandRegistryMap = func() map[string]CommandDef {
+	m := make(map[string]CommandDef, len(commandRegistry))
+	for _, def := range commandRegistry {
+		m[def.ID] = def
+	}
+	return m
+}()
+
+// CommandDescription returns the registry description for a command ID.
+// Returns empty string if the command is not registered.
+func CommandDescription(id string) string {
+	if def, ok := commandRegistryMap[id]; ok {
+		return def.Description
+	}
+	return ""
+}
+
+// adapterSkillIDs returns IDs of commands that have adapter skills.
+// It is derived from commandRegistry to keep the generated surfaces in sync.
+var adapterSkillIDs = func() []string {
+	out := make([]string, 0, len(commandRegistry))
+	for _, def := range commandRegistry {
+		if def.HasAdapterSkill {
+			out = append(out, def.ID)
+		}
+	}
+	return out
+}()
+
+// commandIDs returns the adapter skill IDs that have user-facing command entries (sorted).
+func commandIDs() []string {
+	out := make([]string, len(adapterSkillIDs))
+	copy(out, adapterSkillIDs)
+	slices.Sort(out)
+	return out
+}
+
+// standaloneNames lists standalone skills (not governance, not technique) to generate.
+var standaloneNames = []string{}
+
+// techniqueNames lists the technique skills to generate.
+var techniqueNames = []string{
+	"tdd",
+	"systematic-debugging",
+	"code-review-protocol",
+	"codebase-mapping",
+}
+
+// GovernanceSkillNames lists the governance skills generated for each tool (static .md).
+var GovernanceSkillNames = []string{
+	"research-orchestration",
+	"plan-audit",
+	"tdd-governance",
+}
+
+// standaloneGovernanceNames lists non-registry standalone skills still generated
+// for adapter guidance. These are not governance-registry skills but provide
+// useful procedural guidance for agents (e.g. worktree setup).
+var standaloneGovernanceNames = []string{
+	"worktree-preflight",
+}
+
+// TemplatedGovernanceSkillNames lists governance skills rendered from .md.tmpl.
+// These support template partials via {{ template "partial-name" . }}.
+var TemplatedGovernanceSkillNames = []string{
+	"wave-orchestration",
+	"spec-compliance-review",
+	"code-quality-review",
+	"goal-verification",
+	"final-closeout",
+}
+
+// commandDescriptions returns the description for a command from the registry.
+var commandDescriptions = func() map[string]string {
+	m := make(map[string]string, len(commandRegistry))
+	for _, def := range commandRegistry {
+		m[def.ID] = def.Description
+	}
+	return m
+}()
+
+func commandPrerequisites(id string) []string {
+	if def, ok := commandRegistryMap[id]; ok && len(def.Prerequisites) > 0 {
+		return def.Prerequisites
+	}
+	// Default prerequisites for commands not explicitly configured.
+	return []string{
+		"`.slipway.yaml` must exist (run `slipway init` first)",
+		"an active change must exist, or pass `--change <slug>` when supported.",
+	}
+}
+
+// Registry returns all tool configs sorted by ID.
+func Registry() []ToolConfig {
+	out := make([]ToolConfig, 0, len(toolRegistry))
+	for _, cfg := range toolRegistry {
+		out = append(out, cfg)
+	}
+	slices.SortFunc(out, func(a, b ToolConfig) int {
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
+		return 0
+	})
+	return out
+}
+
+// ResolveWorkspaceTool selects the best matching generated tool adapter for the
+// current workspace. Selection order:
+// 1. SLIPWAY_TOOL env override, when that adapter is generated
+// 2. the single generated adapter, when exactly one exists
+// 3. the first generated adapter in deterministic registry order
+// 4. Claude fallback when no generated adapters exist
+func ResolveWorkspaceTool(root string) ToolConfig {
+	if override := strings.ToLower(strings.TrimSpace(os.Getenv("SLIPWAY_TOOL"))); override != "" {
+		if cfg, ok := toolRegistry[override]; ok && hasGeneratedAdapter(root, cfg) {
+			return cfg
+		}
+	}
+
+	generated := make([]ToolConfig, 0, len(toolRegistry))
+	for _, cfg := range Registry() {
+		if hasGeneratedAdapter(root, cfg) {
+			generated = append(generated, cfg)
+		}
+	}
+	if len(generated) == 1 {
+		return generated[0]
+	}
+	if len(generated) > 0 {
+		return generated[0]
+	}
+	return toolRegistry["claude"]
+}
+
+// ResolveTools parses tool selection string into a list of tool IDs.
+func ResolveTools(selection string) ([]string, error) {
+	selection = strings.TrimSpace(selection)
+	if selection == "" {
+		return nil, nil
+	}
+	if strings.EqualFold(selection, "all") {
+		return []string{"claude", "codex", "cursor", "gemini", "opencode"}, nil
+	}
+	if strings.EqualFold(selection, "none") {
+		return nil, nil
+	}
+
+	parts := strings.Split(selection, ",")
+	seen := map[string]struct{}{}
+	tools := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.ToLower(strings.TrimSpace(part))
+		if name == "" {
+			continue
+		}
+		if _, ok := toolRegistry[name]; !ok {
+			return nil, fmt.Errorf("unsupported tool %q", name)
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		tools = append(tools, name)
+	}
+	slices.Sort(tools)
+	return tools, nil
+}
+
+// DetectExistingTools scans the workspace for previously generated slipway
+// adapter surfaces and returns the list of tool IDs found. Used by init --refresh
+// when --tools is not explicitly provided.
+//
+// Detection checks for slipway-specific marker paths (e.g. skills/slipway/next/SKILL.md)
+// rather than just top-level directories, so workspaces that happen to have a .claude/ or
+// .codex/ directory for other reasons are not mistakenly treated as slipway-managed.
+func DetectExistingTools(root string) []string {
+	var found []string
+	for _, cfg := range Registry() {
+		// Check for a slipway skill marker that only exists if Generate() ran for this tool.
+		marker := filepath.Join(root, SkillPath(cfg, "next"))
+		if _, err := os.Stat(marker); err == nil {
+			found = append(found, cfg.ID)
+		}
+	}
+	slices.Sort(found)
+	return found
+}
+
+// Generate creates tool adapter skills and commands for the given tools.
+func Generate(root string, tools []string, refresh bool) error {
+	for _, tool := range tools {
+		cfg, ok := toolRegistry[tool]
+		if !ok {
+			return fmt.Errorf("unsupported tool %q", tool)
+		}
+		if err := generateForTool(root, cfg, refresh); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SkillPath returns the relative path to a skill's SKILL.md for the given tool config.
+func SkillPath(cfg ToolConfig, skillName string) string {
+	return filepath.Join(cfg.SkillsDir, "slipway", skillName, "SKILL.md")
+}
+
+// AgentPath returns the relative path to an agent definition for the given tool config.
+// Returns empty string for tools with no agent support (AgentStyle == "").
+func AgentPath(cfg ToolConfig, agentName string) string {
+	if cfg.AgentStyle == "" {
+		return ""
+	}
+	ext := ".md"
+	if cfg.AgentStyle == "toml" {
+		ext = ".toml"
+	}
+	return filepath.Join(cfg.AgentsDir, agentName+ext)
+}
+
+func generateForTool(root string, cfg ToolConfig, refresh bool) error {
+	// Adapter skills (rendered from .tmpl templates)
+	for _, id := range adapterSkillIDs {
+		content, err := renderAdapterSkill(cfg, id)
+		if err != nil {
+			return fmt.Errorf("render adapter skill %q for %s: %w", id, cfg.ID, err)
+		}
+		path := filepath.Join(root, SkillPath(cfg, id))
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Governance skills (static content)
+	// Includes both registry governance skills and standalone governance guidance skills.
+	allStaticGovernance := append([]string{}, GovernanceSkillNames...)
+	allStaticGovernance = append(allStaticGovernance, standaloneGovernanceNames...)
+	for _, name := range allStaticGovernance {
+		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		if err != nil {
+			return fmt.Errorf("load governance skill %q: %w", name, err)
+		}
+		skillPath := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Templated governance skills (tool-aware .md.tmpl)
+	for _, name := range TemplatedGovernanceSkillNames {
+		content, err := renderAdapterSkill(cfg, name)
+		if err != nil {
+			return fmt.Errorf("render templated governance skill %q for %s: %w", name, cfg.ID, err)
+		}
+		skillPath := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Standalone skills (static content, not governance, not technique)
+	for _, name := range standaloneNames {
+		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		if err != nil {
+			return fmt.Errorf("load standalone %q: %w", name, err)
+		}
+		path := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Technique skills (static content)
+	for _, name := range techniqueNames {
+		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		if err != nil {
+			return fmt.Errorf("load technique %q: %w", name, err)
+		}
+		path := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Command entry files (routing stubs for all adapter commands).
+	// Skip when CommandsDir is empty (Codex uses global prompts instead).
+	if cfg.CommandsDir != "" {
+		ext := ".md"
+		if cfg.CommandFormat == "toml" {
+			ext = ".toml"
+		}
+		for _, id := range commandIDs() {
+			content, err := renderCommandEntry(cfg, id)
+			if err != nil {
+				return fmt.Errorf("render command entry %q for %s: %w", id, cfg.ID, err)
+			}
+			var path string
+			switch cfg.CommandStyle {
+			case "flat":
+				path = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
+			default: // "nested"
+				path = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
+			}
+			if err := writeDeterministic(path, content, refresh); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Agent definitions — skip when AgentStyle is empty (Cursor).
+	switch cfg.AgentStyle {
+	case "md":
+		for _, name := range tmpl.AgentNames() {
+			content, err := tmpl.Content(path.Join("agents", name+".md"))
+			if err != nil {
+				return fmt.Errorf("load agent %q: %w", name, err)
+			}
+			path := filepath.Join(root, AgentPath(cfg, name))
+			if err := writeDeterministic(path, content, refresh); err != nil {
+				return err
+			}
+		}
+	case "toml":
+		if err := generateCodexAgents(root, cfg, refresh); err != nil {
+			return err
+		}
+	default:
+		// AgentStyle == "": skip agent generation entirely (Cursor).
+	}
+
+	// Global prompts (Codex: ~/.codex/prompts/) — writes outside project root.
+	if cfg.PromptsStyle == "global" {
+		if err := generateCodexPrompts(cfg, refresh); err != nil {
+			return err
+		}
+	}
+
+	// Session-start hook helper (hook-capable runtimes).
+	if strings.TrimSpace(cfg.SessionHook) != "" {
+		content, err := renderSessionHook(cfg)
+		if err != nil {
+			return fmt.Errorf("render session hook for %s: %w", cfg.ID, err)
+		}
+		path := filepath.Join(root, cfg.SessionHook)
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(cfg.PostToolHook) != "" {
+		content, err := renderPostToolHook(cfg)
+		if err != nil {
+			return fmt.Errorf("render post-tool hook for %s: %w", cfg.ID, err)
+		}
+		path := filepath.Join(root, cfg.PostToolHook)
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(cfg.SettingsPath) != "" {
+		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// renderAdapterSkill renders an adapter SKILL.md from a .tmpl template.
+func renderAdapterSkill(cfg ToolConfig, id string) (string, error) {
+	data := map[string]string{
+		"ToolID":      cfg.ID,
+		"Trigger":     commandTrigger(cfg, id),
+		"Description": commandDescriptions[id],
+	}
+	return tmpl.Render(path.Join("skills", id, "SKILL.md.tmpl"), data)
+}
+
+// renderCommandEntry renders a command routing entry from the appropriate template.
+func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
+	tier := "situational"
+	if def, ok := commandRegistryMap[id]; ok {
+		tier = def.Tier
+	}
+	data := map[string]any{
+		"CommandID":     id,
+		"ToolID":        cfg.ID,
+		"Trigger":       commandTrigger(cfg, id),
+		"Description":   commandDescriptions[id],
+		"SkillPath":     SkillPath(cfg, id),
+		"Arguments":     commandArguments(id),
+		"Prerequisites": commandPrerequisites(id),
+		"Tier":          tier,
+		"Surface":       "adapter",
+	}
+	tmplName := "command-entry.md.tmpl"
+	if cfg.CommandFormat == "toml" {
+		tmplName = "command-entry.toml.tmpl"
+	}
+	return tmpl.Render(path.Join("commands", tmplName), data)
+}
+
+func renderSessionHook(cfg ToolConfig) (string, error) {
+	data := map[string]string{
+		"ToolID": cfg.ID,
+	}
+	return tmpl.Render(path.Join("hooks", "session-start.sh.tmpl"), data)
+}
+
+func renderPostToolHook(cfg ToolConfig) (string, error) {
+	data := map[string]string{
+		"ToolID":    cfg.ID,
+		"HookEvent": cfg.PostToolEvent,
+	}
+	return tmpl.Render(path.Join("hooks", "post-tool-context-monitor.js.tmpl"), data)
+}
+
+func writeDeterministic(path, content string, refresh bool) error {
+	if !refresh {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	mode := os.FileMode(0o644)
+	if strings.HasSuffix(path, ".sh") {
+		mode = 0o755
+	}
+	return os.WriteFile(path, []byte(content), mode)
+}
+
+func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	if !refresh {
+		if _, err := os.Stat(settingsPath); err == nil {
+			return nil
+		}
+	}
+
+	settings := map[string]any{}
+	existing, err := os.ReadFile(settingsPath)
+	if err == nil {
+		if err := json.Unmarshal(existing, &settings); err != nil {
+			return fmt.Errorf("parse %s: %w", cfg.SettingsPath, err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	var hooks map[string]any
+	switch existingHooks := settings["hooks"].(type) {
+	case nil:
+		hooks = map[string]any{}
+	case map[string]any:
+		hooks = existingHooks
+	default:
+		return fmt.Errorf("%s contains a non-object hooks field", cfg.SettingsPath)
+	}
+
+	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
+		mergeHookEventCommand(hooks, cfg.SessionEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.SessionHook)))
+	}
+	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, fmt.Sprintf(`node "%s"`, filepath.ToSlash(cfg.PostToolHook)))
+	}
+	settings["hooks"] = hooks
+
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		return err
+	}
+	content, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	return os.WriteFile(settingsPath, content, 0o644)
+}
+
+func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
+	rawEntries, ok := hooks[eventName]
+	if !ok {
+		hooks[eventName] = []any{
+			map[string]any{
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": command,
+					},
+				},
+			},
+		}
+		return
+	}
+
+	entries, ok := rawEntries.([]any)
+	if !ok {
+		hooks[eventName] = []any{
+			map[string]any{
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": command,
+					},
+				},
+			},
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hookList, ok := entryMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hookList {
+			hookMap, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if hookMap["command"] == command {
+				return
+			}
+		}
+	}
+
+	hooks[eventName] = append(entries, map[string]any{
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": command,
+			},
+		},
+	})
+}
+
+func commandTrigger(cfg ToolConfig, commandID string) string {
+	if cfg.TriggerStyle == "slash-colon" {
+		return fmt.Sprintf("%s:%s", cfg.TriggerPrefix, commandID)
+	}
+	return fmt.Sprintf("%s%s", cfg.TriggerPrefix, commandID)
+}
+
+func commandArguments(id string) string {
+	if def, ok := commandRegistryMap[id]; ok && def.Arguments != "" {
+		return def.Arguments
+	}
+	return "[--json]"
+}
+
+func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
+	path := filepath.Join(root, SkillPath(cfg, "next"))
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
+}
+
+// codexAgentSandboxMode returns the sandbox_mode for a Codex agent TOML file.
+func codexAgentSandboxMode(name string) string {
+	switch name {
+	case "slipway-reviewer", "slipway-auditor", "slipway-verifier":
+		return "read-only"
+	default:
+		return "workspace-write"
+	}
+}
+
+// parseAgentFrontmatter extracts description from agent .md template frontmatter.
+// Supports two closing forms:
+//   - "\n---\n" (standard: closing delimiter followed by body content)
+//   - "\n---" at EOF (frontmatter-only file with no trailing newline)
+//
+// The "\n---\n" form is checked first via strings.Index, so a file ending with
+// "\n---\n" (trailing newline after delimiter) is handled by the standard path,
+// not the EOF branch.
+func parseAgentFrontmatter(content string) (description string, body string) {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	if !strings.HasPrefix(content, "---\n") {
+		return "", content
+	}
+	rest := content[4:]
+	end := strings.Index(rest, "\n---\n")
+	if end < 0 {
+		// Closing --- at EOF with no trailing newline — frontmatter-only file.
+		if strings.HasSuffix(rest, "\n---") {
+			end = len(rest) - 4 // position before "\n---"
+			fm := rest[:end]
+			return extractDescription(fm), ""
+		}
+		return "", content
+	}
+	fm := rest[:end]
+	body = rest[end+5:] // skip past closing "\n---\n"
+
+	return extractDescription(fm), body
+}
+
+func extractDescription(fm string) string {
+	for _, line := range strings.Split(fm, "\n") {
+		if strings.HasPrefix(line, "description:") {
+			desc := strings.TrimPrefix(line, "description:")
+			desc = strings.TrimSpace(desc)
+			desc = strings.Trim(desc, `"`)
+			return desc
+		}
+	}
+	return ""
+}
+
+// generateCodexAgents generates .codex/agents/<name>.toml files and registers
+// them in .codex/config.toml.
+func generateCodexAgents(root string, cfg ToolConfig, refresh bool) error {
+	agentsDir := filepath.Join(root, cfg.AgentsDir)
+
+	var entries []codexAgentEntry
+
+	for _, name := range tmpl.AgentNames() {
+		content, err := tmpl.Content(path.Join("agents", name+".md"))
+		if err != nil {
+			return fmt.Errorf("load agent %q: %w", name, err)
+		}
+
+		description, body := parseAgentFrontmatter(content)
+		sandbox := codexAgentSandboxMode(name)
+
+		body = strings.TrimSpace(body)
+		// TOML multi-line basic strings: escape backslashes and break any
+		// triple-quote sequences that would prematurely close the string.
+		body = strings.ReplaceAll(body, `\`, `\\`)
+		body = strings.ReplaceAll(body, `"""`, `""\"`)
+
+		tomlContent := fmt.Sprintf("sandbox_mode = %q\ndeveloper_instructions = \"\"\"\n%s\n\"\"\"\n", sandbox, body)
+
+		path := filepath.Join(agentsDir, name+".toml")
+		if err := writeDeterministic(path, tomlContent, refresh); err != nil {
+			return err
+		}
+
+		entries = append(entries, codexAgentEntry{Name: name, Description: description})
+	}
+
+	return mergeCodexConfigTOML(root, entries, refresh)
+}
+
+const (
+	codexMarkerBegin = "# BEGIN slipway agents"
+	codexMarkerEnd   = "# END slipway agents"
+)
+
+type codexAgentEntry struct {
+	Name        string
+	Description string
+}
+
+// mergeCodexConfigTOML writes/updates [agents.slipway-*] sections in .codex/config.toml
+// using marker comments for idempotency.
+func mergeCodexConfigTOML(root string, entries []codexAgentEntry, refresh bool) error {
+	configPath := filepath.Join(root, ".codex", "config.toml")
+
+	// Build the managed section.
+	var managed strings.Builder
+	managed.WriteString(codexMarkerBegin + "\n")
+	for _, e := range entries {
+		_, _ = fmt.Fprintf(&managed, "\n[agents.%s]\n", e.Name)
+		_, _ = fmt.Fprintf(&managed, "description = %q\n", e.Description)
+		_, _ = fmt.Fprintf(&managed, "config_file = %q\n", "agents/"+e.Name+".toml")
+	}
+	managed.WriteString("\n" + codexMarkerEnd + "\n")
+
+	existing, err := os.ReadFile(configPath)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		// File doesn't exist — create with managed section (even without refresh).
+		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(configPath, []byte(managed.String()), 0o644)
+	}
+
+	content := string(existing)
+	beginIdx := strings.Index(content, codexMarkerBegin)
+	endIdx := strings.Index(content, codexMarkerEnd)
+
+	if beginIdx >= 0 && endIdx >= 0 {
+		if !refresh {
+			// Managed section already exists and refresh not requested — skip.
+			return nil
+		}
+		// Replace existing managed section.
+		endIdx += len(codexMarkerEnd)
+		// Include trailing newline if present.
+		if endIdx < len(content) && content[endIdx] == '\n' {
+			endIdx++
+		}
+		newContent := content[:beginIdx] + managed.String() + content[endIdx:]
+		return os.WriteFile(configPath, []byte(newContent), 0o644)
+	}
+
+	// Partial marker — one present without the other. Warn and bail out to
+	// avoid corrupting the file with a duplicate marker block.
+	if beginIdx >= 0 || endIdx >= 0 {
+		return fmt.Errorf("config.toml has incomplete slipway markers (BEGIN=%v, END=%v); fix or remove the markers manually", beginIdx >= 0, endIdx >= 0)
+	}
+
+	// No markers found — append managed section (even without refresh,
+	// since this is first-time registration into an existing file).
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += "\n" + managed.String()
+	return os.WriteFile(configPath, []byte(content), 0o644)
+}
+
+// codexPromptsDir resolves the Codex global prompts directory.
+// Uses $CODEX_HOME/prompts/ if set, otherwise ~/.codex/prompts/.
+func codexPromptsDir() (string, error) {
+	if home := os.Getenv("CODEX_HOME"); home != "" {
+		return filepath.Join(home, "prompts"), nil
+	}
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(userHome, ".codex", "prompts"), nil
+}
+
+// generateCodexPrompts renders and writes global prompt files to ~/.codex/prompts/
+// (or $CODEX_HOME/prompts/ when set). Note: this writes outside the project root
+// to the user's home directory.
+func generateCodexPrompts(cfg ToolConfig, refresh bool) error {
+	promptsDir, err := codexPromptsDir()
+	if err != nil {
+		return err
+	}
+
+	for _, id := range commandIDs() {
+		tier := "situational"
+		if def, ok := commandRegistryMap[id]; ok {
+			tier = def.Tier
+		}
+		data := map[string]any{
+			"CommandID":     id,
+			"ToolID":        cfg.ID,
+			"Trigger":       commandTrigger(cfg, id),
+			"Description":   commandDescriptions[id],
+			"SkillPath":     SkillPath(cfg, id),
+			"Arguments":     commandArguments(id),
+			"Prerequisites": commandPrerequisites(id),
+			"Tier":          tier,
+			"Surface":       "adapter",
+		}
+		content, err := tmpl.Render(path.Join("commands", "command-entry.codex-prompt.md.tmpl"), data)
+		if err != nil {
+			return fmt.Errorf("render codex prompt %q: %w", id, err)
+		}
+		path := filepath.Join(promptsDir, "slipway-"+id+".md")
+		if err := writeDeterministic(path, content, refresh); err != nil {
+			return err
+		}
+	}
+	return nil
+}

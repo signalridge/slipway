@@ -1,0 +1,38 @@
+---
+description: "{{.Description}}"
+argument-hint: "{{.Arguments}}"
+tier: "{{.Tier}}"
+surface: "{{.Surface}}"
+---
+
+# slipway-{{.CommandID}}
+
+{{.Description}}.
+
+- **Skill**: `slipway-{{.CommandID}}` at `{{.SkillPath}}`
+
+## Usage
+
+```bash
+slipway {{.CommandID}} {{.Arguments}}
+```
+
+## What This Does
+
+1. Read the full skill instructions at `{{.SkillPath}}`
+2. Execute the skill workflow as described
+3. Follow all `<HARD-GATE>` checkpoints before advancing
+
+Pass the following arguments to the skill: $ARGUMENTS
+
+## Prerequisites
+
+{{- range .Prerequisites }}
+- {{ . }}
+{{- end }}
+
+## On Error
+
+- If the command returns validation errors, read the error details and fix the root cause
+- If blocked by a gate, show the blocker reasons to the user
+- Do not retry without addressing the underlying issue

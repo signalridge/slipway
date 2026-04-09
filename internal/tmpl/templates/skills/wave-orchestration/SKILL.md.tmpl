@@ -1,0 +1,356 @@
+---
+name: wave-orchestration
+description: "Execute implementation tasks in dependency-ordered waves with conflict detection"
+tool: "{{.ToolID}}"
+---
+
+# Wave Orchestration
+
+## Purpose
+Execute implementation tasks in dependency-ordered waves with conflict detection.
+Mitigates: uncontrolled parallel execution drift.
+
+## Workflow Graph (Graphviz DOT)
+```dot
+digraph WaveOrchestration {
+  rankdir=LR;
+  node [shape=box];
+  S5 [label="S1_PLAN audit passed"];
+  S6 [label="S2_EXECUTE"];
+  cp [shape=diamond, label="checkpoint or blocker?"];
+  ctl [label="retry/skip/abort/pivot"];
+  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
+  S7 [label="S3_REVIEW"];
+
+  S5 -> S6;
+  S6 -> cp;
+  cp -> ctl [label="yes"];
+  ctl -> S6 [label="fresh subagent continue"];
+  cp -> gate [label="no"];
+  gate -> S7 [label="slipway next"];
+}
+```
+
+## When This Runs
+After plan audit passes. `slipway next` returns `next_skill: wave-orchestration`.
+
+## Process
+
+### 1. Read Context
+Run `slipway next --json` and read the task plan from the governed change bundle.
+
+If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
+- `STRUCTURE.md`
+- `CONVENTIONS.md`
+- `TESTING.md`
+- `CONCERNS.md`
+
+Use these documents to keep task execution aligned with directory conventions, existing test infrastructure, and known risk hotspots.
+
+**Resume checkpoint**: If `input_context.resume_checkpoint` is present in the JSON output, prior tasks have already been completed. Skip tasks whose IDs appear in `completed_task_ids`. Check `freshness` — if `stale`, re-run all tasks regardless of checkpoint. Only resume from checkpoint when freshness is `fresh`.
+
+### 2. Discover and Group Waves
+Parse the task plan into dependency-ordered waves:
+
+1. Read `tasks.md` from the governed artifact bundle
+2. Extract task entries with their `depends_on` relationships
+3. Group tasks into waves: wave 1 = tasks with no unsatisfied dependencies, wave 2 = tasks depending only on wave 1, etc.
+4. Validate: every task must belong to exactly one wave; circular dependencies are blockers
+
+Report the wave plan before execution:
+```
+## Execution Plan
+
+**{description}** - {total_tasks} tasks across {wave_count} waves
+
+| Wave | Tasks | What it builds |
+|------|-------|----------------|
+| 1    | T1, T2 | {from task objectives, 3-8 words} |
+| 2    | T3     | ... |
+```
+
+### 3. Execute Waves
+Execute each wave in sequence. Within a wave: dispatch tasks in parallel.
+
+**For each wave:**
+
+1. **Describe what is being built (BEFORE spawning):**
+   Read each task objective. Summarize what is being built and why.
+   ```
+   ---
+   ## Wave {N}
+
+   **{Task ID}: {Task Name}**
+   {2-3 sentences: what this builds, technical approach, why it matters}
+
+   Spawning {count} executor(s)...
+   ---
+   ```
+
+2. **Dispatch executor subagents** using tool-specific dispatch (see below).
+
+3. **Wait for all executors in wave to complete.**
+
+4. **Spot-check results before proceeding:**
+   For each completed task:
+   - Verify first 2 files from `changed_files` exist on disk
+   - Check for blocker evidence in task evidence record
+
+   If ANY spot-check fails: report which task failed, ask user "Retry task?" or "Continue with remaining waves?"
+
+5. **Report wave completion:**
+   ```
+   ---
+   ## Wave {N} Complete
+
+   **{Task ID}: {Task Name}**
+   {What was built - from task evidence}
+   {Notable deviations, if any}
+
+   {If more waves: what this enables for next wave}
+   ---
+   ```
+
+6. **Handle checkpoints between waves** (see Checkpoint Continuation Rule).
+
+7. **Proceed to next wave.**
+
+### 4. Write Verification
+Verification requires `run_version` matching `verification/execution-summary.yaml`.
+
+```yaml
+# Write to: artifacts/changes/{slug}/verification/wave-orchestration.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references: []
+notes: |
+  <verification notes>
+```
+
+### 5. Present and Advance
+Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
+
+After confirmation: `slipway next`
+
+## Orchestrator Context Budget (HARD RULE)
+The orchestrator MUST stay below 15% of available context budget. The orchestrator is a dispatcher, not an implementer.
+- Pass file paths only, never inline file content.
+- Do not read task source files — the executor reads them.
+- Do not paste evidence records — reference them by path.
+- If you find yourself reading code to "understand" a task, STOP. That is the executor's job.
+
+## Context Budget Tiers
+
+### Always-Loaded (Tier 1) — max ~4KB per item
+- Change description and acceptance criteria
+- Current state and discovery metadata
+- Active blockers and decisions
+
+### Phase-Specific (Tier 2) — max ~8KB per item
+- Task plan for current wave only (not all waves)
+- Relevant spec sections (not full spec)
+- Recent evidence summaries (not full evidence files)
+
+### On-Demand (Tier 3) — load only when needed
+- Full artifact content (read via file path, not inline)
+- Historical evidence from prior waves
+- Codebase analysis results
+
+### Budget Rules
+- Orchestrator: MUST stay below 15% of context window
+- Task executor: target 60% utilization, leave 40% for execution
+- Reviewer: target 50% utilization, leave 50% for analysis
+- If estimated utilization exceeds tier target, trim lower-priority context before proceeding
+
+## Subagent Dispatch Protocol
+
+Each task MUST be executed by a fresh, dedicated subagent. Never reuse a subagent across tasks. Context accumulated during one task contaminates judgment for subsequent tasks.
+
+### Subagent Isolation Rules
+- **One task per subagent**: each executor handles exactly one task and terminates.
+- **Pass file paths, never content**: the executor reads files itself within its own context.
+- **No state sharing**: do not pass in-memory state between executors. Use filesystem state only.
+- **Fresh context on retry**: if a task fails and is retried, spawn a NEW subagent. Never retry in the same context.
+
+### Task Input Contract
+Provide each task executor with:
+- **Task ID** and description from the task plan
+- **Acceptance criteria** for this specific task
+- **Changed file scope** (which files this task is expected to touch)
+- **Technique references**: `slipway-tdd` for implementation, `slipway-systematic-debugging` for failures
+- **Locked decisions** (if `skill_constraints.locked_decisions` is present): inject locked decisions verbatim into the executor context. These decisions are NON-NEGOTIABLE — the executor MUST NOT override, reinterpret, or work around locked decisions. Violation is a blocker.
+
+### Decision Fidelity Rule (HARD RULE)
+Locked decisions from decision.md are constraints, not suggestions. If an executor encounters a situation where a locked decision seems wrong or suboptimal:
+- STOP. Do NOT override the decision.
+- Record a blocker: `"decision_fidelity:violated:<decision_id>"`
+- Surface the conflict to the user for resolution.
+
+The user locked those decisions for a reason. Agents cannot second-guess locked decisions during execution.
+
+### Task Output Contract
+Each task executor must return:
+- `changed_files`: list of files modified
+- `test_summary`: test results (pass count, fail count, skip count)
+- `evidence_ref`: path to task-level evidence file
+
+### Atomic Commit Per Task
+Each task MUST produce its own git commit immediately after passing self-check. This enables `git bisect` to isolate regressions to a specific task and allows independent rollback.
+
+Commit message format: `task(<task_id>): <one-line summary>`
+
+If a task fails self-check, do NOT commit. Record the failure and move on.
+
+### TDD Gate (task_kind=code)
+When a task has `task_kind=code`, the executor MUST follow TDD discipline:
+1. **Write the failing test first** — create a test that exercises the acceptance criteria before writing implementation.
+2. **Verify the test fails** — run the test and confirm it fails for the right reason (missing implementation, not syntax error).
+3. **Write minimal implementation** — only enough code to make the test pass.
+4. **Verify the test passes** — run the test and confirm it passes. Other existing tests must also pass.
+5. **Refactor if needed** — clean up without breaking tests.
+
+If the executor writes implementation code before a failing test exists, the task verdict MUST be downgraded to `incomplete` with reason `tdd_violation`. This gate is opt-out only when `task_kind` is not `code` (e.g., `doc`, `ops`, `investigation`).
+
+### Post-Execution Self-Check
+Before accepting a task result, the executor MUST self-review its own work:
+1. All files listed in `changed_files` exist on disk.
+2. Changed code compiles without errors (run build command if available).
+3. Tests relevant to changed files pass (run test command if available).
+4. No obvious logic errors, missing imports, or incomplete implementations in changed files.
+
+Only after self-check passes, commit the changes.
+
+If any check fails, downgrade the task verdict to `incomplete` and record the specific failure.
+{{if eq .ToolID "claude"}}
+### Tool-Specific Dispatch (Claude Code)
+- **Spawn executor**: Use the `Task` tool with `subagent_type` set to `"slipway-executor"` and `prompt` containing the task input contract.
+- **Pass file paths only**: Include task plan path, evidence directory, codebase map directory in the prompt. Never inline file content — the executor has a fresh 200k context and reads files itself.
+- **One task per Task() call**: Each task gets its own `Task` invocation. Do not batch multiple tasks in a single `Task` call.
+- **Wave parallelism**: Within a wave, spawn all `Task()` calls simultaneously. The `Task` tool blocks until the subagent completes — parallel `Task()` calls run concurrently. Wait for all wave tasks to complete before starting the next wave.
+- **Collect results**: Each `Task()` returns the subagent's output. Parse for `changed_files`, `test_summary`, `evidence_ref`.
+- **Spot-check after wave**: Verify claimed commits exist (`git cat-file -t <ref>`), verify key changed files exist on disk, check for blocker evidence. If spot-check fails, route to failure handler.
+- **Fresh context on checkpoint**: After checkpoint pause (user input needed via `slipway checkpoint`), spawn a NEW `Task()` call with checkpoint context and user response. Never resume in the same `Task` context.
+- **Checkpoint dispatch format**:
+  ```
+  Task(
+    subagent_type="slipway-executor",
+    prompt="
+      Execute task {task_id} of governed change {slug}.
+
+      <task_input>
+      Task plan: {artifact_bundle_path}/tasks.md
+      Verification dir: {verification_dir}
+      Codebase map: {codebase_map_dir}
+      Locked decisions: {locked_decisions_text}
+      </task_input>
+
+      <technique_references>
+      TDD: {skills_dir}/slipway/tdd/SKILL.md
+      Debugging: {skills_dir}/slipway/systematic-debugging/SKILL.md
+      </technique_references>
+
+      <success_criteria>
+      - [ ] Acceptance criteria met
+      - [ ] Tests written first (TDD) and passing
+      - [ ] Self-check passed
+      - [ ] Atomic commit produced
+      - [ ] Task evidence written
+      </success_criteria>
+    "
+  )
+  ```
+{{else if eq .ToolID "codex"}}
+### Tool-Specific Dispatch (Codex)
+- **Spawn executor**: Use `codex -q --task "<prompt>"` to dispatch a headless task executor in sandbox mode.
+- **Pass file paths only**: Reference files by path in the task prompt. Never inline content.
+- **One task per invocation**: Each task gets its own `codex --task` call.
+- **Wave parallelism**: Within a wave, spawn parallel `codex --task` calls as background processes. Collect results after all complete.
+- **Collect results**: Parse stdout for structured output (`changed_files`, `test_summary`, `evidence_ref`).
+- **Spot-check after wave**: Same verification protocol — verify commits, files, blocker evidence.
+- **Fresh context on checkpoint**: New `codex --task` call with checkpoint context. Previous context is automatically isolated.
+{{else if eq .ToolID "cursor"}}
+### Tool-Specific Dispatch (Cursor)
+- **Spawn executor**: Use Cursor Composer agent mode to dispatch a task executor.
+- **Pass file paths only**: Reference files by path. Never inline content.
+- **One task per agent session**: Each task gets its own Composer agent session.
+- **Wave parallelism**: Sequential dispatch within Composer (Composer does not support parallel agent sessions). Track wave ordering manually.
+- **Spot-check after wave**: Same verification protocol — verify commits, files, blocker evidence.
+- **Fresh context on checkpoint**: New Composer session. Do not continue in the same thread.
+{{else}}
+### Tool-Specific Dispatch ({{.ToolID}})
+- **Spawn executor**: Use the tool's agent/task dispatch mechanism to create an isolated executor context.
+- **Pass file paths only**: Reference files by path. Never inline content.
+- **One task per subagent**: Each task gets its own isolated context.
+- **Wave parallelism**: If the tool supports parallel dispatch, spawn all wave tasks concurrently. Otherwise dispatch sequentially within the wave.
+- **Collect results**: Parse executor output for task evidence fields.
+- **Spot-check after wave**: Same verification protocol — verify commits, files, blocker evidence.
+- **Fresh context on retry/checkpoint**: New subagent. Never reuse prior context.
+{{end}}
+### Dispatch Rules
+- Dispatch one task at a time within a wave. Do not batch tasks in a single context.
+- After each task, run the post-execution self-check before moving to the next task.
+- If a task modifies files outside its expected scope, flag as a conflict.
+- If a task fails, record the blocker and apply the control loop decision (retry/skip/abort/pivot) before continuing.
+- Retry budget per task: maximum 2 retries. After exhaustion, surface alternatives to the user.
+
+## DO NOT SKIP
+1. Dependency ordering before execution.
+2. File conflict detection after each wave.
+3. Retry budget enforcement.
+4. Post-execution verification.
+
+## Rationalization Red Flags
+| Rationalization | Counter-rule |
+|---|---|
+| "Execute all tasks at once" | Follow wave ordering to detect conflicts. |
+| "File conflict is minor" | Downgrade conflicting tasks and require serialized retry. |
+| "Retry budget doesn't apply" | Retry exhaustion must surface alternatives. |
+| "One large context is fine" | Keep per-task context scoped and disposable. |
+| "TDD slows us down, just implement" | TDD is governance, not optional. Untested code blocks review. |
+| "This task is too simple for tests" | Simple tasks get simple tests. No exceptions. |
+| "I'll add tests after implementation" | Tests-after is not TDD. Write the failing test first. |
+| "The orchestrator can read the code to help" | Orchestrator stays at 15% context. Reading code is the executor's job. |
+
+## Deviation Rules
+1. **Bug found during task**: Auto-fix if the bug is directly blocking the current task. Record the fix in changed_files.
+2. **Missing critical functionality**: Auto-add if it is required for the current task's acceptance criteria. Do not add speculative features.
+3. **Blocker encountered**: Auto-fix if the fix is mechanical (import, config, dependency). Record as a blocker if the fix requires architectural decisions.
+4. **Architectural change needed**: STOP. Do not proceed. Write a blocker evidence record describing the architectural change needed and surface it to the user for decision.
+
+**Scope Boundary:**
+Only auto-fix issues DIRECTLY caused by the current task's changes. Pre-existing warnings, linting errors, or failures in unrelated files are out of scope. Note out-of-scope discoveries in the task evidence record. Do not fix them.
+
+**Fix Attempt Limit:**
+After 3 auto-fix attempts on a single task, STOP fixing. Document remaining issues in task evidence under blockers. Continue to the next task or surface a checkpoint.
+
+## Analysis Paralysis Guard
+If you have performed 5 or more consecutive read/search/grep operations without writing any code or producing any output:
+- STOP immediately
+- Write a blocker evidence record explaining what you are stuck on
+- Surface the blocker to the user rather than continuing to search
+
+This prevents wasting context budget on exploration loops. If you need more context, ask — do not loop.
+
+## Checkpoint Continuation Rule (HARD RULE)
+After any checkpoint pause (task blocker surfaced to user, retry budget exhaustion, architectural change needed), a **fresh subagent MUST be spawned** to continue execution. Do NOT resume in the same context that was active before the pause.
+
+Rationale: Context accumulated during failed task execution contaminates subsequent attempts. A fresh subagent starts with clean context, only the checkpoint state, and the user's resolution.
+
+This rule is NOT optional. Violating it invalidates subsequent task evidence because the evidence was produced in a contaminated context.
+
+## Blocker Reporting Protocol (Decision #13)
+When a task encounters a blocker that traces back to a spec or artifact issue:
+- Use structured blocker format: `spec:<artifact_id>` to reference the problematic artifact (e.g., `spec:design`, `spec:tasks`)
+- Include actionable remediation in the blocker description
+- The user will decide whether to roll back to an earlier state or resolve in-place
+- Do NOT attempt automatic state rollback — surface the issue and let the user decide via `slipway next`
+
+## Failure Handling
+- File conflicts between tasks: downgrade conflicting tasks, retry serially.
+- Task failures: record blocker, suggest fix or skip.
+- Retry budget exhaustion: surface alternatives instead of silent retries.
+
+## Step Declaration
+Declare current step and expected output before executing each workflow step.

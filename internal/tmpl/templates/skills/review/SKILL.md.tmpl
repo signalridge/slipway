@@ -1,0 +1,22 @@
+---
+name: slipway-review
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "review"
+trigger: "{{.Trigger}}"
+---
+
+# Review
+
+Trigger artifact and implementation review for the active governed change.
+
+## Invocation
+```bash
+slipway review
+```
+
+## Contract
+- Evaluates artifact completeness and implementation quality.
+- Produces review findings with required/optional layers.
+- Show review summary to user with pass/fail per layer.

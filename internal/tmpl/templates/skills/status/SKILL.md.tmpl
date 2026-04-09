@@ -1,0 +1,25 @@
+---
+name: slipway-status
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "status"
+trigger: "{{.Trigger}}"
+---
+
+# Status
+
+Show lifecycle status, evidence progress, and blockers for the active change.
+When multiple active changes exist, summarize them and let the user choose one explicitly.
+
+## Invocation
+```bash
+slipway status --json
+```
+
+## Contract
+- Follow runtime state and gate contracts from Slipway CLI.
+- Show structured output to the user.
+- If no active change: suggest `slipway new`.
+- If multiple active changes: show the summary and suggest `slipway status --change <slug>`.
+- Suggest `slipway repair` only for actual state-integrity problems.

@@ -1,0 +1,29 @@
+---
+name: slipway-sync
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "sync"
+trigger: "{{.Trigger}}"
+---
+
+# Sync
+
+Validate the active change's requirements.md exists and is well-formed (read-only).
+
+## Invocation
+```bash
+slipway sync --json
+```
+
+## Contract
+- Reads the active change's requirements.md from the governed bundle.
+- Validates that the file exists and is readable.
+- Does NOT write any files or publish to a separate directory.
+- Does NOT change lifecycle status or archive the change.
+- Use when you want to confirm requirements are in place mid-workflow.
+- Show sync summary to user.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific change (defaults to active change)

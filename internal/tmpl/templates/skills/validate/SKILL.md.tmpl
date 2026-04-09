@@ -1,0 +1,23 @@
+---
+name: slipway-validate
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "validate"
+trigger: "{{.Trigger}}"
+---
+
+# Validate
+
+Check evidence and gate readiness for the current state without advancing.
+
+## Invocation
+```bash
+slipway validate
+```
+
+## Contract
+- Evaluates all gates and evidence requirements for the current state.
+- Reports pass/fail status and specific blockers.
+- Does not modify state — read-only diagnostic.
+- Show validation summary to user with actionable remediation steps.

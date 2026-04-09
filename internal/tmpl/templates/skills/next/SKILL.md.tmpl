@@ -1,0 +1,171 @@
+---
+name: slipway-next
+type: orchestration
+tool: "{{.ToolID}}"
+trigger: "{{.Trigger}}"
+description: "Use when you need the next governed step, evidence validation, and state progression context."
+---
+
+# Slipway Step Execution
+
+Auto-select and execute the next actionable governance skill for the active change.
+This is the default progression command for governed changes.
+
+## Prerequisites
+1. Active change exists (`slipway status --json` shows a change).
+2. Current status has been queried and blockers are resolved.
+
+## Workflow
+
+### 1. Get Instructions
+```bash
+slipway next --json
+```
+If `next_skill` is null, all skills are complete for the current state.
+Check `blockers` for guidance (e.g., "run `slipway done`").
+
+### 2. Read Skill Prompt
+Read the file at `next_skill.prompt_path` (SKILL.md).
+This contains the full execution instructions for the current governance skill.
+
+### 3. Execute Skill
+Follow the SKILL.md instructions:
+- Analyze the codebase/change context as specified
+- Write evidence JSON to `next_skill.evidence_dir`
+- Follow the evidence schema defined in the skill
+
+### 4. Present to User
+Show:
+- What was analyzed/done
+- Key findings and decisions
+- Proposed next step
+
+**Manual mode (default):** Wait for explicit user confirmation before calling `slipway next` again.
+**Auto mode (`slipway next --auto`):** CLI handles advancement automatically between routine steps; governance gates (fresh-reviewer stages, guardrail-sensitive transitions) still pause for user confirmation. See the Auto Mode section below for details.
+
+### 5. Advance
+```bash
+slipway next --json
+```
+CLI validates evidence, checks gates, advances state, and returns next instructions.
+
+### 6. Repeat
+If `next` returns a new `next_skill`, go to step 2.
+If the change reaches DONE-ready state, suggest `slipway done`.
+
+## Agent Dispatch
+If `next_skill.agent_hint` is present, dispatch the recommended agent for the skill.
+Otherwise, execute the skill directly in the current context.
+{{if eq .ToolID "claude"}}
+### Tool-Specific Dispatch (Claude Code)
+- **Spawn subagent**: Use the `Task` tool with the agent hint as `description` and task context as `prompt`.
+- **Pass file paths only**: Include `prompt_path`, `evidence_dir`, task plan paths. Never inline file content.
+- **One task per Task() call**: Each task executor gets its own `Task` invocation.
+- **Fresh context on retry**: Spawn a new `Task` call. Never reuse a prior Task's context.
+{{else if eq .ToolID "codex"}}
+### Tool-Specific Dispatch (Codex)
+- **Spawn subagent**: Use `codex -q --task "<prompt>"` to dispatch a headless task executor.
+- **Pass file paths only**: Reference files by path in the task prompt.
+- **One task per invocation**: Each task gets its own `codex --task` call.
+- **Fresh context on retry**: New `codex --task` call. Previous context is automatically isolated.
+{{else if eq .ToolID "cursor"}}
+### Tool-Specific Dispatch (Cursor)
+- **Spawn subagent**: Use Cursor Composer agent mode to dispatch the recommended agent.
+- **Pass file paths only**: Reference files by path.
+- **One task per agent session**: Each task gets its own Composer agent session.
+- **Fresh context on retry**: New Composer session. Do not continue in the same thread.
+{{else}}
+### Tool-Specific Dispatch ({{.ToolID}})
+- **Spawn subagent**: Use the tool's agent/task dispatch mechanism.
+- **Pass file paths only**: Reference files by path. Never inline content.
+- **One task per subagent**: Each task gets its own isolated context.
+- **Fresh context on retry**: New subagent. Never reuse prior context.
+{{end}}
+## Subagent Role: Implementer
+- Input scope: one task or one wave unit, not the entire project.
+- Required output contract: `changed_files`, `test_summary`, `evidence_ref`.
+- Methodology references: `slipway-tdd` for implementation and `slipway-systematic-debugging` for failures.
+
+## Context Budget
+- Include only active skill, blockers, and directly touched artifacts.
+- Exclude full logs; reference git-runtime evidence paths instead of pasting them inline.
+- Refresh threshold: after each skill execution and before each new step.
+
+## Auto Mode
+
+When running with `slipway next --auto`, governance skills execute continuously, pausing only when user confirmation is required.
+
+### Auto Mode Loop
+1. `slipway next --json` — get current skill and advance state if ready
+2. If `next_skill` is null: done, exit loop
+3. Read SKILL.md at `next_skill.prompt_path`
+4. Execute skill, write evidence to `next_skill.evidence_dir`
+5. `slipway next --json` — validate evidence and advance
+6. If `next` succeeds and returns new `next_skill`: go to step 3
+7. If blocked: show blockers to user, pause
+
+### When to Pause (Auto Mode)
+- Gate transitions that require user judgment (scope confirmation, plan approval)
+- Guardrail-sensitive states (auth/security/PII domains)
+- `next` returns errors or blockers
+- Evidence validation fails
+- Governed review skills that require a fresh reviewer agent (`spec-compliance-review`, `code-quality-review`, `final-closeout`)
+
+### Context Self-Monitoring (SHOULD)
+During long-running skill executions (especially wave-orchestration in S5), periodically check context health:
+- After every 3 tasks executed, run `slipway status --json` and check `context_budget.health`
+- If health is `degrading` or `poor`, pause and spawn a fresh subagent before continuing
+- If `guard_action` is `warn`, trim non-essential context (historical evidence, completed task details)
+- If `guard_action` is `stop`, cease execution immediately and write handoff state
+
+Signs of context degradation during execution:
+- Repeated reasoning about already-completed tasks
+- Difficulty recalling task acceptance criteria
+- Growing confusion about which files were changed by which task
+- Increasing tendency to re-read files that were read earlier
+
+If you notice any of these signs, run `slipway status --json` immediately. Do not wait for the scheduled check.
+
+### Subagent Continuation Rule (HARD RULE)
+After any checkpoint pause (gate transition, fresh-reviewer stage, guardrail pause, or user intervention), a **fresh subagent MUST be spawned** to continue execution. Do NOT resume in the same context that was active before the pause.
+
+Rationale: Context accumulated during a skill execution degrades judgment for subsequent skills. Stale reasoning from a previous skill can bias the next skill's decisions, leading to rationalization drift. A fresh subagent starts with clean context and only the information it needs.
+
+This rule is NOT optional. It is NOT a best practice. It is a hard requirement. Violating it invalidates subsequent evidence because the evidence was produced in a contaminated context.
+
+### Auto Mode Failure Handling
+1. On any `next` failure, stop auto mode and show error details.
+2. On evidence validation failure, stop and require manual intervention.
+3. If three consecutive skills fail, exit auto mode and suggest diagnostic steps.
+
+## Technique Skill References
+- `slipway-tdd`: enforce RED->GREEN->REFACTOR during wave execution.
+- `slipway-systematic-debugging`: isolate root cause when skill execution fails.
+
+## DO NOT SKIP
+1. Pre-action status check (`slipway next --json`).
+2. Blocker resolution before execution.
+3. Post-action verification (`slipway next`).
+4. Pause on governed review skills that require a fresh reviewer agent (auto mode).
+5. Pause on guardrail-sensitive transitions (auto mode).
+
+## Rationalization Red Flags
+| Rationalization | Counter-rule |
+|---|---|
+| "Run `next` repeatedly" | Always check instructions between each invocation. |
+| "Blockers will clear automatically" | Resolve blockers explicitly before execution. |
+| "Skip the skill, just advance" | Every skill step must execute and produce evidence. |
+| "One large context is fine" | Keep per-task context scoped and disposable. |
+| "I know the next skill" | `slipway next --json` output is authoritative. |
+| "Skip the pause, keep going" | Hard gates exist for a reason. |
+| "Evidence looks close enough" | Validation must pass before advance. |
+| "Fresh reviewer rules don't matter in auto" | Governed review skills still require a fresh reviewer agent. |
+| "User already approved the plan" | Each state transition may require fresh confirmation. |
+
+## Failure Mode Handling
+1. If skill execution fails, capture blocker text and rerun only after targeted remediation.
+2. If stale evidence appears repeatedly, reconcile dependencies and re-review changed scope.
+3. If `next` returns errors, show error details and suggest remediation.
+
+## Step Declaration
+Declare current step and expected output before executing each workflow step.

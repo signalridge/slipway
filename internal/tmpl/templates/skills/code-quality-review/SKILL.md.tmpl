@@ -1,0 +1,140 @@
+---
+name: code-quality-review
+description: "Review implementation for engineering quality, consistency, and safety beyond spec compliance"
+---
+
+# Code Quality Review
+
+```
+IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
+```
+
+Violating the letter of this rule is violating the spirit of this rule.
+
+## Purpose
+Review implementation for engineering quality, consistency, and safety beyond spec compliance.
+Mitigates: cross-artifact inconsistency and code quality gaps.
+
+## When This Runs
+After spec-compliance-review passes. This is Stage 2 of the two-stage review protocol.
+`slipway next` returns `next_skill: code-quality-review` after spec-compliance-review verification passes.
+
+## Process
+
+<HARD-GATE>
+This skill MUST NOT run until spec-compliance-review verification exists with verdict=pass.
+If spec-compliance-review has not passed, STOP and return to spec-compliance-review first.
+</HARD-GATE>
+
+### 0. Independent Verification Mandate (HARD RULE)
+CRITICAL: **Do Not Trust Any Prior Report.** You MUST read actual code and artifacts yourself, line by line, before making any pass/fail claim.
+
+- Do NOT rely on summaries from the spec-compliance-review or implementer
+- Do NOT trust "tests pass" claims — verify test quality by reading test code
+- Do NOT trust "no duplication" claims — search for similar patterns yourself
+- Use fresh context: do not carry assumptions from the spec-compliance-review stage
+- If something "looks fine at a glance", that is a signal to look deeper, not to move on
+
+### 1. Read Context
+Run `slipway next --json` and locate `verification/execution-summary.yaml`. Verify spec-compliance-review verification exists with verdict=pass.
+
+### 2. Code Quality Assessment
+Review implementation for engineering quality:
+- **Readability**: clear naming, appropriate abstraction level, self-documenting code
+- **Maintainability**: separation of concerns, minimal coupling, reasonable complexity
+- **Duplication**: no copy-paste patterns that should be abstracted
+- **Consistency**: follows project conventions and existing patterns
+
+### 3. Test Quality Assessment
+- Test coverage adequacy for changed code
+- Test clarity and maintainability
+- Edge case coverage for critical paths
+- No test-only hacks that mask real issues
+
+### 4. Safety Review
+- Auth/data handling patterns
+- Irreversible operations have appropriate guards
+- External contract changes are backward-compatible or versioned
+- No secrets or credentials in code
+
+### 5. Cross-Artifact Consistency
+- Implementation matches test expectations
+- Config changes are reflected in documentation
+- API contracts match between layers
+
+### 6. Write Verification
+Verification requires `run_version` matching `verification/execution-summary.yaml`.
+
+```yaml
+# Write to: artifacts/changes/{slug}/verification/code-quality-review.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+notes: |
+  Gaps (code_to_artifact): <code patterns not reflected in artifacts>
+  Gaps (artifact_to_code): <artifact expectations not met by code>
+```
+
+The `notes` field SHOULD include gap analysis. Empty gaps indicate full cross-artifact consistency.
+
+### 7. Present and Advance
+Show review findings. {{template "hard-gate"}}
+
+After confirmation: `slipway next`
+
+## Review Layers
+Execute this review layer:
+1. **Quality**: readability, maintainability, duplication, test clarity, cross-artifact consistency
+
+Report layer outcomes in `references` using format: `layer:QUALITY=pass|fail`
+
+## Subagent Role: Reviewer
+- Fresh context: must use a separate context from spec-compliance-review to prevent review fatigue.
+- Focus: engineering quality beyond spec compliance.
+- Output: explicit blocker mapping to artifact/file references.
+
+## Mandatory Checklist
+Before writing verification, verify ALL of the following:
+
+- [ ] **Fresh Context**: This review is in a separate context from spec-compliance-review
+- [ ] **Readability**: Changed functions have clear naming, appropriate abstraction, self-documenting code
+- [ ] **Maintainability**: Changes follow single responsibility, minimal coupling, reasonable complexity
+- [ ] **Duplication Check**: Searched for similar patterns — no copy-paste that should be abstracted
+- [ ] **Convention Compliance**: Changes follow project naming, file organization, and error handling conventions
+- [ ] **Test Quality**: Tests have meaningful assertions, cover happy path + edge cases, would fail if impl removed
+- [ ] **Safety Scan**: Auth/data handling, irreversible operations, external contracts, no secrets in code
+- [ ] **Cross-Artifact**: Implementation matches test expectations, config changes reflected in docs, API contracts match between layers
+
+Each unchecked item must be explicitly addressed (pass or finding).
+
+## DO NOT SKIP
+1. Independent review for governed levels.
+2. Fresh context separate from spec-compliance-review.
+3. Blocker fix + rerun loop.
+4. Verification record written after review.
+5. Line-level review of changed code (not just file-level).
+
+## Rationalization Red Flags
+| Rationalization | Counter-rule |
+|---|---|
+| "Self-review is fine" | Self-review is not permitted for governed review skills. Use a fresh reviewer agent. |
+| "Blockers are minor, continue" | Any blocker must be resolved before progression. |
+| "One review pass is enough" | Rerun review after every fix cycle. |
+| "Looks fine at a glance" | Require line-level checks for changed logic. |
+| "Tests pass so quality is fine" | Passing tests do not guarantee code quality. |
+| "Same context as spec review is fine" | Fresh context prevents review fatigue and bias. |
+
+## Failure Handling
+- On review blocker, route back to S6 fix/re-run loop and require fresh review verification.
+- If review findings are insufficient, rerun with a fresh reviewer agent.
+
+## Hard Gate Enforcement
+DO NOT advance past code quality review until the user has explicitly approved the review findings. Review completion is not approval. The user must confirm that all findings are acceptable before calling `slipway next`.
+
+**Anti-pattern**: "No blockers found, so the review passes automatically." — A clean review still requires user sign-off.
+
+## Step Declaration
+Declare current step and expected output before executing each workflow step.

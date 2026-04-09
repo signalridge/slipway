@@ -1,0 +1,26 @@
+---
+name: slipway-pivot
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "pivot"
+trigger: "{{.Trigger}}"
+---
+
+# Pivot
+
+Reroute (refresh the current discovery decision) or rescope (return to discovery) an active change.
+
+## Invocation
+```bash
+slipway pivot --reroute
+slipway pivot --rescope
+```
+
+## Options
+- `--reroute`: Refresh S1 analysis and re-route to the appropriate discovery path.
+- `--rescope`: Return to discovery phase to modify scope boundaries.
+
+## Contract
+- Show pivot summary with before/after state.
+- Confirm pivot action with user before executing.

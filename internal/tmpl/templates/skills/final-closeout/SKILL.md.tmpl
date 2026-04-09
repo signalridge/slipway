@@ -1,0 +1,153 @@
+---
+name: final-closeout
+description: "Final verification refresh before ship approval, ensuring nothing is stale"
+---
+
+# Final Closeout
+
+```
+IRON LAW: NO SHIP WITHOUT FRESH, INDEPENDENT CLOSEOUT VERIFICATION
+```
+
+Violating the letter of this rule is violating the spirit of this rule.
+
+## Purpose
+Final verification refresh before ship approval, ensuring nothing is stale.
+Mitigates: stale final verification before governed ship decision.
+
+## Workflow Graph (Graphviz DOT)
+```dot
+digraph FinalCloseout {
+  rankdir=LR;
+  node [shape=box];
+  start [label="goal-verification passed"];
+  read [label="Read context\n+ verification index"];
+  fresh [shape=diamond, label="All verification\nfresh?"];
+  tests [shape=diamond, label="Full test\nsuite pass?"];
+  assure [shape=diamond, label="Assurance\ncomplete?"];
+  stale [label="Refresh stale\nverification"];
+  fix [label="Fix failures"];
+  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
+  done [label="slipway next\n→ G_ship"];
+
+  start -> read;
+  read -> fresh;
+  fresh -> stale [label="no"];
+  stale -> read [label="re-check"];
+  fresh -> tests [label="yes"];
+  tests -> fix [label="no"];
+  fix -> tests [label="rerun"];
+  tests -> assure [label="yes"];
+  assure -> stale [label="incomplete"];
+  assure -> gate [label="yes"];
+  gate -> done;
+}
+```
+
+## When This Runs
+Only when governed closeout refresh is required. `slipway next` returns `next_skill: final-closeout`.
+This skill runs AFTER goal-verification and BEFORE the G_ship gate decision.
+
+## Process
+
+### 1. Read Context
+Run `slipway next --json`. Examine:
+- Current run_summary_version
+- Verification index for all prior skills
+- Assurance artifact state
+- Active blockers list
+
+### 2. Closeout Checklist (MANDATORY)
+Verify ALL of the following before producing closeout verification:
+
+- [ ] **Verification Freshness**: All verification records match current `run_version`
+- [ ] **Verification Completeness**: Every required governance skill has a passing verification record
+- [ ] **Test Suite Pass**: Full test suite runs green (not cached, not partial)
+- [ ] **No Unresolved Blockers**: Blocker list is empty
+- [ ] **Assurance Artifact**: `assurance.md` is complete with all required sections (standard/strict preset; skip on light preset)
+- [ ] **Review Verification**: Both spec-compliance-review and code-quality-review have passing verification
+- [ ] **No Stale Artifacts**: Artifact staleness propagation graph is clean
+- [ ] **Guardrail Domain Check**: If guardrail domain is active, domain-specific safety baseline is met
+
+Each unchecked item is a BLOCKER. No partial credit. No "close enough."
+
+### 3. Verification-Before-Completion Protocol (HARD RULE)
+Before ANY closeout claim, you MUST follow this exact sequence:
+1. **Identify** the verification command (e.g., `go test ./...`, `npm test`)
+2. **Run** the command fresh and complete — not from memory or cache
+3. **Read** the full output — do not truncate or summarize prematurely
+4. **Compare** the output against closeout criteria (all tests pass, no blockers, verification fresh)
+5. **State** the claim WITH evidence: "Closeout ready because [command] produced [output showing N/N pass]"
+
+{{template "banned-language"}}
+
+### 4. Assurance Artifact Verification (standard/strict preset)
+On light preset, skip this section — assurance.md is optional.
+
+The `assurance.md` artifact MUST contain:
+- **Scope Summary**: What was delivered vs. what was requested
+- **Verification Verdict**: Pass/fail with verification references
+- **Verification Index**: Map of skill → verification file path → verdict
+- **Residual Risks**: Known limitations, deferred items, tech debt introduced
+- **Archive Decision**: Recommendation (archive/defer/rollback) with rationale
+
+If any section is empty or missing, the closeout is BLOCKED.
+
+### 5. Write Verification
+Review must be performed independently from implementation.
+
+```yaml
+# Write to: artifacts/changes/{slug}/verification/final-closeout.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:N/N"
+  - "closeout:reviewer_independence=pass"
+  - "closeout:guardrail_baseline=pass"
+# On standard/strict preset, also add `closeout:assurance_complete=pass`.
+notes: |
+  <verification notes>
+```
+
+### 6. Present and Advance
+Show closeout summary with verification index. {{template "hard-gate"}}
+
+After confirmation: `slipway next`
+
+## DO NOT SKIP
+1. Full test suite pass (fresh, not cached).
+2. Verification freshness check for ALL prior skills.
+3. Assurance artifact completeness verification (standard/strict preset; skip on light).
+4. Reviewer independence verification.
+5. Guardrail domain baseline check (when applicable).
+
+## Rationalization Red Flags
+| Rationalization | Counter-rule |
+|---|---|
+| "Most tests pass" | Closeout requires ALL tests pass. "Most" is not "all." |
+| "Ship first, polish later" | Assurance must be complete pre-ship. Post-ship polish is tech debt. |
+| "Closeout verification can be added later" | Verification must exist at closeout completion time. Later is never. |
+| "One flaky fail is acceptable" | Flaky tests block closeout until stabilized or explicitly waived by user. |
+| "Goal-verification already checked this" | Goal-verification checks outcomes. Closeout checks verification freshness. Different concerns. |
+| "The reviewer is the same person, it's fine" | Reviewer independence is mandatory. Use a fresh reviewer agent. |
+| "Assurance sections are boilerplate" | Boilerplate indicates insufficient reflection. Each section must reflect this specific change. |
+| "Verification is from the last run, close enough" | Verification must match current run_version. Last run is stale if version incremented. |
+| "Guardrail check was done at S5" | Guardrail baseline must be re-verified at closeout. Conditions may have changed. |
+| "The user already approved goal-verification" | Closeout is a separate gate. Prior approval does not carry forward. |
+
+## Hard Gate Enforcement
+DO NOT advance past final closeout until the user has explicitly confirmed the closeout summary. A passing test suite is not the same as user approval. The user must confirm before calling `slipway next`.
+
+**Anti-pattern**: "All tests pass and verification is complete, advancing automatically." — Closeout gates exist because automated checks cannot verify intent alignment. Even a clean closeout requires explicit user sign-off.
+
+## Failure Handling
+- If tests fail, fix root cause and rerun closeout (do not patch verification).
+- Stale verification: refresh the stale skill's verification, then rerun closeout.
+- Missing assurance sections: route back to artifact completion before closeout.
+- If review is insufficient, rerun with a fresh reviewer agent.
+
+## Step Declaration
+Declare current step and expected output before executing each workflow step.
