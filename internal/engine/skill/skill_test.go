@@ -181,3 +181,60 @@ func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
 		assert.Equal(t, expected.DiscoveryOnly, def.DiscoveryOnly, "discovery_only mismatch for %s", name)
 	}
 }
+
+func TestLoadGovernanceRegistryAppliesConfiguredAgentMappings(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+	cfg := model.DefaultConfig()
+	cfg.Agents.Mappings = map[string]string{}
+	cfg.Agents.Mappings["wave-orchestration"] = "slipway-reviewer"
+	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
+
+	registry, err := LoadGovernanceRegistry(root)
+	require.NoError(t, err)
+
+	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
+	require.True(t, ok)
+	assert.Equal(t, "slipway-reviewer", def.AgentHint)
+}
+
+func TestLoadGovernanceRegistryRejectsUnknownConfiguredAgent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+	cfg := model.DefaultConfig()
+	cfg.Agents.Mappings = map[string]string{}
+	cfg.Agents.Mappings["wave-orchestration"] = "slipway-missing"
+	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+
+	var regErr *GovernanceRegistryError
+	require.ErrorAs(t, err, &regErr)
+	assert.Contains(t, err.Error(), `unknown agent "slipway-missing"`)
+}
+
+func TestLoadGovernanceRegistryRejectsManualOnlyConfiguredAgent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+	cfg := model.DefaultConfig()
+	cfg.Agents.Mappings = map[string]string{}
+	cfg.Agents.Mappings["wave-orchestration"] = "slipway-executor"
+	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+
+	var regErr *GovernanceRegistryError
+	require.ErrorAs(t, err, &regErr)
+	assert.Contains(t, err.Error(), `manual-only`)
+}

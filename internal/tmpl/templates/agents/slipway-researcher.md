@@ -4,6 +4,7 @@ description: "Use when focused domain research is needed to unblock planning or 
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - research-orchestration
 ---

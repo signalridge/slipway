@@ -248,6 +248,12 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		return saveChangeAndReturn(root, change, doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize."))
 	}
 
+	if toState == model.StateS2Execute {
+		if _, err := state.MaterializeWavePlan(root, change); err != nil {
+			return AdvanceSummary{}, err
+		}
+	}
+
 	change.CurrentState = toState
 	// Clear substeps when leaving their parent state.
 	if toState != model.StateS1Plan {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -61,6 +62,7 @@ func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -198,6 +200,7 @@ func TestRepairReportsOrphanBundleDirectoryFinding(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 
 		require.NoError(t, cmd.Execute())
@@ -226,6 +229,7 @@ func TestRepairReportsUnreadableChangeAuthorityFinding(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 
 		require.NoError(t, cmd.Execute())
@@ -271,6 +275,7 @@ func TestRepairReportsHiddenUnreadableChangeAuthorityFinding(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 
 		require.NoError(t, cmd.Execute())
@@ -307,6 +312,7 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 
 		require.NoError(t, cmd.Execute())
@@ -322,5 +328,257 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "expected execution summary finding in repair summary")
+	})
+}
+
+func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "repair should recover wave execution artifacts")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "t-01",
+			PausedWaveIndex: 1,
+			PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` recover wave execution state
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.MaterializedWavePlans, slug)
+		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+		assert.Contains(t, summary.ClearedCheckpoints, slug)
+
+		_, err = state.LoadWavePlan(root, slug)
+		require.NoError(t, err)
+		runs, err := state.LoadWaveRuns(root, slug, 1)
+		require.NoError(t, err)
+		require.Len(t, runs, 1)
+
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Nil(t, change.ActiveCheckpoint)
+	})
+}
+
+func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "repair should rebuild unreadable wave artifacts")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` rebuild unreadable wave artifacts
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		require.NoError(t, os.WriteFile(state.WavePlanPathForRead(root, slug), []byte("version: [\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(state.WaveEvidenceDir(root, slug, 1), "wave-01.yaml"), []byte("wave_index: [\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.MaterializedWavePlans, slug)
+		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+
+		plan, err := state.LoadWavePlan(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.WavePlanVersion, plan.Version)
+
+		runs, err := state.LoadWaveRuns(root, slug, 1)
+		require.NoError(t, err)
+		require.Len(t, runs, 1)
+		assert.Equal(t, model.WaveVerdictPass, runs[0].Verdict)
+	})
+}
+
+func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "repair should not rewrite drifted historical execution")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "t-01",
+			PausedWaveIndex: 1,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` historical executed task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_id":  "t-01",
+			"verdict":  "pass",
+			"evidence": "historical",
+		})
+
+		tasksPath := filepath.Join(bundlePath, "tasks.md")
+		updatedAt := time.Now().UTC().Add(2 * time.Second)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replacement task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+		require.NoError(t, os.Chtimes(tasksPath, updatedAt, updatedAt))
+
+		evidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "t-01.json")
+		_, err = os.Stat(evidencePath)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		assert.NotContains(t, summary.MaterializedWavePlans, slug)
+		assert.NotContains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+		assert.NotContains(t, summary.ClearedCheckpoints, slug)
+		assert.NotContains(t, summary.PrunedTaskEvidence, filepath.ToSlash(filepath.Join(slug, "rv1", "t-01.json")))
+
+		foundBlocked := false
+		for _, finding := range summary.NonRepairableFindings {
+			if strings.Contains(finding, slug) && strings.Contains(finding, "wave plan repair blocked") {
+				foundBlocked = true
+				break
+			}
+		}
+		assert.True(t, foundBlocked, "expected repair summary to report blocked wave-plan reconstruction")
+
+		_, err = os.Stat(evidencePath)
+		require.NoError(t, err, "historical task evidence must be preserved")
+
+		_, err = state.LoadWavePlan(root, slug)
+		require.Error(t, err, "repair must not materialize a replacement wave-plan when current tasks drifted")
+
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		require.NotNil(t, change.ActiveCheckpoint, "repair must preserve the historical checkpoint when reconstruction is blocked")
+		assert.Equal(t, "t-01", change.ActiveCheckpoint.PausedTaskID)
+	})
+}
+
+func TestRepairRewritesDriftedRuntimeState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "repair should rewrite runtime drift")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		change.Artifacts = map[string]model.ArtifactState{
+			"intent": {ID: "intent", State: model.ArtifactLifecycleDraft},
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte(`current_state: S2_EXECUTE
+status: active
+artifacts:
+  intent:
+    id: intent
+    state: draft
+`), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.RewrittenRuntimeState, slug)
+	})
+}
+
+func TestRepairRewritesUnreadableRuntimeState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "repair should rewrite unreadable runtime state")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.RewrittenRuntimeState, slug)
+		assert.NotContains(t, summary.NonRepairableFindings, slug+": runtime state unreadable")
+
+		repaired, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS3Review, repaired.CurrentState)
 	})
 }

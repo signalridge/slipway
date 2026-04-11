@@ -4,6 +4,7 @@ description: "Use when independent two-stage review is required for spec complia
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - spec-compliance-review
   - code-quality-review

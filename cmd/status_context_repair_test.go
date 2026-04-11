@@ -489,6 +489,7 @@ func TestRepairRecoversCorruptConfig(t *testing.T) {
 
 		var out bytes.Buffer
 		repair := makeRepairCmd()
+		repair.SetArgs([]string{"--json"})
 		repair.SetOut(&out)
 		require.NoError(t, repair.Execute())
 
@@ -517,6 +518,7 @@ func TestRepairRecreatesMissingConfig(t *testing.T) {
 
 		var out bytes.Buffer
 		repair := makeRepairCmd()
+		repair.SetArgs([]string{"--json"})
 		repair.SetOut(&out)
 		require.NoError(t, repair.Execute())
 

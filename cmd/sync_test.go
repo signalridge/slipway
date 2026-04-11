@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSyncCommandValidatesRequirements(t *testing.T) {
+func TestValidateRequirementsCommandValidatesRequirements(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -29,13 +29,13 @@ func TestSyncCommandValidatesRequirements(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
 		out := bytes.NewBuffer(nil)
-		cmd := makeSyncCmd()
+		cmd := makeValidateRequirementsCmd()
 		cmd.SetOut(out)
 		cmd.SetErr(out)
 		cmd.SetArgs([]string{"--json", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
-		view := syncView{}
+		view := validateRequirementsView{}
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.True(t, view.Valid)
 		assert.Equal(t, slug, view.Slug)
@@ -47,22 +47,22 @@ func TestSyncCommandValidatesRequirements(t *testing.T) {
 	})
 }
 
-func runSyncCommand(t *testing.T, slug string) syncView {
+func runValidateRequirementsCommand(t *testing.T, slug string) validateRequirementsView {
 	t.Helper()
 
 	out := bytes.NewBuffer(nil)
-	cmd := makeSyncCmd()
+	cmd := makeValidateRequirementsCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"--json", "--change", slug})
 	require.NoError(t, cmd.Execute())
 
-	view := syncView{}
+	view := validateRequirementsView{}
 	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 	return view
 }
 
-func TestSyncCommandNoRequirementsReportsNothing(t *testing.T) {
+func TestValidateRequirementsCommandMissingRequirementsReportsFailure(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -77,20 +77,20 @@ func TestSyncCommandNoRequirementsReportsNothing(t *testing.T) {
 		_ = os.Remove(filepath.Join(bundleDir, "requirements.md"))
 
 		out := bytes.NewBuffer(nil)
-		cmd := makeSyncCmd()
+		cmd := makeValidateRequirementsCmd()
 		cmd.SetOut(out)
 		cmd.SetErr(out)
 		cmd.SetArgs([]string{"--json", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
-		view := syncView{}
+		view := validateRequirementsView{}
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.False(t, view.Valid)
-		assert.Contains(t, view.Message, "nothing to sync")
+		assert.Contains(t, view.Message, "missing")
 	})
 }
 
-func TestSyncCommandRejectsInvalidRequirements(t *testing.T) {
+func TestValidateRequirementsCommandRejectsInvalidRequirements(t *testing.T) {
 	tests := []struct {
 		name        string
 		description string
@@ -131,7 +131,7 @@ Auth MUST remain deterministic.
 				require.NoError(t, err)
 				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(tt.content), 0o644))
 
-				view := runSyncCommand(t, slug)
+				view := runValidateRequirementsCommand(t, slug)
 				assert.False(t, view.Valid)
 				assert.Contains(t, view.Message, tt.wantMessage)
 			})
@@ -139,26 +139,26 @@ Auth MUST remain deterministic.
 	}
 }
 
-func TestSyncCommandAcceptsAllGovernedChanges(t *testing.T) {
+func TestValidateRequirementsCommandAcceptsAllGovernedChanges(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 		_ = createActiveNonDiscoveryChange(t, root, "simple governed task")
 
-		cmd := makeSyncCmd()
+		cmd := makeValidateRequirementsCmd()
 		cmd.SetArgs([]string{"--json"})
 		err := cmd.Execute()
-		// May succeed or return "nothing to sync", but should not fail with sync_requires_governed.
+		// May succeed or report missing requirements, but should not fail with a governed-mode precondition.
 		if err != nil {
 			cliErr := asCLIError(err)
 			if cliErr != nil {
-				assert.NotEqual(t, "sync_requires_governed", cliErr.ErrorCode)
+				assert.NotEqual(t, "validate_requirements_requires_governed", cliErr.ErrorCode)
 			}
 		}
 	})
 }
 
-func TestSyncCommandUsesDedicatedWorktreeBundleForL3(t *testing.T) {
+func TestValidateRequirementsCommandUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -185,7 +185,7 @@ func TestSyncCommandUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 		reqContent := "# Requirements\n\n### Requirement: Auth\nREQ-001: Auth MUST remain deterministic.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
-		view := runSyncCommand(t, slug)
+		view := runValidateRequirementsCommand(t, slug)
 		assert.True(t, view.Valid)
 		assert.Equal(t, slug, view.Slug)
 	})

@@ -192,6 +192,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 			require.NoError(t, state.SaveChange(root, change))
 
 			writePassingExecutionSummary(t, root, slug, 1, "t-01")
+			materializeWaveExecutionForSummary(t, root, slug)
 			bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 			require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
 
@@ -227,6 +228,7 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 		writeShipReadyGovernedBundle(t, root, change)
 		writeAssuranceMD(t, root, slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 		writePassingWaveEvidence(t, root, slug, 1)
 		writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,

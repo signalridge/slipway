@@ -57,6 +57,9 @@ func renderStatusText(view statusView) string {
 	if view.PlanningNote != "" {
 		writeLine("Planning Note: %s\n", view.PlanningNote)
 	}
+	if view.InterruptedExecutionAt != "" {
+		writeLine("Interrupted Execution: %s\n", view.InterruptedExecutionAt)
+	}
 	if view.Narrative != "" {
 		writeLine("Narrative: %s\n", view.Narrative)
 	}
@@ -67,6 +70,21 @@ func renderStatusText(view statusView) string {
 			bar, view.Progress.Percentage,
 			view.Progress.StageIndex+1, view.Progress.StageTotal,
 			view.Progress.StageName)
+		if view.Progress.TotalWaves > 0 {
+			writeLine("Waves: %d/%d complete", view.Progress.CompletedWaves, view.Progress.TotalWaves)
+			if view.Progress.CurrentWaveIndex > 0 {
+				writeLine("  (resume from wave %d)", view.Progress.CurrentWaveIndex)
+			}
+			if len(view.Progress.WavesByVerdict) > 0 {
+				parts := make([]string, 0, len(view.Progress.WavesByVerdict))
+				for verdict, count := range view.Progress.WavesByVerdict {
+					parts = append(parts, fmt.Sprintf("%s=%d", verdict, count))
+				}
+				slices.Sort(parts)
+				writeLine("  [%s]", strings.Join(parts, ", "))
+			}
+			writeLine("\n")
+		}
 		if view.Progress.TasksTotal > 0 {
 			writeLine("Tasks: %d/%d completed", view.Progress.TasksCompleted, view.Progress.TasksTotal)
 			if len(view.Progress.TasksByVerdict) > 0 {
@@ -223,7 +241,7 @@ func progressBar(pct, width int) string {
 
 var actionHints = map[model.WorkflowState]string{
 	model.StateS1Plan:    "slipway next  (planning phase)",
-	model.StateS2Execute: "slipway next  (execute implementation waves)",
+	model.StateS2Execute: "slipway run  (execute governed loop)",
 	model.StateS3Review:  "slipway review  (bidirectional alignment review)",
 	model.StateS4Verify:  "slipway next  (verify and close out)",
 	model.StateDone:      "(complete)",

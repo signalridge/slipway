@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/signalridge/slipway/internal/fsutil"
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,6 +83,33 @@ func TestInitWorkspaceRefreshWithoutToolsCleanWorkspace(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "no adapters should be created in clean workspace")
 }
 
+func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	cfg := model.DefaultConfig()
+	cfg.Agents.Mappings = map[string]string{
+		"wave-orchestration": "slipway-executor",
+	}
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+	require.NoError(t, InitWorkspace(root, []string{"claude", "codex"}, false))
+
+	loaded, err := model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "new", "SKILL.md"))
+	require.NoError(t, err)
+
+	require.NoError(t, InitWorkspace(root, []string{"claude", "codex"}, true))
+
+	loaded, err = model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
+	_, err = os.Stat(filepath.Join(root, ".codex", "agents", "slipway-executor.toml"))
+	require.NoError(t, err)
+}
+
 func TestInitWorkspaceCreatesScopedRuntimeMarkerForNestedScope(t *testing.T) {
 	t.Parallel()
 
@@ -134,6 +162,52 @@ func TestInitWorkspaceFromLinkedWorktreeSeedsCanonicalScope(t *testing.T) {
 	require.NoError(t, err, "linked worktree should keep a local scope config mirror")
 	_, err = os.Stat(state.WorkspaceScopeMarkerPath(worktreeRoot))
 	require.NoError(t, err, "linked worktree should keep a local scope marker")
+}
+
+func TestInitWorkspaceFromLinkedWorktreeRefreshesLocalScopeConfigMirror(t *testing.T) {
+	t.Parallel()
+
+	root := initGitRepo(t)
+	cmd := exec.Command("git", "-C", root, "config", "user.email", "test@example.com")
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git config user.email: %s", out)
+	cmd = exec.Command("git", "-C", root, "config", "user.name", "Test")
+	out, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git config user.name: %s", out)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("hello\n"), 0o644))
+	cmd = exec.Command("git", "-C", root, "add", "README.md")
+	out, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git add: %s", out)
+	cmd = exec.Command("git", "-C", root, "commit", "-m", "init")
+	out, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git commit: %s", out)
+
+	worktreeRoot := filepath.Join(t.TempDir(), "linked-worktree")
+	cmd = exec.Command("git", "-C", root, "worktree", "add", worktreeRoot, "-b", "feat/init-linked-worktree-mirror", "HEAD")
+	out, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git worktree add: %s", out)
+
+	require.NoError(t, InitWorkspace(worktreeRoot, nil, false))
+
+	scopeCfg, err := model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	scopeCfg.Agents.Mappings = map[string]string{
+		"wave-orchestration": "slipway-executor",
+	}
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), scopeCfg))
+
+	worktreeCfg, err := model.LoadConfig(state.ConfigPath(worktreeRoot))
+	require.NoError(t, err)
+	worktreeCfg.Agents.Mappings = map[string]string{
+		"wave-orchestration": "slipway-orchestrator",
+	}
+	require.NoError(t, model.SaveConfig(state.ConfigPath(worktreeRoot), worktreeCfg))
+
+	require.NoError(t, InitWorkspace(worktreeRoot, nil, false))
+
+	refreshed, err := model.LoadConfig(state.ConfigPath(worktreeRoot))
+	require.NoError(t, err)
+	assert.Equal(t, "slipway-executor", refreshed.Agents.Mappings["wave-orchestration"])
 }
 
 func TestInitWorkspaceToolsAllAndNone(t *testing.T) {

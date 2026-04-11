@@ -138,8 +138,25 @@ var toolRegistry = map[string]ToolConfig{
 }
 
 // CommandDef describes a single adapter command with all metadata consolidated.
+type CommandClass string
+
+const (
+	CommandClassQuery    CommandClass = "query"
+	CommandClassMutation CommandClass = "mutation"
+)
+
+func (c CommandClass) IsValid() bool {
+	switch c {
+	case CommandClassQuery, CommandClassMutation:
+		return true
+	default:
+		return false
+	}
+}
+
 type CommandDef struct {
 	ID              string
+	Class           CommandClass
 	Description     string
 	Arguments       string
 	Prerequisites   []string
@@ -151,46 +168,51 @@ type CommandDef struct {
 // Entry order is for readability; commandIDs() returns IDs sorted alphabetically.
 var commandRegistry = []CommandDef{
 	// Core (5)
-	{ID: "new", Description: "Create a governed change with intake-first workflow", Tier: "core", HasAdapterSkill: true,
+	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasAdapterSkill: true,
 		Arguments:     `"<description>" [--preset light|standard|strict] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
-	{ID: "next", Description: "Validate evidence, advance state, and show next skill", Tier: "core", HasAdapterSkill: true,
-		Arguments: "[--json] [--auto] [--preview] [--context-guard] [--resume-response \"<text>\"]"},
-	{ID: "status", Description: "Show lifecycle status and blockers", Tier: "core", HasAdapterSkill: true,
+	{ID: "next", Class: CommandClassMutation, Description: "Show readiness, advance one step if ready, and show next skill", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--preview] [--context-guard] [--change <slug>]"},
+	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
+	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
+		Arguments:     "[--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
-	{ID: "done", Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
-		Arguments: "[--json] [--all-ready]"},
+	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--all-ready] [--change <slug>]"},
 	// Situational (9)
-	{ID: "init", Description: "Initialize Slipway in the current project", Tier: "situational", HasAdapterSkill: true,
+	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasAdapterSkill: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it."}},
-	{ID: "cancel", Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--json]"},
-	{ID: "review", Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--json] [--all|--changed-only]"},
-	{ID: "validate", Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "[--json]",
+	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json] [--change <slug>]"},
+	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json] [--all|--changed-only] [--change <slug>]"},
+	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "[--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
-	{ID: "checkpoint", Description: "Record a checkpoint decision for the current state", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json]"},
-	{ID: "preset", Description: "Confirm or override the active change workflow preset", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "<light|standard|strict> [--json]",
+	{ID: "validate-requirements", Class: CommandClassQuery, Description: "Validate requirements.md contract for the active change", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json] [--change <slug>]"},
+	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]"},
+	{ID: "preset", Class: CommandClassMutation, Description: "Confirm or override the active change workflow preset", Tier: "situational", HasAdapterSkill: true,
+		Arguments:     "<light|standard|strict> [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change should already exist, or pass `--change <slug>`."}},
-	{ID: "sync", Description: "Merge active delta spec into main spec", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--json]"},
-	{ID: "pivot", Description: "Reroute or rescope an active change", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--reroute|--rescope] [--json]"},
-	{ID: "repair", Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
+	{ID: "pivot", Class: CommandClassMutation, Description: "Reroute or rescope an active change", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--reroute|--rescope] [--json] [--change <slug>]"},
+	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasAdapterSkill: true,
+		Arguments: "[--json] [--change <slug>]"},
+	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	// Diagnostics (3) — CLI-only, no adapter skill templates
-	{ID: "stats", Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
+	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "health", Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
-		Arguments:     "[--json] [--governance] [--all] [--observations]",
+	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
+		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "codebase-map", Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
+	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 }
@@ -209,6 +231,15 @@ var commandRegistryMap = func() map[string]CommandDef {
 func CommandDescription(id string) string {
 	if def, ok := commandRegistryMap[id]; ok {
 		return def.Description
+	}
+	return ""
+}
+
+// CommandClassification returns the registry classification for a command ID.
+// Returns empty string if the command is not registered.
+func CommandClassification(id string) string {
+	if def, ok := commandRegistryMap[id]; ok {
+		return string(def.Class)
 	}
 	return ""
 }
@@ -421,6 +452,12 @@ func AgentPath(cfg ToolConfig, agentName string) string {
 }
 
 func generateForTool(root string, cfg ToolConfig, refresh bool) error {
+	if refresh {
+		if err := cleanupStaleGeneratedArtifacts(root, cfg); err != nil {
+			return err
+		}
+	}
+
 	// Adapter skills (rendered from .tmpl templates)
 	for _, id := range adapterSkillIDs {
 		content, err := renderAdapterSkill(cfg, id)
@@ -566,6 +603,142 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	return nil
 }
 
+func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
+	if err := cleanupStaleSkillDirs(root, cfg); err != nil {
+		return err
+	}
+	if err := cleanupStaleCommandEntries(root, cfg); err != nil {
+		return err
+	}
+	if err := cleanupStaleAgentFiles(root, cfg); err != nil {
+		return err
+	}
+	if err := cleanupStaleGlobalPrompts(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
+	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
+	expected := map[string]struct{}{}
+	for _, names := range [][]string{
+		adapterSkillIDs,
+		GovernanceSkillNames,
+		standaloneGovernanceNames,
+		TemplatedGovernanceSkillNames,
+		standaloneNames,
+		techniqueNames,
+	} {
+		for _, name := range names {
+			expected[name] = struct{}{}
+		}
+	}
+	return cleanupUnexpectedEntries(skillsRoot, expected)
+}
+
+func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
+	if cfg.CommandsDir == "" {
+		return nil
+	}
+
+	ext := ".md"
+	if cfg.CommandFormat == "toml" {
+		ext = ".toml"
+	}
+	expected := map[string]struct{}{}
+	for _, id := range commandIDs() {
+		name := id + ext
+		if cfg.CommandStyle == "flat" {
+			name = "slipway-" + id + ext
+		}
+		expected[name] = struct{}{}
+	}
+
+	switch cfg.CommandStyle {
+	case "flat":
+		return cleanupPrefixedEntries(filepath.Join(root, cfg.CommandsDir), "slipway-", expected)
+	default:
+		return cleanupUnexpectedEntries(filepath.Join(root, cfg.CommandsDir, "slipway"), expected)
+	}
+}
+
+func cleanupStaleAgentFiles(root string, cfg ToolConfig) error {
+	if cfg.AgentStyle == "" || cfg.AgentsDir == "" {
+		return nil
+	}
+
+	ext := ".md"
+	if cfg.AgentStyle == "toml" {
+		ext = ".toml"
+	}
+	expected := map[string]struct{}{}
+	for _, name := range tmpl.AgentNames() {
+		expected[name+ext] = struct{}{}
+	}
+	return cleanupPrefixedEntries(filepath.Join(root, cfg.AgentsDir), "slipway-", expected)
+}
+
+func cleanupStaleGlobalPrompts(cfg ToolConfig) error {
+	if cfg.PromptsStyle != "global" {
+		return nil
+	}
+
+	promptsDir, err := codexPromptsDir()
+	if err != nil {
+		return err
+	}
+	expected := map[string]struct{}{}
+	for _, id := range commandIDs() {
+		expected["slipway-"+id+".md"] = struct{}{}
+	}
+	return cleanupPrefixedEntries(promptsDir, "slipway-", expected)
+}
+
+func cleanupUnexpectedEntries(dir string, expected map[string]struct{}) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		if _, ok := expected[entry.Name()]; ok {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if _, ok := expected[name]; ok {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // renderAdapterSkill renders an adapter SKILL.md from a .tmpl template.
 func renderAdapterSkill(cfg ToolConfig, id string) (string, error) {
 	data := map[string]string{
@@ -586,6 +759,7 @@ func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 		"CommandID":     id,
 		"ToolID":        cfg.ID,
 		"Trigger":       commandTrigger(cfg, id),
+		"Class":         CommandClassification(id),
 		"Description":   commandDescriptions[id],
 		"SkillPath":     SkillPath(cfg, id),
 		"Arguments":     commandArguments(id),
@@ -779,10 +953,10 @@ func codexAgentSandboxMode(name string) string {
 // The "\n---\n" form is checked first via strings.Index, so a file ending with
 // "\n---\n" (trailing newline after delimiter) is handled by the standard path,
 // not the EOF branch.
-func parseAgentFrontmatter(content string) (description string, body string) {
+func parseAgentFrontmatter(content string) (description string, status string, body string) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	if !strings.HasPrefix(content, "---\n") {
-		return "", content
+		return "", "", content
 	}
 	rest := content[4:]
 	end := strings.Index(rest, "\n---\n")
@@ -791,26 +965,57 @@ func parseAgentFrontmatter(content string) (description string, body string) {
 		if strings.HasSuffix(rest, "\n---") {
 			end = len(rest) - 4 // position before "\n---"
 			fm := rest[:end]
-			return extractDescription(fm), ""
+			return extractDescription(fm), extractAgentStatus(fm), ""
 		}
-		return "", content
+		return "", "", content
 	}
 	fm := rest[:end]
 	body = rest[end+5:] // skip past closing "\n---\n"
 
-	return extractDescription(fm), body
+	return extractDescription(fm), extractAgentStatus(fm), body
 }
 
 func extractDescription(fm string) string {
+	return extractFrontmatterValue(fm, "description")
+}
+
+func extractAgentStatus(fm string) string {
+	return extractFrontmatterValue(fm, "agent_status")
+}
+
+func extractFrontmatterValue(fm, key string) string {
 	for _, line := range strings.Split(fm, "\n") {
-		if strings.HasPrefix(line, "description:") {
-			desc := strings.TrimPrefix(line, "description:")
+		prefix := key + ":"
+		if strings.HasPrefix(line, prefix) {
+			desc := strings.TrimPrefix(line, prefix)
 			desc = strings.TrimSpace(desc)
 			desc = strings.Trim(desc, `"`)
 			return desc
 		}
 	}
 	return ""
+}
+
+func agentStatusLabel(status string) string {
+	switch strings.TrimSpace(status) {
+	case "manual_only":
+		return "manual-only helper"
+	case "governance_mapped":
+		return "governance-mapped"
+	default:
+		return ""
+	}
+}
+
+func codexAgentDescription(description, status string) string {
+	label := agentStatusLabel(status)
+	if label == "" {
+		return description
+	}
+	if strings.TrimSpace(description) == "" {
+		return label
+	}
+	return fmt.Sprintf("%s (%s)", description, label)
 }
 
 // generateCodexAgents generates .codex/agents/<name>.toml files and registers
@@ -826,10 +1031,13 @@ func generateCodexAgents(root string, cfg ToolConfig, refresh bool) error {
 			return fmt.Errorf("load agent %q: %w", name, err)
 		}
 
-		description, body := parseAgentFrontmatter(content)
+		description, status, body := parseAgentFrontmatter(content)
 		sandbox := codexAgentSandboxMode(name)
 
 		body = strings.TrimSpace(body)
+		if label := agentStatusLabel(status); label != "" {
+			body = strings.TrimSpace("Agent status: " + label + ".\n\n" + body)
+		}
 		// TOML multi-line basic strings: escape backslashes and break any
 		// triple-quote sequences that would prematurely close the string.
 		body = strings.ReplaceAll(body, `\`, `\\`)
@@ -842,7 +1050,7 @@ func generateCodexAgents(root string, cfg ToolConfig, refresh bool) error {
 			return err
 		}
 
-		entries = append(entries, codexAgentEntry{Name: name, Description: description})
+		entries = append(entries, codexAgentEntry{Name: name, Description: codexAgentDescription(description, status)})
 	}
 
 	return mergeCodexConfigTOML(root, entries, refresh)
@@ -950,6 +1158,7 @@ func generateCodexPrompts(cfg ToolConfig, refresh bool) error {
 			"CommandID":     id,
 			"ToolID":        cfg.ID,
 			"Trigger":       commandTrigger(cfg, id),
+			"Class":         CommandClassification(id),
 			"Description":   commandDescriptions[id],
 			"SkillPath":     SkillPath(cfg, id),
 			"Arguments":     commandArguments(id),

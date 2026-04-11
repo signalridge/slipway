@@ -24,7 +24,7 @@ var defaultGovernanceRegistry = map[string]Definition{
 		Name:       "intake-clarification",
 		State:      model.StateS0Intake,
 		Mitigation: "scope ambiguity and intent drift before planning",
-		AgentHint:  "slipway-clarifier",
+		AgentHint:  "slipway-planner",
 	},
 	"research-orchestration": {
 		Name:          "research-orchestration",
@@ -91,10 +91,8 @@ func GovernanceRegistry() []Definition {
 	return definitionsToSortedSlice(defaultGovernanceRegistry)
 }
 
-// AgentHintForSkill returns the recommended agent for the given governance skill,
-// or empty string if no agent hint is configured.
-func AgentHintForSkill(name string) string {
-	if def, ok := defaultGovernanceRegistry[name]; ok {
+func AgentHintForSkillInRegistry(registry []Definition, name string) string {
+	if def, ok := LookupDefinitionInRegistry(registry, name); ok {
 		return def.AgentHint
 	}
 	return ""

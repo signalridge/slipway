@@ -88,6 +88,102 @@ func TestBuildProjectionKeepsExecutionSummaryProgressInExecutionStates(t *testin
 	assert.Equal(t, 1, projection.Progress.RunSummaryVersion)
 }
 
+func TestBuildProjectionDoesNotSynthesizeWaveProgressWhenWaveRunsAreMissing(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("missing-wave-runs-progress")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`task-a`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+
+- [ ] `+"`task-b`"+` pending second wave
+  - depends_on: ["task-a"]
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+`), 0o644))
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	summary := &model.ExecutionSummary{
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		Tasks: []model.ExecutionTaskSummary{
+			{TaskID: "task-a", Verdict: model.TaskVerdictPass},
+		},
+	}
+
+	projection, err := BuildProjection(root, change, summary, nil, progression.GovernanceReadiness{}, testStageName)
+	require.NoError(t, err)
+	require.NotNil(t, projection.Progress)
+	assert.Equal(t, 2, projection.Progress.TotalWaves)
+	assert.Equal(t, 0, projection.Progress.CurrentWaveIndex)
+	assert.Equal(t, 0, projection.Progress.CompletedWaves)
+	assert.Nil(t, projection.Progress.WavesByVerdict)
+}
+
+func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("completed-wave-progress")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`task-a`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+
+- [x] `+"`task-b`"+` completed second wave
+  - depends_on: ["task-a"]
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+`), 0o644))
+	plan, err := state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	summary := &model.ExecutionSummary{
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		Tasks: []model.ExecutionTaskSummary{
+			{TaskID: "task-a", Verdict: model.TaskVerdictPass, CapturedAt: time.Now().UTC().Add(-1 * time.Minute)},
+			{TaskID: "task-b", Verdict: model.TaskVerdictPass, CapturedAt: time.Now().UTC()},
+		},
+	}
+	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, change.Slug, summary.RunSummaryVersion, runs))
+
+	projection, err := BuildProjection(root, change, summary, nil, progression.GovernanceReadiness{}, testStageName)
+	require.NoError(t, err)
+	require.NotNil(t, projection.Progress)
+	assert.Equal(t, 2, projection.Progress.TotalWaves)
+	assert.Equal(t, 2, projection.Progress.CompletedWaves)
+	assert.Equal(t, 0, projection.Progress.CurrentWaveIndex)
+	assert.Equal(t, map[string]int{"pass": 2}, projection.Progress.WavesByVerdict)
+}
+
 func TestBuildProjectionBuildsEvidenceInventoryAndDiagnostics(t *testing.T) {
 	change := model.NewChange("inventory")
 	change.CurrentState = model.StateS2Execute

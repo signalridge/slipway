@@ -29,7 +29,7 @@ const (
 
 // Execution limits.
 const (
-	// maxAutoNextIterations is the safety cap for --auto next loops.
+	// maxAutoNextIterations is the safety cap for governed run loops.
 	maxAutoNextIterations = 20
 	// defaultMaxRetriesPerSkill is the default retry budget per skill execution.
 	defaultMaxRetriesPerSkill = 2

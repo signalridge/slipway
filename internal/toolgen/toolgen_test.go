@@ -44,12 +44,13 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 16 commands (4 core + 9 situational + 3 diagnostics).
-	assert.Len(t, commandRegistry, 16)
+	// Verify registry has 18 commands (5 core + 10 situational + 3 diagnostics).
+	assert.Len(t, commandRegistry, 18)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
 		assert.NotEmpty(t, def.ID, "registry entry missing ID")
+		assert.True(t, def.Class.IsValid(), "registry entry %s has invalid Class %q", def.ID, def.Class)
 		assert.NotEmpty(t, def.Description, "registry entry %s missing Description", def.ID)
 		assert.NotEmpty(t, def.Tier, "registry entry %s missing Tier", def.ID)
 		assert.True(t, def.Tier == "core" || def.Tier == "situational" || def.Tier == "diagnostics",
@@ -58,7 +59,14 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 
 	// Count tiers.
 	core, sit, diag := 0, 0, 0
+	query, mutation := 0, 0
 	for _, def := range commandRegistry {
+		switch def.Class {
+		case CommandClassQuery:
+			query++
+		case CommandClassMutation:
+			mutation++
+		}
 		switch def.Tier {
 		case "core":
 			core++
@@ -68,13 +76,15 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 			diag++
 		}
 	}
-	assert.Equal(t, 4, core, "expected 4 core commands")
-	assert.Equal(t, 9, sit, "expected 9 situational commands")
+	assert.Equal(t, 5, core, "expected 5 core commands")
+	assert.Equal(t, 10, sit, "expected 10 situational commands")
 	assert.Equal(t, 3, diag, "expected 3 diagnostics commands")
+	assert.Equal(t, 5, query, "expected 5 query commands")
+	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
 	ids := commandIDs()
-	assert.Len(t, ids, 13)
+	assert.Len(t, ids, 15)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -334,9 +344,9 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 
 	// Build set of valid commands.
 	validCmds := map[string]bool{
-		"new": true, "next": true, "status": true, "done": true,
-		"cancel": true, "review": true, "validate": true, "pivot": true, "preset": true,
-		"repair": true, "init": true, "sync": true, "checkpoint": true,
+		"new": true, "next": true, "run": true, "status": true, "done": true,
+		"abort": true, "cancel": true, "review": true, "validate": true, "validate-requirements": true,
+		"pivot": true, "preset": true, "repair": true, "init": true, "checkpoint": true,
 	}
 
 	// Pattern to find `slipway <cmd>` references in generated files.
@@ -399,6 +409,40 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 	assert.Equal(t, string(firstCommand), string(refreshedCommand))
 }
 
+func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
+
+	staleSkill := filepath.Join(root, ".claude", "skills", "slipway", "sync", "SKILL.md")
+	staleCommand := filepath.Join(root, ".claude", "commands", "slipway", "sync.md")
+	stalePrompt := filepath.Join(codexHome, "prompts", "slipway-sync.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(staleSkill), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(staleCommand), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
+	require.NoError(t, os.WriteFile(staleSkill, []byte("stale sync skill"), 0o644))
+	require.NoError(t, os.WriteFile(staleCommand, []byte("stale sync command"), 0o644))
+	require.NoError(t, os.WriteFile(stalePrompt, []byte("stale sync prompt"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
+
+	_, err := os.Stat(staleSkill)
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync skill surface")
+	_, err = os.Stat(staleCommand)
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync command entry")
+	_, err = os.Stat(stalePrompt)
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync codex prompt")
+
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "validate-requirements", "SKILL.md"))
+	assert.NoError(t, err, "current validate-requirements skill should remain present")
+	_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "validate-requirements.md"))
+	assert.NoError(t, err, "current validate-requirements command entry should remain present")
+	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway-validate-requirements.md"))
+	assert.NoError(t, err, "current validate-requirements codex prompt should remain present")
+}
+
 func TestCodexAgentTOMLGeneration(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -418,9 +462,11 @@ func TestCodexAgentTOMLGeneration(t *testing.T) {
 	// Verify sandbox_mode per agent role.
 	executorContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-executor.toml"))
 	assert.Contains(t, string(executorContent), `sandbox_mode = "workspace-write"`)
+	assert.Contains(t, string(executorContent), "Agent status: manual-only helper.")
 
 	reviewerContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-reviewer.toml"))
 	assert.Contains(t, string(reviewerContent), `sandbox_mode = "read-only"`)
+	assert.Contains(t, string(reviewerContent), "Agent status: governance-mapped.")
 
 	verifierContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-verifier.toml"))
 	assert.Contains(t, string(verifierContent), `sandbox_mode = "read-only"`)
@@ -431,6 +477,7 @@ func TestCodexAgentTOMLGeneration(t *testing.T) {
 	cs := string(configContent)
 	assert.Contains(t, cs, "[agents.slipway-executor]")
 	assert.Contains(t, cs, `config_file = "agents/slipway-executor.toml"`)
+	assert.Contains(t, cs, "manual-only helper")
 	assert.Contains(t, cs, "# BEGIN slipway agents")
 	assert.Contains(t, cs, "# END slipway agents")
 }
@@ -512,7 +559,9 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	require.NoError(t, err)
 	readme := string(content)
 
-	assert.Contains(t, readme, "`new`")
+	assert.Contains(t, readme, "`slipway new`")
+	assert.Contains(t, readme, "`slipway run`")
+	assert.Contains(t, readme, "`slipway validate-requirements`")
 	assert.Contains(t, readme, "`artifacts/changes/`")
 	assert.Contains(t, readme, "`artifacts/codebase/`")
 	assert.NotContains(t, readme, "request intake")
@@ -521,6 +570,7 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	assert.NotContains(t, readme, "`openspec/`: change and spec artifacts used by governed workflows")
 
 	assert.Equal(t, "Create a governed change with intake-first workflow", commandDescriptions["new"])
+	assert.Equal(t, "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", commandDescriptions["run"])
 	assert.Equal(t, "Finalize a done-ready change and archive it", commandDescriptions["done"])
 }
 
@@ -558,14 +608,36 @@ func TestCodexPromptsIncludeTierAndSurface(t *testing.T) {
 	// Core command should have tier: "core".
 	newPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-new.md"))
 	require.NoError(t, err)
+	assert.Contains(t, string(newPrompt), `class: "mutation"`, "core command prompt missing class metadata")
 	assert.Contains(t, string(newPrompt), `tier: "core"`, "core command prompt missing tier metadata")
 	assert.Contains(t, string(newPrompt), `surface: "adapter"`, "command prompt missing surface metadata")
 
-	// Situational command should have tier: "situational".
-	initPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-init.md"))
+	// Query command should preserve class alongside tier and surface metadata.
+	statusPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-status.md"))
 	require.NoError(t, err)
-	assert.Contains(t, string(initPrompt), `tier: "situational"`, "situational command prompt missing tier metadata")
-	assert.Contains(t, string(initPrompt), `surface: "adapter"`, "command prompt missing surface metadata")
+	assert.Contains(t, string(statusPrompt), `class: "query"`, "query command prompt missing class metadata")
+	assert.Contains(t, string(statusPrompt), `tier: "core"`, "query command prompt missing tier metadata")
+	assert.Contains(t, string(statusPrompt), `surface: "adapter"`, "query command prompt missing surface metadata")
+}
+
+func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "gemini", "codex"}, true))
+
+	claudeStatus, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "status.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claudeStatus), `class: "query"`)
+
+	geminiRun, err := os.ReadFile(filepath.Join(root, ".gemini", "commands", "slipway", "run.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(geminiRun), `class = "mutation"`)
+
+	codexAbort, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-abort.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(codexAbort), `class: "mutation"`)
 }
 
 func TestGeneratedWaveOrchestrationSkillUsesDescriptionPlaceholder(t *testing.T) {

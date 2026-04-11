@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
@@ -106,6 +107,564 @@ func TestCollectHealthReportReportsUnreadableExecutionSummary(t *testing.T) {
 		assert.False(t, finding.Repairable)
 	}
 	assert.True(t, found, "expected execution summary integrity finding")
+}
+
+func TestCollectHealthReportReportsMissingWavePlan(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("missing-wave-plan")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` recover wave plan
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "t-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
+	}))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_plan_missing" {
+				found = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, found, "expected missing wave-plan health finding")
+}
+
+func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("missing-wave-plan-drifted")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` historical task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+
+	capturedAt := time.Now().UTC()
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "t-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: capturedAt,
+		}},
+	}))
+
+	updatedAt := capturedAt.Add(2 * time.Second)
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replacement task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`), 0o644))
+	require.NoError(t, os.Chtimes(tasksPath, updatedAt, updatedAt))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_plan_repair_blocked" {
+				found = true
+				assert.False(t, finding.Repairable)
+				assert.Contains(t, finding.Message, "cannot be safely reconstructed")
+			}
+		}
+	}
+	assert.True(t, found, "expected wave-plan repair block finding")
+}
+
+func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("wave-plan-drift")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` preserve original task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replace task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_plan_drift" {
+				found = true
+				assert.False(t, finding.Repairable)
+				assert.Contains(t, finding.RepairHint, "slipway pivot --rescope")
+			}
+		}
+	}
+	assert.True(t, found, "expected wave plan drift health finding")
+}
+
+func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("unreadable-wave-plan-drifted")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` historical task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+
+	capturedAt := time.Now().UTC()
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "t-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: capturedAt,
+		}},
+	}))
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	updatedAt := capturedAt.Add(2 * time.Second)
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replacement task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`), 0o644))
+	require.NoError(t, os.Chtimes(tasksPath, updatedAt, updatedAt))
+	require.NoError(t, os.WriteFile(WavePlanPathForRead(root, change.Slug), []byte("version: [\n"), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_plan_repair_blocked" {
+				found = true
+				assert.False(t, finding.Repairable)
+				assert.Contains(t, finding.Message, "cannot be safely reconstructed")
+			}
+		}
+	}
+	assert.True(t, found, "expected unreadable wave-plan repair block finding")
+}
+
+func TestCollectHealthReportReportsMissingWaveRuns(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("missing-wave-runs")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` recover wave evidence
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{"cmd/run.go"},
+			CapturedAt:   time.Now().UTC(),
+		}},
+	}))
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_runs_missing" {
+				found = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, found, "expected missing wave-run health finding")
+}
+
+func TestCollectHealthReportReportsIncompleteWaveRuns(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("incomplete-wave-runs")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`t-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`t-02`"+` pending second wave
+  - depends_on: ["t-01"]
+  - target_files: ["cmd/review.go"]
+  - task_kind: code
+`), 0o644))
+	now := time.Now().UTC()
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        now,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{"cmd/run.go"},
+			CapturedAt:   now,
+		}},
+	}))
+
+	plan, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	runs, err := BuildWaveRuns(plan, 1, []model.ExecutionTaskSummary{{
+		TaskID:       "t-01",
+		Verdict:      model.TaskVerdictPass,
+		TaskKind:     model.TaskKindCode,
+		ChangedFiles: []string{"cmd/run.go"},
+		CapturedAt:   now,
+	}})
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	require.NoError(t, SaveWaveRuns(root, change.Slug, 1, runs[:1]))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_runs_incomplete" {
+				found = true
+				assert.True(t, finding.Repairable)
+				assert.Equal(t, model.ReasonSeverityError, finding.Severity)
+			}
+		}
+	}
+	assert.True(t, found, "expected incomplete wave-run health finding")
+}
+
+func TestCollectHealthReportReportsWaveTaskLinkageMismatch(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("wave-task-linkage-mismatch")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` build first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`t-02`"+` build second wave
+  - depends_on: ["t-01"]
+  - target_files: ["cmd/review.go"]
+  - task_kind: code
+`), 0o644))
+
+	now := time.Now().UTC()
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        now,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01", "t-02"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "t-01",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"cmd/run.go"},
+				CapturedAt:   now,
+			},
+			{
+				TaskID:       "t-02",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"cmd/review.go"},
+				CapturedAt:   now.Add(time.Second),
+			},
+		},
+	}))
+
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	require.NoError(t, SaveWaveRuns(root, change.Slug, 1, []model.WaveRun{
+		{
+			WaveIndex:         1,
+			RunSummaryVersion: 1,
+			TaskRuns: []model.TaskRunRef{{
+				TaskID:            "t-02",
+				RunSummaryVersion: 1,
+			}},
+			Verdict: model.WaveVerdictPass,
+		},
+		{
+			WaveIndex:         2,
+			RunSummaryVersion: 1,
+			TaskRuns: []model.TaskRunRef{{
+				TaskID:            "t-01",
+				RunSummaryVersion: 1,
+			}},
+			Verdict: model.WaveVerdictPass,
+		},
+	}))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "wave_task_linkage_mismatch" {
+				found = true
+				assert.True(t, finding.Repairable)
+				assert.Contains(t, reason.Detail, "wave 1")
+				assert.Contains(t, reason.Detail, "t-02")
+			}
+		}
+	}
+	assert.True(t, found, "expected wave/task linkage mismatch finding")
+}
+
+func TestCollectHealthReportReportsRuntimeStateDrift(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("runtime-state-drift")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.Artifacts = map[string]model.ArtifactState{
+		"intent": {ID: "intent", State: model.ArtifactLifecycleDraft},
+	}
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, ChangeRuntimeStateFileName), []byte(`current_state: S2_EXECUTE
+status: active
+artifacts:
+  intent:
+    id: intent
+    state: draft
+`), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "runtime_state" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "runtime_state_current_state_drift" {
+				found = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, found, "expected runtime-state drift finding")
+}
+
+func TestCollectHealthReportReportsUnreadableRuntimeState(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("runtime-state-unreadable")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	foundRuntimeState := false
+	for _, finding := range report.Findings {
+		if finding.Slug != change.Slug {
+			continue
+		}
+		assert.NotEqual(t, "bundle_integrity", finding.Category, "runtime-state corruption must not downgrade the whole change to unreadable bundle integrity")
+		if finding.Category != "runtime_state" {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "runtime_state_unreadable" {
+				foundRuntimeState = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, foundRuntimeState, "expected unreadable runtime-state finding")
+}
+
+func TestCollectHealthReportReportsStaleCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	cfg := model.DefaultConfig()
+	cfg.Execution.LockStaleAfterSeconds = 60
+	require.NoError(t, model.SaveConfig(ConfigPath(root), cfg))
+
+	change := model.NewChange("stale-checkpoint")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ActiveCheckpoint = &model.ActiveCheckpoint{
+		PausedTaskID:    "t-01",
+		PausedWaveIndex: 1,
+		PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
+		CheckpointType:  string(model.CheckpointHumanVerify),
+	}
+	require.NoError(t, SaveChange(root, change))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "execution_checkpoint" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "checkpoint_stale" {
+				found = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, found, "expected stale checkpoint health finding")
 }
 
 func TestCollectHealthReportFindsOrphanBundleDirsAcrossWorktrees(t *testing.T) {

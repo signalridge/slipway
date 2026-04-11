@@ -289,9 +289,17 @@ func ChangeSlugExists(root, slug string) (bool, error) {
 }
 
 func loadChangeFromCandidates(root string, paths []bundleCandidate) (model.Change, error) {
+	return loadChangeFromCandidatesWithLoader(root, paths, loadChangeCandidate)
+}
+
+func loadChangeFromCandidatesWithLoader(
+	root string,
+	paths []bundleCandidate,
+	load func(string) (model.Change, error),
+) (model.Change, error) {
 	var firstAuthorityErr error
 	for _, candidate := range paths {
-		change, err := loadChangeCandidate(candidate.Path)
+		change, err := load(candidate.Path)
 		if err == nil {
 			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change) {
 				continue
@@ -321,6 +329,24 @@ func loadChangeFromCandidates(root string, paths []bundleCandidate) (model.Chang
 	return model.Change{}, fs.ErrNotExist
 }
 
+func loadChangeCandidateIgnoringRuntimeState(path string) (model.Change, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return model.Change{}, err
+	}
+	change, err := decodeAndValidateChange(b)
+	if err != nil {
+		return model.Change{}, err
+	}
+	if err := loadAndApplyChangeRuntimeState(filepath.Dir(path), &change); err != nil {
+		var runtimeErr *ChangeRuntimeStateLoadError
+		if !errors.As(err, &runtimeErr) {
+			return model.Change{}, err
+		}
+	}
+	return change, nil
+}
+
 // LoadChange loads the active change state for the given slug from the canonical bundle paths.
 func LoadChange(root, slug string) (model.Change, error) {
 	paths, rootsErr := candidateBundlePaths(root, slug)
@@ -336,6 +362,22 @@ func loadChangeRegardlessOfVisibility(root, slug string) (model.Change, error) {
 		return model.Change{}, err
 	}
 	return loadChangeFromCandidates(root, bundleCandidatesForRoots(roots, slug))
+}
+
+func loadChangeRegardlessOfVisibilityForDiagnostics(root, slug string) (model.Change, error) {
+	roots, err := allWorkspaceRoots(root)
+	if err != nil {
+		return model.Change{}, err
+	}
+	return loadChangeFromCandidatesWithLoader(root, bundleCandidatesForRoots(roots, slug), loadChangeCandidateIgnoringRuntimeState)
+}
+
+func LoadChangeForDiagnostics(root, slug string) (model.Change, error) {
+	paths, rootsErr := candidateBundlePaths(root, slug)
+	if rootsErr != nil {
+		return model.Change{}, rootsErr
+	}
+	return loadChangeFromCandidatesWithLoader(root, paths, loadChangeCandidateIgnoringRuntimeState)
 }
 
 // ListChangesForCreateGuard returns active authoritative changes across all
@@ -629,7 +671,9 @@ func ListChangesBestEffortWithIssues(root string) ([]model.Change, []ChangeLoadI
 	if err != nil {
 		return nil, nil, err
 	}
-	return loadChangesForSlugs(root, slugs, true)
+	return loadChangesForSlugsWithLoader(slugs, true, func(slug string) (model.Change, error) {
+		return LoadChangeForDiagnostics(root, slug)
+	})
 }
 
 // ListRepoChangesBestEffortWithIssues returns repo-wide authoritative changes
@@ -640,7 +684,7 @@ func ListRepoChangesBestEffortWithIssues(root string) ([]model.Change, []ChangeL
 		return nil, nil, err
 	}
 	return loadChangesForSlugsWithLoader(slugs, true, func(slug string) (model.Change, error) {
-		return loadChangeRegardlessOfVisibility(root, slug)
+		return loadChangeRegardlessOfVisibilityForDiagnostics(root, slug)
 	})
 }
 

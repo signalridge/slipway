@@ -417,6 +417,21 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		t.Fatalf("bundle dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`task-a`"+` preserve change authority
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`), 0o644); err != nil {
+		t.Fatalf("write tasks.md: %v", err)
+	}
+	if _, err := state.MaterializeWavePlan(root, change); err != nil {
+		t.Fatalf("materialize wave plan: %v", err)
+	}
 
 	changePath := state.BundleChangeFilePath(root, change.Slug)
 	before := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)

@@ -1,11 +1,17 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -18,17 +24,25 @@ import (
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
 type repairSummary struct {
-	CleanedAtomicTemps    []string `json:"cleaned_atomic_temps,omitempty"`
-	ConfigBackupPath      string   `json:"config_backup_path,omitempty"`
-	StaleLockCleaned      bool     `json:"stale_lock_cleaned"`
-	WorktreeScopeRepairs  []string `json:"worktree_scope_repairs,omitempty"`
-	NonRepairableFindings []string `json:"non_repairable_findings,omitempty"`
+	CleanedAtomicTemps        []string `json:"cleaned_atomic_temps,omitempty"`
+	ConfigBackupPath          string   `json:"config_backup_path,omitempty"`
+	StaleLockCleaned          bool     `json:"stale_lock_cleaned"`
+	WorktreeScopeRepairs      []string `json:"worktree_scope_repairs,omitempty"`
+	MaterializedWavePlans     []string `json:"materialized_wave_plans,omitempty"`
+	RecoveredWaveRuns         []string `json:"recovered_wave_runs,omitempty"`
+	RewrittenRuntimeState     []string `json:"rewritten_runtime_state,omitempty"`
+	ClearedCheckpoints        []string `json:"cleared_checkpoints,omitempty"`
+	RepairedCheckpoints       []string `json:"repaired_checkpoints,omitempty"`
+	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
+	RebuiltExecutionSummaries []string `json:"rebuilt_execution_summaries,omitempty"`
+	NonRepairableFindings     []string `json:"non_repairable_findings,omitempty"`
 }
 
 func makeRepairCmd() *cobra.Command {
+	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "repair",
-		Short: "Run safe local integrity and layout repairs",
+		Short: desc("repair"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := repairRootFromWD()
 			if err != nil {
@@ -96,6 +110,25 @@ func makeRepairCmd() *cobra.Command {
 					}
 				}
 
+				execRepair, err := state.RepairExecutionState(root, now, staleAfter)
+				if err != nil {
+					return err
+				}
+				summary.MaterializedWavePlans = execRepair.MaterializedWavePlans
+				summary.RecoveredWaveRuns = execRepair.RecoveredWaveRuns
+				summary.RewrittenRuntimeState = execRepair.RewrittenRuntimeState
+				summary.ClearedCheckpoints = execRepair.ClearedCheckpoints
+				summary.RepairedCheckpoints = execRepair.RepairedCheckpoints
+				summary.PrunedTaskEvidence = execRepair.PrunedTaskEvidence
+				summary.NonRepairableFindings = append(summary.NonRepairableFindings, execRepair.NonRepairableFindings...)
+
+				rebuiltSummaries, rebuildFindings, err := rebuildExecutionSummaries(root, now)
+				if err != nil {
+					return err
+				}
+				summary.RebuiltExecutionSummaries = rebuiltSummaries
+				summary.NonRepairableFindings = append(summary.NonRepairableFindings, rebuildFindings...)
+
 				for _, slug := range archivedSlugs {
 					if _, err := state.RepairArchivedTerminalStatus(root, slug); err != nil {
 						return err
@@ -158,12 +191,65 @@ func makeRepairCmd() *cobra.Command {
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
 
-				return encodeJSONResponse(cmd, summary)
+				if jsonOutput {
+					return encodeJSONResponse(cmd, summary)
+				}
+				return writeRepairText(cmd.OutOrStdout(), summary)
 			})
 		},
 	}
-	cmd.Flags().Bool("json", false, "JSON output")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	return cmd
+}
+
+func writeRepairText(w io.Writer, summary repairSummary) error {
+	writer := newFormatWriter(w)
+	writer.Writef("Repair Summary\n")
+
+	writeRepairSection := func(title string, items []string) {
+		if len(items) == 0 {
+			return
+		}
+		writer.Writef("%s:\n", title)
+		for _, item := range items {
+			writer.Writef("  - %s\n", item)
+		}
+	}
+
+	if summary.StaleLockCleaned {
+		writer.Writef("Stale locks cleaned\n")
+	}
+	if strings.TrimSpace(summary.ConfigBackupPath) != "" {
+		writer.Writef("Config backup: %s\n", summary.ConfigBackupPath)
+	}
+
+	writeRepairSection("Cleaned atomic temp artifacts", summary.CleanedAtomicTemps)
+	writeRepairSection("Worktree scope repairs", summary.WorktreeScopeRepairs)
+	writeRepairSection("Materialized wave plans", summary.MaterializedWavePlans)
+	writeRepairSection("Recovered wave runs", summary.RecoveredWaveRuns)
+	writeRepairSection("Rewritten runtime state", summary.RewrittenRuntimeState)
+	writeRepairSection("Cleared checkpoints", summary.ClearedCheckpoints)
+	writeRepairSection("Repaired checkpoints", summary.RepairedCheckpoints)
+	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
+	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
+	writeRepairSection("Non-repairable findings", summary.NonRepairableFindings)
+
+	if len(summary.CleanedAtomicTemps) == 0 &&
+		strings.TrimSpace(summary.ConfigBackupPath) == "" &&
+		!summary.StaleLockCleaned &&
+		len(summary.WorktreeScopeRepairs) == 0 &&
+		len(summary.MaterializedWavePlans) == 0 &&
+		len(summary.RecoveredWaveRuns) == 0 &&
+		len(summary.RewrittenRuntimeState) == 0 &&
+		len(summary.ClearedCheckpoints) == 0 &&
+		len(summary.RepairedCheckpoints) == 0 &&
+		len(summary.PrunedTaskEvidence) == 0 &&
+		len(summary.RebuiltExecutionSummaries) == 0 &&
+		len(summary.NonRepairableFindings) == 0 {
+		writer.Writef("No repairs were needed\n")
+	}
+
+	return writer.Err()
 }
 
 func repairSummaryForHealthFinding(finding state.HealthFinding) string {
@@ -180,6 +266,9 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 			return fmt.Sprintf("%s: change authority unreadable: %s", slug, reason.Detail)
 		}
 	case "execution_summary":
+		if finding.Repairable {
+			return ""
+		}
 		for _, reason := range finding.Reasons {
 			if reason.Code != "execution_summary_unreadable" {
 				continue
@@ -191,4 +280,88 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 		}
 	}
 	return ""
+}
+
+func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, error) {
+	allChanges, _, err := state.ListChangesBestEffortWithIssues(root)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rebuilt := []string{}
+	findings := []string{}
+	for _, change := range allChanges {
+		if change.Status != model.ChangeStatusActive || !state.ExecutionSummaryRelevantState(change.CurrentState) {
+			continue
+		}
+
+		record, found, err := progression.LatestPassingWaveEvidence(root, change.Slug)
+		if err != nil {
+			findings = append(findings, fmt.Sprintf("%s: execution summary recovery preflight failed: %v", change.Slug, err))
+			continue
+		}
+		if !found || record.RunVersion < 1 {
+			continue
+		}
+
+		summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+		if err == nil && state.ExecutionSummaryReady(summary) {
+			continue
+		}
+
+		if err != nil {
+			backupPath, backupErr := backupUnreadableExecutionSummary(root, change, now)
+			if backupErr != nil {
+				findings = append(findings, fmt.Sprintf("%s: backup unreadable execution summary: %v", change.Slug, backupErr))
+				continue
+			}
+			if strings.TrimSpace(backupPath) == "" {
+				findings = append(findings, fmt.Sprintf("%s: execution summary unreadable and could not be backed up", change.Slug))
+				continue
+			}
+		}
+
+		if _, syncErr := progression.SyncGovernedWaveExecution(root, change); syncErr != nil {
+			findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %v", change.Slug, syncErr))
+			continue
+		}
+
+		rebuiltSummary, loadErr := state.LoadOptionalRelevantExecutionSummary(root, change)
+		if loadErr != nil || !state.ExecutionSummaryReady(rebuiltSummary) {
+			if loadErr != nil {
+				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary still unreadable: %v", change.Slug, loadErr))
+			} else {
+				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary is still incomplete", change.Slug))
+			}
+			continue
+		}
+		rebuilt = append(rebuilt, change.Slug)
+	}
+
+	slices.Sort(rebuilt)
+	slices.Sort(findings)
+	return slices.Compact(rebuilt), slices.Compact(findings), nil
+}
+
+func backupUnreadableExecutionSummary(root string, change model.Change, now time.Time) (string, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return "", err
+	}
+	summaryPath := filepath.Join(paths.GovernedBundleDir, "verification", state.ExecutionSummaryFileName)
+	if _, err := os.Stat(summaryPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	backupPath := filepath.Join(
+		filepath.Dir(summaryPath),
+		fmt.Sprintf("execution-summary.broken.%s.yaml", now.UTC().Format("20060102T150405Z")),
+	)
+	if err := os.Rename(summaryPath, backupPath); err != nil {
+		return "", err
+	}
+	return backupPath, nil
 }

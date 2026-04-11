@@ -4,6 +4,7 @@ description: "Use when failures require hypothesis-driven debugging with reprodu
 tools: Read, Write, Edit, Grep, Glob, Bash
 sandbox: workspace-write
 runtime_bound: false
+agent_status: manual_only
 ---
 
 # Debugger Agent

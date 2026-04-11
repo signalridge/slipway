@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -78,14 +79,24 @@ func ensureWorkspaceScopeVisibility(scopeRoot, workspaceRoot string, refresh boo
 
 	sourcePath := state.ConfigPath(scopeRoot)
 	targetPath := state.ConfigPath(workspaceRoot)
-	if refresh || !fileExists(targetPath) {
-		raw, err := os.ReadFile(sourcePath)
-		if err != nil {
+	sourceRaw, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+	targetRaw, err := os.ReadFile(targetPath)
+	switch {
+	case err == nil:
+		if refresh || !bytes.Equal(targetRaw, sourceRaw) {
+			if err := fsutil.WriteFileAtomic(targetPath, sourceRaw, 0o644); err != nil {
+				return err
+			}
+		}
+	case errors.Is(err, fs.ErrNotExist):
+		if err := fsutil.WriteFileAtomic(targetPath, sourceRaw, 0o644); err != nil {
 			return err
 		}
-		if err := fsutil.WriteFileAtomic(targetPath, raw, 0o644); err != nil {
-			return err
-		}
+	default:
+		return err
 	}
 
 	markerPath := state.WorkspaceScopeMarkerPath(workspaceRoot)

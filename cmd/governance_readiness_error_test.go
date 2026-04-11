@@ -184,12 +184,13 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 		change.WorkflowPreset = model.WorkflowPresetStandard
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		writeMalformedVerificationFile(t, root, slug, "plan-audit")
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -264,7 +265,7 @@ func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
 		require.NoError(t, os.MkdirAll(intentPath, 0o755))
 
 		var out bytes.Buffer
-		cmd := makeNextCmd()
+		cmd := makeRunCmd()
 		cmd.SetArgs([]string{"--json", "--change", slug, "--resume-response", "verified"})
 		cmd.SetOut(&out)
 

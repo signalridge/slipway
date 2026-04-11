@@ -4,6 +4,7 @@ description: "Use when completion claims require 3-level goal-backward verificat
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - goal-verification
 ---

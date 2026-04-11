@@ -4,6 +4,7 @@ description: "Use when discovery-required governed worktree setup and baseline v
 tools: Read, Grep, Glob, Bash
 sandbox: workspace-write
 runtime_bound: true
+agent_status: manual_only
 bound_skills:
   - worktree-preflight
 ---

@@ -524,6 +524,71 @@ func TestCancelArchivesUnboundL3Change(t *testing.T) {
 	})
 }
 
+func TestCancelRejectsUnexpectedArgs(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		create := makeNewCmd()
+		create.SetArgs([]string{"cancel should reject unexpected args"})
+		require.NoError(t, create.Execute())
+
+		cancelCmd := makeCancelCmd()
+		cancelCmd.SetArgs([]string{"unexpected"})
+
+		err := cancelCmd.Execute()
+		require.Error(t, err)
+		assertUnexpectedArgError(t, err)
+	})
+}
+
+func TestCancelUsesHumanReadableOutputWithoutJSONFlag(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		create := makeNewCmd()
+		create.SetArgs([]string{"cancel text output"})
+		require.NoError(t, create.Execute())
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+
+		cancelCmd := makeCancelCmd()
+		var buf bytes.Buffer
+		cancelCmd.SetOut(&buf)
+		cancelCmd.SetErr(&buf)
+		require.NoError(t, cancelCmd.Execute())
+
+		assert.Contains(t, buf.String(), "Change cancelled: "+slug)
+		assert.Contains(t, buf.String(), "Archived: true")
+		assert.NotContains(t, buf.String(), `"archived":`)
+	})
+}
+
+func TestCancelUsesJSONOutputWhenRequested(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		create := makeNewCmd()
+		create.SetArgs([]string{"cancel json output"})
+		require.NoError(t, create.Execute())
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+
+		cancelCmd := makeCancelCmd()
+		cancelCmd.SetArgs([]string{"--json"})
+		var buf bytes.Buffer
+		cancelCmd.SetOut(&buf)
+		cancelCmd.SetErr(&buf)
+		require.NoError(t, cancelCmd.Execute())
+
+		var view cancelView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+		assert.True(t, view.Archived)
+		assert.Equal(t, string(model.ChangeStatusCancelled), view.Status)
+	})
+}
+
 func TestPivotStateBoundaryRejected(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -718,6 +783,7 @@ func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
 				name string
 				cmd  *cobra.Command
 			}{
+				{name: "abort", cmd: makeAbortCmd()},
 				{name: "next", cmd: makeNextCmd()},
 				{name: "done", cmd: makeDoneCmd()},
 				{name: "cancel", cmd: makeCancelCmd()},
@@ -754,6 +820,18 @@ func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
 			assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", "repair")
 		})
 	})
+}
+
+func assertUnexpectedArgError(t *testing.T, err error) {
+	t.Helper()
+
+	msg := strings.ToLower(err.Error())
+	assert.True(
+		t,
+		strings.Contains(msg, "accepts 0 arg") || strings.Contains(msg, "unknown command"),
+		"expected unexpected-arg rejection, got %q",
+		err.Error(),
+	)
 }
 
 func TestRequestCommandBlocksOnChangeCreateLock(t *testing.T) {
@@ -1058,6 +1136,15 @@ func markChangeReadyForDone(t *testing.T, root string, change *model.Change) {
 
 func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
 	t.Helper()
+
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	require.NoError(t, err)
+	if state.ExecutionSummaryReady(summary) {
+		materializeWaveExecutionForSummary(t, root, slug)
+	}
+
 	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},

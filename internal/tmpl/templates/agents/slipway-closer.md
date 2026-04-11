@@ -4,6 +4,7 @@ description: "Use when governed closeout evidence must be refreshed and archived
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - final-closeout
 ---

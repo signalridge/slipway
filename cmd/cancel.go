@@ -27,9 +27,11 @@ type cancelView struct {
 
 func makeCancelCmd() *cobra.Command {
 	var changeSlug string
+	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "cancel",
-		Short: "Cancel an active change and archive terminal state",
+		Short: desc("cancel"),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {
@@ -53,7 +55,7 @@ func makeCancelCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				preemptionEvidenceRef, err := writeCancelPreemptionEvidence(root, active.Slug, interrupted, forceKilled)
+				preemptionEvidenceRef, err := writePreemptionEvidence(root, active.Slug, "cancel", interrupted, forceKilled)
 				if err != nil {
 					return err
 				}
@@ -96,12 +98,25 @@ func makeCancelCmd() *cobra.Command {
 					ForceKilledPIDs: forceKilled,
 				}
 
-				return encodeJSONResponse(cmd, view)
+				if jsonOutput {
+					return encodeJSONResponse(cmd, view)
+				}
+
+				writer := newFormatWriter(cmd.OutOrStdout())
+				writer.Writef("Change cancelled: %s\n", active.Slug)
+				writer.Writef("Archived: true\n")
+				if len(interrupted) > 0 {
+					writer.Writef("Interrupted PIDs: %v\n", interrupted)
+				}
+				if len(forceKilled) > 0 {
+					writer.Writef("Force-killed PIDs: %v\n", forceKilled)
+				}
+				return writer.Err()
 			})
 		},
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	cmd.Flags().Bool("json", false, "JSON output")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	return cmd
 }
 
@@ -130,20 +145,25 @@ func clearActiveTaskPIDs(root, slug string) error {
 	return nil
 }
 
-func writeCancelPreemptionEvidence(root, slug string, interrupted, forceKilled []int) (string, error) {
+func writePreemptionEvidence(root, slug, action string, interrupted, forceKilled []int) (string, error) {
 	if len(interrupted) == 0 && len(forceKilled) == 0 {
 		return "", nil
 	}
-	dir := filepath.Join(state.ChangeDir(root, slug), "evidence", "tasks", "cancel")
+	action = strings.TrimSpace(action)
+	if action == "" {
+		return "", fmt.Errorf("preemption action is required")
+	}
+	dir := filepath.Join(state.ChangeDir(root, slug), "evidence", "tasks", action)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	payload := map[string]any{
 		"slug":              slug,
+		"action":            action,
 		"timestamp":         time.Now().UTC().Format(time.RFC3339Nano),
 		"interrupt_pids":    append([]int(nil), interrupted...),
 		"force_killed_pids": append([]int(nil), forceKilled...),
-		"outcome":           "cancelled_or_aborted",
+		"outcome":           action,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {

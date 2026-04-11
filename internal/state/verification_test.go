@@ -180,6 +180,38 @@ func TestListVerificationsMultiple(t *testing.T) {
 	assert.Contains(t, result, "wave-orchestration")
 }
 
+func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	slug := "skip-wave-plan"
+	saveActiveChangeForTest(t, root, slug)
+
+	writeVerificationForTest(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
+	})
+	require.NoError(t, SaveWavePlan(root, slug, model.WavePlan{
+		Version:       model.WavePlanVersion,
+		GeneratedAt:   time.Now().UTC(),
+		TasksPlanHash: "abc123",
+		TotalTasks:    1,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Tasks: []model.WavePlanTask{{
+				TaskID: "t-01",
+			}},
+		}},
+	}))
+
+	result, err := ListVerifications(root, slug)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Contains(t, result, "plan-audit")
+	assert.NotContains(t, result, "wave-plan")
+}
+
 func TestListVerificationsRejectsInvalidFiles(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

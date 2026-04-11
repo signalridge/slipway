@@ -28,13 +28,14 @@ type commandGroup struct {
 var helpGroups = []commandGroup{
 	{
 		Title:       "Core lifecycle",
-		Description: "new -> [next -> (AI executes skill)]* -> done",
+		Description: "new -> [next|run -> (AI executes skill)]* -> done",
 		Commands: []groupedCommand{
 			{Name: "new", Description: desc("new")},
 			{Name: "preset", Description: desc("preset")},
 			{Name: "next", Description: desc("next")},
-			{Name: "done", Description: desc("done")},
+			{Name: "run", Description: desc("run")},
 			{Name: "status", Description: desc("status")},
+			{Name: "done", Description: desc("done")},
 		},
 	},
 	{
@@ -50,8 +51,9 @@ var helpGroups = []commandGroup{
 		Commands: []groupedCommand{
 			{Name: "review", Description: desc("review")},
 			{Name: "validate", Description: desc("validate")},
-			{Name: "sync", Description: desc("sync")},
+			{Name: "validate-requirements", Description: desc("validate-requirements")},
 			{Name: "pivot", Description: desc("pivot")},
+			{Name: "abort", Description: desc("abort")},
 			{Name: "cancel", Description: desc("cancel")},
 			{Name: "repair", Description: desc("repair")},
 			{Name: "checkpoint", Description: desc("checkpoint")},
@@ -137,15 +139,17 @@ func init() {
 	rootCmd.AddCommand(makeNewCmd())
 	rootCmd.AddCommand(makePresetCmd())
 	rootCmd.AddCommand(makeNextCmd())
+	rootCmd.AddCommand(makeRunCmd())
 	rootCmd.AddCommand(makeStatusCmd())
 	rootCmd.AddCommand(makeStatsCmd())
 	rootCmd.AddCommand(makeHealthCmd())
 	rootCmd.AddCommand(makeRootPathCmd())
 	rootCmd.AddCommand(makeDoneCmd())
+	rootCmd.AddCommand(makeAbortCmd())
 	rootCmd.AddCommand(makeCancelCmd())
 	rootCmd.AddCommand(makeReviewCmd())
 	rootCmd.AddCommand(makeValidateCmd())
-	rootCmd.AddCommand(makeSyncCmd())
+	rootCmd.AddCommand(makeValidateRequirementsCmd())
 	rootCmd.AddCommand(makePivotCmd())
 	rootCmd.AddCommand(makeRepairCmd())
 	rootCmd.AddCommand(makeCheckpointCmd())

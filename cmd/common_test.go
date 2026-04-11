@@ -239,6 +239,8 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 
 		oldTS := time.Now().UTC().Add(-3 * time.Second)
 		capturedAt := oldTS.Add(time.Second)
+		evidenceInputHash, err := state.ComputeTaskEvidenceInputHash(slug, 1, "task-01", "")
+		require.NoError(t, err)
 		writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
@@ -254,6 +256,7 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 			"changed_files":       []string{"cmd/next.go"},
 			"blockers":            []string{},
 			"captured_at":         capturedAt.Format(time.RFC3339Nano),
+			"evidence_input_hash": evidenceInputHash,
 		}
 		raw, err := json.Marshal(taskEvidence)
 		require.NoError(t, err)
@@ -274,6 +277,8 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 				require.NoError(t, os.Chtimes(path, oldTS, oldTS))
 			}
 		}
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 
 		result, err := progression.SyncGovernedWaveExecution(root, change)
 		require.NoError(t, err)

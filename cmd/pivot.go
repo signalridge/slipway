@@ -17,7 +17,7 @@ func makePivotCmd() *cobra.Command {
 	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "pivot",
-		Short: "Reroute or rescope an active change",
+		Short: desc("pivot"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Resolve pivot kind from --reroute/--rescope flags; default reroute.
 			kind := string(gate.PivotKindReroute)

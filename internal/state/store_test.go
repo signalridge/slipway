@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
@@ -85,6 +86,7 @@ func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
 		Reason: "no_blocking_review_obligations",
 	}}
 	change.ReviewIntentDriftFailures = 2
+	change.InterruptedExecutionAt = time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 
 	require.NoError(t, SaveChange(root, change))
 
@@ -94,6 +96,7 @@ func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
 	assert.NotContains(t, string(changeRaw), "evidence_refs:")
 	assert.NotContains(t, string(changeRaw), "last_auto_passed_states:")
 	assert.NotContains(t, string(changeRaw), "review_intent_drift_failures:")
+	assert.NotContains(t, string(changeRaw), "interrupted_execution_at:")
 
 	runtimeRaw, err := os.ReadFile(filepath.Join(ActiveBundlesDir(root), change.Slug, ChangeRuntimeStateFileName))
 	require.NoError(t, err)
@@ -103,6 +106,7 @@ func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
 	assert.Equal(t, change.EvidenceRefs, runtime.EvidenceRefs)
 	assert.Equal(t, change.LastAutoPassedStates, runtime.LastAutoPassedStates)
 	assert.Equal(t, change.ReviewIntentDriftFailures, runtime.ReviewIntentDriftFailures)
+	assert.True(t, change.InterruptedExecutionAt.Equal(runtime.InterruptedExecutionAt))
 
 	loaded, err := LoadChange(root, change.Slug)
 	require.NoError(t, err)
@@ -110,6 +114,7 @@ func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
 	assert.Equal(t, change.EvidenceRefs, loaded.EvidenceRefs)
 	assert.Equal(t, change.LastAutoPassedStates, loaded.LastAutoPassedStates)
 	assert.Equal(t, change.ReviewIntentDriftFailures, loaded.ReviewIntentDriftFailures)
+	assert.True(t, change.InterruptedExecutionAt.Equal(loaded.InterruptedExecutionAt))
 }
 
 func TestRestoreChangeAuthorityIfNeededTreatsMatchingRuntimeSidecarAsEqual(t *testing.T) {
@@ -230,6 +235,10 @@ func TestLoadChangeRejectsRuntimeFieldsInChangeAuthority(t *testing.T) {
 		{
 			name: "review_intent_drift_failures",
 			yaml: "\nreview_intent_drift_failures: 2\n",
+		},
+		{
+			name: "interrupted_execution_at",
+			yaml: "\ninterrupted_execution_at: 2026-04-10T12:00:00Z\n",
 		},
 	}
 
@@ -858,6 +867,25 @@ func TestListChangesBestEffortSkipsUnreadableChangeBundle(t *testing.T) {
 	assert.Equal(t, bad.Slug, issues[0].Slug)
 	assert.ErrorContains(t, issues[0].Err, "load change")
 
+}
+
+func TestListChangesBestEffortIncludesChangeWhenRuntimeStateIsUnreadable(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+
+	change := model.NewChange("runtime-state-bad")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, SaveChange(root, change))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(BundleChangeFilePath(root, change.Slug)), ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
+
+	changes, issues, err := ListChangesBestEffortWithIssues(root)
+	require.NoError(t, err)
+	require.Len(t, issues, 0)
+	require.Len(t, changes, 1)
+	assert.Equal(t, change.Slug, changes[0].Slug)
+	assert.Equal(t, model.StateS3Review, changes[0].CurrentState)
 }
 
 func TestLoadChangeReturnsWorktreeEnumerationErrorWhenGitWorkspaceLookupMisses(t *testing.T) {

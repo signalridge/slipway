@@ -105,6 +105,18 @@ func TestReviewRejectsUnsupportedArtifactFlag(t *testing.T) {
 	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
 }
 
+func TestReviewRejectsUnexpectedArgs(t *testing.T) {
+	t.Parallel()
+
+	err := func() error {
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"unexpected"})
+		return cmd.Execute()
+	}()
+	require.Error(t, err)
+	assertUnexpectedArgError(t, err)
+}
+
 func TestEnsureReviewEntryStateRequiresRunSummary(t *testing.T) {
 	t.Parallel()
 
@@ -153,7 +165,7 @@ func TestReviewExplicitRequestRejectsInactiveGovernedChange(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		err = cmd.Execute()
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
@@ -187,7 +199,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 `), 0o644))
 
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		err = cmd.Execute()
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
@@ -246,6 +258,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 				},
 			},
 		})
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -269,7 +282,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -284,7 +297,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 	})
 }
 
-func TestReviewPassesFromExecutionSummaryWithoutStoredRuns(t *testing.T) {
+func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -333,6 +346,8 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 				},
 			},
 		}))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 
 		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -356,14 +371,179 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
+		err = cmd.Execute()
+		require.Error(t, err)
 
-		var view reviewView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Equal(t, "pass", view.Verdict)
-		assert.Equal(t, string(model.StateS4Verify), view.CurrentState)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "review should fail closed when wave runs are missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		change.Artifacts = map[string]model.ArtifactState{}
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`t-01`"+` preserve review contract
+  - depends_on: []
+  - target_files: ["cmd/review.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`), 0o644))
+		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
+		require.NoError(t, os.WriteFile(specPath, []byte(`## Requirements
+
+### Requirement: ReviewContract
+
+REQ-001: The system must preserve governed verify-state when review prerequisites remain valid.
+`), 0o644))
+
+		now := time.Now().UTC()
+		require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+			Version:           model.ExecutionSummaryVersion,
+			RunSummaryVersion: 1,
+			CapturedAt:        now,
+			OverallVerdict:    model.ExecutionVerdictPass,
+			CompletedTasks:    []string{"t-01"},
+			Tasks: []model.ExecutionTaskSummary{
+				{
+					TaskID:       "t-01",
+					Verdict:      model.TaskVerdictPass,
+					TaskKind:     model.TaskKindVerification,
+					ChangedFiles: []string{"cmd/review.go"},
+					CapturedAt:   now,
+				},
+			},
+		}))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  now,
+			RunVersion: 1,
+		})
+		// Intentionally omit spec-compliance-review so readiness is already blocked.
+
+		var out bytes.Buffer
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetOut(&out)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`t-01`"+` preserve first review wave
+  - depends_on: []
+  - target_files: ["cmd/review.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+
+- [x] `+"`t-02`"+` preserve second review wave
+  - depends_on: ["t-01"]
+  - target_files: ["cmd/review.go"]
+  - task_kind: verification
+`), 0o644))
+
+		now := time.Now().UTC()
+		require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+			Version:           model.ExecutionSummaryVersion,
+			RunSummaryVersion: 1,
+			CapturedAt:        now,
+			OverallVerdict:    model.ExecutionVerdictPass,
+			CompletedTasks:    []string{"t-01", "t-02"},
+			Tasks: []model.ExecutionTaskSummary{
+				{
+					TaskID:       "t-01",
+					Verdict:      model.TaskVerdictPass,
+					TaskKind:     model.TaskKindVerification,
+					ChangedFiles: []string{"cmd/review.go"},
+					CapturedAt:   now,
+				},
+				{
+					TaskID:       "t-02",
+					Verdict:      model.TaskVerdictPass,
+					TaskKind:     model.TaskKindVerification,
+					ChangedFiles: []string{"cmd/review.go"},
+					CapturedAt:   now.Add(time.Second),
+				},
+			},
+		}))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+		require.NoError(t, state.SaveWaveRuns(root, slug, 1, []model.WaveRun{
+			{
+				WaveIndex:         1,
+				RunSummaryVersion: 1,
+				TaskRuns: []model.TaskRunRef{{
+					TaskID:            "t-02",
+					RunSummaryVersion: 1,
+				}},
+				Verdict: model.WaveVerdictPass,
+			},
+			{
+				WaveIndex:         2,
+				RunSummaryVersion: 1,
+				TaskRuns: []model.TaskRunRef{{
+					TaskID:            "t-01",
+					RunSummaryVersion: 1,
+				}},
+				Verdict: model.WaveVerdictPass,
+			},
+		}))
+
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		execCtx, err := loadExecutionContext(root, change)
+		require.NoError(t, err)
+
+		_, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_task_linkage_mismatch", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 	})
 }
 
@@ -382,6 +562,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 
 		// Write execution summary with CapturedAt = now.
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		// Write a bundle artifact AFTER the summary to make evidence stale.
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -398,6 +579,8 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "fail", view.Verdict)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_execution_evidence")
+		require.NotEmpty(t, view.Waves, "review should still surface wave status on blocked paths when wave execution data is available")
+		assert.Equal(t, "pass", view.Waves[0].Verdict)
 	})
 }
 
@@ -469,6 +652,7 @@ How do we prove changed-only review still sees stale downstream artifacts?
 `)))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 		writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
@@ -485,7 +669,7 @@ How do we prove changed-only review still sees stale downstream artifacts?
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -566,6 +750,7 @@ Auth-specific follow-up still needs review.
 `)))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 		writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
@@ -582,7 +767,7 @@ Auth-specific follow-up still needs review.
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--changed-only", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--changed-only", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -629,12 +814,13 @@ REQ-002: The system must emit audit logs.
 `), 0o644))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -659,11 +845,11 @@ func TestEvaluateReviewVerdictRejectsEmptyExecutionSummaryWithoutChecklistFallba
 		OverallVerdict:    model.ExecutionVerdictPass,
 		Tasks:             []model.ExecutionTaskSummary{},
 	}
-	verdict, blockers := evaluateReviewVerdict(executionContext{
+	verdict, blockers, _ := evaluateReviewVerdict(executionContext{
 		Summary:          summary,
 		LatestRunVersion: summary.RunSummaryVersion,
 		Ready:            false, // empty tasks → not ready
-	})
+	}, nil)
 
 	assert.Equal(t, "fail", verdict)
 	assert.Contains(t, model.ReasonSpecs(blockers), "missing_run_summary")
@@ -672,7 +858,7 @@ func TestEvaluateReviewVerdictRejectsEmptyExecutionSummaryWithoutChecklistFallba
 func TestEvaluateReviewVerdictRejectsNilSummary(t *testing.T) {
 	t.Parallel()
 
-	verdict, blockers := evaluateReviewVerdict(executionContext{})
+	verdict, blockers, _ := evaluateReviewVerdict(executionContext{}, nil)
 
 	assert.Equal(t, "fail", verdict)
 	assert.Contains(t, model.ReasonSpecs(blockers), "missing_run_summary")
@@ -692,12 +878,12 @@ func TestEvaluateReviewVerdictSurfacesSummaryLevelBlockers(t *testing.T) {
 			{TaskID: "task-a", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindCode, CapturedAt: time.Now().UTC()},
 		},
 	}
-	verdict, blockers := evaluateReviewVerdict(executionContext{
+	verdict, blockers, _ := evaluateReviewVerdict(executionContext{
 		Summary:          summary,
 		LatestRunVersion: 1,
 		Ready:            true,
 		SummaryBlockers:  summary.OpenBlockers,
-	})
+	}, nil)
 
 	assert.Equal(t, "fail", verdict)
 	assert.Contains(t, model.ReasonSpecs(blockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
@@ -721,13 +907,30 @@ func TestEvaluateReviewVerdictSurfacesInvalidTaskRunKey(t *testing.T) {
 			},
 		},
 	}
-	verdict, blockers := evaluateReviewVerdict(executionContext{
+	verdict, blockers, _ := evaluateReviewVerdict(executionContext{
 		Summary:          summary,
 		LatestRunVersion: 1,
 		Ready:            true,
-	})
+	}, nil)
 
 	assert.Equal(t, "fail", verdict)
 	assert.Contains(t, model.ReasonSpecs(blockers), "task_blockers_invalid_key:task-a__rvshadow")
 	assert.NotContains(t, model.ReasonSpecs(blockers), "task_blockers:task-a__rvshadow")
+}
+
+func materializeWaveExecutionForSummary(t *testing.T, root, slug string) {
+	t.Helper()
+
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+
+	plan, err := state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs))
 }

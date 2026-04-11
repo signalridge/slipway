@@ -91,9 +91,10 @@ func makeValidateCmd() *cobra.Command {
 	var changeSlug string
 	cmd := &cobra.Command{
 		Use:   "validate",
-		Short: "Read-only evidence and gate check",
-		Long:  "Validate evidence files and gate conditions without advancing state. Use to check readiness before calling next.",
-		Args:  cobra.NoArgs,
+		Short: desc("validate"),
+		Long: desc("validate") + ".\n\n" +
+			"Use this command to inspect current evidence and gate readiness without advancing state.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {

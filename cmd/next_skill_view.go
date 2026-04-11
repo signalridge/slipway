@@ -13,7 +13,7 @@ import (
 )
 
 func resolveWorkspaceSkillPaths(root, skillName, agentHint string) (promptPath, agentDefinitionPath string) {
-	cfg := toolgen.ResolveWorkspaceTool(root)
+	cfg := toolgen.ResolveWorkspaceTool(invocationWorkspaceRoot(root))
 	promptPath = toolgen.SkillPath(cfg, skillName)
 	if strings.TrimSpace(agentHint) != "" {
 		agentDefinitionPath = toolgen.AgentPath(cfg, agentHint)
@@ -103,8 +103,13 @@ func assembleSkillView(
 		return nil
 	}
 
+	registry, err := skill.LoadGovernanceRegistry(root)
+	if err != nil {
+		return wrapRequiredSkillsEvaluationError("load governance registry", ref.Slug, err)
+	}
+
 	verificationDir := state.DisplayPath(root, filepath.Dir(state.VerificationFilePath(root, ref.Slug, nextSkillName)))
-	agentHint := skill.AgentHintForSkill(nextSkillName)
+	agentHint := skill.AgentHintForSkillInRegistry(registry, nextSkillName)
 	promptPath, agentDefPath := resolveWorkspaceSkillPaths(root, nextSkillName, agentHint)
 
 	ns := &nextSkillView{
@@ -133,7 +138,9 @@ func assembleSkillView(
 		ns.ReviewContext = buildReviewContext(guardrailDomain)
 	}
 
-	ns.SkillConstraints = buildSkillConstraints(root, nextSkillName, governedChange)
+	if def, ok := skill.LookupDefinitionInRegistry(registry, nextSkillName); ok {
+		ns.SkillConstraints = buildSkillConstraints(root, def, governedChange)
+	}
 
 	view.NextSkill = ns
 	view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)

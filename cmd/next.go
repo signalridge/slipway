@@ -150,22 +150,22 @@ type resumeCheckpoint struct {
 	RunSummaryVersion   int      `json:"run_summary_version"`
 	CompletedTaskIDs    []string `json:"completed_task_ids,omitempty"`
 	Freshness           string   `json:"freshness,omitempty"`
+	ResumeWaveIndex     int      `json:"resume_wave_index,omitempty"`
 	PausedTaskID        string   `json:"paused_task_id,omitempty"`
+	PausedWaveIndex     int      `json:"paused_wave_index,omitempty"`
 	CheckpointType      string   `json:"checkpoint_type,omitempty"`
 	UserResponsePayload string   `json:"user_response_payload,omitempty"`
 }
 
 func makeNextCmd() *cobra.Command {
 	var jsonOutput bool
-	var resumeResponse string
 	var preview bool
-	var auto bool
 	var contextGuard bool
 	var changeSlug string
 
 	cmd := &cobra.Command{
 		Use:   "next",
-		Short: "Validate evidence, advance state if ready, and show next skill",
+		Short: desc("next"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
@@ -174,7 +174,7 @@ func makeNextCmd() *cobra.Command {
 			}
 
 			// Validate flag conflicts before acquiring any locks.
-			if err := validateNextFlags(auto, preview, resumeResponse, contextGuard); err != nil {
+			if err := validateNextFlags(preview, contextGuard); err != nil {
 				return err
 			}
 
@@ -184,11 +184,7 @@ func makeNextCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
-				if auto {
-					return runAutoNext(cmd, root, ref, jsonOutput)
-				}
-
-				view, err := buildNextView(root, ref, resumeResponse, preview)
+				view, err := buildNextView(root, ref, "", preview)
 				if err != nil {
 					return err
 				}
@@ -206,47 +202,13 @@ func makeNextCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused checkpoint")
 	cmd.Flags().BoolVar(&preview, "preview", false, "Show next skill context without state advancement")
-	cmd.Flags().BoolVar(&auto, "auto", false, "Loop advance until blocked, checkpoint, or done-ready")
 	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format (requires --preview)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
 
-func validateNextFlags(auto, preview bool, resumeResponse string, contextGuard bool) error {
-	if auto {
-		switch {
-		case preview:
-			return newCLIError(
-				categoryInvalidUsage,
-				"flag_conflict",
-				"--auto cannot be used with --preview",
-				"Use --auto or --preview, not both.",
-				"",
-				nil,
-			)
-		case strings.TrimSpace(resumeResponse) != "":
-			return newCLIError(
-				categoryInvalidUsage,
-				"flag_conflict",
-				"--auto cannot be used with --resume-response",
-				"Use --auto or --resume-response, not both.",
-				"",
-				nil,
-			)
-		case contextGuard:
-			return newCLIError(
-				categoryInvalidUsage,
-				"flag_conflict",
-				"--auto cannot be used with --context-guard",
-				"Use --auto or --context-guard, not both.",
-				"",
-				nil,
-			)
-		}
-	}
-
+func validateNextFlags(preview bool, contextGuard bool) error {
 	if contextGuard && !preview {
 		return newCLIError(
 			categoryInvalidUsage,
@@ -261,59 +223,7 @@ func validateNextFlags(auto, preview bool, resumeResponse string, contextGuard b
 	return nil
 }
 
-// runAutoNext loops buildNextView until the workflow is blocked, paused at a checkpoint,
-// done-ready, or reaches a state that requires a skill (i.e., agent work).
-func runAutoNext(cmd *cobra.Command, root string, ref changeRef, jsonOutput bool) error {
-	const maxIterations = maxAutoNextIterations
-	var lastView nextView
-	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
-
-	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextView(root, ref, "", false)
-		if err != nil {
-			return err
-		}
-		lastView = view
-		if view.Advanced != nil && view.Advanced.Action != "preview" {
-			transitions = append(transitions, *view.Advanced)
-		}
-
-		// Stop conditions: done, blocked, checkpoint, done_ready, or skill required.
-		if view.CurrentState == model.StateDone {
-			break
-		}
-		if len(view.Blockers) > 0 {
-			break
-		}
-		if view.InputContext.ResumeCheckpoint != nil {
-			break
-		}
-		if view.Advanced != nil && view.Advanced.Action == "done_ready" {
-			break
-		}
-		if view.NextSkill != nil {
-			// A skill is required — stop so the agent can execute it.
-			break
-		}
-		// If no advance happened and no skill is needed, we're stuck.
-		if view.Advanced == nil || view.Advanced.Action == "noop" {
-			break
-		}
-	}
-	if len(transitions) > 0 {
-		lastView.AutoTransitions = transitions
-	}
-
-	if jsonOutput {
-		return encodeJSONResponse(cmd, lastView)
-	}
-	return writeNextHuman(cmd.OutOrStdout(), lastView)
-}
-
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool) (nextView, error) {
-	// Flag conflict checks (--auto vs --preview, --resume-response vs --preview, etc.)
-	// are performed in makeNextCmd before this function is called.
-
 	advanced, err := advanceIfReady(root, ref, preview)
 	if err != nil {
 		return nextView{}, err
@@ -386,7 +296,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 
 	// Attach wave plan when at S2_EXECUTE for governed changes.
 	if view.CurrentState == model.StateS2Execute && governedChange != nil {
-		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle)
+		view.InputContext.WavePlan = buildWavePlan(root, governedChange, view.InputContext.ArtifactBundle)
 	}
 
 	if view.CurrentState == model.StateDone {

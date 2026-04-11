@@ -84,6 +84,9 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 	if err := state.RemoveExecutionSummary(root, change.Slug); err != nil {
 		return pivotView{}, err
 	}
+	if err := state.ResetWaveExecution(root, change.Slug); err != nil {
+		return pivotView{}, err
+	}
 	if err := os.RemoveAll(state.ChangeDir(root, change.Slug)); err != nil {
 		return pivotView{}, err
 	}

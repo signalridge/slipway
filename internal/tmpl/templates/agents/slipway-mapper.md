@@ -4,6 +4,7 @@ description: "Use when architectural mapping and dependency tracing are required
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: false
+agent_status: manual_only
 ---
 
 # Mapper Agent

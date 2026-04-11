@@ -62,7 +62,7 @@ func makeNewCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "new [description]",
-		Short: "Create a governed change with intake-first workflow",
+		Short: desc("new"),
 		Long: `Create a governed change starting at S0_INTAKE.
 
 This command creates a governed change and begins the intake-first workflow.

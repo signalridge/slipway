@@ -13,15 +13,11 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
-// buildSkillConstraints populates per-skill constraint fields from the Go registry
-// and artifact state, replacing level-conditional logic in skill templates.
+// buildSkillConstraints populates per-skill constraint fields from the loaded
+// governance registry and artifact state, replacing level-conditional logic in
+// skill templates.
 // governedChange is the already-loaded unified Change (nil for intake-only mode).
-func buildSkillConstraints(root, skillName string, governedChange *model.Change) *skillConstraints {
-	def, ok := skill.LookupDefinition(skillName)
-	if !ok {
-		return nil
-	}
-
+func buildSkillConstraints(root string, def skill.Definition, governedChange *model.Change) *skillConstraints {
 	sc := &skillConstraints{
 		MitigationTarget: def.Mitigation,
 		RunSummaryBound:  def.RunSummaryBound,

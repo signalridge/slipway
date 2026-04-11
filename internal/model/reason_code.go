@@ -60,6 +60,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A dedicated worktree is required for this governed change",
 	},
+	"execution_interrupted": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Governed execution was interrupted",
+	},
 	"high_risk_check_failed": {
 		Severity: ReasonSeverityError,
 		Message:  "A required high-risk safety check failed",

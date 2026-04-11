@@ -53,6 +53,7 @@ type Change struct {
 	LastAutoPassedStates      []AutoPassedState        `yaml:"-" json:"-"`
 	EvidenceRefs              map[string]string        `yaml:"-" json:"-"`
 	ReviewIntentDriftFailures int                      `yaml:"-" json:"-"`
+	InterruptedExecutionAt    time.Time                `yaml:"-" json:"-"`
 }
 
 // Phase returns the user-facing phase for this change.
@@ -100,6 +101,9 @@ func (c *Change) Normalize() {
 		c.PlanSubStep = PlanEntrySubStep(c.NeedsDiscovery)
 	}
 	c.ContextDependencies.Normalize()
+	if !c.InterruptedExecutionAt.IsZero() {
+		c.InterruptedExecutionAt = c.InterruptedExecutionAt.Round(0).UTC()
+	}
 }
 
 func (c Change) Validate() error {
@@ -151,6 +155,9 @@ func (c Change) Validate() error {
 		}
 	}
 	if c.ActiveCheckpoint != nil {
+		if !c.ActiveCheckpoint.PausedAt.IsZero() {
+			c.ActiveCheckpoint.PausedAt = c.ActiveCheckpoint.PausedAt.Round(0).UTC()
+		}
 		if err := c.ActiveCheckpoint.Validate(); err != nil {
 			return fmt.Errorf("active_checkpoint: %w", err)
 		}
@@ -209,9 +216,11 @@ func (k CheckpointKind) IsValid() bool {
 // ActiveCheckpoint tracks a paused checkpoint contract that requires user
 // input before wave execution can resume.
 type ActiveCheckpoint struct {
-	PausedTaskID     string   `yaml:"paused_task_id" json:"paused_task_id"`
-	CheckpointType   string   `yaml:"checkpoint_type" json:"checkpoint_type"`
-	AllowedResponses []string `yaml:"allowed_responses,omitempty" json:"allowed_responses,omitempty"`
+	PausedTaskID     string    `yaml:"paused_task_id" json:"paused_task_id"`
+	PausedWaveIndex  int       `yaml:"paused_wave_index,omitempty" json:"paused_wave_index,omitempty"`
+	PausedAt         time.Time `yaml:"paused_at,omitempty" json:"paused_at,omitempty"`
+	CheckpointType   string    `yaml:"checkpoint_type" json:"checkpoint_type"`
+	AllowedResponses []string  `yaml:"allowed_responses,omitempty" json:"allowed_responses,omitempty"`
 }
 
 type AutoPassedState struct {
@@ -232,6 +241,9 @@ func (s AutoPassedState) Validate() error {
 func (cp ActiveCheckpoint) Validate() error {
 	if strings.TrimSpace(cp.PausedTaskID) == "" {
 		return fmt.Errorf("paused_task_id is required")
+	}
+	if cp.PausedWaveIndex < 0 {
+		return fmt.Errorf("paused_wave_index must be >= 0")
 	}
 	kind := CheckpointKind(cp.CheckpointType)
 	if !kind.IsValid() {

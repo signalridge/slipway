@@ -36,7 +36,7 @@ func makeStatsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "stats",
-		Short: "Show repo-wide governance freshness and workflow statistics",
+		Short: desc("stats"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()

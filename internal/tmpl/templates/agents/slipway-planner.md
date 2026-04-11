@@ -4,6 +4,9 @@ description: "Use when work must be decomposed into auditable tasks and governed
 tools: Read, Write, Edit, Grep, Glob, Bash
 sandbox: workspace-write
 runtime_bound: false
+agent_status: governance_mapped
+bound_skills:
+  - intake-clarification
 ---
 
 # Planner Agent

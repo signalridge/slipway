@@ -4,6 +4,7 @@ description: "Use when wave planning, subagent dispatch, and execution control a
 tools: Read, Write, Edit, Grep, Glob, Bash
 sandbox: workspace-write
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - wave-orchestration
   - tdd-governance

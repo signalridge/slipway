@@ -4,6 +4,7 @@ description: "Use when plan quality must be audited against goal-backward checks
 tools: Read, Grep, Glob, Bash
 sandbox: read-only
 runtime_bound: true
+agent_status: governance_mapped
 bound_skills:
   - plan-audit
 ---

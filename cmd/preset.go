@@ -42,7 +42,7 @@ func makePresetCmd() *cobra.Command {
 	var changeSlug string
 	cmd := &cobra.Command{
 		Use:   "preset <light|standard|strict>",
-		Short: "Confirm or update the governance preset for the active change",
+		Short: desc("preset"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := projectRootFromWD()

@@ -23,17 +23,20 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 
 	// Map command names to their Cobra constructors.
 	cmds := map[string]*cobra.Command{
-		"init":     makeInitCmd(),
-		"new":      makeNewCmd(),
-		"next":     makeNextCmd(),
-		"status":   makeStatusCmd(),
-		"done":     makeDoneCmd(),
-		"cancel":   makeCancelCmd(),
-		"review":   makeReviewCmd(),
-		"validate": makeValidateCmd(),
-		"pivot":    makePivotCmd(),
-		"repair":   makeRepairCmd(),
-		"sync":     makeSyncCmd(),
+		"init":                  makeInitCmd(),
+		"new":                   makeNewCmd(),
+		"next":                  makeNextCmd(),
+		"status":                makeStatusCmd(),
+		"done":                  makeDoneCmd(),
+		"cancel":                makeCancelCmd(),
+		"review":                makeReviewCmd(),
+		"validate":              makeValidateCmd(),
+		"validate-requirements": makeValidateRequirementsCmd(),
+		"pivot":                 makePivotCmd(),
+		"health":                makeHealthCmd(),
+		"run":                   makeRunCmd(),
+		"abort":                 makeAbortCmd(),
+		"repair":                makeRepairCmd(),
 	}
 
 	// Collect registered flags per command.
@@ -108,4 +111,31 @@ func TestDoneAllReadyFlagUsageMatchesBulkBehavior(t *testing.T) {
 	flag := makeDoneCmd().Flags().Lookup("all-ready")
 	require.NotNil(t, flag)
 	assert.Equal(t, "Archive every active change that is done-ready", flag.Usage)
+}
+
+func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+	commandsDir := filepath.Join(root, ".claude", "commands", "slipway")
+	for _, id := range []string{
+		"abort",
+		"cancel",
+		"checkpoint",
+		"done",
+		"next",
+		"pivot",
+		"preset",
+		"review",
+		"run",
+		"status",
+		"validate",
+		"validate-requirements",
+	} {
+		raw, err := os.ReadFile(filepath.Join(commandsDir, id+".md"))
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), "--change <slug>", "generated command entry for %s must surface the explicit change selector", id)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,621 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 			}
 		}
 		assert.True(t, found)
+	})
+}
+
+func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should surface wave repair")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+		assert.Equal(t, "doctor", view.ExecutionMode)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Command == "slipway repair" && strings.Contains(strings.ToLower(action.Summary), "wave plan") {
+				found = true
+				assert.True(t, action.Repairable)
+			}
+		}
+		assert.True(t, found, "expected doctor to recommend slipway repair for missing wave artifacts")
+	})
+}
+
+func TestHealthCommandDoctorUsesCommandSpecificRepairHint(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category != "codebase_map" {
+				continue
+			}
+			found = true
+			assert.Equal(t, "slipway codebase-map", action.Command)
+			assert.True(t, action.Repairable)
+		}
+		assert.True(t, found, "expected doctor to preserve the codebase-map repair command")
+	})
+}
+
+func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRepair(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before wave repair")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/health.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending checkpointed wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/health.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		foundRepair := false
+		for _, action := range view.Doctor.Actions {
+			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
+			if action.Category == "wave_execution" && action.Slug == slug && action.Command == "slipway repair" {
+				foundRepair = true
+			}
+		}
+		assert.True(t, foundRepair, "expected doctor to recommend repair instead of resume")
+	})
+}
+
+func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before pre-summary wave plan repair")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		foundRepair := false
+		for _, action := range view.Doctor.Actions {
+			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
+			if action.Category == "wave_execution" && action.Slug == slug && action.Command == "slipway repair" {
+				foundRepair = true
+			}
+		}
+		assert.True(t, foundRepair, "expected doctor to recommend repair instead of resume")
+	})
+}
+
+func TestHealthCommandDoctorExplainsNoActiveChange(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+		assert.Contains(t, view.Diagnostics, "No active change; governance health not applicable.")
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category != "governance" {
+				continue
+			}
+			if action.Summary == "No active change; governance health not applicable." {
+				found = true
+				assert.False(t, action.Repairable)
+				assert.Empty(t, action.Command)
+			}
+		}
+		assert.True(t, found, "expected doctor to emit an informational no-active-change action")
+	})
+}
+
+func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should explain interrupted execution")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/health.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/health.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		foundInterrupted := false
+		foundResume := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category == "execution_session" && action.Command == "slipway status" {
+				foundInterrupted = true
+				assert.Contains(t, action.Summary, "2026-04-11T10:30:00Z")
+			}
+			if action.Category == "execution_resume" && action.Command == "slipway run --resume" {
+				foundResume = true
+			}
+		}
+		assert.True(t, foundInterrupted, "expected doctor to explain the interrupted execution")
+		assert.True(t, foundResume, "expected doctor to preserve the resume action")
+	})
+}
+
+func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should not auto-repair drifted wave state")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` original execution task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		tasksPath := filepath.Join(bundlePath, "tasks.md")
+		updatedAt := time.Now().UTC().Add(2 * time.Second)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replacement task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+		require.NoError(t, os.Chtimes(tasksPath, updatedAt, updatedAt))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category != "wave_execution" || action.Slug != slug {
+				continue
+			}
+			if strings.Contains(strings.ToLower(action.Summary), "cannot be safely reconstructed") {
+				found = true
+				assert.False(t, action.Repairable)
+				assert.Equal(t, "slipway pivot --rescope", action.Command)
+			}
+		}
+		assert.True(t, found, "expected doctor to block auto-repair for drifted wave-plan reconstruction")
+	})
+}
+
+func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceExists(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "health should promote repairable execution summary finding")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		summaryPath := state.ExecutionSummaryPathForRead(root, slug)
+		require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "execution_summary" || finding.Slug != slug {
+				continue
+			}
+			found = true
+			assert.True(t, finding.Repairable)
+			assert.Equal(t, "Run `slipway repair` to rebuild execution-summary.yaml from wave-backed execution evidence.", finding.RepairHint)
+		}
+		assert.True(t, found, "expected unreadable execution summary finding")
+	})
+}
+
+func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should surface pivot for wave drift")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` preserve original task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-02`"+` replace task after drift
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category != "wave_execution" || action.Slug != slug {
+				continue
+			}
+			if strings.Contains(strings.ToLower(action.Summary), "wave plan drift") {
+				found = true
+				assert.False(t, action.Repairable)
+				assert.Equal(t, "slipway pivot --rescope", action.Command)
+			}
+		}
+		assert.True(t, found, "expected doctor to recommend pivot for wave plan drift")
+	})
+}
+
+func TestHealthCommandDoctorIncludesUnreadableRuntimeStateRepair(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should include unreadable runtime state repair")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		foundFinding := false
+		for _, finding := range view.Findings {
+			if finding.Category == "runtime_state" && finding.Slug == slug {
+				foundFinding = true
+				assert.True(t, finding.Repairable)
+			}
+		}
+		assert.True(t, foundFinding, "expected unreadable runtime-state finding")
+
+		foundAction := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category == "runtime_state" && action.Slug == slug {
+				foundAction = true
+				assert.Equal(t, "slipway repair", action.Command)
+				assert.True(t, action.Repairable)
+			}
+		}
+		assert.True(t, foundAction, "expected doctor to recommend repair for unreadable runtime-state")
+	})
+}
+
+func TestHealthCommandReportsInvalidAgentMapping(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		cfg := model.DefaultConfig()
+		cfg.Agents.Mappings = map[string]string{}
+		cfg.Agents.Mappings["wave-orchestration"] = "slipway-missing"
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "agent_contract" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "agent_mapping_invalid" {
+					found = true
+					assert.False(t, finding.Repairable)
+				}
+			}
+		}
+		assert.True(t, found, "expected invalid agent mapping finding")
+	})
+}
+
+func TestHealthCommandRejectsManualOnlyAgentMapping(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		cfg := model.DefaultConfig()
+		cfg.Agents.Mappings = map[string]string{}
+		cfg.Agents.Mappings["wave-orchestration"] = "slipway-executor"
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "agent_contract" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "agent_mapping_invalid" {
+					found = true
+					assert.Equal(t, model.ReasonSeverityError, finding.Severity)
+					assert.False(t, finding.Repairable)
+					assert.Contains(t, reason.Message, "manual-only")
+					assert.Contains(t, finding.RepairHint, "governance-mapped")
+				}
+			}
+		}
+		assert.True(t, found, "expected manual-only governance mapping rejection")
+	})
+}
+
+func TestHealthCommandReportsMissingGeneratedAgentSurface(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "agents", "slipway-planner.md")))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "agent_contract" || finding.Slug != "intake-clarification" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "agent_generated_surface_missing" {
+					found = true
+					assert.Contains(t, finding.Message, "missing generated agent file")
+					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
+				}
+			}
+		}
+		assert.True(t, found, "expected missing generated agent surface finding")
+	})
+}
+
+func TestHealthCommandDoctorIncludesGovernanceFailuresWithoutExtraFlags(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initGitRepoForWorktreeTests(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "doctor should include governance failures")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepBundle
+		change.WorktreePath = root
+		change.WorktreeBranch = currentGitBranch(t, root)
+		require.NoError(t, state.SaveChange(root, change))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+		require.NotNil(t, view.Governance)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category == "governance_worktree_binding" {
+				found = true
+				assert.Contains(t, action.Summary, "dedicated_worktree_required")
+			}
+		}
+		assert.True(t, found, "expected governance worktree failure in doctor actions")
+	})
+}
+
+func TestHealthCommandDoctorSkipsNonCommandRepairHints(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		cfg := model.DefaultConfig()
+		cfg.Agents.Mappings = map[string]string{
+			"wave-orchestration": "slipway-missing",
+		}
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		for _, action := range view.Doctor.Actions {
+			if action.Category == "agent_contract" {
+				assert.NotEqual(t, ".slipway.yaml", action.Command)
+			}
+		}
 	})
 }
 
@@ -570,6 +1186,39 @@ func TestHealthCommandGovernanceSurfacesMultipleActiveChangeError(t *testing.T) 
 		execErr := cmd.Execute()
 		require.Error(t, execErr, "governance health should surface multiple active changes error")
 		assert.Contains(t, execErr.Error(), "multiple active changes")
+	})
+}
+
+func TestHealthCommandDoctorDoesNotFailWhenMultipleActiveChangesExist(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		changeA := model.NewChange("health-doctor-multi-a")
+		require.NoError(t, state.SaveChange(root, changeA))
+
+		changeB := model.NewChange("health-doctor-multi-b")
+		require.NoError(t, state.SaveChange(root, changeB))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "explicit `--change` target")
+
+		foundSelectionAction := false
+		for _, action := range view.Doctor.Actions {
+			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
+			if action.Category == "active_change_selection" && action.Command == "slipway status" {
+				foundSelectionAction = true
+			}
+		}
+		assert.True(t, foundSelectionAction, "expected doctor to include active-change selection recovery action")
 	})
 }
 

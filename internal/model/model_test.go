@@ -122,6 +122,7 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	change.EvidenceRefs = map[string]string{
 		"plan-audit": "evidence/governance/plan-audit.json",
 	}
+	change.InterruptedExecutionAt = createdAt.Add(2 * time.Hour)
 	change.ActiveCheckpoint = &ActiveCheckpoint{
 		PausedTaskID:     "task-01",
 		CheckpointType:   string(CheckpointDecision),
@@ -136,6 +137,7 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.NotContains(t, string(raw), "evidence_refs:")
 	assert.NotContains(t, string(raw), "last_auto_passed_states:")
 	assert.NotContains(t, string(raw), "review_intent_drift_failures:")
+	assert.NotContains(t, string(raw), "interrupted_execution_at:")
 
 	var decoded Change
 	require.NoError(t, yaml.Unmarshal(raw, &decoded))
@@ -157,8 +159,23 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.Empty(t, decoded.EvidenceRefs)
 	assert.Empty(t, decoded.LastAutoPassedStates)
 	assert.Zero(t, decoded.ReviewIntentDriftFailures)
+	assert.Zero(t, decoded.InterruptedExecutionAt)
 	require.NotNil(t, decoded.ActiveCheckpoint)
 	assert.Equal(t, *change.ActiveCheckpoint, *decoded.ActiveCheckpoint)
+}
+
+func TestChangeUnmarshalYAMLIgnoresRuntimeOnlyInterruptedExecutionAt(t *testing.T) {
+	t.Parallel()
+
+	var change Change
+	require.NoError(t, yaml.Unmarshal([]byte(`
+slug: ignored-runtime-field
+status: active
+current_state: S2_EXECUTE
+interrupted_execution_at: 2026-04-10T12:00:00Z
+`), &change))
+
+	assert.Zero(t, change.InterruptedExecutionAt)
 }
 
 func TestNormalizeReasonCodesSortsGateReasons(t *testing.T) {

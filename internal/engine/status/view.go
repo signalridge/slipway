@@ -28,6 +28,10 @@ type Progress struct {
 	StageIndex        int
 	StageTotal        int
 	StageName         string
+	CurrentWaveIndex  int
+	CompletedWaves    int
+	TotalWaves        int
+	WavesByVerdict    map[string]int
 	TasksCompleted    int
 	TasksTotal        int
 	TasksByVerdict    map[string]int
@@ -61,7 +65,7 @@ func BuildProjection(
 ) (Projection, error) {
 	projection := Projection{
 		SummaryBlockers:   summaryBlockers(executionSummary),
-		Progress:          executionProgress(change, executionSummary, stageName),
+		Progress:          executionProgress(root, change, executionSummary, stageName),
 		EvidenceInventory: buildEvidenceInventory(executionSummary, evidenceRefs),
 		GateStatus:        GateStatusFromEvaluations(readiness.GateEvaluations),
 		ArtifactDAG:       artifactNodesFromProjection(readiness.ArtifactProjection),
@@ -83,6 +87,7 @@ func summaryBlockers(summary *model.ExecutionSummary) []model.ReasonCode {
 }
 
 func executionProgress(
+	root string,
 	change model.Change,
 	summary *model.ExecutionSummary,
 	stageName func(model.WorkflowState, model.IntakeSubStep, model.PlanSubStep) string,
@@ -106,9 +111,13 @@ func executionProgress(
 	}
 
 	byVerdict := map[string]int{}
+	wavesByVerdict := map[string]int{}
 	completed := 0
 	total := 0
 	latestRunVersion := 0
+	completedWaves := 0
+	totalWaves := 0
+	currentWaveIndex := 0
 	if summary != nil && summary.RunSummaryVersion >= 1 {
 		latestRunVersion = summary.RunSummaryVersion
 		for _, task := range summary.Tasks {
@@ -116,6 +125,28 @@ func executionProgress(
 			byVerdict[string(task.Verdict)]++
 			if task.Verdict == model.TaskVerdictPass && len(task.Blockers) == 0 {
 				completed++
+			}
+		}
+		if plan, err := state.LoadOptionalWavePlanForChange(root, change); err == nil && plan != nil {
+			totalWaves = len(plan.Waves)
+			if waveRuns, err := state.LoadOptionalWaveRuns(root, change.Slug, summary.RunSummaryVersion); err == nil {
+				if len(waveRuns) == len(plan.Waves) && len(state.WaveTaskLinkageIssues(*plan, waveRuns)) == 0 {
+					currentWaveIndex = state.ResumeWaveIndex(*plan, waveRuns)
+					runByWave := make(map[int]model.WaveRun, len(waveRuns))
+					for _, run := range waveRuns {
+						runByWave[run.WaveIndex] = run
+					}
+					for _, plannedWave := range plan.Waves {
+						verdict := model.WaveVerdictPending
+						if run, ok := runByWave[plannedWave.WaveIndex]; ok {
+							verdict = run.Verdict
+						}
+						wavesByVerdict[string(verdict)]++
+						if verdict == model.WaveVerdictPass {
+							completedWaves++
+						}
+					}
+				}
 			}
 		}
 	}
@@ -144,12 +175,18 @@ func executionProgress(
 		StageIndex:        stageIndex,
 		StageTotal:        stageTotal,
 		StageName:         stageName(change.CurrentState, change.IntakeSubStep, change.PlanSubStep),
+		CurrentWaveIndex:  currentWaveIndex,
+		CompletedWaves:    completedWaves,
+		TotalWaves:        totalWaves,
 		TasksCompleted:    completed,
 		TasksTotal:        total,
 		RunSummaryVersion: latestRunVersion,
 	}
 	if len(byVerdict) > 0 {
 		progress.TasksByVerdict = byVerdict
+	}
+	if len(wavesByVerdict) > 0 {
+		progress.WavesByVerdict = wavesByVerdict
 	}
 	return progress
 }

@@ -82,59 +82,106 @@ func applyReadinessToNextContext(view *nextView, readiness progression.Governanc
 // buildResumeCheckpoint handles active checkpoint validation and wave execution
 // resume checkpoint construction for governed changes.
 func buildResumeCheckpoint(root string, change *model.Change, execCtx executionContext, view *nextView, resumeResponse string, preview bool) error {
-	if !preview {
-		if change.ActiveCheckpoint != nil {
+	if err := validateActiveCheckpointAuthority(root, *change, execCtx, "next"); err != nil {
+		return err
+	}
+
+	completedTaskIDs, freshness, resumeWaveIndex, err := buildResumeCheckpointProgress(root, *change, execCtx)
+	if err != nil {
+		return err
+	}
+
+	if change.ActiveCheckpoint != nil {
+		checkpoint := &resumeCheckpoint{
+			RunSummaryVersion: execCtx.LatestRunVersion,
+			CompletedTaskIDs:  completedTaskIDs,
+			Freshness:         freshness,
+			ResumeWaveIndex:   resumeWaveIndex,
+			PausedTaskID:      change.ActiveCheckpoint.PausedTaskID,
+			PausedWaveIndex:   change.ActiveCheckpoint.PausedWaveIndex,
+			CheckpointType:    change.ActiveCheckpoint.CheckpointType,
+		}
+		if strings.TrimSpace(resumeResponse) != "" {
 			if err := validateResumeResponse(change.ActiveCheckpoint, resumeResponse); err != nil {
 				return err
 			}
-			view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
-				RunSummaryVersion:   execCtx.LatestRunVersion,
-				PausedTaskID:        change.ActiveCheckpoint.PausedTaskID,
-				CheckpointType:      change.ActiveCheckpoint.CheckpointType,
-				UserResponsePayload: resumeResponse,
+			checkpoint.UserResponsePayload = resumeResponse
+			if !preview {
+				// Run consumes the checkpoint only after the full next view succeeds
+				// so failed readiness/projection passes preserve the pending resume
+				// contract.
+				view.consumeActiveCheckpoint = true
 			}
-			// Non-preview `next` consumes the checkpoint only after the full
-			// next view succeeds so failed readiness/projection passes preserve
-			// the pending resume contract.
-			view.consumeActiveCheckpoint = true
-		} else if strings.TrimSpace(resumeResponse) != "" {
-			return newPreconditionError(
-				"no_active_checkpoint",
-				"--resume-response provided but no active checkpoint exists",
-				"Remove --resume-response when no checkpoint is pending.",
-				"",
-				nil,
-			)
 		}
-	} else if change.ActiveCheckpoint != nil {
-		view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
-			RunSummaryVersion: execCtx.LatestRunVersion,
-			PausedTaskID:      change.ActiveCheckpoint.PausedTaskID,
-			CheckpointType:    change.ActiveCheckpoint.CheckpointType,
-		}
+		view.InputContext.ResumeCheckpoint = checkpoint
+	} else if strings.TrimSpace(resumeResponse) != "" {
+		return newPreconditionError(
+			"no_active_checkpoint",
+			"--resume-response provided but no active checkpoint exists",
+			"Remove --resume-response when no checkpoint is pending.",
+			"",
+			nil,
+		)
 	}
 
 	if change.CurrentState == model.StateS2Execute && execCtx.Ready && view.InputContext.ResumeCheckpoint == nil {
-		completed := progression.BuildResumeCompletedTasks(*execCtx.Summary)
-		hasCompletedTasks := len(execCtx.Summary.CompletedTasks) > 0
-		if hasCompletedTasks {
-			ids := make([]string, 0, len(completed))
-			for id := range completed {
-				ids = append(ids, id)
-			}
-			slices.Sort(ids)
-			freshness := projectFreshnessForExecMode(
-				root,
-				*change,
-				execCtx.Summary,
-				nil,
-			)
+		if len(completedTaskIDs) > 0 {
 			view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
 				RunSummaryVersion: execCtx.LatestRunVersion,
-				CompletedTaskIDs:  ids,
+				CompletedTaskIDs:  completedTaskIDs,
 				Freshness:         freshness,
+				ResumeWaveIndex:   resumeWaveIndex,
 			}
 		}
 	}
+
+	if preview && change.ActiveCheckpoint != nil {
+		view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
+			RunSummaryVersion: execCtx.LatestRunVersion,
+			CompletedTaskIDs:  completedTaskIDs,
+			Freshness:         freshness,
+			ResumeWaveIndex:   resumeWaveIndex,
+			PausedTaskID:      change.ActiveCheckpoint.PausedTaskID,
+			PausedWaveIndex:   change.ActiveCheckpoint.PausedWaveIndex,
+			CheckpointType:    change.ActiveCheckpoint.CheckpointType,
+		}
+	}
 	return nil
+}
+
+func buildResumeCheckpointProgress(
+	root string,
+	change model.Change,
+	execCtx executionContext,
+) ([]string, string, int, error) {
+	if !execCtx.Ready || execCtx.Summary == nil || len(execCtx.Summary.CompletedTasks) == 0 {
+		return nil, "", 0, nil
+	}
+
+	completed := progression.BuildResumeCompletedTasks(*execCtx.Summary)
+	ids := make([]string, 0, len(completed))
+	for id := range completed {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	freshness := projectFreshnessForExecMode(
+		root,
+		change,
+		execCtx.Summary,
+		nil,
+	)
+
+	resumeWaveIndex := 0
+	if execCtx.LatestRunVersion > 0 {
+		waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "next")
+		if err != nil {
+			return nil, "", 0, err
+		}
+		if waveCtx != nil {
+			resumeWaveIndex = state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs)
+		}
+	}
+
+	return ids, freshness, resumeWaveIndex, nil
 }

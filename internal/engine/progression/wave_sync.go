@@ -62,7 +62,21 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
 	}
 
-	tasksPlanHash, tasksPlanUpdatedAt, err := currentTasksPlanState(root, change)
+	wavePlan, err := state.LoadWavePlanForChange(root, change)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return WaveSyncResult{
+				Blockers: []model.ReasonCode{model.NewReasonCode("wave_plan_missing", change.Slug)},
+			}, nil
+		}
+		return WaveSyncResult{}, err
+	}
+	waveRuns, err := state.BuildWaveRuns(wavePlan, record.RunVersion, tasks)
+	if err != nil {
+		return WaveSyncResult{}, err
+	}
+
+	tasksPlanHash, tasksPlanUpdatedAt, err := state.CurrentTasksPlanState(root, change)
 	if err != nil {
 		return WaveSyncResult{}, err
 	}
@@ -85,6 +99,16 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
 		executionSummary.SyncDerivedFields()
 	}
+	existingWaveRuns, err := state.LoadOptionalWaveRuns(root, change.Slug, record.RunVersion)
+	if err != nil {
+		return WaveSyncResult{}, err
+	}
+	wroteWaveRuns := !waveRunsEqual(existingWaveRuns, waveRuns)
+	if wroteWaveRuns {
+		if err := state.SaveWaveRuns(root, change.Slug, record.RunVersion, waveRuns); err != nil {
+			return WaveSyncResult{}, err
+		}
+	}
 	wroteExecutionSummary := existingSummary == nil || !existingSummary.Equal(executionSummary)
 	if wroteExecutionSummary {
 		if err := state.SaveExecutionSummary(root, change.Slug, executionSummary); err != nil {
@@ -94,7 +118,7 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 
 	runs := executionSummary.TaskRunMap()
 
-	updated := wroteExecutionSummary
+	updated := wroteExecutionSummary || wroteWaveRuns
 	if len(planDriftBlockers) == 0 {
 		wroteChecklist, err := syncCompletedTaskCheckboxes(root, change, runs)
 		if err != nil {
@@ -414,30 +438,6 @@ func BuildResumeCompletedTasks(summary model.ExecutionSummary) map[string]bool {
 	return completed
 }
 
-func currentTasksPlanState(root string, change model.Change) (string, time.Time, error) {
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	info, err := os.Stat(tasksPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", time.Time{}, nil
-		}
-		return "", time.Time{}, err
-	}
-	raw, err := os.ReadFile(tasksPath)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	hash, err := wave.TaskPlanSemanticHash(string(raw))
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	return hash, info.ModTime().UTC(), nil
-}
-
 func tasksPlanChangedSinceTaskEvidenceBlockers(
 	previousHash string,
 	tasks []model.ExecutionTaskSummary,
@@ -466,4 +466,25 @@ func tasksPlanChangedSinceTaskEvidenceBlockers(
 		blockers = append(blockers, "tasks_plan_changed_since_task_evidence:"+taskID)
 	}
 	return blockers
+}
+
+func waveRunsEqual(left, right []model.WaveRun) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		l := left[i]
+		r := right[i]
+		l.Normalize()
+		r.Normalize()
+		if l.WaveIndex != r.WaveIndex ||
+			l.RunSummaryVersion != r.RunSummaryVersion ||
+			!l.StartedAt.Equal(r.StartedAt) ||
+			!l.CompletedAt.Equal(r.CompletedAt) ||
+			l.Verdict != r.Verdict ||
+			!slices.Equal(l.TaskRuns, r.TaskRuns) {
+			return false
+		}
+	}
+	return true
 }

@@ -637,6 +637,298 @@ func TestBuildGovernedStatusViewPendingPresetShowsPresetInNextActions(t *testing
 	})
 }
 
+func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` first wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending checkpointed wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, `run --resume-response "<response>"`, view.NextReadyActions[0])
+		assert.Contains(t, renderStatusText(view), `slipway run --resume-response "<response>"`)
+	})
+}
+
+func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when pre-summary wave plan is missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "repair", view.NextReadyActions[0])
+		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave-plan.yaml")
+
+		found := false
+		for _, blocker := range view.Blockers {
+			if blocker.Code == "wave_plan_missing" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected status blockers to include wave_plan_missing")
+	})
+}
+
+func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAreMissing(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			PausedAt:        time.Now().UTC(),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending checkpointed wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "repair", view.NextReadyActions[0])
+		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
+
+		found := false
+		for _, blocker := range view.Blockers {
+			if blocker.Code == "wave_runs_missing" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected status blockers to include wave_runs_missing")
+	})
+}
+
+func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "run --resume", view.NextReadyActions[0])
+		assert.Contains(t, renderStatusText(view), "slipway run --resume")
+	})
+}
+
+func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "2026-04-11T10:30:00Z", view.InterruptedExecutionAt)
+		assert.Equal(t, "run --resume", view.NextReadyActions[0])
+		assert.Contains(t, view.Narrative, "interrupted at 2026-04-11T10:30:00Z")
+		assert.Contains(t, renderStatusText(view), "Interrupted Execution: 2026-04-11T10:30:00Z")
+	})
+}
+
+func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: code
+`)))
+
+		plan, err := state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+		summary, err := state.LoadExecutionSummary(root, slug)
+		require.NoError(t, err)
+		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+		require.NoError(t, err)
+		require.Len(t, runs, 2)
+		require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "repair", view.NextReadyActions[0])
+		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "incomplete wave run evidence")
+
+		found := false
+		for _, blocker := range view.Blockers {
+			if blocker.Code == "wave_runs_incomplete" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected status blockers to include wave_runs_incomplete")
+	})
+}
+
+func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed only wave
+  - depends_on: []
+  - target_files: ["cmd/status_view_build.go"]
+  - task_kind: verification
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, view.NextReadyActions)
+		assert.Equal(t, "repair", view.NextReadyActions[0])
+		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
+
+		found := false
+		for _, blocker := range view.Blockers {
+			if blocker.Code == "wave_runs_missing" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected status blockers to include wave_runs_missing")
+	})
+}
+
 func TestComputeProgressExcludesPassWithBlockersFromCompleted(t *testing.T) {
 	t.Parallel()
 

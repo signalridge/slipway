@@ -264,6 +264,19 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 				{TaskID: "task-a", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindCode, CapturedAt: now},
 			},
 		}))
+		require.NoError(t, state.SaveWavePlan(root, slug, model.WavePlan{
+			Version:       model.WavePlanVersion,
+			GeneratedAt:   now,
+			TasksPlanHash: "task-plan-hash",
+			TotalTasks:    1,
+			Waves: []model.WavePlanWave{{
+				WaveIndex: 1,
+				Tasks: []model.WavePlanTask{{
+					TaskID:   "task-a",
+					TaskKind: model.TaskKindCode,
+				}},
+			}},
+		}))
 		runtimeEvidence := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
 		require.NoError(t, os.MkdirAll(filepath.Dir(runtimeEvidence), 0o755))
 		require.NoError(t, os.WriteFile(runtimeEvidence, []byte(`{"task_id":"task-a","run_summary_version":1,"verdict":"pass"}`), 0o644))
@@ -281,6 +294,8 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 		assert.True(t, os.IsNotExist(err), "runtime evidence directory should be removed")
 		_, err = os.Stat(pidPath)
 		assert.True(t, os.IsNotExist(err), "task PID registry should be removed")
+		_, err = os.Stat(state.WavePlanPathForRead(root, slug))
+		assert.True(t, os.IsNotExist(err), "wave plan should be removed")
 	})
 }
 

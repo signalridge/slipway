@@ -1,0 +1,26 @@
+---
+name: slipway-validate-requirements
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "validate-requirements"
+trigger: "{{.Trigger}}"
+---
+
+# Validate Requirements
+
+Validate the governed `requirements.md` contract for the active change without mutating any state.
+
+## Invocation
+```bash
+slipway validate-requirements --json
+```
+
+## Contract
+- Reads the active change's `requirements.md` from the governed bundle.
+- Verifies the file exists and contains well-formed Requirement blocks with stable `REQ-*` IDs.
+- Does not write files, merge artifacts, or change lifecycle state.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific change (defaults to active change)

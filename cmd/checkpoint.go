@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -10,10 +13,11 @@ import (
 )
 
 type checkpointView struct {
-	Slug           string `json:"slug"`
-	PausedTaskID   string `json:"paused_task_id"`
-	CheckpointType string `json:"checkpoint_type"`
-	Set            bool   `json:"set"`
+	Slug            string `json:"slug"`
+	PausedTaskID    string `json:"paused_task_id"`
+	PausedWaveIndex int    `json:"paused_wave_index,omitempty"`
+	CheckpointType  string `json:"checkpoint_type"`
+	Set             bool   `json:"set"`
 }
 
 func makeCheckpointCmd() *cobra.Command {
@@ -27,7 +31,7 @@ func makeCheckpointCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "checkpoint",
-		Short: "Set an active checkpoint to pause wave execution and request user input",
+		Short: desc("checkpoint"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
@@ -90,21 +94,83 @@ func makeCheckpointCmd() *cobra.Command {
 					return newInvalidUsageError(
 						"checkpoint_already_active",
 						fmt.Sprintf("checkpoint already active for task %s", change.ActiveCheckpoint.PausedTaskID),
-						"Resume the existing checkpoint with `slipway next --resume-response` before setting a new one.",
+						"Resume the existing checkpoint with `slipway run --resume-response` before setting a new one.",
+						nil,
+					)
+				}
+
+				execCtx, err := loadExecutionContext(root, change)
+				if err != nil {
+					return err
+				}
+
+				var wavePlan model.WavePlan
+				currentWaveIndex := 0
+				if execCtx.Ready && execCtx.LatestRunVersion > 0 {
+					waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "checkpoint")
+					if err != nil {
+						return err
+					}
+					if waveCtx != nil {
+						wavePlan = waveCtx.Plan
+						currentWaveIndex = state.ResumeWaveIndex(wavePlan, waveCtx.Runs)
+					}
+				} else {
+					wavePlan, err = state.LoadWavePlanForChange(root, change)
+					if err != nil {
+						if errors.Is(err, fs.ErrNotExist) {
+							return newStateIntegrityError(
+								"wave_plan_missing",
+								"checkpoint requires wave-plan.yaml but it is missing",
+								"Run `slipway repair` to restore execution plan artifacts before setting a checkpoint.",
+								change.Slug,
+								map[string]any{"path": state.WavePlanPathForRead(root, change.Slug)},
+							)
+						}
+						return err
+					}
+					currentWaveIndex = state.ResumeWaveIndex(wavePlan, nil)
+				}
+				if currentWaveIndex == 0 {
+					return newInvalidUsageError(
+						"checkpoint_unavailable",
+						"all planned waves have already passed; no active wave can be checkpointed",
+						"Use `slipway next` or `slipway done` to continue the lifecycle instead of setting a checkpoint.",
+						nil,
+					)
+				}
+
+				pausedWaveIndex := wavePlan.WaveIndexForTask(taskID)
+				if pausedWaveIndex == 0 {
+					return newInvalidUsageError(
+						"checkpoint_task_unknown",
+						fmt.Sprintf("task %q is not present in the current wave plan", taskID),
+						"Use a task id from tasks.md / wave-plan.yaml and retry.",
+						nil,
+					)
+				}
+				if pausedWaveIndex != currentWaveIndex {
+					return newInvalidUsageError(
+						"checkpoint_task_not_in_current_wave",
+						fmt.Sprintf("task %q belongs to wave %d, but the current incomplete wave is %d", taskID, pausedWaveIndex, currentWaveIndex),
+						"Choose a task from the current incomplete wave before setting a checkpoint.",
 						nil,
 					)
 				}
 
 				change.ActiveCheckpoint = &cp
+				change.ActiveCheckpoint.PausedWaveIndex = pausedWaveIndex
+				change.ActiveCheckpoint.PausedAt = time.Now().UTC()
 				if err := state.SaveChange(root, change); err != nil {
 					return err
 				}
 
 				view := checkpointView{
-					Slug:           ref.Slug,
-					PausedTaskID:   taskID,
-					CheckpointType: checkpointType,
-					Set:            true,
+					Slug:            ref.Slug,
+					PausedTaskID:    taskID,
+					PausedWaveIndex: pausedWaveIndex,
+					CheckpointType:  checkpointType,
+					Set:             true,
 				}
 
 				if jsonOutput {
@@ -113,8 +179,8 @@ func makeCheckpointCmd() *cobra.Command {
 
 				writer := newFormatWriter(cmd.OutOrStdout())
 				writer.Writef(
-					"Checkpoint set: task=%s type=%s\nResume with: slipway next --resume-response \"<response>\"\n",
-					taskID, checkpointType,
+					"Checkpoint set: task=%s wave=%d type=%s\nResume with: slipway run --resume-response \"<response>\"\n",
+					taskID, pausedWaveIndex, checkpointType,
 				)
 				return writer.Err()
 			})

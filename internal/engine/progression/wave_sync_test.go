@@ -15,6 +15,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func writeTasksAndMaterializeWavePlan(t *testing.T, root string, change model.Change, tasks string) string {
+	t.Helper()
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(tasks), 0o644))
+
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	return tasksPath
+}
+
 func TestCollectNonPassTaskBlockers_AllPass(t *testing.T) {
 	t.Parallel()
 	runs := map[string]model.TaskRun{
@@ -215,6 +230,12 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)
 
 	taskEvidence := map[string]any{
 		"task_id":             "task-a",
@@ -274,6 +295,14 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)
+	plan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
 
 	taskEvidence := map[string]any{
 		"task_id":             "task-a",
@@ -295,7 +324,13 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
+	matching.TasksPlanHash, _, err = state.CurrentTasksPlanState(root, change)
+	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
+
+	runs, err := state.BuildWaveRuns(plan, 1, tasks)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
 
 	result, err := SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
@@ -320,6 +355,14 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)
+	plan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
 
 	taskEvidence := map[string]any{
 		"task_id":             "task-a",
@@ -341,7 +384,13 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
+	matching.TasksPlanHash, _, err = state.CurrentTasksPlanState(root, change)
+	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
+
+	runs, err := state.BuildWaveRuns(plan, 1, tasks)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
 
 	summaryPath := filepath.Join(state.VerificationDir(root, slug), state.ExecutionSummaryFileName)
 	infoBefore, err := os.Stat(summaryPath)
@@ -349,7 +398,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 
 	result, err := SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
-	assert.False(t, result.Updated)
+	assert.Empty(t, result.Blockers)
 
 	infoAfter, err := os.Stat(summaryPath)
 	require.NoError(t, err)
@@ -374,7 +423,7 @@ func TestCurrentTasksPlanHashUsesSemanticTaskPlanHash(t *testing.T) {
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasks), 0o644))
 
-	got, _, err := currentTasksPlanState(root, change)
+	got, _, err := state.CurrentTasksPlanState(root, change)
 	require.NoError(t, err)
 	want, err := wave.TaskPlanSemanticHash(tasks)
 	require.NoError(t, err)
@@ -415,10 +464,7 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
   - target_files: ["cmd/status.go"]
   - task_kind: doc
 `
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	if err := os.WriteFile(tasksPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write tasks.md: %v", err)
-	}
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, content)
 	tasksPlanAt := record.Timestamp.Add(-1 * time.Minute)
 	if err := os.Chtimes(tasksPath, tasksPlanAt, tasksPlanAt); err != nil {
 		t.Fatalf("chtime tasks.md: %v", err)
@@ -491,6 +537,16 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+
+- [ ] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+`)
 
 	sharedSessionID := "session-shared"
 	for _, taskID := range []string{"task-a", "task-b"} {
@@ -560,8 +616,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	require.NoError(t, os.WriteFile(tasksPath, []byte(initialTasks), 0o644))
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
 	initialHash, err := wave.TaskPlanSemanticHash(initialTasks)
 	require.NoError(t, err)
 
@@ -660,8 +715,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	require.NoError(t, os.WriteFile(tasksPath, []byte(initialTasks), 0o644))
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
 	initialHash, err := wave.TaskPlanSemanticHash(initialTasks)
 	require.NoError(t, err)
 
@@ -729,6 +783,8 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 	taskPath = filepath.Join(state.EvidenceTasksDir(root, slug, 2), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
 	result, err = SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
@@ -781,8 +837,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	require.NoError(t, os.WriteFile(tasksPath, []byte(initialTasks), 0o644))
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
 
 	evidenceAt := record.Timestamp
 	taskEvidence := map[string]any{

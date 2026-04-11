@@ -1,0 +1,63 @@
+---
+name: slipway-run
+description: "{{.Description}}"
+type: command
+tool: "{{.ToolID}}"
+command_id: "run"
+trigger: "{{.Trigger}}"
+---
+
+# Run
+
+Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome.
+
+## Invocation
+```bash
+slipway run --json
+slipway run --resume --json
+slipway run --resume-response "<response>" --json
+```
+
+## Contract
+- `run` owns continuous governed execution.
+- `run --resume` resumes governed execution from the latest incomplete wave when no active checkpoint exists.
+- `run --resume-response "<response>"` resumes an active checkpoint and consumes the checkpoint payload.
+- When returned JSON includes `input_context.resume_checkpoint.user_response_payload`, carry that response and `checkpoint_type` into the next execution skill; do not drop or rewrite operator input.
+- If an active checkpoint exists, plain `run` is rejected and `--resume-response` is required.
+- If resumable non-checkpoint execution exists, plain `run` is rejected and `--resume` is required.
+- `run` reuses the same `next --json` contract for the returned next-skill / blocker surface.
+
+## When To Use
+- You want Slipway to keep advancing / validating until the workflow surfaces the next skill or another stop condition.
+- You are resuming wave execution after a prior interruption.
+- You are resuming a paused checkpoint after obtaining the required human response.
+
+## Pause Conditions
+- A next skill is surfaced.
+- Blockers are present.
+- A checkpoint is active.
+- The change is done-ready or done.
+
+## Context Self-Monitoring (SHOULD)
+During long-running execution, periodically check context health:
+- After every 3 tasks executed, run `slipway status --json` and inspect `context_budget.health`
+- If health is `degrading` or `poor`, pause and spawn a fresh subagent before continuing
+- If `guard_action` is `warn`, trim non-essential context
+- If `guard_action` is `stop`, cease execution immediately and write handoff state
+
+## Fresh Reviewer Pause Rule
+When `run` reaches a governed review skill (`spec-compliance-review`, `code-quality-review`, or `final-closeout`), stop and hand off to a fresh reviewer agent. Do not let the same long-running execution context review its own prior implementation work.
+
+## Subagent Continuation Rule (HARD RULE)
+After any checkpoint pause, user intervention, or governed review handoff, a fresh subagent MUST be spawned to continue execution. Do not resume in the same context that produced the prior evidence.
+
+## Failure Handling
+1. On any command/runtime error, stop and show the error details.
+2. On evidence validation failure, stop and require targeted remediation.
+3. If three consecutive skills fail, exit the loop and require manual intervention before retrying.
+
+## Flags
+- `--resume`: continue resumable non-checkpoint execution from the latest incomplete wave
+- `--resume-response "<response>"`: resume an active checkpoint with explicit response text
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change

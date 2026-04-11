@@ -38,6 +38,7 @@ type frozenToolContract struct {
 }
 
 var frozenAdapterCommandIDs = []string{
+	"abort",
 	"cancel",
 	"checkpoint",
 	"done",
@@ -48,8 +49,9 @@ var frozenAdapterCommandIDs = []string{
 	"preset",
 	"repair",
 	"review",
+	"run",
 	"status",
-	"sync",
+	"validate-requirements",
 	"validate",
 }
 

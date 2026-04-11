@@ -122,7 +122,7 @@ func makeDoneCmd() *cobra.Command {
 	var changeSlug string
 	cmd := &cobra.Command{
 		Use:   "done",
-		Short: "Finalize a done-ready change and archive it",
+		Short: desc("done"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {

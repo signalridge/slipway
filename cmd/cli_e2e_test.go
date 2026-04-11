@@ -107,11 +107,11 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		nextPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S0_INTAKE", nextPayload["current_state"])
 
-		stdout, stderr, err = runRootCommand([]string{"sync", "--json"})
+		stdout, stderr, err = runRootCommand([]string{"validate-requirements", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
-		syncPayload := decodeJSONMap(t, stdout)
-		assert.Equal(t, true, syncPayload["valid"])
+		validateRequirementsPayload := decodeJSONMap(t, stdout)
+		assert.Equal(t, true, validateRequirementsPayload["valid"])
 
 		stdout, stderr, err = runRootCommand([]string{"checkpoint", "--json", "--task-id", "task-01", "--type", "human_verify"})
 		require.Error(t, err)
@@ -152,6 +152,132 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 	})
 }
 
+func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L3", "run should stop at research orchestration")
+
+		stdout, stderr, err := runRootCommand([]string{"run", "--json", "--change", slug})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+
+		runPayload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "S1_PLAN", runPayload["current_state"])
+
+		nextSkill, ok := runPayload["next_skill"].(map[string]any)
+		require.True(t, ok, "expected next_skill in run output")
+		assert.Equal(t, "research-orchestration", nextSkill["name"])
+		assert.Equal(t, "slipway-researcher", nextSkill["agent_hint"])
+	})
+}
+
+func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "run resume-response e2e")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  "human_verify",
+		}
+		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` checkpointed second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		stdout, stderr, err := runRootCommand([]string{"run", "--json", "--resume-response", "verified ok", "--change", slug})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+
+		runPayload := decodeJSONMap(t, stdout)
+		inputContext, ok := runPayload["input_context"].(map[string]any)
+		require.True(t, ok, "expected input_context in run output")
+		resumeCheckpoint, ok := inputContext["resume_checkpoint"].(map[string]any)
+		require.True(t, ok, "expected resume_checkpoint in run output")
+		assert.Equal(t, "task-02", resumeCheckpoint["paused_task_id"])
+		assert.Equal(t, float64(2), resumeCheckpoint["paused_wave_index"])
+		assert.Equal(t, "verified ok", resumeCheckpoint["user_response_payload"])
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Nil(t, after.ActiveCheckpoint, "run --resume-response should consume the active checkpoint")
+	})
+}
+
+func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "abort then resume e2e")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave before abort
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` continue second wave after abort
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		stdout, stderr, err := runRootCommand([]string{"abort", "--json", "--change", slug})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		abortPayload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "S2_EXECUTE", abortPayload["current_state"])
+
+		stdout, stderr, err = runRootCommand([]string{"run", "--json", "--change", slug})
+		require.Error(t, err)
+		assert.Empty(t, stdout)
+		errPayload := decodeJSONMap(t, stderr)
+		assert.Equal(t, "resume_required", errPayload["error_code"])
+
+		stdout, stderr, err = runRootCommand([]string{"run", "--json", "--resume", "--change", slug})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		runPayload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "S2_EXECUTE", runPayload["current_state"])
+		nextSkill, ok := runPayload["next_skill"].(map[string]any)
+		require.True(t, ok, "expected next_skill in resumed run output")
+		assert.Equal(t, "wave-orchestration", nextSkill["name"])
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, after.InterruptedExecutionAt.IsZero(), "run --resume should clear interrupted execution marker")
+	})
+}
+
 func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -179,7 +305,7 @@ func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndSuccessfulSyncValidatesRequirements(t *testing.T) {
+func TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -194,11 +320,11 @@ func TestCLIEndToEndSuccessfulSyncValidatesRequirements(t *testing.T) {
 		reqContent := "# Requirements\n\n### Requirement: Token Auth\nREQ-001: The system MUST support token-based authentication.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
-		stdout, stderr, err := runRootCommand([]string{"sync", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommand([]string{"validate-requirements", "--json", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
-		view := syncView{}
+		view := validateRequirementsView{}
 		require.NoError(t, json.Unmarshal([]byte(stdout), &view))
 		assert.True(t, view.Valid)
 		assert.Equal(t, slug, view.Slug)
@@ -222,25 +348,30 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
+		plan, err := state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+		require.NotEmpty(t, plan.Waves)
+		require.NotEmpty(t, plan.Waves[0].Tasks)
+		taskID := plan.Waves[0].Tasks[0].TaskID
 
 		out := bytes.NewBuffer(nil)
 		cmd := makeCheckpointCmd()
 		cmd.SetOut(out)
 		cmd.SetErr(out)
-		cmd.SetArgs([]string{"--json", "--task-id", "task-e2e-01", "--type", "human_verify"})
+		cmd.SetArgs([]string{"--json", "--task-id", taskID, "--type", "human_verify"})
 		require.NoError(t, cmd.Execute())
 
 		var view checkpointView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.True(t, view.Set)
-		assert.Equal(t, "task-e2e-01", view.PausedTaskID)
+		assert.Equal(t, taskID, view.PausedTaskID)
 		assert.Equal(t, "human_verify", view.CheckpointType)
 
 		// Verify persisted.
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
 		require.NotNil(t, change.ActiveCheckpoint)
-		assert.Equal(t, "task-e2e-01", change.ActiveCheckpoint.PausedTaskID)
+		assert.Equal(t, taskID, change.ActiveCheckpoint.PausedTaskID)
 	})
 }
 
@@ -273,6 +404,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		out := bytes.NewBuffer(nil)
 		cmd := makeReviewCmd()
@@ -321,7 +453,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndSyncAfterRequestNext(t *testing.T) {
+func TestCLIEndToEndValidateRequirementsAfterRequestNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -337,15 +469,15 @@ func TestCLIEndToEndSyncAfterRequestNext(t *testing.T) {
 		reqContent := "# Requirements\n\n## Requirements\n\n### Requirement: Token Rotation\nREQ-001: The system MUST rotate tokens on schedule.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
-		syncOut := bytes.NewBuffer(nil)
-		syncCmd := makeSyncCmd()
-		syncCmd.SetOut(syncOut)
-		syncCmd.SetErr(syncOut)
-		syncCmd.SetArgs([]string{"--json", "--change", slug})
-		require.NoError(t, syncCmd.Execute())
+		validateOut := bytes.NewBuffer(nil)
+		validateCmd := makeValidateRequirementsCmd()
+		validateCmd.SetOut(validateOut)
+		validateCmd.SetErr(validateOut)
+		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		require.NoError(t, validateCmd.Execute())
 
-		realView := syncView{}
-		require.NoError(t, json.Unmarshal(syncOut.Bytes(), &realView))
+		realView := validateRequirementsView{}
+		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &realView))
 		assert.True(t, realView.Valid)
 		assert.Contains(t, realView.Message, "validated")
 

@@ -205,10 +205,12 @@ func TestRenderAdapterSkillTemplates(t *testing.T) {
 		"skills/cancel/SKILL.md.tmpl",
 		"skills/preset/SKILL.md.tmpl",
 		"skills/review/SKILL.md.tmpl",
+		"skills/run/SKILL.md.tmpl",
 		"skills/validate/SKILL.md.tmpl",
+		"skills/validate-requirements/SKILL.md.tmpl",
 		"skills/pivot/SKILL.md.tmpl",
+		"skills/abort/SKILL.md.tmpl",
 		"skills/repair/SKILL.md.tmpl",
-		"skills/sync/SKILL.md.tmpl",
 		"skills/checkpoint/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
 	}
@@ -235,10 +237,12 @@ func TestAdapterSkillTemplateFrontmatterIncludesDescription(t *testing.T) {
 		"skills/cancel/SKILL.md.tmpl",
 		"skills/preset/SKILL.md.tmpl",
 		"skills/review/SKILL.md.tmpl",
+		"skills/run/SKILL.md.tmpl",
 		"skills/validate/SKILL.md.tmpl",
+		"skills/validate-requirements/SKILL.md.tmpl",
 		"skills/pivot/SKILL.md.tmpl",
+		"skills/abort/SKILL.md.tmpl",
 		"skills/repair/SKILL.md.tmpl",
-		"skills/sync/SKILL.md.tmpl",
 		"skills/checkpoint/SKILL.md.tmpl",
 	}
 	data := map[string]string{
@@ -306,7 +310,16 @@ func TestContentReturnsAgentDefinitions(t *testing.T) {
 		assert.NotEmpty(t, content, "%s is empty", path)
 		assert.Contains(t, content, "---", "%s missing frontmatter", path)
 		assert.Contains(t, content, "name: "+name, "%s missing name field", path)
+		assert.Contains(t, content, "agent_status:", "%s missing agent_status field", path)
 	}
+}
+
+func TestPlannerAgentIncludesIntakeClarificationBinding(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("agents/slipway-planner.md")
+	require.NoError(t, err)
+	assert.Contains(t, content, "intake-clarification")
 }
 
 func TestAgentNamesMatchesFiles(t *testing.T) {
@@ -497,32 +510,45 @@ func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	assert.Contains(t, content2, `"should work"`, "banned-language partial should render into final-closeout")
 }
 
-func TestNextSkillContainsAutoModeBehavioralBlocks(t *testing.T) {
+func TestRunSkillContainsLoopBehavioralBlocks(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:next",
-		"Description": "Validate evidence, advance state, and show next skill",
+		"Trigger":     "/slipway:run",
+		"Description": "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
 	}
-	content, err := Render("skills/next/SKILL.md.tmpl", data)
+	content, err := Render("skills/run/SKILL.md.tmpl", data)
 	require.NoError(t, err)
 
-	// Context self-monitoring (from auto/SKILL.md.tmpl lines 71-84)
 	assert.Contains(t, content, "context_budget.health",
-		"next skill missing context self-monitoring block")
+		"run skill missing context self-monitoring block")
 
-	// Fresh-reviewer pause mandate for governed review stages.
 	assert.Contains(t, content, "fresh reviewer agent",
-		"next skill missing fresh-reviewer pause mandate")
+		"run skill missing fresh-reviewer pause mandate")
 
-	// Subagent continuation HARD RULE (from auto/SKILL.md.tmpl lines 99-104)
 	assert.Contains(t, content, "Subagent Continuation Rule (HARD RULE)",
-		"next skill missing subagent continuation hard rule")
+		"run skill missing subagent continuation hard rule")
 
-	// 3-consecutive-failure exit (from auto/SKILL.md.tmpl line 109)
 	assert.Contains(t, content, "three consecutive skills fail",
-		"next skill missing 3-consecutive-failure exit rule")
+		"run skill missing 3-consecutive-failure exit rule")
 
+	assert.Contains(t, content, "user_response_payload",
+		"run skill missing checkpoint response handoff guidance")
+}
+
+func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+		"ToolID":  "claude",
+		"Trigger": "/slipway:wave-orchestration",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "user_response_payload",
+		"wave-orchestration skill missing checkpoint response guidance")
+	assert.Contains(t, content, "checkpoint_type",
+		"wave-orchestration skill missing checkpoint type guidance")
 }
 
 func TestContentNotFound(t *testing.T) {

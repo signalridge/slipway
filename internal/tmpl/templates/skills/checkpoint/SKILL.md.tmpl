@@ -20,7 +20,7 @@ slipway checkpoint --task-id <task_id> [--type <type>] [--allowed-responses <res
 - Sets an active checkpoint on the current governed change.
 - Only valid during `S2_EXECUTE` state.
 - Only one checkpoint can be active at a time.
-- Resume with `slipway next --resume-response "<response>"`.
+- Resume with `slipway run --resume-response "<response>"`.
 - After checkpoint resume, a **fresh subagent MUST be spawned** — do NOT continue in the same context.
 
 ## When to Use

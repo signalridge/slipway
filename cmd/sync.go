@@ -12,22 +12,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type syncView struct {
+type validateRequirementsView struct {
 	Slug    string `json:"slug"`
 	Source  string `json:"source"`
 	Valid   bool   `json:"valid"`
 	Message string `json:"message"`
 }
 
-func makeSyncCmd() *cobra.Command {
+func makeValidateRequirementsCmd() *cobra.Command {
 	var jsonOutput bool
 	var changeSlug string
 
 	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: "Validate change requirements (read-only)",
-		Long:  "Validate the change's requirements.md exists and is well-formed. Does not write any files.",
-		Args:  cobra.NoArgs,
+		Use:   "validate-requirements",
+		Short: desc("validate-requirements"),
+		Long: desc("validate-requirements") + ".\n\n" +
+			"This command is read-only and verifies that the governed requirements.md exists and is well-formed.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {
@@ -39,8 +40,8 @@ func makeSyncCmd() *cobra.Command {
 				return err
 			}
 
-			return withBestEffortChangeStateLock(root, ref.Slug, "sync", func() error {
-				view, err := runArtifactSync(root, ref.Slug)
+			return withBestEffortChangeStateLock(root, ref.Slug, "validate-requirements", func() error {
+				view, err := runValidateRequirements(root, ref.Slug)
 				if err != nil {
 					return err
 				}
@@ -59,42 +60,41 @@ func makeSyncCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	addChangeSelectorFlags(cmd, &changeSlug, "Governed change slug to sync (defaults to active change)")
+	addChangeSelectorFlags(cmd, &changeSlug, "Governed change slug to validate (defaults to active change)")
 	return cmd
 }
 
-func runArtifactSync(root, slug string) (syncView, error) {
+func runValidateRequirements(root, slug string) (validateRequirementsView, error) {
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
-		return syncView{}, err
+		return validateRequirementsView{}, err
 	}
 
 	changeDir, err := state.GovernedBundleDir(root, change)
 	if err != nil {
-		return syncView{}, err
+		return validateRequirementsView{}, err
 	}
 
-	// Source: the change's requirements.md (flat in bundle).
 	sourcePath := artifact.ResolveArtifactPath(changeDir, change.Slug, "requirements.md")
 	_, err = os.Stat(sourcePath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return syncView{
+			return validateRequirementsView{
 				Slug:    change.Slug,
 				Valid:   false,
-				Message: "no requirements.md found; nothing to sync",
+				Message: "requirements.md is missing",
 			}, nil
 		}
-		return syncView{}, err
+		return validateRequirementsView{}, err
 	}
 
 	raw, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return syncView{}, err
+		return validateRequirementsView{}, err
 	}
 	requirementCount := len(artifact.ParseRequirementBlocks(string(raw)))
 	if requirementCount == 0 {
-		return syncView{
+		return validateRequirementsView{
 			Slug:    change.Slug,
 			Source:  sourcePath,
 			Valid:   false,
@@ -103,7 +103,7 @@ func runArtifactSync(root, slug string) (syncView, error) {
 	}
 	missingStableIDs := artifact.RequirementBlocksMissingStableIDs(string(raw))
 	if len(missingStableIDs) > 0 {
-		return syncView{
+		return validateRequirementsView{
 			Slug:   change.Slug,
 			Source: sourcePath,
 			Valid:  false,
@@ -114,7 +114,7 @@ func runArtifactSync(root, slug string) (syncView, error) {
 		}, nil
 	}
 
-	return syncView{
+	return validateRequirementsView{
 		Slug:    change.Slug,
 		Source:  sourcePath,
 		Valid:   true,

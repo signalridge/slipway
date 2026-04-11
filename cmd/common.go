@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,30 @@ func projectRootFromWD() (string, error) {
 		return "", err
 	}
 	return "", fmt.Errorf("%w: workspace is not initialized; run `slipway init`", fsutil.ErrProjectRootNotFound)
+}
+
+// invocationWorkspaceRoot resolves the git worktree where the current command
+// is running. Adapter prompt/agent paths must follow the active invocation
+// workspace, not always the canonical scope root.
+func invocationWorkspaceRoot(projectRoot string) string {
+	workspaceRoot := projectRoot
+	wd, err := os.Getwd()
+	if err != nil {
+		return workspaceRoot
+	}
+
+	out, err := exec.Command("git", "-C", wd, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return workspaceRoot
+	}
+	resolved := strings.TrimSpace(string(out))
+	if resolved == "" {
+		return workspaceRoot
+	}
+	if normalized, err := state.NormalizePath(resolved); err == nil {
+		return normalized
+	}
+	return filepath.Clean(resolved)
 }
 
 func repairRootFromWD() (string, error) {
@@ -381,16 +406,32 @@ func currentWorktreeRoot() (string, error) {
 }
 
 func projectNextReadyActions(currentState model.WorkflowState) []string {
+	return projectNextReadyActionsWithPrimary(currentState, "")
+}
+
+func projectNextReadyActionsWithPrimary(currentState model.WorkflowState, primary string) []string {
 	actions := []string{}
 	if currentState == model.StateDone {
 		return actions
 	}
-	actions = append(actions, "next")
+	if primary = strings.TrimSpace(primary); primary != "" {
+		actions = append(actions, primary)
+	} else {
+		switch currentState {
+		case model.StateS2Execute:
+			actions = append(actions, "run")
+		default:
+			actions = append(actions, "next")
+		}
+	}
 	if currentState == model.StateS4Verify {
 		actions = append(actions, "done")
 	}
 	if currentState == model.StateS2Execute || currentState == model.StateS3Review || currentState == model.StateS4Verify {
 		actions = append(actions, "pivot")
+	}
+	if currentState == model.StateS2Execute {
+		actions = append(actions, "abort")
 	}
 	actions = append(actions, "cancel")
 	return actions
@@ -432,6 +473,108 @@ type executionContext struct {
 	SummaryBlockers []model.ReasonCode
 }
 
+type waveExecutionContext struct {
+	Plan model.WavePlan
+	Runs []model.WaveRun
+}
+
+func loadResumableWaveExecution(
+	root string,
+	change model.Change,
+	execCtx executionContext,
+	operation string,
+) (*waveExecutionContext, int, error) {
+	if change.CurrentState != model.StateS2Execute || !execCtx.Ready {
+		return nil, 0, nil
+	}
+
+	waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, operation)
+	if err != nil || waveCtx == nil {
+		return nil, 0, err
+	}
+	return waveCtx, state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs), nil
+}
+
+func validateActiveCheckpointAuthority(
+	root string,
+	change model.Change,
+	execCtx executionContext,
+	operation string,
+) error {
+	if change.ActiveCheckpoint == nil || change.CurrentState != model.StateS2Execute {
+		return nil
+	}
+
+	var plan model.WavePlan
+	if execCtx.Ready && execCtx.LatestRunVersion > 0 {
+		waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, operation)
+		if err != nil {
+			return err
+		}
+		if waveCtx == nil {
+			return nil
+		}
+		plan = waveCtx.Plan
+	} else {
+		loadedPlan, err := state.LoadWavePlanForChange(root, change)
+		if err != nil {
+			errorCode := "wave_plan_load_failed"
+			message := fmt.Sprintf("%s failed to load wave-plan.yaml for %q: %v", operation, change.Slug, err)
+			if errors.Is(err, fs.ErrNotExist) {
+				errorCode = "wave_plan_missing"
+				message = fmt.Sprintf("%s requires wave-plan.yaml for active checkpoint %q, but it is missing", operation, change.Slug)
+			}
+			return newStateIntegrityError(
+				errorCode,
+				message,
+				"Run `slipway repair` to restore wave execution artifacts before continuing.",
+				change.Slug,
+				map[string]any{
+					"path": state.WavePlanPathForRead(root, change.Slug),
+				},
+			)
+		}
+		plan = loadedPlan
+	}
+
+	return validateActiveCheckpointWavePlan(root, change, plan, operation)
+}
+
+func validateActiveCheckpointWavePlan(root string, change model.Change, plan model.WavePlan, operation string) error {
+	if change.ActiveCheckpoint == nil {
+		return nil
+	}
+
+	expectedWaveIndex := plan.WaveIndexForTask(change.ActiveCheckpoint.PausedTaskID)
+	if expectedWaveIndex == 0 {
+		return newStateIntegrityError(
+			"checkpoint_task_missing_from_wave_plan",
+			fmt.Sprintf("%s found active checkpoint task %q is not present in wave-plan.yaml for %q", operation, change.ActiveCheckpoint.PausedTaskID, change.Slug),
+			"Run `slipway repair` to clear the stale checkpoint before resuming execution.",
+			change.Slug,
+			map[string]any{
+				"path":    state.WavePlanPathForRead(root, change.Slug),
+				"task_id": change.ActiveCheckpoint.PausedTaskID,
+			},
+		)
+	}
+	if change.ActiveCheckpoint.PausedWaveIndex != expectedWaveIndex {
+		return newStateIntegrityError(
+			"checkpoint_wave_index_drift",
+			fmt.Sprintf("%s found checkpoint wave index drift for %q: task %q belongs to wave %d, checkpoint points at wave %d", operation, change.Slug, change.ActiveCheckpoint.PausedTaskID, expectedWaveIndex, change.ActiveCheckpoint.PausedWaveIndex),
+			"Run `slipway repair` to rewrite the checkpoint wave index before resuming execution.",
+			change.Slug,
+			map[string]any{
+				"path":                  state.WavePlanPathForRead(root, change.Slug),
+				"task_id":               change.ActiveCheckpoint.PausedTaskID,
+				"expected_wave_index":   expectedWaveIndex,
+				"checkpoint_wave_index": change.ActiveCheckpoint.PausedWaveIndex,
+			},
+		)
+	}
+	return nil
+}
+
 // loadExecutionContext loads the execution summary for a change and extracts
 // the unified readiness and blocker surface. This is the single call site for
 // execution-summary authority consumption.
@@ -457,6 +600,113 @@ func loadExecutionContext(root string, change model.Change) (executionContext, e
 		}
 	}
 	return ctx, nil
+}
+
+func loadAuthoritativeWaveExecution(
+	root string,
+	change model.Change,
+	runVersion int,
+	operation string,
+) (*waveExecutionContext, error) {
+	if runVersion < 1 {
+		return nil, nil
+	}
+
+	plan, err := state.LoadWavePlanForChange(root, change)
+	if err != nil {
+		errorCode := "wave_plan_load_failed"
+		message := fmt.Sprintf("%s failed to load wave-plan.yaml for %q: %v", operation, change.Slug, err)
+		if errors.Is(err, fs.ErrNotExist) {
+			errorCode = "wave_plan_missing"
+			message = fmt.Sprintf("%s requires wave-plan.yaml for %q, but it is missing", operation, change.Slug)
+		}
+		return nil, newStateIntegrityError(
+			errorCode,
+			message,
+			"Run `slipway repair` to restore wave execution artifacts before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WavePlanPathForRead(root, change.Slug),
+			},
+		)
+	}
+
+	runs, err := state.LoadOptionalWaveRuns(root, change.Slug, runVersion)
+	if err != nil {
+		return nil, newStateIntegrityError(
+			"wave_runs_load_failed",
+			fmt.Sprintf("%s failed to load wave run evidence for %q: %v", operation, change.Slug, err),
+			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+			},
+		)
+	}
+	if len(plan.Waves) > 0 && len(runs) == 0 {
+		return nil, newStateIntegrityError(
+			"wave_runs_missing",
+			fmt.Sprintf("%s requires wave run evidence for %q, but none was found for rv%d", operation, change.Slug, runVersion),
+			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+			},
+		)
+	}
+	if len(runs) > 0 && len(runs) < len(plan.Waves) {
+		return nil, newStateIntegrityError(
+			"wave_runs_incomplete",
+			fmt.Sprintf("%s found incomplete wave run evidence for %q: %d of %d waves are present for rv%d", operation, change.Slug, len(runs), len(plan.Waves), runVersion),
+			"Run `slipway repair` to reconstruct the missing wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+			},
+		)
+	}
+	if len(runs) > len(plan.Waves) {
+		return nil, newStateIntegrityError(
+			"wave_runs_invalid_count",
+			fmt.Sprintf("%s found more wave runs than planned waves for %q (%d > %d)", operation, change.Slug, len(runs), len(plan.Waves)),
+			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+			},
+		)
+	}
+	for _, run := range runs {
+		if run.RunSummaryVersion == runVersion {
+			continue
+		}
+		return nil, newStateIntegrityError(
+			"wave_run_version_mismatch",
+			fmt.Sprintf("%s found wave evidence version drift for %q: wave %d points at rv%d, expected rv%d", operation, change.Slug, run.WaveIndex, run.RunSummaryVersion, runVersion),
+			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+			},
+		)
+	}
+	if linkageIssues := state.WaveTaskLinkageIssues(plan, runs); len(linkageIssues) > 0 {
+		return nil, newStateIntegrityError(
+			"wave_task_linkage_mismatch",
+			fmt.Sprintf("%s found wave/task linkage mismatch for %q: %s", operation, change.Slug, strings.Join(linkageIssues, "; ")),
+			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
+			change.Slug,
+			map[string]any{
+				"path":   state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"issues": linkageIssues,
+			},
+		)
+	}
+
+	return &waveExecutionContext{
+		Plan: plan,
+		Runs: runs,
+	}, nil
 }
 
 // encodeJSONResponse encodes v as indented JSON to the command's stdout.

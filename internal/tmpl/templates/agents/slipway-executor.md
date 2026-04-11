@@ -4,6 +4,7 @@ description: "Use when one implementation task must be executed with strict TDD 
 tools: Read, Write, Edit, Grep, Glob, Bash
 sandbox: workspace-write
 runtime_bound: true
+agent_status: manual_only
 bound_skills:
   - wave-orchestration
 ---

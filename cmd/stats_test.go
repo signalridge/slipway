@@ -115,7 +115,7 @@ func TestStatsDoesNotTreatMissingReviewEvidenceAsStaleRunSummary(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 
 		view, err := buildStatsView(root, time.Now().UTC())
@@ -138,7 +138,7 @@ func TestStatsMarksStaleRunSummaryWhenExecutionEvidenceDrifts(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 
@@ -225,7 +225,7 @@ func TestStatsIncludesHiddenBoundWorktreeChanges(t *testing.T) {
 		require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
 		require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 
 		require.NoError(t, os.Remove(filepath.Join(normalizedWT, ".slipway.yaml")))
@@ -261,7 +261,7 @@ func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing
 		require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
 		require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		require.NoError(t, os.Remove(filepath.Join(normalizedWT, ".slipway.yaml")))
 
@@ -304,7 +304,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 		require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
 		require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)

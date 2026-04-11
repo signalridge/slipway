@@ -47,7 +47,7 @@ If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
 
 Use these documents to keep task execution aligned with directory conventions, existing test infrastructure, and known risk hotspots.
 
-**Resume checkpoint**: If `input_context.resume_checkpoint` is present in the JSON output, prior tasks have already been completed. Skip tasks whose IDs appear in `completed_task_ids`. Check `freshness` — if `stale`, re-run all tasks regardless of checkpoint. Only resume from checkpoint when freshness is `fresh`.
+**Resume checkpoint**: If `input_context.resume_checkpoint` is present in the JSON output, prior tasks have already been completed. Skip tasks whose IDs appear in `completed_task_ids`. Check `freshness` — if `stale`, re-run all tasks regardless of checkpoint. Only resume from checkpoint when freshness is `fresh`. If `user_response_payload` is present, treat it as authoritative operator input for the paused task: read `checkpoint_type`, apply the response before continuing the wave, and carry the chosen response into the task evidence / verification notes instead of asking for the same checkpoint again.
 
 ### 2. Discover and Group Waves
 Parse the task plan into dependency-ordered waves:

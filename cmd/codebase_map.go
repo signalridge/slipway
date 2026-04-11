@@ -22,7 +22,7 @@ func makeCodebaseMapCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "codebase-map",
-		Short: "Create or refresh the durable repo-scoped codebase map",
+		Short: desc("codebase-map"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()

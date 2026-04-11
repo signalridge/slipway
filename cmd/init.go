@@ -18,7 +18,7 @@ func makeInitCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize runtime layout and optional tool artifacts",
+		Short: desc("init"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := os.Getwd()
 			if err != nil {

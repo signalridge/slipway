@@ -28,6 +28,7 @@ type statusView struct {
 	IntakeSubStep             model.IntakeSubStep         `json:"intake_substep,omitempty"`
 	PlanSubStep               model.PlanSubStep           `json:"plan_substep,omitempty"`
 	PlanningNote              string                      `json:"planning_note,omitempty"`
+	InterruptedExecutionAt    string                      `json:"interrupted_execution_at,omitempty"`
 	Narrative                 string                      `json:"narrative,omitempty"`
 	NextReadyActions          []string                    `json:"next_ready_actions,omitempty"`
 	SummaryBlockers           []model.ReasonCode          `json:"summary_blockers,omitempty"`
@@ -80,6 +81,10 @@ type statusProgress struct {
 	StageIndex        int            `json:"stage_index"`
 	StageTotal        int            `json:"stage_total"`
 	StageName         string         `json:"stage_name"`
+	CurrentWaveIndex  int            `json:"current_wave_index,omitempty"`
+	CompletedWaves    int            `json:"completed_waves,omitempty"`
+	TotalWaves        int            `json:"total_waves,omitempty"`
+	WavesByVerdict    map[string]int `json:"waves_by_verdict,omitempty"`
 	TasksCompleted    int            `json:"tasks_completed"`
 	TasksTotal        int            `json:"tasks_total"`
 	TasksByVerdict    map[string]int `json:"tasks_by_verdict,omitempty"`
@@ -103,7 +108,7 @@ func makeStatusCmd() *cobra.Command {
 	var jsonFlag bool
 	cmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show lifecycle status, blockers, and next actions",
+		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {

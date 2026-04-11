@@ -182,7 +182,7 @@ func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writeShipReadyGovernedBundle(t, root, change)
-		writePassingExecutionSummary(t, root, slug, 1, "task-a")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
@@ -328,31 +328,11 @@ func TestValidateNextFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		auto           bool
-		preview        bool
-		resumeResponse string
-		contextGuard   bool
-		wantMessage    string
+		name         string
+		preview      bool
+		contextGuard bool
+		wantMessage  string
 	}{
-		{
-			name:        "auto conflicts with preview",
-			auto:        true,
-			preview:     true,
-			wantMessage: "--auto cannot be used with --preview",
-		},
-		{
-			name:           "auto conflicts with resume response",
-			auto:           true,
-			resumeResponse: "approved",
-			wantMessage:    "--auto cannot be used with --resume-response",
-		},
-		{
-			name:         "auto conflicts with context guard",
-			auto:         true,
-			contextGuard: true,
-			wantMessage:  "--auto cannot be used with --context-guard",
-		},
 		{
 			name:         "context guard requires preview",
 			contextGuard: true,
@@ -363,15 +343,11 @@ func TestValidateNextFlags(t *testing.T) {
 			preview:      true,
 			contextGuard: true,
 		},
-		{
-			name:           "resume response without auto is valid",
-			resumeResponse: "approved",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateNextFlags(tt.auto, tt.preview, tt.resumeResponse, tt.contextGuard)
+			err := validateNextFlags(tt.preview, tt.contextGuard)
 			if tt.wantMessage == "" {
 				require.NoError(t, err)
 				return
@@ -889,14 +865,14 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 	})
 }
 
-func TestNextRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
+func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 		_ = createGovernedRequest(t, root, "L2", "test no checkpoint")
 
-		cmd := makeNextCmd()
+		cmd := makeRunCmd()
 		cmd.SetArgs([]string{"--json", "--resume-response", "approved"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
@@ -998,7 +974,7 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 	})
 }
 
-func TestNextRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
+func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -1015,7 +991,7 @@ func TestNextRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 		}
 		require.NoError(t, state.SaveChange(root, change))
 
-		cmd := makeNextCmd()
+		cmd := makeRunCmd()
 		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
@@ -1027,7 +1003,96 @@ func TestNextRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 	})
 }
 
-func TestNextResumesCheckpointWithValidResponse(t *testing.T) {
+func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "abort without wave-backed state should not require resume")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		abortCmd := makeAbortCmd()
+		abortCmd.SetArgs([]string{"--json", "--change", slug})
+		var abortOut bytes.Buffer
+		abortCmd.SetOut(&abortOut)
+		require.NoError(t, abortCmd.Execute())
+
+		runCmd := makeRunCmd()
+		runCmd.SetArgs([]string{"--json", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		runCmd.SetErr(&runOut)
+		require.NoError(t, runCmd.Execute())
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, after.InterruptedExecutionAt.IsZero())
+	})
+}
+
+func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "abort with wave-backed state should require resume")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` preserve completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` continue next wave after abort
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		abortCmd := makeAbortCmd()
+		abortCmd.SetArgs([]string{"--json", "--change", slug})
+		var abortOut bytes.Buffer
+		abortCmd.SetOut(&abortOut)
+		require.NoError(t, abortCmd.Execute())
+
+		runCmd := makeRunCmd()
+		runCmd.SetArgs([]string{"--json", "--change", slug})
+		var blockedOut bytes.Buffer
+		runCmd.SetOut(&blockedOut)
+		runCmd.SetErr(&blockedOut)
+		err = runCmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "resume_required", cliErr.ErrorCode)
+
+		resumeCmd := makeRunCmd()
+		resumeCmd.SetArgs([]string{"--json", "--resume", "--change", slug})
+		var resumeOut bytes.Buffer
+		resumeCmd.SetOut(&resumeOut)
+		require.NoError(t, resumeCmd.Execute())
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, after.InterruptedExecutionAt.IsZero())
+	})
+}
+
+func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -1039,12 +1104,28 @@ func TestNextResumesCheckpointWithValidResponse(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:   "task-02",
-			CheckpointType: "human_verify",
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  "human_verify",
 		}
 		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-		cmd := makeNextCmd()
+- [ ] `+"`task-01`"+` first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` checkpointed second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		cmd := makeRunCmd()
 		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
@@ -1066,7 +1147,232 @@ func TestNextResumesCheckpointWithValidResponse(t *testing.T) {
 	})
 }
 
-func TestNextRejectsInvalidAllowedResponse(t *testing.T) {
+func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when wave artifacts are missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending checkpointed wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		cmd := makeRunCmd()
+		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestRunRejectsResumeResponseWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when pre-summary wave plan is missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := makeRunCmd()
+		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_plan_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+
+		after, loadErr := state.LoadChange(root, slug)
+		require.NoError(t, loadErr)
+		require.NotNil(t, after.ActiveCheckpoint)
+		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
+	})
+}
+
+func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "next should fail closed when checkpoint wave artifacts are missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending checkpointed wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "next should fail closed when pre-summary checkpoint wave plan is missing")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_plan_missing", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+
+		after, loadErr := state.LoadChange(root, slug)
+		require.NoError(t, loadErr)
+		require.NotNil(t, after.ActiveCheckpoint)
+		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
+	})
+}
+
+func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "run resume should fail closed when wave evidence is incomplete")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` pending second wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+
+		plan, err := state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+		summary, err := state.LoadExecutionSummary(root, slug)
+		require.NoError(t, err)
+		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+		require.NoError(t, err)
+		require.Len(t, runs, 2, "expected one persisted run per planned wave")
+		require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))
+
+		cmd := makeRunCmd()
+		cmd.SetArgs([]string{"--json", "--resume", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "wave_runs_incomplete", cliErr.ErrorCode)
+		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -1078,14 +1384,30 @@ func TestNextRejectsInvalidAllowedResponse(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:     "task-03",
+			PausedTaskID:     "task-02",
+			PausedWaveIndex:  2,
 			CheckpointType:   "decision",
 			AllowedResponses: []string{"approve", "reject", "defer"},
 		}
 		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` decision checkpoint
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 
 		// Invalid response
-		cmd := makeNextCmd()
+		cmd := makeRunCmd()
 		cmd.SetArgs([]string{"--json", "--resume-response", "maybe"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
@@ -1096,7 +1418,7 @@ func TestNextRejectsInvalidAllowedResponse(t *testing.T) {
 		assert.Contains(t, err.Error(), "approve")
 
 		// Valid response (case-insensitive)
-		cmd2 := makeNextCmd()
+		cmd2 := makeRunCmd()
 		cmd2.SetArgs([]string{"--json", "--resume-response", "Approve"})
 		buf.Reset()
 		cmd2.SetOut(&buf)
@@ -1165,6 +1487,54 @@ func TestValidateResumeResponseUnit(t *testing.T) {
 	})
 }
 
+func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
+	t.Run("informational resume progress does not stop run", func(t *testing.T) {
+		view := nextView{
+			CurrentState: model.StateS2Execute,
+			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
+			InputContext: nextContext{
+				ResumeCheckpoint: &resumeCheckpoint{
+					RunSummaryVersion: 1,
+					CompletedTaskIDs:  []string{"task-01"},
+					ResumeWaveIndex:   2,
+				},
+			},
+		}
+		assert.False(t, shouldStopRunLoop(view))
+	})
+
+	t.Run("checkpoint response payload does not stop run", func(t *testing.T) {
+		view := nextView{
+			CurrentState: model.StateS2Execute,
+			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
+			InputContext: nextContext{
+				ResumeCheckpoint: &resumeCheckpoint{
+					PausedTaskID:        "task-02",
+					PausedWaveIndex:     2,
+					CheckpointType:      string(model.CheckpointHumanVerify),
+					UserResponsePayload: "approved",
+				},
+			},
+		}
+		assert.False(t, shouldStopRunLoop(view))
+	})
+
+	t.Run("pending checkpoint still stops run", func(t *testing.T) {
+		view := nextView{
+			CurrentState: model.StateS2Execute,
+			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
+			InputContext: nextContext{
+				ResumeCheckpoint: &resumeCheckpoint{
+					PausedTaskID:    "task-02",
+					PausedWaveIndex: 2,
+					CheckpointType:  string(model.CheckpointHumanVerify),
+				},
+			},
+		}
+		assert.True(t, shouldStopRunLoop(view))
+	})
+}
+
 func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1186,6 +1556,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
 		cmd.SetArgs([]string{"--json"})
@@ -1313,6 +1684,8 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 
 		cmd := makeNextCmd()
 		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
@@ -1348,6 +1721,68 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 	})
 }
 
+func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "authoritative wave plan should win during execution")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
+- [ ] `+"`t-01`"+` authoritative wave task
+  - depends_on: []
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
+- [ ] `+"`t-01`"+` mutated tasks.md should not replace authoritative wave plan
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+
+		inputContext, ok := payload["input_context"].(map[string]any)
+		require.True(t, ok, "expected input_context in next output")
+
+		wavePlan, ok := inputContext["wave_plan"].(map[string]any)
+		require.True(t, ok, "expected wave_plan in next output")
+
+		rawWaves, ok := wavePlan["waves"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, rawWaves)
+
+		firstWave, ok := rawWaves[0].(map[string]any)
+		require.True(t, ok)
+		rawTasks, ok := firstWave["tasks"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, rawTasks)
+
+		firstTask, ok := rawTasks[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "authoritative wave task", firstTask["objective"])
+		assert.Equal(t, []any{"cmd/next.go"}, firstTask["target_files"])
+	})
+}
+
 func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1360,8 +1795,9 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:   "task-09",
-			CheckpointType: "human_verify",
+			PausedTaskID:    "task-09",
+			PausedWaveIndex: 2,
+			CheckpointType:  "human_verify",
 		}
 		require.NoError(t, state.SaveChange(root, change))
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
@@ -1369,8 +1805,29 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 			RunSummaryVersion: 3,
 			CapturedAt:        time.Now().UTC(),
 			OverallVerdict:    model.ExecutionVerdictPass,
-			Tasks:             []model.ExecutionTaskSummary{},
+			CompletedTasks:    []string{"task-01"},
+			Tasks: []model.ExecutionTaskSummary{
+				{
+					TaskID:     "task-01",
+					Verdict:    model.TaskVerdictPass,
+					TaskKind:   model.TaskKindCode,
+					CapturedAt: time.Now().UTC(),
+				},
+			},
 		})
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
+
+- [x] `+"`task-01`"+` preserve preview checkpoint context
+  - target_files: ["cmd/next_context_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-09`"+` pending checkpoint task
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/next_context_build.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
 		cmd.SetArgs([]string{"--json", "--preview"})
@@ -1385,11 +1842,67 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		assert.Equal(t, 3, view.InputContext.ResumeCheckpoint.RunSummaryVersion)
 		assert.Equal(t, "task-09", view.InputContext.ResumeCheckpoint.PausedTaskID)
 		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
+		assert.Equal(t, []string{"task-01"}, view.InputContext.ResumeCheckpoint.CompletedTaskIDs)
+		assert.NotEmpty(t, view.InputContext.ResumeCheckpoint.Freshness)
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		require.NotNil(t, after.ActiveCheckpoint, "preview mode must not clear active checkpoint")
 		assert.Equal(t, "task-09", after.ActiveCheckpoint.PausedTaskID)
+	})
+}
+
+func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "next should inspect active checkpoint without resume response")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "task-02",
+			PausedWaveIndex: 2,
+			CheckpointType:  "human_verify",
+		}
+		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` first wave
+  - depends_on: []
+  - target_files: ["cmd/next_context_build.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` active checkpoint task
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/next_context_build.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.InputContext.ResumeCheckpoint)
+		assert.Equal(t, "task-02", view.InputContext.ResumeCheckpoint.PausedTaskID)
+		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
+		assert.Empty(t, view.InputContext.ResumeCheckpoint.UserResponsePayload)
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		require.NotNil(t, after.ActiveCheckpoint, "next inspection must not consume the active checkpoint")
+		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
 	})
 }
 
@@ -1452,6 +1965,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 
 		// Simulate a relevant input update after evidence was captured.
 		require.NoError(t, state.SaveChange(root, change))
+		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
 		cmd.SetArgs([]string{"--json", "--preview"})
@@ -1623,19 +2137,19 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 	})
 }
 
-func TestNextAutoIncludesTransitionTrace(t *testing.T) {
+func TestRunIncludesTransitionTrace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-		slug := createGovernedRequest(t, root, "L2", "auto transition trace")
+		slug := createGovernedRequest(t, root, "L2", "run transition trace")
 
 		// createGovernedRequest runs request + one next, leaving governed lane at S1.
 		changeBefore, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		require.Equal(t, model.StateS1Plan, changeBefore.CurrentState)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--auto"})
+		cmd := makeRunCmd()
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1733,6 +2247,15 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 			"changed_files":       []string{"cmd/next.go"},
 			"blockers":            []string{},
 		})
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-a`"+` materialize run summary
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 
 		cmd := makeNextCmd()
 		cmd.SetArgs([]string{"--json"})

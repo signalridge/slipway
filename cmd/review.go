@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/progression"
@@ -23,6 +25,7 @@ type reviewView struct {
 	CurrentState   string             `json:"current_state"`
 	Verdict        string             `json:"verdict"`
 	Blockers       []model.ReasonCode `json:"blockers,omitempty"`
+	Waves          []reviewWaveView   `json:"waves,omitempty"`
 	Gaps           *reviewGaps        `json:"gaps,omitempty"`
 }
 
@@ -31,12 +34,20 @@ type reviewGaps struct {
 	ArtifactToCode []string `json:"artifact_to_code,omitempty"`
 }
 
+type reviewWaveView struct {
+	WaveIndex int      `json:"wave_index"`
+	Verdict   string   `json:"verdict"`
+	TaskRuns  []string `json:"task_runs,omitempty"`
+}
+
 func makeReviewCmd() *cobra.Command {
 	opts := reviewOptions{}
 	var changeSlug string
+	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "review",
-		Short: "Bidirectional artifact-code alignment review",
+		Short: desc("review"),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if cmd.Flags().Changed("all") && cmd.Flags().Changed("changed-only") && opts.all && opts.changedOnly {
 				return newInvalidUsageError(
@@ -90,7 +101,6 @@ func makeReviewCmd() *cobra.Command {
 
 				execMode := governedExecutionMode
 
-				verdict, blockers := evaluateReviewVerdict(execCtx)
 				reviewState := model.StateS3Review
 				readiness, evalErr := progression.EvaluateGovernanceReadiness(
 					root,
@@ -110,6 +120,17 @@ func makeReviewCmd() *cobra.Command {
 				if readiness.ReviewSurface != nil {
 					artifactReviewEvidence = readiness.ReviewSurface.PassingSkills[progression.SkillSpecComplianceReview]
 				}
+				var waveViews []reviewWaveView
+				var waveCtx *waveExecutionContext
+				if execCtx.Ready {
+					waveCtx, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
+					if err != nil {
+						return err
+					}
+				}
+
+				verdict, blockers, waveStatus := evaluateReviewVerdict(execCtx, waveCtx)
+				waveViews = waveStatus
 				blockers = append(blockers, readiness.Blockers...)
 				if reviewAll {
 					blockers = append(blockers, progression.EvaluateReviewLayerBlockers(change, artifactReviewEvidence, readiness.ArtifactProjection, true)...)
@@ -144,10 +165,14 @@ func makeReviewCmd() *cobra.Command {
 					CurrentState:   string(change.CurrentState),
 					Verdict:        verdict,
 					Blockers:       blockers,
+					Waves:          waveViews,
 					Gaps:           classifyReviewGaps(blockers),
 				}
 
-				return encodeJSONResponse(cmd, view)
+				if jsonOutput {
+					return encodeJSONResponse(cmd, view)
+				}
+				return writeReviewText(cmd.OutOrStdout(), view)
 			})
 		},
 	}
@@ -156,8 +181,50 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.changedOnly, "changed-only", true, "Review only changed/stale units")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Run full review")
 	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
-	cmd.Flags().Bool("json", false, "JSON output")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	return cmd
+}
+
+func writeReviewText(w io.Writer, view reviewView) error {
+	writer := newFormatWriter(w)
+	writer.Writef("Change: %s\n", view.Slug)
+	writer.Writef("State: %s\n", view.CurrentState)
+	writer.Writef("Verdict: %s\n", view.Verdict)
+
+	if len(view.Waves) > 0 {
+		writer.Writef("Waves:\n")
+		for _, wave := range view.Waves {
+			line := fmt.Sprintf("  - wave %d: %s", wave.WaveIndex, wave.Verdict)
+			if len(wave.TaskRuns) > 0 {
+				line += " [" + strings.Join(wave.TaskRuns, ", ") + "]"
+			}
+			writer.Writef("%s\n", line)
+		}
+	}
+
+	if len(view.Blockers) > 0 {
+		writer.Writef("Blockers:\n")
+		for _, blocker := range model.ReasonSpecs(view.Blockers) {
+			writer.Writef("  - %s\n", blocker)
+		}
+	}
+
+	if view.Gaps != nil {
+		if len(view.Gaps.CodeToArtifact) > 0 {
+			writer.Writef("Code->Artifact Gaps:\n")
+			for _, gap := range view.Gaps.CodeToArtifact {
+				writer.Writef("  - %s\n", gap)
+			}
+		}
+		if len(view.Gaps.ArtifactToCode) > 0 {
+			writer.Writef("Artifact->Code Gaps:\n")
+			for _, gap := range view.Gaps.ArtifactToCode {
+				writer.Writef("  - %s\n", gap)
+			}
+		}
+	}
+
+	return writer.Err()
 }
 
 func ensureReviewEntryState(current model.WorkflowState, summary *model.ExecutionSummary) error {
@@ -185,13 +252,43 @@ func ensureReviewEntryState(current model.WorkflowState, summary *model.Executio
 	}
 }
 
-func evaluateReviewVerdict(execCtx executionContext) (string, []model.ReasonCode) {
+func evaluateReviewVerdict(execCtx executionContext, waveCtx *waveExecutionContext) (string, []model.ReasonCode, []reviewWaveView) {
 	if !execCtx.Ready {
-		return "fail", []model.ReasonCode{model.NewReasonCode("missing_run_summary", "")}
+		return "fail", []model.ReasonCode{model.NewReasonCode("missing_run_summary", "")}, nil
 	}
 	summary := execCtx.Summary
 
 	blockers := append([]model.ReasonCode(nil), execCtx.SummaryBlockers...)
+	waveViews := []reviewWaveView{}
+	if waveCtx != nil {
+		runByWave := make(map[int]model.WaveRun, len(waveCtx.Runs))
+		for _, run := range waveCtx.Runs {
+			runByWave[run.WaveIndex] = run
+		}
+		for _, plannedWave := range waveCtx.Plan.Waves {
+			run, ok := runByWave[plannedWave.WaveIndex]
+			if !ok {
+				blockers = append(blockers, model.NewReasonCode("wave_run_missing", plannedWaveLabel(plannedWave.WaveIndex)))
+				waveViews = append(waveViews, reviewWaveView{
+					WaveIndex: plannedWave.WaveIndex,
+					Verdict:   string(model.WaveVerdictPending),
+				})
+				continue
+			}
+			taskRuns := make([]string, 0, len(run.TaskRuns))
+			for _, ref := range run.TaskRuns {
+				taskRuns = append(taskRuns, ref.TaskID)
+			}
+			waveViews = append(waveViews, reviewWaveView{
+				WaveIndex: plannedWave.WaveIndex,
+				Verdict:   string(run.Verdict),
+				TaskRuns:  taskRuns,
+			})
+			if run.Verdict != model.WaveVerdictPass {
+				blockers = append(blockers, model.NewReasonCode("non_pass_wave", plannedWaveDetail(run.WaveIndex, run.Verdict)))
+			}
+		}
+	}
 	for _, task := range summary.Tasks {
 		if task.Verdict != model.TaskVerdictPass {
 			blockers = append(blockers, model.NewReasonCode("non_pass_task", task.TaskID))
@@ -209,9 +306,9 @@ func evaluateReviewVerdict(execCtx executionContext) (string, []model.ReasonCode
 		blockers = append(blockers, model.NewReasonCode("execution_verdict_fail", ""))
 	}
 	if len(blockers) > 0 {
-		return "fail", model.NormalizeReasonCodes(blockers)
+		return "fail", model.NormalizeReasonCodes(blockers), waveViews
 	}
-	return "pass", nil
+	return "pass", nil, waveViews
 }
 
 func hasIntentDriftSignal(blockers []model.ReasonCode, artifactReviewEvidence model.VerificationRecord) bool {
@@ -246,7 +343,9 @@ func classifyReviewGaps(blockers []model.ReasonCode) *reviewGaps {
 			lower == "required_skill_missing":
 			artToCode = append(artToCode, b)
 		case lower == "non_pass_task" ||
-			lower == "task_blockers":
+			lower == "task_blockers" ||
+			lower == "non_pass_wave" ||
+			lower == "wave_run_missing":
 			codeToArt = append(codeToArt, b)
 		default:
 			artToCode = append(artToCode, b)
@@ -259,4 +358,12 @@ func classifyReviewGaps(blockers []model.ReasonCode) *reviewGaps {
 		CodeToArtifact: model.ReasonSpecs(codeToArt),
 		ArtifactToCode: model.ReasonSpecs(artToCode),
 	}
+}
+
+func plannedWaveLabel(index int) string {
+	return fmt.Sprintf("wave-%02d", index)
+}
+
+func plannedWaveDetail(index int, verdict model.WaveVerdict) string {
+	return plannedWaveLabel(index) + ":" + string(verdict)
 }

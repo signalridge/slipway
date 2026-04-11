@@ -3,6 +3,7 @@ package cmd
 import (
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
@@ -89,6 +90,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	if err != nil {
 		return statusView{}, err
 	}
+	primaryAction, waveBlockers, waveDiagnostics := statusPrimaryAction(root, change, execCtx)
 	view := buildStatusViewBase(
 		root,
 		"governed",
@@ -106,6 +108,10 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.PresetConfirmationPending = presetFields.PresetConfirmationPending
 	view.PresetUpgradeReasons = presetFields.PresetUpgradeReasons
 	view.GovernanceForecast = presetFields.GovernanceForecast
+	if !change.InterruptedExecutionAt.IsZero() {
+		view.InterruptedExecutionAt = change.InterruptedExecutionAt.UTC().Format(time.RFC3339)
+	}
+	view.NextReadyActions = projectNextReadyActionsWithPrimary(change.CurrentState, primaryAction)
 	view.AutoPassedStates = append([]model.AutoPassedState(nil), change.LastAutoPassedStates...)
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	if !change.ContextDependencies.IsEmpty() {
@@ -114,7 +120,9 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	}
 	view.SelectedPriorContext, view.UnresolvedDependencies = buildSelectedPriorContext(root, change.ContextDependencies)
 	applyGovernanceSurfaceToStatus(readiness, &view)
+	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
+	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
 	view.Narrative = buildStatusNarrative(view)
 	return view, nil
 }
@@ -156,6 +164,71 @@ func buildStatusViewBase(
 	return view
 }
 
+func statusPrimaryAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {
+	switch change.CurrentState {
+	case model.StateS2Execute:
+		return projectStatusExecutionAction(root, change, execCtx)
+	case model.StateS3Review, model.StateS4Verify:
+		return statusWaveExecutionRepairAction(root, change, execCtx)
+	default:
+		return "", nil, nil
+	}
+}
+
+func projectStatusExecutionAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {
+	if change.ActiveCheckpoint != nil {
+		if err := validateActiveCheckpointAuthority(root, change, execCtx, "status"); err != nil {
+			blockers, diagnostics := statusWaveExecutionIssues(err)
+			return "repair", blockers, diagnostics
+		}
+		return `run --resume-response "<response>"`, nil, nil
+	}
+	if !execCtx.Ready || execCtx.LatestRunVersion < 1 {
+		return "run", nil, nil
+	}
+
+	_, resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "status")
+	switch {
+	case err != nil:
+		blockers, diagnostics := statusWaveExecutionIssues(err)
+		return "repair", blockers, diagnostics
+	case resumeWaveIndex > 0:
+		return "run --resume", nil, nil
+	default:
+		return "run", nil, nil
+	}
+}
+
+func statusWaveExecutionRepairAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {
+	if !execCtx.Ready || execCtx.LatestRunVersion < 1 {
+		return "", nil, nil
+	}
+	if _, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "status"); err != nil {
+		blockers, diagnostics := statusWaveExecutionIssues(err)
+		return "repair", blockers, diagnostics
+	}
+	return "", nil, nil
+}
+
+func statusWaveExecutionIssues(err error) ([]model.ReasonCode, []string) {
+	if err == nil {
+		return nil, nil
+	}
+
+	diagnostics := []string{err.Error()}
+	if cliErr := asCLIError(err); cliErr != nil {
+		if cliErr.Remediation != "" {
+			diagnostics = append(diagnostics, cliErr.Remediation)
+		}
+		if len(cliErr.Reasons) > 0 {
+			return append([]model.ReasonCode(nil), cliErr.Reasons...), diagnostics
+		}
+		return []model.ReasonCode{model.NewReasonCode(cliErr.ErrorCode, cliErr.Message)}, diagnostics
+	}
+
+	return []model.ReasonCode{model.NewReasonCode("wave_execution_unavailable", err.Error())}, diagnostics
+}
+
 // governedSourceStateFile returns the display path for the authoritative
 // change.yaml, resolving worktree-bound bundles when necessary.
 func governedSourceStateFile(root string, change model.Change) string {
@@ -171,13 +244,17 @@ func buildStatusNarrative(view statusView) string {
 	if note := planningNote(view.CurrentState, view.PlanSubStep); note != "" {
 		recoverySuffix = " " + note
 	}
+	interruptSuffix := ""
+	if view.InterruptedExecutionAt != "" {
+		interruptSuffix = " The last governed execution was interrupted at " + view.InterruptedExecutionAt + "."
+	}
 	switch {
 	case len(view.Blockers) > 0:
-		return "Blocked in " + stateLabel + "." + recoverySuffix + " Resolve the current blockers before running the next lifecycle action."
+		return "Blocked in " + stateLabel + "." + recoverySuffix + interruptSuffix + " Resolve the current blockers before running the next lifecycle action."
 	case len(view.SelectedPriorContext) > 0:
-		return "Active in " + stateLabel + "." + recoverySuffix + " Prior archived context was loaded selectively to support the next action."
+		return "Active in " + stateLabel + "." + recoverySuffix + interruptSuffix + " Prior archived context was loaded selectively to support the next action."
 	default:
-		return "Active in " + stateLabel + "." + recoverySuffix + " Continue with the next lifecycle action."
+		return "Active in " + stateLabel + "." + recoverySuffix + interruptSuffix + " Continue with the next lifecycle action."
 	}
 }
 
@@ -264,9 +341,18 @@ func mapStatusProgress(progress *enginestatus.Progress) *statusProgress {
 		StageIndex:        progress.StageIndex,
 		StageTotal:        progress.StageTotal,
 		StageName:         progress.StageName,
+		CurrentWaveIndex:  progress.CurrentWaveIndex,
+		CompletedWaves:    progress.CompletedWaves,
+		TotalWaves:        progress.TotalWaves,
 		TasksCompleted:    progress.TasksCompleted,
 		TasksTotal:        progress.TasksTotal,
 		RunSummaryVersion: progress.RunSummaryVersion,
+	}
+	if len(progress.WavesByVerdict) > 0 {
+		mapped.WavesByVerdict = make(map[string]int, len(progress.WavesByVerdict))
+		for key, value := range progress.WavesByVerdict {
+			mapped.WavesByVerdict[key] = value
+		}
 	}
 	if len(progress.TasksByVerdict) > 0 {
 		mapped.TasksByVerdict = make(map[string]int, len(progress.TasksByVerdict))
