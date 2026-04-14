@@ -1,0 +1,17 @@
+sources:
+  - source: getsentry/gha-security-review
+    absorbed_as: standalone
+    extracted:
+      - "permissions/pinning/untrusted-input checklist"
+      - "per-finding category tag"
+    dropped:
+      - "sentry-internal workflow examples"
+    conflicts_with: []
+  - source: trailofbits/agentic-actions-auditor
+    absorbed_as: standalone
+    extracted:
+      - "agentic-action gating rule (no secrets, sanitized output)"
+      - "reusable-workflow pinning for third-party callees"
+    dropped:
+      - "engagement-specific agent audit traces"
+    conflicts_with: []

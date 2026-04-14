@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/skill"
@@ -130,6 +132,11 @@ func assembleSkillView(
 		}
 	}
 
+	// Auto capability resolver: attach B1 catalog-skill hints on top of the
+	// kernel's host selection. Never changes the next skill chosen by
+	// ResolveNextSkill; only enriches TechniqueHints.
+	ns.TechniqueHints = appendCatalogHints(ns.TechniqueHints, nextSkillName, governedChange, view)
+
 	if nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview {
 		var guardrailDomain string
 		if governedChange != nil {
@@ -152,4 +159,33 @@ func assembleSkillView(
 	applyContextBudgetGuard(view)
 
 	return nil
+}
+
+// appendCatalogHints runs the capability resolver against the current host
+// and returns technique-hint entries derived from its support attachments.
+// The resolver is read-only with respect to kernel progression.
+func appendCatalogHints(
+	existing []techniqueHint,
+	hostSkill string,
+	governedChange *model.Change,
+	view *nextView,
+) []techniqueHint {
+	sig := capability.Signals{Host: hostSkill}
+	if governedChange != nil {
+		sig.Paths = append(sig.Paths, governedChange.WorktreePath)
+	}
+	if view != nil {
+		for _, rc := range view.Blockers {
+			sig.Blockers = append(sig.Blockers, rc.Code)
+		}
+	}
+
+	resolution := capability.Resolve(capability.DefaultRegistry(), sig)
+	for _, support := range resolution.Supports {
+		existing = append(existing, techniqueHint{
+			Name:   fmt.Sprintf("skill:%s", support.SkillID),
+			Reason: fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
+		})
+	}
+	return existing
 }

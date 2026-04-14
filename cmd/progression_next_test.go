@@ -417,6 +417,14 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, "spec-compliance-review", view.NextSkill.Name)
+		foundCatalogHint := false
+		for _, hint := range view.NextSkill.TechniqueHints {
+			if hint.Name == "skill:independent-review" {
+				foundCatalogHint = true
+				break
+			}
+		}
+		assert.True(t, foundCatalogHint, "expected resolver hint without changing governed next host")
 		require.NotNil(t, view.NextSkill.ReviewContext)
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R3")

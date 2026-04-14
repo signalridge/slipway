@@ -1,0 +1,24 @@
+sources:
+  - source: alirezarezvani/adversarial-reviewer
+    absorbed_as: standalone
+    extracted:
+      - "adversarial reviewer produces independent finding list"
+      - "reproducible-observation rule for adversarial blockers"
+    dropped:
+      - "persona-heavy prompting examples"
+    conflicts_with: []
+  - source: sickn33/code-review-ai-ai-review
+    absorbed_as: standalone
+    extracted:
+      - "one-verdict-to-author merge discipline"
+    dropped:
+      - "tool-specific prompt templates"
+    conflicts_with: []
+  - source: wshobson/multi-reviewer-patterns
+    absorbed_as: standalone
+    extracted:
+      - "rubric-boundary calibration before merge"
+      - "deferral naming the reviewer who raised it"
+    dropped:
+      - "long worked-example threads"
+    conflicts_with: []

@@ -1,0 +1,17 @@
+sources:
+  - source: trailofbits/coverage-analysis
+    absorbed_as: standalone
+    extracted:
+      - "change-surface denominator rule"
+      - "uncovered-line disposition: add-test or justified-exclusion"
+      - "delta-vs-baseline blocks on regression"
+    dropped:
+      - "engagement-specific tool invocations"
+    conflicts_with: []
+  - source: wshobson/e2e-testing-patterns
+    absorbed_as: standalone
+    extracted:
+      - "end-to-end gap call-out when change crosses process boundaries"
+    dropped:
+      - "framework-specific e2e harness examples"
+    conflicts_with: []

@@ -1,0 +1,10 @@
+sources:
+  - source: trailofbits/mutation-testing
+    absorbed_as: standalone
+    extracted:
+      - "score-rates-the-tests framing"
+      - "per-survivor triage: test-gap / equivalent-mutant / out-of-scope"
+      - "operator-set pinning rule"
+    dropped:
+      - "engagement-specific mutation catalogs"
+    conflicts_with: []

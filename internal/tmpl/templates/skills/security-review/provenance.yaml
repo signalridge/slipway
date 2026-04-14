@@ -1,0 +1,33 @@
+sources:
+  - source: getsentry/security-review
+    absorbed_as: standalone
+    extracted:
+      - "input/authn/authz/secrets/errors traversal checklist"
+      - "verdict with per-finding category tag"
+    dropped:
+      - "sentry-product-specific runbook pointers"
+    conflicts_with: []
+  - source: openai/security-best-practices
+    absorbed_as: standalone
+    extracted:
+      - "secure-default posture: explicit deviation with justification"
+      - "third-party library safe-usage citation"
+    dropped:
+      - "openai-product-specific prose"
+    conflicts_with: []
+  - source: trailofbits/insecure-defaults
+    absorbed_as: standalone
+    extracted:
+      - "enumerated insecure-default categories (CORS, TLS, hashing)"
+      - "fail-closed error-path rule"
+    dropped:
+      - "engagement-specific example code"
+    conflicts_with: []
+  - source: trailofbits/sharp-edges
+    absorbed_as: standalone
+    extracted:
+      - "framework-known-bad pattern flagging"
+      - "boundary re-check rule for authorization"
+    dropped:
+      - "long language-specific example catalogs"
+    conflicts_with: []

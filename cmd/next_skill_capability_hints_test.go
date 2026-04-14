@@ -1,0 +1,48 @@
+package cmd
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/signalridge/slipway/internal/model"
+)
+
+func TestAppendCatalogHintsAttachesOnIntakeHost(t *testing.T) {
+	t.Parallel()
+	hints := appendCatalogHints(nil, "intake-clarification", nil, &nextView{})
+	require.NotEmpty(t, hints)
+	assert.Equal(t, "skill:scope-clarification", hints[0].Name)
+	assert.Contains(t, hints[0].Reason, "posture")
+}
+
+func TestAppendCatalogHintsAttachesOnReviewHost(t *testing.T) {
+	t.Parallel()
+	hints := appendCatalogHints(nil, "code-quality-review", nil, &nextView{})
+	require.NotEmpty(t, hints)
+	assert.Equal(t, "skill:independent-review", hints[0].Name)
+	assert.Contains(t, hints[0].Reason, "procedure")
+}
+
+func TestAppendCatalogHintsEmptyWhenNoMatch(t *testing.T) {
+	t.Parallel()
+	hints := appendCatalogHints(nil, "", nil, &nextView{})
+	assert.Empty(t, hints)
+}
+
+func TestAppendCatalogHintsPreservesExisting(t *testing.T) {
+	t.Parallel()
+	existing := []techniqueHint{{Name: "slipway codebase-map", Reason: "seed"}}
+	hints := appendCatalogHints(existing, "intake-clarification", nil, &nextView{})
+	require.GreaterOrEqual(t, len(hints), 2)
+	assert.Equal(t, "slipway codebase-map", hints[0].Name)
+}
+
+func TestAppendCatalogHintsReactsToBlockers(t *testing.T) {
+	t.Parallel()
+	view := &nextView{Blockers: []model.ReasonCode{{Code: "missing_red_proof"}}}
+	hints := appendCatalogHints(nil, "", nil, view)
+	require.NotEmpty(t, hints)
+	assert.Equal(t, "skill:tdd-proof", hints[0].Name)
+}

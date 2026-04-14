@@ -30,6 +30,9 @@ func renderStatusText(view statusView) string {
 
 	if view.ExecutionMode == "diagnostics" {
 		writeLine("Mode: diagnostics\n")
+		if strings.TrimSpace(view.View) != "" {
+			writeLine("View: %s\n", view.View)
+		}
 		writeLine("Evidence Freshness: %s\n", view.EvidenceFreshness)
 		for _, d := range view.Diagnostics {
 			writeLine("  %s\n", d)
@@ -40,6 +43,9 @@ func renderStatusText(view statusView) string {
 	label := view.Slug
 	writeLine("# %s\n\n", label)
 	writeLine("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
+	if strings.TrimSpace(view.View) != "" {
+		writeLine("View: %s\n", view.View)
+	}
 	if view.QualityMode != "" {
 		writeLine("Quality: %s | Discovery Required: %t\n", view.QualityMode, view.NeedsDiscovery)
 	}

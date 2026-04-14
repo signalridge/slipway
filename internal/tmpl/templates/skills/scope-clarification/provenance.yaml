@@ -1,0 +1,16 @@
+sources:
+  - source: superpowers/brainstorming
+    absorbed_as: standalone
+    extracted:
+      - "surface unspoken assumptions before asking questions"
+      - "prefer targeted questions over scattered ones"
+    dropped:
+      - "long narrative examples of brainstorming etiquette"
+  - source: trailofbits/ask-questions-if-underspecified
+    absorbed_as: standalone
+    extracted:
+      - "abbreviation signals for trivial changes"
+      - "do not advance without a bounded acceptance signal"
+    dropped:
+      - "source-specific prose framing"
+    conflicts_with: []

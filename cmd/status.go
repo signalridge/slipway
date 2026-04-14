@@ -12,6 +12,7 @@ import (
 
 type statusView struct {
 	ExecutionMode             string                      `json:"execution_mode"`
+	View                      string                      `json:"view,omitempty"`
 	Slug                      string                      `json:"slug,omitempty"`
 	QualityMode               string                      `json:"quality_mode,omitempty"`
 	WorkflowPreset            string                      `json:"workflow_preset,omitempty"`
@@ -106,10 +107,15 @@ func makeStatusCmd() *cobra.Command {
 	var format string
 	var changeSlug string
 	var jsonFlag bool
+	var view string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRouteView("status", view); err != nil {
+				return err
+			}
+			explicitView := strings.TrimSpace(view)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -132,11 +138,12 @@ func makeStatusCmd() *cobra.Command {
 
 			// When --change is provided, show detail view for that specific change.
 			if changeSlug != "" {
+				effectiveView := resolveEffectiveRouteView("status", explicitView)
 				change, err := loadChangeBySlug(root, changeSlug)
 				if err != nil {
 					return err
 				}
-				return showStatusForChange(cmd, root, change, outputFormat)
+				return showStatusForChange(cmd, root, change, outputFormat, effectiveView)
 			}
 
 			changes, err := state.ListChanges(root)
@@ -157,14 +164,19 @@ func makeStatusCmd() *cobra.Command {
 				return printMultiChangeSummary(cmd, active, outputFormat)
 			}
 			if route.diagnostics != nil {
+				// Diagnostics mode is not a routed command context. When no
+				// active change exists, only preserve an explicit --view value.
+				route.diagnostics.View = explicitView
 				return printStatusView(cmd, *route.diagnostics, outputFormat)
 			}
 
-			return showStatusForChange(cmd, root, *route.change, outputFormat)
+			effectiveView := resolveEffectiveRouteView("status", explicitView)
+			return showStatusForChange(cmd, root, *route.change, outputFormat, effectiveView)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output (shorthand for --format json)")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json")
+	cmd.Flags().StringVar(&view, "view", "", "Status view override (e.g. incident-response, review-queue, observability-query)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
@@ -220,7 +232,7 @@ func diagnosticStatusView(message string) *statusView {
 	}
 }
 
-func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string) error {
+func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string) error {
 	return withChangeStateLock(root, change.Slug, "status", func() error {
 		latest, err := state.LoadChange(root, change.Slug)
 		if err != nil {
@@ -230,6 +242,7 @@ func showStatusForChange(cmd *cobra.Command, root string, change model.Change, o
 		if err != nil {
 			return err
 		}
+		view.View = requestedView
 		return printStatusView(cmd, view, outputFormat)
 	})
 }

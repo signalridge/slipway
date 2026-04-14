@@ -15,6 +15,7 @@ type reviewOptions struct {
 	changedOnly bool
 	all         bool
 	artifact    string
+	mode        string
 }
 
 type reviewView struct {
@@ -24,6 +25,7 @@ type reviewView struct {
 	NeedsDiscovery bool               `json:"needs_discovery,omitempty"`
 	CurrentState   string             `json:"current_state"`
 	Verdict        string             `json:"verdict"`
+	Mode           string             `json:"mode,omitempty"`
 	Blockers       []model.ReasonCode `json:"blockers,omitempty"`
 	Waves          []reviewWaveView   `json:"waves,omitempty"`
 	Gaps           *reviewGaps        `json:"gaps,omitempty"`
@@ -67,6 +69,10 @@ func makeReviewCmd() *cobra.Command {
 					nil,
 				)
 			}
+			if err := validateRouteMode("review", opts.mode); err != nil {
+				return err
+			}
+			effectiveMode := resolveEffectiveRouteMode("review", opts.mode)
 
 			root, err := projectRootFromWD()
 			if err != nil {
@@ -164,6 +170,7 @@ func makeReviewCmd() *cobra.Command {
 					NeedsDiscovery: profile.NeedsDiscovery,
 					CurrentState:   string(change.CurrentState),
 					Verdict:        verdict,
+					Mode:           effectiveMode,
 					Blockers:       blockers,
 					Waves:          waveViews,
 					Gaps:           classifyReviewGaps(blockers),
@@ -181,6 +188,7 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.changedOnly, "changed-only", true, "Review only changed/stale units")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Run full review")
 	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
+	cmd.Flags().StringVar(&opts.mode, "mode", "", "Review mode override (e.g. independent-review, spec-trace, second-opinion)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	return cmd
 }
@@ -190,6 +198,9 @@ func writeReviewText(w io.Writer, view reviewView) error {
 	writer.Writef("Change: %s\n", view.Slug)
 	writer.Writef("State: %s\n", view.CurrentState)
 	writer.Writef("Verdict: %s\n", view.Verdict)
+	if strings.TrimSpace(view.Mode) != "" {
+		writer.Writef("Mode: %s\n", view.Mode)
+	}
 
 	if len(view.Waves) > 0 {
 		writer.Writef("Waves:\n")

@@ -1,0 +1,24 @@
+sources:
+  - source: alirezarezvani/incident-commander
+    absorbed_as: standalone
+    extracted:
+      - "commander-role-owns-verdict rule"
+      - "containment before diagnosis ordering"
+    dropped:
+      - "role-playbook-specific prose"
+    conflicts_with: []
+  - source: alirezarezvani/incident-response
+    absorbed_as: standalone
+    extracted:
+      - "structured timeline + containment + diagnosis + communication schema"
+      - "postmortem is mandatory with action items"
+    dropped:
+      - "tool-specific runbook links"
+    conflicts_with: []
+  - source: sickn33/acceptance-orchestrator
+    absorbed_as: posture-only
+    extracted:
+      - "gate posture: provisional hypothesis until disconfirming check fails"
+    dropped:
+      - "acceptance-specific orchestration loops (absorbed elsewhere)"
+    conflicts_with: []

@@ -1,0 +1,32 @@
+sources:
+  - source: trailofbits/codeql
+    absorbed_as: standalone
+    extracted:
+      - "tool + ruleset version pinning"
+      - "diff-plus-blast-radius scoping"
+    dropped:
+      - "long CodeQL query examples"
+    conflicts_with: []
+  - source: trailofbits/semgrep
+    absorbed_as: standalone
+    extracted:
+      - "custom-rule rationale requirement"
+      - "semgrep ruleset selection defaults"
+    dropped:
+      - "per-language rule catalogs"
+    conflicts_with: []
+  - source: trailofbits/sarif-parsing
+    absorbed_as: standalone
+    extracted:
+      - "per-result triage status: confirmed | false-positive | deferred"
+      - "no silent drops"
+    dropped:
+      - "parser implementation details"
+    conflicts_with: []
+  - source: trailofbits/audit-augmentation
+    absorbed_as: standalone
+    extracted:
+      - "augment built-in rules only when risk is uncovered"
+    dropped:
+      - "engagement-specific augmentation recipes"
+    conflicts_with: []

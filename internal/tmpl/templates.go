@@ -3,6 +3,7 @@ package tmpl
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -13,6 +14,20 @@ import (
 //go:embed all:templates
 var embeddedTemplates embed.FS
 
+// TemplateFS returns a read-only view of the embedded templates rooted at
+// the "templates/" directory. Callers use it to enumerate optional support
+// directories like <skill>/references or <skill>/scripts that do not have
+// a fixed file list.
+func TemplateFS() fs.FS {
+	sub, err := fs.Sub(embeddedTemplates, "templates")
+	if err != nil {
+		// The "templates" sub-FS is embedded at build time; failure here
+		// means the embed directive is broken.
+		panic(fmt.Errorf("tmpl: fs.Sub: %w", err))
+	}
+	return sub
+}
+
 // Content returns the raw content of a template file.
 // Use for static templates that need no variable substitution.
 func Content(name string) (string, error) {
@@ -22,6 +37,20 @@ func Content(name string) (string, error) {
 		return "", fmt.Errorf("template %q: %w", name, err)
 	}
 	return string(b), nil
+}
+
+// ContentIfExists returns a template's raw content when present.
+// Missing templates are reported with exists=false and no error.
+func ContentIfExists(name string) (content string, exists bool, err error) {
+	p := path.Join("templates", name)
+	b, err := embeddedTemplates.ReadFile(p)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("template %q: %w", name, err)
+	}
+	return string(b), true, nil
 }
 
 // Render parses a template file as a Go text/template and executes it with the given data.

@@ -1,0 +1,10 @@
+sources:
+  - source: trailofbits/variant-analysis
+    absorbed_as: standalone
+    extracted:
+      - "anti-predicate pattern distillation"
+      - "per-callsite classification: affected / safe-with-reason / needs-followup"
+      - "pattern recorded in provenance"
+    dropped:
+      - "engagement-specific query libraries"
+    conflicts_with: []

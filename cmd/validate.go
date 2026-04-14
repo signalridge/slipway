@@ -31,6 +31,7 @@ type validateView struct {
 	GateDetails               map[string]model.GateRecord `json:"gate_details,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
+	Mode                      string                      `json:"mode,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -89,6 +90,7 @@ func buildValidateViewBase(
 
 func makeValidateCmd() *cobra.Command {
 	var changeSlug string
+	var mode string
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: desc("validate"),
@@ -96,6 +98,10 @@ func makeValidateCmd() *cobra.Command {
 			"Use this command to inspect current evidence and gate readiness without advancing state.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRouteMode("validate", mode); err != nil {
+				return err
+			}
+			effectiveMode := resolveEffectiveRouteMode("validate", mode)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -113,10 +119,12 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			view.Mode = effectiveMode
 			return encodeJSONResponse(cmd, view)
 		},
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
+	cmd.Flags().StringVar(&mode, "mode", "", "Catalog validate mode (skill id, e.g. coverage-analysis, property-testing)")
 	cmd.Flags().Bool("json", false, "JSON output")
 	return cmd
 }

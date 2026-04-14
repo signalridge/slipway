@@ -1,0 +1,25 @@
+sources:
+  - source: sickn33/audit-context-building
+    absorbed_as: standalone
+    extracted:
+      - "entry-point-to-blast-radius traversal"
+      - "risk surface enumeration"
+    dropped:
+      - "audit-specific narrative examples"
+    conflicts_with: []
+  - source: trailofbits/audit-context-building
+    absorbed_as: standalone
+    extracted:
+      - "file:line citation discipline for every claim"
+      - "separation of assumption vs finding"
+    dropped:
+      - "tool-specific invocation guidance"
+    conflicts_with: []
+  - source: wshobson/context-driven-development
+    absorbed_as: standalone
+    extracted:
+      - "restate the question before reading"
+      - "one-screen summary as the reviewable handoff"
+    dropped:
+      - "general prompt-engineering prose"
+    conflicts_with: []

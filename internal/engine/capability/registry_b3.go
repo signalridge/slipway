@@ -1,0 +1,104 @@
+package capability
+
+// Skills registered at B3 (security cluster). See docs/distillation/catalog.md
+// rows 11, 12, 13, 14.
+
+func threatModeling() Skill {
+	return Skill{
+		ID:                "threat-modeling",
+		Domain:            DomainReviewSecurity,
+		Function:          "structured threat enumeration with ownership map and mitigation trace",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentProcedure,
+		Summary:           "Use when a change alters the trust boundary or asset surface. Triggers on review or validate commands, security-classified guardrails, or user text naming threats.",
+		Evidence:          EvidenceArtifact,
+		Triggers: []TriggerClause{
+			{Op: OpCommand, Values: []string{"review", "validate"},
+				Reason: "review or validate command invoked; enumerate threats against the change"},
+			{Op: OpUserTextMatches, Values: []string{"threat model", "attack surface", "adversary", "trust boundary"},
+				Reason: "User text asks for threat modeling"},
+		},
+		Bindings: []Binding{
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
+			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func sastOrchestration() Skill {
+	return Skill{
+		ID:                "sast-orchestration",
+		Domain:            DomainReviewSecurity,
+		Function:          "run SAST tooling (CodeQL/Semgrep) with SARIF triage",
+		Tier:              TierT2,
+		PrimaryAttachment: AttachmentToolRecipe,
+		Summary:           "Use when running SAST tooling against the change. Triggers on review, validate, or repair commands and user text naming SAST tools.",
+		Evidence:          EvidenceArtifact,
+		Triggers: []TriggerClause{
+			{Op: OpCommand, Values: []string{"review", "validate", "repair"},
+				Reason: "Review/validate/repair command invoked; SAST may apply"},
+			{Op: OpUserTextMatches, Values: []string{"codeql", "semgrep", "sast", "sarif"},
+				Reason: "User text names a SAST tool"},
+		},
+		Bindings: []Binding{
+			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func ghaSecurityReview() Skill {
+	return Skill{
+		ID:                "gha-security-review",
+		Domain:            DomainReviewSecurity,
+		Function:          "review GitHub Actions workflows for privilege, pinning, and agentic-action risk",
+		Tier:              TierT2,
+		PrimaryAttachment: AttachmentChecklist,
+		Summary:           "Use when reviewing GitHub Actions workflows. Triggers on review or repair commands or on changes to .github/workflows paths.",
+		Evidence:          EvidenceVerdict,
+		Triggers: []TriggerClause{
+			{Op: OpChangedFilesInclude, Values: []string{".github/workflows/*", ".github/workflows/**/*"},
+				Reason: "GitHub Actions workflow changed"},
+			{Op: OpCommand, Values: []string{"review", "repair"},
+				Reason: "Review or repair command invoked; workflow surface may be in scope"},
+		},
+		Bindings: []Binding{
+			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
+			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func supplyChainAudit() Skill {
+	return Skill{
+		ID:                "supply-chain-audit",
+		Domain:            DomainReviewSecurity,
+		Function:          "audit third-party dependencies for CVE, provenance, and pinning risk",
+		Tier:              TierT2,
+		PrimaryAttachment: AttachmentChecklist,
+		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review, repair, or status commands or on changes to package/lock files.",
+		Evidence:          EvidenceVerdict,
+		Triggers: []TriggerClause{
+			{Op: OpChangedFilesInclude, Values: []string{
+				"go.mod", "go.sum",
+				"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+				"Cargo.toml", "Cargo.lock",
+				"requirements*.txt", "pyproject.toml", "poetry.lock", "uv.lock",
+			},
+				Reason: "Dependency manifest or lockfile changed"},
+			{Op: OpCommand, Values: []string{"review", "repair", "status"},
+				Reason: "Review/repair/status command invoked; dependency surface may apply"},
+		},
+		Bindings: []Binding{
+			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
+			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandManual, Target: "status", Attachment: AttachmentChecklist},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}

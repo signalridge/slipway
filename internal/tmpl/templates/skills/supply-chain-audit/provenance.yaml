@@ -1,0 +1,17 @@
+sources:
+  - source: alirezarezvani/dependency-auditor
+    absorbed_as: standalone
+    extracted:
+      - "added-dependency rationale requirement"
+      - "transitive enumeration rule"
+    dropped:
+      - "tool-specific CLI transcripts"
+    conflicts_with: []
+  - source: trailofbits/supply-chain-risk-auditor
+    absorbed_as: standalone
+    extracted:
+      - "provenance check against typo-squat lookalikes"
+      - "pinned scanner version requirement"
+    dropped:
+      - "engagement-specific risk catalogs"
+    conflicts_with: []

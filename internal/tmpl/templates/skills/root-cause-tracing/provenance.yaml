@@ -1,0 +1,32 @@
+sources:
+  - source: superpowers/systematic-debugging
+    absorbed_as: standalone
+    extracted:
+      - "symptom-to-invariant backward trace"
+      - "file:line citation for first violated invariant"
+    dropped:
+      - "general debugging prose and examples"
+    conflicts_with: []
+  - source: wshobson/debugging-strategies
+    absorbed_as: standalone
+    extracted:
+      - "no fix without documented root cause"
+      - "minimal reproduction discipline"
+    dropped:
+      - "language-specific example snippets"
+    conflicts_with: []
+  - source: wshobson/parallel-debugging
+    absorbed_as: standalone
+    extracted:
+      - "competing-hypothesis branch with distinguishing observation"
+      - "written elimination of losing hypothesis"
+    dropped:
+      - "per-tool harness configuration"
+    conflicts_with: []
+  - source: trailofbits/debug-buttercup
+    absorbed_as: partial-only
+    extracted:
+      - "triage posture: reproduce first, classify before fixing"
+    dropped:
+      - "engagement-specific runbook details"
+    conflicts_with: []

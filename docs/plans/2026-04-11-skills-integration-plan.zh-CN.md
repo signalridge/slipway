@@ -1,895 +1,699 @@
-# Skills 集成方案 — 大胃口建设版（2026-04-11，v5）
+# Skills 集成方案
 
-> 取代 v3（`2026-04-11-skills-integration-plan.md` 旧版）、v3-critique（`...v3-critique.md`）以及 v4（`...v4-merged.md`）。v3 拒绝了 v2 的幻觉是对的；v4 把每个论断都落到仓库事实上是对的。v5 同时保留这两点优势，并且不再保守：引擎、registry 契约、CLI、chezmoi 池、slipway 模板面 —— 全部一次协调改造。
->
-> **状态：** 草案，等待 owner 在 §13 上签字。
-> **审计时间：** 2026-04-11，针对本地机器实测。
-> **目标形态：** 通过 `internal/engine/skill/skill.go` 注册 **19 个 gate + 12 个 reference + 4 个 technique**，全部经由扩展后的 `next` CLI 输出，复用并扩展现有的 `defaultGovernanceRegistry` 形状（不替换）。
+## 1. 目标
 
----
+把当前以 capability pack 为中心的 skills 集成设计，重构成以 catalog
+为中心的设计。
 
-## 1. 执行摘要
+Slipway 会先把 `skills_ref/` 当前工作集蒸馏成 25 个按 `domain x function`
+组织的独立 Slipway skill，再通过 Go 侧持有的 binding registry 和自动
+capability resolver，把这些 skill 重新绑定回现有 Slipway 框架。
 
-v4 矫枉过正了。v4 推迟掉的一半事项（"不加 gate、不扩展 frontmatter、不动 CLI 表面"）并不是根本约束 —— 它们是因为测试套件这么写而自我设的规则。测试套件是你写的；契约也是你定的。打破最小 frontmatter 契约、加入 gate 排序的最佳时机就是**现在**，在一次协调改造里完成，而不是分散在未来四份方案中。
+Source corpus 说明：`skills_ref/` 是权威 source corpus。定稿时它包含 80 份权威
+`SKILL.md`，另含 1 份随 `skill-tester` 一起下发的 fixture：
+`alirezarezvani/skill-tester/assets/sample-skill/SKILL.md`。该 fixture 是
+`skill-tester` 技能内部的测试数据，**不属于** source corpus，不计入 disposition
+和 provenance coverage。如果交付阶段为了分批蒸馏采用更窄的 working set，那也
+只能作为 rollout batching 视图，不能替代 disposition / provenance 的覆盖口径。
 
-v5 分四个 wave 落地。每个 wave 是独立的 PR，但四个 wave 合在一起构成一次连贯的契约变更：
+这个方案坚持四条不可动摇的原则：
 
-- **Wave 1 — 引擎 + schema 改造。** `Definition` 新增 6 个字段（`Phase`、`Subject`、`Tier`、`References`、`OrderAfter`、若干条件标志）。`governanceFrontMatter` parser 扩展。同 state 内 gate 排序加入拓扑排序。新增 `defaultReferenceRegistry` map。新增 `slipway next --references` CLI flag。`chezmoi` 拉取 5 个缺失的上游源。测试契约迁移到新形状。零新 skill。现有 9 个 gate 行为零变化。
-- **Wave 2 — 现有 skill 加固 + `checklist-quality` 拆分。** v4 §7.2 的 6 个增强合并落地（intake / code-review-protocol / codebase-mapping / spec-compliance-review / wave-orchestration / tdd-governance）。7 行的 `checklist-quality.md` sidecar 拆成 4 个领域 checklist（`intake`、`plan`、`review`、`test`）。所有被加固的 skill 获得新 frontmatter 字段。
-- **Wave 3 — 新 gate（10 个）。** registry 落地 10 个新治理 gate，gate 总数从 9 提到 19。每个都来自经核实的上游 skill（完整引用见 §6）。每个都有 slipway 风格的 frontmatter、reason code、hard-gate 标记，并在适用的地方有条件触发规则。在 scratch 项目上做端到端冒烟。
-- **Wave 4 — Reference shelf（12 个）。** 12 个 slipway 风格的 reference skill 落地到 `defaultReferenceRegistry`。每个 ~150–200 LoC，源自 v4 §4.1 已核实的上游内容。`next --references` 按 phase/subject 过滤展示。Reference shelf 就是 v4 想用文档交叉链做的"还应该读什么"层 —— 但作为结构化 registry 实现。
+1. 保持单内核。`ResolveNextSkill` 继续作为唯一 progression authority。
+2. 不要求手动调用 skill。在 Slipway 内部，被吸收的 skill 由系统自动选择
+   并附着。
+3. 蒸馏方法，不搬运包。source skill 是新 Slipway catalog 的输入，不是
+   vendored runtime unit。
+4. 路由权在代码里，不在 prose 里。生成出来的 `SKILL.md` 是描述面和导出
+   面；真正的 runtime binding 继续由 Go registry 持有。
 
-终态：slipway 的 skill 表面从 **9 gate + 4 technique** 扩到 **19 gate + 4 technique + 12 reference** = 35 个注册 skill。registry 契约一次性支持 phase × subject 过滤、gate 排序、条件触发和 reference 展示。
+## 2. 硬约束
 
----
+### 2.1 Runtime authority
 
-## 2. 落地此方案的事实依据
+Slipway 保持唯一的控制闭环：
 
-以下是 v4 审计得到的核实事实。v5 全部继承；v4 到 v5 之间这部分没有变化。
+1. `ResolveNextSkill` 是唯一 progression authority。
+2. 当前按状态选择的 governed host 继续保持为：
+   `intake-clarification`、`research-orchestration`、`plan-audit`、
+   `worktree-preflight`、`wave-orchestration`、`tdd-governance`、
+   `spec-compliance-review`、`code-quality-review`、`goal-verification`、
+   `final-closeout`。
+3. `review`、`validate`、`repair`、`status`、`health` 继续是 command
+   surface。它们可以增长 router 或 view，但不会变成第二个 workflow
+   engine。
 
-### 2.1 当前 `slipway` 运行时路由契约
+### 2.2 产品边界
 
-`slipway` 通过这些 `Definition` 字段路由治理 skill（`internal/engine/skill/skill.go:10-20`）：
+这个方案不会改变 Slipway 的产品身份：
 
-```go
-type Definition struct {
-    Name                string
-    State               model.WorkflowState
-    PlanSubStep         model.PlanSubStep
-    Mitigation          string
-    RunSummaryBound     bool
-    DiscoveryOnly       bool
-    GuardrailRequired   bool
-    CloseoutConditional bool
-    AgentHint           string
-}
+1. Slipway 继续保持 multi-tool 能力。
+2. Slipway 不导入 mission/work-package/dashboard runtime。
+3. Slipway 不变成 home-directory skill installer。
+4. 重分析器和 provider-specific 工具继续放在显式 routed command path
+   之后。
+
+### 2.3 Binding authority
+
+必须尊重当前实现边界：
+
+1. Toolgen 目前是从 `SKILL.md` 和 `SKILL.md.tmpl` 渲染 adapter skill。
+2. Governance skill loader 目前只解析 `name` 和 `description`，真正的
+   runtime 行为来自 Go 侧默认 registry。
+3. 当前代码真相里，registry-backed governance definition 是 9 个；
+   `worktree-preflight` 是 kernel-owned standalone surface，不在默认
+   registry map 里。
+4. 因此，新增到 `SKILL.md` frontmatter 里的 catalog metadata 是描述面、
+   审计面、导出面，不是 runtime binding authority。
+5. 任何 catalog 到 host / command 的 binding，都必须落在 Go 侧的 registry
+   和可测试 resolver 里。
+
+## 3. 目标架构
+
+### 3.1 三层模型
+
+| Layer | 作用 | Authority |
+|------|------|-----------|
+| Kernel layer | 通过现有 Slipway host 执行 governed progression | `ResolveNextSkill` 与当前治理逻辑 |
+| Catalog layer | 25 个按 `domain x function` 切分的独立 Slipway skill | 不具备 progression authority |
+| Binding layer | 把 catalog skill 绑定到 host、routed command、hint、view、export | Go 持有的 binding registry 与 auto resolver |
+
+规则：
+
+1. Catalog 不替代 kernel。
+2. Kernel 不需要为每个独立 skill 新增一个 runtime state。
+3. Capability pack 降级成文档标签，不再是主架构单元。
+
+### 3.2 独立 skill 契约
+
+每个新的 Slipway skill 都按 function 定义，而不是按上游 source skill 名字
+平移。
+
+每个目标 skill 带有如下概念契约：
+
+| 字段 | 含义 |
+|------|------|
+| `skill_id` | 稳定的 Slipway skill ID |
+| `domain` | 关注域，例如 review、verification、repair |
+| `function` | 这个 skill 只做的那一件事 |
+| `tier` | `T1` core capability、`T2` specialist route、或 `T3` diagnostic view |
+| `primary_attachment` | `posture`、`procedure`、`checklist`、`tool-recipe`、`report-schema` 五选一 |
+| `summary` | 面向触发的描述，并镜像到 frontmatter 与导出面 |
+| `trigger_signals[]` | capability resolver 使用的受限 trigger DSL 子句 |
+| `evidence_contract` | `verdict`、`artifact`、或 `checklist` 契约 |
+| `bindings[]` | Go 持有的 host、command、hint、view、export binding 的镜像 |
+| `provenance_ref` | 指向结构化 `provenance.yaml` 的路径 |
+
+规则：
+
+1. 一个 source skill 可以喂给多个 target skill。
+2. 一个 target skill 可以吸收多个 source skill。
+3. `tier` 描述语义角色，不规定绑定数量或密度。像 `threat-modeling`、
+   `differential-review` 这类 T1 绑定较窄，也仍然是 T1，因为它们承载的是
+   可复用的方法，而不是工具路由或只读视图。
+4. `primary_attachment` 是 authoring 侧元数据；运行时注入位置由 resolver
+   根据 attachment mode 决定。
+5. `bindings[]` 会镜像到 authoring metadata，但 runtime authority 继续由
+   Go 侧 registry 持有。
+6. `trigger_signals[]` 使用受限算子集合，而不是任意 prose。
+7. `provenance_ref` 采用结构化格式，方便保持 by-source 索引可审计，并支持
+   coverage 校验自动化。
+
+### 3.3 Binding 类型
+
+每个 catalog skill 可以绑定到一个或多个目标：
+
+| Binding type | 含义 |
+|------|------|
+| `host-embedded` | 作为 directive、checklist 或 partial 注入 governed host |
+| `command-auto` | 由 routed command 自动选择 |
+| `command-manual` | 支持显式 command flag override |
+| `technique-hint` | 复用 `cmd/next_skill_view.go` 中现有的 `TechniqueHints` surface，不影响 progression |
+| `command-view` | 以只读 command surface 或 diagnostics view 的形式暴露 |
+| `export-only` | 只给 adapter export，不进入核心 runtime |
+
+规则：
+
+1. `technique-hint` 复用现有 `TechniqueHints` 渲染路径；Go 侧只返回
+   skill id 和 hint 种类，文案由 host LLM 组织。
+2. Binding type 决定运行时附着 surface；attachment mode（见 §3.3.1）决定
+   内容被附着时的形状。
+
+### 3.3.1 Attachment mode
+
+每个 catalog skill 声明一个 `primary_attachment`；具体 binding 可再追加。
+五种模式在下面固定：
+
+| Mode | 含义 | 典型载体 |
+|------|------|----------|
+| `posture` | 持续性立场，注入 host prompt 顶部 | "enforce TDD"、"fresh verification required" |
+| `procedure` | 有序步骤 | `RED -> GREEN -> REFACTOR`、`Extract -> Dedup -> Reframe -> Anchor` |
+| `checklist` | 离散检查项 | security review 条目、spec-trace 对齐 |
+| `tool-recipe` | 工具 / 命令调用模式 | semgrep 配置、codeql query scaffold |
+| `report-schema` | 结构化输出约束 | verdict 形状、incident timeline schema |
+
+规则：
+
+1. 五种 mode 在 `docs/distillation/schema.md` 中冻结。
+2. Template 映射：`PROSE.tmpl` -> `posture` / `procedure`；
+   `CHECKLIST.tmpl` -> `checklist`；`VERDICT.tmpl` -> `report-schema`；
+   `tool-recipe` 走 `scripts/` 或 inline。
+3. Resolver 根据 attachment mode 决定注入位置（prompt 顶部 / checklist
+   段 / tool-invocation hint / output-constraint 段）。
+4. `primary_attachment` 必填；当单个 skill 承载多种形状时，具体 binding
+   可以再额外声明 attachment mode。
+
+### 3.4 Auto capability resolver
+
+Slipway 继续保持 AI-driven，不要求操作员手动点选被吸收的 skill。
+
+当前已落地的 auto capability resolver 直接消费
+`internal/engine/capability.Signals` 这组输入：
+
+1. 当前 command 上下文，例如 `review`、`validate`、`repair`、`status`、
+   `health`
+2. 当前 governed host（用于 support skill 附着）
+3. blocker reason
+4. changed-file signal
+5. referenced path signal
+6. 当调用方显式提供时的 user-text match
+
+workflow state/sub-step、guardrail 分类、evidence freshness、artifact
+上下文可以由调用方先折算成这些 signal，但它们并不是当前 shipped resolver
+struct 的一等字段。
+
+它输出：
+
+1. 当 command 需要自动选 mode/view 时，返回一个 bound route
+2. 当 governed host 需要附加方法论时，返回 0-3 个 ranked support skill
+3. `hydrate_references[]` 标记按需注入的 `references/*.md`（仿 spec-kitty
+   的条件 hydration）
+4. 可选 `llm_tiebreak` 字段：当 DSL 评分产生平局时，列出候选 skill id
+   与裁决 criterion，交由 host LLM 在 prompt 内对照 user text 裁决
+5. 每个自动附着项都带一个简短的 `reason`，其内容来自命中的
+   trigger clause
+
+规则：
+
+1. Resolver 绝不能改变 `ResolveNextSkill` 选出来的下一个 governed host。
+2. 显式 operator flag 优先于自动路由。
+3. 在正常 Slipway 流程里，不要求手动调用被吸收 skill。
+4. 导出的 skill 仍然可以被其他工具直接调用；这不改变 Slipway 内部 runtime
+   模型。
+5. `hydrate_references[]` 与 `llm_tiebreak` 都属于可选扩展输出，而不是 B1
+   必交字段。B1 只要求 route / support attachment / technique-hint 跑通。
+6. `technique-hint` binding 通过 `cmd/next_skill_view.go` 现有的
+   `TechniqueHints` surface 发出 skill id 与 hint 种类；hint 文案不归 Go 管。
+7. `hydrate_references[]` 最早在 B2 引入，由 `context-assembly` 这类
+   reference-heavy 能力证明；在此之前 resolver 不需要产出该字段。
+8. `llm_tiebreak` 是唯一被允许的 AI 让渡点，但只在后续批次出现真实 DSL
+   平局时引入；B1 不要求实现或测试它。
+
+### 3.5 Source authoring 布局
+
+Catalog skill 的 source 布局调整为“固定核心契约 + 受约束 support 目录”：
+
+```text
+internal/tmpl/templates/skills/<skill-id>/
+  SKILL.md
+  provenance.yaml
+  PROSE.tmpl           # optional
+  CHECKLIST.tmpl       # optional
+  VERDICT.tmpl         # optional
+  references/          # optional
+  scripts/             # optional
 ```
 
-现有 9 条全部设置了 `AgentHint`。v5 对每个新 gate 也保留这个习惯。
+说明：
 
-### 2.2 当前 registry 大小：9 gate
+1. `SKILL.md` 与 `provenance.yaml` 是每个 catalog skill 必备的核心文件。
+2. `PROSE.tmpl`、`CHECKLIST.tmpl`、`VERDICT.tmpl` 是按 binding 或 evidence
+   contract 条件启用的 typed optional template。
+3. `references/` 是一跳可达的 support shelf，用来承载长说明、反例、
+   framework 变体、source note；它不是 routing authority。
+4. `scripts/` 只放确定性的 helper、validator、aggregator、report
+   generator，并要求显式输入/输出契约；它不是 progression authority。
+5. Assembler 装配顺序固定为：frontmatter -> `SKILL.md` body -> 按 binding
+   类型条件注入 `PROSE` / `CHECKLIST` / `VERDICT`。
+6. Support 目录默认不自动消费；只有 skill body 或 assembler config
+   显式点名，才会被纳入流程。
+7. Catalog skill 现在已经使用 assembler。非 catalog 的 governed host
+   仍可能直接使用单文件或 `.tmpl` source。
 
-| State | Skill | 备注 |
+### 3.6 蒸馏工作流
+
+每次 source-skill 吸收都遵循同一套四步法：
+
+1. `Extract`：只保留触发条件、决策规则、反例，以及能承载证据的检查项。
+2. `Deduplicate`：重复规则保留更具体的版本；多个 source 冲突时，保留更
+   保守的规则，并把冲突写入 `provenance.yaml`。
+3. `Reframe`：围绕目标 Slipway skill 的唯一职责重写，不保留 source skill
+   的命名、语气和叙事结构。
+4. `Anchor`：一条规则只有在能映射到 `trigger_signals[]`、
+   `evidence_contract` 或 typed template 消费点时才保留。
+
+规则：
+
+1. 长故事、背景叙述、冗长 example 默认移入 `references/` 或直接删除。
+2. 不能锚定到 runtime 选择、证据输出或 typed prompt 装配的规则，不带入
+   catalog 层。
+3. Catalog 层默认保持精炼：CI 会鼓励小型 `SKILL.md`，把溢出内容推到 typed
+   template 或 `references/`。
+4. 蒸馏工作本身由 Claude Code session 扮演蒸馏器执行，不另造
+   `slipway distill` 子命令。批次之间的上下文交接仅依赖已合并的
+   `provenance.yaml` 与 `docs/distillation/by-source.md`，不写专门的交接
+   笔记。
+
+### 3.7 Trigger DSL
+
+`trigger_signals[]` 使用 Go 持有的受限 DSL，而不是自由文本匹配规则。
+
+示例：
+
+```yaml
+trigger_signals:
+  - all_of:
+      - command: review
+      - path_includes: ".github/workflows"
+      - changed_files_include: "**/*.{yml,yaml}"
+    reason: "review 阶段修改了 GitHub Actions workflow"
+```
+
+首批支持的算子：
+
+- `all_of`
+- `any_of`
+- `not`
+- `command`
+- `host`
+- `blocker_reason`
+- `changed_files_include`
+- `path_includes`
+- `user_text_matches`
+
+规则：
+
+1. 算子集合固定在 Go 代码 `internal/engine/capability/trigger.go`。
+2. 评分仍由 Go 持有；resolver 负责返回一个 routed command mode/view，或
+   至多三个 support attachment。
+3. Trigger 子句只是路由证据，不是第二个 workflow engine。
+
+### 3.8 结构化 provenance
+
+每个 catalog skill 都带一个结构化 `provenance.yaml`，用于保持 source
+追踪、冲突说明和 by-source 索引可审计，而不是只写手工叙述。
+
+最小形态：
+
+```yaml
+sources:
+  - source: superpowers/systematic-debugging
+    absorbed_as: standalone
+    extracted:
+      - 先追 root cause 再修复
+    dropped:
+      - 冗长的调试叙事故事
+    conflicts_with: []
+```
+
+规则：
+
+1. 只有在 `by-source.md` 中被标为 `standalone` 或 `partial-only` 的
+   source，才必须在 `extracted`、`dropped` 或 `conflicts_with` 之一里落位。
+   `posture-only`、`absorbed`、`view-only`、`route-only` 与 `deferred`
+   继续在 `by-source.md` 中跟踪，不作为 provenance gate。
+2. `absorbed_as` 记录这个 source 是 standalone target、posture-only
+   输入，还是 partial-only 输入。
+3. `docs/distillation/by-source.md` 是人工维护的反向索引，引用
+   `provenance.yaml` 与 rollout 状态；它不是自动生成的 source of truth。
+
+### 3.9 蒸馏质量门
+
+只有以下 gate 全部通过，catalog skill 才算蒸馏完成：
+
+1. `schema-lint`：只读解析 frontmatter、typed template reference 与
+   trigger operator，断言结构与白名单合法。
+2. `size-lint`：只读测量 `SKILL.md` body，并校验 prompt-density discipline；
+   预算按 tier 分层：
+   - T1 core capability：目标 <= 2 KB；2-6 KB 告警；超过 6 KB 需显式理由。
+   - T2 specialist route：目标 <= 3 KB（承载 tool-recipe 开销）；3-8 KB
+     告警；超过 8 KB 需显式理由。
+   - T3 diagnostic view：目标 <= 1.5 KB；以 report-schema 为主，但允许在同一
+     预算内保留极简 posture / anti-pattern 上下文。
+   警戒带仅记录为提示日志，不会单独导致 gate fail。
+   只有出现无边界 prose、长 example 本应下沉到 typed template /
+   `references/` 却仍堆在主文件，或超大 body 且没有批准豁免时，才直接失败。
+3. `binding-compare`：只读比对 authoring `bindings[]` 与 Go 持有 registry
+   是否 1:1 一致。
+4. `provenance-coverage-scan`：只读扫描 `by-source.md` 中所有
+   `standalone` / `partial-only` source 是否都在 `provenance.yaml` 的并集中
+   被覆盖，并反向检查每个 provenance source 都已出现在 `by-source.md`。
+
+Gate 自动化现在已经通过 Go 测试落地，并应由 CI 执行。更早的 B0-B7 阶段
+曾依赖 PR review checklist，直到 Go 侧 registry schema、frontmatter
+契约与 by-source 索引稳定下来。
+
+### 3.10 吸收自 superpowers 与 spec-kitty 的范式
+
+以下两个源框架塑造了 Slipway 的蒸馏姿态，但它们不作为 runtime 单元被导入：
+
+| 吸收的范式 | 来源 | Slipway 落点 |
 |---|---|---|
-| `S0_INTAKE` | `intake-clarification` | `AgentHint: slipway-planner` |
-| `S1_PLAN` | `research-orchestration` | `PlanSubStep: research`、`DiscoveryOnly: true`、`AgentHint: slipway-researcher` |
-| `S1_PLAN` | `plan-audit` | `PlanSubStep: audit`、`AgentHint: slipway-auditor` |
-| `S2_EXECUTE` | `wave-orchestration` | `RunSummaryBound: true`、`AgentHint: slipway-orchestrator` |
-| `S2_EXECUTE` | `tdd-governance` | `GuardrailRequired: true`、`RunSummaryBound: true`、`AgentHint: slipway-orchestrator` |
-| `S3_REVIEW` | `spec-compliance-review` | `RunSummaryBound: true`、`AgentHint: slipway-reviewer` |
-| `S3_REVIEW` | `code-quality-review` | `RunSummaryBound: true`、`AgentHint: slipway-reviewer` |
-| `S4_VERIFY` | `goal-verification` | `RunSummaryBound: true`、`AgentHint: slipway-verifier` |
-| `S4_VERIFY` | `final-closeout` | `CloseoutConditional: true`、`RunSummaryBound: true`、`AgentHint: slipway-closer` |
+| `description`-as-dispatcher | `superpowers` | catalog `SKILL.md` frontmatter `summary` 统一使用 `Use when ... / Triggers on ...` 句式，让导出面的外部 adapter 能做 description 级分诊。 |
+| 目录入口 manifest | `superpowers/using-superpowers` | Toolgen 导出时生成一份 `using-slipway-catalog.md`，只面向外部 agent，不进入 Slipway kernel。 |
+| `references/` 按需 hydration | `spec-kitty` / `runtime-next` | schema 预留 `hydrate_references[]`；等后续 resolver batch 真正产出该字段后，再由 host 决定是否内联对应 `references/*.md`。 |
+| 自动发现 manifest 姿态 | `sickn33/agent-orchestrator` | 作用于 B8 的 toolgen 多文件 assembler，而不是升格为独立 catalog skill。 |
 
-### 2.3 仅作为 technique 的 skill（未注册为 gate）
+规则：
 
-`tdd`、`systematic-debugging`、`code-review-protocol`、`codebase-mapping`。v5 仍把这些保留为 technique skill —— 它们在 gate **内部**被引用，而不是作为 state checkpoint。v5 不把它们提升为 gate。
+1. 这些吸收的范式是声明式契约，不新增 runtime progression authority。
+2. 不按源仓库一比一镜像，只吸收范式本身。
 
-### 2.4 模板文件形态
+## 4. Domain x Function Catalog
 
-- 静态 `SKILL.md`：大多数 skill。
-- 由 `SKILL.md.tmpl` 渲染：`spec-compliance-review`、`wave-orchestration`、`tdd-governance`。改动落在 `.tmpl` 源；Wave 2 的结构断言要先渲染再断言。
+`skills_ref/` 继续是本方案的权威 source corpus。任何 rollout batching 用的
+working set，都必须在 `by-source.md` 或 disposition matrix 里显式列出，不得
+隐式缩小 provenance 覆盖范围。
 
-### 2.5 `~/.agents/skills` 已经预装了 167 个 SKILL.md
+### Tier 分布
 
-`~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl` 拉自 `wshobson/agents`、`anthropics/skills`、`getsentry/skills`、`openai/skills`、`trailofbits/skills`、`huggingface/skills`、`cloudflare`、`vercel-labs`、`supabase`、`expo`、`microsoft`、`signalridge`、多语言 humanizer 包、`nextlevelbuilder/ui-ux-pro-max-skill`、`sickn33/antigravity-awesome-skills`。v5 在 Wave 1 再加 5 个源（§9）。
+25 个 catalog skill 按三个 tier 切分（tier 语义见 §3.2）：
 
-### 2.6 v2 的所有错分都已确认
+| Tier | 数量 | 成员 |
+|---|---|---|
+| **T1** core capability | 18 | `scope-clarification`、`context-assembly`、`plan-authoring`、`tdd-proof`、`parallel-executor-contract`、`fresh-verification-evidence`、`root-cause-tracing`、`independent-review`、`multi-reviewer-calibration`、`security-review`、`threat-modeling`、`spec-trace`、`differential-review`、`variant-analysis`、`coverage-analysis`、`property-testing`、`mutation-testing`、`performance-profiling` |
+| **T2** specialist route | 6 | `sast-orchestration`、`gha-security-review`、`supply-chain-audit`、`ci-triage`、`review-comment-triage`、`git-recovery` |
+| **T3** diagnostic view | 1 | `incident-response` |
 
-v4 §2.5 的完整证据表格无变化保留。v5 仍然依赖的几个要点：
+Tier 是语义角色标签。像 `threat-modeling`、`differential-review` 这类 T1
+skill 绑定较窄，但仍然是 T1，因为它们承载的是可复用方法，而不是工具路由
+或视图。
 
-- `agentic-actions-auditor` 是**只针对 GitHub Actions AI CI 的审计** —— 不是通用的 diff scanner。v5 不把它做成 gate；只在用户审视 `.github/workflows/*.yml` 时作为 reference 出现（`tier: reference`、`subject: safety`、`phase: review`）。
-- `trailofbits/spec-to-code-compliance` 是区块链特定的。v5 的 `spec-compliance-review` gate 只借用其证据引用规则，绝不照搬整个流程。
-- `trailofbits/testing-handbook-skills` 是 15 个模糊测试工具 skill，不是方法论 bundle。v5 不会注册 `testing-strategies` gate。
-- Slipway 的 `spec-compliance-review/SKILL.md.tmpl` **比上游更严**。v5 §6.2.2 不会削弱它。
-- `worktree-preflight、checkpoint、done、pivot、repair、cancel、abort` 是 CLI 命令，**不是注册的 skill**。v5 保留它们作为命令。
-- `checklist-quality.md` 是 7 行 sidecar，不是 skill。v5 §7 把它拆成 4 个领域 checklist，仍然是 sidecar（仍然不注册为 skill）。
+### A. Intake and Framing
 
-完整 file:line 引用见 §14。
-
----
-
-## 3. 目标 Skill 表面
-
-v5 的终态 = **35 个注册 skill**（19 gate + 4 technique + 12 reference），位于 `internal/tmpl/templates/skills/` 与 `internal/engine/skill/skill.go`。
-
-### 3.1 v5 后按 state 划分的 gate
-
-| State | Gate | 状态 | 来源 |
-|---|---|---|---|
-| `S0_INTAKE` | `intake-clarification` | 现有（Wave 2 加固） | + `trailofbits/ask-questions-if-underspecified` |
-| `S1_PLAN` | `research-orchestration` | 现有 | — |
-| `S1_PLAN` | `plan-audit` | 现有 | — |
-| `S1_PLAN` | `threat-model-screen` | **Wave 3 新增** | `openai/.curated/security-threat-model`（已安装） |
-| `S1_PLAN` | `adr-discipline` | **Wave 3 新增** | `wshobson/.../architecture-decision-records`（已安装） |
-| `S2_EXECUTE` | `wave-orchestration` | 现有（Wave 2 加固） | + `wshobson/.../workflow-patterns` + `wshobson/.../task-coordination-strategies` |
-| `S2_EXECUTE` | `tdd-governance` | 现有（Wave 2 加固） | + `wshobson/.../workflow-patterns`（wave 感知 TDD） |
-| `S2_EXECUTE` | `code-simplification-review` | **Wave 3 新增** | `getsentry/.../code-simplifier`（已安装） |
-| `S2_EXECUTE` | `error-handling-discipline` | **Wave 3 新增** | `wshobson/.../error-handling-patterns`（已安装） |
-| `S3_REVIEW` | `spec-compliance-review` | 现有（Wave 2 加固） | 窄借 `trailofbits/spec-to-code-compliance` |
-| `S3_REVIEW` | `code-quality-review` | 现有（Wave 2 加固） | + `developer-essentials/code-review-excellence`（已安装） |
-| `S3_REVIEW` | `audit-context-readiness` | **Wave 3 新增** | `trailofbits/audit-context-building`（已安装） |
-| `S3_REVIEW` | `differential-risk-review` | **Wave 3 新增** | `trailofbits/differential-review`（已安装） |
-| `S3_REVIEW` | `security-review` | **Wave 3 新增** | `getsentry/security-review` + `openai/security-best-practices`（均已安装） |
-| `S4_VERIFY` | `goal-verification` | 现有 | — |
-| `S4_VERIFY` | `final-closeout` | 现有 | — |
-| `S4_VERIFY` | `changelog-emission` | **Wave 3 新增** | `wshobson/.../changelog-automation`（已安装） |
-| `S4_VERIFY` | `postmortem-readiness` | **Wave 3 新增** | `wshobson/.../postmortem-writing`（已安装） |
-
-**总计 19 个 gate。** 9 现有 + 10 新增。
-
-### 3.2 v5 后的 Reference
-
-12 个 slipway 风格的 reference skill，每个 ~150–200 LoC，注册到新的 `defaultReferenceRegistry`。每个都是 `tier: reference`、`hard_gate: false`，通过 `next --references` 展示。
-
-| # | Slipway 目标名 | Phase | Subject | 来源 |
+| # | Skill | 功能 | 主要 binding | 来源启发 |
 |---|---|---|---|---|
-| 1 | `audit-context-building` | review | safety | `~/.agents/skills/ecosystem/trailofbits/audit-context-building/SKILL.md` |
-| 2 | `differential-review-methodology` | review | safety | `~/.agents/skills/ecosystem/trailofbits/differential-review/SKILL.md` |
-| 3 | `property-based-testing` | execute | correctness | `~/.agents/skills/ecosystem/trailofbits/property-based-testing/SKILL.md` |
-| 4 | `e2e-testing-patterns` | execute | correctness | `~/.agents/skills/developer-essentials/e2e-testing-patterns/SKILL.md` |
-| 5 | `error-handling-patterns` | execute | refactor | `~/.agents/skills/developer-essentials/error-handling-patterns/SKILL.md` |
-| 6 | `code-simplification` | execute | refactor | `~/.agents/skills/ecosystem/getsentry/code-simplifier/SKILL.md` |
-| 7 | `architecture-decision-records` | plan | architecture | `~/.agents/skills/documentation-generation/architecture-decision-records/SKILL.md` |
-| 8 | `threat-modeling` | plan | safety | `~/.agents/skills/ecosystem/openai/security-threat-model/SKILL.md` |
-| 9 | `incident-runbooks` | verify | process | `wshobson/.../incident-runbook-templates`（Wave 1 chezmoi 拉取） |
-| 10 | `postmortem-writing` | verify | process | `~/.agents/skills/.../postmortem-writing/SKILL.md` |
-| 11 | `changelog-authoring` | verify | process | `~/.agents/skills/documentation-generation/changelog-automation/SKILL.md` |
-| 12 | `debugging-strategies` | execute | debug | `~/.agents/skills/developer-essentials/debugging-strategies/SKILL.md` |
-
-### 3.3 Technique（不变）
-
-`tdd`、`systematic-debugging`、`code-review-protocol`、`codebase-mapping`。继续作为 technique-only `.md` 文件留在 `internal/tmpl/templates/skills/`。两个 registry 都不进。
-
----
-
-## 4. 引擎 + Schema 变更（Wave 1）
-
-### 4.1 新的 `Definition` 字段
-
-扩展 `internal/engine/skill/skill.go:10-20`：
-
-```go
-type Definition struct {
-    // 现有
-    Name                string              `json:"name"`
-    State               model.WorkflowState `json:"state"`
-    PlanSubStep         model.PlanSubStep   `json:"plan_substep,omitempty"`
-    Mitigation          string              `json:"mitigation"`
-    RunSummaryBound     bool                `json:"run_summary_bound"`
-    DiscoveryOnly       bool                `json:"discovery_only,omitempty"`
-    GuardrailRequired   bool                `json:"guardrail_required,omitempty"`
-    CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
-    AgentHint           string              `json:"agent_hint,omitempty"`
-
-    // v5 新增
-    Phase           Phase    `json:"phase,omitempty"`            // intake|plan|execute|review|verify|meta
-    Subject         Subject  `json:"subject,omitempty"`          // correctness|safety|architecture|refactor|process|debug|authoring
-    Tier            Tier     `json:"tier"`                       // gate|reference|technique
-    References      []string `json:"references,omitempty"`       // 池路径（如 "shared:ecosystem/trailofbits/differential-review"）
-    OrderAfter      string   `json:"order_after,omitempty"`      // 同 state 内 gate 排序
-    ReasonCode      string   `json:"reason_code,omitempty"`      // internal/model/reason_code.go 中的 key
-    HardGate        bool     `json:"hard_gate,omitempty"`        // 推进 state 需要显式用户批准
-    SubjectGated    bool     `json:"subject_gated,omitempty"`    // 仅当 change.Subject 与 this.Subject 匹配时触发
-    PivotConditional      bool `json:"pivot_conditional,omitempty"`       // 仅当执行日志含 pivot/repair/abort 时触发
-    UserFacingConditional bool `json:"user_facing_conditional,omitempty"` // 仅当变更涉及用户面文件时触发
-    ErrorPathConditional  bool `json:"error_path_conditional,omitempty"`  // 仅当变更涉及错误/异常路径时触发
-}
-```
-
-配套三个枚举（`Phase`、`Subject`、`Tier`），含常量与校验器。校验器在 registry 加载时跑，并拒绝非法组合（如 `Tier: reference` + `HardGate: true`）。
-
-### 4.2 新的 `governanceFrontMatter` 字段
-
-扩展 `internal/engine/skill/registry_loader.go:40-44`，解析 `phase`、`subject`、`tier`、`references`、`order_after`、`reason_code`、`hard_gate`、`subject_gated`、`pivot_conditional`、`user_facing_conditional`、`error_path_conditional`。更新 `parseGovernanceSkillFromFile()`（168–199 行），在 name 查表后填充新的 `Definition` 字段。
-
-向后兼容：没有任何新字段的 frontmatter 仍然有效；如果 skill 在 `defaultGovernanceRegistry` 中，loader 默认设 `Tier: gate`；在 `defaultReferenceRegistry` 中默认 `Tier: reference`；否则默认 `Tier: technique`。
-
-### 4.3 新的 `defaultReferenceRegistry`
-
-加入 `internal/engine/skill/skill.go`：
-
-```go
-var defaultReferenceRegistry = map[string]Definition{
-    "audit-context-building": {
-        Name:       "audit-context-building",
-        Tier:       TierReference,
-        Phase:      PhaseReview,
-        Subject:    SubjectSafety,
-        References: []string{"shared:ecosystem/trailofbits/audit-context-building"},
-    },
-    // ... §3.2 还有 11 个 ...
-}
-```
-
-Reference skill 没有 `State`。它们不被 progression 引擎迭代；只通过 `next --references`（§4.6）和其它 skill 内部 `References` 交叉链来展示。
-
-### 4.4 `OrderAfter` 拓扑排序
-
-`RequiredSkillsForStateWithRegistry`（`skill.go:115-158`）当前按 state 迭代 registry 但没有顺序保证。把这次迭代换成：
-
-1. 按 state 过滤为 `Definition` 切片。
-2. 用 `OrderAfter` 边构造 DAG。
-3. 拓扑排序。环或未知依赖在 registry 加载阶段直接 fail loud。
-4. 返回排好序的切片。
-
-这样像 `differential-risk-review` 这种必须在 S3 中跑在 `code-quality-review` **之后**的 gate 才能解锁。
-
-### 4.5 条件触发逻辑
-
-加入 `internal/engine/progression/skill_resolution.go`：
-
-```go
-type ChangeContext struct {
-    Subject        Subject       // intake 时打 tag
-    GuardrailDomain bool         // 现有
-    ExecutionLog   []ExecutionEvent  // pivot、repair、abort
-    TouchedFiles   []string      // 用于 user-facing / error-path 检测
-}
-
-func (d Definition) ShouldFire(ctx ChangeContext) bool {
-    if d.SubjectGated && d.Subject != ctx.Subject {
-        return false
-    }
-    if d.PivotConditional && !hasPivot(ctx.ExecutionLog) {
-        return false
-    }
-    if d.UserFacingConditional && !touchesUserFacing(ctx.TouchedFiles) {
-        return false
-    }
-    if d.ErrorPathConditional && !touchesErrorPath(ctx.TouchedFiles) {
-        return false
-    }
-    return true
-}
-```
-
-检测 helper（`hasPivot`、`touchesUserFacing`、`touchesErrorPath`）是简单的 file glob 匹配 —— `touchesUserFacing` 检测 `cmd/`、`internal/cli/`、`web/`、`frontend/` 下的变化；`touchesErrorPath` 检测含 `errors.go`、`*_error.*`、`recovery.*` 等的文件。这些 pattern 在 `internal/model/config.go` 中可配置。
-
-`ChangeContext` 由现有的变更解析器构造，而不是每个 gate 自行构造。Gate 只通过条件标志声明它在意什么。
-
-### 4.6 新 CLI flag：`slipway next --references`
-
-扩展 `cmd/next.go` 支持 `--references`（短别名 `--refs`）。开启时：
-
-- `slipway next` 先打印正常的 gate 输出。
-- gate 输出之后追加 `## References` 段，列出 `defaultReferenceRegistry` 中所有 `Phase` 匹配当前 state 且 `Subject` 匹配变更主题（已知则匹配，未知则任意）的条目。
-- 每行：`slipway-<name>: <一行说明> → <池路径>`。
-- JSON 输出（`--json`）增加 `references` 数组。
-
-flag 是 opt-in；`next` 默认行为不变。
-
-### 4.7 测试契约迁移
-
-`internal/tmpl/templates_test.go` 当前断言最小 frontmatter。Wave 1 把断言迁移成：
-
-- 必须字段：`name`、`description`、`tier`。
-- 对于 `tier: gate`：还要求 `phase`、`subject`、`reason_code`。
-- 对于 `tier: reference`：还要求 `phase`、`subject`、`references`（非空）。
-- 对于 `tier: technique`：仅要求 `name` 和 `description`。
-- 拓扑排序断言：`TestGateOrderingNoCycles` 遍历 `defaultGovernanceRegistry` 并确认 `OrderAfter` 形成 DAG。
-- Reference 断言：`TestReferenceTargetsExist` 遍历 `defaultReferenceRegistry` 并确认每个 `References` 条目都能解析到 `~/.agents/skills/` 下真实文件（在 CI 环境无 chezmoi 池时可软告警跳过）。
-
-这就是 v3/v4 想避开的契约破裂点。v5 一次完成迁移，然后锁住新形状。
-
----
-
-## 5. 现有 Skill 加固（Wave 2）
-
-v4 §7.2 的 6 个加固，重述于此。每个都在 Wave 2 与 Wave 1 的新 frontmatter 字段一起落地。
-
-### 5.1 `intake-clarification` ← `trailofbits/ask-questions-if-underspecified`
-
-借用：5 类提问分类法（scope / acceptance / constraint / risk / stakeholder）、显式停止条件（"用 1–3 句话复述需求 + 关键约束"）。在现有 "Clarification Loop" 步骤下加 `## Question Taxonomy` 与 `## Stop Condition` 子节。不动现有的 Rationalization Red Flags 或 Scope Boundary Precision Rules。
-
-新 frontmatter：
-
-```yaml
----
-name: slipway-intake-clarification
-description: "Verify scope, acceptance criteria, and constraints before planning"
-tier: gate
-phase: intake
-subject: correctness
-reason_code: intake_clarification_required
-hard_gate: true
----
-```
-
-### 5.2 `code-quality-review`（v4 中叫 `code-review-protocol`）← `wshobson/multi-reviewer-patterns` + `developer-essentials/code-review-excellence`
-
-借用 `multi-reviewer-patterns`：reviewer 维度分配表（Security / Performance / Architecture / Testing / Accessibility）、findings 去重协议。借用 `code-review-excellence`：「Goals vs Not Goals」反向清单、建设性反馈量规。在现有 iron-law 段后添加 `## Reviewer Role Splits` 与 `## Feedback Discipline` 节。
-
-注意：`code-review-protocol` 仍然作为 technique skill 存在（被 `code-quality-review` 引用）。`code-quality-review` 这个 gate 才是注册的执行点。
-
-### 5.3 `wave-orchestration` ← `wshobson/workflow-patterns` + `wshobson/task-coordination-strategies`
-
-借用 workflow-patterns：11 步 TDD 生命周期（仅生命周期清单）、phase 完成协议、quality gates checkpoint 结构。借用 task-coordination-strategies：依赖图原则（parallel-safe vs sequential-required 判定）。添加 `## Coordination Strategies` 与 `## Lifecycle Checkpoints` 节。
-
-`SKILL.md.tmpl` 源 —— 改动落在模板，后续渲染。
-
-### 5.4 `tdd-governance` ← `wshobson/workflow-patterns`（延续）
-
-新增 `## Wave-Aware TDD` 节：何时跨 wave 拆测试，何时 fail-fast。交叉链至 `wave-orchestration`。`SKILL.md.tmpl` 源。
-
-### 5.5 `codebase-mapping` ← `trailofbits/entry-point-analyzer`（仅借概念）
-
-借用 5 类入口分类（CLI、HTTP、定时任务、消息队列消费者、事件处理器），改写为语言无关。添加 `## Entry-Point Discovery` 子节。`codebase-mapping` 仍是 technique skill。
-
-### 5.6 `spec-compliance-review` ← `trailofbits/spec-to-code-compliance`（窄借）
-
-只借：Phase 0 证据引用规则（每个论断都必须引用 `file:line`），以及 changed-files 完备性 phase（要读每个变更文件，而不是只看 diff hunk）。在现有 "Independent Verification Mandate" 段内添加 `## Evidence Citation` 子节。**不删不弱化**现有的 Iron Law、Mandatory Checklist、Review Layers 或 Rationalization Red Flags。`SKILL.md.tmpl` 源。
-
-### 5.7 `checklist-quality` 拆分
-
-把单文件 7 行的 `internal/tmpl/templates/skills/checklist-quality.md` 替换为目录：
-
-```
-internal/tmpl/templates/skills/checklist-quality/
-├── intake.md   — 澄清完备性 checklist（5 类提问）
-├── plan.md     — 计划审计 checklist
-├── review.md   — 审查/审计 checklist（现有内容放这里并扩展）
-└── test.md     — 测试充分性 checklist
-```
-
-每个仍然是 sidecar（无 frontmatter，无 registry 注册）。Skill 通过新的 `references:` frontmatter 字段引用具体 checklist。Wave 2 把 `spec-compliance-review/SKILL.md.tmpl:35` 改为引用 `checklist-quality/review.md` 而不是整目录。
-
----
-
-## 6. 新 Gate 规格（Wave 3）
-
-每个新 gate 一个子节：来源引用、slipway frontmatter、body skeleton、reason code、排序、条件逻辑。
-
-### 6.1 `S1_PLAN` 新增
-
-#### 6.1.1 `threat-model-screen`
-
-**来源：** `~/.agents/skills/ecosystem/openai/security-threat-model/SKILL.md`（已安装；82 LoC；STRIDE 级别 workflow）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-threat-model-screen
-description: "STRIDE-lite threat model screen for safety-subject changes during planning"
-tier: gate
-phase: plan
-subject: safety
-reason_code: threat_model_screen_required
-hard_gate: true
-subject_gated: true       # 仅在 change.Subject == "safety" 时触发
-order_after: plan-audit
-references:
-  - "shared:ecosystem/openai/security-threat-model"
-agent_hint: slipway-auditor
----
-```
-
-**Body skeleton：** 6 节 STRIDE 走查（边界 / 资产 / 入口 / 滥用路径 / 缓解 / 开放问题）。验证 YAML 写入 `artifacts/changes/{slug}/verification/threat-model-screen.yaml`。
-
-**Reason code：** `internal/model/reason_code.go` 中 `threat_model_screen:safety_subject_unscreened`。
-
-**排序：** 在 `subject == safety` 时，于同 state 中 `plan-audit` 之后执行。
-
-#### 6.1.2 `adr-discipline`
-
-**来源：** `~/.agents/skills/documentation-generation/architecture-decision-records/SKILL.md`（已安装；441 LoC）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-adr-discipline
-description: "Material design changes require an ADR"
-tier: gate
-phase: plan
-subject: architecture
-reason_code: adr_discipline_required
-hard_gate: false
-order_after: plan-audit
-references:
-  - "shared:documentation-generation/architecture-decision-records"
-agent_hint: slipway-auditor
----
-```
-
-**条件触发：** Wave 1 检测 helper `touchesArchitecture()` 匹配 `internal/engine/`、`internal/model/`、`cmd/root.go` 下的变化或重命名导出类型的变化。仅在 `touchesArchitecture(ctx.TouchedFiles)` 时触发。实现为新 flag `MaterialDesignConditional bool`（v5 终稿在 §4.1 struct 中加入）。
-
-**Body skeleton：** 读现有 `docs/decisions/` 中 ADR，决定是否要新写一份，写或显式给出跳过的理由。
-
-### 6.2 `S2_EXECUTE` 新增
-
-#### 6.2.1 `code-simplification-review`
-
-**来源：** `~/.agents/skills/ecosystem/getsentry/code-simplifier/SKILL.md`（已安装；119 LoC）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-code-simplification-review
-description: "Apply simplification heuristics before TDD lockdown"
-tier: gate
-phase: execute
-subject: refactor
-reason_code: code_simplification_review_required
-hard_gate: false
-order_after: wave-orchestration
-references:
-  - "shared:ecosystem/getsentry/code-simplifier"
-  - "slipway:reference:code-simplification"
-agent_hint: slipway-orchestrator
----
-```
-
-**Body skeleton：** 语言无关的 checklist（减少分支、扁平嵌套、命名、删除死代码），针对刚完成的 wave diff 执行。输出："已应用的简化"清单或显式的 "无需简化" 说明。
-
-#### 6.2.2 `error-handling-discipline`
-
-**来源：** `~/.agents/skills/developer-essentials/error-handling-patterns/SKILL.md`（已安装；632 LoC —— 较大；v5 只借决策矩阵，不照搬全文）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-error-handling-discipline
-description: "Touched error paths must declare fail-fast vs fallback vs retry vs circuit-break"
-tier: gate
-phase: execute
-subject: refactor
-reason_code: error_handling_discipline_required
-hard_gate: true
-guardrail_required: true
-error_path_conditional: true
-order_after: tdd-governance
-references:
-  - "shared:developer-essentials/error-handling-patterns"
-agent_hint: slipway-orchestrator
----
-```
-
-**条件触发：** `error_path_conditional: true` —— 仅在变更文件匹配 error-path pattern 时触发（在 `internal/model/config.go` 中可配；默认 pattern：`*errors*.go`、`*recover*.go`、`*panic*.go`、含 `defer recover()` 的文件等）。
-
-### 6.3 `S3_REVIEW` 新增
-
-#### 6.3.1 `audit-context-readiness`
-
-**来源：** `~/.agents/skills/ecosystem/trailofbits/audit-context-building/SKILL.md`（已安装；约 200 LoC）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-audit-context-readiness
-description: "Build line-by-line architectural context before risky review"
-tier: gate
-phase: review
-subject: safety
-reason_code: audit_context_readiness_required
-hard_gate: true
-subject_gated: true
-order_after: ""           # 触发时在 S3 中先跑
-references:
-  - "shared:ecosystem/trailofbits/audit-context-building"
-agent_hint: slipway-reviewer
----
-```
-
-**条件触发：** `subject_gated: true` —— 仅在 `subject == safety` 时触发。触发时在 `spec-compliance-review` **之前**跑（无 `order_after`，但拓扑排序把无依赖的 gate 按注册序放在前面）。
-
-#### 6.3.2 `differential-risk-review`
-
-**来源：** `~/.agents/skills/ecosystem/trailofbits/differential-review/SKILL.md`（已安装）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-differential-risk-review
-description: "Risk-aware diff review with blast-radius and rationalizations"
-tier: gate
-phase: review
-subject: correctness
-reason_code: differential_risk_review_required
-hard_gate: true
-order_after: code-quality-review
-references:
-  - "shared:ecosystem/trailofbits/differential-review"
-agent_hint: slipway-reviewer
----
-```
-
-**Body skeleton：** 改编自上游的 6 阶段走查 —— Triage → Blast Radius → Test Coverage → Risk Classification → Adversarial → Report。严重性立场：首次部署 Important，1 个月观察后升级为 Critical。
-
-#### 6.3.3 `security-review`
-
-**来源：** `~/.agents/skills/ecosystem/getsentry/security-review/SKILL.md` + `~/.agents/skills/ecosystem/openai/security-best-practices/SKILL.md`（均已安装）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-security-review
-description: "Confidence-based security findings for safety-subject changes"
-tier: gate
-phase: review
-subject: safety
-reason_code: security_review_required
-hard_gate: true
-subject_gated: true
-order_after: differential-risk-review
-references:
-  - "shared:ecosystem/getsentry/security-review"
-  - "shared:ecosystem/openai/security-best-practices"
-agent_hint: slipway-reviewer
----
-```
-
-**Body skeleton：** OWASP 基础 checklist + 语言/框架感知的被动检测。按置信度分级输出（High = 阻断；Medium = 告警；Low = 信息）。
-
-### 6.4 `S4_VERIFY` 新增
-
-#### 6.4.1 `changelog-emission`
-
-**来源：** `~/.agents/skills/documentation-generation/changelog-automation/SKILL.md`（已安装；572 LoC）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-changelog-emission
-description: "User-facing changes require a changelog entry before closeout"
-tier: gate
-phase: verify
-subject: process
-reason_code: changelog_emission_required
-hard_gate: false
-user_facing_conditional: true
-order_after: goal-verification
-references:
-  - "shared:documentation-generation/changelog-automation"
-  - "slipway:reference:changelog-authoring"
-agent_hint: slipway-closer
----
-```
-
-**条件触发：** `user_facing_conditional: true` —— 仅在变更文件涉及 `cmd/`、`docs/`、`README*` 或任何具有 semver 影响的内容时触发。
-
-#### 6.4.2 `postmortem-readiness`
-
-**来源：** `~/.agents/skills/.../postmortem-writing/SKILL.md`（已安装；390 LoC）。
-
-**Frontmatter：**
-```yaml
----
-name: slipway-postmortem-readiness
-description: "Pivots/repairs/aborts during execution require a blameless postmortem"
-tier: gate
-phase: verify
-subject: process
-reason_code: postmortem_readiness_required
-hard_gate: false
-pivot_conditional: true
-order_after: goal-verification
-references:
-  - "slipway:reference:postmortem-writing"
-agent_hint: slipway-closer
----
-```
-
-**条件触发：** `pivot_conditional: true` —— 仅在执行日志含 pivot、repair 或 abort 事件时触发。
-
-### 6.5 Wave 3 新增的 reason code
-
-加入 `internal/model/reason_code.go`：
-
-```go
-const (
-    ReasonThreatModelScreen      ReasonCode = "threat_model_screen:safety_subject_unscreened"
-    ReasonADRDiscipline          ReasonCode = "adr_discipline:material_design_undocumented"
-    ReasonCodeSimplification     ReasonCode = "code_simplification_review:not_applied"
-    ReasonErrorHandlingDiscipline ReasonCode = "error_handling_discipline:undeclared_strategy"
-    ReasonAuditContextReadiness  ReasonCode = "audit_context_readiness:context_unbuilt"
-    ReasonDifferentialRiskReview ReasonCode = "differential_risk_review:risk_unclassified"
-    ReasonSecurityReview         ReasonCode = "security_review:safety_subject_unreviewed"
-    ReasonChangelogEmission      ReasonCode = "changelog_emission:user_facing_undocumented"
-    ReasonPostmortemReadiness    ReasonCode = "postmortem_readiness:pivot_unanalyzed"
-)
-```
-
-外加一个用于排序字段冲突检测的第十个 code。
-
----
-
-## 7. Reference Shelf 规格（Wave 4）
-
-12 个 reference skill，每个 ~150–200 LoC。每个都是上游 skill 的 slipway 风格改编版，带 slipway frontmatter 和 `## Source` 节引用上游路径。
-
-### 7.1 Reference frontmatter 模板
-
-```yaml
----
-name: slipway-<reference-name>
-description: "<一行意图>"
-tier: reference
-phase: <intake|plan|execute|review|verify>
-subject: <correctness|safety|architecture|refactor|process|debug|authoring>
-references:
-  - "shared:<池路径>"
-hard_gate: false
----
-```
-
-### 7.2 Reference body 形态
-
-```markdown
-# <Title>
-
-> **Source:** `<完整池路径>`（镜像上游）
-> **Use when:** <一段触发说明>
-> **Surfaced via:** `slipway next --references`，当 phase=<phase> 且 subject=<subject>
-
-## Quick Reference
-
-<5–10 行上游方法论摘要>
-
-## When to invoke
-
-<3–5 个 bullet>
-
-## When NOT to invoke
-
-<3–5 个 bullet>
-
-## Borrowed essentials
-
-<slipway 关心的 100–150 LoC —— 启发式、决策矩阵、反模式>
-
-## See also
-
-- <相关 slipway gate>
-- <其它 reference shelf 条目>
-```
-
-### 7.3 12 个 reference
-
-| # | Slipway 目标名 | 来源 | Phase | Subject | LoC 目标 |
-|---|---|---|---|---|---|
-| 1 | `audit-context-building` | `ecosystem/trailofbits/audit-context-building` | review | safety | ~150 |
-| 2 | `differential-review-methodology` | `ecosystem/trailofbits/differential-review` | review | safety | ~200 |
-| 3 | `property-based-testing` | `ecosystem/trailofbits/property-based-testing` | execute | correctness | ~180 |
-| 4 | `e2e-testing-patterns` | `developer-essentials/e2e-testing-patterns` | execute | correctness | ~150 |
-| 5 | `error-handling-patterns` | `developer-essentials/error-handling-patterns` | execute | refactor | ~180 |
-| 6 | `code-simplification` | `ecosystem/getsentry/code-simplifier` | execute | refactor | ~120 |
-| 7 | `architecture-decision-records` | `documentation-generation/architecture-decision-records` | plan | architecture | ~150 |
-| 8 | `threat-modeling` | `ecosystem/openai/security-threat-model` | plan | safety | ~150 |
-| 9 | `incident-runbooks` | `incident-response/incident-runbook-templates`（Wave 1 chezmoi 拉取） | verify | process | ~180 |
-| 10 | `postmortem-writing` | `incident-response/postmortem-writing` | verify | process | ~150 |
-| 11 | `changelog-authoring` | `documentation-generation/changelog-automation` | verify | process | ~150 |
-| 12 | `debugging-strategies` | `developer-essentials/debugging-strategies` | execute | debug | ~180 |
-
-Reference 总 LoC 约 1,950，每个都可以独立 review。
-
-### 7.4 命名注意
-
-12 个 reference 的目标名与 v2 一些发明的别名（`code-simplification`、`adr-authoring` 风格）有重叠。v5 在能对齐时尽量使用与上游一致的真实名（`code-simplification`、`architecture-decision-records`、`changelog-authoring`），不发明新身份。slipway 的 `slipway-` 前缀用来把本地适配版与上游来源区分开。
-
----
-
-## 8. CLI 表面变更
-
-### 8.1 `slipway next --references`（新 flag）
-
-```
-slipway next --references           # 在文本输出中追加 References 段
-slipway next --references --json    # 在 JSON 输出中追加 "references" 数组
-slipway next --refs                  # 短别名
-```
-
-实现：`cmd/next.go` 从变更 context 读取当前 state，按匹配 `Phase` 与 `Subject`（subject 取变更打 tag 的 subject，未知则取 "any"）查询 `defaultReferenceRegistry`，打印结果。
-
-### 8.2 不做 `slipway preset --references`（明确不在范围）
-
-`preset` 仍然是 workflow preset 选择器。Reference shelf 通过 `next` 表达，不通过 `preset`。v5 不把 `preset` 改成 catalog 浏览器。
-
-### 8.3 不做 `slipway next --skill <name>`（明确不在范围）
-
-v2 的 `--skill` 选择器想法仍然不在范围。skill 选择仍由现有的 state 驱动机制决定。Reference 是**追加性展示**，而不是可选择的目的地。
-
----
-
-## 9. chezmoi 扩展（Wave 1）
-
-加入 `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl`：
-
-| 来源 | 路径 |
+| 1 | `scope-clarification` | 在规划前收敛意图与范围 | `intake-clarification`、`technique-hint` | `brainstorming`、`ask-questions-if-underspecified` |
+| 2 | `context-assembly` | 组织产品、代码库、风险上下文 | `research-orchestration`、`plan-audit`、`technique-hint` | `context-driven-development`、`audit-context-building`、`spec-kitty` 的 action-scoped context posture |
+| 3 | `plan-authoring` | 把需求拆成 bounded、可审计的实现任务 | `plan-audit`、`host-embedded`、`export-only` | `writing-plans`、`workflow-patterns`、`agent-workflow-designer` |
+
+### B. Execution Discipline
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 4 | `tdd-proof` | 强制 RED-GREEN-REFACTOR 与 test-first proof | `tdd-governance`、`wave-orchestration`、`technique-hint` | `test-driven-development`、`workflow-patterns` |
+| 5 | `parallel-executor-contract` | bounded 的并行子代理分派与可审阅 handoff | `wave-orchestration` | `dispatching-parallel-agents`、`subagent-driven-development`、`spec-kitty-implement-review` |
+| 6 | `fresh-verification-evidence` | 没有 fresh command 与 fresh proof 就不能声称完成 | `goal-verification`、`final-closeout`、`tdd-governance` | `verification-before-completion` |
+
+### C. Debugging
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 7 | `root-cause-tracing` | 修复前先回溯真正 root cause，必要时进入竞争假设分支 | `wave-orchestration`、`repair`、`technique-hint` | `systematic-debugging`、`debugging-strategies`、`debug-buttercup` 的 triage posture、`parallel-debugging` |
+
+### D. Code Review - Quality
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 8 | `independent-review` | fresh-context review、明确 verdict contract，以及 review handoff discipline | `spec-compliance-review`、`code-quality-review`、`review` | `code-review`、`code-reviewer`、`code-review-excellence`、`spec-kitty-runtime-review`、`requesting-code-review`、`receiving-code-review` |
+| 9 | `multi-reviewer-calibration` | 多 reviewer finding 去重与严重度校准 | `code-quality-review`、`review` | `multi-reviewer-patterns`、`adversarial-reviewer`、`code-review-ai-ai-review` |
+
+### E. Code Review - Security
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 10 | `security-review` | secure-default 与 framework-specific 安全审查 | `review`、`spec-compliance-review`、`code-quality-review` | `insecure-defaults`、`sharp-edges`、`security-review`、`security-best-practices` |
+| 11 | `threat-modeling` | trust boundary、abuse path、owner-aware threat model | `review`、`validate`、`export-only` | `security-threat-model`、`security-ownership-map` |
+| 12 | `gha-security-review` | 审查 GitHub Actions 与 AI-agent CI 攻击路径 | `review`、`repair` | `gha-security-review`、`agentic-actions-auditor` |
+| 13 | `supply-chain-audit` | 依赖、接管、CVE、license 风险审查 | `review`、`repair`、`status` | `supply-chain-risk-auditor`、`dependency-auditor` |
+| 14 | `sast-orchestration` | 运行并合并 Semgrep、CodeQL、SARIF findings | `review`、`validate`、`repair` | `semgrep`、`codeql`、`sarif-parsing`、`audit-augmentation` |
+
+### F. Code Review - Change Shape
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 15 | `differential-review` | 以风险优先级和 blast radius 做 diff review | `review` | `differential-review`、`find-bugs`、`pr-review-expert` |
+| 16 | `variant-analysis` | 搜索已知 bug 或漏洞模式的变体 | `review`、`repair` | `variant-analysis` |
+| 17 | `spec-trace` | 双向 spec-to-code / code-to-spec trace 审查 | `spec-compliance-review`、`validate`、`review` | `spec-to-code-compliance`、`spec-kitty-mission-review` |
+
+### G. Verification
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 18 | `coverage-analysis` | 覆盖率、关键链路、e2e 证明审查 | `validate`、`goal-verification` | `coverage-analysis`、`e2e-testing-patterns` |
+| 19 | `property-testing` | invariant、round-trip、decoder 属性测试 | `validate`、`goal-verification` | `property-based-testing` |
+| 20 | `mutation-testing` | 跑 mutation campaign 并解读强度信号 | `validate`、`goal-verification` | `mutation-testing` |
+| 21 | `performance-profiling` | profiling、前后对比、负载验证 | `validate`、`goal-verification`、`status` | `performance-profiler`、distributed-tracing 的 checklist 内容 |
+
+### H. Repair and CI Loop
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 22 | `ci-triage` | 提炼 CI 失败上下文并给出 bounded remediation plan | `repair`、`status` | `gh-fix-ci`、`iterate-pr` |
+| 23 | `review-comment-triage` | 拉取、分类并处理 PR / issue 评论 | `repair` | `gh-address-comments`、`iterate-pr` |
+| 24 | `git-recovery` | 处理 rebase、bisect、reflog、worktree、hook-bypass 问题 | `repair`、`status`、`worktree-preflight` 的失败支持 | `git-advanced-workflows`、`spec-kitty-git-workflow`、`block-no-verify-hook` |
+
+### I. Ops and Diagnostics
+
+| # | Skill | 功能 | 主要 binding | 来源启发 |
+|---|---|---|---|---|
+| 25 | `incident-response` | 严重度分级、时间线重建、PIR 流程 | `status`、`health`、`export-only`（T3 诊断视图；不走 `repair` 路由） | `incident-commander`、`incident-response`、`acceptance-orchestrator` 的 gate posture |
+
+### J. 非 catalog disposition matrix
+
+| Source / surface | Disposition | 落点 | 原因 |
+|---|---|---|---|
+| `review-queue` | `view-only` | `status` view | 更像薄队列聚合视图，不是可复用的方法型 skill |
+| `observability-query` | `view-only` | `status` / `health` view | 本质上是只读诊断视图，做成 view 比独立 skill 更贴框架 |
+| `claude-settings-audit` | `view-only` | `health` / `validate` diagnostics | repo permission / config 审计，更像诊断面而不是运行时方法 |
+| `skill-scanner` | `view-only` | `health` / `validate` diagnostics | skill 安全检查更适合作为审计报告 surface |
+| `skill-security-auditor` | `view-only` | `health` / `validate` diagnostics | 与 `skill-scanner` 高重叠，保留为安全审计输入而不是 catalog 节点 |
+| `skill-tester` | `view-only` | `validate` diagnostics | 质量门 / 报告面，不是 governed workflow 方法 |
+| `gh-review-requests` | `view-only` | `status` review queue view | queue / query helper，不是可复用方法节点 |
+| `sentry` | `view-only` | `status` / `health` observability view | provider-specific 的只读查询包装 |
+| `second-opinion` | `route-only` | 显式 `review` route 或 override | 有价值，但更像 review surface，而不是核心方法型 skill |
+| `skill-factory` | `deferred` | future repo-local command family | 当前 CLI 还没有 `skill` command family |
+| `prompt-governance` | `deferred` | future prompt-system governance surface | 能力真实存在，但超出当前 code-change governance rollout |
+| `agent-workflow-designer` | `absorbed` | `plan-authoring` authoring guidance | authoring meta-skill 更适合蒸馏进 SOP / checklist |
+| `designing-workflow-skills` | `absorbed` | distiller SOP / `plan-authoring` guidance | workflow-skill 设计规则属于 authoring process，不是 runtime catalog |
+| `writing-skills` | `absorbed` | distiller SOP / adapter export guidance | TDD-for-skills 过程面向作者，不属于运行时 |
+| `antigravity-workflows` | `absorbed` | distiller SOP / workflow routing heuristic | orchestration meta-skill，不应提升成 Slipway runtime unit |
+| `acceptance-orchestrator` | `absorbed` | `incident-response` / gate posture | gate posture 被吸收即可，不需要独立 surface |
+| `block-no-verify-hook` | `absorbed` | `git-recovery` / policy guidance | hook-specific policy，不是可复用 catalog method |
+| `spec-kitty-charter-doctrine` | `absorbed` | `plan-authoring` / runtime constraints commentary | doctrine framing 已被吸收到计划与约束层 |
+| `simplification-pass` | `absorbed` | `independent-review` 与 `code-quality-review` partial | 更适合作为内部 review technique，而不是独立节点 |
+| `review-request-response` | `absorbed` | `independent-review` 与 `review-comment-triage` | 横跨两个生命周期点，边界噪声较大 |
+| `hypothesis-arbitration` | `absorbed` | `root-cause-tracing` | 与调试核心重叠太高，做成高级分支更干净 |
+
+### K. 只作为姿态吸收，不提升成独立 skill 的 source
+
+| Source | 融入到 |
 |---|---|
-| `wshobson/agents` plugin `conductor` skill `workflow-patterns` | `~/.agents/skills/conductor/workflow-patterns/` |
-| `wshobson/agents` plugin `agent-teams` skill `task-coordination-strategies` | `~/.agents/skills/agent-teams/task-coordination-strategies/` |
-| `wshobson/agents` plugin `agent-teams` skill `multi-reviewer-patterns` | `~/.agents/skills/agent-teams/multi-reviewer-patterns/` |
-| `trailofbits/skills` plugin `ask-questions-if-underspecified` | `~/.agents/skills/ecosystem/trailofbits/ask-questions-if-underspecified/` |
-| `trailofbits/skills` plugin `workflow-skill-design` skill `designing-workflow-skills` | `~/.agents/skills/ecosystem/trailofbits/designing-workflow-skills/` |
-| `wshobson/agents` plugin `incident-response` skill `incident-runbook-templates` | `~/.agents/skills/incident-response/incident-runbook-templates/` |
-| `wshobson/agents` plugin `incident-response` skill `postmortem-writing` | `~/.agents/skills/incident-response/postmortem-writing/` |
+| `superpowers/using-superpowers` | project / agent 层 skill-first posture 文案 |
+| `superpowers/executing-plans` | `plan-authoring` 的 execution-contract 段落 |
+| `spec-kitty/mission-system` | `plan-authoring` 的 taxonomy 与 procedure 注释 |
+| `spec-kitty/runtime-next` | Slipway runtime 文档与 resolver 约束 |
+| `sickn33/agent-orchestrator` | auto capability resolver 的 matching heuristic |
+| `wshobson/error-handling-patterns` | `independent-review` 与 `code-quality-review` partial |
 
-7 个新的 chezmoi 条目。Wave 1 `chezmoi apply` 之后，Waves 2–4 所需的全部 35 个源都在本地 `~/.agents/skills/` 这一稳定路径下可用。
+## 5. Binding 与蒸馏模型
 
----
+### 5.1 Binding registry
 
-## 10. 实施 Wave
+这个重构方案引入一个专门的 binding registry，概念落点为：
 
-### Wave 1 — 引擎 + Schema 改造（基础）
+```text
+internal/engine/capability/
+  registry.go
+  trigger.go
+  resolver.go
+  provenance.go
+```
 
-**目标：** 落地契约变更，对现有 9 个 gate 行为零影响。
+它负责：
 
-**改动文件：**
-- `internal/engine/skill/skill.go`（Definition 字段、defaultReferenceRegistry、Phase/Subject/Tier 枚举）
-- `internal/engine/skill/registry_loader.go`（governanceFrontMatter parser）
-- `internal/engine/progression/skill_resolution.go`（ChangeContext、ShouldFire、条件 helper）
-- `internal/engine/progression/advance_governed.go`（在 gate 选择中调用 ShouldFire）
-- `internal/model/config.go`（error-path / user-facing / architecture 文件 pattern 配置）
-- `internal/tmpl/templates_test.go`（迁移到新契约）
-- `cmd/next.go`（--references flag）
-- `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl`（7 个新源）
-- `docs/plans/2026-04-11-skills-integration-plan.zh-CN.md`（移植 v5 内容）
+1. 持有 25-skill catalog metadata
+2. 持有受限 trigger DSL 的算子集合与求值规则
+3. 持有 host、command route、hint、view 的 binding target
+4. 让 runtime routing 可测试，并与生成出来的 prose 文件解耦
+5. 暴露 adapter export 所需的最小 metadata
 
-**新建文件：**
-- `internal/engine/skill/phase_subject_tier.go`（枚举 + 校验器）
+### 5.2 Host binding
 
-**完成判据：**
-- `go test ./...` 全绿
-- `go vet ./...` 干净
-- 在 scratch 项目上 `slipway next` 输出与之前一致（现有 9 个 gate 的新字段全部是默认值）
-- `slipway next --references` 输出空的 References 段（还没有 reference skill 注册）
-- `chezmoi apply` 成功；`~/.agents/skills/conductor/workflow-patterns/SKILL.md` 存在
+Governed host 仍然少而稳定，但会有意吸收 catalog skill：
 
-### Wave 2 — 现有 skill 加固 + checklist-quality 拆分
+| Governed host | 绑定的 catalog skill |
+|---|---|
+| `intake-clarification` | `scope-clarification` |
+| `research-orchestration` | `context-assembly` |
+| `plan-audit` | `plan-authoring`、`context-assembly` |
+| `worktree-preflight` | 继续 kernel-owned；当前实现也在该 host 上 host-embed `git-recovery` procedure 作为 worktree failure support |
+| `wave-orchestration` | `tdd-proof`、`parallel-executor-contract`、`root-cause-tracing` |
+| `tdd-governance` | `tdd-proof`、`fresh-verification-evidence` |
+| `spec-compliance-review` | `independent-review`、`spec-trace`、`security-review` |
+| `code-quality-review` | `independent-review`、`multi-reviewer-calibration`、`security-review`，以及内嵌的 simplification guidance |
+| `goal-verification` | `fresh-verification-evidence`、`coverage-analysis`、`property-testing`、`mutation-testing`、`performance-profiling` |
+| `final-closeout` | `fresh-verification-evidence` 加 residual-risk closeout 文案 |
 
-**目标：** 落地 v4 §7.2 的 6 个合并规格并拆分 `checklist-quality.md`。
+### 5.3 Command binding
 
-**改动文件：**
-- `internal/tmpl/templates/skills/intake-clarification/SKILL.md`（5.1）
-- `internal/tmpl/templates/skills/code-quality-review/SKILL.md`（或 `.tmpl`）（5.2）
-- `internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl`（5.3）
-- `internal/tmpl/templates/skills/tdd-governance/SKILL.md.tmpl`（5.4）
-- `internal/tmpl/templates/skills/codebase-mapping/SKILL.md`（5.5）
-- `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl`（5.6）
-- `internal/engine/skill/skill.go`（给现有 9 条加新字段：phase、subject、tier、reason_code、hard_gate、references、order_after 在适用处）
+Command surface 按“自动优先、显式 override 次之”的方式绑定 catalog skill：
 
-**新建文件：**
-- `internal/tmpl/templates/skills/checklist-quality/intake.md`
-- `internal/tmpl/templates/skills/checklist-quality/plan.md`
-- `internal/tmpl/templates/skills/checklist-quality/review.md`
-- `internal/tmpl/templates/skills/checklist-quality/test.md`
+| Command | Catalog skill |
+|---|---|
+| `review` | `independent-review`、`multi-reviewer-calibration`、`security-review`、`threat-modeling`、`gha-security-review`、`supply-chain-audit`、`sast-orchestration`、`differential-review`、`variant-analysis`、`spec-trace`，以及作为显式 route / override 的 `second-opinion` |
+| `validate` | `spec-trace`、`coverage-analysis`、`property-testing`、`mutation-testing`、`performance-profiling` |
+| `repair` | `root-cause-tracing`、`ci-triage`、`review-comment-triage`、`git-recovery`、`supply-chain-audit`、`gha-security-review`、`variant-analysis` |
+| `status` | `incident-response`、`supply-chain-audit`、`ci-triage`、`performance-profiling` 的 summary，以及作为 view 的 `review-queue`、`observability-query` |
+| `health` | diagnostics-first 的完整性与 observability 视图；当前在 change-scoped 自动路由下默认落到 `incident-response`，`observability-query` 保持显式 `--view` 覆盖入口 |
 
-**删除文件：**
-- `internal/tmpl/templates/skills/checklist-quality.md`（被目录替换）
+规则：
 
-**完成判据：**
-- 6 个加固 skill 都有新节；结构测试扩展为对新节标识的断言
-- 现有 9 条 registry 条目都有完整的 v5 frontmatter
-- `spec-compliance-review` 引用的是 `checklist-quality/review.md` 而不是整目录
+1. Routed command binding 已在当前代码落地：
+   `review` / `validate` / `repair` 提供 `--mode`，
+   `status` / `health` 提供 `--view`。
+2. 自动选择是默认姿态。
+3. 显式 `--mode` / `--view` 覆盖优先于 resolver 自动路由回退。
+   同时支持 route-only 非 catalog 覆盖：
+   `review --mode second-opinion`、
+   `status --view review-queue|observability-query`、
+   `health --view observability-query`。
+4. `status` / `health` 当前共用一套 payload renderer。对具体
+   active/selected change，当前 auto-route 会选择已落地的 T3
+   `incident-response` 视图；当没有 active change 且进入 diagnostics
+   回退时，除非操作者显式传入 `--view`，否则 `view` 保持为空。
+5. 当前非 catalog 的显式 `--view` 覆盖值只有
+   `review-queue` 与 `observability-query`。其余 `view-only` 条目仍属于
+   文档化的 diagnostics landing zone；当前代码中的 `validate`
+   也还没有独立的 `--view` 选择器。
+6. `incident-response` 是 T3，仅绑定到 `status` / `health` / export，不再
+   进入 `repair` 路由；`repair` 主要由 `root-cause-tracing`、`ci-triage`、
+   `git-recovery` 承载。
+7. `fresh-verification-evidence` 保持 host 绑定
+   （`goal-verification`、`final-closeout`、`tdd-governance`），不作为
+   直接 `validate` 路由。
+8. `command-auto` 只用于低延迟、高信号的默认路由；扫描器重、外部提供方耦合强
+   的路由保持 `command-manual`，通过显式 `--mode` 选择。
 
-### Wave 3 — 新 gate（10 个）
+### 5.4 蒸馏文档面
 
-**目标：** 落地 10 个新 gate，总数到 19。
+文档模型改成 catalog-first：
 
-**新建文件：**
-- 10 个新的 `internal/tmpl/templates/skills/<gate-name>/SKILL.md`（必要时 `.tmpl`）
-- 每个含完整 frontmatter、body skeleton、强制 checklist、失败处理
+```text
+docs/distillation/
+  schema.md
+  catalog.md
+  by-source.md
+  domains/
+    intake-and-framing.md
+    execution-discipline.md
+    debugging.md
+    code-review-quality.md
+    code-review-security.md
+    code-review-change-shape.md
+    verification.md
+    repair-and-ci.md
+    ops-and-diagnostics.md
+  routed-surfaces.md
+```
 
-**改动文件：**
-- `internal/engine/skill/skill.go`（在 `defaultGovernanceRegistry` 加 10 条新条目）
-- `internal/model/reason_code.go`（§6.5 的 10 个新 reason code 常量）
-- `internal/engine/progression/advance_governed.go`（state 特定路由微调）
-- `internal/tmpl/templates_test.go`（10 个新 skill 的结构断言）
-- `cmd/<various>_test.go`（条件触发的端到端覆盖）
+`schema.md` 用来冻结：
 
-**完成判据：**
-- 19 个 gate 注册，19 个 gate 通过拓扑排序循环检查
-- 每个条件 gate 仅在其声明条件下触发（用合成 ChangeContext 的表驱动测试覆盖）
-- 冒烟：在 scratch 项目上 `slipway init → new → next → done`，覆盖 10 个条件触发场景
+1. frontmatter、typed template、`provenance.yaml` 的 authoring 契约
+2. resolver 可消费的受限 trigger DSL 算子集合
+3. 判断一个 catalog skill 是否可合并的 CI gate
 
-### Wave 4 — Reference Shelf（12 个）
+`catalog.md` 以 target 为索引：
 
-**目标：** 落地 12 个 slipway 风格的 reference skill。
+1. 每个 Slipway catalog skill 一行
+2. 记录 domain、function、primary attachment、bindings、provenance 摘要
+3. 记录实现状态和测试覆盖状态
 
-**新建文件：**
-- 12 个新的 `internal/tmpl/templates/skills/<reference-name>/SKILL.md`，每个 ~150–200 LoC
-- 每个有 `tier: reference` frontmatter 和 §7.2 的 body 形态
+`by-source.md` 以 source 为索引，但它是人工维护的反向索引：
 
-**改动文件：**
-- `internal/engine/skill/skill.go`（在 `defaultReferenceRegistry` 加 12 条）
-- `internal/tmpl/templates_test.go`（12 个 reference skill 的结构断言）
-- `cmd/next.go`（--references 输出非空；集成测试）
+1. 每个权威 source corpus 条目一行
+2. 记录它的 disposition、被哪些 target catalog skill 吸收，以及 rollout 状态
+3. 通过引用 `provenance.yaml` 维持可审计性，但不作为自动生成产物
 
-**完成判据：**
-- 在 scratch 项目上 `slipway next --references` 对每个 state 输出正确子集
-- `TestReferenceTargetsExist` 通过（每个 `references:` 条目都解析到真实 `~/.agents/skills/` 路径）
-- `docs/skills/INDEX.md` 由 registry 重新生成（每个 skill 一行，按 phase 分组）
+`routed-surfaces.md` 记录：
 
----
+1. `view-only` / `route-only` / `deferred` surface 的固定清单
+2. 每个 surface 的命令落点与边界
+3. 哪些 source 被明确判定为不进入 catalog
 
-## 11. 实施风险
+### 5.5 为什么 capability pack 不再是主架构
 
-1. **模板渲染 vs 静态 markdown。** `spec-compliance-review`、`wave-orchestration`、`tdd-governance` 是 `.tmpl`。Wave 2 的结构测试必须先渲染再断言，或者直接对 `.tmpl` 源断言。
-2. **`checklist-quality.md` 引用如果不原子迁移会断。** Wave 2 的 `spec-compliance-review/SKILL.md.tmpl:35` 引用必须在同一个 commit 内随目录创建一起更新。
-3. **`AgentHint` 对 gate 是必填。** 10 个新 gate 都必须设置。复用现有值（`slipway-planner`、`slipway-auditor`、`slipway-orchestrator`、`slipway-reviewer`、`slipway-verifier`、`slipway-closer`）；v5 不引入新 hint。
-4. **拓扑排序在 registry 加载时 fail loud。** 加单测确认 19 gate registry 无环。如果未来某 plan 添加的 gate 形成环，binary 拒绝启动。
-5. **条件触发依赖 `ChangeContext` 的准确性。** 检测 helper（`touchesUserFacing`、`touchesErrorPath`、`touchesArchitecture`）是 file-glob 启发式，会有假阳和假阴。缓解：每个 helper 在 `internal/model/config.go` 里有项目专属 pattern 的 config 覆盖。
-6. **`subject` 在 intake 时打 tag。** v5 要求变更 context 携带 `Subject` 值。Wave 1 必须扩展变更解析器，从 intake artifact（`artifacts/changes/{slug}/intake/subject.yaml` 或类似路径）读取 subject。如果 subject 未设，条件 gate 默认"触发"（safe-by-default）。
-7. **Reason code 是稳定标识。** §6.5 的 10 个 reason code 一旦发布就不能没有 deprecation 流程地改名。Wave 3 起名时要小心。
-8. **chezmoi 拉取仅限本地。** Wave 1 的 `.chezmoiexternal.toml.tmpl` 改动只在能 `chezmoi apply` 到源的机器上工作。CI 应该回退到读 `~/ghq/.../<repo>/...` 路径或跳过 reference-existence 断言。
-9. **`zh-CN.md` 兄弟文件漂移。** 当前 zh-CN 内容是空文件。Wave 1 必须移植 v5 内容（即本文件），并保持同步。
-10. **Wave 3 的 gate 数量是拐点。** 从 9 涨到 19 是 schema 价值的核心兑现处 —— 但也是 review 负担尖峰处。如果 review 速率是瓶颈，把 Wave 3 拆成每 2–3 个 gate 一个 PR（共 5 个子 PR）。
+Capability pack 仍然存在，但仅作为 tag 与文档视图，不再定义系统形状。
 
----
+原因：
 
-## 12. 显式不做
+1. pack 适合做 survey，不适合做 runtime binding
+2. `domain x function` 能得到更干净的 skill 边界
+3. binding layer 可以把一个 skill 绑定到多个 surface，而不需要把 pack 变成
+   pseudo-runtime object
 
-- 不做 `slipway next --skill <name>` 选择器。skill 选择仍由 state 驱动。
-- 不做 `slipway preset` 重构。preset 仍是 workflow preset 选择器。
-- 不把 technique（`tdd`、`systematic-debugging`、`code-review-protocol`、`codebase-mapping`）提升为 gate。technique 在 gate **内部**被引用。
-- `defaultReferenceRegistry` 不包含 `agentic-actions-auditor`、`dimensional-analysis`、`mutation-testing`、`entry-point-analyzer`、`spec-to-code-compliance`、`testing-handbook-skills/*`。这些按 §2.6 显式排除。
-- 不引入新 `AgentHint` 值。复用现有 6 个。
-- 不为旧 `governanceFrontMatter` 形状写向后兼容 shim。Wave 1 一次性迁移测试契约并锁定。
+## 6. Rollout Record
 
----
+本节记录已经完成并落地的 B0-B8 rollout。`skill-factory`、
+`prompt-governance` 等 deferred surface 仍保持 deferred，但下文描述的
+catalog registry、routed flags、assembler、export manifest 与 Go test gate
+都已经 shipped。
 
-## 13. 等 Owner 拍板的开放决策
+### 6.1 批次总表
 
-以下 6 项需要在 Wave 1 启动前 yes/no。v5 对每项给出推荐。
+| 批次 | 目的 | 主要交付 | 推进门 |
+|---|---|---|---|
+| **B0** | 契约冻结 | `docs/distillation/schema.md` 冻结（tier、attachment mode、trigger DSL 算子）；`catalog.md`、`by-source.md`、`routed-surfaces.md` 骨架；`provenance.yaml` schema 冻结 | schema review 通过 |
+| **B1** | 端到端验证 | `internal/engine/capability/{registry,trigger,resolver,provenance}.go`；对接 `TechniqueHints`（`cmd/next_skill_view.go`）；5 个 foundation T1 完整蒸馏：`scope-clarification`、`plan-authoring`、`tdd-proof`、`fresh-verification-evidence`、`independent-review`；含 registry load + resolver selection + hint 发出的测试 | 端到端闭环在测试里真的跑通 |
+| **B2** | 扩 foundation | 剩余 5 个 foundation T1：`context-assembly`、`parallel-executor-contract`、`root-cause-tracing`、`security-review`、`spec-trace` | 多 skill 并存下 resolver 行为稳定 |
+| **B3** | 安全集群 | T1 `threat-modeling` + T2 `sast-orchestration`、`gha-security-review`、`supply-chain-audit` | T2 command-route 绑定验证通过 |
+| **B4** | 变更形态 + verification | T1 `multi-reviewer-calibration`、`differential-review`、`variant-analysis`、`coverage-analysis`、`property-testing`、`mutation-testing`、`performance-profiling` | |
+| **B5** | Repair/CI + ops | T2 `ci-triage`、`review-comment-triage`、`git-recovery` + T3 `incident-response` | T3 view-only 绑定验证通过 |
+| **B6** | 非 catalog 清账 | `routed-surfaces.md` 完整；6 条 posture-only 吸收注记完成；disposition matrix 闭环 | 所有 `standalone` / `partial-only` by-source 行在 provenance coverage 扫描中 clean |
+| **B7** | Routed command rollout | `review` / `validate` / `repair` auto routing 与 `--mode` flag；`status` / `health` 的 `--view` flag；route selection 与 fallback 的 resolver 测试 | Routed flag 已 shipped 并完成验证 |
+| **B8** | Export + gate 自动化 | Toolgen 多文件 assembler；`using-slipway-catalog.md` export；自动化 `schema-lint`、`size-lint`（按 tier）、`binding-compare`、`provenance-coverage-scan` | CI 强制四项 gate，不再依赖 PR review |
 
-1. **采纳 6 个新 `Definition` 字段及 `Tier`/`Phase`/`Subject` 枚举（§4.1）？** *推荐：是 —— 这是其它一切的基础。*
-2. **采纳带 `OrderAfter` 的拓扑排序 gate 排序（§4.4）？** *推荐：是 —— 没有它，新的 S3 gate 没有定义良好的顺序。*
-3. **采纳条件触发机制（`SubjectGated`、`PivotConditional`、`UserFacingConditional`、`ErrorPathConditional`、`MaterialDesignConditional`），而非另选条件 DSL（§4.5）？** *推荐：是 —— 显式 bool flag 比条件 DSL 更简单也更易测。*
-4. **加入 `slipway next --references`（§4.6、§8.1），但**不**加 `--skill`、**不**重做 `preset`（§8.2、§8.3）？** *推荐：是 —— 用最小 CLI 表面解锁 reference shelf。*
-5. **在 Wave 2 而非另开方案中拆分 `checklist-quality.md` 为 4 个领域 checklist（§5.7、§7）？** *推荐：是 —— 四 checklist 拆分是个小的 Wave 2 增量，避免 sidecar 与 v5 词汇不一致。*
-6. **Wave 3 拆 5 个子 PR（每 2–3 gate 一个）还是一个大 PR？** *推荐：5 个子 PR —— Wave 3 的瓶颈是 review 负担，而不是引擎工作。*
+### 6.2 B1 foundation 固定集
 
----
+B1 蒸馏以下 5 个 T1 catalog skill，用以端到端证明 host absorption、
+hint 发出、command binding 都能跑通：
 
-## 14. 验证索引（继承自 v4 §13）
+1. `scope-clarification` — intake host + technique-hint；attachment：`posture` + `checklist`
+2. `plan-authoring` — plan-audit host + host-embedded；attachment：`procedure` + `checklist`
+3. `tdd-proof` — tdd-governance 与 wave-orchestration host；attachment：`procedure`
+4. `fresh-verification-evidence` — goal-verification 与 final-closeout host；attachment：`checklist` + `report-schema`
+5. `independent-review` — spec-compliance-review 与 code-quality-review host，以及 `review` command；attachment：`procedure` + `checklist` + `report-schema`
 
-审计中端到端读过的文件。§2 的每条论断都映射到这里某一项。任意一项都可以重新读以再验证。
+这 5 个覆盖了 4 个不同的 governed host、1 个 routed command、5 种
+attachment mode 中的 4 种。B2 补齐另外 5 个 foundation skill，合并后即为
+原 plan 中的 foundation ten。
 
-**Trailofbits：**
-- `~/ghq/github.com/trailofbits/skills/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/differential-review/skills/differential-review/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/property-based-testing/skills/property-based-testing/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/spec-to-code-compliance/skills/spec-to-code-compliance/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/ask-questions-if-underspecified/skills/ask-questions-if-underspecified/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/workflow-skill-design/skills/designing-workflow-skills/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/skill-improver/skills/skill-improver/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/testing-handbook-skills/skills/`（15 项目录列表）
-- `~/ghq/github.com/trailofbits/skills/plugins/mutation-testing/skills/mutation-testing/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/dimensional-analysis/skills/dimensional-analysis/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/audit-context-building/skills/audit-context-building/SKILL.md`
+### 6.3 批次执行规则
 
-**Anthropics / OpenAI / Getsentry：**
-- `~/ghq/github.com/anthropics/skills/skills/skill-creator/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-threat-model/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-best-practices/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-ownership-map/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/skill-scanner/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/code-simplifier/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/claude-settings-audit/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/security-review/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/find-bugs/SKILL.md`
+1. 每个批次落在一个 PR。批次之间的上下文交接只依赖已合并的
+   `provenance.yaml` 与持续维护的 `docs/distillation/by-source.md`；不写
+   专门的交接笔记。
+2. 冲突裁决默认：source 之间规则冲突时，保守合并 + 在 `provenance.yaml`
+   的 `conflicts_with` 里标注 + 在 PR 描述列出冲突清单，不停批。
+3. 确实需要升级裁决的冲突，只阻塞对应的 skill，不阻塞整批。
+4. EN 与 zh-CN 文档在同一个 PR 内同步。
 
-**wshobson：**
-- `~/ghq/github.com/wshobson/agents/plugins/agent-teams/skills/multi-reviewer-patterns/SKILL.md`（约 127 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/conductor/skills/workflow-patterns/SKILL.md`（约 623 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/agent-teams/skills/task-coordination-strategies/SKILL.md`（约 163 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/error-handling-patterns/SKILL.md`（约 632 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/framework-migration/skills/dependency-upgrade/SKILL.md`（约 368 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/e2e-testing-patterns/SKILL.md`（约 535 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/documentation-generation/skills/architecture-decision-records/SKILL.md`（约 441 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/incident-response/skills/incident-runbook-templates/SKILL.md`（约 471 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/incident-response/skills/postmortem-writing/SKILL.md`（约 390 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/documentation-generation/skills/changelog-automation/SKILL.md`（约 572 LoC）
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/code-review-excellence/SKILL.md`
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/debugging-strategies/SKILL.md`
+### 6.4 历史 rollout 护栏
 
-**Slipway 内部：**
-- `~/ghq/github.com/signalridge/slipway/internal/engine/skill/skill.go:1-100`
-- `~/ghq/github.com/signalridge/slipway/internal/engine/skill/registry_loader.go:40-44, 168-199`
-- `~/ghq/github.com/signalridge/slipway/internal/engine/progression/skill_resolution.go`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/intake-clarification/SKILL.md`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/checklist-quality.md`
-- `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl`
-- `~/.agents/skills/`（顶层 + ecosystem/ 遍历；确认 167 个 SKILL.md）
+1. B1 先证明了 registry 与 resolver，再扩展到完整 25 个 catalog skill。
+2. CI gate 曾被有意推迟到 B8；现在已经通过 Go 测试落地，并预期由 CI 执行。
+3. `--mode` / `--view` 已在 B7 shipped，并且现在可用。
+4. Routed command rollout 是在 foundation 批次之后独立落地的，而不是混进
+   初始蒸馏证明阶段。
+
+## 7. 非目标
+
+1. 不在 `ResolveNextSkill` 旁边再加第二个 progression kernel。
+2. 不要求 operator 在正常 Slipway 流程里手动调用被吸收 skill。
+3. 不按 source repository 一比一镜像 Slipway 内部目录。
+4. 不把生成出来的 `SKILL.md` frontmatter 当成 runtime binding authority。
+5. 不为每个 catalog skill 新增一个顶层命令。
+6. 不导入 mission/work-package/dashboard/doctrine runtime 行为。
+7. 不把 capability pack 再次抬回主架构。
+8. 不把 Slipway 收缩成某个工具专属的 skill installer。
+9. 不把薄队列、observability、review wrapper 继续维持成独立 catalog
+   skill；更适合的形态是 routed surface。

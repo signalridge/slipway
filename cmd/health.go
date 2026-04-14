@@ -21,6 +21,7 @@ import (
 
 type healthView struct {
 	ExecutionMode string                             `json:"execution_mode"`
+	View          string                             `json:"view,omitempty"`
 	Findings      []state.HealthFinding              `json:"findings,omitempty"`
 	Governance    *governance.GovernanceHealthReport `json:"governance,omitempty"`
 	Observations  []model.SignalObservation          `json:"observations,omitempty"`
@@ -49,12 +50,17 @@ func makeHealthCmd() *cobra.Command {
 	var observationsFlag bool
 	var doctorFlag bool
 	var changeSlug string
+	var routeView string
 
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: desc("health"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRouteView("health", routeView); err != nil {
+				return err
+			}
+			explicitView := strings.TrimSpace(routeView)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -66,6 +72,7 @@ func makeHealthCmd() *cobra.Command {
 			view := healthView{
 				ExecutionMode: "diagnostics",
 				ShowRepo:      showRepo,
+				View:          explicitView,
 			}
 			governanceNotApplicable := false
 			if doctorFlag {
@@ -96,6 +103,11 @@ func makeHealthCmd() *cobra.Command {
 				change, err := resolveHealthChangeTarget(root, changeSlug)
 				switch {
 				case err == nil && change != nil:
+					if view.View == "" {
+						// Auto view routing is applied only when health is
+						// evaluating a concrete active/selected change.
+						view.View = resolveEffectiveRouteView("health", "")
+					}
 					var govReport governance.GovernanceHealthReport
 					var persistedSnap model.GovernanceSnapshot
 					var snap model.GovernanceSnapshot
@@ -193,6 +205,7 @@ func makeHealthCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&allFlag, "all", false, "Show both repo health and governance health")
 	cmd.Flags().BoolVar(&observationsFlag, "observations", false, "Include detailed governance signal provenance")
 	cmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Synthesize prioritized repair and recovery actions without mutating state")
+	cmd.Flags().StringVar(&routeView, "view", "", "Health view override (e.g. incident-response, observability-query)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Target a specific change for governance health")
 	return cmd
 }
@@ -301,6 +314,9 @@ func shouldSkipGovernanceSnapshotRecompute(root string, change model.Change) (bo
 
 func writeHealthText(w io.Writer, view healthView) error {
 	writer := newFormatWriter(w)
+	if strings.TrimSpace(view.View) != "" {
+		writer.Writef("View: %s\n\n", view.View)
+	}
 
 	if view.Doctor != nil {
 		writer.Writef("Doctor:\n")

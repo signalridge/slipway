@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +90,33 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Len(t, ids, 15)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
+	}
+}
+
+func TestGovernanceSkillExportsCoverRuntimeRegistry(t *testing.T) {
+	t.Parallel()
+
+	exported := map[string]struct{}{}
+	for _, name := range GovernanceSkillNames {
+		exported[name] = struct{}{}
+	}
+	for _, name := range TemplatedGovernanceSkillNames {
+		exported[name] = struct{}{}
+	}
+
+	for _, name := range []string{
+		"intake-clarification",
+		"research-orchestration",
+		"plan-audit",
+		"wave-orchestration",
+		"tdd-governance",
+		"spec-compliance-review",
+		"code-quality-review",
+		"goal-verification",
+		"final-closeout",
+	} {
+		_, ok := exported[name]
+		assert.Truef(t, ok, "runtime governance skill %q is not exported by toolgen", name)
 	}
 }
 
@@ -236,6 +266,42 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NoError(t, err, "%s: missing technique %s", toolID, name)
 		}
 
+		// Catalog skills (registry-owned). Every exported catalog skill
+		// must carry the adapter-visible frontmatter contract (`name`,
+		// `description`) and keep its support artifacts (provenance.yaml)
+		// next to SKILL.md so `provenance_ref` is not dangling.
+		reg := capability.DefaultRegistry()
+		for _, id := range catalogSkillIDs {
+			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway", id)
+			skillPath := filepath.Join(skillDir, "SKILL.md")
+			body, err := os.ReadFile(skillPath)
+			assert.NoError(t, err, "%s: missing catalog skill %s", toolID, id)
+
+			fm := extractAdapterFrontmatter(t, string(body), toolID, id)
+			assert.Equal(t, "slipway-"+id, fm["name"],
+				"%s: catalog skill %s: wrong name", toolID, id)
+			assert.NotEmpty(t, fm["description"],
+				"%s: catalog skill %s: empty description", toolID, id)
+			sk, ok := reg.Lookup(id)
+			if assert.Truef(t, ok, "%s: catalog skill %s missing from registry", toolID, id) {
+				assert.Equal(t, sk.Summary, fm["description"],
+					"%s: catalog skill %s: description drifted from registry summary", toolID, id)
+			}
+
+			provPath := filepath.Join(skillDir, "provenance.yaml")
+			_, err = os.Stat(provPath)
+			assert.NoErrorf(t, err, "%s: catalog skill %s missing provenance.yaml next to SKILL.md", toolID, id)
+		}
+
+		// Outbound catalog manifest
+		manifestPath := filepath.Join(root, CatalogManifestPath(cfg))
+		manifestBytes, err := os.ReadFile(manifestPath)
+		assert.NoError(t, err, "%s: missing catalog manifest", toolID)
+		assert.Contains(t, string(manifestBytes), "# Using the Slipway Catalog",
+			"%s: manifest missing header", toolID)
+		assert.Contains(t, string(manifestBytes), "## Triage index",
+			"%s: manifest missing triage index", toolID)
+
 		if cfg.SessionHook != "" {
 			hookPath := filepath.Join(root, cfg.SessionHook)
 			_, err := os.Stat(hookPath)
@@ -270,6 +336,116 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.True(t, os.IsNotExist(err), "%s: unexpected settings file generated", toolID)
 		}
 	}
+}
+
+func TestRenderCatalogSkillUsesFixedTypedTemplateOrder(t *testing.T) {
+	t.Parallel()
+
+	skill := capability.Skill{
+		ID: "_test-catalog-assembler",
+		Bindings: []capability.Binding{
+			{Attachment: capability.AttachmentProcedure},
+			{Attachment: capability.AttachmentChecklist},
+			{Attachment: capability.AttachmentReportSchema},
+		},
+	}
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	bodyIdx := regexp.MustCompile("BODY_SECTION").FindStringIndex(content)
+	proseIdx := regexp.MustCompile("PROSE_SECTION").FindStringIndex(content)
+	checklistIdx := regexp.MustCompile("CHECKLIST_SECTION").FindStringIndex(content)
+	verdictIdx := regexp.MustCompile("VERDICT_SECTION").FindStringIndex(content)
+	require.NotNil(t, bodyIdx)
+	require.NotNil(t, proseIdx)
+	require.NotNil(t, checklistIdx)
+	require.NotNil(t, verdictIdx)
+	assert.Less(t, bodyIdx[0], proseIdx[0])
+	assert.Less(t, proseIdx[0], checklistIdx[0])
+	assert.Less(t, checklistIdx[0], verdictIdx[0])
+}
+
+func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T) {
+	t.Parallel()
+
+	reg := capability.DefaultRegistry()
+	skill, ok := reg.Lookup("scope-clarification")
+	require.True(t, ok)
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "scope-clarification", "SKILL.md")))
+	require.NoError(t, err)
+
+	// Output equals the source body with the adapter-frontmatter header
+	// prepended; no typed-template sections are appended.
+	injected, err := injectAdapterFrontmatter(raw, skill)
+	require.NoError(t, err)
+	assert.Equal(t, injected, content)
+}
+
+func TestInjectAdapterFrontmatterPrependsNameAndDescription(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nsummary: \"Use when X. Triggers on Y.\"\n---\n\n# Body\n"
+	sk := capability.Skill{ID: "demo", Summary: "Use when X. Triggers on Y."}
+
+	out, err := injectAdapterFrontmatter(src, sk)
+	require.NoError(t, err)
+
+	// Header lines appear before existing fields.
+	nameAt := strings.Index(out, "name: slipway-demo")
+	descAt := strings.Index(out, "description: \"Use when X. Triggers on Y.\"")
+	skillIDAt := strings.Index(out, "skill_id: demo")
+	bodyAt := strings.Index(out, "# Body")
+	require.GreaterOrEqual(t, nameAt, 0)
+	require.GreaterOrEqual(t, descAt, 0)
+	require.GreaterOrEqual(t, skillIDAt, 0)
+	require.GreaterOrEqual(t, bodyAt, 0)
+	assert.Less(t, nameAt, descAt)
+	assert.Less(t, descAt, skillIDAt)
+	assert.Less(t, skillIDAt, bodyAt)
+}
+
+func TestInjectAdapterFrontmatterEscapesDoubleQuotes(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\n---\n\nbody\n"
+	sk := capability.Skill{ID: "demo", Summary: `needs "quote" and \backslash`}
+
+	out, err := injectAdapterFrontmatter(src, sk)
+	require.NoError(t, err)
+	assert.Contains(t, out, `description: "needs \"quote\" and \\backslash"`)
+}
+
+func TestInjectAdapterFrontmatterRejectsMissingDelimiter(t *testing.T) {
+	t.Parallel()
+
+	_, err := injectAdapterFrontmatter("no frontmatter here", capability.Skill{ID: "x"})
+	assert.Error(t, err)
+}
+
+func TestRenderCatalogSkillUsesTypedTemplatesForProductionSkill(t *testing.T) {
+	t.Parallel()
+
+	reg := capability.DefaultRegistry()
+	skill, ok := reg.Lookup("independent-review")
+	require.True(t, ok)
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "independent-review", "SKILL.md")))
+	require.NoError(t, err)
+
+	// This asserts production catalog assembly actually uses optional typed
+	// templates, not only the dedicated test fixture.
+	assert.NotEqual(t, raw, content)
+	assert.Contains(t, content, "## Procedure")
+	assert.Contains(t, content, "## Checklist")
+	assert.Contains(t, content, "## Report schema")
 }
 
 func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
@@ -313,6 +489,48 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 			)
 		}
 	}
+}
+
+// extractAdapterFrontmatter reads a minimal adapter contract from a
+// generated SKILL.md: the set of `key: value` pairs inside the leading
+// `---` / `---` frontmatter block. It tolerates double-quoted values and
+// ignores nested YAML (lists, maps), which are not part of the adapter
+// contract.
+func extractAdapterFrontmatter(t *testing.T, raw, toolID, skillID string) map[string]string {
+	t.Helper()
+	require.Truef(t, len(raw) >= 4 && raw[:4] == "---\n",
+		"%s: catalog skill %s: missing frontmatter opener", toolID, skillID)
+	rest := raw[4:]
+	end := indexOf(rest, "\n---")
+	require.GreaterOrEqualf(t, end, 0,
+		"%s: catalog skill %s: missing frontmatter closer", toolID, skillID)
+	out := map[string]string{}
+	for _, line := range splitLines(rest[:end]) {
+		// Only scan flat top-level `key: value` pairs. Lines that start
+		// with whitespace or `-` belong to nested structures.
+		if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '-' {
+			continue
+		}
+		colon := indexOf(line, ":")
+		if colon <= 0 {
+			continue
+		}
+		key := line[:colon]
+		value := ""
+		if colon+1 < len(line) {
+			value = strings.TrimSpace(line[colon+1:])
+		}
+		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+			value = value[1 : len(value)-1]
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func indexOf(s, sub string) int { return strings.Index(s, sub) }
+func splitLines(s string) []string {
+	return strings.Split(s, "\n")
 }
 
 func writeGeneratedAdapterMarker(t *testing.T, root string, cfg ToolConfig) {

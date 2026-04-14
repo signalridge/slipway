@@ -1,0 +1,17 @@
+sources:
+  - source: alirezarezvani/performance-profiler
+    absorbed_as: standalone
+    extracted:
+      - "profile-before-optimize posture"
+      - "inclusive-plus-exclusive attribution rule"
+      - "post-change delta measurement"
+    dropped:
+      - "tool-specific flag catalogs"
+    conflicts_with: []
+  - source: wshobson/distributed-tracing
+    absorbed_as: partial-only
+    extracted:
+      - "cross-process workload reproducibility requirement"
+    dropped:
+      - "distributed-tracing-specific sampling knobs"
+    conflicts_with: []

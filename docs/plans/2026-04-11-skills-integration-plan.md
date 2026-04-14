@@ -1,895 +1,738 @@
-# Skills Integration Plan — Ambitious Build (2026-04-11, v5)
+# Skills Integration Plan
 
-> Supersedes v3 (`2026-04-11-skills-integration-plan.md`), the v3-critique (`...v3-critique.md`), and v4 (`...v4-merged.md`). v3 was right to reject v2's hallucinations; v4 was right to ground every claim in repo facts. v5 keeps both wins and stops being timid: the engine, the registry contract, the CLI, the chezmoi pool, the slipway template surface — all expand together in one coherent rev.
->
-> **Status:** Draft, ready for owner sign-off on §13.
-> **Audited on:** 2026-04-11, against the local machine.
-> **Target shape:** **19 gates + 12 references + 4 techniques** registered through `internal/engine/skill/skill.go`, all surfaced via an extended `next` CLI, with the existing `defaultGovernanceRegistry` shape extended (not replaced).
+## 1. Goal
 
----
+Refactor the current skills-integration design from a pack-centered plan into a
+catalog-centered plan.
 
-## 1. Executive Summary
+Slipway will distill the `skills_ref/` working set into a catalog of 25
+independent Slipway skills organized by `domain x function`, then bind those
+skills back into the existing Slipway framework through a Go-owned binding
+registry and an automatic capability resolver.
 
-v4 over-corrected. Half the things v4 deferred ("no new gate, no frontmatter expansion, no new CLI surface") are not fundamental constraints — they are self-imposed rules that exist because the test suite was written that way. The test suite is yours; the contract is yours. The right time to break the minimal-frontmatter contract and add gate ordering is **now**, in one coordinated rev, not across four future plans.
+Source corpus note: `skills_ref/` remains the authoritative source corpus. At
+the time of this plan it contains 80 authoritative `SKILL.md` entries plus one
+embedded sample fixture at `alirezarezvani/skill-tester/assets/sample-skill/
+SKILL.md` that ships inside the `skill-tester` skill as test data. The fixture
+is **not** a source-corpus entry and is excluded from disposition and
+provenance-coverage accounting. If delivery batching uses a narrower working
+set, that batching view must not replace disposition or provenance coverage
+accounting.
 
-v5 ships in four waves. Each wave is a self-contained PR but the four together compose into one coherent contract change:
+This plan keeps four non-negotiable rules:
 
-- **Wave 1 — Engine + schema rev.** `Definition` grows 6 new fields (`Phase`, `Subject`, `Tier`, `References`, `OrderAfter`, conditional flags). `governanceFrontMatter` parser extended. Topo-sort added for same-state gate ordering. New `defaultReferenceRegistry` map. New `slipway next --references` CLI flag. `chezmoi` pulls 5 missing upstream sources. Test contract migrated to the new shape. Zero new skills. Zero behavior change for the existing 9 gates.
-- **Wave 2 — Existing-skill enhancements + `checklist-quality` decomposition.** The 6 enhancement merges from v4 §7.2 land (intake / code-review-protocol / codebase-mapping / spec-compliance-review / wave-orchestration / tdd-governance). The 7-line `checklist-quality.md` sidecar is decomposed into 4 domain checklists (`intake`, `plan`, `review`, `test`). All enhanced skills gain the new frontmatter fields.
-- **Wave 3 — New gates (10).** 10 new governance gates land in the registry, taking total gate count from 9 to 19. Each is sourced from a verified upstream skill (full citations in §6). Each has slipway-flavored frontmatter, a reason code, a hard-gate marker, and conditional firing rules where applicable. End-to-end smoke test on a scratch project.
-- **Wave 4 — Reference shelf (12).** 12 slipway-flavored reference skills land in `defaultReferenceRegistry`. Each is ~150–200 LoC, sourced from the upstream content already verified in v4 §4.1. `next --references` surfaces them filtered by phase/subject. The reference shelf is the "what else should I read" layer that v4 wanted to do via doc cross-links — but as a structured registry instead.
+1. Keep a single kernel. `ResolveNextSkill` remains the only progression
+   authority.
+2. Do not require manual skill invocation. Inside Slipway, absorbed skills are
+   selected and attached automatically.
+3. Distill methods, not packages. Source skills are inputs to a new Slipway
+   catalog, not vendored runtime units.
+4. Keep routing authority in code, not prose. Generated `SKILL.md` files are
+   descriptive and export-facing; runtime binding stays in Go registries.
 
-End state: slipway's skill surface goes from **9 gates + 4 techniques** to **19 gates + 4 techniques + 12 references** = 35 registered skills. The registry contract supports phase × subject filtering, gate ordering, conditional firing, and reference surfacing — all in one place.
+## 2. Hard Constraints
 
----
+### 2.1 Runtime authority
 
-## 2. Facts That Grounded This Plan
+Slipway keeps one authoritative control loop:
 
-These are the verified ground truths from the v4 audit. v5 inherits all of them; nothing here changes between v4 and v5.
+1. `ResolveNextSkill` is the only progression authority.
+2. The current state-selected governed hosts remain:
+   `intake-clarification`, `research-orchestration`, `plan-audit`,
+   `worktree-preflight`, `wave-orchestration`, `tdd-governance`,
+   `spec-compliance-review`, `code-quality-review`, `goal-verification`, and
+   `final-closeout`.
+3. `review`, `validate`, `repair`, `status`, and `health` remain command
+   surfaces. They may gain routers or views, but they do not become a second
+   workflow engine.
 
-### 2.1 Current `slipway` runtime routing contract
+### 2.2 Product boundary
 
-`slipway` routes governance skills through these `Definition` fields (`internal/engine/skill/skill.go:10-20`):
+This plan does not change Slipway's product identity:
 
-```go
-type Definition struct {
-    Name                string
-    State               model.WorkflowState
-    PlanSubStep         model.PlanSubStep
-    Mitigation          string
-    RunSummaryBound     bool
-    DiscoveryOnly       bool
-    GuardrailRequired   bool
-    CloseoutConditional bool
-    AgentHint           string
-}
+1. Slipway remains multi-tool capable.
+2. Slipway does not import a mission/work-package/dashboard runtime.
+3. Slipway does not become a home-directory skill installer.
+4. Heavy scanners and provider-specific tools stay behind explicit routed
+   command paths.
+
+### 2.3 Binding authority
+
+The current implementation matters:
+
+1. Toolgen currently renders adapter skills from `SKILL.md` and
+   `SKILL.md.tmpl` sources.
+2. Governance-skill loading currently parses `name` and `description`, then
+   resolves runtime behavior from Go-owned defaults.
+3. In current code truth there are 9 registry-backed governance definitions;
+   `worktree-preflight` remains a kernel-owned standalone surface rather than a
+   default registry entry.
+4. Therefore, new catalog metadata in `SKILL.md` frontmatter is descriptive,
+   auditable, and export-facing, but not the authority for runtime binding.
+5. Any catalog-to-host or catalog-to-command binding introduced by this plan
+   must live in a Go-owned registry and testable resolver path.
+
+## 3. Target Architecture
+
+### 3.1 Three-layer model
+
+| Layer | Purpose | Authority |
+|------|---------|-----------|
+| Kernel layer | Governed progression through existing Slipway hosts | `ResolveNextSkill` and current governance logic |
+| Catalog layer | 25 independent Slipway skills organized by `domain x function` | No progression authority |
+| Binding layer | Maps catalog skills into hosts, routed commands, hints, views, and exports | Go-owned binding registry plus auto resolver |
+
+Rules:
+
+1. The catalog does not replace the kernel.
+2. The kernel does not need one runtime state per independent skill.
+3. Capability packs are demoted to documentation tags; they are no longer the
+   primary architectural unit.
+
+### 3.2 Independent skill contract
+
+Each new Slipway skill is an independent unit defined by function, not by the
+name of any upstream source skill.
+
+Each target skill carries this conceptual contract:
+
+| Field | Meaning |
+|------|---------|
+| `skill_id` | Stable Slipway skill identifier |
+| `domain` | Concern area such as review, verification, or repair |
+| `function` | The one job this skill performs |
+| `tier` | `T1` core capability, `T2` specialist route, or `T3` diagnostic view |
+| `primary_attachment` | One of `posture`, `procedure`, `checklist`, `tool-recipe`, or `report-schema` |
+| `summary` | Trigger-oriented description mirrored into frontmatter and export surfaces |
+| `trigger_signals[]` | Bounded trigger DSL clauses used by the capability resolver |
+| `evidence_contract` | `verdict`, `artifact`, or `checklist` contract |
+| `bindings[]` | Mirror of Go-owned host, command, hint, view, or export bindings |
+| `provenance_ref` | Path to structured `provenance.yaml` for source absorption details |
+
+Rules:
+
+1. One source skill may feed multiple target skills.
+2. One target skill may absorb multiple source skills.
+3. `tier` encodes semantic role, not required binding count or density. A T1
+   capability may still be narrowly bound (for example `threat-modeling` or
+   `differential-review`); it is still T1 because it expresses a reusable
+   method, not a tool route or a view.
+4. `primary_attachment` is authored-side metadata. Runtime injection position
+   is decided by the resolver based on attachment mode.
+5. `bindings[]` are mirrored in authoring metadata, but runtime authority stays in
+   Go registries.
+6. `trigger_signals[]` use a bounded operator set; they are not arbitrary prose.
+7. `provenance_ref` is structured so by-source indexing stays auditable and
+   coverage checks can be automated.
+
+### 3.3 Binding types
+
+Each catalog skill may bind to one or more of these targets:
+
+| Binding type | Meaning |
+|------|---------|
+| `host-embedded` | Injected into a governed host as directive, checklist, or partial |
+| `command-auto` | Selected automatically by a routed command |
+| `command-manual` | Addressable by explicit command flag override |
+| `technique-hint` | Surfaced through the existing `TechniqueHints` surface in `cmd/next_skill_view.go` without affecting progression |
+| `command-view` | Exposed as a read-only command surface or diagnostics view |
+| `export-only` | Materialized for adapter export, not for core runtime |
+
+Rules:
+
+1. `technique-hint` reuses the existing `TechniqueHints` rendering path; the
+   Go side returns skill id plus hint kind, and the host LLM organizes the
+   actual hint text.
+2. Binding type determines runtime attachment surface; attachment mode (see
+   §3.3.1) determines how content is shaped when attached.
+
+### 3.3.1 Attachment modes
+
+Every catalog skill declares one `primary_attachment` and may extend per
+binding. The five modes are frozen:
+
+| Mode | Meaning | Typical carrier |
+|------|---------|-----------------|
+| `posture` | Persistent stance injected at the top of a host prompt | "enforce TDD"; "fresh verification required" |
+| `procedure` | Ordered steps | `RED -> GREEN -> REFACTOR`; `Extract -> Dedup -> Reframe -> Anchor` |
+| `checklist` | Discrete check items | security review items; spec-trace pairs |
+| `tool-recipe` | Tool or command invocation pattern | semgrep config; codeql query scaffold |
+| `report-schema` | Structured output constraint | verdict shape; incident timeline schema |
+
+Rules:
+
+1. The five modes are frozen in `docs/distillation/schema.md`.
+2. Typical template mapping: `PROSE.tmpl` -> `posture` / `procedure`;
+   `CHECKLIST.tmpl` -> `checklist`; `VERDICT.tmpl` -> `report-schema`;
+   `tool-recipe` lives in `scripts/` or inline.
+3. The resolver uses attachment mode to decide injection position (prompt
+   top, checklist section, tool-invocation hint, output-constraint section).
+4. `primary_attachment` is mandatory; additional attachment modes may be
+   declared per binding when a single skill carries multiple shapes.
+
+### 3.4 Auto capability resolver
+
+Slipway remains AI-driven by resolving catalog skills automatically instead of
+asking the operator to invoke them manually.
+
+The shipped auto capability resolver currently consumes the
+`internal/engine/capability.Signals` set:
+
+1. explicit command context such as `review`, `validate`, `repair`, `status`,
+   or `health`
+2. current governed host when attaching support skills
+3. blocker reasons
+4. changed-file signals
+5. referenced path signals
+6. user-text matches when the caller provides them
+
+The caller may derive those signals from workflow state/sub-step, guardrail
+classification, evidence freshness, or artifact context, but those are not
+first-class fields in the current shipped resolver struct.
+
+It returns:
+
+1. one bound route when a command needs an automatic mode/view choice
+2. zero to three ranked support skills when a governed host needs additional
+   guidance
+3. `hydrate_references[]` indicating which `references/*.md` files should be
+   injected on demand (spec-kitty-style conditional hydration)
+4. an optional `llm_tiebreak` record listing candidate skill ids plus a
+   decision criterion when DSL scoring produces ties; the host LLM resolves
+   the tie against user text in-prompt
+5. a short `reason` for every automatic attachment, copied from the matched
+   trigger clause
+
+Rules:
+
+1. The resolver must never change the next governed host selected by
+   `ResolveNextSkill`.
+2. Explicit operator flags override automatic route selection.
+3. Manual skill invocation is not required for absorbed catalog skills.
+4. Exported skills may still be invoked directly by other tools; that does not
+   change Slipway's internal runtime model.
+5. `hydrate_references[]` and `llm_tiebreak` are optional extension outputs,
+   not mandatory B1 fields. B1 only proves route selection, support
+   attachment, and `technique-hint`.
+6. `technique-hint` bindings emit skill id and hint kind through the existing
+   `TechniqueHints` surface in `cmd/next_skill_view.go`; Go does not own the
+   hint wording.
+7. `hydrate_references[]` first enters no earlier than B2, when
+   reference-heavy capabilities such as `context-assembly` become real owners
+   of conditional hydration.
+8. `llm_tiebreak` is the only documented AI hand-off, but it is introduced
+   only when a later batch creates a genuine unresolved DSL tie. B1 does not
+   implement or test it.
+
+### 3.5 Source authoring layout
+
+The catalog skill source layout becomes a fixed core contract with constrained
+support directories:
+
+```text
+internal/tmpl/templates/skills/<skill-id>/
+  SKILL.md
+  provenance.yaml
+  PROSE.tmpl           # optional
+  CHECKLIST.tmpl       # optional
+  VERDICT.tmpl         # optional
+  references/          # optional
+  scripts/             # optional
 ```
 
-All 9 existing entries set `AgentHint`. v5 keeps this convention for every new gate.
+Notes:
 
-### 2.2 Current registry size: 9 gates
+1. `SKILL.md` and `provenance.yaml` are the required core files for every
+   catalog skill.
+2. `PROSE.tmpl`, `CHECKLIST.tmpl`, and `VERDICT.tmpl` are typed optional
+   templates consumed only when a binding or evidence contract needs them.
+3. `references/` is a one-hop support shelf for long-form examples,
+   anti-patterns, framework variants, and source notes; it is never routing
+   authority.
+4. `scripts/` is reserved for deterministic helpers, validators, aggregators,
+   and report generators with explicit input/output contracts; it is never
+   progression authority.
+5. Assembler order is fixed: frontmatter -> `SKILL.md` body -> conditional
+   injection of `PROSE` / `CHECKLIST` / `VERDICT` by binding type.
+6. Support directories are opt-in. A reference or script must be named from the
+   skill body or assembler config before it is consumed.
+7. Catalog skills now use the assembler. Existing non-catalog governed hosts
+   may still use their single-file or `.tmpl` sources directly.
 
-| State | Skill | Notes |
+### 3.6 Distillation workflow
+
+Every source-skill absorption follows the same four-step workflow:
+
+1. `Extract`: keep only trigger conditions, decision rules, counterexamples,
+   and evidence-bearing checks.
+2. `Deduplicate`: merge repeated rules into the most specific formulation; if
+   sources conflict, keep the more conservative rule and record the conflict in
+   `provenance.yaml`.
+3. `Reframe`: rewrite around the target Slipway skill's single function instead
+   of preserving source-skill naming, tone, or narrative structure.
+4. `Anchor`: keep a rule only if it maps to `trigger_signals[]`,
+   `evidence_contract`, or one typed template consumer.
+
+Rules:
+
+1. Narrative background, long examples, and source-specific storytelling move to
+   `references/` or are dropped.
+2. Rules that cannot be anchored to runtime selection, evidence, or typed
+   prompt assembly are removed instead of being carried as prose noise.
+3. The catalog layer remains lean by default: CI targets compact `SKILL.md`
+   bodies and pushes overflow into typed templates or `references/`.
+4. The distillation work itself is executed by a Claude Code session acting as
+   the distiller; there is no separate `slipway distill` subcommand. Session
+   hand-off between batches is carried by the merged `provenance.yaml` plus
+   `docs/distillation/by-source.md`, not by bespoke hand-off notes.
+
+### 3.7 Trigger DSL
+
+`trigger_signals[]` is a bounded DSL owned by Go rather than free-text matching
+rules.
+
+Example:
+
+```yaml
+trigger_signals:
+  - all_of:
+      - command: review
+      - path_includes: ".github/workflows"
+      - changed_files_include: "**/*.{yml,yaml}"
+    reason: "GitHub Actions workflow modified under review"
+```
+
+Supported operators in the first cut:
+
+- `all_of`
+- `any_of`
+- `not`
+- `command`
+- `host`
+- `blocker_reason`
+- `changed_files_include`
+- `path_includes`
+- `user_text_matches`
+
+Rules:
+
+1. The operator list is frozen in Go under `internal/engine/capability/trigger.go`.
+2. Scoring remains Go-owned; the resolver ranks matches and returns one routed
+   command mode/view or up to three support attachments.
+3. Trigger clauses are declarative evidence for routing, not a second workflow
+   engine.
+
+### 3.8 Structured provenance
+
+Each catalog skill carries a structured `provenance.yaml` so that source
+tracking, conflict notes, and by-source indexing stay auditable instead of
+being left as loose narration.
+
+Minimum shape:
+
+```yaml
+sources:
+  - source: superpowers/systematic-debugging
+    absorbed_as: standalone
+    extracted:
+      - trace the root cause before fixing
+    dropped:
+      - long narrative debugging stories
+    conflicts_with: []
+```
+
+Rules:
+
+1. Every source whose `by-source.md` disposition is `standalone` or
+   `partial-only` must appear in either `extracted`, `dropped`, or
+   `conflicts_with`. `posture-only`, `absorbed`, `view-only`, `route-only`,
+   and `deferred` remain tracked in `by-source.md` rather than provenance-gated.
+2. `absorbed_as` records whether the source became a standalone target,
+   posture-only input, or partial-only input.
+3. `docs/distillation/by-source.md` is a manually maintained reverse index that
+   cites `provenance.yaml` and rollout status; it is not a generated source of
+   truth.
+
+### 3.9 Distillation quality gates
+
+Distillation is not considered complete until these gates pass in CI:
+
+1. `schema-lint`: read-only parsing of frontmatter, typed-template references,
+   and trigger operators, asserting valid structure and operator whitelist use.
+2. `size-lint`: read-only measurement of `SKILL.md` body size and prompt-density
+   discipline. Budgets vary by tier:
+   - T1 core capability: target <= 2 KB; warn 2-6 KB; rationale required above 6 KB.
+   - T2 specialist route: target <= 3 KB (tool-recipe overhead); warn 3-8 KB;
+     rationale required above 8 KB.
+   - T3 diagnostic view: target <= 1.5 KB; report-schema-first, with concise
+     posture or anti-pattern context allowed inside the same budget.
+   Warning-band entries are informational logs only.
+   Failures are reserved for unbounded prose, long examples that should move to
+   typed templates or `references/`, or oversized bodies without an approved
+   exception.
+3. `binding-compare`: read-only comparison between authoring `bindings[]` and
+   the Go-owned registry, requiring a 1:1 match.
+4. `provenance-coverage-scan`: read-only scan that checks whether every
+   `standalone` / `partial-only` source listed in `by-source.md` appears in the
+   union of `provenance.yaml` records, plus the reverse check that every
+   provenance source is indexed in `by-source.md`.
+
+Gate automation is now implemented in Go tests and expected in CI. During the
+earlier B0-B7 rollout these gates were enforced by PR-review checklist until
+the registry schema, frontmatter contract, and by-source index stabilized.
+
+### 3.10 Pattern absorptions from superpowers and spec-kitty
+
+Two source frameworks shape Slipway's distillation posture without being
+imported as runtime units:
+
+| Absorbed pattern | Source | Slipway landing |
 |---|---|---|
-| `S0_INTAKE` | `intake-clarification` | `AgentHint: slipway-planner` |
-| `S1_PLAN` | `research-orchestration` | `PlanSubStep: research`, `DiscoveryOnly: true`, `AgentHint: slipway-researcher` |
-| `S1_PLAN` | `plan-audit` | `PlanSubStep: audit`, `AgentHint: slipway-auditor` |
-| `S2_EXECUTE` | `wave-orchestration` | `RunSummaryBound: true`, `AgentHint: slipway-orchestrator` |
-| `S2_EXECUTE` | `tdd-governance` | `GuardrailRequired: true`, `RunSummaryBound: true`, `AgentHint: slipway-orchestrator` |
-| `S3_REVIEW` | `spec-compliance-review` | `RunSummaryBound: true`, `AgentHint: slipway-reviewer` |
-| `S3_REVIEW` | `code-quality-review` | `RunSummaryBound: true`, `AgentHint: slipway-reviewer` |
-| `S4_VERIFY` | `goal-verification` | `RunSummaryBound: true`, `AgentHint: slipway-verifier` |
-| `S4_VERIFY` | `final-closeout` | `CloseoutConditional: true`, `RunSummaryBound: true`, `AgentHint: slipway-closer` |
+| `description`-as-dispatcher | `superpowers` | Every catalog `SKILL.md` frontmatter `summary` uses the `Use when ... / Triggers on ...` phrasing so export-facing adapters can rely on description-level triage. |
+| Catalog entrypoint manifest | `superpowers/using-superpowers` | Toolgen export generates a single `using-slipway-catalog.md` aimed at external agents. It does not enter the Slipway kernel. |
+| Conditional `references/` hydration | `spec-kitty` / `runtime-next` | Schema reserves `hydrate_references[]`; once emitted by a later resolver batch, the host decides whether to inline the cited `references/*.md` file. |
+| Auto-discovery manifest posture | `sickn33/agent-orchestrator` | Informs toolgen multi-file assembler behavior at B8 rather than becoming a standalone catalog skill. |
 
-### 2.3 Current technique-only skills (not registered as gates)
+Rules:
 
-`tdd`, `systematic-debugging`, `code-review-protocol`, `codebase-mapping`. These stay technique skills in v5 — they are invoked *within* gates, not as state checkpoints. v5 does not promote them.
+1. These absorbed patterns are declarative contracts; they do not add runtime
+   progression authority.
+2. No source repository is mirrored one-for-one; only the pattern is absorbed.
 
-### 2.4 Template file shapes
+## 4. Domain x Function Catalog
 
-- Static `SKILL.md`: most skills.
-- Rendered from `SKILL.md.tmpl`: `spec-compliance-review`, `wave-orchestration`, `tdd-governance`. Edits go in the `.tmpl` source; Wave-2 structural assertions render first.
+`skills_ref/` remains the authoritative source corpus for this plan. Any
+rollout batching working set must be enumerated explicitly in `by-source.md` or
+the disposition matrix rather than silently narrowing provenance coverage.
 
-### 2.5 `~/.agents/skills` is already populated with 167 SKILL.md files
+### Tier distribution
 
-`~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl` pulls from `wshobson/agents`, `anthropics/skills`, `getsentry/skills`, `openai/skills`, `trailofbits/skills`, `huggingface/skills`, `cloudflare`, `vercel-labs`, `supabase`, `expo`, `microsoft`, `signalridge`, multilingual humanizers, `nextlevelbuilder/ui-ux-pro-max-skill`, `sickn33/antigravity-awesome-skills`. v5 adds 5 more sources in Wave 1 (§9).
+The 25 catalog skills split across three tiers (see §3.2 for tier semantics):
 
-### 2.6 v2's misclassifications, all confirmed
+| Tier | Count | Members |
+|---|---|---|
+| **T1** core capability | 18 | `scope-clarification`, `context-assembly`, `plan-authoring`, `tdd-proof`, `parallel-executor-contract`, `fresh-verification-evidence`, `root-cause-tracing`, `independent-review`, `multi-reviewer-calibration`, `security-review`, `threat-modeling`, `spec-trace`, `differential-review`, `variant-analysis`, `coverage-analysis`, `property-testing`, `mutation-testing`, `performance-profiling` |
+| **T2** specialist route | 6 | `sast-orchestration`, `gha-security-review`, `supply-chain-audit`, `ci-triage`, `review-comment-triage`, `git-recovery` |
+| **T3** diagnostic view | 1 | `incident-response` |
 
-The full evidence table from v4 §2.5 stands without changes. Highlights v5 still depends on:
+Tier is a semantic-role tag. Some T1 skills (for example `threat-modeling` or
+`differential-review`) are narrowly bound but remain T1 because they express
+reusable methods, not tool routes or views.
 
-- `agentic-actions-auditor` is **GitHub-Actions-AI-CI only** — not a generic diff scanner. v5 does not turn it into a gate; it appears only as a reference for users reviewing `.github/workflows/*.yml` (`tier: reference`, `subject: safety`, `phase: review`).
-- `trailofbits/spec-to-code-compliance` is blockchain-specific. v5's `spec-compliance-review` gate borrows only the evidence-citation rule, never the full process.
-- `trailofbits/testing-handbook-skills` is 15 fuzzing-tool skills, not a methodology bundle. v5 does not register a `testing-strategies` gate.
-- Slipway's `spec-compliance-review/SKILL.md.tmpl` is **stricter** than upstream. v5 §6.2.2 does not weaken it.
-- `worktree-preflight, checkpoint, done, pivot, repair, cancel, abort` are CLI commands, **not registered skills**. v5 keeps them as commands.
-- `checklist-quality.md` is a 7-line sidecar, not a skill. v5 §7 decomposes it into 4 domain checklists, still as sidecars (still not registered as skills).
+### A. Intake and Framing
 
-Full file:line citations in §14.
-
----
-
-## 3. Target Skill Surface
-
-End state of v5 = **35 registered skills** (19 gates + 4 techniques + 12 references) under `internal/tmpl/templates/skills/` and `internal/engine/skill/skill.go`.
-
-### 3.1 Gates by state (post-v5)
-
-| State | Gate | Status | Source |
-|---|---|---|---|
-| `S0_INTAKE` | `intake-clarification` | existing (enhanced in Wave 2) | + `trailofbits/ask-questions-if-underspecified` |
-| `S1_PLAN` | `research-orchestration` | existing | — |
-| `S1_PLAN` | `plan-audit` | existing | — |
-| `S1_PLAN` | `threat-model-screen` | **NEW Wave 3** | `openai/.curated/security-threat-model` (already installed) |
-| `S1_PLAN` | `adr-discipline` | **NEW Wave 3** | `wshobson/.../architecture-decision-records` (already installed) |
-| `S2_EXECUTE` | `wave-orchestration` | existing (enhanced in Wave 2) | + `wshobson/.../workflow-patterns` + `wshobson/.../task-coordination-strategies` |
-| `S2_EXECUTE` | `tdd-governance` | existing (enhanced in Wave 2) | + `wshobson/.../workflow-patterns` (wave-aware TDD) |
-| `S2_EXECUTE` | `code-simplification-review` | **NEW Wave 3** | `getsentry/.../code-simplifier` (already installed) |
-| `S2_EXECUTE` | `error-handling-discipline` | **NEW Wave 3** | `wshobson/.../error-handling-patterns` (already installed) |
-| `S3_REVIEW` | `spec-compliance-review` | existing (enhanced in Wave 2) | narrow borrow from `trailofbits/spec-to-code-compliance` |
-| `S3_REVIEW` | `code-quality-review` | existing (enhanced in Wave 2) | + `developer-essentials/code-review-excellence` (already installed) |
-| `S3_REVIEW` | `audit-context-readiness` | **NEW Wave 3** | `trailofbits/audit-context-building` (already installed) |
-| `S3_REVIEW` | `differential-risk-review` | **NEW Wave 3** | `trailofbits/differential-review` (already installed) |
-| `S3_REVIEW` | `security-review` | **NEW Wave 3** | `getsentry/security-review` + `openai/security-best-practices` (both already installed) |
-| `S4_VERIFY` | `goal-verification` | existing | — |
-| `S4_VERIFY` | `final-closeout` | existing | — |
-| `S4_VERIFY` | `changelog-emission` | **NEW Wave 3** | `wshobson/.../changelog-automation` (already installed) |
-| `S4_VERIFY` | `postmortem-readiness` | **NEW Wave 3** | `wshobson/.../postmortem-writing` (already installed) |
-
-**19 gates total.** 9 existing + 10 new.
-
-### 3.2 References (post-v5)
-
-12 slipway-flavored reference skills, each ~150–200 LoC, registered in the new `defaultReferenceRegistry`. Each is `tier: reference`, `hard_gate: false`, surfaced via `next --references`.
-
-| # | Slipway target | Phase | Subject | Source |
+| # | Skill | Function | Primary bindings | Source inspirations |
 |---|---|---|---|---|
-| 1 | `audit-context-building` | review | safety | `~/.agents/skills/ecosystem/trailofbits/audit-context-building/SKILL.md` |
-| 2 | `differential-review-methodology` | review | safety | `~/.agents/skills/ecosystem/trailofbits/differential-review/SKILL.md` |
-| 3 | `property-based-testing` | execute | correctness | `~/.agents/skills/ecosystem/trailofbits/property-based-testing/SKILL.md` |
-| 4 | `e2e-testing-patterns` | execute | correctness | `~/.agents/skills/developer-essentials/e2e-testing-patterns/SKILL.md` |
-| 5 | `error-handling-patterns` | execute | refactor | `~/.agents/skills/developer-essentials/error-handling-patterns/SKILL.md` |
-| 6 | `code-simplification` | execute | refactor | `~/.agents/skills/ecosystem/getsentry/code-simplifier/SKILL.md` |
-| 7 | `architecture-decision-records` | plan | architecture | `~/.agents/skills/documentation-generation/architecture-decision-records/SKILL.md` |
-| 8 | `threat-modeling` | plan | safety | `~/.agents/skills/ecosystem/openai/security-threat-model/SKILL.md` |
-| 9 | `incident-runbooks` | verify | process | `wshobson/.../incident-runbook-templates` (Wave-1 chezmoi pull) |
-| 10 | `postmortem-writing` | verify | process | `~/.agents/skills/.../postmortem-writing/SKILL.md` |
-| 11 | `changelog-authoring` | verify | process | `~/.agents/skills/documentation-generation/changelog-automation/SKILL.md` |
-| 12 | `debugging-strategies` | execute | debug | `~/.agents/skills/developer-essentials/debugging-strategies/SKILL.md` |
-
-### 3.3 Techniques (unchanged)
-
-`tdd`, `systematic-debugging`, `code-review-protocol`, `codebase-mapping`. Stay as technique-only `.md` files in `internal/tmpl/templates/skills/`. Not in either registry.
-
----
-
-## 4. Engine + Schema Changes (Wave 1)
-
-### 4.1 New `Definition` fields
-
-Extend `internal/engine/skill/skill.go:10-20`:
-
-```go
-type Definition struct {
-    // existing
-    Name                string              `json:"name"`
-    State               model.WorkflowState `json:"state"`
-    PlanSubStep         model.PlanSubStep   `json:"plan_substep,omitempty"`
-    Mitigation          string              `json:"mitigation"`
-    RunSummaryBound     bool                `json:"run_summary_bound"`
-    DiscoveryOnly       bool                `json:"discovery_only,omitempty"`
-    GuardrailRequired   bool                `json:"guardrail_required,omitempty"`
-    CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
-    AgentHint           string              `json:"agent_hint,omitempty"`
-
-    // new in v5
-    Phase           Phase    `json:"phase,omitempty"`            // intake|plan|execute|review|verify|meta
-    Subject         Subject  `json:"subject,omitempty"`          // correctness|safety|architecture|refactor|process|debug|authoring
-    Tier            Tier     `json:"tier"`                       // gate|reference|technique
-    References      []string `json:"references,omitempty"`       // pool paths (e.g. "shared:ecosystem/trailofbits/differential-review")
-    OrderAfter      string   `json:"order_after,omitempty"`      // gate ordering within same state
-    ReasonCode      string   `json:"reason_code,omitempty"`      // key in internal/model/reason_code.go
-    HardGate        bool     `json:"hard_gate,omitempty"`        // requires explicit user approval to advance
-    SubjectGated    bool     `json:"subject_gated,omitempty"`    // fires only when change.Subject matches this.Subject
-    PivotConditional      bool `json:"pivot_conditional,omitempty"`       // fires only when execution log has pivot/repair/abort
-    UserFacingConditional bool `json:"user_facing_conditional,omitempty"` // fires only when changed files include user-facing surface
-    ErrorPathConditional  bool `json:"error_path_conditional,omitempty"`  // fires only when changed files touch error/exception paths
-}
-```
-
-Three companion enums (`Phase`, `Subject`, `Tier`) with constants and a validator. Validator runs at registry load and rejects invalid combinations (e.g. `Tier: reference` + `HardGate: true`).
-
-### 4.2 New `governanceFrontMatter` fields
-
-Extend `internal/engine/skill/registry_loader.go:40-44` to parse `phase`, `subject`, `tier`, `references`, `order_after`, `reason_code`, `hard_gate`, `subject_gated`, `pivot_conditional`, `user_facing_conditional`, `error_path_conditional`. Update `parseGovernanceSkillFromFile()` (lines 168–199) to populate the new `Definition` fields after the name lookup.
-
-For backward compatibility: a frontmatter without any new fields is still valid; the loader sets `Tier: gate` by default if the skill is in `defaultGovernanceRegistry`, `Tier: reference` if in `defaultReferenceRegistry`, `Tier: technique` otherwise.
-
-### 4.3 New `defaultReferenceRegistry`
-
-Add to `internal/engine/skill/skill.go`:
-
-```go
-var defaultReferenceRegistry = map[string]Definition{
-    "audit-context-building": {
-        Name:       "audit-context-building",
-        Tier:       TierReference,
-        Phase:      PhaseReview,
-        Subject:    SubjectSafety,
-        References: []string{"shared:ecosystem/trailofbits/audit-context-building"},
-    },
-    // ... 11 more from §3.2 ...
-}
-```
-
-Reference skills do not have `State`. They are not iterated by the progression engine; they are surfaced only via `next --references` (§4.6) and via `References` cross-links inside other skills.
-
-### 4.4 Topo-sort for `OrderAfter`
-
-`RequiredSkillsForStateWithRegistry` (`skill.go:115-158`) currently iterates the registry by state with no ordering guarantees. Replace the iteration with:
-
-1. Filter by state into a slice of `Definition`.
-2. Build a DAG using `OrderAfter` edges.
-3. Topological sort. Cycles or unknown dependencies fail loud at registry-load time.
-4. Return the sorted slice.
-
-This unblocks gates like `differential-risk-review` that must run *after* `code-quality-review` in S3.
-
-### 4.5 Conditional firing logic
-
-Add to `internal/engine/progression/skill_resolution.go`:
-
-```go
-type ChangeContext struct {
-    Subject        Subject       // tagged at intake
-    GuardrailDomain bool         // existing
-    ExecutionLog   []ExecutionEvent  // pivot, repair, abort
-    TouchedFiles   []string      // for user-facing / error-path detection
-}
-
-func (d Definition) ShouldFire(ctx ChangeContext) bool {
-    if d.SubjectGated && d.Subject != ctx.Subject {
-        return false
-    }
-    if d.PivotConditional && !hasPivot(ctx.ExecutionLog) {
-        return false
-    }
-    if d.UserFacingConditional && !touchesUserFacing(ctx.TouchedFiles) {
-        return false
-    }
-    if d.ErrorPathConditional && !touchesErrorPath(ctx.TouchedFiles) {
-        return false
-    }
-    return true
-}
-```
-
-Detection helpers (`hasPivot`, `touchesUserFacing`, `touchesErrorPath`) are simple file-glob matchers — `touchesUserFacing` checks for changes under `cmd/`, `internal/cli/`, `web/`, `frontend/`; `touchesErrorPath` checks for files containing `errors.go`, `*_error.*`, `recovery.*`, etc. The patterns are configurable in `internal/model/config.go`.
-
-`ChangeContext` is built by the existing change resolver, not by each gate. Gates only declare what they care about via the conditional flags.
-
-### 4.6 New CLI flag: `slipway next --references`
-
-Extend `cmd/next.go` to support `--references` (also `--refs` short). When set:
-
-- `slipway next` prints the normal gate output.
-- After gate output, prints a `## References` section listing all `defaultReferenceRegistry` entries whose `Phase` matches the current state and whose `Subject` matches the change subject (if known) or any subject (if unknown).
-- Each line: `slipway-<name>: <one-line description> → <pool path>`.
-- JSON output (`--json`) gains a `references` array.
-
-The flag is opt-in; `next` default behavior is unchanged.
-
-### 4.7 Test contract migration
-
-`internal/tmpl/templates_test.go` currently asserts on minimal frontmatter. Wave 1 migrates the assertions to:
-
-- Required fields: `name`, `description`, `tier`.
-- For `tier: gate`: also require `phase`, `subject`, `reason_code`.
-- For `tier: reference`: also require `phase`, `subject`, `references` (non-empty).
-- For `tier: technique`: only require `name` and `description`.
-- Topo-sort assertion: `TestGateOrderingNoCycles` walks `defaultGovernanceRegistry` and confirms `OrderAfter` forms a DAG.
-- Reference assertion: `TestReferenceTargetsExist` walks `defaultReferenceRegistry` and confirms every `References` entry resolves to a real file in `~/.agents/skills/` (or skips with a soft warning if running in CI without the chezmoi pool).
-
-This is the contract break v3/v4 wanted to avoid. v5 does it once, then locks the new shape.
-
----
-
-## 5. Existing Skill Enhancements (Wave 2)
-
-The 6 enhancements from v4 §7.2, restated here. Each lands in Wave 2 alongside the new frontmatter fields from Wave 1.
-
-### 5.1 `intake-clarification` ← `trailofbits/ask-questions-if-underspecified`
-
-Borrow: 5-category question taxonomy (scope / acceptance / constraint / risk / stakeholder), explicit stop condition ("restate requirements in 1–3 sentences + key constraints"). Add as `## Question Taxonomy` and `## Stop Condition` subsections under existing "Clarification Loop" step. Do not touch existing Rationalization Red Flags or Scope Boundary Precision Rules.
-
-New frontmatter:
-
-```yaml
----
-name: slipway-intake-clarification
-description: "Verify scope, acceptance criteria, and constraints before planning"
-tier: gate
-phase: intake
-subject: correctness
-reason_code: intake_clarification_required
-hard_gate: true
----
-```
-
-### 5.2 `code-quality-review` (was `code-review-protocol` in v4) ← `wshobson/multi-reviewer-patterns` + `developer-essentials/code-review-excellence`
-
-Borrow `multi-reviewer-patterns`: review-dimension allocation table (Security / Performance / Architecture / Testing / Accessibility), finding-deduplication protocol. Borrow `code-review-excellence`: "Goals vs Not Goals" anti-list, constructive-feedback rubric. Add as `## Reviewer Role Splits` and `## Feedback Discipline` sections after the existing iron-law block.
-
-Note: `code-review-protocol` stays as a technique skill (cited from `code-quality-review`'s body). The `code-quality-review` gate is the registered enforcer.
-
-### 5.3 `wave-orchestration` ← `wshobson/workflow-patterns` + `wshobson/task-coordination-strategies`
-
-Borrow workflow-patterns: 11-step TDD lifecycle (lifecycle list only), phase-completion protocol, quality-gates checkpoint structure. Borrow task-coordination-strategies: Dependency Graph Principles (parallel-safe vs sequential-required criteria). Add as `## Coordination Strategies` and `## Lifecycle Checkpoints` sections.
-
-`SKILL.md.tmpl` source — edits go in the template, render in a follow-up.
-
-### 5.4 `tdd-governance` ← `wshobson/workflow-patterns` (continuation)
-
-Add `## Wave-Aware TDD` section: when to split tests across waves, when to fail-fast. Cross-link to `wave-orchestration`. `SKILL.md.tmpl` source.
-
-### 5.5 `codebase-mapping` ← `trailofbits/entry-point-analyzer` (concept-only borrow)
-
-Borrow the 5-category entry-point classification (CLI, HTTP, scheduled jobs, message-queue consumers, event handlers), rewritten language-agnostic. Add as `## Entry-Point Discovery` subsection. `codebase-mapping` stays a technique skill.
-
-### 5.6 `spec-compliance-review` ← `trailofbits/spec-to-code-compliance` (narrow borrow)
-
-Borrow only: Phase 0 evidence-citation rule (every claim must cite `file:line`) and exhaustiveness-of-changed-files phase (read every changed file, not just diff hunks). Add as `## Evidence Citation` subsection inside the existing "Independent Verification Mandate" block. Do not remove or weaken the existing Iron Law, Mandatory Checklist, Review Layers, or Rationalization Red Flags. `SKILL.md.tmpl` source.
-
-### 5.7 `checklist-quality` decomposition
-
-Replace the single 7-line `internal/tmpl/templates/skills/checklist-quality.md` with a directory:
-
-```
-internal/tmpl/templates/skills/checklist-quality/
-├── intake.md   — clarification completeness checklist (5-question taxonomy)
-├── plan.md     — plan-audit checklist
-├── review.md   — review/audit checklist (current content goes here, expanded)
-└── test.md     — test sufficiency checklist
-```
-
-Each is still a sidecar (no frontmatter, no registry entry). Skills reference specific checklists via the new `references:` frontmatter field. Wave 2 updates `spec-compliance-review/SKILL.md.tmpl:35` to reference `checklist-quality/review.md` specifically instead of the whole file.
-
----
-
-## 6. New Gate Specs (Wave 3)
-
-Each new gate gets its own subsection: source citation, slipway frontmatter, body skeleton, reason code, ordering, conditional logic.
-
-### 6.1 `S1_PLAN` additions
-
-#### 6.1.1 `threat-model-screen`
-
-**Source:** `~/.agents/skills/ecosystem/openai/security-threat-model/SKILL.md` (already installed; 82 LoC; STRIDE-grade workflow).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-threat-model-screen
-description: "STRIDE-lite threat model screen for safety-subject changes during planning"
-tier: gate
-phase: plan
-subject: safety
-reason_code: threat_model_screen_required
-hard_gate: true
-subject_gated: true       # only fires when change.Subject == "safety"
-order_after: plan-audit
-references:
-  - "shared:ecosystem/openai/security-threat-model"
-agent_hint: slipway-auditor
----
-```
-
-**Body skeleton:** 6-section STRIDE walk (boundaries / assets / entry points / abuse paths / mitigations / open questions). Verification YAML written to `artifacts/changes/{slug}/verification/threat-model-screen.yaml`.
-
-**Reason code:** `threat_model_screen:safety_subject_unscreened` in `internal/model/reason_code.go`.
-
-**Ordering:** runs after `plan-audit` in the same state when `subject == safety`.
-
-#### 6.1.2 `adr-discipline`
-
-**Source:** `~/.agents/skills/documentation-generation/architecture-decision-records/SKILL.md` (already installed; 441 LoC).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-adr-discipline
-description: "Material design changes require an ADR"
-tier: gate
-phase: plan
-subject: architecture
-reason_code: adr_discipline_required
-hard_gate: false
-order_after: plan-audit
-references:
-  - "shared:documentation-generation/architecture-decision-records"
-agent_hint: slipway-auditor
----
-```
-
-**Conditional firing:** Wave-1 detection helper `touchesArchitecture()` matches changes under `internal/engine/`, `internal/model/`, `cmd/root.go`, anything renaming exported types. Gate fires only when `touchesArchitecture(ctx.TouchedFiles)`. Implemented as a new flag `MaterialDesignConditional bool` (added to §4.1's struct in v5 final).
-
-**Body skeleton:** read existing ADRs in `docs/decisions/`, decide if a new one is needed, write or skip with explicit justification.
-
-### 6.2 `S2_EXECUTE` additions
-
-#### 6.2.1 `code-simplification-review`
-
-**Source:** `~/.agents/skills/ecosystem/getsentry/code-simplifier/SKILL.md` (already installed; 119 LoC).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-code-simplification-review
-description: "Apply simplification heuristics before TDD lockdown"
-tier: gate
-phase: execute
-subject: refactor
-reason_code: code_simplification_review_required
-hard_gate: false
-order_after: wave-orchestration
-references:
-  - "shared:ecosystem/getsentry/code-simplifier"
-  - "slipway:reference:code-simplification"
-agent_hint: slipway-orchestrator
----
-```
-
-**Body skeleton:** language-agnostic checklist (reduce branches, flatten nesting, name things, delete dead code), executed against the just-completed wave's diff. Output: a "simplifications applied" list or an explicit "none needed" justification.
-
-#### 6.2.2 `error-handling-discipline`
-
-**Source:** `~/.agents/skills/developer-essentials/error-handling-patterns/SKILL.md` (already installed; 632 LoC — large; v5 borrows the decision matrix, not the full body).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-error-handling-discipline
-description: "Touched error paths must declare fail-fast vs fallback vs retry vs circuit-break"
-tier: gate
-phase: execute
-subject: refactor
-reason_code: error_handling_discipline_required
-hard_gate: true
-guardrail_required: true
-error_path_conditional: true
-order_after: tdd-governance
-references:
-  - "shared:developer-essentials/error-handling-patterns"
-agent_hint: slipway-orchestrator
----
-```
-
-**Conditional firing:** `error_path_conditional: true` — fires only when changed files match error-path patterns (configurable in `internal/model/config.go`; default patterns: `*errors*.go`, `*recover*.go`, `*panic*.go`, files containing `defer recover()`, etc.).
-
-### 6.3 `S3_REVIEW` additions
-
-#### 6.3.1 `audit-context-readiness`
-
-**Source:** `~/.agents/skills/ecosystem/trailofbits/audit-context-building/SKILL.md` (already installed; ~200 LoC).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-audit-context-readiness
-description: "Build line-by-line architectural context before risky review"
-tier: gate
-phase: review
-subject: safety
-reason_code: audit_context_readiness_required
-hard_gate: true
-subject_gated: true
-order_after: ""           # runs first in S3 when fired
-references:
-  - "shared:ecosystem/trailofbits/audit-context-building"
-agent_hint: slipway-reviewer
----
-```
-
-**Conditional firing:** `subject_gated: true` — fires only when `subject == safety`. Runs *before* `spec-compliance-review` when fired (no `order_after`, but the topo-sort puts unbound gates first by registration order).
-
-#### 6.3.2 `differential-risk-review`
-
-**Source:** `~/.agents/skills/ecosystem/trailofbits/differential-review/SKILL.md` (already installed).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-differential-risk-review
-description: "Risk-aware diff review with blast-radius and rationalizations"
-tier: gate
-phase: review
-subject: correctness
-reason_code: differential_risk_review_required
-hard_gate: true
-order_after: code-quality-review
-references:
-  - "shared:ecosystem/trailofbits/differential-review"
-agent_hint: slipway-reviewer
----
-```
-
-**Body skeleton:** 6-phase walk adapted from upstream — Triage → Blast Radius → Test Coverage → Risk Classification → Adversarial → Report. Severity stance: Important on first deployment, escalate to Critical after 1-month observation.
-
-#### 6.3.3 `security-review`
-
-**Source:** `~/.agents/skills/ecosystem/getsentry/security-review/SKILL.md` + `~/.agents/skills/ecosystem/openai/security-best-practices/SKILL.md` (both already installed).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-security-review
-description: "Confidence-based security findings for safety-subject changes"
-tier: gate
-phase: review
-subject: safety
-reason_code: security_review_required
-hard_gate: true
-subject_gated: true
-order_after: differential-risk-review
-references:
-  - "shared:ecosystem/getsentry/security-review"
-  - "shared:ecosystem/openai/security-best-practices"
-agent_hint: slipway-reviewer
----
-```
-
-**Body skeleton:** OWASP-grounded checklist + language/framework-aware passive detection. Confidence-tiered findings (High = block; Medium = warn; Low = informational).
-
-### 6.4 `S4_VERIFY` additions
-
-#### 6.4.1 `changelog-emission`
-
-**Source:** `~/.agents/skills/documentation-generation/changelog-automation/SKILL.md` (already installed; 572 LoC).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-changelog-emission
-description: "User-facing changes require a changelog entry before closeout"
-tier: gate
-phase: verify
-subject: process
-reason_code: changelog_emission_required
-hard_gate: false
-user_facing_conditional: true
-order_after: goal-verification
-references:
-  - "shared:documentation-generation/changelog-automation"
-  - "slipway:reference:changelog-authoring"
-agent_hint: slipway-closer
----
-```
-
-**Conditional firing:** `user_facing_conditional: true` — fires only when changed files include `cmd/`, `docs/`, `README*`, or anything with semver impact.
-
-#### 6.4.2 `postmortem-readiness`
-
-**Source:** `~/.agents/skills/.../postmortem-writing/SKILL.md` (already installed; 390 LoC).
-
-**Frontmatter:**
-```yaml
----
-name: slipway-postmortem-readiness
-description: "Pivots/repairs/aborts during execution require a blameless postmortem"
-tier: gate
-phase: verify
-subject: process
-reason_code: postmortem_readiness_required
-hard_gate: false
-pivot_conditional: true
-order_after: goal-verification
-references:
-  - "slipway:reference:postmortem-writing"
-agent_hint: slipway-closer
----
-```
-
-**Conditional firing:** `pivot_conditional: true` — fires only when execution log contains a pivot, repair, or abort event.
-
-### 6.5 Reason codes added in Wave 3
-
-Add to `internal/model/reason_code.go`:
-
-```go
-const (
-    ReasonThreatModelScreen      ReasonCode = "threat_model_screen:safety_subject_unscreened"
-    ReasonADRDiscipline          ReasonCode = "adr_discipline:material_design_undocumented"
-    ReasonCodeSimplification     ReasonCode = "code_simplification_review:not_applied"
-    ReasonErrorHandlingDiscipline ReasonCode = "error_handling_discipline:undeclared_strategy"
-    ReasonAuditContextReadiness  ReasonCode = "audit_context_readiness:context_unbuilt"
-    ReasonDifferentialRiskReview ReasonCode = "differential_risk_review:risk_unclassified"
-    ReasonSecurityReview         ReasonCode = "security_review:safety_subject_unreviewed"
-    ReasonChangelogEmission      ReasonCode = "changelog_emission:user_facing_undocumented"
-    ReasonPostmortemReadiness    ReasonCode = "postmortem_readiness:pivot_unanalyzed"
-)
-```
-
-Plus a tenth code for any new ordering field collision detection.
-
----
-
-## 7. Reference Shelf Specs (Wave 4)
-
-12 reference skills, each ~150–200 LoC. Each is a slipway-flavored adaptation of an upstream skill, with slipway frontmatter and a `## Source` section citing the upstream path.
-
-### 7.1 Reference frontmatter template
-
-```yaml
----
-name: slipway-<reference-name>
-description: "<one-line intent>"
-tier: reference
-phase: <intake|plan|execute|review|verify>
-subject: <correctness|safety|architecture|refactor|process|debug|authoring>
-references:
-  - "shared:<pool-path>"
-hard_gate: false
----
-```
-
-### 7.2 Reference body shape
-
-```markdown
-# <Title>
-
-> **Source:** `<full pool path>` (mirrored upstream)
-> **Use when:** <one-paragraph trigger>
-> **Surfaced via:** `slipway next --references` when phase=<phase> and subject=<subject>
-
-## Quick Reference
-
-<5–10 line summary of the upstream methodology>
-
-## When to invoke
-
-<3–5 bullets>
-
-## When NOT to invoke
-
-<3–5 bullets>
-
-## Borrowed essentials
-
-<the 100–150 LoC slipway cares about — heuristics, decision matrix, anti-patterns>
-
-## See also
-
-- <related slipway gates>
-- <other reference shelf entries>
-```
-
-### 7.3 The 12 references
-
-| # | Slipway target | Source | Phase | Subject | LoC target |
-|---|---|---|---|---|---|
-| 1 | `audit-context-building` | `ecosystem/trailofbits/audit-context-building` | review | safety | ~150 |
-| 2 | `differential-review-methodology` | `ecosystem/trailofbits/differential-review` | review | safety | ~200 |
-| 3 | `property-based-testing` | `ecosystem/trailofbits/property-based-testing` | execute | correctness | ~180 |
-| 4 | `e2e-testing-patterns` | `developer-essentials/e2e-testing-patterns` | execute | correctness | ~150 |
-| 5 | `error-handling-patterns` | `developer-essentials/error-handling-patterns` | execute | refactor | ~180 |
-| 6 | `code-simplification` | `ecosystem/getsentry/code-simplifier` | execute | refactor | ~120 |
-| 7 | `architecture-decision-records` | `documentation-generation/architecture-decision-records` | plan | architecture | ~150 |
-| 8 | `threat-modeling` | `ecosystem/openai/security-threat-model` | plan | safety | ~150 |
-| 9 | `incident-runbooks` | `incident-response/incident-runbook-templates` (Wave-1 chezmoi pull) | verify | process | ~180 |
-| 10 | `postmortem-writing` | `incident-response/postmortem-writing` | verify | process | ~150 |
-| 11 | `changelog-authoring` | `documentation-generation/changelog-automation` | verify | process | ~150 |
-| 12 | `debugging-strategies` | `developer-essentials/debugging-strategies` | execute | debug | ~180 |
-
-Total reference LoC: ~1,950. Each is reviewable in isolation.
-
-### 7.4 Naming caveat
-
-The 12 reference target names overlap with some of v2's invented aliases (`code-simplification`, `adr-authoring`-style). v5 keeps real upstream-aligned names where possible (`code-simplification`, `architecture-decision-records`, `changelog-authoring`) and avoids inventing new identities. The slipway prefix `slipway-` distinguishes the local adaptation from the upstream source.
-
----
-
-## 8. CLI Surface Changes
-
-### 8.1 `slipway next --references` (new flag)
-
-```
-slipway next --references           # adds References section to text output
-slipway next --references --json    # adds "references" array to JSON output
-slipway next --refs                  # short alias
-```
-
-Implementation: `cmd/next.go` reads the current state from change context, queries `defaultReferenceRegistry` for matching `Phase` and `Subject` (where `Subject` is either the change's tagged subject or "any"), prints the result.
-
-### 8.2 No `slipway preset --references` (intentionally out of scope)
-
-`preset` stays a workflow preset selector. The reference shelf is surfaced through `next`, not through `preset`. v5 does not turn `preset` into a catalog browser.
-
-### 8.3 No `slipway next --skill <name>` (intentionally out of scope)
-
-The `--skill` selector idea from v2 stays out of scope. Skill selection happens through the existing state-driven mechanism. References are *additive surfacing*, not selectable destinations.
-
----
-
-## 9. chezmoi Expansion (Wave 1)
-
-Add to `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl`:
-
-| Source | Path |
+| 1 | `scope-clarification` | converge intent and scope before planning | `intake-clarification`, `technique-hint` | `brainstorming`, `ask-questions-if-underspecified` |
+| 2 | `context-assembly` | assemble product, codebase, and risk context | `research-orchestration`, `plan-audit`, `technique-hint` | `context-driven-development`, `audit-context-building`, `spec-kitty` action-scoped context posture |
+| 3 | `plan-authoring` | turn requirements into bounded, auditable implementation tasks | `plan-audit`, `host-embedded`, `export-only` | `writing-plans`, `workflow-patterns`, `agent-workflow-designer` |
+
+### B. Execution Discipline
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 4 | `tdd-proof` | enforce RED-GREEN-REFACTOR and test-first proof | `tdd-governance`, `wave-orchestration`, `technique-hint` | `test-driven-development`, `workflow-patterns` |
+| 5 | `parallel-executor-contract` | bounded parallel subagent dispatch with reviewable handoff | `wave-orchestration` | `dispatching-parallel-agents`, `subagent-driven-development`, `spec-kitty-implement-review` |
+| 6 | `fresh-verification-evidence` | block completion claims without fresh commands and fresh proof | `goal-verification`, `final-closeout`, `tdd-governance` | `verification-before-completion` |
+
+### C. Debugging
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 7 | `root-cause-tracing` | trace root cause before attempting fixes, including competing-hypothesis branches when needed | `wave-orchestration`, `repair`, `technique-hint` | `systematic-debugging`, `debugging-strategies`, `debug-buttercup` triage posture, `parallel-debugging` |
+
+### D. Code Review - Quality
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 8 | `independent-review` | fresh-context review with explicit verdict contract plus review handoff discipline | `spec-compliance-review`, `code-quality-review`, `review` | `code-review`, `code-reviewer`, `code-review-excellence`, `spec-kitty-runtime-review`, `requesting-code-review`, `receiving-code-review` |
+| 9 | `multi-reviewer-calibration` | dedupe findings and calibrate severity across reviewers | `code-quality-review`, `review` | `multi-reviewer-patterns`, `adversarial-reviewer`, `code-review-ai-ai-review` |
+
+### E. Code Review - Security
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 10 | `security-review` | secure-default and framework-specific security review | `review`, `spec-compliance-review`, `code-quality-review` | `insecure-defaults`, `sharp-edges`, `security-review`, `security-best-practices` |
+| 11 | `threat-modeling` | trust-boundary, abuse-path, and owner-aware threat modeling | `review`, `validate`, `export-only` | `security-threat-model`, `security-ownership-map` |
+| 12 | `gha-security-review` | review GitHub Actions and AI-agent CI attack paths | `review`, `repair` | `gha-security-review`, `agentic-actions-auditor` |
+| 13 | `supply-chain-audit` | dependency, takeover, CVE, and license risk review | `review`, `repair`, `status` | `supply-chain-risk-auditor`, `dependency-auditor` |
+| 14 | `sast-orchestration` | run and merge Semgrep, CodeQL, and SARIF-based findings | `review`, `validate`, `repair` | `semgrep`, `codeql`, `sarif-parsing`, `audit-augmentation` |
+
+### F. Code Review - Change Shape
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 15 | `differential-review` | risk-prioritized diff review with blast-radius awareness | `review` | `differential-review`, `find-bugs`, `pr-review-expert` |
+| 16 | `variant-analysis` | search for variants of already-known bug or vulnerability patterns | `review`, `repair` | `variant-analysis` |
+| 17 | `spec-trace` | bidirectional spec-to-code and code-to-spec trace review | `spec-compliance-review`, `validate`, `review` | `spec-to-code-compliance`, `spec-kitty-mission-review` |
+
+### G. Verification
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 18 | `coverage-analysis` | coverage plus critical-path and end-to-end proof review | `validate`, `goal-verification` | `coverage-analysis`, `e2e-testing-patterns` |
+| 19 | `property-testing` | invariant, round-trip, and decoder property testing | `validate`, `goal-verification` | `property-based-testing` |
+| 20 | `mutation-testing` | run mutation campaigns and interpret signal strength | `validate`, `goal-verification` | `mutation-testing` |
+| 21 | `performance-profiling` | profiling, before/after comparison, and load-oriented verification | `validate`, `goal-verification`, `status` | `performance-profiler`, distributed-tracing checklist material |
+
+### H. Repair and CI Loop
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 22 | `ci-triage` | summarize CI failures and produce bounded remediation plan | `repair`, `status` | `gh-fix-ci`, `iterate-pr` |
+| 23 | `review-comment-triage` | fetch, classify, and process PR or issue comments | `repair` | `gh-address-comments`, `iterate-pr` |
+| 24 | `git-recovery` | recover from rebase, bisect, reflog, worktree, or hook-bypass problems | `repair`, `status`, `worktree-preflight` failure support | `git-advanced-workflows`, `spec-kitty-git-workflow`, `block-no-verify-hook` |
+
+### I. Ops and Diagnostics
+
+| # | Skill | Function | Primary bindings | Source inspirations |
+|---|---|---|---|---|
+| 25 | `incident-response` | severity classification, timeline reconstruction, and PIR flow | `status`, `health`, `export-only` (T3 diagnostic view; not routed through `repair`) | `incident-commander`, `incident-response`, `acceptance-orchestrator` gate posture |
+
+### J. Non-catalog disposition matrix
+
+| Source / surface | Disposition | Landing zone | Reason |
+|---|---|---|---|
+| `review-queue` | `view-only` | `status` view | thin queue aggregation wrapper, not a reusable method skill |
+| `observability-query` | `view-only` | `status` / `health` view | read-only inspection surface, better modeled as diagnostics view |
+| `claude-settings-audit` | `view-only` | `health` / `validate` diagnostics | repo permission and config audit belongs in diagnostics rather than the governed runtime method layer |
+| `skill-scanner` | `view-only` | `health` / `validate` diagnostics | skill security checking is better surfaced as an audit/report view |
+| `skill-security-auditor` | `view-only` | `health` / `validate` diagnostics | high overlap with `skill-scanner`; retained as security-audit input rather than a catalog node |
+| `skill-tester` | `view-only` | `validate` diagnostics | quality gate and reporting surface, not a governed workflow method |
+| `gh-review-requests` | `view-only` | `status` review queue view | queue/query helper rather than a reusable method node |
+| `sentry` | `view-only` | `status` / `health` observability view | provider-specific read-only query wrapper |
+| `second-opinion` | `route-only` | explicit `review` route or override | valuable review surface, but not a core reusable method |
+| `skill-factory` | `deferred` | future repo-local command family | current CLI does not expose a `skill` command family |
+| `prompt-governance` | `deferred` | future prompt-system governance surface | real capability, but outside the current code-change governance rollout |
+| `agent-workflow-designer` | `absorbed` | `plan-authoring` authoring guidance | authoring meta-skill is better distilled into SOP/checklists |
+| `designing-workflow-skills` | `absorbed` | distiller SOP / `plan-authoring` guidance | workflow-skill design rules belong to the authoring process rather than the runtime catalog |
+| `writing-skills` | `absorbed` | distiller SOP / adapter export guidance | TDD-for-skills process is for authors, not runtime |
+| `antigravity-workflows` | `absorbed` | distiller SOP / workflow routing heuristics | orchestration meta-skill should not become a Slipway runtime unit |
+| `acceptance-orchestrator` | `absorbed` | `incident-response` / gate posture | gate posture is preserved without promoting a standalone surface |
+| `block-no-verify-hook` | `absorbed` | `git-recovery` / policy guidance | hook-specific policy, not a reusable catalog method |
+| `spec-kitty-charter-doctrine` | `absorbed` | `plan-authoring` / runtime constraints commentary | doctrine framing is already absorbed into planning and runtime constraints |
+| `simplification-pass` | `absorbed` | `independent-review` and `code-quality-review` partials | better as an internal review technique than a standalone node |
+| `review-request-response` | `absorbed` | `independent-review` and `review-comment-triage` | spans two lifecycle points and creates noisy boundaries |
+| `hypothesis-arbitration` | `absorbed` | `root-cause-tracing` | overlaps heavily with the debugging core and is cleaner as an advanced branch |
+
+### K. Sources absorbed as posture, not promoted as standalone skills
+
+| Source | Absorbed into |
 |---|---|
-| `wshobson/agents` plugin `conductor` skill `workflow-patterns` | `~/.agents/skills/conductor/workflow-patterns/` |
-| `wshobson/agents` plugin `agent-teams` skill `task-coordination-strategies` | `~/.agents/skills/agent-teams/task-coordination-strategies/` |
-| `wshobson/agents` plugin `agent-teams` skill `multi-reviewer-patterns` | `~/.agents/skills/agent-teams/multi-reviewer-patterns/` |
-| `trailofbits/skills` plugin `ask-questions-if-underspecified` | `~/.agents/skills/ecosystem/trailofbits/ask-questions-if-underspecified/` |
-| `trailofbits/skills` plugin `workflow-skill-design` skill `designing-workflow-skills` | `~/.agents/skills/ecosystem/trailofbits/designing-workflow-skills/` |
-| `wshobson/agents` plugin `incident-response` skill `incident-runbook-templates` | `~/.agents/skills/incident-response/incident-runbook-templates/` |
-| `wshobson/agents` plugin `incident-response` skill `postmortem-writing` | `~/.agents/skills/incident-response/postmortem-writing/` |
+| `superpowers/using-superpowers` | project- and agent-level skill-first posture text |
+| `superpowers/executing-plans` | `plan-authoring` execution-contract sections |
+| `spec-kitty/mission-system` | `plan-authoring` taxonomy and procedure commentary |
+| `spec-kitty/runtime-next` | Slipway runtime documentation and resolver constraints |
+| `sickn33/agent-orchestrator` | auto capability resolver matching heuristics |
+| `wshobson/error-handling-patterns` | `independent-review` and `code-quality-review` partials |
 
-7 new chezmoi entries. After Wave 1's `chezmoi apply`, all 35 sources for Waves 2–4 are available locally under one stable path (`~/.agents/skills/`).
+## 5. Binding and Distillation Model
 
----
+### 5.1 Binding registry
 
-## 10. Implementation Waves
+This refactor introduces a dedicated binding registry, conceptually under:
 
-### Wave 1 — Engine + schema rev (foundation)
+```text
+internal/engine/capability/
+  registry.go
+  trigger.go
+  resolver.go
+  provenance.go
+```
 
-**Goal:** ship the contract change with zero behavior change for the existing 9 gates.
+Responsibilities:
 
-**Files touched:**
-- `internal/engine/skill/skill.go` (Definition fields, defaultReferenceRegistry, Phase/Subject/Tier enums)
-- `internal/engine/skill/registry_loader.go` (governanceFrontMatter parser)
-- `internal/engine/progression/skill_resolution.go` (ChangeContext, ShouldFire, conditional helpers)
-- `internal/engine/progression/advance_governed.go` (call ShouldFire in gate selection)
-- `internal/model/config.go` (error-path / user-facing / architecture file-pattern config)
-- `internal/tmpl/templates_test.go` (migrate to new contract)
-- `cmd/next.go` (--references flag)
-- `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl` (7 new sources)
-- `docs/plans/2026-04-11-skills-integration-plan.zh-CN.md` (port v5 content)
+1. own the 25-skill catalog metadata
+2. own the bounded trigger DSL operator set and evaluator rules
+3. own binding targets for hosts, command routes, hints, and views
+4. keep runtime routing testable and independent from rendered prose files
+5. expose the minimum export metadata needed by tool adapters
 
-**Files created:**
-- `internal/engine/skill/phase_subject_tier.go` (enums + validators)
+### 5.2 Host bindings
 
-**Exit criteria:**
-- `go test ./...` green
-- `go vet ./...` clean
-- `slipway next` on a scratch project produces identical output to before (existing 9 gates with new fields all set to defaults)
-- `slipway next --references` produces an empty References section (no reference skills registered yet)
-- `chezmoi apply` succeeds; `~/.agents/skills/conductor/workflow-patterns/SKILL.md` exists
+Governed hosts remain few, but they absorb catalog skills intentionally:
 
-### Wave 2 — Existing-skill enhancements + checklist-quality decomposition
+| Governed host | Bound catalog skills |
+|---|---|
+| `intake-clarification` | `scope-clarification` |
+| `research-orchestration` | `context-assembly` |
+| `plan-audit` | `plan-authoring`, `context-assembly` |
+| `worktree-preflight` | kernel-owned; current runtime also host-embeds `git-recovery` here as worktree failure support |
+| `wave-orchestration` | `tdd-proof`, `parallel-executor-contract`, `root-cause-tracing` |
+| `tdd-governance` | `tdd-proof`, `fresh-verification-evidence` |
+| `spec-compliance-review` | `independent-review`, `spec-trace`, `security-review` |
+| `code-quality-review` | `independent-review`, `multi-reviewer-calibration`, `security-review`, plus embedded simplification guidance |
+| `goal-verification` | `fresh-verification-evidence`, `coverage-analysis`, `property-testing`, `mutation-testing`, `performance-profiling` |
+| `final-closeout` | `fresh-verification-evidence` plus residual-risk closeout language |
 
-**Goal:** apply the 6 v4 §7.2 merge specs and decompose `checklist-quality.md`.
+### 5.3 Command bindings
 
-**Files touched:**
-- `internal/tmpl/templates/skills/intake-clarification/SKILL.md` (5.1)
-- `internal/tmpl/templates/skills/code-quality-review/SKILL.md` (or `.tmpl` if applicable) (5.2)
-- `internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl` (5.3)
-- `internal/tmpl/templates/skills/tdd-governance/SKILL.md.tmpl` (5.4)
-- `internal/tmpl/templates/skills/codebase-mapping/SKILL.md` (5.5)
-- `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl` (5.6)
-- `internal/engine/skill/skill.go` (add new fields to existing 9 entries: phase, subject, tier, reason_code, hard_gate, references, order_after where applicable)
+Command surfaces bind catalog skills through auto routes first, then optional
+manual overrides:
 
-**Files created:**
-- `internal/tmpl/templates/skills/checklist-quality/intake.md`
-- `internal/tmpl/templates/skills/checklist-quality/plan.md`
-- `internal/tmpl/templates/skills/checklist-quality/review.md`
-- `internal/tmpl/templates/skills/checklist-quality/test.md`
+| Command | Catalog skills |
+|---|---|
+| `review` | `independent-review`, `multi-reviewer-calibration`, `security-review`, `threat-modeling`, `gha-security-review`, `supply-chain-audit`, `sast-orchestration`, `differential-review`, `variant-analysis`, `spec-trace`, plus `second-opinion` as an explicit route or override |
+| `validate` | `spec-trace`, `coverage-analysis`, `property-testing`, `mutation-testing`, `performance-profiling` |
+| `repair` | `root-cause-tracing`, `ci-triage`, `review-comment-triage`, `git-recovery`, `supply-chain-audit`, `gha-security-review`, `variant-analysis` |
+| `status` | `incident-response`, `supply-chain-audit`, `ci-triage`, `performance-profiling` summaries, plus `review-queue` and `observability-query` as views |
+| `health` | diagnostics-first integrity and observability views; current change-scoped auto-route defaults to `incident-response`, with `observability-query` available as an explicit view override |
 
-**Files deleted:**
-- `internal/tmpl/templates/skills/checklist-quality.md` (replaced by directory)
+Rules:
 
-**Exit criteria:**
-- All 6 enhanced skills have new sections; structural test extended to assert new section markers
-- All 9 existing registry entries have full v5 frontmatter
-- `spec-compliance-review` references `checklist-quality/review.md` specifically
+1. Routed command bindings are shipped in current code:
+   `review` / `validate` / `repair` expose `--mode`, and
+   `status` / `health` expose `--view`.
+2. Automatic selection is the default posture.
+3. Explicit `--mode` / `--view` overrides take precedence over resolver
+   auto-route fallback. Route-only non-catalog overrides are also accepted:
+   `review --mode second-opinion`,
+   `status --view review-queue|observability-query`,
+   `health --view observability-query`.
+4. `status` / `health` currently use a shared payload renderer. For concrete
+   active/selected changes, current auto-route selects the shipped
+   `incident-response` T3 view; in diagnostics fallback with no active change,
+   `view` remains empty unless the operator passed `--view`.
+5. Current non-catalog explicit `--view` overrides are
+   `review-queue` and `observability-query`. Other `view-only` entries remain
+   documented diagnostics landing zones, and `validate` has no standalone
+   `--view` selector in current code.
+6. `incident-response` is T3: it binds only to `status` / `health` / export,
+   not to `repair`. `repair` routing leans on `root-cause-tracing`,
+   `ci-triage`, and `git-recovery` instead.
+7. `fresh-verification-evidence` remains host-bound (`goal-verification`,
+   `final-closeout`, `tdd-governance`) and is not a direct `validate` route.
+8. `command-auto` is reserved for low-latency, high-signal defaults.
+   Scanner-heavy or provider-coupled routes stay `command-manual` and are
+   selected explicitly through `--mode`.
 
-### Wave 3 — New gates (10)
+### 5.4 Distillation documentation
 
-**Goal:** ship 10 new gates, taking total to 19.
+The documentation model becomes catalog-first:
 
-**Files created:**
-- 10 new `internal/tmpl/templates/skills/<gate-name>/SKILL.md` files (or `.tmpl` if needed)
-- Each with full frontmatter, body skeleton, mandatory checklist, failure handling
+```text
+docs/distillation/
+  schema.md
+  catalog.md
+  by-source.md
+  domains/
+    intake-and-framing.md
+    execution-discipline.md
+    debugging.md
+    code-review-quality.md
+    code-review-security.md
+    code-review-change-shape.md
+    verification.md
+    repair-and-ci.md
+    ops-and-diagnostics.md
+  routed-surfaces.md
+```
 
-**Files touched:**
-- `internal/engine/skill/skill.go` (10 new entries in `defaultGovernanceRegistry`)
-- `internal/model/reason_code.go` (10 new reason code constants from §6.5)
-- `internal/engine/progression/advance_governed.go` (any state-specific routing tweaks)
-- `internal/tmpl/templates_test.go` (10 new skill structural assertions)
-- `cmd/<various>_test.go` (end-to-end coverage for conditional firing)
+`schema.md` freezes:
 
-**Exit criteria:**
-- 19 gates registered, 19 gates pass topo-sort cycle check
-- Each conditional gate fires only under its declared condition (covered by table-driven tests against synthetic ChangeContexts)
-- Smoke test: `slipway init → new → next → done` on a scratch project with each conditional triggered (10 scenarios)
+1. the authoring contract for frontmatter, typed templates, and `provenance.yaml`
+2. the bounded trigger DSL operators that the resolver may consume
+3. the CI gates that determine whether a distilled catalog skill is mergeable
 
-### Wave 4 — Reference shelf (12)
+`catalog.md` is target-indexed:
 
-**Goal:** ship 12 slipway-flavored reference skills.
+1. one row per Slipway catalog skill
+2. domain, function, primary attachment, bindings, and provenance summary
+3. implementation status and test coverage status
 
-**Files created:**
-- 12 new `internal/tmpl/templates/skills/<reference-name>/SKILL.md` files, each ~150–200 LoC
-- Each with `tier: reference` frontmatter and the §7.2 body shape
+`by-source.md` is source-indexed, but manually maintained:
 
-**Files touched:**
-- `internal/engine/skill/skill.go` (12 new entries in `defaultReferenceRegistry`)
-- `internal/tmpl/templates_test.go` (12 new structural assertions for reference skills)
-- `cmd/next.go` (--references output now non-empty; integration test)
+1. one row per authoritative source-corpus entry
+2. its disposition, the target catalog skills that consume it, and rollout status
+3. auditability maintained by citing `provenance.yaml`, not by code generation
 
-**Exit criteria:**
-- `slipway next --references` on a scratch project surfaces the correct subset for each state
-- `TestReferenceTargetsExist` passes (every `references:` entry resolves to a real `~/.agents/skills/` path)
-- `docs/skills/INDEX.md` regenerated from the registry (one-line per skill, grouped by phase)
+`routed-surfaces.md` records:
 
----
+1. the fixed list of `view-only`, `route-only`, and `deferred` surfaces
+2. the command landing zone and boundary for each surface
+3. which sources are intentionally classified as non-catalog
 
-## 11. Implementation Hazards
+### 5.5 Why packs are no longer the main architecture
 
-1. **Template rendering vs static markdown.** `spec-compliance-review`, `wave-orchestration`, `tdd-governance` are `.tmpl`. Wave-2 structural tests must render first or assert against `.tmpl` source.
-2. **`checklist-quality.md` references break if not migrated atomically.** Wave 2's `spec-compliance-review/SKILL.md.tmpl:35` reference must update in the same commit as the directory creation.
-3. **`AgentHint` is mandatory for gates.** All 10 new gates must set it. Reuse existing values (`slipway-planner`, `slipway-auditor`, `slipway-orchestrator`, `slipway-reviewer`, `slipway-verifier`, `slipway-closer`); do not introduce new hints in v5.
-4. **Topo-sort cycles fail loud at registry-load time.** Add a unit test that the 19-gate registry has no cycles. If a future plan adds a gate that creates a cycle, the binary will refuse to start.
-5. **Conditional firing depends on `ChangeContext` accuracy.** The detection helpers (`touchesUserFacing`, `touchesErrorPath`, `touchesArchitecture`) are file-glob heuristics; they will have false positives and false negatives. Mitigation: each helper has a config override in `internal/model/config.go` for project-specific patterns.
-6. **`subject` tagging happens at intake.** v5 requires that the change context carries a `Subject` value. Wave 1 must extend the change resolver to pull subject from intake artifacts (`artifacts/changes/{slug}/intake/subject.yaml` or similar). If subject is unset, conditional gates default to "fire" (safe-by-default).
-7. **Reason codes are stable identifiers.** Once shipped, the 10 new reason codes from §6.5 cannot be renamed without a deprecation pass. Pick the names carefully in Wave 3.
-8. **chezmoi pull is local-only.** Wave 1's `.chezmoiexternal.toml.tmpl` change works only on machines that have `chezmoi apply` access to the source. CI should fall back to reading from `~/ghq/.../<repo>/...` paths or skip reference-existence assertions.
-9. **`zh-CN.md` sibling drifts.** The current zh-CN file is still v2 content. Wave 1 must port v5 content; do not let it drift.
-10. **Wave 3 gate count is the inflection point.** Going from 9 to 19 gates is where the schema's value lives — but it's also where review burden spikes. Stage Wave 3 as one PR per 2–3 gates if review velocity is the bottleneck (5 sub-PRs total).
+Capability packs still exist as tags and documentation views, but no longer
+define the system shape.
 
----
+Reasons:
 
-## 12. Explicit Non-Goals (still)
+1. packs are useful for surveying work, not for binding runtime behavior
+2. `domain x function` yields cleaner skill boundaries
+3. the binding layer can attach one skill to multiple surfaces without turning
+   packs into pseudo-runtime objects
 
-- No `slipway next --skill <name>` selector. Skill selection stays state-driven.
-- No `slipway preset` rework. Preset stays a workflow preset selector.
-- No promotion of techniques (`tdd`, `systematic-debugging`, `code-review-protocol`, `codebase-mapping`) into gates. Techniques are invoked *within* gates.
-- No `defaultReferenceRegistry` entry for `agentic-actions-auditor`, `dimensional-analysis`, `mutation-testing`, `entry-point-analyzer`, `spec-to-code-compliance`, `testing-handbook-skills/*`. These remain explicitly excluded as documented in §2.6.
-- No new `AgentHint` values. Reuse the 6 existing.
-- No backwards-compat shim for the old `governanceFrontMatter` shape. Wave 1 migrates the test contract once and locks it.
+## 6. Rollout Record
 
----
+This section records the B0-B8 rollout that is now implemented. Deferred
+surfaces such as `skill-factory` and `prompt-governance` remain deferred, but
+the catalog registry, routed flags, assembler, export manifest, and Go test
+gates described below are shipped.
 
-## 13. Open Decisions for Owner
+### 6.1 Batch map
 
-These six require yes/no before Wave 1 starts. v5 takes a recommendation on each.
+| Batch | Purpose | Primary deliverables | Gate to advance |
+|---|---|---|---|
+| **B0** | Contract freeze | `docs/distillation/schema.md` frozen (tier, attachment modes, trigger DSL operators); `catalog.md`, `by-source.md`, `routed-surfaces.md` skeletons; `provenance.yaml` schema frozen | Schema review signed off |
+| **B1** | End-to-end proof | `internal/engine/capability/{registry,trigger,resolver,provenance}.go`; wiring into `TechniqueHints` (`cmd/next_skill_view.go`); full distillation of five foundation T1 skills: `scope-clarification`, `plan-authoring`, `tdd-proof`, `fresh-verification-evidence`, `independent-review`; tests for registry load + resolver selection + hint emission | End-to-end loop demonstrably functional in tests |
+| **B2** | Scale foundation | Remaining foundation T1 skills: `context-assembly`, `parallel-executor-contract`, `root-cause-tracing`, `security-review`, `spec-trace` | Multi-skill resolver stability demonstrated |
+| **B3** | Security cluster | T1 `threat-modeling` + T2 `sast-orchestration`, `gha-security-review`, `supply-chain-audit` | T2 command-route binding proven |
+| **B4** | Change shape + verification | T1 `multi-reviewer-calibration`, `differential-review`, `variant-analysis`, `coverage-analysis`, `property-testing`, `mutation-testing`, `performance-profiling` | |
+| **B5** | Repair/CI + ops | T2 `ci-triage`, `review-comment-triage`, `git-recovery` + T3 `incident-response` | T3 view-only binding proven |
+| **B6** | Non-catalog cleanup | `routed-surfaces.md` finalized; six posture-only absorptions annotated; disposition matrix closed | Provenance coverage scan clean for all `standalone` / `partial-only` by-source rows |
+| **B7** | Routed command rollout | `review` / `validate` / `repair` auto routing and `--mode` flag; `status` / `health` `--view` flag; resolver tests for route selection and fallback | Routed flags shipped and verified |
+| **B8** | Export + gate automation | Toolgen multi-file assembler; `using-slipway-catalog.md` export; automate `schema-lint`, `size-lint` (tier-aware), `binding-compare`, `provenance-coverage-scan` | Gates enforce via CI, no manual review required |
 
-1. **Adopt the 6 new `Definition` fields and the new `Tier`/`Phase`/`Subject` enums (§4.1)?** *Recommendation: yes — this is the foundation for everything else.*
-2. **Adopt topo-sort gate ordering with `OrderAfter` (§4.4)?** *Recommendation: yes — without this, the new S3 gates have undefined order.*
-3. **Adopt the conditional firing mechanism (`SubjectGated`, `PivotConditional`, `UserFacingConditional`, `ErrorPathConditional`, `MaterialDesignConditional`) over the alternative DSL approach (§4.5)?** *Recommendation: yes — explicit bool flags are simpler than a condition DSL and easier to test.*
-4. **Add `slipway next --references` (§4.6, §8.1) but **not** `--skill` and **not** `preset` rework (§8.2, §8.3)?** *Recommendation: yes — minimal CLI surface that unlocks the reference shelf.*
-5. **Decompose `checklist-quality.md` into 4 domain checklists (§5.7, §7) in Wave 2, not as a separate plan?** *Recommendation: yes — the four-checklist split is a small Wave-2 add and avoids leaving the sidecar inconsistent with v5's vocabulary.*
-6. **Ship Wave 3 as 5 sub-PRs (one per 2–3 gates) or one big PR?** *Recommendation: 5 sub-PRs — review burden is the bottleneck for Wave 3, not engine work.*
+### 6.2 B1 foundation set (locked)
 
----
+B1 distils these five T1 catalog skills to prove host absorption, hint
+emission, and command binding all end-to-end:
 
-## 14. Verification Index (from v4 §13)
+1. `scope-clarification` - intake host + technique-hint; attachment: `posture` + `checklist`
+2. `plan-authoring` - plan-audit host + host-embedded; attachment: `procedure` + `checklist`
+3. `tdd-proof` - tdd-governance and wave-orchestration hosts; attachment: `procedure`
+4. `fresh-verification-evidence` - goal-verification and final-closeout hosts; attachment: `checklist` + `report-schema`
+5. `independent-review` - spec-compliance-review and code-quality-review hosts, plus `review` command; attachment: `procedure` + `checklist` + `report-schema`
 
-Files read end-to-end during the audit. Every claim in §2 maps to one of these. Re-run any of these reads to reverify.
+This set covers four distinct governed hosts, one routed command, and four
+of the five attachment modes. B2 adds the other five foundation skills;
+together they complete the `docs/plans/.../plan.md` foundation ten.
 
-**Trailofbits:**
-- `~/ghq/github.com/trailofbits/skills/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/differential-review/skills/differential-review/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/property-based-testing/skills/property-based-testing/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/spec-to-code-compliance/skills/spec-to-code-compliance/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/ask-questions-if-underspecified/skills/ask-questions-if-underspecified/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/workflow-skill-design/skills/designing-workflow-skills/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/skill-improver/skills/skill-improver/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/testing-handbook-skills/skills/` (15-entry directory listing)
-- `~/ghq/github.com/trailofbits/skills/plugins/mutation-testing/skills/mutation-testing/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/dimensional-analysis/skills/dimensional-analysis/SKILL.md`
-- `~/ghq/github.com/trailofbits/skills/plugins/audit-context-building/skills/audit-context-building/SKILL.md`
+### 6.3 Batch execution rules
 
-**Anthropics / OpenAI / Getsentry:**
-- `~/ghq/github.com/anthropics/skills/skills/skill-creator/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-threat-model/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-best-practices/SKILL.md`
-- `~/ghq/github.com/openai/skills/skills/.curated/security-ownership-map/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/skill-scanner/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/code-simplifier/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/claude-settings-audit/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/security-review/SKILL.md`
-- `~/ghq/github.com/getsentry/skills/plugins/sentry-skills/skills/find-bugs/SKILL.md`
+1. Each batch lands as one PR. Inter-batch context transfer relies solely on
+   merged `provenance.yaml` files and the maintained
+   `docs/distillation/by-source.md`; no bespoke hand-off documents.
+2. Conflict adjudication default: when sources disagree on a rule, merge
+   conservatively, record the conflict under `conflicts_with` in
+   `provenance.yaml`, and list the conflict in the PR body. Do not stall the
+   batch on single-rule disagreements.
+3. Rules unresolved by conservative merge and flagged for escalation block
+   only their own skill, not the whole batch.
+4. EN and zh-CN documents are updated in the same PR.
 
-**wshobson:**
-- `~/ghq/github.com/wshobson/agents/plugins/agent-teams/skills/multi-reviewer-patterns/SKILL.md` (~127 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/conductor/skills/workflow-patterns/SKILL.md` (~623 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/agent-teams/skills/task-coordination-strategies/SKILL.md` (~163 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/error-handling-patterns/SKILL.md` (~632 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/framework-migration/skills/dependency-upgrade/SKILL.md` (~368 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/e2e-testing-patterns/SKILL.md` (~535 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/documentation-generation/skills/architecture-decision-records/SKILL.md` (~441 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/incident-response/skills/incident-runbook-templates/SKILL.md` (~471 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/incident-response/skills/postmortem-writing/SKILL.md` (~390 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/documentation-generation/skills/changelog-automation/SKILL.md` (~572 LoC)
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/code-review-excellence/SKILL.md`
-- `~/ghq/github.com/wshobson/agents/plugins/developer-essentials/skills/debugging-strategies/SKILL.md`
+### 6.4 Historical rollout guardrails
 
-**Slipway internals:**
-- `~/ghq/github.com/signalridge/slipway/internal/engine/skill/skill.go:1-100`
-- `~/ghq/github.com/signalridge/slipway/internal/engine/skill/registry_loader.go:40-44, 168-199`
-- `~/ghq/github.com/signalridge/slipway/internal/engine/progression/skill_resolution.go`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/intake-clarification/SKILL.md`
-- `~/ghq/github.com/signalridge/slipway/internal/tmpl/templates/skills/checklist-quality.md`
-- `~/.local/share/chezmoi/.chezmoiexternal.toml.tmpl`
-- `~/.agents/skills/` (top-level + ecosystem/ walk; 167 SKILL.md confirmed)
+1. B1 proved the registry and resolver before the catalog expanded to all 25
+   skills.
+2. CI gates were intentionally deferred until B8; they are now implemented in
+   Go tests and expected in CI.
+3. `--mode` / `--view` shipped in B7 and are now live.
+4. Routed command rollout landed after the foundation batches rather than being
+   mixed into the initial distillation proof.
+
+## 7. Non-Goals
+
+1. Do not add a second progression kernel beside `ResolveNextSkill`.
+2. Do not require operators to manually invoke absorbed skills during normal
+   Slipway flows.
+3. Do not mirror source repositories one-for-one inside Slipway.
+4. Do not treat generated `SKILL.md` frontmatter as runtime binding authority.
+5. Do not create one top-level command per catalog skill.
+6. Do not import mission/work-package/dashboard/doctrine runtime behavior.
+7. Do not make capability packs the primary architecture again.
+8. Do not reduce Slipway to a tool-specific skill installer.
+9. Do not keep thin queue, observability, or review wrappers as standalone
+   catalog skills when they fit better as routed surfaces.

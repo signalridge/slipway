@@ -11,8 +11,15 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/tmpl"
 )
+
+// catalogManifestFileName is the outbound `using-slipway-catalog.md`
+// document that describes the Go-owned capability registry to external
+// agents. It sits alongside the generated SKILL.md directories under
+// `<SkillsDir>/slipway/`.
+const catalogManifestFileName = "using-slipway-catalog.md"
 
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
 type ToolConfig struct {
@@ -176,20 +183,20 @@ var commandRegistry = []CommandDef{
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
-		Arguments:     "[--json] [--change <slug>]",
+		Arguments:     "[--json] [--view <skill-id>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
 	// Situational (9)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasAdapterSkill: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
-		Prerequisites: []string{"Run from the target project root or any child directory inside it."}},
+		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--json] [--all|--changed-only] [--change <slug>]"},
+		Arguments: "[--json] [--all|--changed-only] [--mode <skill-id>] [--change <slug>]"},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "[--json] [--change <slug>]",
+		Arguments:     "[--json] [--mode <skill-id>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "validate-requirements", Class: CommandClassQuery, Description: "Validate requirements.md contract for the active change", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
@@ -203,14 +210,14 @@ var commandRegistry = []CommandDef{
 	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "[--json]",
+		Arguments:     "[--json] [--mode <skill-id>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	// Diagnostics (3) — CLI-only, no adapter skill templates
 	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
-		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--change <slug>]",
+		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--view <skill-id>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
@@ -277,6 +284,7 @@ var techniqueNames = []string{
 
 // GovernanceSkillNames lists the governance skills generated for each tool (static .md).
 var GovernanceSkillNames = []string{
+	"intake-clarification",
 	"research-orchestration",
 	"plan-audit",
 	"tdd-governance",
@@ -298,6 +306,12 @@ var TemplatedGovernanceSkillNames = []string{
 	"goal-verification",
 	"final-closeout",
 }
+
+// catalogSkillIDs returns Go-registry skill IDs sorted for deterministic
+// generation and cleanup.
+var catalogSkillIDs = func() []string {
+	return capability.DefaultRegistry().IDs()
+}()
 
 // commandDescriptions returns the description for a command from the registry.
 var commandDescriptions = func() map[string]string {
@@ -438,6 +452,13 @@ func SkillPath(cfg ToolConfig, skillName string) string {
 	return filepath.Join(cfg.SkillsDir, "slipway", skillName, "SKILL.md")
 }
 
+// CatalogManifestPath returns the relative path to the generated
+// `using-slipway-catalog.md` outbound manifest for the given tool config.
+// External agents read this file to triage catalog skills by description.
+func CatalogManifestPath(cfg ToolConfig) string {
+	return filepath.Join(cfg.SkillsDir, "slipway", catalogManifestFileName)
+}
+
 // AgentPath returns the relative path to an agent definition for the given tool config.
 // Returns empty string for tools with no agent support (AgentStyle == "").
 func AgentPath(cfg ToolConfig, agentName string) string {
@@ -468,6 +489,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
 		}
+		if err := emitSkillSupportFiles(root, cfg, id, refresh, false); err != nil {
+			return fmt.Errorf("emit support files for adapter skill %q (%s): %w", id, cfg.ID, err)
+		}
 	}
 
 	// Governance skills (static content)
@@ -483,6 +507,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
 			return err
 		}
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+			return fmt.Errorf("emit support files for governance skill %q (%s): %w", name, cfg.ID, err)
+		}
 	}
 
 	// Templated governance skills (tool-aware .md.tmpl)
@@ -494,6 +521,30 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		skillPath := filepath.Join(root, SkillPath(cfg, name))
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
 			return err
+		}
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+			return fmt.Errorf("emit support files for templated governance skill %q (%s): %w", name, cfg.ID, err)
+		}
+	}
+
+	// Catalog skills (registry-owned, assembled from SKILL.md plus optional
+	// typed templates in fixed order).
+	reg := capability.DefaultRegistry()
+	for _, id := range catalogSkillIDs {
+		sk, ok := reg.Lookup(id)
+		if !ok {
+			return fmt.Errorf("catalog skill %q missing from registry lookup", id)
+		}
+		content, err := renderCatalogSkill(sk)
+		if err != nil {
+			return fmt.Errorf("render catalog skill %q for %s: %w", id, cfg.ID, err)
+		}
+		skillPath := filepath.Join(root, SkillPath(cfg, id))
+		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+			return err
+		}
+		if err := emitSkillSupportFiles(root, cfg, id, refresh, true); err != nil {
+			return fmt.Errorf("emit support files for catalog skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
 
@@ -507,6 +558,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
 		}
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+			return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
+		}
 	}
 
 	// Technique skills (static content)
@@ -518,6 +572,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		path := filepath.Join(root, SkillPath(cfg, name))
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
+		}
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+			return fmt.Errorf("emit support files for technique skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
 
@@ -600,6 +657,15 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return err
 		}
 	}
+
+	// Outbound catalog manifest (read by external agents; not consumed by
+	// the Slipway kernel). Regenerated deterministically from the Go-owned
+	// capability registry so every adapter sees the same triage index.
+	manifest := capability.BuildCatalogManifest(capability.DefaultRegistry())
+	manifestPath := filepath.Join(root, CatalogManifestPath(cfg))
+	if err := writeDeterministic(manifestPath, manifest, refresh); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -627,6 +693,7 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 		GovernanceSkillNames,
 		standaloneGovernanceNames,
 		TemplatedGovernanceSkillNames,
+		catalogSkillIDs,
 		standaloneNames,
 		techniqueNames,
 	} {
@@ -634,6 +701,7 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 			expected[name] = struct{}{}
 		}
 	}
+	expected[catalogManifestFileName] = struct{}{}
 	return cleanupUnexpectedEntries(skillsRoot, expected)
 }
 
@@ -737,6 +805,200 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) er
 		}
 	}
 	return nil
+}
+
+// renderCatalogSkill assembles a registry-owned catalog SKILL.md from the
+// source body and optional typed templates in fixed order:
+// SKILL.md body -> PROSE.tmpl -> CHECKLIST.tmpl -> VERDICT.tmpl.
+//
+// The assembled output rewrites the authoring-side frontmatter so adapter
+// skill loaders (Codex, Claude) see the required `name` and `description`
+// fields. Internal fields (skill_id, summary, bindings, provenance_ref, ...)
+// are preserved below them so audit and binding-compare gates still work.
+func renderCatalogSkill(sk capability.Skill) (string, error) {
+	base, err := tmpl.Content(path.Join("skills", sk.ID, "SKILL.md"))
+	if err != nil {
+		return "", fmt.Errorf("load catalog base body: %w", err)
+	}
+	base, err = injectAdapterFrontmatter(base, sk)
+	if err != nil {
+		return "", fmt.Errorf("rewrite frontmatter for %q: %w", sk.ID, err)
+	}
+
+	needProse, needChecklist, needVerdict := typedTemplateNeeds(sk)
+	prose, err := loadOptionalTemplate(path.Join("skills", sk.ID, "PROSE.tmpl"), needProse)
+	if err != nil {
+		return "", err
+	}
+	checklist, err := loadOptionalTemplate(path.Join("skills", sk.ID, "CHECKLIST.tmpl"), needChecklist)
+	if err != nil {
+		return "", err
+	}
+	verdict, err := loadOptionalTemplate(path.Join("skills", sk.ID, "VERDICT.tmpl"), needVerdict)
+	if err != nil {
+		return "", err
+	}
+
+	sections := []string{
+		trimCatalogSection(base),
+		trimCatalogSection(prose),
+		trimCatalogSection(checklist),
+		trimCatalogSection(verdict),
+	}
+	out := make([]string, 0, len(sections))
+	for _, section := range sections {
+		if section == "" {
+			continue
+		}
+		out = append(out, section)
+	}
+	if len(out) == 1 {
+		// Preserve exact SKILL.md content when no typed-template section exists.
+		return base, nil
+	}
+	return strings.Join(out, "\n\n") + "\n", nil
+}
+
+// injectAdapterFrontmatter prepends `name` and `description` to the source
+// frontmatter so adapter loaders (Codex/Claude) accept the output. The
+// existing authoring fields are preserved verbatim below them.
+//
+// The function is string-based on purpose: it keeps the body byte-for-byte
+// identical to the source (important for tier-size and schema-lint gates
+// that measure post-frontmatter bytes).
+func injectAdapterFrontmatter(raw string, sk capability.Skill) (string, error) {
+	const open = "---\n"
+	if !strings.HasPrefix(raw, open) {
+		return "", fmt.Errorf("SKILL.md missing opening `---` delimiter")
+	}
+	rest := raw[len(open):]
+	idx := strings.Index(rest, "\n---")
+	if idx < 0 {
+		return "", fmt.Errorf("SKILL.md missing closing `---` delimiter")
+	}
+	fm := rest[:idx]
+	tail := rest[idx:] // starts with "\n---"
+
+	header := "name: slipway-" + sk.ID + "\n" +
+		"description: " + yamlDoubleQuoted(sk.Summary) + "\n"
+	return open + header + fm + tail, nil
+}
+
+// yamlDoubleQuoted renders s as a YAML double-quoted scalar. It escapes `\`
+// and `"`; other printable ASCII, including backticks, are safe inside
+// double-quoted YAML strings.
+func yamlDoubleQuoted(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '\\', '"':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+var optionalSkillSupportDirs = []string{"references", "scripts"}
+
+// emitSkillSupportFiles copies optional support artifacts next to a generated
+// skill. Catalog skills additionally request provenance.yaml so their
+// exported `provenance_ref` stays non-dangling.
+func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh, includeProvenance bool) error {
+	skillDirRel := filepath.Dir(SkillPath(cfg, skillID))
+	dstBase := filepath.Join(root, skillDirRel)
+
+	if includeProvenance {
+		// provenance.yaml is required for registry-owned catalog skills.
+		provSrc := path.Join("skills", skillID, "provenance.yaml")
+		if content, exists, err := tmpl.ContentIfExists(provSrc); err != nil {
+			return fmt.Errorf("load provenance for %q: %w", skillID, err)
+		} else if exists {
+			if err := writeDeterministic(filepath.Join(dstBase, "provenance.yaml"), content, refresh); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Optional support directories — copy recursively when present.
+	for _, sub := range optionalSkillSupportDirs {
+		if err := copyTemplateSubtree(path.Join("skills", skillID, sub), filepath.Join(dstBase, sub), refresh); err != nil {
+			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
+		}
+	}
+	return nil
+}
+
+// copyTemplateSubtree walks an embedded template directory and writes each
+// file to dstDir preserving relative paths. Missing source directories are
+// a no-op.
+func copyTemplateSubtree(srcPrefix, dstDir string, refresh bool) error {
+	tfs := tmpl.TemplateFS()
+	info, err := fs.Stat(tfs, srcPrefix)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("expected directory at %q", srcPrefix)
+	}
+	return fs.WalkDir(tfs, srcPrefix, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(srcPrefix, p)
+		if err != nil {
+			return err
+		}
+		content, err := fs.ReadFile(tfs, p)
+		if err != nil {
+			return err
+		}
+		return writeDeterministic(filepath.Join(dstDir, filepath.FromSlash(rel)), string(content), refresh)
+	})
+}
+
+func typedTemplateNeeds(sk capability.Skill) (needProse, needChecklist, needVerdict bool) {
+	for _, b := range sk.Bindings {
+		switch b.Attachment {
+		case capability.AttachmentPosture, capability.AttachmentProcedure:
+			needProse = true
+		case capability.AttachmentChecklist:
+			needChecklist = true
+		case capability.AttachmentReportSchema:
+			needVerdict = true
+		}
+	}
+	return needProse, needChecklist, needVerdict
+}
+
+func loadOptionalTemplate(name string, needed bool) (string, error) {
+	if !needed {
+		return "", nil
+	}
+	content, exists, err := tmpl.ContentIfExists(name)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", nil
+	}
+	return content, nil
+}
+
+func trimCatalogSection(section string) string {
+	return strings.Trim(section, "\n")
 }
 
 // renderAdapterSkill renders an adapter SKILL.md from a .tmpl template.

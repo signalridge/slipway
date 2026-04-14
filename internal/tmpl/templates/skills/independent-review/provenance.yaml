@@ -1,0 +1,34 @@
+sources:
+  - source: getsentry/code-review
+    absorbed_as: standalone
+    extracted:
+      - "read diff before author notes"
+      - "severity calibration with blocker/major/minor/nit"
+    dropped: []
+  - source: alirezarezvani/code-reviewer
+    absorbed_as: standalone
+    extracted:
+      - "structured findings with file:line + evidence + remediation"
+      - "one-line bottom line convention"
+    dropped:
+      - "source-specific tone and templates"
+  - source: wshobson/code-review-excellence
+    absorbed_as: standalone
+    extracted:
+      - "fresh-context reader posture"
+    dropped: []
+  - source: spec-kitty/spec-kitty-runtime-review
+    absorbed_as: standalone
+    extracted:
+      - "reviewer-handoff discipline (questions vs blockers)"
+    dropped: []
+  - source: superpowers/requesting-code-review
+    absorbed_as: standalone
+    extracted:
+      - "explicit request-to-review contract"
+    dropped: []
+  - source: superpowers/receiving-code-review
+    absorbed_as: standalone
+    extracted:
+      - "receive-side reply discipline and finding triage"
+    dropped: []

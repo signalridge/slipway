@@ -36,14 +36,20 @@ type repairSummary struct {
 	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
 	RebuiltExecutionSummaries []string `json:"rebuilt_execution_summaries,omitempty"`
 	NonRepairableFindings     []string `json:"non_repairable_findings,omitempty"`
+	Mode                      string   `json:"mode,omitempty"`
 }
 
 func makeRepairCmd() *cobra.Command {
 	var jsonOutput bool
+	var mode string
 	cmd := &cobra.Command{
 		Use:   "repair",
 		Short: desc("repair"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRouteMode("repair", mode); err != nil {
+				return err
+			}
+			effectiveMode := resolveEffectiveRouteMode("repair", mode)
 			root, err := repairRootFromWD()
 			if err != nil {
 				return err
@@ -52,6 +58,7 @@ func makeRepairCmd() *cobra.Command {
 				now := time.Now().UTC()
 				summary := repairSummary{
 					StaleLockCleaned: staleLockCleaned,
+					Mode:             effectiveMode,
 				}
 
 				cleaned, err := fsutil.CleanupAtomicTempArtifacts(root)
@@ -199,12 +206,16 @@ func makeRepairCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	cmd.Flags().StringVar(&mode, "mode", "", "Catalog repair mode (skill id, e.g. root-cause-tracing, ci-triage)")
 	return cmd
 }
 
 func writeRepairText(w io.Writer, summary repairSummary) error {
 	writer := newFormatWriter(w)
 	writer.Writef("Repair Summary\n")
+	if strings.TrimSpace(summary.Mode) != "" {
+		writer.Writef("Mode: %s\n", summary.Mode)
+	}
 
 	writeRepairSection := func(title string, items []string) {
 		if len(items) == 0 {

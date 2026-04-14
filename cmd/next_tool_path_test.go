@@ -85,3 +85,28 @@ func TestNextUsesCurrentLinkedWorktreeAdaptersForSkillPaths(t *testing.T) {
 		assert.Equal(t, ".codex/agents/slipway-auditor.toml", view.NextSkill.AgentDefinitionPath)
 	})
 }
+
+func TestNextUsesExistingPromptPathForIntakeHost(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+
+		create := makeNewCmd()
+		create.SetArgs([]string{"--preset", "standard", "intake prompt path must exist after init"})
+		require.NoError(t, create.Execute())
+
+		var out bytes.Buffer
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, "intake-clarification", view.NextSkill.Name)
+		assert.Equal(t, ".claude/skills/slipway/intake-clarification/SKILL.md", view.NextSkill.PromptPath)
+		_, err := os.Stat(filepath.Join(root, view.NextSkill.PromptPath))
+		require.NoError(t, err, "next should not point to a non-existent exported skill prompt")
+	})
+}

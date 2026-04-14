@@ -1,0 +1,127 @@
+package capability
+
+// Skills registered at B2 (scale foundation). See docs/distillation/catalog.md
+// rows 2, 5, 7, 10, 17.
+
+func contextAssembly() Skill {
+	return Skill{
+		ID:                "context-assembly",
+		Domain:            DomainIntake,
+		Function:          "assemble product, codebase, and risk context before planning or review",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentProcedure,
+		Summary:           "Use when a task needs grounded context before planning or review. Triggers on research or plan-audit hosts, unclear context, or action-scoped hydration cues.",
+		Evidence:          EvidenceArtifact,
+		Triggers: []TriggerClause{
+			{Op: OpHost, Values: []string{"research-orchestration", "plan-audit"},
+				Reason: "Research or plan host active; assemble context first"},
+			{Op: OpUserTextMatches, Values: []string{"context", "background", "how does this work"},
+				Reason: "User text asks for context"},
+		},
+		Bindings: []Binding{
+			{Type: BindingHostEmbedded, Target: "research-orchestration", Attachment: AttachmentProcedure},
+			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentPosture},
+			{Type: BindingTechniqueHint, Target: "research-orchestration", Attachment: AttachmentProcedure},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func parallelExecutorContract() Skill {
+	return Skill{
+		ID:                "parallel-executor-contract",
+		Domain:            DomainExecution,
+		Function:          "bounded parallel subagent dispatch with reviewable handoff",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentProcedure,
+		Summary:           "Use when dispatching subagents in parallel. Triggers on wave-orchestration host or when the plan calls for multi-agent work.",
+		Evidence:          EvidenceArtifact,
+		Triggers: []TriggerClause{
+			{Op: OpHost, Value: "wave-orchestration",
+				Reason: "Wave orchestration host active; enforce parallel executor contract"},
+			{Op: OpUserTextMatches, Values: []string{"parallel", "subagent", "in parallel"},
+				Reason: "Request involves parallel execution"},
+		},
+		Bindings: []Binding{
+			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
+			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentChecklist},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func rootCauseTracing() Skill {
+	return Skill{
+		ID:                "root-cause-tracing",
+		Domain:            DomainDebugging,
+		Function:          "trace root cause before attempting fixes; branch competing hypotheses when traces disagree",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentProcedure,
+		Summary:           "Use when a fix is being considered before the root cause is documented. Triggers on repair, wave-orchestration host, or debugging-centric user text.",
+		Evidence:          EvidenceArtifact,
+		Triggers: []TriggerClause{
+			{Op: OpCommand, Value: "repair",
+				Reason: "repair command invoked; block fixes until root cause is documented"},
+			{Op: OpHost, Value: "wave-orchestration",
+				Reason: "Execution host may be masking a missing root-cause step"},
+			{Op: OpUserTextMatches, Values: []string{"debug", "crash", "flaky", "regression"},
+				Reason: "User text signals debugging work"},
+		},
+		Bindings: []Binding{
+			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func securityReview() Skill {
+	return Skill{
+		ID:                "security-review",
+		Domain:            DomainReviewSecurity,
+		Function:          "secure-default and framework-aware security review",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentChecklist,
+		Summary:           "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths.",
+		Evidence:          EvidenceVerdict,
+		Triggers: []TriggerClause{
+			{Op: OpCommand, Value: "review",
+				Reason: "review command invoked; attach security checklist"},
+			{Op: OpHost, Values: []string{"spec-compliance-review", "code-quality-review"},
+				Reason: "Review host active; include security checklist"},
+			{Op: OpChangedFilesInclude, Values: []string{"**/auth/*", "**/crypto/*", "**/session*"},
+				Reason: "Security-sensitive paths changed"},
+		},
+		Bindings: []Binding{
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
+			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
+			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}
+
+func specTrace() Skill {
+	return Skill{
+		ID:                "spec-trace",
+		Domain:            DomainReviewChangeShape,
+		Function:          "bidirectional spec-to-code and code-to-spec trace review",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentChecklist,
+		Summary:           "Use when verifying that implementation mirrors the approved plan. Triggers on spec-compliance host or validate/review commands.",
+		Evidence:          EvidenceVerdict,
+		Triggers: []TriggerClause{
+			{Op: OpHost, Value: "spec-compliance-review",
+				Reason: "Spec-compliance host active; enforce spec trace"},
+			{Op: OpCommand, Values: []string{"validate", "review"},
+				Reason: "Validation or review path; run spec trace"},
+		},
+		Bindings: []Binding{
+			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},
+		},
+		ProvenanceRef: "provenance.yaml",
+	}
+}

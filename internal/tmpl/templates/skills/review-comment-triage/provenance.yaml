@@ -1,0 +1,17 @@
+sources:
+  - source: openai/gh-address-comments
+    absorbed_as: standalone
+    extracted:
+      - "per-thread disposition: accept / push-back / defer"
+      - "cite commit/hunk when accepting"
+      - "reply before change when pushing back"
+    dropped:
+      - "gh-cli-specific command transcripts"
+    conflicts_with: []
+  - source: getsentry/iterate-pr
+    absorbed_as: partial-only
+    extracted:
+      - "no silent cosmetic fixes without a reply"
+    dropped:
+      - "sentry-specific PR label conventions"
+    conflicts_with: []
