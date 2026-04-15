@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -149,4 +150,118 @@ func TestResolveEffectiveRouteView_PrecedenceAndFallback(t *testing.T) {
 			t.Fatalf("expected empty view fallback, got %q", got)
 		}
 	})
+}
+
+func TestResolveEffectiveRouteHydrate_ExplicitModeShortCircuitsResolver(t *testing.T) {
+	for _, tc := range []struct {
+		command    string
+		mode       string
+		wantPrefix string
+		wantKey    string
+	}{
+		{command: "review", mode: "gha-security-review", wantPrefix: "gha-security-review/", wantKey: "gha-security-review/pwn-request.md"},
+		{command: "validate", mode: "sast-orchestration", wantPrefix: "sast-orchestration/", wantKey: "sast-orchestration/codeql-ruleset-catalog.md"},
+	} {
+		got := resolveEffectiveRouteHydrate(tc.command, tc.mode)
+		if len(got) == 0 {
+			t.Fatalf("%s/%s: expected registry hydrate keys", tc.command, tc.mode)
+		}
+		for _, key := range got {
+			if !strings.HasPrefix(key, tc.wantPrefix) {
+				t.Fatalf("%s/%s: expected skill-relative hydrate key with prefix %q, got %q", tc.command, tc.mode, tc.wantPrefix, key)
+			}
+		}
+		if !slices.Contains(got, tc.wantKey) {
+			t.Fatalf("%s/%s: expected key %q in %v", tc.command, tc.mode, tc.wantKey, got)
+		}
+		normalized := normalizeHydrateKeys(got)
+		if !sortedStrings(normalized) {
+			t.Fatalf("%s/%s: expected normalizeHydrateKeys to stable-sort, got %v", tc.command, tc.mode, normalized)
+		}
+	}
+}
+
+func TestResolveEffectiveRouteHydrate_EmptyExplicitFallsBackToResolver(t *testing.T) {
+	got := resolveEffectiveRouteHydrate("review", "")
+	sig := capability.Signals{Command: "review"}
+	want := capability.Resolve(capability.DefaultRegistry(), sig).HydrateReferences
+	if !equalStrings(got, want) {
+		t.Fatalf("expected resolver hydrate fallback %v, got %v", want, got)
+	}
+}
+
+func TestResolveEffectiveRouteHydrate_ExplicitModeWithNoRefsDoesNotFallBack(t *testing.T) {
+	got := resolveEffectiveRouteHydrate("repair", "review-comment-triage")
+	if got != nil {
+		t.Fatalf("expected nil for explicit zero-hydrate mode, got %v", got)
+	}
+}
+
+func TestResolveEffectiveRouteHydrate_UnknownModeReturnsNil(t *testing.T) {
+	got := resolveEffectiveRouteHydrate("review", "does-not-exist")
+	if got != nil {
+		t.Fatalf("expected nil for unknown mode, got %v", got)
+	}
+}
+
+func TestResolveEffectiveViewHydrate_ExplicitViewShortCircuitsResolver(t *testing.T) {
+	for _, tc := range []struct {
+		command    string
+		view       string
+		wantPrefix string
+		wantKey    string
+	}{
+		{command: "status", view: "supply-chain-audit", wantPrefix: "supply-chain-audit/", wantKey: "supply-chain-audit/results-template.md"},
+		{command: "health", view: "incident-response", wantPrefix: "incident-response/", wantKey: "incident-response/incident-severity-matrix.md"},
+	} {
+		got := resolveEffectiveViewHydrate(tc.command, tc.view)
+		if len(got) == 0 {
+			t.Fatalf("%s/%s: expected registry hydrate keys", tc.command, tc.view)
+		}
+		for _, key := range got {
+			if !strings.HasPrefix(key, tc.wantPrefix) {
+				t.Fatalf("%s/%s: expected skill-relative hydrate key with prefix %q, got %q", tc.command, tc.view, tc.wantPrefix, key)
+			}
+		}
+		if !slices.Contains(got, tc.wantKey) {
+			t.Fatalf("%s/%s: expected key %q in %v", tc.command, tc.view, tc.wantKey, got)
+		}
+	}
+}
+
+func TestResolveEffectiveViewHydrate_EmptyExplicitFallsBackToResolver(t *testing.T) {
+	got := resolveEffectiveViewHydrate("status", "")
+	sig := capability.Signals{Command: "status"}
+	want := capability.Resolve(capability.DefaultRegistry(), sig).HydrateReferences
+	if !equalStrings(got, want) {
+		t.Fatalf("expected resolver hydrate fallback %v, got %v", want, got)
+	}
+}
+
+func TestResolveEffectiveViewHydrate_ExplicitViewWithNoRefsDoesNotFallBack(t *testing.T) {
+	got := resolveEffectiveViewHydrate("status", "ci-triage")
+	if got != nil {
+		t.Fatalf("expected nil for explicit zero-hydrate view, got %v", got)
+	}
+}
+
+func sortedStrings(ss []string) bool {
+	for i := 1; i < len(ss); i++ {
+		if ss[i-1] > ss[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

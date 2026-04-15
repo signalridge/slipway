@@ -76,12 +76,7 @@ var helpGroups = []commandGroup{
 	},
 }
 
-var rootCmd = &cobra.Command{
-	Use:           "slipway",
-	Short:         "Slipway change-governance workflow CLI",
-	SilenceUsage:  true,
-	SilenceErrors: true,
-}
+var rootCmd = newRootCmd()
 
 // Execute runs the root command.
 func Execute() error {
@@ -131,37 +126,43 @@ func writeRootHelp(w io.Writer) error {
 	return writer.Err()
 }
 
-func init() {
-	rootCmd.SetOut(os.Stdout)
-	rootCmd.SetErr(os.Stderr)
-	rootCmd.AddCommand(makeInitCmd())
-	rootCmd.AddCommand(makeCodebaseMapCmd())
-	rootCmd.AddCommand(makeNewCmd())
-	rootCmd.AddCommand(makePresetCmd())
-	rootCmd.AddCommand(makeNextCmd())
-	rootCmd.AddCommand(makeRunCmd())
-	rootCmd.AddCommand(makeStatusCmd())
-	rootCmd.AddCommand(makeStatsCmd())
-	rootCmd.AddCommand(makeHealthCmd())
-	rootCmd.AddCommand(makeRootPathCmd())
-	rootCmd.AddCommand(makeDoneCmd())
-	rootCmd.AddCommand(makeAbortCmd())
-	rootCmd.AddCommand(makeCancelCmd())
-	rootCmd.AddCommand(makeReviewCmd())
-	rootCmd.AddCommand(makeValidateCmd())
-	rootCmd.AddCommand(makeValidateRequirementsCmd())
-	rootCmd.AddCommand(makePivotCmd())
-	rootCmd.AddCommand(makeRepairCmd())
-	rootCmd.AddCommand(makeCheckpointCmd())
-	rootCmd.SetHelpCommand(&cobra.Command{
+func newRootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "slipway",
+		Short:         "Slipway change-governance workflow CLI",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+	cmd.SetOut(os.Stdout)
+	cmd.SetErr(os.Stderr)
+	cmd.AddCommand(makeInitCmd())
+	cmd.AddCommand(makeCodebaseMapCmd())
+	cmd.AddCommand(makeNewCmd())
+	cmd.AddCommand(makePresetCmd())
+	cmd.AddCommand(makeNextCmd())
+	cmd.AddCommand(makeRunCmd())
+	cmd.AddCommand(makeStatusCmd())
+	cmd.AddCommand(makeStatsCmd())
+	cmd.AddCommand(makeHealthCmd())
+	cmd.AddCommand(makeRootPathCmd())
+	cmd.AddCommand(makeDoneCmd())
+	cmd.AddCommand(makeAbortCmd())
+	cmd.AddCommand(makeCancelCmd())
+	cmd.AddCommand(makeReviewCmd())
+	cmd.AddCommand(makeValidateCmd())
+	cmd.AddCommand(makeValidateRequirementsCmd())
+	cmd.AddCommand(makePivotCmd())
+	cmd.AddCommand(makeRepairCmd())
+	cmd.AddCommand(makeCheckpointCmd())
+	cmd.SetHelpCommand(&cobra.Command{
 		Use:   "help [command]",
 		Short: "Show help for a command",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(helpCmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return writeRootHelp(cmd.OutOrStdout())
+				return writeRootHelp(helpCmd.OutOrStdout())
 			}
 
-			target, _, err := rootCmd.Find(args)
+			target, _, err := cmd.Find(args)
 			if err != nil {
 				return err
 			}
@@ -178,4 +179,5 @@ func init() {
 			return target.Help()
 		},
 	})
+	return cmd
 }

@@ -23,3 +23,12 @@ sources:
     dropped:
       - "general prompt-engineering prose"
     conflicts_with: []
+inputs:
+  - reference: codebase-map.md
+    upstream_merged_from:
+      - sickn33/audit-context-building
+      - trailofbits/audit-context-building
+      - wshobson/context-driven-development
+      - cmd/codebase_map.go
+      - internal/engine/artifact/schemas.yaml
+    curator_note: "Method-first reference synthesized from the three B2 context sources plus the shipped `slipway codebase-map` command and artifact contract. No upstream 1:1 reference file exists."

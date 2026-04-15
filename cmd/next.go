@@ -100,8 +100,9 @@ type skillConstraints struct {
 }
 
 type techniqueHint struct {
-	Name   string `json:"name"`
-	Reason string `json:"reason"`
+	Name              string   `json:"name"`
+	Reason            string   `json:"reason"`
+	HydrateReferences []string `json:"hydrate_references,omitempty"`
 }
 
 type reviewContextView struct {
@@ -509,6 +510,7 @@ func writeNextHuman(w io.Writer, view nextView) error {
 	writeLine("\n")
 
 	if view.NextSkill != nil {
+		hydrateWriter := newFormatWriter(w)
 		writeLine("Next Skill: %s\n", view.NextSkill.Name)
 		writeLine("  Prompt: %s\n", view.NextSkill.PromptPath)
 		writeLine("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
@@ -518,6 +520,7 @@ func writeNextHuman(w io.Writer, view nextView) error {
 			writeLine("\nTechnique Hints:\n")
 			for _, hint := range view.NextSkill.TechniqueHints {
 				writeLine("  - %s: %s\n", hint.Name, hint.Reason)
+				writeHydrateLine(hydrateWriter, "    ", hint.HydrateReferences)
 			}
 		}
 

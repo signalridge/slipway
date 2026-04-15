@@ -97,7 +97,17 @@ type Skill struct {
 	Triggers          []TriggerClause
 	Evidence          EvidenceContract
 	Bindings          []Binding
+	HydrateReferences []HydrateReference
 	ProvenanceRef     string // relative to the skill directory, usually "provenance.yaml"
+}
+
+// HydrateReference is a typed, registry-owned record that mirrors a skill's
+// authoring-side `hydrate_references:` frontmatter entry. `Name` is a bare
+// basename under the skill's `references/` directory; runtime outputs use the
+// collision-safe skill-relative key `<skill-id>/<name>`.
+type HydrateReference struct {
+	Name   string
+	Reason string
 }
 
 // Registry exposes read-only lookups over the registered catalog skills.

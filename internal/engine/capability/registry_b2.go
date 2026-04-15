@@ -23,6 +23,9 @@ func contextAssembly() Skill {
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentPosture},
 			{Type: BindingTechniqueHint, Target: "research-orchestration", Attachment: AttachmentProcedure},
 		},
+		HydrateReferences: []HydrateReference{
+			{Name: "codebase-map.md", Reason: "Ground brownfield context before planning"},
+		},
 		ProvenanceRef: "provenance.yaml",
 	}
 }
@@ -72,6 +75,13 @@ func rootCauseTracing() Skill {
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 		},
+		HydrateReferences: []HydrateReference{
+			{Name: "root-cause-tracing.md", Reason: "Trace error origins back to first divergence before proposing fixes"},
+			{Name: "condition-based-waiting.md", Reason: "Replace sleep/retry guards with condition-based waits in flaky tests"},
+			{Name: "defense-in-depth.md", Reason: "Layer validation so a single bypass does not surface as user-visible failure"},
+			{Name: "hypothesis-testing.md", Reason: "Structure competing hypotheses and their falsification experiments"},
+			{Name: "failure-patterns.md", Reason: "Named failure signatures and diagnostic patterns"},
+		},
 		ProvenanceRef: "provenance.yaml",
 	}
 }
@@ -97,6 +107,14 @@ func securityReview() Skill {
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
+		},
+		HydrateReferences: []HydrateReference{
+			{Name: "authentication.md", Reason: "Password storage / session / MFA / recovery secure-default rules"},
+			{Name: "authorization.md", Reason: "Resource-boundary re-check, IDOR, multi-tenant isolation"},
+			{Name: "injection.md", Reason: "Per-sink parameterization, deserialization-as-injection"},
+			{Name: "xss.md", Reason: "Context-aware encoding and framework escape-hatch review cues"},
+			{Name: "ssrf.md", Reason: "Fetcher allow/deny-list, metadata endpoints, DNS rebinding"},
+			{Name: "infrastructure-docker.md", Reason: "Container hardening, K8s securityContext, image supply chain"},
 		},
 		ProvenanceRef: "provenance.yaml",
 	}

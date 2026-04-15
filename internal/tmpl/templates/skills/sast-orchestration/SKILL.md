@@ -11,6 +11,25 @@ trigger_signals:
   - user_text_matches: ["codeql", "semgrep", "sast", "sarif"]
     reason: "User text names a SAST tool"
 evidence_contract: artifact
+hydrate_references:
+  - name: codeql-ruleset-catalog.md
+    reason: "Pick a CodeQL query pack by threat model and language"
+  - name: codeql-language-details.md
+    reason: "Language-specific CodeQL build and analysis caveats"
+  - name: codeql-threat-models.md
+    reason: "Threat-model selection for CodeQL run scoping"
+  - name: codeql-performance-tuning.md
+    reason: "Scan-time / memory knobs for large repos"
+  - name: codeql-build-fixes.md
+    reason: "Common build failures that block the CodeQL database"
+  - name: semgrep-rulesets.md
+    reason: "Semgrep ruleset selection and risk coverage"
+  - name: semgrep-scan-modes.md
+    reason: "Full / diff / supply-chain scan-mode selection"
+  - name: sarif-merge.md
+    reason: "Deterministic multi-tool SARIF merge contract"
+  - name: sarif-jq-queries.md
+    reason: "Ad-hoc triage queries over SARIF output"
 bindings:
   - type: command-manual
     target: review

@@ -30,3 +30,18 @@ sources:
     dropped:
       - "engagement-specific runbook details"
     conflicts_with: []
+inputs:
+  - reference: root-cause-tracing.md
+    upstream: superpowers/systematic-debugging/root-cause-tracing.md
+  - reference: condition-based-waiting.md
+    upstream: superpowers/systematic-debugging/condition-based-waiting.md
+  - reference: defense-in-depth.md
+    upstream: superpowers/systematic-debugging/defense-in-depth.md
+  - reference: hypothesis-testing.md
+    upstream: wshobson/parallel-debugging/references/hypothesis-testing.md
+  - reference: failure-patterns.md
+    upstream: trailofbits/debug-buttercup/references/failure-patterns.md
+scripts:
+  - script: find-polluter-go.sh
+    upstream_forked_from: superpowers/systematic-debugging/find-polluter.sh
+    curator_note: "Specialized for Go: uses `go list` to enumerate test packages and `go test -count=1 -run <regex>` per package. The npm-oriented variant stays upstream."

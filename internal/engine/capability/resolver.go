@@ -116,7 +116,99 @@ func Resolve(reg *Registry, sig Signals) Resolution {
 		})
 	}
 
+	resolution.HydrateReferences = collectHydrateReferences(reg, sig, resolution)
 	return resolution
+}
+
+// collectHydrateReferences unions the hydrate references from the routed
+// skill (if any) and any support attachment that is eligible to surface
+// hydrate on the current implicit path, returning stable-sorted deduplicated
+// skill-relative keys `<skill-id>/<name>`. Runtime output always uses the
+// collision-safe form; basename-only keys are never emitted.
+func collectHydrateReferences(reg *Registry, sig Signals, res Resolution) []string {
+	if reg == nil {
+		return nil
+	}
+	var ids []string
+	if res.Route != nil && res.Route.SkillID != "" {
+		ids = append(ids, res.Route.SkillID)
+	}
+	for _, s := range res.Supports {
+		if !supportHydratesInContext(reg, s.SkillID, sig) {
+			continue
+		}
+		ids = append(ids, s.SkillID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, id := range ids {
+		for _, key := range HydrateReferenceKeysForSkill(reg, id) {
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// supportHydratesInContext returns true when a supporting skill's hydrate
+// shelf should surface on the implicit path represented by sig. Command-manual
+// attachments remain explicit-only: their hydrate is advertised only through
+// `--mode` / `--view`, not through default routed command output.
+func supportHydratesInContext(reg *Registry, skillID string, sig Signals) bool {
+	if reg == nil || skillID == "" {
+		return false
+	}
+	sk, ok := reg.Lookup(skillID)
+	if !ok {
+		return false
+	}
+	for _, b := range sk.Bindings {
+		switch b.Type {
+		case BindingHostEmbedded:
+			if sig.Host != "" && b.Target == sig.Host {
+				return true
+			}
+		case BindingTechniqueHint:
+			if sig.Host != "" && (b.Target == sig.Host || b.Target == "") {
+				return true
+			}
+		case BindingCommandAuto:
+			if sig.Command != "" && bindingMatchesCommand(b, sig.Command) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HydrateReferenceKeysForSkill returns the ordered list of skill-relative
+// hydrate keys (`<skill-id>/<name>`) declared by the named skill in the
+// registry. Callers that bypass Resolve() - for example, the manual-explicit
+// route in cmd/route_flags.go - use this helper to derive hydrate output
+// without re-running signal matching.
+func HydrateReferenceKeysForSkill(reg *Registry, skillID string) []string {
+	if reg == nil || skillID == "" {
+		return nil
+	}
+	sk, ok := reg.Lookup(skillID)
+	if !ok {
+		return nil
+	}
+	if len(sk.HydrateReferences) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(sk.HydrateReferences))
+	for _, hr := range sk.HydrateReferences {
+		out = append(out, sk.ID+"/"+hr.Name)
+	}
+	return out
 }
 
 func scoreClause(c TriggerClause, sig Signals) int {

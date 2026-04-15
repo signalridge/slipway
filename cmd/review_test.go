@@ -105,6 +105,37 @@ func TestReviewRejectsUnsupportedArtifactFlag(t *testing.T) {
 	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
 }
 
+func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, true))
+
+		slug := createGovernedRequest(t, root, "L2", "review hydrate/json rejection must be side-effect free")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, root, change)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--json", "--hydrate", "--change", slug})
+		err = cmd.Execute()
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "mutually_exclusive_flags", cliErr.ErrorCode)
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS2Execute, after.CurrentState, "invalid hydrate/json request must not advance review state")
+		assert.Zero(t, after.ReviewIntentDriftFailures, "invalid hydrate/json request must not mutate review counters")
+	})
+}
+
 func TestReviewRejectsUnexpectedArgs(t *testing.T) {
 	t.Parallel()
 

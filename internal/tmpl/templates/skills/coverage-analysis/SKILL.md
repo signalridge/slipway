@@ -45,20 +45,6 @@ you whether the change is tested.
       when the change crosses process boundaries.
 - [ ] Delta vs baseline is reported; a coverage drop blocks the verdict.
 
-## Report schema
-```yaml
-tool: "<tool + version>"
-command: "<exact invocation>"
-whole_codebase: { lines: <n>, covered: <n>, pct: <float> }
-change_surface: { lines: <n>, covered: <n>, pct: <float> }
-uncovered:
-  - location: "<path:line>"
-    disposition: add-test | justified-exclusion
-    reason: "<if excluded>"
-delta_vs_baseline: <+/-float>
-verdict: pass | changes-requested | blocked
-```
-
 ## Anti-patterns
 - Reporting whole-codebase coverage and calling the change tested.
 - Excluding uncovered lines silently because "they're hard to test".

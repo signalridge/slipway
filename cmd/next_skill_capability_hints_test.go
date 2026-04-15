@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,4 +46,28 @@ func TestAppendCatalogHintsReactsToBlockers(t *testing.T) {
 	hints := appendCatalogHints(nil, "", nil, view)
 	require.NotEmpty(t, hints)
 	assert.Equal(t, "skill:tdd-proof", hints[0].Name)
+}
+
+func TestAppendCatalogHintsAttachesHydrateReferencesOnWaveHost(t *testing.T) {
+	t.Parallel()
+
+	hints := appendCatalogHints(nil, "wave-orchestration", nil, &nextView{})
+	require.NotEmpty(t, hints)
+
+	var rootCauseHint *techniqueHint
+	for i := range hints {
+		if hints[i].Name == "skill:root-cause-tracing" {
+			rootCauseHint = &hints[i]
+			break
+		}
+	}
+	require.NotNil(t, rootCauseHint, "expected root-cause-tracing support hint on wave-orchestration host")
+	assert.Equal(t, []string{
+		"root-cause-tracing/condition-based-waiting.md",
+		"root-cause-tracing/defense-in-depth.md",
+		"root-cause-tracing/failure-patterns.md",
+		"root-cause-tracing/hypothesis-testing.md",
+		"root-cause-tracing/root-cause-tracing.md",
+	}, rootCauseHint.HydrateReferences)
+	assert.True(t, slices.IsSorted(rootCauseHint.HydrateReferences), "hydrate references should be stable-sorted")
 }

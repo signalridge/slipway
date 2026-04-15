@@ -13,6 +13,7 @@ import (
 type statusView struct {
 	ExecutionMode             string                      `json:"execution_mode"`
 	View                      string                      `json:"view,omitempty"`
+	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 	Slug                      string                      `json:"slug,omitempty"`
 	QualityMode               string                      `json:"quality_mode,omitempty"`
 	WorkflowPreset            string                      `json:"workflow_preset,omitempty"`
@@ -108,12 +109,22 @@ func makeStatusCmd() *cobra.Command {
 	var changeSlug string
 	var jsonFlag bool
 	var view string
+	var hydrate bool
+	var hydrateRefs []string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := validateRouteView("status", view); err != nil {
 				return err
+			}
+			if len(hydrateRefs) > 0 && !hydrate {
+				return newInvalidUsageError(
+					"hydrate_ref_requires_hydrate",
+					"`--hydrate-ref` requires `--hydrate`",
+					"Add `--hydrate` to emit hydrate bodies, or remove `--hydrate-ref`.",
+					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
+				)
 			}
 			explicitView := strings.TrimSpace(view)
 			root, err := projectRootFromWD()
@@ -139,11 +150,18 @@ func makeStatusCmd() *cobra.Command {
 			// When --change is provided, show detail view for that specific change.
 			if changeSlug != "" {
 				effectiveView := resolveEffectiveRouteView("status", explicitView)
+				hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+				if hydrate {
+					hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
+					if err != nil {
+						return err
+					}
+				}
 				change, err := loadChangeBySlug(root, changeSlug)
 				if err != nil {
 					return err
 				}
-				return showStatusForChange(cmd, root, change, outputFormat, effectiveView)
+				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 			}
 
 			changes, err := state.ListChanges(root)
@@ -167,16 +185,34 @@ func makeStatusCmd() *cobra.Command {
 				// Diagnostics mode is not a routed command context. When no
 				// active change exists, only preserve an explicit --view value.
 				route.diagnostics.View = explicitView
-				return printStatusView(cmd, *route.diagnostics, outputFormat)
+				if explicitView != "" {
+					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+					if hydrate {
+						route.diagnostics.HydrateReferences, err = selectHydrateKeys(route.diagnostics.HydrateReferences, hydrateRefs)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				return printStatusView(cmd, root, *route.diagnostics, outputFormat, hydrate)
 			}
 
 			effectiveView := resolveEffectiveRouteView("status", explicitView)
-			return showStatusForChange(cmd, root, *route.change, outputFormat, effectiveView)
+			hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+			if hydrate {
+				hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
+				if err != nil {
+					return err
+				}
+			}
+			return showStatusForChange(cmd, root, *route.change, outputFormat, effectiveView, hydrateKeys, hydrate)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output (shorthand for --format json)")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json")
 	cmd.Flags().StringVar(&view, "view", "", "Status view override (e.g. incident-response, review-queue, observability-query)")
+	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
@@ -232,7 +268,7 @@ func diagnosticStatusView(message string) *statusView {
 	}
 }
 
-func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string) error {
+func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool) error {
 	return withChangeStateLock(root, change.Slug, "status", func() error {
 		latest, err := state.LoadChange(root, change.Slug)
 		if err != nil {
@@ -243,7 +279,8 @@ func showStatusForChange(cmd *cobra.Command, root string, change model.Change, o
 			return err
 		}
 		view.View = requestedView
-		return printStatusView(cmd, view, outputFormat)
+		view.HydrateReferences = hydrateKeys
+		return printStatusView(cmd, root, view, outputFormat, hydrate)
 	})
 }
 

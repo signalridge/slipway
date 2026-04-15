@@ -3,6 +3,7 @@ package toolgen
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -13,7 +14,51 @@ import (
 	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+var (
+	execLookPath  = exec.LookPath
+	osExecCommand = exec.Command
+)
+
+type hydrateReferenceEntry struct {
+	Name   string `yaml:"name"`
+	Reason string `yaml:"reason"`
+}
+
+// loadHydrateReferences parses a SKILL.md frontmatter block and returns the
+// declared hydrate_references[] records (empty slice when absent).
+func loadHydrateReferences(t *testing.T, path string) []hydrateReferenceEntry {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lines := strings.Split(content, "\n")
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	if start >= len(lines) || strings.TrimSpace(lines[start]) != "---" {
+		return nil
+	}
+	end := -1
+	for i := start + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		t.Fatalf("%s: unterminated frontmatter", path)
+	}
+	block := strings.Join(lines[start+1:end], "\n")
+	var fm struct {
+		HydrateReferences []hydrateReferenceEntry `yaml:"hydrate_references"`
+	}
+	require.NoErrorf(t, yaml.Unmarshal([]byte(block), &fm), "%s: parse frontmatter", path)
+	return fm.HydrateReferences
+}
 
 func TestRegistryHasFiveTools(t *testing.T) {
 	t.Parallel()
@@ -1252,4 +1297,505 @@ func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command 
 
 func isAgentFile(name string) bool {
 	return len(name) > 3 && name[len(name)-3:] == ".md"
+}
+
+// hydratedSkillIDs lists the PR-1 slice of skills required to ship a
+// non-empty references/ tree. Kept local so drift in the registry does not
+// silently expand the set without updating the plan.
+var hydratedSkillIDs = []string{
+	"gha-security-review",
+	"incident-response",
+	"root-cause-tracing",
+	"sast-orchestration",
+	"supply-chain-audit",
+}
+
+// referencesBudgetPerFile caps any single reference at 24 KB so hydrate
+// payloads never saturate the per-skill ceiling with one oversized file.
+const referencesBudgetPerFile = 24 * 1024
+
+// referencesBudgetPerSkill caps total reference bytes per skill at 64 KB so
+// reference shelves stay reviewable and explicit `--hydrate-ref` selection
+// remains practical even when operators choose to print the full set.
+const referencesBudgetPerSkill = 64 * 1024
+
+// TestCatalogSkillHasReferences asserts the PR-1 five have a non-empty
+// references/ directory with at least one .md file, and every .md starts
+// with an H1 so hydrate output renders a readable heading.
+func TestCatalogSkillHasReferences(t *testing.T) {
+	t.Parallel()
+	root := skillTemplatesRoot(t)
+	for _, id := range hydratedSkillIDs {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			refsDir := filepath.Join(root, id, "references")
+			info, err := os.Stat(refsDir)
+			require.NoErrorf(t, err, "missing references/ dir for %s", id)
+			require.Truef(t, info.IsDir(), "%s: references path is not a directory", id)
+
+			entries, err := os.ReadDir(refsDir)
+			require.NoError(t, err)
+			mdCount := 0
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+					continue
+				}
+				mdCount++
+				raw, err := os.ReadFile(filepath.Join(refsDir, e.Name()))
+				require.NoError(t, err)
+				head := strings.TrimLeft(string(raw), "\ufeff \t\n")
+				assert.Truef(t, strings.HasPrefix(head, "# "),
+					"%s/%s must open with an H1 heading (# ...) for hydrate readability", id, e.Name())
+			}
+			assert.NotZerof(t, mdCount, "%s: references/ must contain at least one .md file", id)
+		})
+	}
+}
+
+// TestHydrateReferencesResolveToFiles is the PR-1 temporary frontmatter-only
+// gate: every SKILL.md that declares hydrate_references[] must use typed
+// records whose name is a bare .md basename resolving to a file under that
+// skill's references/ directory. Names must be unique within the skill and
+// must not contain path separators or ...
+func TestHydrateReferencesResolveToFiles(t *testing.T) {
+	t.Parallel()
+	root := skillTemplatesRoot(t)
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		id := e.Name()
+		skillPath := filepath.Join(root, id, "SKILL.md")
+		if _, err := os.Stat(skillPath); err != nil {
+			continue
+		}
+		refs := loadHydrateReferences(t, skillPath)
+		if len(refs) == 0 {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			seen := make(map[string]struct{}, len(refs))
+			for _, r := range refs {
+				assert.NotEmptyf(t, r.Name, "%s: hydrate_references entry missing name", id)
+				assert.NotEmptyf(t, r.Reason, "%s: hydrate_references entry %q missing reason", id, r.Name)
+				assert.Falsef(t,
+					strings.ContainsAny(r.Name, "/\\") || strings.Contains(r.Name, ".."),
+					"%s: hydrate_references name %q must be a basename with no path separators or ..", id, r.Name)
+				assert.Truef(t, strings.HasSuffix(r.Name, ".md"),
+					"%s: hydrate_references name %q must end with .md", id, r.Name)
+
+				if _, dup := seen[r.Name]; dup {
+					t.Errorf("%s: duplicate hydrate_references name %q", id, r.Name)
+				}
+				seen[r.Name] = struct{}{}
+
+				refPath := filepath.Join(root, id, "references", r.Name)
+				_, err := os.Stat(refPath)
+				assert.NoErrorf(t, err,
+					"%s: hydrate_references %q does not resolve to a file under references/", id, r.Name)
+			}
+		})
+	}
+}
+
+// TestReferenceFileSizeBudget enforces per-file and per-skill size caps on
+// reference material so hydrate payloads stay bounded.
+func TestReferenceFileSizeBudget(t *testing.T) {
+	t.Parallel()
+	root := skillTemplatesRoot(t)
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		id := e.Name()
+		refsDir := filepath.Join(root, id, "references")
+		info, err := os.Stat(refsDir)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			files, err := os.ReadDir(refsDir)
+			require.NoError(t, err)
+			total := 0
+			for _, f := range files {
+				if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+					continue
+				}
+				p := filepath.Join(refsDir, f.Name())
+				st, err := os.Stat(p)
+				require.NoError(t, err)
+				size := int(st.Size())
+				assert.LessOrEqualf(t, size, referencesBudgetPerFile,
+					"%s/%s size %d bytes exceeds per-file cap %d", id, f.Name(), size, referencesBudgetPerFile)
+				total += size
+			}
+			assert.LessOrEqualf(t, total, referencesBudgetPerSkill,
+				"%s: references total %d bytes exceeds per-skill cap %d", id, total, referencesBudgetPerSkill)
+		})
+	}
+}
+
+// TestTypedPartsRendered asserts that the PR-3 typed partials land in the
+// assembled SKILL.md for the four skills the plan extends (spec-trace,
+// threat-modeling, coverage-analysis, security-review). Each expected
+// section heading must appear exactly once so source-body sections and
+// partial-rendered sections never co-exist.
+func TestTypedPartsRendered(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	cases := []struct {
+		skill    string
+		headings []string
+	}{
+		{"spec-trace", []string{"## Checklist"}},
+		{"threat-modeling", []string{"## Procedure", "## Checklist"}},
+		{"coverage-analysis", []string{"## Report schema"}},
+		{"security-review", []string{"## Checklist"}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.skill, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(root, tc.skill, "SKILL.md")
+			raw, err := os.ReadFile(path)
+			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
+			body := string(raw)
+			for _, h := range tc.headings {
+				count := strings.Count(body, "\n"+h+"\n")
+				assert.Equalf(t, 1, count,
+					"%s: heading %q must appear exactly once in assembled SKILL.md (found %d)",
+					tc.skill, h, count)
+			}
+		})
+	}
+}
+
+// TestSecurityReviewReferenceOverlaysPresent asserts that the rendered
+// security-review/references/ directory contains the six topic /
+// infrastructure overlays authored after removing language-specific overlays.
+func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	refsDir := filepath.Join(root, "security-review", "references")
+	expected := []string{
+		"authentication.md",
+		"authorization.md",
+		"injection.md",
+		"xss.md",
+		"ssrf.md",
+		"infrastructure-docker.md",
+	}
+	for _, name := range expected {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := filepath.Join(refsDir, name)
+			info, err := os.Stat(p)
+			require.NoErrorf(t, err, "security-review overlay %q missing from rendered tree", name)
+			assert.Falsef(t, info.IsDir(), "%s: expected file, got directory", name)
+			assert.NotZerof(t, info.Size(), "%s: overlay is empty", name)
+		})
+	}
+}
+
+// skillTemplatesRoot locates the authoring-side skill template directory
+// from the toolgen test package.
+func skillTemplatesRoot(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join("..", "tmpl", "templates", "skills")
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+	require.True(t, info.IsDir(), "expected %s to be a directory", p)
+	return p
+}
+
+// generatedSkillsRoot generates a codex tree and returns the path to
+// `<root>/.codex/skills/slipway/` for script-contract tests.
+func generatedSkillsRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+	cfg := toolRegistry["codex"]
+	return filepath.Join(root, cfg.SkillsDir, "slipway")
+}
+
+// TestScriptExecutableBit asserts every rendered scripts/*.sh file has an
+// executable bit set. Skipped on Windows where POSIX perm bits are not
+// meaningful.
+func TestScriptExecutableBit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit semantics are POSIX-only")
+	}
+	root := generatedSkillsRoot(t)
+	shellCount := 0
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !strings.Contains(filepath.ToSlash(p), "/scripts/") || !strings.HasSuffix(p, ".sh") {
+			return nil
+		}
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		assert.NotZerof(t, info.Mode().Perm()&0o111,
+			"%s: expected executable bit on .sh script, got %v", p, info.Mode().Perm())
+		shellCount++
+		return nil
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, shellCount, "expected at least one .sh script in the generated tree")
+}
+
+// TestScriptStaticChecks validates each rendered script parses.
+//   - *.sh  -> `bash -n`
+//   - *.py  -> `python3 -m py_compile`
+//
+// If a required interpreter is missing locally, the corresponding check
+// is skipped with an explicit message; CI must provide bash and python3.
+func TestScriptStaticChecks(t *testing.T) {
+	root := generatedSkillsRoot(t)
+
+	bashPath, bashErr := execLookPath("bash")
+	pyPath, pyErr := execLookPath("python3")
+
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		slash := filepath.ToSlash(p)
+		if !strings.Contains(slash, "/scripts/") {
+			return nil
+		}
+		switch {
+		case strings.HasSuffix(p, ".sh"):
+			if bashErr != nil {
+				t.Logf("skipping bash -n for %s: %v", p, bashErr)
+				return nil
+			}
+			out, cerr := runCommand(bashPath, "-n", p)
+			assert.NoErrorf(t, cerr, "bash -n %s failed: %s", p, out)
+		case strings.HasSuffix(p, ".py"):
+			if pyErr != nil {
+				t.Logf("skipping py_compile for %s: %v", p, pyErr)
+				return nil
+			}
+			out, cerr := runCommand(pyPath, "-m", "py_compile", p)
+			assert.NoErrorf(t, cerr, "py_compile %s failed: %s", p, out)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+// TestScriptFixtureContracts exercises each Wave-1 script against a
+// fixture scenario:
+//   - merge-sarif.sh merges two SARIF files and produces a deterministic
+//     result set (deduped, sorted).
+//   - pin-actions.sh rewrites a workflow using a checked-in mapping,
+//     fails on unresolved refs, and rejects missing --mapping with
+//     usage text.
+//   - find-polluter-go.sh surfaces a stable usage error when argv is
+//     insufficient, independent of a Go toolchain being available.
+func TestScriptFixtureContracts(t *testing.T) {
+	root := generatedSkillsRoot(t)
+
+	t.Run("merge-sarif", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("jq"); err != nil {
+			t.Skipf("jq unavailable: %v", err)
+		}
+		script := filepath.Join(root, "sast-orchestration", "scripts", "merge-sarif.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		raw := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"}]}},
+            "results":[{"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]}]}]}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"},{"id":"R2"}]}},
+            "results":[
+              {"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]},
+              {"ruleId":"R2","locations":[{"physicalLocation":{"artifactLocation":{"uri":"y.go"},"region":{"startLine":7}}}]}]}]}`), 0o644))
+
+		outPath := filepath.Join(t.TempDir(), "merged.sarif")
+		out, cerr := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
+
+		data, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		var merged map[string]any
+		require.NoError(t, json.Unmarshal(data, &merged))
+		runs, _ := merged["runs"].([]any)
+		require.Len(t, runs, 1, "expected exactly one merged run")
+		run0 := runs[0].(map[string]any)
+		results, _ := run0["results"].([]any)
+		assert.Len(t, results, 2, "expected 2 deduped results (R1@x.go:1 + R2@y.go:7)")
+
+		out2, cerr2 := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr2, "merge-sarif.sh second run failed: %s", out2)
+		data2, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		assert.Equal(t, string(data), string(data2), "merge output must be deterministic across runs")
+	})
+
+	t.Run("pin-actions", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "gha-security-review", "scripts", "pin-actions.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// Missing --mapping fails with usage text.
+		dir := t.TempDir()
+		wf := filepath.Join(dir, "ci.yml")
+		require.NoError(t, os.WriteFile(wf, []byte("jobs:\n  x:\n    steps:\n      - uses: actions/checkout@v4\n"), 0o644))
+		out, cerr := runCommand(bashPath, script, wf)
+		assert.Errorf(t, cerr, "expected failure when --mapping is missing")
+		assert.Contains(t, out, "Usage:", "expected usage text on missing --mapping")
+
+		// Successful rewrite with mapping.
+		mapping := filepath.Join(dir, "pins.tsv")
+		require.NoError(t, os.WriteFile(mapping,
+			[]byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf)
+		require.NoErrorf(t, cerr, "pin-actions.sh unexpected failure: %s", out)
+		rewritten, err := os.ReadFile(wf)
+		require.NoError(t, err)
+		assert.Contains(t, string(rewritten), "@b4ffde65f46336ab88eb53be808477a3936bae11")
+		assert.Contains(t, string(rewritten), "# v4")
+
+		// Unresolved reference: non-zero exit, no rewrite.
+		wf2 := filepath.Join(dir, "ci2.yml")
+		body := "jobs:\n  x:\n    steps:\n      - uses: custom/act@v9\n"
+		require.NoError(t, os.WriteFile(wf2, []byte(body), 0o644))
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf2)
+		assert.Errorf(t, cerr, "expected failure on unresolved ref")
+		assert.Contains(t, out, "unresolved")
+		after, err := os.ReadFile(wf2)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(after), "file must be untouched when unresolved refs remain")
+
+		// Unreadable workflow preserves the documented exit code 3 instead of
+		// collapsing it into the generic unresolved-ref exit path.
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, filepath.Join(dir, "missing.yml"))
+		require.Error(t, cerr, "expected unreadable workflow to fail")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, cerr, &exitErr)
+		assert.Equal(t, 3, exitErr.ExitCode())
+		assert.Contains(t, out, "cannot read")
+	})
+
+	t.Run("find-polluter-go", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// No argv -> stable usage.
+		out, cerr := runCommand(bashPath, script)
+		assert.Errorf(t, cerr, "expected usage exit")
+		assert.Contains(t, out, "Usage:")
+
+		// Nonexistent pollution path with empty package set should exit
+		// cleanly or produce the "no test packages" diagnostic when a
+		// Go toolchain is present.
+	})
+
+	t.Run("find-polluter-go reports go list failures", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("go"); err != nil {
+			t.Skipf("go unavailable: %v", err)
+		}
+
+		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		emptyDir := t.TempDir()
+		out, cerr := runCommandInDir(emptyDir, bashPath, script, filepath.Join(emptyDir, ".pollution"), "./...")
+		assert.Errorf(t, cerr, "expected go list failure outside a Go module")
+		assert.Contains(t, out, "go list failed for ./...")
+		assert.NotContains(t, out, "no test packages found", "go list failures must not collapse into an empty-package diagnostic")
+	})
+
+	t.Run("find-polluter-go external tests", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("go"); err != nil {
+			t.Skipf("go unavailable: %v", err)
+		}
+
+		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		modRoot := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/polluter\n\ngo 1.22\n"), 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Join(modRoot, "polluter"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "impl.go"), []byte("package polluter\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "polluter_test.go"), []byte(`package polluter_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestOnlyExternalPolluter(t *testing.T) {
+	target := filepath.Join("..", ".pollution")
+	if err := os.WriteFile(target, []byte("polluted"), 0o644); err != nil {
+		t.Fatalf("write pollution marker: %v", err)
+	}
+}
+`), 0o644))
+
+		pollutionPath := filepath.Join(modRoot, ".pollution")
+		out, cerr := runCommandInDir(modRoot, bashPath, script, pollutionPath, "./...")
+		assert.Errorf(t, cerr, "expected polluter detection to exit non-zero")
+		assert.Contains(t, out, "POLLUTER:", "external-test-only package should still be enumerated")
+		assert.Contains(t, out, "example.com/polluter/polluter")
+	})
+}
+
+// runCommand runs an external command capturing combined output. Returns
+// stdout+stderr and the exit error (if any).
+func runCommand(name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func runCommandInDir(dir, name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }

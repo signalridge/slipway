@@ -13,6 +13,17 @@ trigger_signals:
   - user_text_matches: ["debug", "crash", "flaky", "regression"]
     reason: "User text signals debugging work"
 evidence_contract: artifact
+hydrate_references:
+  - name: root-cause-tracing.md
+    reason: "Trace error origins back to first divergence before proposing fixes"
+  - name: condition-based-waiting.md
+    reason: "Replace sleep/retry guards with condition-based waits in flaky tests"
+  - name: defense-in-depth.md
+    reason: "Layer validation so a single bypass does not surface as user-visible failure"
+  - name: hypothesis-testing.md
+    reason: "Structure competing hypotheses and their falsification experiments"
+  - name: failure-patterns.md
+    reason: "Named failure signatures and diagnostic patterns"
 bindings:
   - type: host-embedded
     target: wave-orchestration

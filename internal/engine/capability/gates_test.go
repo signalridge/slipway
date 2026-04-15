@@ -56,6 +56,25 @@ func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 	}
 }
 
+// TestFrontmatterMirrorsRegistryHydrateReferences is the PR-4a hydrate
+// compare gate. Every catalog skill's SKILL.md frontmatter
+// `hydrate_references:` list must match the Go-owned Skill.HydrateReferences
+// record-for-record after sorting by name.
+func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	root := skillsDir(t)
+	for _, sk := range reg.All() {
+		sk := sk
+		t.Run(sk.ID, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(root, sk.ID, "SKILL.md")
+			fm := loadFrontmatter(t, path)
+			assertHydrateReferencesEqual(t, sk, fm.HydrateReferences)
+		})
+	}
+}
+
 // TestSizeBudgetsForRegisteredSkills enforces the B1 tier-aware size-lint
 // gate. Sizes above target are warning-band; sizes above hard-max require
 // `size_rationale` in frontmatter.
@@ -117,22 +136,28 @@ func TestFrontmatterHasRequiredFields(t *testing.T) {
 }
 
 type frontmatter struct {
-	SkillID           string         `yaml:"skill_id"`
-	Domain            string         `yaml:"domain"`
-	Function          string         `yaml:"function"`
-	Tier              string         `yaml:"tier"`
-	PrimaryAttachment string         `yaml:"primary_attachment"`
-	Summary           string         `yaml:"summary"`
-	SizeRationale     string         `yaml:"size_rationale"`
-	EvidenceContract  string         `yaml:"evidence_contract"`
-	Bindings          []frontBinding `yaml:"bindings"`
-	ProvenanceRef     string         `yaml:"provenance_ref"`
+	SkillID           string            `yaml:"skill_id"`
+	Domain            string            `yaml:"domain"`
+	Function          string            `yaml:"function"`
+	Tier              string            `yaml:"tier"`
+	PrimaryAttachment string            `yaml:"primary_attachment"`
+	Summary           string            `yaml:"summary"`
+	SizeRationale     string            `yaml:"size_rationale"`
+	EvidenceContract  string            `yaml:"evidence_contract"`
+	Bindings          []frontBinding    `yaml:"bindings"`
+	HydrateReferences []frontHydrateRef `yaml:"hydrate_references"`
+	ProvenanceRef     string            `yaml:"provenance_ref"`
 }
 
 type frontBinding struct {
 	Type       string `yaml:"type"`
 	Target     string `yaml:"target"`
 	Attachment string `yaml:"attachment"`
+}
+
+type frontHydrateRef struct {
+	Name   string `yaml:"name"`
+	Reason string `yaml:"reason"`
 }
 
 func loadFrontmatter(t *testing.T, path string) frontmatter {
@@ -203,12 +228,32 @@ func bindingKey(typ, target, attachment string) string {
 	return typ + "|" + target + "|" + attachment
 }
 
+func assertHydrateReferencesEqual(t *testing.T, sk Skill, frontRefs []frontHydrateRef) {
+	t.Helper()
+	require.Equalf(t, len(sk.HydrateReferences), len(frontRefs),
+		"skill %s: hydrate_references count drift (registry=%d, frontmatter=%d)",
+		sk.ID, len(sk.HydrateReferences), len(frontRefs))
+
+	type pair struct{ name, reason string }
+	goPairs := make([]pair, 0, len(sk.HydrateReferences))
+	for _, hr := range sk.HydrateReferences {
+		goPairs = append(goPairs, pair{hr.Name, hr.Reason})
+	}
+	frontPairs := make([]pair, 0, len(frontRefs))
+	for _, fr := range frontRefs {
+		frontPairs = append(frontPairs, pair{fr.Name, fr.Reason})
+	}
+	sort.Slice(goPairs, func(i, j int) bool { return goPairs[i].name < goPairs[j].name })
+	sort.Slice(frontPairs, func(i, j int) bool { return frontPairs[i].name < frontPairs[j].name })
+	assert.Equal(t, goPairs, frontPairs, "skill %s: frontmatter hydrate_references do not mirror registry", sk.ID)
+}
+
 func tierSizeBudget(tier Tier) (target, hardMax int) {
 	switch tier {
 	case TierT1:
-		return 2 * 1024, 6 * 1024
+		return 2560, 6 * 1024 // 2.5 KB target (PR-3 lift), hard-max 6 KB
 	case TierT2:
-		return 3 * 1024, 8 * 1024
+		return 3584, 8 * 1024 // 3.5 KB target (PR-3 lift), hard-max 8 KB
 	case TierT3:
 		return 1536, 3 * 1024 // 1.5 KB target, rationale above 3 KB
 	default:

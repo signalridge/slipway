@@ -489,7 +489,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, id, refresh, false); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, id, refresh); err != nil {
 			return fmt.Errorf("emit support files for adapter skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
@@ -507,7 +507,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
 			return fmt.Errorf("emit support files for governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
@@ -522,7 +522,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
 			return fmt.Errorf("emit support files for templated governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
@@ -543,7 +543,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, id, refresh, true); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, id, refresh); err != nil {
 			return fmt.Errorf("emit support files for catalog skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
@@ -558,7 +558,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
 			return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
@@ -573,7 +573,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := writeDeterministic(path, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh, false); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
 			return fmt.Errorf("emit support files for technique skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
@@ -825,16 +825,17 @@ func renderCatalogSkill(sk capability.Skill) (string, error) {
 		return "", fmt.Errorf("rewrite frontmatter for %q: %w", sk.ID, err)
 	}
 
-	needProse, needChecklist, needVerdict := typedTemplateNeeds(sk)
-	prose, err := loadOptionalTemplate(path.Join("skills", sk.ID, "PROSE.tmpl"), needProse)
+	// Typed partials are assembled whenever authored on disk; attachment-mode
+	// gating lives in the capability layer, not in the assembler.
+	prose, err := loadOptionalTemplate(path.Join("skills", sk.ID, "PROSE.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
-	checklist, err := loadOptionalTemplate(path.Join("skills", sk.ID, "CHECKLIST.tmpl"), needChecklist)
+	checklist, err := loadOptionalTemplate(path.Join("skills", sk.ID, "CHECKLIST.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
-	verdict, err := loadOptionalTemplate(path.Join("skills", sk.ID, "VERDICT.tmpl"), needVerdict)
+	verdict, err := loadOptionalTemplate(path.Join("skills", sk.ID, "VERDICT.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
@@ -908,38 +909,55 @@ func yamlDoubleQuoted(s string) string {
 var optionalSkillSupportDirs = []string{"references", "scripts"}
 
 // emitSkillSupportFiles copies optional support artifacts next to a generated
-// skill. Catalog skills additionally request provenance.yaml so their
-// exported `provenance_ref` stays non-dangling.
-func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh, includeProvenance bool) error {
+// skill. provenance.yaml is emitted whenever it exists template-side; the
+// helper also copies optional `references/` and `scripts/` subtrees when
+// present. Skills with no support payload are a silent no-op.
+func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
 	skillDirRel := filepath.Dir(SkillPath(cfg, skillID))
 	dstBase := filepath.Join(root, skillDirRel)
+	return emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstBase, refresh)
+}
 
-	if includeProvenance {
-		// provenance.yaml is required for registry-owned catalog skills.
-		provSrc := path.Join("skills", skillID, "provenance.yaml")
-		if content, exists, err := tmpl.ContentIfExists(provSrc); err != nil {
-			return fmt.Errorf("load provenance for %q: %w", skillID, err)
-		} else if exists {
-			if err := writeDeterministic(filepath.Join(dstBase, "provenance.yaml"), content, refresh); err != nil {
-				return err
-			}
+// emitSkillSupportFilesFromFS is the testable core: it sources support files
+// from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin with
+// "skills/<id>/...") and writes them under dstBase on the local filesystem.
+func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh bool) error {
+	provSrc := path.Join("skills", skillID, "provenance.yaml")
+	if content, exists, err := readIfExists(srcFS, provSrc); err != nil {
+		return fmt.Errorf("load provenance for %q: %w", skillID, err)
+	} else if exists {
+		if err := writeDeterministic(filepath.Join(dstBase, "provenance.yaml"), content, refresh); err != nil {
+			return err
 		}
 	}
 
-	// Optional support directories — copy recursively when present.
 	for _, sub := range optionalSkillSupportDirs {
-		if err := copyTemplateSubtree(path.Join("skills", skillID, sub), filepath.Join(dstBase, sub), refresh); err != nil {
+		if err := copyTemplateSubtreeFromFS(srcFS, path.Join("skills", skillID, sub), filepath.Join(dstBase, sub), refresh); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
 		}
 	}
 	return nil
 }
 
+func readIfExists(srcFS fs.FS, name string) (string, bool, error) {
+	b, err := fs.ReadFile(srcFS, name)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return string(b), true, nil
+}
+
 // copyTemplateSubtree walks an embedded template directory and writes each
 // file to dstDir preserving relative paths. Missing source directories are
 // a no-op.
 func copyTemplateSubtree(srcPrefix, dstDir string, refresh bool) error {
-	tfs := tmpl.TemplateFS()
+	return copyTemplateSubtreeFromFS(tmpl.TemplateFS(), srcPrefix, dstDir, refresh)
+}
+
+func copyTemplateSubtreeFromFS(tfs fs.FS, srcPrefix, dstDir string, refresh bool) error {
 	info, err := fs.Stat(tfs, srcPrefix)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -955,6 +973,12 @@ func copyTemplateSubtree(srcPrefix, dstDir string, refresh bool) error {
 			return walkErr
 		}
 		if d.IsDir() {
+			if shouldSkipSupportArtifact(path.Base(p), true) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if shouldSkipSupportArtifact(path.Base(p), false) {
 			return nil
 		}
 		rel, err := filepath.Rel(srcPrefix, p)
@@ -969,18 +993,11 @@ func copyTemplateSubtree(srcPrefix, dstDir string, refresh bool) error {
 	})
 }
 
-func typedTemplateNeeds(sk capability.Skill) (needProse, needChecklist, needVerdict bool) {
-	for _, b := range sk.Bindings {
-		switch b.Attachment {
-		case capability.AttachmentPosture, capability.AttachmentProcedure:
-			needProse = true
-		case capability.AttachmentChecklist:
-			needChecklist = true
-		case capability.AttachmentReportSchema:
-			needVerdict = true
-		}
+func shouldSkipSupportArtifact(name string, isDir bool) bool {
+	if isDir {
+		return name == "__pycache__"
 	}
-	return needProse, needChecklist, needVerdict
+	return strings.HasSuffix(name, ".pyc") || strings.HasSuffix(name, ".pyo")
 }
 
 func loadOptionalTemplate(name string, needed bool) (string, error) {

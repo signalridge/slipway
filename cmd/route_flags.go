@@ -119,3 +119,41 @@ func resolveEffectiveRouteView(command, explicit string, signals ...capability.S
 	}
 	return strings.TrimSpace(resolution.Route.View)
 }
+
+// resolveEffectiveRouteHydrate returns the hydrate references that apply to
+// the effective --mode selection. Explicit manual modes short-circuit the
+// resolver: the registry is the authority on that skill's hydrate keys and
+// we never fall back to auto-route output on the explicit path. Empty
+// explicit mode falls through to resolver output (union of route +
+// supports) so auto-route callers see the same keys as Resolve().
+func resolveEffectiveRouteHydrate(command, explicit string, signals ...capability.Signals) []string {
+	reg := capability.DefaultRegistry()
+	if mode := strings.TrimSpace(explicit); mode != "" {
+		return capability.HydrateReferenceKeysForSkill(reg, mode)
+	}
+	var sig capability.Signals
+	if len(signals) > 0 {
+		sig = signals[0]
+	}
+	if strings.TrimSpace(sig.Command) == "" {
+		sig.Command = command
+	}
+	return capability.Resolve(reg, sig).HydrateReferences
+}
+
+// resolveEffectiveViewHydrate mirrors resolveEffectiveRouteHydrate for the
+// status/health --view surfaces.
+func resolveEffectiveViewHydrate(command, explicit string, signals ...capability.Signals) []string {
+	reg := capability.DefaultRegistry()
+	if view := strings.TrimSpace(explicit); view != "" {
+		return capability.HydrateReferenceKeysForSkill(reg, view)
+	}
+	var sig capability.Signals
+	if len(signals) > 0 {
+		sig = signals[0]
+	}
+	if strings.TrimSpace(sig.Command) == "" {
+		sig.Command = command
+	}
+	return capability.Resolve(reg, sig).HydrateReferences
+}

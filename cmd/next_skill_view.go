@@ -180,11 +180,13 @@ func appendCatalogHints(
 		}
 	}
 
-	resolution := capability.Resolve(capability.DefaultRegistry(), sig)
+	reg := capability.DefaultRegistry()
+	resolution := capability.Resolve(reg, sig)
 	for _, support := range resolution.Supports {
 		existing = append(existing, techniqueHint{
-			Name:   fmt.Sprintf("skill:%s", support.SkillID),
-			Reason: fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
+			Name:              fmt.Sprintf("skill:%s", support.SkillID),
+			Reason:            fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
+			HydrateReferences: normalizeHydrateKeys(capability.HydrateReferenceKeysForSkill(reg, support.SkillID)),
 		})
 	}
 	return existing

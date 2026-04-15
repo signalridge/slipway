@@ -36,19 +36,6 @@ Enumerate threats against the assets and trust boundaries the change touches.
 Do not hand-wave "what could go wrong"; attach each threat to an asset, an
 actor, and a pre-existing or proposed mitigation.
 
-## Procedure
-1. Name the assets the change affects (data, credentials, privileged
-   operations). Asset naming comes first; skipping it produces vague threats.
-2. Name the actors that can reach each asset (anonymous, authenticated user,
-   internal service, admin). Cite the surface that exposes each actor.
-3. For each (asset, actor) pair, enumerate threats using STRIDE (spoofing,
-   tampering, repudiation, information disclosure, denial of service,
-   elevation of privilege). Drop pairs with no plausible threat.
-4. For each threat, cite the mitigation: existing code path, proposed change,
-   or accepted residual risk. Residuals require explicit acceptance.
-5. Produce an ownership map: which skill or review surface owns catching
-   regressions of each mitigation.
-
 ## Report schema
 ```yaml
 assets:

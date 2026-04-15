@@ -13,7 +13,7 @@ trigger_signals:
     reason: "User text asks for context"
 evidence_contract: artifact
 hydrate_references:
-  - name: codebase-map
+  - name: codebase-map.md
     reason: "Ground brownfield context before planning"
 bindings:
   - type: host-embedded

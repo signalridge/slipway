@@ -170,7 +170,7 @@ Rules:
 | Gate | Scope |
 |------|-------|
 | `schema-lint` | Parses frontmatter and typed-template references; asserts operator whitelist |
-| `size-lint` | Measures `SKILL.md` body size against tier budget (T1 ≤ 2 KB, T2 ≤ 3 KB, T3 ≤ 1.5 KB; warnings 2-6 / 3-8 / 1.5-3 KB; above top bound requires rationale) |
+| `size-lint` | Measures `SKILL.md` body size against tier budget (T1 ≤ 2.5 KB, T2 ≤ 3.5 KB, T3 ≤ 1.5 KB; warnings 2.5-6 / 3.5-8 / 1.5-3 KB; above top bound requires rationale) |
 | `binding-compare` | Diff between frontmatter `bindings[]` and Go-owned registry; must be 1:1 |
 | `provenance-coverage-scan` | Enforces `standalone` / `partial-only` by-source rows are covered by `provenance.yaml`, plus reverse check that each provenance source appears in `by-source.md` |
 

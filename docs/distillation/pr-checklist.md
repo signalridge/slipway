@@ -22,8 +22,8 @@ Warning-band overages are reviewer notes only. A blocking failure occurs only
 when a skill body exceeds the tier hard-max without the required
 `size_rationale`.
 
-- [ ] T1: `SKILL.md` body ≤ 2 KB; warn 2-6 KB; rationale required above 6 KB.
-- [ ] T2: ≤ 3 KB; warn 3-8 KB; rationale required above 8 KB.
+- [ ] T1: `SKILL.md` body ≤ 2.5 KB; warn 2.5-6 KB; rationale required above 6 KB.
+- [ ] T2: ≤ 3.5 KB; warn 3.5-8 KB; rationale required above 8 KB.
 - [ ] T3: ≤ 1.5 KB; warn 1.5-3 KB; `size_rationale` required above 3 KB.
 - [ ] Any overflow example, counter-pattern, or narrative moved to
       `references/` or intentionally dropped. Inline tool-recipe differences

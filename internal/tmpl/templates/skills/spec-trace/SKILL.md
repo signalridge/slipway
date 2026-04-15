@@ -35,17 +35,6 @@ Verify that the implementation mirrors the approved plan in both directions.
 Spec-to-code proves every promise was kept; code-to-spec proves no unapproved
 scope crept in. Either direction alone is insufficient.
 
-## Checklist
-- [ ] Spec-to-code: every acceptance signal in the plan cites a file:line or
-      test that realizes it.
-- [ ] Spec-to-code: any skipped spec item is listed with justification the
-      reviewer accepted.
-- [ ] Code-to-spec: every non-trivial diff hunk cites the plan item it
-      implements.
-- [ ] Code-to-spec: unlinked diff hunks are flagged as scope drift, not
-      silently accepted.
-- [ ] Re-derived acceptance signal agrees with the plan's stated signal.
-
 ## Report schema
 ```yaml
 verdict: pass | changes-requested | blocked

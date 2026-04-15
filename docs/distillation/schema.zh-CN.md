@@ -150,7 +150,7 @@ Toolgen 的多文件组装器现在按且仅按此顺序编译目录技能：
 | 门 | 范围 |
 |------|-------|
 | `schema-lint` | 解析前言与类型化模板引用；校验算子白名单 |
-| `size-lint` | 按层级预算度量主体大小（T1 ≤ 2KB, T2 ≤ 3KB, T3 ≤ 1.5KB；警戒 2-6 / 3-8 / 1.5-3KB；超上界需理由） |
+| `size-lint` | 按层级预算度量主体大小（T1 ≤ 2.5KB, T2 ≤ 3.5KB, T3 ≤ 1.5KB；警戒 2.5-6 / 3.5-8 / 1.5-3KB；超上界需理由） |
 | `binding-compare` | 前言 `bindings[]` 与 Go 注册表的差异；必须一一对应 |
 | `provenance-coverage-scan` | 强制 `by-source` 中 `standalone` / `partial-only` 行被 `provenance.yaml` 覆盖，并做反向校验（每个 provenance source 必须出现在 `by-source.md`） |
 

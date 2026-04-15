@@ -31,3 +31,61 @@ sources:
     dropped:
       - "long language-specific example catalogs"
     conflicts_with: []
+inputs:
+  - reference: authentication.md
+    upstream_distilled_from: getsentry/security-review/references/authentication.md
+    curator_note: "Compressed from 9 KB to ~3 KB: kept storage/session/MFA/recovery rules and review cues; dropped long OWASP cross-references."
+  - reference: authorization.md
+    upstream_distilled_from: getsentry/security-review/references/authorization.md
+    curator_note: "Kept model-selection + IDOR + step-up + multi-tenant invariants; dropped worked code examples."
+  - reference: injection.md
+    upstream_distilled_from: getsentry/security-review/references/injection.md
+    curator_note: "Kept per-sink parameterization rules + review cues; dropped per-language snippets to keep the Wave 1 overlay language-neutral."
+  - reference: xss.md
+    upstream_distilled_from: getsentry/security-review/references/xss.md
+    curator_note: "Kept context-aware encoding table, framework escape hatches, and CSP posture; dropped long sanitizer library comparison."
+  - reference: ssrf.md
+    upstream_distilled_from: getsentry/security-review/references/ssrf.md
+    curator_note: "Kept allow/deny-list recipe, metadata endpoint list, DNS rebinding defense; dropped engagement-specific incident stories."
+  - reference: infrastructure-docker.md
+    upstream_distilled_from: getsentry/security-review/infrastructure/docker.md
+    curator_note: "Kept Dockerfile + runtime + Kubernetes securityContext floors and supply-chain posture; dropped tool-specific rollout recipes."
+ledger:
+  mapped:
+    - getsentry/security-review/references/authentication.md
+    - getsentry/security-review/references/authorization.md
+    - getsentry/security-review/references/injection.md
+    - getsentry/security-review/references/xss.md
+    - getsentry/security-review/references/ssrf.md
+    - getsentry/security-review/infrastructure/docker.md
+  deferred:
+    - upstream: getsentry/security-review/languages/python.md
+      reason: "Language-specific overlay intentionally deferred; Wave 1 keeps the reference surface language-neutral."
+    - upstream: getsentry/security-review/languages/javascript.md
+      reason: "Language-specific overlay intentionally deferred; Wave 1 keeps the reference surface language-neutral."
+    - upstream: getsentry/security-review/references/api-security.md
+      reason: "Covered transitively by injection + authentication + authorization overlays in Wave 1; standalone API-centric overlay deferred to a later wave once contract-testing skill lands."
+    - upstream: getsentry/security-review/references/business-logic.md
+      reason: "Needs domain-specific framing; Wave 1 keeps cross-cutting gates only."
+    - upstream: getsentry/security-review/references/cryptography.md
+      reason: "Covered by authentication.md storage section in Wave 1; standalone crypto overlay deferred until TLS / key-management gaps are scoped."
+    - upstream: getsentry/security-review/references/csrf.md
+      reason: "Needs a platform/session-model-specific treatment; deferred rather than reintroducing language-specific overlays in Wave 1."
+    - upstream: getsentry/security-review/references/data-protection.md
+      reason: "Regulatory-classification material overlaps the incident-response regulatory-deadlines reference; defer to cross-skill rationalization."
+    - upstream: getsentry/security-review/references/error-handling.md
+      reason: "Cross-cutting checklist row already enforces fail-closed posture; standalone overlay deferred."
+    - upstream: getsentry/security-review/references/file-security.md
+      reason: "Needs storage-backend-specific content; deferred until storage skills are in scope."
+    - upstream: getsentry/security-review/references/logging.md
+      reason: "Logging hygiene is captured by the cross-cutting secrets row; standalone overlay deferred."
+    - upstream: getsentry/security-review/references/misconfiguration.md
+      reason: "Covered in docker infrastructure overlay + cross-cutting checklist rows; standalone overlay deferred."
+    - upstream: getsentry/security-review/references/modern-threats.md
+      reason: "Survey material, not action-changing; defer until it has a review-actionable schema."
+    - upstream: getsentry/security-review/references/supply-chain.md
+      reason: "Duplicative with gha-security-review/supply-chain.md and supply-chain-audit; cross-skill rationalization pending."
+  collapsed:
+    - upstream: getsentry/security-review/references/deserialization.md
+      into: injection.md
+      reason: "Operative shape (typed parser + signature-before-parse) matches the injection overlay; reduces duplication."

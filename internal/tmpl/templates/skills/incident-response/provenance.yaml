@@ -22,3 +22,46 @@ sources:
     dropped:
       - "acceptance-specific orchestration loops (absorbed elsewhere)"
     conflicts_with: []
+inputs:
+  - reference: incident-response-framework.md
+    upstream_distilled_from: alirezarezvani/incident-commander/references/incident-response-framework.md
+    curator_note: "Aggressive distillation: 26 KB framework narrative reduced to roles + phase gates + decision authority to fit 24 KB per-file cap."
+  - reference: incident-severity-matrix.md
+    upstream_distilled_from: alirezarezvani/incident-commander/references/incident_severity_matrix.md
+    curator_note: "Retained triage table, tie-breakers, and assignment discipline; dropped narrative examples."
+  - reference: communication-templates.md
+    upstream_distilled_from: alirezarezvani/incident-commander/references/communication_templates.md
+    curator_note: "Kept template blocks and anti-patterns; dropped multi-channel matrix narrative."
+  - reference: sla-management-guide.md
+    upstream_distilled_from: alirezarezvani/incident-commander/references/sla-management-guide.md
+    curator_note: "Retained clock/breach/credit operational rules; dropped legal-language library (out of on-call scope)."
+  - reference: rca-frameworks-guide.md
+    upstream_distilled_from: alirezarezvani/incident-commander/references/rca_frameworks_guide.md
+    curator_note: "Retained framework selection + 5 Whys/Fishbone recipes; dropped long worked examples."
+  - reference: regulatory-deadlines.md
+    upstream: alirezarezvani/incident-response/references/regulatory-deadlines.md
+ledger:
+  mapped:
+    - alirezarezvani/incident-commander/references/incident-response-framework.md
+    - alirezarezvani/incident-commander/references/incident_severity_matrix.md
+    - alirezarezvani/incident-commander/references/communication_templates.md
+    - alirezarezvani/incident-commander/references/sla-management-guide.md
+    - alirezarezvani/incident-commander/references/rca_frameworks_guide.md
+    - alirezarezvani/incident-response/references/regulatory-deadlines.md
+  deferred:
+    - upstream: alirezarezvani/incident-commander/references/reference-information.md
+      reason: "Glossary / links page; duplicative of content surfaced in distilled framework file."
+    - upstream: alirezarezvani/incident-commander/scripts/incident_classifier.py
+      reason: "Runtime-contract freeze pending; defer to later script-lift wave."
+    - upstream: alirezarezvani/incident-commander/scripts/incident_timeline_builder.py
+      reason: "Runtime-contract freeze pending."
+    - upstream: alirezarezvani/incident-commander/scripts/pir_generator.py
+      reason: "Runtime-contract freeze pending."
+    - upstream: alirezarezvani/incident-commander/scripts/postmortem_generator.py
+      reason: "Runtime-contract freeze pending."
+    - upstream: alirezarezvani/incident-commander/scripts/severity_classifier.py
+      reason: "Runtime-contract freeze pending."
+    - upstream: alirezarezvani/incident-commander/scripts/timeline_reconstructor.py
+      reason: "Runtime-contract freeze pending."
+    - upstream: alirezarezvani/incident-response/scripts/incident_triage.py
+      reason: "Runtime-contract freeze pending."

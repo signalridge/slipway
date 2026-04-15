@@ -20,14 +20,15 @@ import (
 )
 
 type healthView struct {
-	ExecutionMode string                             `json:"execution_mode"`
-	View          string                             `json:"view,omitempty"`
-	Findings      []state.HealthFinding              `json:"findings,omitempty"`
-	Governance    *governance.GovernanceHealthReport `json:"governance,omitempty"`
-	Observations  []model.SignalObservation          `json:"observations,omitempty"`
-	Diagnostics   []string                           `json:"diagnostics,omitempty"`
-	Doctor        *doctorView                        `json:"doctor,omitempty"`
-	ShowRepo      bool                               `json:"-"`
+	ExecutionMode     string                             `json:"execution_mode"`
+	View              string                             `json:"view,omitempty"`
+	HydrateReferences []string                           `json:"hydrate_references,omitempty"`
+	Findings          []state.HealthFinding              `json:"findings,omitempty"`
+	Governance        *governance.GovernanceHealthReport `json:"governance,omitempty"`
+	Observations      []model.SignalObservation          `json:"observations,omitempty"`
+	Diagnostics       []string                           `json:"diagnostics,omitempty"`
+	Doctor            *doctorView                        `json:"doctor,omitempty"`
+	ShowRepo          bool                               `json:"-"`
 }
 
 type doctorView struct {
@@ -51,6 +52,8 @@ func makeHealthCmd() *cobra.Command {
 	var doctorFlag bool
 	var changeSlug string
 	var routeView string
+	var hydrate bool
+	var hydrateRefs []string
 
 	cmd := &cobra.Command{
 		Use:   "health",
@@ -59,6 +62,14 @@ func makeHealthCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := validateRouteView("health", routeView); err != nil {
 				return err
+			}
+			if len(hydrateRefs) > 0 && !hydrate {
+				return newInvalidUsageError(
+					"hydrate_ref_requires_hydrate",
+					"`--hydrate-ref` requires `--hydrate`",
+					"Add `--hydrate` to emit hydrate bodies, or remove `--hydrate-ref`.",
+					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
+				)
 			}
 			explicitView := strings.TrimSpace(routeView)
 			root, err := projectRootFromWD()
@@ -73,6 +84,15 @@ func makeHealthCmd() *cobra.Command {
 				ExecutionMode: "diagnostics",
 				ShowRepo:      showRepo,
 				View:          explicitView,
+			}
+			if explicitView != "" {
+				view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("health", explicitView))
+				if hydrate {
+					view.HydrateReferences, err = selectHydrateKeys(view.HydrateReferences, hydrateRefs)
+					if err != nil {
+						return err
+					}
+				}
 			}
 			governanceNotApplicable := false
 			if doctorFlag {
@@ -107,6 +127,13 @@ func makeHealthCmd() *cobra.Command {
 						// Auto view routing is applied only when health is
 						// evaluating a concrete active/selected change.
 						view.View = resolveEffectiveRouteView("health", "")
+						view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("health", ""))
+						if hydrate {
+							view.HydrateReferences, err = selectHydrateKeys(view.HydrateReferences, hydrateRefs)
+							if err != nil {
+								return err
+							}
+						}
 					}
 					var govReport governance.GovernanceHealthReport
 					var persistedSnap model.GovernanceSnapshot
@@ -194,9 +221,23 @@ func makeHealthCmd() *cobra.Command {
 			}
 
 			if jsonOutput {
+				if hydrate {
+					return newInvalidUsageError(
+						"mutually_exclusive_flags",
+						"`--hydrate` cannot be combined with `--json`",
+						"Drop `--json` to emit hydrate bodies, or omit `--hydrate`.",
+						nil,
+					)
+				}
 				return encodeJSONResponse(cmd, view)
 			}
-			return writeHealthText(cmd.OutOrStdout(), view)
+			if err := writeHealthText(cmd.OutOrStdout(), view); err != nil {
+				return err
+			}
+			if hydrate {
+				return emitHydrateBlocks(root, cmd.OutOrStdout(), view.HydrateReferences)
+			}
+			return nil
 		},
 	}
 
@@ -206,6 +247,8 @@ func makeHealthCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&observationsFlag, "observations", false, "Include detailed governance signal provenance")
 	cmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Synthesize prioritized repair and recovery actions without mutating state")
 	cmd.Flags().StringVar(&routeView, "view", "", "Health view override (e.g. incident-response, observability-query)")
+	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Target a specific change for governance health")
 	return cmd
 }
@@ -315,7 +358,12 @@ func shouldSkipGovernanceSnapshotRecompute(root string, change model.Change) (bo
 func writeHealthText(w io.Writer, view healthView) error {
 	writer := newFormatWriter(w)
 	if strings.TrimSpace(view.View) != "" {
-		writer.Writef("View: %s\n\n", view.View)
+		writer.Writef("View: %s\n", view.View)
+		writeHydrateLine(writer, "", view.HydrateReferences)
+		writer.Writef("\n")
+	} else if len(view.HydrateReferences) > 0 {
+		writeHydrateLine(writer, "", view.HydrateReferences)
+		writer.Writef("\n")
 	}
 
 	if view.Doctor != nil {

@@ -11,7 +11,6 @@ import (
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	pflag "github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -271,6 +270,8 @@ func TestTypedCLIErrorHelpers(t *testing.T) {
 }
 
 func runRootCommand(args []string) (string, string, error) {
+	rootCmd = newRootCmd()
+
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 
@@ -278,15 +279,5 @@ func runRootCommand(args []string) (string, string, error) {
 	rootCmd.SetErr(&errOut)
 	rootCmd.SetArgs(args)
 	err := Execute()
-	rootCmd.SetArgs(nil)
-
-	// Reset all subcommand flags to prevent flag value leaks between tests.
-	for _, sub := range rootCmd.Commands() {
-		sub.Flags().VisitAll(func(f *pflag.Flag) {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
-	}
-
 	return out.String(), errOut.String(), err
 }

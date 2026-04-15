@@ -11,14 +11,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func printStatusView(cmd *cobra.Command, view statusView, format string) error {
+func printStatusView(cmd *cobra.Command, root string, view statusView, format string, hydrate bool) error {
+	if hydrate && format != "text" {
+		return newInvalidUsageError(
+			"mutually_exclusive_flags",
+			"`--hydrate` requires text output (remove `--json`/`--format`).",
+			"Drop `--json`/`--format` to emit hydrate bodies, or omit `--hydrate`.",
+			nil,
+		)
+	}
 	switch format {
 	case "json":
 		return encodeJSONResponse(cmd, view)
 	case "yaml":
 		return yaml.NewEncoder(cmd.OutOrStdout()).Encode(view)
 	default:
-		return writeStatusText(cmd.OutOrStdout(), view)
+		if err := writeStatusText(cmd.OutOrStdout(), view); err != nil {
+			return err
+		}
+		if hydrate {
+			return emitHydrateBlocks(root, cmd.OutOrStdout(), view.HydrateReferences)
+		}
+		return nil
 	}
 }
 
@@ -33,6 +47,11 @@ func renderStatusText(view statusView) string {
 		if strings.TrimSpace(view.View) != "" {
 			writeLine("View: %s\n", view.View)
 		}
+		writer := newFormatWriter(&builder)
+		writeHydrateLine(writer, "", view.HydrateReferences)
+		if writer.Err() != nil {
+			return builder.String()
+		}
 		writeLine("Evidence Freshness: %s\n", view.EvidenceFreshness)
 		for _, d := range view.Diagnostics {
 			writeLine("  %s\n", d)
@@ -45,6 +64,11 @@ func renderStatusText(view statusView) string {
 	writeLine("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
 	if strings.TrimSpace(view.View) != "" {
 		writeLine("View: %s\n", view.View)
+	}
+	writer := newFormatWriter(&builder)
+	writeHydrateLine(writer, "", view.HydrateReferences)
+	if writer.Err() != nil {
+		return builder.String()
 	}
 	if view.QualityMode != "" {
 		writeLine("Quality: %s | Discovery Required: %t\n", view.QualityMode, view.NeedsDiscovery)

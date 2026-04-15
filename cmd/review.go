@@ -19,16 +19,17 @@ type reviewOptions struct {
 }
 
 type reviewView struct {
-	Slug           string             `json:"slug"`
-	ExecutionMode  string             `json:"execution_mode"`
-	QualityMode    string             `json:"quality_mode,omitempty"`
-	NeedsDiscovery bool               `json:"needs_discovery,omitempty"`
-	CurrentState   string             `json:"current_state"`
-	Verdict        string             `json:"verdict"`
-	Mode           string             `json:"mode,omitempty"`
-	Blockers       []model.ReasonCode `json:"blockers,omitempty"`
-	Waves          []reviewWaveView   `json:"waves,omitempty"`
-	Gaps           *reviewGaps        `json:"gaps,omitempty"`
+	Slug              string             `json:"slug"`
+	ExecutionMode     string             `json:"execution_mode"`
+	QualityMode       string             `json:"quality_mode,omitempty"`
+	NeedsDiscovery    bool               `json:"needs_discovery,omitempty"`
+	CurrentState      string             `json:"current_state"`
+	Verdict           string             `json:"verdict"`
+	Mode              string             `json:"mode,omitempty"`
+	HydrateReferences []string           `json:"hydrate_references,omitempty"`
+	Blockers          []model.ReasonCode `json:"blockers,omitempty"`
+	Waves             []reviewWaveView   `json:"waves,omitempty"`
+	Gaps              *reviewGaps        `json:"gaps,omitempty"`
 }
 
 type reviewGaps struct {
@@ -46,6 +47,8 @@ func makeReviewCmd() *cobra.Command {
 	opts := reviewOptions{}
 	var changeSlug string
 	var jsonOutput bool
+	var hydrate bool
+	var hydrateRefs []string
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: desc("review"),
@@ -72,7 +75,31 @@ func makeReviewCmd() *cobra.Command {
 			if err := validateRouteMode("review", opts.mode); err != nil {
 				return err
 			}
+			if len(hydrateRefs) > 0 && !hydrate {
+				return newInvalidUsageError(
+					"hydrate_ref_requires_hydrate",
+					"`--hydrate-ref` requires `--hydrate`",
+					"Add `--hydrate` to emit hydrate bodies, or remove `--hydrate-ref`.",
+					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
+				)
+			}
+			if jsonOutput && hydrate {
+				return newInvalidUsageError(
+					"mutually_exclusive_flags",
+					"`--hydrate` cannot be combined with `--json`",
+					"Drop `--json` to emit hydrate bodies, or omit `--hydrate`.",
+					nil,
+				)
+			}
 			effectiveMode := resolveEffectiveRouteMode("review", opts.mode)
+			hydrateKeys := normalizeHydrateKeys(resolveEffectiveRouteHydrate("review", opts.mode))
+			if hydrate {
+				var err error
+				hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
+				if err != nil {
+					return err
+				}
+			}
 
 			root, err := projectRootFromWD()
 			if err != nil {
@@ -164,22 +191,29 @@ func makeReviewCmd() *cobra.Command {
 				}
 				profile := buildChangeProfileView(change)
 				view := reviewView{
-					Slug:           active.Slug,
-					ExecutionMode:  execMode,
-					QualityMode:    profile.QualityMode,
-					NeedsDiscovery: profile.NeedsDiscovery,
-					CurrentState:   string(change.CurrentState),
-					Verdict:        verdict,
-					Mode:           effectiveMode,
-					Blockers:       blockers,
-					Waves:          waveViews,
-					Gaps:           classifyReviewGaps(blockers),
+					Slug:              active.Slug,
+					ExecutionMode:     execMode,
+					QualityMode:       profile.QualityMode,
+					NeedsDiscovery:    profile.NeedsDiscovery,
+					CurrentState:      string(change.CurrentState),
+					Verdict:           verdict,
+					Mode:              effectiveMode,
+					HydrateReferences: hydrateKeys,
+					Blockers:          blockers,
+					Waves:             waveViews,
+					Gaps:              classifyReviewGaps(blockers),
 				}
 
 				if jsonOutput {
 					return encodeJSONResponse(cmd, view)
 				}
-				return writeReviewText(cmd.OutOrStdout(), view)
+				if err := writeReviewText(cmd.OutOrStdout(), view); err != nil {
+					return err
+				}
+				if hydrate {
+					return emitHydrateBlocks(root, cmd.OutOrStdout(), view.HydrateReferences)
+				}
+				return nil
 			})
 		},
 	}
@@ -190,6 +224,8 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
 	cmd.Flags().StringVar(&opts.mode, "mode", "", "Review mode override (e.g. independent-review, spec-trace, second-opinion)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	return cmd
 }
 
@@ -201,6 +237,7 @@ func writeReviewText(w io.Writer, view reviewView) error {
 	if strings.TrimSpace(view.Mode) != "" {
 		writer.Writef("Mode: %s\n", view.Mode)
 	}
+	writeHydrateLine(writer, "", view.HydrateReferences)
 
 	if len(view.Waves) > 0 {
 		writer.Writef("Waves:\n")

@@ -32,6 +32,7 @@ type validateView struct {
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	Mode                      string                      `json:"mode,omitempty"`
+	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -110,7 +111,10 @@ func makeValidateCmd() *cobra.Command {
 			ref, err := resolveActiveChangeRef(root, changeSlug)
 			if err != nil {
 				if shouldFallbackValidateDiagnostics(err) {
-					return encodeJSONResponse(cmd, diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`"))
+					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
+					view.Mode = effectiveMode
+					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveRouteHydrate("validate", mode))
+					return encodeJSONResponse(cmd, view)
 				}
 				return err
 			}
@@ -120,6 +124,7 @@ func makeValidateCmd() *cobra.Command {
 				return err
 			}
 			view.Mode = effectiveMode
+			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveRouteHydrate("validate", mode))
 			return encodeJSONResponse(cmd, view)
 		},
 	}

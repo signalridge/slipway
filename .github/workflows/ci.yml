@@ -19,6 +19,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Install staticcheck
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
