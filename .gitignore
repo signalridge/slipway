@@ -39,3 +39,10 @@ openspec/
 
 # slipway managed
 .worktrees/
+
+# Stray Python bytecode in bundled helpers
+__pycache__/
+*.pyc
+
+# Local research references (upstream skill repos)
+/skills_ref/

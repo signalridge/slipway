@@ -109,6 +109,13 @@ type Signals struct {
 	ChangedFiles []string
 	Paths        []string
 	UserText     string
+	// Focus names an explicit `--focus <alias>` selection resolved through
+	// surface policy. Empty means no explicit focus was requested; route
+	// selection falls back to the primary surface for the command.
+	Focus string
+	// View names an explicit `--view <alias>` selection (status / health).
+	// Empty means the command layer did not request an explicit view.
+	View string
 }
 
 // Match returns true when every top-level clause operator semantics hold

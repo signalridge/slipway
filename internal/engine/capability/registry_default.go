@@ -23,7 +23,6 @@ func defaultSkills() []Skill {
 		supplyChainAudit(),
 		// B4 change-shape + verification
 		multiReviewerCalibration(),
-		differentialReview(),
 		variantAnalysis(),
 		coverageAnalysis(),
 		propertyTesting(),
@@ -65,7 +64,6 @@ func scopeClarification() Skill {
 			{Type: BindingHostEmbedded, Target: "intake-clarification", Attachment: AttachmentChecklist},
 			{Type: BindingTechniqueHint, Target: "intake-clarification", Attachment: AttachmentPosture},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -95,7 +93,9 @@ func planAuthoring() Skill {
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentChecklist},
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentProcedure},
 		},
-		ProvenanceRef: "provenance.yaml",
+		HydrateReferences: []HydrateReference{
+			{Name: "plan-document-review-prompt.md", Reason: "Reviewer prompt for auditing plan documents before execution"},
+		},
 	}
 }
 
@@ -127,7 +127,9 @@ func tddProof() Skill {
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "tdd-governance", Attachment: AttachmentProcedure},
 		},
-		ProvenanceRef: "provenance.yaml",
+		HydrateReferences: []HydrateReference{
+			{Name: "testing-anti-patterns.md", Reason: "Anti-patterns that defeat test-first proof"},
+		},
 	}
 }
 
@@ -158,7 +160,6 @@ func freshVerificationEvidence() Skill {
 			{Type: BindingHostEmbedded, Target: "final-closeout", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "tdd-governance", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -189,6 +190,5 @@ func independentReview() Skill {
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }

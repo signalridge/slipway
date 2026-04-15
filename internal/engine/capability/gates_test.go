@@ -24,20 +24,6 @@ func skillsDir(t *testing.T) string {
 	return p
 }
 
-// TestProvenanceCoverageForRegisteredSkills asserts every registered catalog
-// skill has a provenance.yaml on disk and every record parses.
-func TestProvenanceCoverageForRegisteredSkills(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	root := skillsDir(t)
-	for _, sk := range reg.All() {
-		path := filepath.Join(root, sk.ID, "provenance.yaml")
-		p, err := LoadProvenance(path)
-		require.NoErrorf(t, err, "skill %s: %v", sk.ID, err)
-		assert.NotEmptyf(t, p.Coverage(), "skill %s has empty provenance coverage", sk.ID)
-	}
-}
-
 // TestFrontmatterMirrorsRegistryBindings is the B1 binding-compare gate.
 // It parses each SKILL.md's frontmatter and asserts the bindings[] list
 // matches the Go-owned Skill entry exactly.
@@ -127,7 +113,6 @@ func TestFrontmatterHasRequiredFields(t *testing.T) {
 			assert.Equal(t, string(sk.Domain), fm.Domain)
 			assert.Equal(t, string(sk.Tier), fm.Tier)
 			assert.Equal(t, string(sk.PrimaryAttachment), fm.PrimaryAttachment)
-			assert.Equal(t, "provenance.yaml", fm.ProvenanceRef)
 			assert.Contains(t, fm.Summary, "Use when")
 			assert.Contains(t, fm.Summary, "Triggers on")
 			assert.NotEmpty(t, fm.Bindings)
@@ -146,7 +131,6 @@ type frontmatter struct {
 	EvidenceContract  string            `yaml:"evidence_contract"`
 	Bindings          []frontBinding    `yaml:"bindings"`
 	HydrateReferences []frontHydrateRef `yaml:"hydrate_references"`
-	ProvenanceRef     string            `yaml:"provenance_ref"`
 }
 
 type frontBinding struct {

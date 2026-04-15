@@ -25,7 +25,6 @@ bindings:
   - type: technique-hint
     target: research-orchestration
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Context Assembly

@@ -1,15 +1,20 @@
-// Package capability owns the Slipway catalog-skill registry, bounded
-// trigger DSL, and auto capability resolver.
+// Package capability owns two runtime authorities:
 //
-// The catalog registry is the runtime authority for binding metadata
-// (hosts, routed command modes/views, technique hints, exports). Generated
-// SKILL.md frontmatter mirrors the registry but is descriptive only; the
-// binding-compare gate enforces 1:1 equality between the two.
+//  1. The catalog-skill registry (internal identity): bindings for hosts,
+//     command-auto / command-view routes, technique hints, and export-only
+//     metadata. Generated SKILL.md frontmatter mirrors this registry and the
+//     binding-compare gate enforces 1:1 equality.
+//  2. The surface policy registry (public exposure), owned by surfaces.go.
+//     It classifies each user-facing selector as primary / suggested /
+//     explicit focus / view, and resolves public aliases to their backing
+//     skill id. --focus / --view resolution reads surfaces.go, not catalog
+//     bindings, so BindingCommandAuto metadata is never equivalent to a
+//     public selector.
 //
 // Catalog skills do not replace the governance kernel. ResolveNextSkill in
 // internal/engine/progression remains the only progression authority; this
-// package emits support attachments and routed-command selections that the
-// kernel's host is free to consume or ignore.
+// package emits support attachments, routed-command selections, and bounded
+// suggested capabilities that the kernel's host is free to consume or ignore.
 package capability
 
 import (
@@ -59,7 +64,6 @@ type BindingType string
 const (
 	BindingHostEmbedded  BindingType = "host-embedded"
 	BindingCommandAuto   BindingType = "command-auto"
-	BindingCommandManual BindingType = "command-manual"
 	BindingTechniqueHint BindingType = "technique-hint"
 	BindingCommandView   BindingType = "command-view"
 	BindingExportOnly    BindingType = "export-only"
@@ -83,10 +87,9 @@ type Binding struct {
 
 // Skill is the authoritative runtime record for one catalog skill.
 //
-// The fields mirror the SKILL.md frontmatter contract. Authoring-side
-// metadata (summary, provenance_ref path) is kept alongside runtime binding
-// data so one source of truth drives both the binding-compare gate and
-// the adapter export pipeline.
+// The fields mirror the SKILL.md frontmatter contract. The binding-compare
+// gate uses this record as the source of truth against generated SKILL.md
+// frontmatter.
 type Skill struct {
 	ID                string
 	Domain            Domain
@@ -98,7 +101,6 @@ type Skill struct {
 	Evidence          EvidenceContract
 	Bindings          []Binding
 	HydrateReferences []HydrateReference
-	ProvenanceRef     string // relative to the skill directory, usually "provenance.yaml"
 }
 
 // HydrateReference is a typed, registry-owned record that mirrors a skill's
@@ -280,7 +282,7 @@ func validEvidence(e EvidenceContract) bool {
 
 func validBindingType(t BindingType) bool {
 	switch t {
-	case BindingHostEmbedded, BindingCommandAuto, BindingCommandManual,
+	case BindingHostEmbedded, BindingCommandAuto,
 		BindingTechniqueHint, BindingCommandView, BindingExportOnly:
 		return true
 	}

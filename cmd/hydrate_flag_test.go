@@ -144,8 +144,8 @@ func TestStatusCommandHydrateRefRequiresHydrate(t *testing.T) {
 
 		cmd := makeStatusCmd()
 		cmd.SetArgs([]string{
-			"--view", "supply-chain-audit",
-			"--hydrate-ref", "supply-chain-audit/results-template.md",
+			"--view", "incident",
+			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})
 		err := cmd.Execute()
 		require.Error(t, err)
@@ -160,16 +160,23 @@ func TestStatusCommandHydrateWarnsButStillRendersBodies(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, true))
 
+		// Temporarily lower the size-warning threshold so incident-response's
+		// six references (~30 KB total) comfortably exceed it. The canonical
+		// 32 KB threshold remains exercised by the defaults elsewhere.
+		orig := hydrateWarnBytes
+		hydrateWarnBytes = 4 * 1024
+		defer func() { hydrateWarnBytes = orig }()
+
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--view", "supply-chain-audit", "--hydrate"})
+		cmd.SetArgs([]string{"--view", "incident", "--hydrate"})
 		require.NoError(t, cmd.Execute())
 
 		rendered := out.String()
 		assert.Contains(t, rendered, "WARN hydrate_output_large:")
-		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: supply-chain-audit/results-template.md =====")
-		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: supply-chain-audit/dependency-management-best-practices.md =====")
+		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: incident-response/incident-severity-matrix.md =====")
+		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: incident-response/incident-response-framework.md =====")
 	})
 }
 
@@ -182,17 +189,17 @@ func TestStatusCommandHydrateRefNarrowsOutput(t *testing.T) {
 		cmd := makeStatusCmd()
 		cmd.SetOut(&out)
 		cmd.SetArgs([]string{
-			"--view", "supply-chain-audit",
+			"--view", "incident",
 			"--hydrate",
-			"--hydrate-ref", "supply-chain-audit/results-template.md",
+			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})
 		require.NoError(t, cmd.Execute())
 
 		rendered := out.String()
 		assert.NotContains(t, rendered, "WARN hydrate_output_large:")
-		assert.Contains(t, rendered, "Hydrate: supply-chain-audit/results-template.md")
-		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: supply-chain-audit/results-template.md =====")
-		assert.NotContains(t, rendered, "dependency-management-best-practices.md =====")
+		assert.Contains(t, rendered, "Hydrate: incident-response/incident-severity-matrix.md")
+		assert.Contains(t, rendered, "===== SLIPWAY HYDRATE: incident-response/incident-severity-matrix.md =====")
+		assert.NotContains(t, rendered, "incident-response-framework.md =====")
 	})
 }
 
@@ -205,7 +212,7 @@ func TestHealthCommandHydrateRefNarrowsOutput(t *testing.T) {
 		cmd := makeHealthCmd()
 		cmd.SetOut(&out)
 		cmd.SetArgs([]string{
-			"--view", "incident-response",
+			"--view", "incident",
 			"--hydrate",
 			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})
@@ -218,7 +225,7 @@ func TestHealthCommandHydrateRefNarrowsOutput(t *testing.T) {
 	})
 }
 
-func TestValidateDiagnosticsManualModeStillAdvertisesHydrateReferences(t *testing.T) {
+func TestValidateDiagnosticsFocusStillAdvertisesHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
@@ -226,15 +233,135 @@ func TestValidateDiagnosticsManualModeStillAdvertisesHydrateReferences(t *testin
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--mode", "sast-orchestration"})
+		cmd.SetArgs([]string{"--json", "--focus", "sast"})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "sast-orchestration", view.Mode)
+		assert.Equal(t, "sast", view.Mode)
 		assert.Contains(t, view.HydrateReferences, "sast-orchestration/codeql-ruleset-catalog.md")
 		assert.Contains(t, view.HydrateReferences, "sast-orchestration/sarif-merge.md")
+	})
+}
+
+// TestValidateFocusPropertyAdvertisesHydrateReferences locks the Wave-2 PR-3
+// hydrate contract for `validate --focus property`: the focus alias resolves
+// through surface policy to property-testing and its declared hydrate
+// references land on the view. Suggested-only skills (variant-analysis,
+// performance-profiling) must not appear on this path.
+func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		var out bytes.Buffer
+		cmd := makeValidateCmd()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"--json", "--focus", "property"})
+		require.NoError(t, cmd.Execute())
+
+		var view validateView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, "diagnostics", view.ExecutionMode)
+		assert.Equal(t, "property", view.Mode)
+
+		for _, ref := range []string{
+			"property-testing/design.md",
+			"property-testing/generating.md",
+			"property-testing/strategies.md",
+			"property-testing/libraries.md",
+			"property-testing/interpreting-failures.md",
+		} {
+			assert.Contains(t, view.HydrateReferences, ref,
+				"--focus property must carry registry-declared hydrate ref %s", ref)
+		}
+
+		for _, ref := range view.HydrateReferences {
+			assert.NotContains(t, ref, "variant-analysis/",
+				"suggested-only variant-analysis must not leak into --focus property hydrate")
+			assert.NotContains(t, ref, "performance-profiling/",
+				"suggested-only performance-profiling must not leak into --focus property hydrate")
+		}
+	})
+}
+
+// TestValidateFocusMutationAdvertisesHydrateReferences locks the hydrate
+// contract for `validate --focus mutation`: mutation-testing's two registry
+// refs appear on the view; suggested-only skills do not.
+func TestValidateFocusMutationAdvertisesHydrateReferences(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		var out bytes.Buffer
+		cmd := makeValidateCmd()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"--json", "--focus", "mutation"})
+		require.NoError(t, cmd.Execute())
+
+		var view validateView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, "diagnostics", view.ExecutionMode)
+		assert.Equal(t, "mutation", view.Mode)
+
+		for _, ref := range []string{
+			"mutation-testing/optimization-strategies.md",
+			"mutation-testing/configuration.md",
+		} {
+			assert.Contains(t, view.HydrateReferences, ref,
+				"--focus mutation must carry registry-declared hydrate ref %s", ref)
+		}
+		for _, ref := range view.HydrateReferences {
+			assert.NotContains(t, ref, "variant-analysis/",
+				"suggested-only variant-analysis must not leak into --focus mutation hydrate")
+			assert.NotContains(t, ref, "performance-profiling/",
+				"suggested-only performance-profiling must not leak into --focus mutation hydrate")
+		}
+	})
+}
+
+// TestReviewFocusCalibrationAdvertisesHydrateReferences locks the Wave-3 PR-3
+// hydrate contract for `review --focus calibration`: the focus alias resolves
+// through surface policy to multi-reviewer-calibration and its declared
+// hydrate reference lands on the focus-resolver helper the review command
+// feeds into its view. Script-only suggested skills (ci-triage,
+// review-comment-triage) must not appear on this path. The full review
+// command requires an active change and full governance; this test pins the
+// cmd-layer hydrate surface itself, which is the narrower contract Wave-3
+// PR-3 cares about.
+func TestReviewFocusCalibrationAdvertisesHydrateReferences(t *testing.T) {
+	t.Parallel()
+
+	keys := resolveEffectiveFocusHydrate("review", "calibration")
+	require.NotEmpty(t, keys, "--focus calibration must expose hydrate keys")
+
+	assert.Contains(t, keys, "multi-reviewer-calibration/review-dimensions.md",
+		"--focus calibration must carry the registry-declared hydrate ref")
+
+	for _, ref := range keys {
+		assert.True(t,
+			strings.HasPrefix(ref, "multi-reviewer-calibration/"),
+			"only the explicit-focus backing skill's keys may surface on this alias, got %q", ref)
+		assert.NotContains(t, ref, "ci-triage/",
+			"suggested-only ci-triage must not leak into --focus calibration hydrate")
+		assert.NotContains(t, ref, "review-comment-triage/",
+			"suggested-only review-comment-triage must not leak into --focus calibration hydrate")
+	}
+}
+
+// TestValidateRawModeSkillIDRejected regresses the route-surface refactor gate:
+// raw `--mode=property-testing` must fail with the structured usage error, not
+// silently fall back to anything.
+func TestValidateRawModeSkillIDRejected(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		cmd := makeValidateCmd()
+		cmd.SetArgs([]string{"--mode", "property-testing"})
+		err := cmd.Execute()
+		require.Error(t, err, "--mode should not exist as a flag after the refactor")
 	})
 }
 

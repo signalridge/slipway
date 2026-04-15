@@ -14,16 +14,15 @@ trigger_signals:
     reason: "User text signals performance work"
 evidence_contract: artifact
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: validate
     attachment: procedure
   - type: host-embedded
     target: goal-verification
     attachment: checklist
-  - type: command-manual
+  - type: command-auto
     target: status
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Performance Profiling
@@ -62,3 +61,11 @@ and cite both before proposing a change.
 - Optimizing from wall-clock feelings without a profile.
 - Comparing profiles captured in different environments.
 - Claiming a speedup without re-measuring after the change.
+
+## Helpers
+- `scripts/repo-performance-scan.py <path>` — static repository scan for
+  performance risk indicators (large files, dependency counts, bundle
+  weight). Not a process or binary profiler; attach a real profiler
+  from `references/profiling-recipes.md` when you need runtime
+  attribution. Accepts `--large-file-threshold-kb=<n>` and `--json`;
+  exits 2 when the path is not a directory.

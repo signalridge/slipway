@@ -102,3 +102,90 @@ Notes:
 - Role: expose grouped help and command-specific help
 - Policy: kept outside the product matrix so adapter registry contracts do not
   have to model Cobra's built-in utility behavior
+
+## Routed Command Surfaces
+
+Routed commands expose a four-class surface taxonomy through the
+`SurfacePolicy` authority in `internal/engine/capability/surfaces.go`. Exposure
+classes, flags, and discovery commands are:
+
+| Class | User surface | Discovery |
+|---|---|---|
+| Primary | selected automatically, never by flag | implicit |
+| Suggested | rendered via `suggested_capabilities[]` in JSON and a `Suggested:` text block | bounded at 3, disjoint from primary |
+| ExplicitFocus | `--focus <alias>` on `review`, `validate`, `repair` | `<command> --list-focuses [--format text\|json]` |
+| View | `--view <alias>` on `status`, `health` | `<command> --list-views [--format text\|json]` |
+
+Legacy `--mode` has been removed from all routed commands. Raw skill IDs are
+rejected with `unknown_route_mode` (for focus) or `unknown_route_view` (for
+views). The public alias registry is:
+
+### `--focus` aliases
+
+| Command | Alias | Backing skill |
+|---|---|---|
+| `review` | `calibration` | `multi-reviewer-calibration` |
+| `review` | `sast` | `sast-orchestration` |
+| `validate` | `mutation` | `mutation-testing` |
+| `validate` | `property` | `property-testing` |
+| `validate` | `sast` | `sast-orchestration` |
+| `repair` | `sast` | `sast-orchestration` |
+
+### `--view` aliases
+
+| Command | Alias | Backing skill |
+|---|---|---|
+| `status` | `incident` | `incident-response` |
+| `health` | `incident` | `incident-response` |
+
+### Primary routes
+
+| Command | Backing skill |
+|---|---|
+| `review` | `independent-review` |
+| `validate` | `spec-trace` |
+| `repair` | `root-cause-tracing` |
+| `status` | `incident-response` (change-scoped; requires `ConcreteChangeTarget`) |
+| `health` | `incident-response` (change-scoped; requires `ConcreteChangeTarget`) |
+
+Primary routes on `status` and `health` are change-scoped: they are only
+selected automatically when `ConcreteChangeTarget(sig)` is true. Diagnostics
+paths without an active change intentionally return an empty `view`.
+
+### `suggested_capabilities[]` output contract
+
+Routed commands (`review`, `validate`, `repair`) carry a stable,
+user-facing suggestion channel in both JSON and text output. This is
+`suggested_capabilities[]` in §4.4 of the route-surface refactor plan:
+
+- JSON output gains an optional `suggested_capabilities` array. Each entry
+  is `{ "name": <skill-id>, "summary": <prose>, "reason": <prose>, "kind":
+  "suggested" | "explicit_focus" }`. `summary` and `reason` are omitted when
+  prose is unavailable. The list is capped at three entries, ordered by
+  (clause score desc, skill id asc), and disjoint from `Supports`.
+- Text output emits a `Suggested:` block after the `Mode:` line whenever
+  the list is non-empty:
+
+  ```
+  Suggested:
+    - <name> — <summary>
+  ```
+
+`status` and `health` intentionally do not emit
+`suggested_capabilities[]`; they are read-only diagnostic views with no
+alternative-capability channel (§4.4).
+
+### Discovery flags
+
+- `review --list-focuses [--format text|json]`
+- `validate --list-focuses [--format text|json]`
+- `repair --list-focuses [--format text|json]`
+- `status --list-views [--format text|json]` (status reuses its existing
+  `--format` flag, which also accepts `yaml` for non-discovery paths)
+- `health --list-views [--format text|json]`
+
+Discovery flags short-circuit execution before any workspace access and
+emit the list of public aliases with their human-readable summaries.
+Discovery flags are registered only on the surfaces that own them: using
+`review --list-views` or `status --list-focuses` fails at parse time as an
+unknown flag, mirroring wrong-surface `--focus` / `--view` handling.

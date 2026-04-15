@@ -24,7 +24,6 @@ bindings:
   - type: command-auto
     target: review
     attachment: report-schema
-provenance_ref: provenance.yaml
 ---
 
 # Independent Review
@@ -42,3 +41,37 @@ record that the author can act on without re-asking.
 - "LGTM" with no traversal evidence.
 - Blockers without reproducible observations.
 - Nits buried in prose so the author misses them.
+
+## Diff-scoped review (absorbed from differential-review)
+
+When a concrete diff target is in scope (pull request, commit range, or
+changed-only selection), apply the diff-scoped rules below in addition to the
+fresh-context discipline above. When no diff context is present (`review
+--all`, or other full-review paths), skip this section entirely — the base
+review contract stands on its own.
+
+### Classify every finding
+- **new** — finding is introduced by the diff under review. Blocking by
+  default; promote to verdict=fail unless the author already ships a
+  compensating control in the same diff.
+- **pre-existing** — finding existed before the diff and is unchanged.
+  Report but do not block the diff on it. Track as a separate ticket.
+- **worsened** — finding existed before the diff, but the diff broadens its
+  blast radius, weakens a mitigation, or removes a compensating control.
+  Treat as blocking: the diff moved the needle in the wrong direction.
+
+### Diff-scoped blocker policy
+- Only **new** and **worsened** findings participate in the verdict.
+  **pre-existing** findings never flip a verdict from pass to fail.
+- Removed code in a "security", "CVE", or "fix" commit is blocking on
+  inspection until git blame proves the removal is safe.
+- Access-control removals (e.g. guard downgraded, validation deleted) are
+  blocking until the diff author demonstrates an equivalent replacement.
+- Report all three categories in the verdict record so the author sees
+  ambient pre-existing risk without the verdict inflating from it.
+
+### Evidence contract
+Diff-scoped review preserves the `verdict` evidence contract. Emit the same
+verdict record shape as the base review: explicit verdict, blocker list with
+reproducible observations, and a reviewer-handoff summary. Do not silently
+downgrade to an artifact-shaped record when operating on a diff.

@@ -31,16 +31,15 @@ hydrate_references:
   - name: sarif-jq-queries.md
     reason: "Ad-hoc triage queries over SARIF output"
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: review
     attachment: tool-recipe
-  - type: command-manual
+  - type: command-auto
     target: validate
     attachment: tool-recipe
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: tool-recipe
-provenance_ref: provenance.yaml
 ---
 
 # SAST Orchestration

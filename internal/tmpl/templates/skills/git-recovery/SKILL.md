@@ -14,16 +14,15 @@ trigger_signals:
     reason: "User text names a destructive or high-risk git operation"
 evidence_contract: artifact
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: procedure
-  - type: command-manual
+  - type: command-auto
     target: status
     attachment: checklist
   - type: host-embedded
     target: worktree-preflight
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Git Recovery

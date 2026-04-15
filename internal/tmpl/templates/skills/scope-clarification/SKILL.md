@@ -22,7 +22,6 @@ bindings:
   - type: technique-hint
     target: intake-clarification
     attachment: posture
-provenance_ref: provenance.yaml
 ---
 
 # Scope Clarification

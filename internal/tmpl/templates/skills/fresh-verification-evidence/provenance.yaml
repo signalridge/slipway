@@ -1,9 +1,0 @@
-sources:
-  - source: superpowers/verification-before-completion
-    absorbed_as: standalone
-    extracted:
-      - "fresh command transcript required for each verdict"
-      - "run-version freshness delta"
-      - "block on stale verification evidence"
-    dropped:
-      - "long narrative examples of past failures"

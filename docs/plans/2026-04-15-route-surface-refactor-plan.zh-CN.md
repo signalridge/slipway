@@ -1,9 +1,8 @@
 # Route Surface 重构计划
 
-**状态。** 提议中。若采纳，本计划将取代以下文档中关于原始
+**状态。** 提议中。若采纳，本计划将取代当前强化 wave 计划中关于原始
 `--mode=<skill-id>` / `--view=<skill-id>` 的假设：
 
-- `2026-04-14-skills-strengthening-plan*.md` §6
 - `2026-04-15-skills-wave2-plan*.md`
 - `2026-04-15-skills-wave3-plan*.md`
 
@@ -67,18 +66,20 @@ surface，以及驱动它的内部分类。
 保留两个明确分层的 authority：
 
 - **Skill registry**（`internal/engine/capability/registry*.go`）
-  - 负责内部 skill identity、triggers、evidence contract、provenance、
+  - 负责内部 skill identity、triggers、evidence contract、
     host/support attachment 行为
 - **Surface policy registry**（新增）
   - 负责 user-facing command exposure：
     `primary`、`suggested`、`explicit focus`、`view`
-  - 每条 policy record 都必须落到两类 backing 之一：
-    catalog skill（`backing_kind=skill`、`backing_id=<skill-id>`）或
-    command-owned diagnostic view（`backing_kind=diagnostic_view`、
-    `backing_id=<view-id>`）
+  - 在本计划族里，每条 policy record 都直接落到 catalog skill
+    （`backing_id=<skill-id>`）。如果后续另有获批计划真正引入
+    command-owned diagnostics implementation，应当在那份后续计划里再扩 schema，
+    而不是在这里预留第二种 backing kind。
 
 skill registry 继续保持内部、描述性。
 surface policy registry 成为 operator 显式可选面的唯一权威。
+这次 hard cut 实际只需要 1 个公共 `view` alias（`incident` ->
+`incident-response`）。本次重构不落任何 command-owned diagnostic view 抽象。
 
 route 解析遵守这条分层：
 
@@ -91,10 +92,9 @@ route 解析遵守这条分层：
 - PR-1 起，`BindingCommandManual` 退化为过渡期元数据：它不再喂 `Supports`，
   也不再参与 explicit focus 解析；PR-3 在完成重分类后删除剩余条目，并将该类型
   从 command-surface validation 中移除
-- surface policy record 同时拥有显式 public selector 的 hydrate 语义：
-  skill-backed entries 从 backing skill hydrate；`diagnostic_view` entries
-  必须要么显式声明 `hydrate_source_id=<skill-id>`，要么明确声明自己没有
-  hydrate source。禁止再走“把 view alias 直接丢给
+- surface policy record 同时拥有显式 public selector 的 hydrate 语义。
+  在本计划族里，所有公共 selector 都是 skill-backed，hydrate 一律来自对应
+  backing skill；禁止再走“把 alias 直接丢给
   `HydrateReferenceKeysForSkill(view)` 碰运气”的隐式回退
 
 ### 4.2 暴露分类
@@ -204,18 +204,24 @@ usage-error 路径，也不返回 unsupported surface 的空列表。
 - 外部自动化必须在同一个纠错窗口内更新。若未来还有人想引入兼容 shim，必须用
   新计划重新论证，不能继承本计划的任何口子。
 
-### 4.6 与 distillation hard cut 的先后关系
+### 4.6 与 Wave-2 / Wave-3 / knowledge-only cleanup 的先后关系
 
 固定落地顺序：
 
-- 先落本计划的 PR-1
-- 再落 `2026-04-15-distillation-hard-cut-plan*.md` 的 PR-1 / PR-2
-- 最后落本计划的 PR-2 / PR-3
+- 先按序落本计划的 PR-1 / PR-2 / PR-3
+- 再落 `2026-04-15-skills-wave2-plan*.md` 的 PR-1 / PR-2 / PR-3，随后完成
+  Wave-2 结项 / metrics report 评审
+- 再落 `2026-04-15-skills-wave3-plan*.md` 的 PR-1 / PR-2 / PR-3，随后完成
+  Wave-3 结项报告评审
+- 最后落 `2026-04-16-knowledge-only-refactor-plan*.md`
 
-`main` 上不允许存在其它交错顺序。本计划的 PR-1 先把 surface-policy
-registry 建成唯一 public-surface authority；distillation hard cut 的 PR-1
-必须直接消费它。不允许在两份计划之间再插入临时 `surfaces[]` bridge
-allowlist、handoff table，或第二份 surface authority。
+`main` 上不允许存在其它交错顺序。本计划的 PR-1 把 surface-policy
+registry 建成唯一 public-surface authority。Wave-2 / Wave-3 随后直接消费
+PR-3 后的 surface model。本计划族之间不允许再插入临时 `surfaces[]`
+bridge allowlist、handoff table、compatibility alias 或第二份 surface
+authority。残余元数据与 dead checked-in source 的唯一清理 PR 是
+`2026-04-16-knowledge-only-refactor-plan*.md`，且只能在 Wave-3 closeout
+review 之后落地。
 
 ## 5. 重分类
 
@@ -272,21 +278,20 @@ focus，同时不保留旧 manual-selection 运行时语义的原因。
 
 ### 5.4 Read-only views
 
-公共 `--view` 只保留真正的 diagnostics：
+公共 `--view` 只保留已经有实现语义的真正 diagnostics：
 
 | View alias | Backing surface | 命令 |
 |-----------|------------------|------|
 | `incident` | `incident-response` | `status`、`health` |
-| `queue` | `review-queue` | `status` |
-| `observability` | `observability-query` | `status`、`health` |
 
-当前三个 public views 的 hydrate 策略如下：
+当前公共 view 的 hydrate 策略如下：
 
 - `incident` 通过 skill backing 复用 `incident-response` 的 hydrate references
-- `queue` 与 `observability` 在本计划中作为 no-hydrate 的
-  `diagnostic_view` aliases 落地；显式选择它们时返回零个 hydrate keys，而
-  `--hydrate-ref` 必须报一个明确的“该 view 不支持 hydrate references”使用
-  错误，不能再尝试按 alias 走 registry lookup
+- `review-queue` 与 `observability-query` **不**进入 PR-2。当前 `cmd/` 与
+  `internal/engine/capability/` 代码只是通过 override / help 路径保留这些
+  字符串，还没有在这些 ID 背后提供独立 diagnostics 行为或 view-specific
+  tests。因此这次 hard cut 应直接删除这类 override-only 暴露，而不是把
+  字符串占位硬写成一等 public view
 
 `sentry` **不**进入 PR-2。当前 `cmd/` 与
 `internal/engine/capability/` 代码里并没有一个已落地的 `status` /
@@ -298,9 +303,10 @@ view-only 文档的暗示。
 
 | 当前 / 计划 surface | 新处置 | 理由 |
 |----------------------|---------|------|
-| `differential-review` | **吸收后删除 registry 条目**；先把它独有的 diff-only 规则并入 `independent-review`（或等价内部 review contract），再删模板 / mirror artifacts | `differentialReview()` 当前声明的是一个纯 `BindingCommandManual` 的 review 技能，且没有 host-embedded / technique-hint 消费者，因此删除 registry 条目本身是干净的；但它关于 `new` / `pre-existing` / `worsened` 与 diff-scoped blocker policy 的约束不能静默丢失，必须先迁移再删除 |
+| `differential-review` | **吸收后删除 registry 条目**；先把它必要的 diff-scoped review 语义并入 `independent-review`，再把 checked-in 的模板 / mirror 目录删除延后到后续 knowledge-only cleanup PR | `differentialReview()` 当前声明的是一个纯 `BindingCommandManual` 的 review 技能，且没有 host-embedded / technique-hint 消费者，因此删除 registry 条目本身是干净的；但它关于 `new` / `pre-existing` / `worsened` 与 diff-scoped blocker policy 的约束不能静默丢失，必须先迁移再删除。把 checked-in 源目录延后删除，并不等于保留 runtime compatibility：toolgen 的生成与清理都由 registry 驱动，所以 registry 条目一旦消失，生成 skill tree 与 manifest 会立刻停止产出 `differential-review`。 |
 | `plan-authoring` 未来 `--mode` 假设 | host/support-only | 属于 planning host，不是 review/validate 公共 selector |
 | `tdd-proof` 未来 `--mode` 假设 | host/support-only | 属于 execution governance contract，不是公共 selector |
+| `status --view=review-queue` / `observability-query` 假设 | 从 PR-2 公共 surface 删除；若未来要恢复，必须等真实实现落地后再用新修订计划引入 | 当前代码只保留 override / help 字符串，并没有对应的独立 command-owned diagnostics 行为 |
 | `status --view=supply-chain-audit` / `ci-triage` / `git-recovery` / `performance-profiling` | 删除 | 它们不是真正的 views |
 
 `differential-review` 的首选吸收路径是：保留 `independent-review` 作为基础
@@ -343,13 +349,15 @@ view 暴露从内部 skill registry 里分离出来。
 ### 实现
 
 - 增加 surface policy records，字段：
-  `command`、`class`、`public_name`、`backing_kind`、`backing_id`、`summary`
-- surface policy 必须同时支持 skill-backed entries 与 command-owned
-  diagnostic views，这样 `review-queue` / `observability-query` 才能以一等
-  public view 身份存在，而不用伪装成 capability-registry skill。
+  `command`、`class`、`public_name`、`backing_id`、`summary`
+- PR-1 只落 skill-backed records。**不要**预留
+  `backing_kind=diagnostic_view`、`hydrate_source_id` 或任何为未实现
+  command-owned diagnostics 提前铺的并行 schema。当前代码对
+  `review-queue` / `observability-query` 仅剩 overrides/help text，不足以支撑
+  在这次重构里先造未来抽象。
 - 从 surface policy 直接导出 listing / lookup helpers，供后续调用方复用；
-  包括 distillation hard cut 的 `source_index` 校验在内，都必须直接消费这份
-  authority，而不是再套 wrapper 或 bridge table。
+  包括 Wave-2 / Wave-3 的后续工作和最终 knowledge-only cleanup PR 在内，都
+  必须直接消费这份 authority，而不是再套 wrapper 或 bridge table。
 - 让 surface policy registry 成为公共 route 解析权威：默认 primary route/view
   查找与 explicit focus/view alias 查找都必须走 surface records，而不是再去查
   `BindingCommandManual`。
@@ -362,9 +370,8 @@ view 暴露从内部 skill registry 里分离出来。
   split 之后，`pickSupportAttachment()` 只能看 host/technique bindings。
   support attachments 应来自 host/technique policy，而不是 explicit route
   元数据。
-- 对 `backing_kind=diagnostic_view`，显式 alias 解析必须从 surface policy
-  record 读取 hydrate 语义：要么声明 `hydrate_source_id`，要么明确 no-hydrate；
-  非 catalog alias 不允许再做隐式 skill-registry fallback。
+- 显式 alias 解析必须先通过 surface policy 定位 backing skill，再进入 hydrate
+  lookup。禁止从 public alias 隐式回退成“把 alias 当 skill id 试一遍”。
 - 不新增 resolver `Signals` 字段来表达 `change-scoped` views。command layer
   仍负责在请求 auto-selected view 前判定是否已经锁定具体 active/selected
   change target。
@@ -389,7 +396,7 @@ view 暴露从内部 skill registry 里分离出来。
 - `TestSuggestedCapabilitiesDisjointFromSupports`
 - `TestExplicitFocusRegistryPerCommand`
 - `TestViewRegistryPerCommand`
-- `TestDiagnosticViewWithoutHydrateSourceReturnsNoHydrateKeys`
+- `TestSurfacePolicyBackingsResolveToRegisteredSkills`
 - `TestCalibrationHostAttachmentSurvivesFocusMigration` —— 即便移除了 manual
   review binding，`code-quality-review` host 仍会附带
   `multi-reviewer-calibration`；host-path 的 support 语义（含当前 no-hydrate
@@ -424,6 +431,7 @@ route selection。
 - 更新：`internal/toolgen/toolgen.go`
 - 更新：`internal/toolgen/testdata/*` 中所有会被 command-registry
   selector/help 输出触发变化的 goldens
+- 更新：`docs/command-contract-matrix.md`
 - 更新：command help / usage text
 
 ### 实现
@@ -436,8 +444,10 @@ route selection。
   text renderer 全部从 surface alias + summary 渲染，不再直接泄漏 raw
   skill IDs。
 - JSON 输出加 `suggested_capabilities[]`；text 输出加 `Suggested:` 区块。
-- 用 policy-backed diagnostic-view entries 取代 ad hoc
-  `routeOnlyViewOverrides` 暴露路径，并在同一 PR 里删掉该 override 表。
+- 在同一 PR 里删除 ad hoc `routeOnlyViewOverrides`。本次 hard cut 只保留
+  `incident` 这一个公共 view alias；`review-queue` /
+  `observability-query` 在未来有真实 command-owned diagnostics 之前，不提供
+  policy-backed 替代项。
 - discovery flags 只注册在真正拥有它们的 command surface 上。错 surface 的
   `--list-focuses` / `--list-views` 与错 surface 的 `--focus` / `--view`
   一样，统一在 parse-time 作为 unknown flag 失败；不再额外保留 usage-error
@@ -449,13 +459,20 @@ route selection。
   立即按 `unknown_route_mode` / `unknown_route_view` 拒绝；不引入 hidden
   alias、compatibility fixture、deprecation warning，亦不设置 telemetry
   pause gate。
-- 显式 alias 选择必须先解析到 backing skill / diagnostic view，再做 hydrate
-  lookup 与 diagnostics 渲染；不能因为 alias cutover 打断当前 explicit-view
-  hydrate short-circuit。
+- 显式 alias 选择必须先解析到 backing skill，再做 hydrate lookup 与
+  diagnostics 渲染；不能因为 alias cutover 打断当前 explicit-view hydrate
+  short-circuit。
 - 重写仍在宣传 raw skill IDs 或 dead selectors 的 command help / usage text。
   特别是 `review` help 不能再提 `second-opinion`。
+- `status` / `health` help 也不能再提 `review-queue` /
+  `observability-query`。
 - 删除 `cmd/route_flags.go` 里陈旧的
   `routeOnlyModeOverrides["review"] = {"second-opinion"}`。
+- 同一个 PR 内同步改写 `docs/command-contract-matrix.md`，确保本计划族之外仍然
+  存活的 live doc 在 CLI cutover 同一时点切到 `--focus` / `--view` 与
+  `suggested_capabilities[]`。PR-3 可以继续收尾后续重分类影响，但 PR-2 不允许
+  留下“runtime/help 已 hard-cut，而 live contract doc 还在教旧 selector”
+  的窗口。
 
 ### 测试
 
@@ -475,12 +492,15 @@ route selection。
   - `review --focus calibration`
   - `validate --focus property`
   - `validate --focus mutation`
-  - `status --view incident|queue|observability`
+  - `status --view incident`
 - text / JSON 输出覆盖 `suggested_capabilities[]`
 - text / JSON 输出覆盖 routed `mode` / `view` 字段，确保暴露的是 public
   alias 而不是 backing ID
-- hydrate tests 证明 `status --view queue|observability` 不会产出 hydrate
-  keys，且会拒绝这些 views 上的 `--hydrate-ref`
+- 否定路由测试证明 `status --view review-queue`、
+  `status --view observability-query`、`health --view observability-query`
+  现在都会走 `unknown_route_view`
+- hydrate tests 证明 `status --view incident` 在 cutover 之后仍保持
+  explicit-view hydrate path
 
 ### 验收
 
@@ -488,7 +508,13 @@ route selection。
 - routed command 输出与生成命令目录文本不再把 raw skill IDs 当成 canonical
   selector contract 暴露给用户。
 - `status` / `health` 不再接受非 view selector。
+- cutover 之后，唯一 shipped 的公共 `--view` alias 是已有实现语义的
+  `incident`；`review-queue` / `observability-query` 不再以字符串占位形式保留。
 - 所有 discoverability 路径都不要求用户预先知道内部 IDs。
+- `docs/command-contract-matrix.md` 必须在同一个 PR 内切到 post-cutover
+  selector contract，并写明 `suggested_capabilities[]`；CLI surface 已
+  hard-cut 后，不允许仍有 surviving live doc 继续教学
+  `--mode=<skill-id>`。
 - `rg -n "routeOnly(Mode|View)Overrides|ValidModesForCommand|ValidViewsForCommand" cmd internal/engine/capability`
   必须归零。
 
@@ -504,16 +530,12 @@ route selection。
 - 更新：`internal/engine/capability/registry_b4.go`
 - 更新：`internal/engine/capability/registry_b5.go`
 - 更新：`internal/engine/capability/registry.go`
-- 更新：`internal/tmpl/templates/skills/differential-review/`
 - 更新：`internal/tmpl/templates/skills/independent-review/`
-- 更新：如果仓内仍保留同步 mirror，则更新
-  `.codex/skills/slipway/differential-review/`
 - 更新：如果仓内仍保留同步 mirror，则更新
   `.codex/skills/slipway/independent-review/`
 - 更新：`internal/toolgen/testdata/skill_tree_inventory.codex.golden`
 - 更新：当前会列 routed bindings 的生成文档 / export 文档
 - 更新：
-  - `docs/plans/2026-04-14-skills-strengthening-plan*.md`
   - `docs/plans/2026-04-15-skills-wave2-plan*.md`
   - `docs/plans/2026-04-15-skills-wave3-plan*.md`
 
@@ -521,12 +543,20 @@ route selection。
 
 - 依 §5 对当前 route participants 重新分类。
 - 删除 `status` / `health` 上的 pseudo-view 假设。
-- 先把 `differential-review` 的 diff-only review 规则吸收到
-  `independent-review`，再移除 registry entry、template tree 与 mirror
-  artifacts。删除步骤以前，下面列出的 preservation test 必须先通过。
+- 先把 `differential-review` 的必要 diff-scoped review 语义吸收到
+  `independent-review`，再移除 registry entry。执行这一步前，下面列出的
+  preservation test 必须先通过。
 - 吸收 `differential-review` 时必须保留其 verdict-shaped evidence contract；
   不能因为并入 `independent-review`，就把 diff-scoped review 的输出契约静默降级
   成 artifact。
+- **不要**在吸收后保留 `differential-review` 的 registry stub、隐藏 selector
+  或 compatibility alias。PR-3 仍然是 runtime hard cut：registry 条目消失，
+  toolgen 产物不再导出该技能，refresh 后的生成工作区也会因为 catalog
+  generation/cleanup 依赖 `DefaultRegistry().IDs()` 而清掉旧目录。
+- `differential-review` 的 checked-in 模板 / mirror 目录在 PR-3 之后只剩
+  dead source 身份，物理删除延后到
+  `2026-04-16-knowledge-only-refactor-plan*.md` cleanup PR。这是仓库卫生
+  整理，不是 live compatibility 阶段。
 - 将 `multi-reviewer-calibration`、`property-testing`、
   `mutation-testing`、`sast-orchestration` 重分类为 explicit-focus-backed
   surfaces；运行时选择通过 surface policy 解析，而不是继续依赖
@@ -568,6 +598,9 @@ route selection。
   一套 surface model。
 - 任一 active plan file 都不再把 raw `--mode=<skill-id>` 语法写成 preferred
   surface。
+- `differential-review` 在 PR-3 后从 runtime registry、generated catalog
+  manifest 与 refresh 后的 generated skill tree 中消失；即使 checked-in dead
+  source 目录稍后才删，也不再属于 live surface。
 
 ## 9. 门禁
 
@@ -585,13 +618,16 @@ PR-2 与 PR-3 额外跑：
 
 PR-3 额外跑 live paths 上的 docs residue checks：
 
-- `rg -- "--mode=[a-z][a-z0-9-]*" docs/plans/2026-04-14-skills-strengthening-plan*.md docs/plans/2026-04-15-skills-wave*.md internal/toolgen/`
-  必须归零。任何残留都说明 live 的 wave/export surface 仍在继续教授退役语法。
-- `rg -n "suggested_capabilities" docs/` 必须至少命中一个位于
-  本计划 family 之外、且不在 `docs/distillation/` 已删除树中的存活 live doc；
-  可以是 `docs/plans/` 下的存活文档，也可以是仓内其它 live doc。这样才能证明
-  新输出契约没有只写在本计划自己身上。
-- `rg -n -- "--mode <skill-id>|--view <skill-id>" internal/toolgen/ docs/plans/2026-04-14-skills-strengthening-plan*.md docs/plans/2026-04-15-skills-wave*.md`
+- `rg -- "--mode=[a-z][a-z0-9-]*" internal/toolgen/`
+  必须归零。任何残留都说明 generated export surface 仍在继续教授退役语法。
+- `rg -n -- "--mode=[a-z][a-z0-9-]*" docs/plans/2026-04-15-skills-wave*.md`
+  只允许命中明确要求 `unknown_route_mode` 的 negative smoke /
+  hard-error 断言。只要是肯定式、教程式或 preferred-surface 语境下继续出现
+  raw `--mode=<skill-id>`，都算失败。
+- `rg -n "suggested_capabilities" docs/command-contract-matrix.md`
+  必须至少命中一次。该文件是本计划 family 之外承接新输出契约的存活 live
+  doc。
+- `rg -n -- "--mode <skill-id>|--view <skill-id>" internal/toolgen/ docs/plans/2026-04-15-skills-wave*.md`
   必须归零。
 - `rg -n "sentry" docs/plans/2026-04-15-skills-wave*.md` 在后续有新批准计划
   明确加入真实 `sentry` diagnostic view 之前必须归零。

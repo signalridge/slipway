@@ -11,6 +11,9 @@ trigger_signals:
   - changed_files_include: ["docs/plans/*.md", "docs/plans/**/*.md"]
     reason: "Plan bundle touched; plan-authoring procedure applies"
 evidence_contract: artifact
+hydrate_references:
+  - name: plan-document-review-prompt.md
+    reason: "Reviewer prompt for auditing plan documents before execution"
 bindings:
   - type: host-embedded
     target: plan-audit
@@ -21,7 +24,6 @@ bindings:
   - type: export-only
     target: using-slipway-catalog
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Plan Authoring

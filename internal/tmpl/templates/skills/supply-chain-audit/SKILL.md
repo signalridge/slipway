@@ -33,16 +33,15 @@ hydrate_references:
   - name: license-compatibility-matrix.md
     reason: "License compatibility rules per distribution target"
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: review
     attachment: checklist
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: tool-recipe
-  - type: command-manual
+  - type: command-auto
     target: status
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Supply Chain Audit

@@ -14,14 +14,15 @@ trigger_signals:
   - user_text_matches: ["mutation testing", "mutmut", "stryker", "pitest"]
     reason: "User text names a mutation testing tool"
 evidence_contract: artifact
+hydrate_references:
+  - name: optimization-strategies.md
+    reason: "Make mutation runs finish in bounded time"
+  - name: configuration.md
+    reason: "Pick the right mutators and exclusions for the target"
 bindings:
-  - type: command-manual
-    target: validate
-    attachment: tool-recipe
   - type: host-embedded
     target: goal-verification
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Mutation Testing

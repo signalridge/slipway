@@ -111,11 +111,15 @@ func makeStatusCmd() *cobra.Command {
 	var view string
 	var hydrate bool
 	var hydrateRefs []string
+	var listViews bool
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := validateRouteView("status", view); err != nil {
+			if listViews {
+				return emitViewDiscovery(cmd, "status", format)
+			}
+			if err := validateViewAlias("status", view); err != nil {
 				return err
 			}
 			if len(hydrateRefs) > 0 && !hydrate {
@@ -149,7 +153,7 @@ func makeStatusCmd() *cobra.Command {
 
 			// When --change is provided, show detail view for that specific change.
 			if changeSlug != "" {
-				effectiveView := resolveEffectiveRouteView("status", explicitView)
+				effectiveView := resolveEffectiveView("status", explicitView)
 				hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
 				if hydrate {
 					hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
@@ -197,7 +201,7 @@ func makeStatusCmd() *cobra.Command {
 				return printStatusView(cmd, root, *route.diagnostics, outputFormat, hydrate)
 			}
 
-			effectiveView := resolveEffectiveRouteView("status", explicitView)
+			effectiveView := resolveEffectiveView("status", explicitView)
 			hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
 			if hydrate {
 				hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
@@ -209,8 +213,9 @@ func makeStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output (shorthand for --format json)")
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json")
-	cmd.Flags().StringVar(&view, "view", "", "Status view override (e.g. incident-response, review-queue, observability-query)")
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json (also used by --list-views: text|json)")
+	cmd.Flags().StringVar(&view, "view", "", "Status view override (e.g. incident)")
+	cmd.Flags().BoolVar(&listViews, "list-views", false, "List public --view aliases for this command and exit")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")

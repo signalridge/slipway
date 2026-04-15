@@ -54,13 +54,18 @@ func makeHealthCmd() *cobra.Command {
 	var routeView string
 	var hydrate bool
 	var hydrateRefs []string
+	var listViews bool
+	var discoveryFormat string
 
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: desc("health"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := validateRouteView("health", routeView); err != nil {
+			if listViews {
+				return emitViewDiscovery(cmd, "health", discoveryFormat)
+			}
+			if err := validateViewAlias("health", routeView); err != nil {
 				return err
 			}
 			if len(hydrateRefs) > 0 && !hydrate {
@@ -126,7 +131,7 @@ func makeHealthCmd() *cobra.Command {
 					if view.View == "" {
 						// Auto view routing is applied only when health is
 						// evaluating a concrete active/selected change.
-						view.View = resolveEffectiveRouteView("health", "")
+						view.View = resolveEffectiveView("health", "")
 						view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("health", ""))
 						if hydrate {
 							view.HydrateReferences, err = selectHydrateKeys(view.HydrateReferences, hydrateRefs)
@@ -246,9 +251,11 @@ func makeHealthCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&allFlag, "all", false, "Show both repo health and governance health")
 	cmd.Flags().BoolVar(&observationsFlag, "observations", false, "Include detailed governance signal provenance")
 	cmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Synthesize prioritized repair and recovery actions without mutating state")
-	cmd.Flags().StringVar(&routeView, "view", "", "Health view override (e.g. incident-response, observability-query)")
+	cmd.Flags().StringVar(&routeView, "view", "", "Health view override (e.g. incident)")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().BoolVar(&listViews, "list-views", false, "List public --view aliases for this command and exit")
+	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-views: text|json")
 	addChangeSelectorFlags(cmd, &changeSlug, "Target a specific change for governance health")
 	return cmd
 }

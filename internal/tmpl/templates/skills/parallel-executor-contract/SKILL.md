@@ -18,7 +18,6 @@ bindings:
   - type: host-embedded
     target: wave-orchestration
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Parallel Executor Contract

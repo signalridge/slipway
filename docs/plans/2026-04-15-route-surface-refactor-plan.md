@@ -1,9 +1,9 @@
 # Route Surface Refactor Plan
 
 **Status.** Proposed. If adopted, this plan supersedes the raw
-`--mode=<skill-id>` / `--view=<skill-id>` assumptions in:
+`--mode=<skill-id>` / `--view=<skill-id>` assumptions in the active
+strengthening-wave plans:
 
-- `2026-04-14-skills-strengthening-plan*.md` §6
 - `2026-04-15-skills-wave2-plan*.md`
 - `2026-04-15-skills-wave3-plan*.md`
 
@@ -72,19 +72,22 @@ internal skill IDs).
 Keep two distinct authorities:
 
 - **Skill registry** (`internal/engine/capability/registry*.go`)
-  - owns internal skill identity, triggers, evidence contract, provenance, and
+  - owns internal skill identity, triggers, evidence contract, and
     host/support attachment behavior.
 - **Surface policy registry** (new)
   - owns user-facing command exposure:
     `primary`, `suggested`, `explicit focus`, and `view`.
-  - each policy record resolves either to a catalog skill
-    (`backing_kind=skill`, `backing_id=<skill-id>`) or to a command-owned
-    diagnostic view implementation (`backing_kind=diagnostic_view`,
-    `backing_id=<view-id>`).
+  - in this plan family, every policy record resolves directly to a catalog
+    skill (`backing_id=<skill-id>`). If a later approved plan introduces a real
+    command-owned diagnostics implementation, it must widen the schema in that
+    later plan instead of pre-allocating a second backing kind here.
 
 The skill registry stays internal and descriptive.
 The surface policy registry becomes the sole authority for what the operator
 can explicitly select.
+This hard cut only requires one public `view` alias (`incident` ->
+`incident-response`). No command-owned diagnostic view abstraction is shipped in
+this refactor.
 
 Route selection follows that split:
 
@@ -98,11 +101,10 @@ Route selection follows that split:
   it no longer feeds `Supports`, it is never consulted for explicit focus
   resolution, and PR-3 removes the remaining entries and the type from
   command-surface validation once reclassification is complete
-- surface policy records own hydrate behavior for explicit public selectors:
-  skill-backed entries hydrate from their backing skill; `diagnostic_view`
-  entries must either name an explicit `hydrate_source_id=<skill-id>` or
-  declare that they have no hydrate source at all. No explicit view alias may
-  fall back to "try `HydrateReferenceKeysForSkill(view)` and hope it exists"
+- surface policy records own hydrate behavior for explicit public selectors.
+  In this plan family all public selectors are skill-backed and hydrate from
+  their backing skill; no explicit alias may fall back to "try
+  `HydrateReferenceKeysForSkill(view)` and hope it exists"
 
 ### 4.2 Exposure classes
 
@@ -225,15 +227,21 @@ plans correct an invalid public surface rather than evolving a valid one.
 
 Committed landing order:
 
-- this plan's PR-1 first
-- then `2026-04-15-distillation-hard-cut-plan*.md` PR-1 / PR-2
-- then this plan's PR-2 / PR-3
+- this plan's PR-1 / PR-2 / PR-3 first, in that order
+- then `2026-04-15-skills-wave2-plan*.md` PR-1 / PR-2 / PR-3, followed by the
+  Wave-2 closeout / metrics report review
+- then `2026-04-15-skills-wave3-plan*.md` PR-1 / PR-2 / PR-3, followed by the
+  Wave-3 closeout report review
+- finally `2026-04-16-knowledge-only-refactor-plan*.md`
 
 No alternative interleaving is permitted on `main`. This plan's PR-1
-establishes the surface-policy registry as the sole public-surface authority;
-the distillation hard cut consumes that authority directly in its PR-1. No
-temporary `surfaces[]` bridge allowlist, handoff table, or second surface
-authority is permitted between the two plans.
+establishes the surface-policy registry as the sole public-surface authority.
+Wave-2 and Wave-3 therefore consume the post-PR-3 surface model directly. No
+temporary `surfaces[]` bridge allowlist, handoff table, compatibility alias,
+or second surface authority is permitted between the plans.
+The single cleanup PR for residual metadata and dead checked-in source is
+`2026-04-16-knowledge-only-refactor-plan*.md`, which lands only after the
+Wave-3 closeout review.
 
 ## 5. Reclassification
 
@@ -292,21 +300,22 @@ selection semantics at runtime.
 
 ### 5.4 Read-only views
 
-Restrict public `--view` selectors to true diagnostics:
+Restrict public `--view` selectors to true diagnostics that already have
+implemented behavior:
 
 | View alias | Backing surface | Commands |
 |-----------|------------------|----------|
 | `incident` | `incident-response` | `status`, `health` |
-| `queue` | `review-queue` | `status` |
-| `observability` | `observability-query` | `status`, `health` |
 
-Hydrate policy for the current three public views:
+Hydrate policy for the current public view:
 
 - `incident` reuses `incident-response` hydrate references via its skill backing
-- `queue` and `observability` ship as no-hydrate `diagnostic_view` aliases in
-  this plan; explicit selection yields zero hydrate keys, and `--hydrate-ref`
-  against them must fail with an explicit "view has no hydrate references"
-  usage error rather than attempting registry lookup by alias
+- `review-queue` and `observability-query` are **not** part of PR-2. Current
+  `cmd/` and `internal/engine/capability/` code only preserve those strings via
+  override/help paths; they do not yet implement distinct diagnostics behavior
+  or view-specific tests behind those IDs. This hard cut therefore deletes the
+  override-only exposure instead of freezing string-only placeholders as
+  first-class public views.
 
 `sentry` is intentionally **not** part of PR-2. Current `cmd/` and
 `internal/engine/capability/` code do not ship a `status` / `health`
@@ -319,9 +328,10 @@ older view-only notes.
 
 | Current / planned surface | New disposition | Reason |
 |---------------------------|-----------------|--------|
-| `differential-review` | **remove from registry after absorption**; first merge its diff-only obligations into `independent-review` (or an equivalent internal review contract), then delete the template / mirror artifacts | today `differentialReview()` declares a pure `BindingCommandManual` review skill, so under §1's bug it always appears in `Supports` on any review invocation. No host-embedded or technique-hint binding exists, so there is no second consumer that would survive registry removal. Its distinct diff-only rules (`new` / `pre-existing` / `worsened`, diff-scoped blocker policy) must be preserved before deletion so behavior does not silently regress |
+| `differential-review` | **remove from registry after absorption**; first merge its essential diff-scoped review obligations into `independent-review`, then defer checked-in template / mirror directory deletion to the later knowledge-only cleanup PR | today `differentialReview()` declares a pure `BindingCommandManual` review skill, so under §1's bug it always appears in `Supports` on any review invocation. No host-embedded or technique-hint binding exists, so there is no second consumer that would survive registry removal. Its distinct diff-only rules (`new` / `pre-existing` / `worsened`, diff-scoped blocker policy) must be preserved before deletion so behavior does not silently regress. Deferring the checked-in source-tree delete does not preserve runtime compatibility: toolgen generation and cleanup are registry-owned, so once the registry entry is gone the generated skill tree and manifest drop `differential-review` immediately. |
 | `plan-authoring` future `--mode` assumption | host/support-only | belongs on planning hosts, not review/validate public selector surface |
 | `tdd-proof` future `--mode` assumption | host/support-only | execution governance contract, not a public validate/review selector |
+| `status --view=review-queue` / `observability-query` assumptions | remove from the PR-2 public surface; defer any replacement to a later amendment | current code only preserves override/help strings and does not implement distinct command-owned diagnostics behavior behind those IDs |
 | `status --view=supply-chain-audit` / `ci-triage` / `git-recovery` / `performance-profiling` | remove | these are not true views |
 
 Preferred absorption path for `differential-review`: keep
@@ -369,13 +379,15 @@ suggested, explicit, and view exposures from the internal skill registry.
 ### Implementation
 
 - Add surface policy records with:
-  `command`, `class`, `public_name`, `backing_kind`, `backing_id`, `summary`
-- Support both skill-backed entries and command-owned diagnostic views, so
-  `review-queue` / `observability-query` stay first-class public views without
-  pretending to be capability-registry skills.
+  `command`, `class`, `public_name`, `backing_id`, `summary`
+- Keep PR-1 skill-backed only. Do **not** pre-allocate
+  `backing_kind=diagnostic_view`, `hydrate_source_id`, or any parallel schema
+  surface for unimplemented command-owned diagnostics. Current code only
+  preserves `review-queue` / `observability-query` through overrides/help text;
+  they do not justify a future-proofing abstraction in this refactor.
 - Export direct listing / lookup helpers from surface policy so later callers,
-  including the distillation hard cut's `source_index` validation, consume the
-  same authority without wrappers or bridge tables.
+  including Wave-2 / Wave-3 follow-on work and the final knowledge-only
+  cleanup PR, consume the same authority without wrappers or bridge tables.
 - Make the surface policy registry authoritative for public route resolution:
   default primary route/view lookup and explicit focus/view alias lookup must
   resolve through surface records, not by consulting `BindingCommandManual`.
@@ -389,10 +401,9 @@ suggested, explicit, and view exposures from the internal skill registry.
   `pickSupportAttachment()` must consult only host/technique bindings after
   the split. Support attachments should come from host/technique policy, not
   from explicit route metadata.
-- For `backing_kind=diagnostic_view`, explicit alias resolution must use the
-  surface policy record to determine hydrate behavior: either a declared
-  `hydrate_source_id`, or an explicit no-hydrate result. There is no implicit
-  skill-registry fallback for non-catalog aliases.
+- Explicit alias resolution must use the surface policy record to determine the
+  backing skill before hydrate lookup. There is no implicit fallback from a
+  public alias to "treat the alias itself as a skill id".
 - No new resolver `Signals` field is introduced for `change-scoped` views.
   Command-layer route resolution remains responsible for deciding whether a
   concrete active/selected change target exists before it requests an
@@ -422,7 +433,7 @@ suggested, explicit, and view exposures from the internal skill registry.
 - `TestSuggestedCapabilitiesDisjointFromSupports`
 - `TestExplicitFocusRegistryPerCommand`
 - `TestViewRegistryPerCommand`
-- `TestDiagnosticViewWithoutHydrateSourceReturnsNoHydrateKeys`
+- `TestSurfacePolicyBackingsResolveToRegisteredSkills`
 - `TestCalibrationHostAttachmentSurvivesFocusMigration` — `code-quality-review`
   host still attaches `multi-reviewer-calibration` after the manual review
   binding is removed; the host-path support semantics (including today's
@@ -463,6 +474,7 @@ suggested, explicit, and view exposures from the internal skill registry.
 - Update: `internal/toolgen/toolgen.go`
 - Update: `internal/toolgen/testdata/*` goldens touched by command-registry
   selector/help output
+- Update: `docs/command-contract-matrix.md`
 - Update: command help / usage text
 
 ### Implementation
@@ -477,9 +489,10 @@ suggested, explicit, and view exposures from the internal skill registry.
   skill IDs.
 - Add `suggested_capabilities[]` to JSON output and `Suggested:` to text
   output (contract per §4.4).
-- Replace ad hoc `routeOnlyViewOverrides` exposure with policy-backed
-  diagnostic-view entries so public views are listed and validated from one
-  place, then delete the override table in the same PR.
+- Delete ad hoc `routeOnlyViewOverrides` in the same PR. This hard cut keeps
+  `incident` as the only supported public view alias; `review-queue` /
+  `observability-query` do not get policy-backed replacements until a later
+  approved plan introduces real command-owned diagnostics for them.
 - Register discovery flags only on the command surfaces that actually own
   them. Wrong-surface `--list-focuses` / `--list-views` invocations fail at
   parse time as unknown flags, matching wrong-surface `--focus` / `--view`
@@ -491,16 +504,23 @@ suggested, explicit, and view exposures from the internal skill registry.
   values reject immediately with `unknown_route_mode` /
   `unknown_route_view`; do not add a hidden alias map, compatibility fixture,
   deprecation warning, or telemetry pause gate.
-- Explicit alias selection must resolve to its backing skill / diagnostic view
-  before hydrate lookup and diagnostics rendering. Alias cutover must not
-  break the current explicit-view hydrate short-circuit path.
+- Explicit alias selection must resolve to its backing skill before hydrate
+  lookup and diagnostics rendering. Alias cutover must not break the current
+  explicit-view hydrate short-circuit path.
 - Rewrite command help / usage strings that still advertise raw skill IDs or
   dead selectors. In particular, `review` help must stop mentioning
-  `second-opinion`.
+  `second-opinion`, and `status` / `health` help must stop mentioning
+  `review-queue` / `observability-query`.
 - Delete the stale `routeOnlyModeOverrides["review"] = {"second-opinion"}`
   entry in `cmd/route_flags.go`. `second-opinion` does not exist in any
   registry (only under `skills_ref/trailofbits/`), so the override is dead
   code today and must not survive the cutover.
+- Rewrite `docs/command-contract-matrix.md` in the same PR so the surviving
+  live doc set outside this plan family flips to `--focus` / `--view` and
+  `suggested_capabilities[]` at the same moment as the CLI cutover. PR-3 may
+  still reconcile later reclassification fallout, but PR-2 may not leave
+  `main` in a state where runtime/help have cut over and the live contract doc
+  still teaches the retired selector surface.
 
 ### Tests
 
@@ -520,12 +540,15 @@ suggested, explicit, and view exposures from the internal skill registry.
   - `review --focus calibration`
   - `validate --focus property`
   - `validate --focus mutation`
-  - `status --view incident|queue|observability`
+  - `status --view incident`
 - text / JSON output tests for `suggested_capabilities[]` (cap + order)
 - text / JSON output tests showing routed `mode` / `view` fields emit public
   aliases, not raw backing IDs
-- hydrate tests proving `status --view queue|observability` emits no hydrate
-  keys and rejects `--hydrate-ref` selectors for those views
+- negative route tests proving `status --view review-queue`,
+  `status --view observability-query`, and `health --view observability-query`
+  now fail with `unknown_route_view`
+- hydrate tests proving `status --view incident` still resolves through the
+  explicit-view hydrate path after the cutover
 
 ### Acceptance
 
@@ -533,6 +556,13 @@ suggested, explicit, and view exposures from the internal skill registry.
 - Routed command outputs and generated command catalog text no longer expose
   raw skill IDs as the canonical selector contract.
 - `status` / `health` no longer accept non-view selectors.
+- The only shipped public `--view` alias after the cutover is the implemented
+  `incident` surface; `review-queue` / `observability-query` are not preserved
+  as string-only placeholders.
+- `docs/command-contract-matrix.md` flips in the same PR to the post-cutover
+  selector contract and documents `suggested_capabilities[]`; there is no
+  surviving live doc window that still teaches `--mode=<skill-id>` after the
+  CLI surface has already hard-cut.
 - All discovery paths work without prior knowledge of internal IDs.
 - `rg -n "routeOnly(Mode|View)Overrides|ValidModesForCommand|ValidViewsForCommand" cmd internal/engine/capability`
   returns zero hits.
@@ -549,16 +579,12 @@ conflicting future assumptions from active plan docs.
 - Update: `internal/engine/capability/registry_b4.go`
 - Update: `internal/engine/capability/registry_b5.go`
 - Update: `internal/engine/capability/registry.go`
-- Update: `internal/tmpl/templates/skills/differential-review/`
 - Update: `internal/tmpl/templates/skills/independent-review/`
-- Update: `.codex/skills/slipway/differential-review/` if the synced local
-  skill mirror is still checked into the repo
 - Update: `.codex/skills/slipway/independent-review/` if the synced local
   skill mirror is still checked into the repo
 - Update: `internal/toolgen/testdata/skill_tree_inventory.codex.golden`
 - Update: generated catalog/export docs that currently list routed bindings
 - Update:
-  - `docs/plans/2026-04-14-skills-strengthening-plan*.md`
   - `docs/plans/2026-04-15-skills-wave2-plan*.md`
   - `docs/plans/2026-04-15-skills-wave3-plan*.md`
 
@@ -566,14 +592,22 @@ conflicting future assumptions from active plan docs.
 
 - Reclassify the current route participants per §5.
 - Remove pseudo-view assumptions from `status` / `health`.
-- Absorb `differential-review`'s diff-only review rules into
-  `independent-review` before removing the registry entry, template tree, and
-  mirrored skill artifacts. That absorption step is blocked until the
-  preservation test listed below passes.
+- Absorb `differential-review`'s essential diff-scoped review semantics into
+  `independent-review` before removing the registry entry. That absorption step
+  is blocked until the preservation test listed below passes.
 - Preserve `differential-review`'s verdict-shaped evidence contract during the
   absorption. Diff-scoped review must not silently degrade to an
   artifact-shaped output contract when its rules move under
   `independent-review`.
+- Do **not** keep a registry stub, hidden selector, or compatibility alias for
+  `differential-review` after the absorption. PR-3 is still the runtime hard
+  cut: the registry entry disappears, toolgen output drops the skill, and
+  refreshed generated workspaces clean the stale generated directory because
+  catalog generation/cleanup is keyed off `DefaultRegistry().IDs()`.
+- The checked-in template / mirror directories for `differential-review`
+  become dead source only after PR-3 and are deleted later in the
+  `2026-04-16-knowledge-only-refactor-plan*.md` cleanup PR. That later delete
+  is repository hygiene, not a live compatibility phase.
 - Reclassify `multi-reviewer-calibration`, `property-testing`,
   `mutation-testing`, and `sast-orchestration` as explicit-focus-backed
   surfaces whose runtime selection resolves through surface policy rather than
@@ -616,6 +650,9 @@ conflicting future assumptions from active plan docs.
   describe the same surface model.
 - No active plan file still instructs operators to use raw `--mode=<skill-id>`
   syntax as the preferred surface.
+- `differential-review` disappears from the runtime registry, generated catalog
+  manifest, and refreshed generated skill trees in PR-3 even if the checked-in
+  dead source directories are deleted later.
 
 ## 9. Gates
 
@@ -633,14 +670,17 @@ PR-2 and PR-3 additionally run:
 
 PR-3 additionally runs docs residue checks on live paths:
 
-- `rg -- "--mode=[a-z][a-z0-9-]*" docs/plans/2026-04-14-skills-strengthening-plan*.md docs/plans/2026-04-15-skills-wave*.md internal/toolgen/`
-  must return zero hits. Any surviving hit means a live wave/export surface
+- `rg -- "--mode=[a-z][a-z0-9-]*" internal/toolgen/`
+  must return zero hits. Any surviving hit means a generated export surface
   still teaches the retired syntax.
-- `rg -n "suggested_capabilities" docs/` must show the new output contract
-  documented in at least one surviving live doc under `docs/plans/` or another
-  live in-repo doc, outside this plan family and outside the deleted
-  `docs/distillation/` tree.
-- `rg -n -- "--mode <skill-id>|--view <skill-id>" internal/toolgen/ docs/plans/2026-04-14-skills-strengthening-plan*.md docs/plans/2026-04-15-skills-wave*.md`
+- `rg -n -- "--mode=[a-z][a-z0-9-]*" docs/plans/2026-04-15-skills-wave*.md`
+  may match only negative smoke / hard-error assertions that explicitly require
+  `unknown_route_mode`. Any affirmative, tutorial, or preferred-surface use of
+  raw `--mode=<skill-id>` syntax is a failure.
+- `rg -n "suggested_capabilities" docs/command-contract-matrix.md` must return
+  at least one hit. That file is the surviving live doc outside this plan
+  family that carries the new output contract.
+- `rg -n -- "--mode <skill-id>|--view <skill-id>" internal/toolgen/ docs/plans/2026-04-15-skills-wave*.md`
   must return zero hits.
 - `rg -n "sentry" docs/plans/2026-04-15-skills-wave*.md` must return zero
   until a later approved plan adds a real `sentry` diagnostic view.

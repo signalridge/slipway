@@ -31,13 +31,12 @@ hydrate_references:
   - name: real-world-attacks.md
     reason: "awesome-go / trivy exploit case studies and detection signals"
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: review
     attachment: checklist
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: tool-recipe
-provenance_ref: provenance.yaml
 ---
 
 # GitHub Actions Security Review

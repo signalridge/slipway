@@ -6,53 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValidModesForReviewIncludesIndependentReview(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	modes := ValidModesForCommand(reg, "review")
-	assert.Contains(t, modes, "independent-review")
-	assert.Contains(t, modes, "differential-review")
-	assert.Contains(t, modes, "security-review")
-}
-
-func TestValidModesForValidateIncludesSpecTrace(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	modes := ValidModesForCommand(reg, "validate")
-	assert.Contains(t, modes, "spec-trace")
-	assert.Contains(t, modes, "coverage-analysis")
-}
-
-func TestValidModesForRepairIncludesRootCauseTracing(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	modes := ValidModesForCommand(reg, "repair")
-	assert.Contains(t, modes, "root-cause-tracing")
-	assert.Contains(t, modes, "ci-triage")
-}
-
-func TestValidViewsForStatusIncludesIncidentResponse(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	views := ValidViewsForCommand(reg, "status")
-	assert.Contains(t, views, "incident-response")
-}
-
-func TestValidViewsForHealthIncludesIncidentResponse(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	views := ValidViewsForCommand(reg, "health")
-	assert.Contains(t, views, "incident-response")
-}
-
-func TestValidModesEmptyForUnknownCommand(t *testing.T) {
-	t.Parallel()
-	reg := DefaultRegistry()
-	assert.Empty(t, ValidModesForCommand(reg, "next"))
-	assert.Empty(t, ValidModesForCommand(reg, ""))
-	assert.Empty(t, ValidModesForCommand(nil, "review"))
-}
-
 func TestBindingMatchesCommand_PrefixedTargetsAreCommandScoped(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -12,13 +12,12 @@ trigger_signals:
     reason: "User text names a CI failure"
 evidence_contract: artifact
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: procedure
-  - type: command-manual
+  - type: command-auto
     target: status
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # CI Triage
@@ -56,3 +55,10 @@ failure wastes time and normalizes flakes. Classify every red run, then act.
 - "Retry the PR" as a first response.
 - "Flaky test; skip it" without a ticket and a budget.
 - Masking env drift by pinning the broken test.
+
+## Scripts
+- `scripts/fetch-pr-checks.py` — fetch CI check-run status for a PR and
+  extract failure log snippets. Read-only. Requires the `gh` CLI on
+  `PATH` plus `GH_TOKEN` (or `GITHUB_TOKEN`, or a prior `gh auth
+  login`); the helper fails fast with a credential-error message when
+  credentials are missing or rejected.

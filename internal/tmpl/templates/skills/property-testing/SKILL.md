@@ -13,14 +13,21 @@ trigger_signals:
   - user_text_matches: ["property test", "invariant", "quickcheck", "hypothesis"]
     reason: "User text signals property-based testing"
 evidence_contract: artifact
+hydrate_references:
+  - name: design.md
+    reason: "How to pick properties that are worth testing"
+  - name: generating.md
+    reason: "Write generators that exercise the property space"
+  - name: strategies.md
+    reason: "Core property strategies (idempotence, roundtrip, oracle, invariants)"
+  - name: libraries.md
+    reason: "Choose an appropriate property-testing library"
+  - name: interpreting-failures.md
+    reason: "Read shrunk counterexamples and extract real bugs"
 bindings:
-  - type: command-manual
-    target: validate
-    attachment: procedure
   - type: host-embedded
     target: goal-verification
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Property Testing

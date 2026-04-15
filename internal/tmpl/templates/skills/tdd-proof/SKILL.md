@@ -12,6 +12,9 @@ trigger_signals:
   - blocker_reason: ["guardrail_domain_requires_tdd", "missing_red_proof"]
     reason: "Blocker cites missing TDD proof"
 evidence_contract: verdict
+hydrate_references:
+  - name: testing-anti-patterns.md
+    reason: "Anti-patterns that defeat test-first proof"
 bindings:
   - type: host-embedded
     target: tdd-governance
@@ -22,7 +25,6 @@ bindings:
   - type: technique-hint
     target: tdd-governance
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # TDD Proof

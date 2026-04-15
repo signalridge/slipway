@@ -34,7 +34,6 @@ bindings:
   - type: technique-hint
     target: wave-orchestration
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Root-Cause Tracing

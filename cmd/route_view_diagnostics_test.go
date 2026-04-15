@@ -35,14 +35,14 @@ func TestStatusDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T)
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
-		cmd.SetArgs([]string{"--json", "--view", "incident-response"})
+		cmd.SetArgs([]string{"--json", "--view", "incident"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
 		var view statusView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "incident-response", view.View)
+		assert.Equal(t, "incident", view.View)
 	})
 }
 
@@ -71,13 +71,13 @@ func TestHealthDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
-		cmd.SetArgs([]string{"--json", "--view", "incident-response"})
+		cmd.SetArgs([]string{"--json", "--view", "incident"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
 		var view healthView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "incident-response", view.View)
+		assert.Equal(t, "incident", view.View)
 	})
 }

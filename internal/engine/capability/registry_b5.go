@@ -1,7 +1,6 @@
 package capability
 
-// Skills registered at B5 (repair/CI + ops). See docs/distillation/catalog.md
-// rows 22, 23, 24, 25.
+// B5 repair/CI + ops skills.
 
 func ciTriage() Skill {
 	return Skill{
@@ -18,11 +17,11 @@ func ciTriage() Skill {
 			{Op: OpUserTextMatches, Values: []string{"ci failing", "ci broken", "build failing", "pipeline failing"},
 				Reason: "User text names a CI failure"},
 		},
+		// Suggested-only on repair / status (§5.2). No public explicit selector.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentProcedure},
-			{Type: BindingCommandManual, Target: "status", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -41,10 +40,10 @@ func reviewCommentTriage() Skill {
 			{Op: OpUserTextMatches, Values: []string{"review comment", "pr comment", "address comment"},
 				Reason: "User text names PR review comments"},
 		},
+		// Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -65,12 +64,13 @@ func gitRecovery() Skill {
 			{Op: OpUserTextMatches, Values: []string{"git reset", "git rebase", "--no-verify", "force push", "detached head"},
 				Reason: "User text names a destructive or high-risk git operation"},
 		},
+		// Suggested-only on repair / status (§5.2). Host-embedded attachment
+		// on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentProcedure},
-			{Type: BindingCommandManual, Target: "status", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "worktree-preflight", Attachment: AttachmentProcedure},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -102,6 +102,5 @@ func incidentResponse() Skill {
 			{Name: "rca-frameworks-guide.md", Reason: "Postmortem frameworks and action-item authoring"},
 			{Name: "regulatory-deadlines.md", Reason: "GDPR/HIPAA/PCI notification windows and wording"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }

@@ -22,7 +22,6 @@ bindings:
   - type: export-only
     target: using-slipway-catalog
     attachment: report-schema
-provenance_ref: provenance.yaml
 ---
 
 # Threat Modeling

@@ -24,7 +24,6 @@ bindings:
   - type: host-embedded
     target: tdd-governance
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Fresh Verification Evidence

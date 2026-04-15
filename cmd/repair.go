@@ -24,32 +24,38 @@ import (
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
 type repairSummary struct {
-	CleanedAtomicTemps        []string `json:"cleaned_atomic_temps,omitempty"`
-	ConfigBackupPath          string   `json:"config_backup_path,omitempty"`
-	StaleLockCleaned          bool     `json:"stale_lock_cleaned"`
-	WorktreeScopeRepairs      []string `json:"worktree_scope_repairs,omitempty"`
-	MaterializedWavePlans     []string `json:"materialized_wave_plans,omitempty"`
-	RecoveredWaveRuns         []string `json:"recovered_wave_runs,omitempty"`
-	RewrittenRuntimeState     []string `json:"rewritten_runtime_state,omitempty"`
-	ClearedCheckpoints        []string `json:"cleared_checkpoints,omitempty"`
-	RepairedCheckpoints       []string `json:"repaired_checkpoints,omitempty"`
-	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
-	RebuiltExecutionSummaries []string `json:"rebuilt_execution_summaries,omitempty"`
-	NonRepairableFindings     []string `json:"non_repairable_findings,omitempty"`
-	Mode                      string   `json:"mode,omitempty"`
+	CleanedAtomicTemps        []string                  `json:"cleaned_atomic_temps,omitempty"`
+	ConfigBackupPath          string                    `json:"config_backup_path,omitempty"`
+	StaleLockCleaned          bool                      `json:"stale_lock_cleaned"`
+	WorktreeScopeRepairs      []string                  `json:"worktree_scope_repairs,omitempty"`
+	MaterializedWavePlans     []string                  `json:"materialized_wave_plans,omitempty"`
+	RecoveredWaveRuns         []string                  `json:"recovered_wave_runs,omitempty"`
+	RewrittenRuntimeState     []string                  `json:"rewritten_runtime_state,omitempty"`
+	ClearedCheckpoints        []string                  `json:"cleared_checkpoints,omitempty"`
+	RepairedCheckpoints       []string                  `json:"repaired_checkpoints,omitempty"`
+	PrunedTaskEvidence        []string                  `json:"pruned_task_evidence,omitempty"`
+	RebuiltExecutionSummaries []string                  `json:"rebuilt_execution_summaries,omitempty"`
+	NonRepairableFindings     []string                  `json:"non_repairable_findings,omitempty"`
+	Mode                      string                    `json:"mode,omitempty"`
+	SuggestedCapabilities     []suggestedCapabilityView `json:"suggested_capabilities,omitempty"`
 }
 
 func makeRepairCmd() *cobra.Command {
 	var jsonOutput bool
-	var mode string
+	var focus string
+	var listFocuses bool
+	var discoveryFormat string
 	cmd := &cobra.Command{
 		Use:   "repair",
 		Short: desc("repair"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := validateRouteMode("repair", mode); err != nil {
+			if listFocuses {
+				return emitFocusDiscovery(cmd, "repair", discoveryFormat)
+			}
+			if err := validateFocus("repair", focus); err != nil {
 				return err
 			}
-			effectiveMode := resolveEffectiveRouteMode("repair", mode)
+			effectiveMode := resolveEffectiveFocus("repair", focus)
 			root, err := repairRootFromWD()
 			if err != nil {
 				return err
@@ -57,8 +63,9 @@ func makeRepairCmd() *cobra.Command {
 			return withWorkspaceRepairLock(root, func(staleLockCleaned bool) error {
 				now := time.Now().UTC()
 				summary := repairSummary{
-					StaleLockCleaned: staleLockCleaned,
-					Mode:             effectiveMode,
+					StaleLockCleaned:      staleLockCleaned,
+					Mode:                  effectiveMode,
+					SuggestedCapabilities: buildSuggestedCapabilities("repair", focus),
 				}
 
 				cleaned, err := fsutil.CleanupAtomicTempArtifacts(root)
@@ -206,7 +213,9 @@ func makeRepairCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().StringVar(&mode, "mode", "", "Catalog repair mode (skill id, e.g. root-cause-tracing, ci-triage)")
+	cmd.Flags().StringVar(&focus, "focus", "", "Repair focus (e.g. sast)")
+	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
+	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
 }
 
@@ -216,6 +225,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	if strings.TrimSpace(summary.Mode) != "" {
 		writer.Writef("Mode: %s\n", summary.Mode)
 	}
+	writeSuggestedBlock(writer, summary.SuggestedCapabilities)
 
 	writeRepairSection := func(title string, items []string) {
 		if len(items) == 0 {

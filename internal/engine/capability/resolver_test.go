@@ -15,6 +15,7 @@ func TestResolveSelectsCommandRoute(t *testing.T) {
 	res := Resolve(reg, Signals{Command: "review"})
 	require.NotNil(t, res.Route)
 	assert.Equal(t, "independent-review", res.Route.SkillID)
+	// Mode now carries the public surface alias (route-surface plan §4.3).
 	assert.Equal(t, "independent-review", res.Route.Mode)
 	assert.NotEmpty(t, res.Route.Reason)
 }
@@ -26,7 +27,8 @@ func TestResolveSelectsCommandViewRoute(t *testing.T) {
 	res := Resolve(reg, Signals{Command: "status"})
 	require.NotNil(t, res.Route)
 	assert.Equal(t, "incident-response", res.Route.SkillID)
-	assert.Equal(t, "incident-response", res.Route.View)
+	// View carries the public view alias after the surface-policy cutover.
+	assert.Equal(t, "incident", res.Route.View)
 	assert.NotEmpty(t, res.Route.Reason)
 }
 
@@ -162,11 +164,10 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			want: resolutionSnapshot{
 				routeSkill: "independent-review",
 				routeMode:  "independent-review",
-				supports: []supportSnapshot{
-					{skillID: "differential-review", kind: AttachmentProcedure},
-					{skillID: "gha-security-review", kind: AttachmentChecklist},
-					{skillID: "multi-reviewer-calibration", kind: AttachmentChecklist},
-				},
+				// After the surface-policy cutover Supports is host/technique-
+				// only; command-auto skills populate SuggestedCapabilities
+				// instead (route-surface plan §4.4).
+				supports: []supportSnapshot{},
 			},
 		},
 		{
@@ -174,12 +175,8 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			sig:  Signals{Command: "status"},
 			want: resolutionSnapshot{
 				routeSkill: "incident-response",
-				routeView:  "incident-response",
-				supports: []supportSnapshot{
-					{skillID: "ci-triage", kind: AttachmentChecklist},
-					{skillID: "git-recovery", kind: AttachmentChecklist},
-					{skillID: "performance-profiling", kind: AttachmentChecklist},
-				},
+				routeView:  "incident",
+				supports:   []supportSnapshot{},
 				hydrate: []string{
 					"incident-response/communication-templates.md",
 					"incident-response/incident-response-framework.md",
@@ -233,6 +230,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 					"root-cause-tracing/failure-patterns.md",
 					"root-cause-tracing/hypothesis-testing.md",
 					"root-cause-tracing/root-cause-tracing.md",
+					"tdd-proof/testing-anti-patterns.md",
 				},
 			},
 		},
@@ -260,6 +258,74 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			assert.Equal(t, tc.want.hydrate, res.HydrateReferences)
 			assert.True(t, slices.IsSorted(res.HydrateReferences), "hydrate references should stay stable-sorted")
 		})
+	}
+}
+
+// TestResolvePlanAuthoringHydrateSurfacesOnPlanAuditHost locks the Wave-3 PR-3
+// host-embedded hydrate contract for plan-authoring: when `plan-audit` is the
+// active host, the skill's declared reference surfaces through the
+// support-path hydrate union.
+func TestResolvePlanAuthoringHydrateSurfacesOnPlanAuditHost(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	res := Resolve(reg, Signals{Host: "plan-audit"})
+	assert.Contains(t, res.HydrateReferences, "plan-authoring/plan-document-review-prompt.md",
+		"plan-authoring hydrate must surface when plan-audit host is active")
+}
+
+// TestResolveTddProofHydrateSurfacesOnGovernanceHosts locks the Wave-3 PR-3
+// host-embedded hydrate contract for tdd-proof on both of its host bindings
+// (`tdd-governance` and `wave-orchestration`).
+func TestResolveTddProofHydrateSurfacesOnGovernanceHosts(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+
+	resGovernance := Resolve(reg, Signals{Host: "tdd-governance"})
+	assert.Contains(t, resGovernance.HydrateReferences, "tdd-proof/testing-anti-patterns.md",
+		"tdd-proof hydrate must surface on tdd-governance host")
+
+	resWave := Resolve(reg, Signals{Host: "wave-orchestration"})
+	assert.Contains(t, resWave.HydrateReferences, "tdd-proof/testing-anti-patterns.md",
+		"tdd-proof hydrate must surface on wave-orchestration host")
+}
+
+// TestResolveCiTriageNeverSurfacesHydrate enforces the Wave-3 PR-3 negative
+// invariant: ci-triage is a scripts-only suggested-only skill with no
+// HydrateReferences, so its hydrate footprint is empty on every selection
+// path it owns (suggested on repair / status, and also on arbitrary hosts).
+func TestResolveCiTriageNeverSurfacesHydrate(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	for _, sig := range []Signals{
+		{Command: "repair"},
+		{Command: "status"},
+		{Host: "code-quality-review"},
+		{Host: "plan-audit"},
+	} {
+		res := Resolve(reg, sig)
+		for _, key := range res.HydrateReferences {
+			assert.NotContains(t, key, "ci-triage/",
+				"ci-triage must never surface hydrate keys (signals=%+v, key=%s)", sig, key)
+		}
+	}
+}
+
+// TestResolveReviewCommentTriageNeverSurfacesHydrate enforces the matching
+// negative invariant for review-comment-triage.
+func TestResolveReviewCommentTriageNeverSurfacesHydrate(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	for _, sig := range []Signals{
+		{Command: "repair"},
+		{Command: "status"},
+		{Host: "code-quality-review"},
+		{Host: "plan-audit"},
+	} {
+		res := Resolve(reg, sig)
+		for _, key := range res.HydrateReferences {
+			assert.NotContains(t, key, "review-comment-triage/",
+				"review-comment-triage must never surface hydrate keys (signals=%+v, key=%s)", sig, key)
+		}
 	}
 }
 

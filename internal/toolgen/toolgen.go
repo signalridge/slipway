@@ -183,7 +183,7 @@ var commandRegistry = []CommandDef{
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
-		Arguments:     "[--json] [--view <skill-id>] [--change <slug>]",
+		Arguments:     "[--json] [--view <alias>] [--list-views] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
@@ -194,9 +194,9 @@ var commandRegistry = []CommandDef{
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
-		Arguments: "[--json] [--all|--changed-only] [--mode <skill-id>] [--change <slug>]"},
+		Arguments: "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--change <slug>]"},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "[--json] [--mode <skill-id>] [--change <slug>]",
+		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "validate-requirements", Class: CommandClassQuery, Description: "Validate requirements.md contract for the active change", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
@@ -210,14 +210,14 @@ var commandRegistry = []CommandDef{
 	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasAdapterSkill: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
-		Arguments:     "[--json] [--mode <skill-id>]",
+		Arguments:     "[--json] [--focus <alias>] [--list-focuses]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	// Diagnostics (3) — CLI-only, no adapter skill templates
 	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
-		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--view <skill-id>] [--change <slug>]",
+		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--view <alias>] [--list-views] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
@@ -813,8 +813,9 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) er
 //
 // The assembled output rewrites the authoring-side frontmatter so adapter
 // skill loaders (Codex, Claude) see the required `name` and `description`
-// fields. Internal fields (skill_id, summary, bindings, provenance_ref, ...)
-// are preserved below them so audit and binding-compare gates still work.
+// fields. Internal fields (skill_id, summary, bindings, hydrate_references,
+// ...) are preserved below them so audit and binding-compare gates still
+// work.
 func renderCatalogSkill(sk capability.Skill) (string, error) {
 	base, err := tmpl.Content(path.Join("skills", sk.ID, "SKILL.md"))
 	if err != nil {
@@ -908,10 +909,10 @@ func yamlDoubleQuoted(s string) string {
 
 var optionalSkillSupportDirs = []string{"references", "scripts"}
 
-// emitSkillSupportFiles copies optional support artifacts next to a generated
-// skill. provenance.yaml is emitted whenever it exists template-side; the
-// helper also copies optional `references/` and `scripts/` subtrees when
-// present. Skills with no support payload are a silent no-op.
+// emitSkillSupportFiles copies optional support artifacts (`references/`,
+// `scripts/`) next to a generated skill. Skills with no support payload are a
+// silent no-op. Refresh mode also sweeps stale copies so catalog drops clean
+// up their previous output.
 func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
 	skillDirRel := filepath.Dir(SkillPath(cfg, skillID))
 	dstBase := filepath.Join(root, skillDirRel)
@@ -922,14 +923,9 @@ func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh 
 // from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin with
 // "skills/<id>/...") and writes them under dstBase on the local filesystem.
 func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh bool) error {
-	provSrc := path.Join("skills", skillID, "provenance.yaml")
-	if content, exists, err := readIfExists(srcFS, provSrc); err != nil {
-		return fmt.Errorf("load provenance for %q: %w", skillID, err)
-	} else if exists {
-		if err := writeDeterministic(filepath.Join(dstBase, "provenance.yaml"), content, refresh); err != nil {
-			return err
-		}
-	} else if refresh {
+	if refresh {
+		// Sweep legacy provenance.yaml files so an older generated tree
+		// cleans up after the knowledge-only cleanup.
 		if err := removePathIfExists(filepath.Join(dstBase, "provenance.yaml")); err != nil {
 			return err
 		}
@@ -947,17 +943,6 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 		}
 	}
 	return nil
-}
-
-func readIfExists(srcFS fs.FS, name string) (string, bool, error) {
-	b, err := fs.ReadFile(srcFS, name)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", false, nil
-		}
-		return "", false, err
-	}
-	return string(b), true, nil
 }
 
 func removePathIfExists(name string) error {

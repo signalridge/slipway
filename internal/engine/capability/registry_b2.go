@@ -1,7 +1,6 @@
 package capability
 
-// Skills registered at B2 (scale foundation). See docs/distillation/catalog.md
-// rows 2, 5, 7, 10, 17.
+// B2 scale-foundation skills.
 
 func contextAssembly() Skill {
 	return Skill{
@@ -26,7 +25,6 @@ func contextAssembly() Skill {
 		HydrateReferences: []HydrateReference{
 			{Name: "codebase-map.md", Reason: "Ground brownfield context before planning"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -49,7 +47,6 @@ func parallelExecutorContract() Skill {
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -82,7 +79,6 @@ func rootCauseTracing() Skill {
 			{Name: "hypothesis-testing.md", Reason: "Structure competing hypotheses and their falsification experiments"},
 			{Name: "failure-patterns.md", Reason: "Named failure signatures and diagnostic patterns"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -116,7 +112,6 @@ func securityReview() Skill {
 			{Name: "ssrf.md", Reason: "Fetcher allow/deny-list, metadata endpoints, DNS rebinding"},
 			{Name: "infrastructure-docker.md", Reason: "Container hardening, K8s securityContext, image supply chain"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -140,6 +135,5 @@ func specTrace() Skill {
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }

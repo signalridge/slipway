@@ -14,13 +14,12 @@ trigger_signals:
     reason: "User text names coverage"
 evidence_contract: verdict
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: validate
     attachment: checklist
   - type: host-embedded
     target: goal-verification
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Coverage Analysis

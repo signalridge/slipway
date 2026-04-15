@@ -12,13 +12,12 @@ trigger_signals:
     reason: "User text asks for variant hunting"
 evidence_contract: artifact
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: review
     attachment: procedure
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Variant Analysis
@@ -42,18 +41,25 @@ labelled `affected`, `safe-with-reason`, or `needs-followup`.
    (cite the guard that blocks it), `needs-followup` (cannot quickly tell).
 4. Fix `affected` variants in the same change if scope allows; file followups
    for `needs-followup` with the callsite citation.
-5. Record the pattern in the provenance artifact so future changes can check
-   against it.
 
 ## Checklist
 - [ ] Pattern written as an anti-predicate, not a string match.
 - [ ] Every callsite classified.
 - [ ] `safe-with-reason` cites the specific guard.
 - [ ] `needs-followup` callsites are ticketed with citation.
-- [ ] Pattern recorded in the change's provenance artifact.
 
 ## Anti-patterns
 - Declaring "grep was clean" without writing down the pattern.
 - Fixing one variant and ignoring the rest to keep the diff small without a
   ticket trail.
 - Classifying callsites as `safe` without citing the guard.
+
+## Helpers
+- `scripts/find-variant.sh --engine=<codeql|semgrep> --language=<lang>`
+  — emits a starter query / rule scaffold grounded in the upstream
+  CodeQL and Semgrep template shelves, with TODO placeholders for seed
+  location, sources, sinks, and sanitizers. This is **not** a finished
+  runnable query and it does **not** bind to any local ruleset naming.
+  Supported languages per engine: `python`, `go`, `java`,
+  `javascript`, `cpp`. Invalid engine/language pairs exit 2 with a
+  usage message.

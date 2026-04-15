@@ -15,21 +15,22 @@ type reviewOptions struct {
 	changedOnly bool
 	all         bool
 	artifact    string
-	mode        string
+	focus       string
 }
 
 type reviewView struct {
-	Slug              string             `json:"slug"`
-	ExecutionMode     string             `json:"execution_mode"`
-	QualityMode       string             `json:"quality_mode,omitempty"`
-	NeedsDiscovery    bool               `json:"needs_discovery,omitempty"`
-	CurrentState      string             `json:"current_state"`
-	Verdict           string             `json:"verdict"`
-	Mode              string             `json:"mode,omitempty"`
-	HydrateReferences []string           `json:"hydrate_references,omitempty"`
-	Blockers          []model.ReasonCode `json:"blockers,omitempty"`
-	Waves             []reviewWaveView   `json:"waves,omitempty"`
-	Gaps              *reviewGaps        `json:"gaps,omitempty"`
+	Slug                  string                    `json:"slug"`
+	ExecutionMode         string                    `json:"execution_mode"`
+	QualityMode           string                    `json:"quality_mode,omitempty"`
+	NeedsDiscovery        bool                      `json:"needs_discovery,omitempty"`
+	CurrentState          string                    `json:"current_state"`
+	Verdict               string                    `json:"verdict"`
+	Mode                  string                    `json:"mode,omitempty"`
+	HydrateReferences     []string                  `json:"hydrate_references,omitempty"`
+	SuggestedCapabilities []suggestedCapabilityView `json:"suggested_capabilities,omitempty"`
+	Blockers              []model.ReasonCode        `json:"blockers,omitempty"`
+	Waves                 []reviewWaveView          `json:"waves,omitempty"`
+	Gaps                  *reviewGaps               `json:"gaps,omitempty"`
 }
 
 type reviewGaps struct {
@@ -49,11 +50,16 @@ func makeReviewCmd() *cobra.Command {
 	var jsonOutput bool
 	var hydrate bool
 	var hydrateRefs []string
+	var listFocuses bool
+	var discoveryFormat string
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: desc("review"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if listFocuses {
+				return emitFocusDiscovery(cmd, "review", discoveryFormat)
+			}
 			if cmd.Flags().Changed("all") && cmd.Flags().Changed("changed-only") && opts.all && opts.changedOnly {
 				return newInvalidUsageError(
 					"mutually_exclusive_flags",
@@ -72,7 +78,7 @@ func makeReviewCmd() *cobra.Command {
 					nil,
 				)
 			}
-			if err := validateRouteMode("review", opts.mode); err != nil {
+			if err := validateFocus("review", opts.focus); err != nil {
 				return err
 			}
 			if len(hydrateRefs) > 0 && !hydrate {
@@ -91,8 +97,8 @@ func makeReviewCmd() *cobra.Command {
 					nil,
 				)
 			}
-			effectiveMode := resolveEffectiveRouteMode("review", opts.mode)
-			hydrateKeys := normalizeHydrateKeys(resolveEffectiveRouteHydrate("review", opts.mode))
+			effectiveMode := resolveEffectiveFocus("review", opts.focus)
+			hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("review", opts.focus))
 			if hydrate {
 				var err error
 				hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
@@ -191,17 +197,18 @@ func makeReviewCmd() *cobra.Command {
 				}
 				profile := buildChangeProfileView(change)
 				view := reviewView{
-					Slug:              active.Slug,
-					ExecutionMode:     execMode,
-					QualityMode:       profile.QualityMode,
-					NeedsDiscovery:    profile.NeedsDiscovery,
-					CurrentState:      string(change.CurrentState),
-					Verdict:           verdict,
-					Mode:              effectiveMode,
-					HydrateReferences: hydrateKeys,
-					Blockers:          blockers,
-					Waves:             waveViews,
-					Gaps:              classifyReviewGaps(blockers),
+					Slug:                  active.Slug,
+					ExecutionMode:         execMode,
+					QualityMode:           profile.QualityMode,
+					NeedsDiscovery:        profile.NeedsDiscovery,
+					CurrentState:          string(change.CurrentState),
+					Verdict:               verdict,
+					Mode:                  effectiveMode,
+					HydrateReferences:     hydrateKeys,
+					SuggestedCapabilities: buildSuggestedCapabilities("review", opts.focus),
+					Blockers:              blockers,
+					Waves:                 waveViews,
+					Gaps:                  classifyReviewGaps(blockers),
 				}
 
 				if jsonOutput {
@@ -222,10 +229,12 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.changedOnly, "changed-only", true, "Review only changed/stale units")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Run full review")
 	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
-	cmd.Flags().StringVar(&opts.mode, "mode", "", "Review mode override (e.g. independent-review, spec-trace, second-opinion)")
+	cmd.Flags().StringVar(&opts.focus, "focus", "", "Review focus (e.g. sast, calibration)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
+	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
 }
 
@@ -237,6 +246,7 @@ func writeReviewText(w io.Writer, view reviewView) error {
 	if strings.TrimSpace(view.Mode) != "" {
 		writer.Writef("Mode: %s\n", view.Mode)
 	}
+	writeSuggestedBlock(writer, view.SuggestedCapabilities)
 	writeHydrateLine(writer, "", view.HydrateReferences)
 
 	if len(view.Waves) > 0 {

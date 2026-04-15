@@ -1,7 +1,6 @@
 package capability
 
-// Skills registered at B4 (change-shape + verification). See
-// docs/distillation/catalog.md rows 9, 15, 16, 18, 19, 20, 21.
+// B4 change-shape + verification skills.
 
 func multiReviewerCalibration() Skill {
 	return Skill{
@@ -20,34 +19,16 @@ func multiReviewerCalibration() Skill {
 			{Op: OpUserTextMatches, Values: []string{"second reviewer", "adversarial", "panel review"},
 				Reason: "User text signals multiple reviewers"},
 		},
+		// Explicit-focus backing for `--focus calibration` on review
+		// (resolved via surfaces.go). Host attachment on code-quality-review
+		// stays so calibration still rides host-embedded flows without
+		// needing a public selector.
 		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentProcedure},
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
-	}
-}
-
-func differentialReview() Skill {
-	return Skill{
-		ID:                "differential-review",
-		Domain:            DomainReviewChangeShape,
-		Function:          "review the delta against the baseline rather than the whole file",
-		Tier:              TierT1,
-		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when reviewing a diff against a known baseline. Triggers on review command or PR-shaped change context.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "review",
-				Reason: "review command invoked; scope reviewer attention to the diff"},
-			{Op: OpUserTextMatches, Values: []string{"diff", "pull request", "delta"},
-				Reason: "User text names a diff-shaped review"},
+		HydrateReferences: []HydrateReference{
+			{Name: "review-dimensions.md", Reason: "Dimensions for reviewer-severity calibration"},
 		},
-		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentProcedure},
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
-		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -66,11 +47,11 @@ func variantAnalysis() Skill {
 			{Op: OpUserTextMatches, Values: []string{"variants", "similar bug", "elsewhere"},
 				Reason: "User text asks for variant hunting"},
 		},
+		// Suggested-only on review / repair (§5.2). No public focus selector.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentProcedure},
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -91,11 +72,13 @@ func coverageAnalysis() Skill {
 			{Op: OpUserTextMatches, Values: []string{"coverage", "uncovered", "untested"},
 				Reason: "User text names coverage"},
 		},
+		// Host-embedded on goal-verification; also suggested on validate so
+		// verification flows keep coverage as a recommendation without a
+		// public focus selector.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -116,11 +99,19 @@ func propertyTesting() Skill {
 			{Op: OpUserTextMatches, Values: []string{"property test", "invariant", "quickcheck", "hypothesis"},
 				Reason: "User text signals property-based testing"},
 		},
+		// Explicit-focus backing for `--focus property` on validate
+		// (resolved via surfaces.go). Host attachment on goal-verification
+		// keeps it available from verification flows.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
+		HydrateReferences: []HydrateReference{
+			{Name: "design.md", Reason: "How to pick properties that are worth testing"},
+			{Name: "generating.md", Reason: "Write generators that exercise the property space"},
+			{Name: "strategies.md", Reason: "Core property strategies (idempotence, roundtrip, oracle, invariants)"},
+			{Name: "libraries.md", Reason: "Choose an appropriate property-testing library"},
+			{Name: "interpreting-failures.md", Reason: "Read shrunk counterexamples and extract real bugs"},
+		},
 	}
 }
 
@@ -141,11 +132,14 @@ func mutationTesting() Skill {
 			{Op: OpUserTextMatches, Values: []string{"mutation testing", "mutmut", "stryker", "pitest"},
 				Reason: "User text names a mutation testing tool"},
 		},
+		// Explicit-focus backing for `--focus mutation` on validate.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentToolRecipe},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
+		HydrateReferences: []HydrateReference{
+			{Name: "optimization-strategies.md", Reason: "Make mutation runs finish in bounded time"},
+			{Name: "configuration.md", Reason: "Pick the right mutators and exclusions for the target"},
+		},
 	}
 }
 
@@ -166,11 +160,12 @@ func performanceProfiling() Skill {
 			{Op: OpUserTextMatches, Values: []string{"perf", "profiling", "slow", "latency", "regression"},
 				Reason: "User text signals performance work"},
 		},
+		// Suggested-only on validate / status (§5.2). The status
+		// --view=performance-profiling surface was removed (§5.5).
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
-			{Type: BindingCommandManual, Target: "status", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }

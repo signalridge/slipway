@@ -1,159 +1,254 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"slices"
+	"sort"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/spf13/cobra"
 )
 
-var routeOnlyModeOverrides = map[string][]string{
-	"review": {"second-opinion"},
+// suggestedCapabilityView is the stable JSON/text shape for entries in a
+// routed command's `suggested_capabilities[]` channel (route-surface plan
+// §4.4). Score is intentionally dropped from the public view for stability.
+type suggestedCapabilityView struct {
+	Name    string `json:"name"`
+	Summary string `json:"summary,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Kind    string `json:"kind,omitempty"`
 }
 
-var routeOnlyViewOverrides = map[string][]string{
-	"status": {"review-queue", "observability-query"},
-	"health": {"observability-query"},
-}
-
-func allowedRouteModes(command string) []string {
-	reg := capability.DefaultRegistry()
-	modes := append([]string(nil), capability.ValidModesForCommand(reg, command)...)
-	modes = append(modes, routeOnlyModeOverrides[command]...)
-	slices.Sort(modes)
-	return slices.Compact(modes)
-}
-
-func allowedRouteViews(command string) []string {
-	reg := capability.DefaultRegistry()
-	views := append([]string(nil), capability.ValidViewsForCommand(reg, command)...)
-	views = append(views, routeOnlyViewOverrides[command]...)
-	slices.Sort(views)
-	return slices.Compact(views)
-}
-
-// validateRouteMode verifies that the user-supplied --mode value is a valid
-// route for the given command. Returns a CLI usage error when the value is
-// unknown so the user sees the allowed list. An empty mode is allowed
-// (meaning "use the default route").
-func validateRouteMode(command, mode string) error {
-	mode = strings.TrimSpace(mode)
-	if mode == "" {
+// validateFocus verifies that the user-supplied --focus alias resolves via
+// surface policy for the given command. An empty alias is allowed (meaning
+// "use the primary route").
+func validateFocus(command, alias string) error {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
 		return nil
 	}
-	modes := allowedRouteModes(command)
-	for _, m := range modes {
-		if m == mode {
-			return nil
-		}
+	if _, ok := capability.LookupFocus(command, alias); ok {
+		return nil
 	}
+	allowed := focusAliases(command)
 	return newInvalidUsageError(
 		"unknown_route_mode",
-		fmt.Sprintf("unknown --mode=%q for `%s`", mode, command),
-		fmt.Sprintf("Use one of: %s", strings.Join(modes, ", ")),
-		map[string]any{"command": command, "mode": mode, "allowed": modes},
+		fmt.Sprintf("unknown --focus=%q for `%s`", alias, command),
+		fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", ")),
+		map[string]any{"command": command, "focus": alias, "allowed": allowed},
 	)
 }
 
-// validateRouteView verifies that the user-supplied --view value is a valid
-// view for the given status/health command. Empty view means "use the
-// default view".
-func validateRouteView(command, view string) error {
-	view = strings.TrimSpace(view)
-	if view == "" {
+// validateViewAlias verifies that the user-supplied --view alias resolves via
+// surface policy for the given status/health command. An empty alias is
+// allowed.
+func validateViewAlias(command, alias string) error {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
 		return nil
 	}
-	views := allowedRouteViews(command)
-	for _, v := range views {
-		if v == view {
-			return nil
-		}
+	if _, ok := capability.LookupView(command, alias); ok {
+		return nil
 	}
+	allowed := viewAliases(command)
 	return newInvalidUsageError(
 		"unknown_route_view",
-		fmt.Sprintf("unknown --view=%q for `%s`", view, command),
-		fmt.Sprintf("Use one of: %s", strings.Join(views, ", ")),
-		map[string]any{"command": command, "view": view, "allowed": views},
+		fmt.Sprintf("unknown --view=%q for `%s`", alias, command),
+		fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", ")),
+		map[string]any{"command": command, "view": alias, "allowed": allowed},
 	)
 }
 
-// resolveEffectiveRouteMode returns the effective mode for a command surface.
-// Precedence is explicit flag > resolver auto-route > empty.
-func resolveEffectiveRouteMode(command, explicit string, signals ...capability.Signals) string {
-	mode := strings.TrimSpace(explicit)
-	if mode != "" {
-		return mode
+// focusAliases returns the sorted list of public focus aliases for the given
+// command (surface policy §5.3).
+func focusAliases(command string) []string {
+	recs := capability.ExplicitFocusesForCommand(command)
+	out := make([]string, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.PublicName)
 	}
-	var sig capability.Signals
-	if len(signals) > 0 {
-		sig = signals[0]
+	sort.Strings(out)
+	return out
+}
+
+// viewAliases returns the sorted list of public view aliases for a status/
+// health command (surface policy §5.4).
+func viewAliases(command string) []string {
+	recs := capability.ViewsForCommand(command)
+	out := make([]string, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.PublicName)
 	}
-	if strings.TrimSpace(sig.Command) == "" {
-		sig.Command = command
+	sort.Strings(out)
+	return out
+}
+
+// resolveEffectiveFocus returns the effective focus alias for a command
+// surface. Precedence: explicit --focus alias > resolver auto route > empty.
+func resolveEffectiveFocus(command, alias string) string {
+	alias = strings.TrimSpace(alias)
+	if alias != "" {
+		if rec, ok := capability.LookupFocus(command, alias); ok {
+			return rec.PublicName
+		}
 	}
-	resolution := capability.Resolve(capability.DefaultRegistry(), sig)
+	resolution := capability.Resolve(capability.DefaultRegistry(), capability.Signals{
+		Command: command,
+		Focus:   alias,
+	})
 	if resolution.Route == nil {
 		return ""
 	}
 	return strings.TrimSpace(resolution.Route.Mode)
 }
 
-// resolveEffectiveRouteView returns the effective view for status/health.
-// Precedence is explicit flag > resolver auto-route > empty.
-func resolveEffectiveRouteView(command, explicit string, signals ...capability.Signals) string {
-	view := strings.TrimSpace(explicit)
-	if view != "" {
-		return view
+// resolveEffectiveView returns the effective view alias for status/health.
+// Precedence: explicit --view alias > resolver auto route > empty.
+func resolveEffectiveView(command, alias string) string {
+	alias = strings.TrimSpace(alias)
+	if alias != "" {
+		if rec, ok := capability.LookupView(command, alias); ok {
+			return rec.PublicName
+		}
 	}
-	var sig capability.Signals
-	if len(signals) > 0 {
-		sig = signals[0]
-	}
-	if strings.TrimSpace(sig.Command) == "" {
-		sig.Command = command
-	}
-	resolution := capability.Resolve(capability.DefaultRegistry(), sig)
+	resolution := capability.Resolve(capability.DefaultRegistry(), capability.Signals{
+		Command: command,
+		View:    alias,
+	})
 	if resolution.Route == nil {
 		return ""
 	}
 	return strings.TrimSpace(resolution.Route.View)
 }
 
-// resolveEffectiveRouteHydrate returns the hydrate references that apply to
-// the effective --mode selection. Explicit manual modes short-circuit the
-// resolver: the registry is the authority on that skill's hydrate keys and
-// we never fall back to auto-route output on the explicit path. Empty
-// explicit mode falls through to resolver output (union of route +
-// supports) so auto-route callers see the same keys as Resolve().
-func resolveEffectiveRouteHydrate(command, explicit string, signals ...capability.Signals) []string {
+// resolveEffectiveFocusHydrate returns the hydrate reference keys for the
+// effective --focus selection. Explicit aliases short-circuit to the backing
+// skill's hydrate keys; empty falls through to resolver output (union of
+// route + supports).
+func resolveEffectiveFocusHydrate(command, alias string) []string {
 	reg := capability.DefaultRegistry()
-	if mode := strings.TrimSpace(explicit); mode != "" {
-		return capability.HydrateReferenceKeysForSkill(reg, mode)
+	alias = strings.TrimSpace(alias)
+	if alias != "" {
+		if rec, ok := capability.LookupFocus(command, alias); ok {
+			return capability.HydrateReferenceKeysForSkill(reg, rec.BackingID)
+		}
+		return nil
 	}
-	var sig capability.Signals
-	if len(signals) > 0 {
-		sig = signals[0]
-	}
-	if strings.TrimSpace(sig.Command) == "" {
-		sig.Command = command
-	}
-	return capability.Resolve(reg, sig).HydrateReferences
+	return capability.Resolve(reg, capability.Signals{Command: command}).HydrateReferences
 }
 
-// resolveEffectiveViewHydrate mirrors resolveEffectiveRouteHydrate for the
+// resolveEffectiveViewHydrate mirrors resolveEffectiveFocusHydrate for the
 // status/health --view surfaces.
-func resolveEffectiveViewHydrate(command, explicit string, signals ...capability.Signals) []string {
+func resolveEffectiveViewHydrate(command, alias string) []string {
 	reg := capability.DefaultRegistry()
-	if view := strings.TrimSpace(explicit); view != "" {
-		return capability.HydrateReferenceKeysForSkill(reg, view)
+	alias = strings.TrimSpace(alias)
+	if alias != "" {
+		if rec, ok := capability.LookupView(command, alias); ok {
+			return capability.HydrateReferenceKeysForSkill(reg, rec.BackingID)
+		}
+		return nil
 	}
-	var sig capability.Signals
-	if len(signals) > 0 {
-		sig = signals[0]
+	return capability.Resolve(reg, capability.Signals{Command: command, View: alias}).HydrateReferences
+}
+
+// writeSuggestedBlock emits the `Suggested:` text block for routed command
+// text output. When the list is empty, no lines are written.
+func writeSuggestedBlock(writer *formatWriter, suggestions []suggestedCapabilityView) {
+	if len(suggestions) == 0 {
+		return
 	}
-	if strings.TrimSpace(sig.Command) == "" {
-		sig.Command = command
+	writer.Writef("Suggested:\n")
+	for _, s := range suggestions {
+		line := "  - " + s.Name
+		if strings.TrimSpace(s.Summary) != "" {
+			line += " — " + s.Summary
+		}
+		writer.Writef("%s\n", line)
 	}
-	return capability.Resolve(reg, sig).HydrateReferences
+}
+
+// focusDiscoveryEntry is the JSON shape for `--list-focuses` output.
+type focusDiscoveryEntry struct {
+	Name    string `json:"name"`
+	Summary string `json:"summary,omitempty"`
+}
+
+// focusDiscoveryOutput is the top-level JSON shape for `--list-focuses`.
+type focusDiscoveryOutput struct {
+	Command string                `json:"command"`
+	Focuses []focusDiscoveryEntry `json:"focuses"`
+}
+
+// viewDiscoveryOutput is the top-level JSON shape for `--list-views`.
+type viewDiscoveryOutput struct {
+	Command string                `json:"command"`
+	Views   []focusDiscoveryEntry `json:"views"`
+}
+
+// emitFocusDiscovery writes the `--list-focuses` response for a command,
+// short-circuiting normal execution before any workspace access.
+func emitFocusDiscovery(cmd *cobra.Command, command, format string) error {
+	records := capability.ExplicitFocusesForCommand(command)
+	entries := make([]focusDiscoveryEntry, 0, len(records))
+	for _, r := range records {
+		entries = append(entries, focusDiscoveryEntry{Name: r.PublicName, Summary: r.Summary})
+	}
+	return emitDiscovery(cmd, format, focusDiscoveryOutput{Command: command, Focuses: entries}, entries)
+}
+
+// emitViewDiscovery writes the `--list-views` response for a command.
+func emitViewDiscovery(cmd *cobra.Command, command, format string) error {
+	records := capability.ViewsForCommand(command)
+	entries := make([]focusDiscoveryEntry, 0, len(records))
+	for _, r := range records {
+		entries = append(entries, focusDiscoveryEntry{Name: r.PublicName, Summary: r.Summary})
+	}
+	return emitDiscovery(cmd, format, viewDiscoveryOutput{Command: command, Views: entries}, entries)
+}
+
+func emitDiscovery(cmd *cobra.Command, format string, jsonPayload any, entries []focusDiscoveryEntry) error {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "text":
+		w := cmd.OutOrStdout()
+		for _, e := range entries {
+			if _, err := fmt.Fprintf(w, "%s\t%s\n", e.Name, e.Summary); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "json":
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(jsonPayload)
+	default:
+		return newInvalidUsageError(
+			"invalid_format",
+			fmt.Sprintf("invalid --format %q; expected text|json", format),
+			"Use --format text or --format json.",
+			nil,
+		)
+	}
+}
+
+// buildSuggestedCapabilities projects the resolver's SuggestedCapabilities
+// onto the stable public view. Score is intentionally dropped.
+func buildSuggestedCapabilities(command, focus string) []suggestedCapabilityView {
+	resolution := capability.Resolve(capability.DefaultRegistry(), capability.Signals{
+		Command: command,
+		Focus:   strings.TrimSpace(focus),
+	})
+	if len(resolution.SuggestedCapabilities) == 0 {
+		return nil
+	}
+	out := make([]suggestedCapabilityView, 0, len(resolution.SuggestedCapabilities))
+	for _, s := range resolution.SuggestedCapabilities {
+		out = append(out, suggestedCapabilityView{
+			Name:    s.Name,
+			Summary: s.Summary,
+			Reason:  s.Reason,
+			Kind:    s.Kind,
+		})
+	}
+	return out
 }

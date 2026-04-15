@@ -15,7 +15,6 @@ func TestDefaultRegistryLoadsFoundationSkills(t *testing.T) {
 		"ci-triage",
 		"context-assembly",
 		"coverage-analysis",
-		"differential-review",
 		"fresh-verification-evidence",
 		"gha-security-review",
 		"git-recovery",

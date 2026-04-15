@@ -1,7 +1,6 @@
 package capability
 
-// Skills registered at B3 (security cluster). See docs/distillation/catalog.md
-// rows 11, 12, 13, 14.
+// B3 security-cluster skills.
 
 func threatModeling() Skill {
 	return Skill{
@@ -23,7 +22,6 @@ func threatModeling() Skill {
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -42,10 +40,13 @@ func sastOrchestration() Skill {
 			{Op: OpUserTextMatches, Values: []string{"codeql", "semgrep", "sast", "sarif"},
 				Reason: "User text names a SAST tool"},
 		},
+		// Explicit-focus backing for `--focus sast` on review / validate /
+		// repair (resolved via surfaces.go). Command-auto bindings also let
+		// the skill appear in suggested_capabilities[] when SAST triggers fire.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentToolRecipe},
-			{Type: BindingCommandManual, Target: "validate", Attachment: AttachmentToolRecipe},
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "codeql-ruleset-catalog.md", Reason: "Pick a CodeQL query pack by threat model and language"},
@@ -58,7 +59,6 @@ func sastOrchestration() Skill {
 			{Name: "sarif-merge.md", Reason: "Deterministic multi-tool SARIF merge contract"},
 			{Name: "sarif-jq-queries.md", Reason: "Ad-hoc triage queries over SARIF output"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -77,9 +77,11 @@ func ghaSecurityReview() Skill {
 			{Op: OpCommand, Values: []string{"review", "repair"},
 				Reason: "Review or repair command invoked; workflow surface may be in scope"},
 		},
+		// Suggested-only on review / repair (§5.2). Command-auto feeds the
+		// suggested_capabilities[] channel when workflow paths change.
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "pwn-request.md", Reason: "pull_request_target fork-code execution vector"},
@@ -92,7 +94,6 @@ func ghaSecurityReview() Skill {
 			{Name: "supply-chain.md", Reason: "action pinning, reusable-workflow, and dependency surface"},
 			{Name: "real-world-attacks.md", Reason: "awesome-go / trivy exploit case studies and detection signals"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }
 
@@ -116,10 +117,12 @@ func supplyChainAudit() Skill {
 			{Op: OpCommand, Values: []string{"review", "repair", "status"},
 				Reason: "Review/repair/status command invoked; dependency surface may apply"},
 		},
+		// Suggested-only on review / repair / status (§5.2). The status
+		// --view=supply-chain-audit surface was removed (§5.5).
 		Bindings: []Binding{
-			{Type: BindingCommandManual, Target: "review", Attachment: AttachmentChecklist},
-			{Type: BindingCommandManual, Target: "repair", Attachment: AttachmentToolRecipe},
-			{Type: BindingCommandManual, Target: "status", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
+			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "results-template.md", Reason: "Audit report schema for supply-chain findings"},
@@ -127,6 +130,5 @@ func supplyChainAudit() Skill {
 			{Name: "vulnerability-assessment-guide.md", Reason: "CVE triage and severity assignment under time pressure"},
 			{Name: "license-compatibility-matrix.md", Reason: "License compatibility rules per distribution target"},
 		},
-		ProvenanceRef: "provenance.yaml",
 	}
 }

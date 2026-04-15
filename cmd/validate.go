@@ -33,6 +33,7 @@ type validateView struct {
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
+	SuggestedCapabilities     []suggestedCapabilityView   `json:"suggested_capabilities,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -91,7 +92,9 @@ func buildValidateViewBase(
 
 func makeValidateCmd() *cobra.Command {
 	var changeSlug string
-	var mode string
+	var focus string
+	var listFocuses bool
+	var discoveryFormat string
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: desc("validate"),
@@ -99,10 +102,13 @@ func makeValidateCmd() *cobra.Command {
 			"Use this command to inspect current evidence and gate readiness without advancing state.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := validateRouteMode("validate", mode); err != nil {
+			if listFocuses {
+				return emitFocusDiscovery(cmd, "validate", discoveryFormat)
+			}
+			if err := validateFocus("validate", focus); err != nil {
 				return err
 			}
-			effectiveMode := resolveEffectiveRouteMode("validate", mode)
+			effectiveMode := resolveEffectiveFocus("validate", focus)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -113,7 +119,8 @@ func makeValidateCmd() *cobra.Command {
 				if shouldFallbackValidateDiagnostics(err) {
 					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
 					view.Mode = effectiveMode
-					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveRouteHydrate("validate", mode))
+					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
+					view.SuggestedCapabilities = buildSuggestedCapabilities("validate", focus)
 					return encodeJSONResponse(cmd, view)
 				}
 				return err
@@ -124,13 +131,16 @@ func makeValidateCmd() *cobra.Command {
 				return err
 			}
 			view.Mode = effectiveMode
-			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveRouteHydrate("validate", mode))
+			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
+			view.SuggestedCapabilities = buildSuggestedCapabilities("validate", focus)
 			return encodeJSONResponse(cmd, view)
 		},
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	cmd.Flags().StringVar(&mode, "mode", "", "Catalog validate mode (skill id, e.g. coverage-analysis, property-testing)")
+	cmd.Flags().StringVar(&focus, "focus", "", "Validate focus (e.g. sast, property, mutation)")
 	cmd.Flags().Bool("json", false, "JSON output")
+	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
+	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
 }
 

@@ -12,10 +12,9 @@ trigger_signals:
     reason: "User text names PR review comments"
 evidence_contract: artifact
 bindings:
-  - type: command-manual
+  - type: command-auto
     target: repair
     attachment: procedure
-provenance_ref: provenance.yaml
 ---
 
 # Review Comment Triage
@@ -55,3 +54,17 @@ cosmetic-only fixes produce surprise blockers on the next round.
 - Pushing commits that silently address some comments and ignore others.
 - Closing threads without a reply.
 - Replying "done" without a commit/hunk link.
+
+## Scripts
+All helpers require the `gh` CLI on `PATH` plus `GH_TOKEN` (or
+`GITHUB_TOKEN`, or a prior `gh auth login`); each fails fast with a
+credential-error message when credentials are missing or rejected.
+
+- `scripts/fetch-pr-feedback.py` — fetch and LOGAF-categorize review
+  comments / threads for a PR. Read-only.
+- `scripts/fetch-review-requests.py` — list open review requests for a
+  user across team memberships. Read-only.
+- `scripts/reply-to-thread.py` — reply to a PR review thread. **Write
+  side effect.** Defaults to dry-run: without `--confirm` it prints the
+  intended GraphQL mutation to stderr and exits non-zero. Only supply
+  `--confirm` once the reply body and thread id have been reviewed.

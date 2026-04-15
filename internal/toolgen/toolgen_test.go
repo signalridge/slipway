@@ -313,8 +313,7 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 
 		// Catalog skills (registry-owned). Every exported catalog skill
 		// must carry the adapter-visible frontmatter contract (`name`,
-		// `description`) and keep its support artifacts (provenance.yaml)
-		// next to SKILL.md so `provenance_ref` is not dangling.
+		// `description`).
 		reg := capability.DefaultRegistry()
 		for _, id := range catalogSkillIDs {
 			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway", id)
@@ -332,10 +331,6 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 				assert.Equal(t, sk.Summary, fm["description"],
 					"%s: catalog skill %s: description drifted from registry summary", toolID, id)
 			}
-
-			provPath := filepath.Join(skillDir, "provenance.yaml")
-			_, err = os.Stat(provPath)
-			assert.NoErrorf(t, err, "%s: catalog skill %s missing provenance.yaml next to SKILL.md", toolID, id)
 		}
 
 		// Outbound catalog manifest
@@ -1305,9 +1300,16 @@ func isAgentFile(name string) bool {
 var hydratedSkillIDs = []string{
 	"gha-security-review",
 	"incident-response",
+	"multi-reviewer-calibration",
+	"mutation-testing",
+	"performance-profiling",
+	"plan-authoring",
+	"property-testing",
 	"root-cause-tracing",
 	"sast-orchestration",
 	"supply-chain-audit",
+	"tdd-proof",
+	"variant-analysis",
 }
 
 // referencesBudgetPerFile caps any single reference at 24 KB so hydrate
@@ -1837,12 +1839,299 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		assert.Contains(t, out, "POLLUTER:", "external-test-only package should still be enumerated")
 		assert.Contains(t, out, "example.com/polluter/polluter")
 	})
+
+	t.Run("repo-performance-scan text and json", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "performance-profiling", "scripts", "repo-performance-scan.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		fixture := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(fixture, "package.json"),
+			[]byte(`{"dependencies":{"a":"1","b":"1"},"devDependencies":{"c":"1"}}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(fixture, "requirements.txt"),
+			[]byte("flask\nrequests\n# comment\n"), 0o644))
+		big := make([]byte, 10*1024)
+		require.NoError(t, os.WriteFile(filepath.Join(fixture, "bundle.js"), big, 0o644))
+
+		out, cerr := runCommand(pythonPath, script, fixture, "--large-file-threshold-kb=1")
+		require.NoErrorf(t, cerr, "repo-performance-scan text mode failed: %s", out)
+		assert.Contains(t, out, "Repo Performance Scan", "text mode must emit header")
+		assert.Contains(t, out, "bundle.js", "large-file section must list bundle.js")
+		assert.Contains(t, out, "Node: 3", "node dep count must be sum of deps+devDeps")
+		assert.Contains(t, out, "Python: 2", "python dep count must skip comments")
+
+		outJSON, cerr := runCommand(pythonPath, script, fixture,
+			"--large-file-threshold-kb=1", "--json")
+		require.NoErrorf(t, cerr, "repo-performance-scan json mode failed: %s", outJSON)
+		var parsed map[string]any
+		require.NoError(t, json.Unmarshal([]byte(outJSON), &parsed),
+			"json output must parse as an object")
+		deps, ok := parsed["dependency_counts"].(map[string]any)
+		require.True(t, ok, "dependency_counts must be present in json")
+		assert.EqualValues(t, 3, deps["node_dependencies"])
+		assert.EqualValues(t, 2, deps["python_dependencies"])
+	})
+
+	t.Run("repo-performance-scan invalid path", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "performance-profiling", "scripts", "repo-performance-scan.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		missing := filepath.Join(t.TempDir(), "no-such-dir")
+		out, cerr := runCommand(pythonPath, script, missing)
+		require.Errorf(t, cerr, "expected non-zero exit when path is not a directory")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, cerr, &exitErr)
+		assert.Equal(t, 2, exitErr.ExitCode(),
+			"invalid path must exit with the documented code 2")
+		assert.Contains(t, out, "path is not a directory",
+			"stderr-embedded error must cite the path contract")
+	})
+
+	t.Run("find-variant codeql python", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=codeql", "--language=python",
+			"--seed-file=app/views.py", "--seed-line=42",
+			"--variant-name=SQLi-audit", "--original-bug=CVE-2025-0001")
+		require.NoErrorf(t, cerr, "find-variant codeql python failed: %s", out)
+		assert.Contains(t, out, "import python",
+			"Python CodeQL scaffold must import the Python library")
+		assert.Contains(t, out, "TaintTracking",
+			"Python CodeQL scaffold must use taint tracking")
+		assert.Contains(t, out, "Seed: app/views.py:42",
+			"scaffold must embed the seed location verbatim")
+		assert.Contains(t, out, "TODO(source)",
+			"scaffold must carry a source-shape TODO")
+		assert.Contains(t, out, "TODO(sink)",
+			"scaffold must carry a sink-shape TODO")
+		assert.Contains(t, out, "TODO(sanitizer)",
+			"scaffold must carry a sanitizer-shape TODO")
+		assert.Contains(t, out, "CVE-2025-0001",
+			"scaffold must echo the original bug id")
+	})
+
+	t.Run("find-variant semgrep go", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=semgrep", "--language=go")
+		require.NoErrorf(t, cerr, "find-variant semgrep go failed: %s", out)
+		assert.Contains(t, out, "id: variant-taint-go",
+			"Go Semgrep scaffold must carry the namespaced rule id")
+		assert.Contains(t, out, "mode: taint",
+			"Go Semgrep scaffold must use taint mode")
+		assert.Contains(t, out, "languages: [go]",
+			"Go Semgrep scaffold must declare language")
+		assert.Contains(t, out, "TODO(source)")
+		assert.Contains(t, out, "TODO(sink)")
+		assert.Contains(t, out, "TODO(sanitizer)")
+	})
+
+	t.Run("find-variant invalid engine", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=unknown", "--language=python")
+		require.Error(t, cerr, "unsupported engine must exit non-zero")
+		assert.Contains(t, out, "unsupported engine/language pair",
+			"error must cite the engine/language contract")
+		assert.Contains(t, out, "Usage:",
+			"error output must include the usage block")
+	})
+
+	t.Run("find-variant missing args", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script)
+		require.Error(t, cerr, "missing required flags must fail")
+		assert.Contains(t, out, "--engine and --language are required",
+			"error must explain which flags are mandatory")
+	})
+
+	// Wave-3 PR-2: ci-triage + review-comment-triage Python helpers. All
+	// four must fail fast with a credential-signal when GH_TOKEN is invalid
+	// (no live network calls are made by the tests themselves — the
+	// upstream gh CLI surfaces the 401 / auth-missing condition inside
+	// this test harness). reply-to-thread additionally must respect the
+	// dry-run safety default.
+
+	t.Run("fetch-pr-checks rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "ci-triage", "scripts", "fetch-pr-checks.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--pr", "999999999",
+		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth") ||
+				strings.Contains(out, "No PR found"),
+			"fetch-pr-checks must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-pr-feedback rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-pr-feedback.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--pr", "999999999",
+		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth") ||
+				strings.Contains(out, "Could not determine repository"),
+			"fetch-pr-feedback must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-review-requests rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// The helper swallows per-call errors and emits stderr diagnostics;
+		// assert the credential signal appears in the output rather than
+		// requiring a non-zero exit, so the test does not flake on the
+		// upstream tool's error-handling shape.
+		out, _ := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--teams", "none-such-slipway-test",
+		)
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth"),
+			"fetch-review-requests must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("reply-to-thread defaults to dry-run", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "review-comment-triage", "scripts", "reply-to-thread.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// No --confirm: preflight must NOT be triggered (dry-run works
+		// offline) and exit must be non-zero.
+		out, cerr := runCommandEnv(
+			// Intentionally neuter PATH so a late preflight would also
+			// refuse, but dry-run is supposed to bypass the gh probe.
+			[]string{"GH_TOKEN=", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "PRRT_abc", "dry-run body",
+		)
+		require.Error(t, cerr, "dry-run must exit non-zero to prevent silent success")
+		assert.Contains(t, out, "DRY-RUN",
+			"dry-run must announce itself explicitly")
+		assert.Contains(t, out, "addPullRequestReviewThreadReply",
+			"dry-run must print the intended GraphQL mutation")
+		assert.Contains(t, out, "PRRT_abc",
+			"dry-run must echo the thread id in the mutation body")
+	})
+
+	t.Run("reply-to-thread confirm rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := filepath.Join(root, "review-comment-triage", "scripts", "reply-to-thread.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--confirm", "PRRT_abc", "real body",
+		)
+		require.Error(t, cerr, "--confirm with invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "GraphQL error") ||
+				strings.Contains(out, "gh auth"),
+			"reply-to-thread --confirm must surface the credential path, got:\n%s", out)
+	})
 }
 
 // runCommand runs an external command capturing combined output. Returns
 // stdout+stderr and the exit error (if any).
 func runCommand(name string, args ...string) (string, error) {
 	cmd := osExecCommand(name, args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// runCommandEnv runs a command with a supplemental environment appended to
+// the inherited environment. Later entries win for duplicate keys, matching
+// exec.Cmd.Env semantics. PATH is inherited from the test process so tools
+// like `gh` and `python3` remain locatable.
+func runCommandEnv(extraEnv []string, name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	cmd.Env = append(os.Environ(), extraEnv...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

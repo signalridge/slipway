@@ -36,7 +36,6 @@ bindings:
   - type: host-embedded
     target: code-quality-review
     attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Security Review

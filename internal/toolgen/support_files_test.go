@@ -20,78 +20,9 @@ import (
 // already-large toolgen_test.go, so the PR-0 contract stays readable without
 // mixing fixture-heavy support-file cases into generated-tree assembler tests.
 
-// TestEmitSupportFilesForNonCatalogSkills verifies the post-PR-0 contract:
-// any skill (not just catalog) that has a template-side provenance.yaml gets
-// it copied into the destination tree.
-func TestEmitSupportFilesForNonCatalogSkills(t *testing.T) {
-	t.Parallel()
-
-	srcFS := fstest.MapFS{
-		"skills/sample-technique/SKILL.md":        &fstest.MapFile{Data: []byte("# sample\n")},
-		"skills/sample-technique/provenance.yaml": &fstest.MapFile{Data: []byte("name: sample-technique\nupstream: example\n")},
-	}
-
-	dst := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "sample-technique", dst, true))
-
-	provBytes, err := os.ReadFile(filepath.Join(dst, "provenance.yaml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(provBytes), "name: sample-technique")
-}
-
-// TestCatalogSkillsRetainProvenanceOnPresenceCheckMigration verifies that
-// after switching from the explicit `includeProvenance` gate to a template-
-// side presence check, every catalog skill that previously shipped
-// provenance.yaml continues to do so.
-func TestCatalogSkillsRetainProvenanceOnPresenceCheckMigration(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
-	require.NoError(t, Generate(root, []string{"codex"}, true))
-
-	cfg := toolRegistry["codex"]
-	for _, id := range catalogSkillsWithProvenanceSnapshot {
-		provPath := filepath.Join(root, cfg.SkillsDir, "slipway", id, "provenance.yaml")
-		_, err := os.Stat(provPath)
-		assert.NoErrorf(t, err, "catalog skill %q lost provenance.yaml after migration", id)
-	}
-}
-
-// catalogSkillsWithProvenanceSnapshot freezes the PR-0 migration contract to
-// the historical set that shipped provenance at the time the template-side
-// presence check landed. Future catalog additions can make an explicit support-
-// file decision without silently broadening this regression test.
-var catalogSkillsWithProvenanceSnapshot = []string{
-	"ci-triage",
-	"context-assembly",
-	"coverage-analysis",
-	"differential-review",
-	"fresh-verification-evidence",
-	"gha-security-review",
-	"git-recovery",
-	"incident-response",
-	"independent-review",
-	"multi-reviewer-calibration",
-	"mutation-testing",
-	"parallel-executor-contract",
-	"performance-profiling",
-	"plan-authoring",
-	"property-testing",
-	"review-comment-triage",
-	"root-cause-tracing",
-	"sast-orchestration",
-	"scope-clarification",
-	"security-review",
-	"spec-trace",
-	"supply-chain-audit",
-	"tdd-proof",
-	"threat-modeling",
-	"variant-analysis",
-}
-
-// TestEmitSupportFilesWithoutProvenanceStillCopiesReferences verifies that
-// the helper copies optional references/ even when no provenance.yaml exists
-// template-side.
-func TestEmitSupportFilesWithoutProvenanceStillCopiesReferences(t *testing.T) {
+// TestEmitSupportFilesCopiesReferences verifies the happy path: optional
+// `references/` under the template tree is copied into the destination tree.
+func TestEmitSupportFilesCopiesReferences(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
@@ -107,8 +38,6 @@ func TestEmitSupportFilesWithoutProvenanceStillCopiesReferences(t *testing.T) {
 		_, err := os.Stat(filepath.Join(dst, "references", name))
 		assert.NoErrorf(t, err, "missing copied reference %q", name)
 	}
-	_, err := os.Stat(filepath.Join(dst, "provenance.yaml"))
-	assert.True(t, os.IsNotExist(err), "provenance.yaml should not be created when absent template-side")
 }
 
 // TestEmitSupportFilesSkipsEmpty verifies the no-op path: no support files
@@ -129,8 +58,9 @@ func TestEmitSupportFilesSkipsEmpty(t *testing.T) {
 }
 
 // TestEmitSupportFilesRefreshPrunesStaleArtifacts verifies that refresh mode
-// makes support payloads mirror the template tree instead of accumulating
-// stale references/scripts/provenance from a previous render.
+// makes support payloads mirror the template tree. Legacy provenance.yaml
+// files from older generated trees must also be swept so the knowledge-only
+// cleanup doesn't leave stale metadata behind.
 func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -150,7 +80,7 @@ func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "sample", dst, true))
 
 	_, err := os.Stat(filepath.Join(dst, "provenance.yaml"))
-	assert.True(t, os.IsNotExist(err), "refresh should remove stale provenance when template-side provenance.yaml is absent")
+	assert.True(t, os.IsNotExist(err), "refresh should sweep legacy provenance.yaml files")
 	_, err = os.Stat(filepath.Join(dst, "references", "stale.md"))
 	assert.True(t, os.IsNotExist(err), "refresh should prune stale reference files")
 	_, err = os.Stat(filepath.Join(dst, "scripts", "stale.sh"))
@@ -189,7 +119,7 @@ func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
 // rendered-tree review and feature-specific fixture tests; this gate only
 // catches missing files, unexpected extras, and executable-bit flips.
 //
-// Update the golden by running with -update.
+// Update the golden by running with UPDATE_GOLDEN=1.
 func TestGeneratedSkillTreeInventoryManifest(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -257,7 +187,6 @@ func buildSkillTreeInventory(t *testing.T, root string) string {
 		b.WriteString(e.exec)
 		b.WriteByte('\n')
 	}
-	// Append a stable summary so deletions show up obviously in diffs.
 	sum := sha256.Sum256([]byte(b.String()))
 	b.WriteString("# inventory_sha256:")
 	b.WriteString(hex.EncodeToString(sum[:]))
@@ -269,8 +198,6 @@ func classifyByPath(rel string) string {
 	switch {
 	case strings.HasSuffix(rel, "SKILL.md"):
 		return "skill_md"
-	case strings.HasSuffix(rel, "provenance.yaml"):
-		return "provenance"
 	case strings.Contains(rel, "/references/"):
 		return "reference"
 	case strings.Contains(rel, "/scripts/") && strings.HasSuffix(rel, ".sh"):
@@ -286,9 +213,6 @@ func classifyByPath(rel string) string {
 	}
 }
 
-// executableSentinel returns a platform-stable token for the file's exec bit.
-// On POSIX, it asserts whether any +x bit is set. Windows normalizes to a
-// fixed sentinel so the manifest stays portable.
 func executableSentinel(p string) string {
 	if runtime.GOOS == "windows" {
 		return "platform-windows"

@@ -13,14 +13,13 @@ trigger_signals:
   - user_text_matches: ["second reviewer", "adversarial", "panel review"]
     reason: "User text signals multiple reviewers"
 evidence_contract: artifact
+hydrate_references:
+  - name: review-dimensions.md
+    reason: "Dimensions for reviewer-severity calibration"
 bindings:
   - type: host-embedded
     target: code-quality-review
     attachment: procedure
-  - type: command-manual
-    target: review
-    attachment: checklist
-provenance_ref: provenance.yaml
 ---
 
 # Multi-Reviewer Calibration

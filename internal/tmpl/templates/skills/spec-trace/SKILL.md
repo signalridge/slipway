@@ -21,7 +21,6 @@ bindings:
   - type: command-auto
     target: review
     attachment: report-schema
-provenance_ref: provenance.yaml
 ---
 
 # Spec Trace
