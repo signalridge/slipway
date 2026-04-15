@@ -1652,6 +1652,60 @@ func TestScriptFixtureContracts(t *testing.T) {
 		assert.Equal(t, string(data), string(data2), "merge output must be deterministic across runs")
 	})
 
+	t.Run("merge-sarif keeps tool runs separate", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("jq"); err != nil {
+			t.Skipf("jq unavailable: %v", err)
+		}
+		script := filepath.Join(root, "sast-orchestration", "scripts", "merge-sarif.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		raw := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"DUP"}]}},
+            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"CodeQL","rules":[{"id":"DUP"}]}},
+            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
+
+		outPath := filepath.Join(t.TempDir(), "merged.sarif")
+		out, cerr := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
+
+		data, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		var merged struct {
+			Runs []struct {
+				Tool struct {
+					Driver struct {
+						Name  string `json:"name"`
+						Rules []struct {
+							ID string `json:"id"`
+						} `json:"rules"`
+					} `json:"driver"`
+				} `json:"tool"`
+				Results []struct {
+					RuleID string `json:"ruleId"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		require.NoError(t, json.Unmarshal(data, &merged))
+		require.Len(t, merged.Runs, 2, "different tools must remain in separate SARIF runs")
+		assert.Equal(t, "CodeQL", merged.Runs[0].Tool.Driver.Name)
+		assert.Equal(t, "semgrep", merged.Runs[1].Tool.Driver.Name)
+		assert.Len(t, merged.Runs[0].Results, 1, "CodeQL result must not be deduped away by semgrep")
+		assert.Len(t, merged.Runs[1].Results, 1, "semgrep result must stay in its own run")
+		assert.Equal(t, "DUP", merged.Runs[0].Tool.Driver.Rules[0].ID)
+		assert.Equal(t, "DUP", merged.Runs[1].Tool.Driver.Rules[0].ID)
+	})
+
 	t.Run("pin-actions", func(t *testing.T) {
 		t.Parallel()
 		bashPath, err := execLookPath("bash")

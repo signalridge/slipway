@@ -5,9 +5,10 @@
 #   merge-sarif.sh RAW_DIR OUTPUT_FILE
 #
 # Reads every `*.sarif` file directly under RAW_DIR, merges runs, and writes
-# a consolidated SARIF 2.1.0 document at OUTPUT_FILE. Results are deduplicated
-# by `(ruleId, artifact uri, startLine)` and rule metadata is merged by rule
-# id, preserving first-seen driver tool metadata.
+# a consolidated SARIF 2.1.0 document at OUTPUT_FILE. Runs are grouped by
+# `(tool.driver.name, scan profile, workingDirectory)` so different tools keep
+# separate `runs[]` entries. Results are deduplicated within each group by
+# `(ruleId, artifact uri, startLine)` and emitted in deterministic order.
 #
 # Narrow lift from `trailofbits/semgrep/scripts/merge_sarif.py`, implemented
 # as shell + jq so the shipped helper stays offline and deterministic without
@@ -77,47 +78,74 @@ fi
 
 jq -S -s '
   . as $docs
-  | def run_stream($docs): $docs[] | .runs[]?;
-    def first_tool($docs):
-      first(run_stream($docs) | select(.tool != null) | .tool)
-      // {"driver": {"name": "merge-sarif", "rules": []}};
-    def merged_rules($docs):
-      reduce (run_stream($docs) | .tool.driver.rules[]? | select(.id? != null and .id != "")) as $r
+  | def grouped_runs($docs):
+      [
+        $docs
+        | to_entries[] as $doc
+        | ($doc.value.runs // [])
+        | to_entries[]
+        | {
+            file_index: $doc.key,
+            run_index: .key,
+            run: .value,
+            group: {
+              tool: (.value.tool.driver.name // "merge-sarif"),
+              profile: (.value.invocations[0]?.properties?.scan_profile
+                // .value.invocations[0]?.properties?.profile
+                // ""),
+              workdir: (.value.invocations[0]?.workingDirectory?.uri // "")
+            }
+          }
+      ]
+      | sort_by(.group.tool, .group.profile, .group.workdir, .file_index, .run_index)
+      | group_by(.group);
+    def merged_rules($runs):
+      reduce ($runs[] | .tool.driver.rules[]? | select(.id? != null and .id != "")) as $r
         ({seen: {}, out: []};
          if .seen[$r.id] then .
          else .seen[$r.id] = true | .out += [$r]
          end)
-      | .out;
+      | .out
+      | sort_by(.id // "");
     def result_key($r):
       [($r.ruleId // ""),
        ($r.locations[0]?.physicalLocation?.artifactLocation?.uri // ""),
        ($r.locations[0]?.physicalLocation?.region?.startLine // 0)]
       | @json;
-    def merged_results($docs):
-      reduce (run_stream($docs) | .results[]?) as $r
+    def merged_results($runs):
+      reduce ($runs[] | .results[]?) as $r
         ({seen: {}, out: []};
          (result_key($r)) as $key
          | if .seen[$key] then .
            else .seen[$key] = true | .out += [$r]
            end)
-      | .out;
-    merged_results($docs) as $results
-    | {
-        "version": "2.1.0",
-        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-        "runs":
-          (if ($results | length) == 0 then
-             []
-           else
-             [
-               {
-                 "tool": first_tool($docs),
-                 "results": $results
-               }
-               | .tool.driver = ((.tool.driver // {"name": "merge-sarif"}) | .rules = merged_rules($docs))
-             ]
-           end)
-      }
+      | .out
+      | sort_by(
+          .ruleId // "",
+          .locations[0]?.physicalLocation?.artifactLocation?.uri // "",
+          .locations[0]?.physicalLocation?.region?.startLine // 0
+        );
+    {
+      "version": "2.1.0",
+      "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+      "runs":
+        (
+          grouped_runs($docs)
+          | map(
+              (map(.run)) as $runs
+              | ($runs | first) as $first
+              | {
+                  "tool": ($first.tool // {"driver": {"name": "merge-sarif", "rules": []}}),
+                  "results": merged_results($runs)
+                }
+                | .tool.driver = ((.tool.driver // {"name": "merge-sarif"}) | .rules = merged_rules($runs))
+                | if ($first.invocations? != null) then .invocations = $first.invocations else . end
+                | if ($first.artifacts? != null) then .artifacts = $first.artifacts else . end
+                | if ($first.originalUriBaseIds? != null) then .originalUriBaseIds = $first.originalUriBaseIds else . end
+                | if ($first.columnKind? != null) then .columnKind = $first.columnKind else . end
+            )
+        )
+    }
 ' "${VALID_FILES[@]}" >"$OUTPUT_FILE"
 
 RESULT_COUNT="$(jq '[.runs[]?.results[]?] | length' "$OUTPUT_FILE")"

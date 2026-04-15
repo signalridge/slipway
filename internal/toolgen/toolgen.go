@@ -929,10 +929,20 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 		if err := writeDeterministic(filepath.Join(dstBase, "provenance.yaml"), content, refresh); err != nil {
 			return err
 		}
+	} else if refresh {
+		if err := removePathIfExists(filepath.Join(dstBase, "provenance.yaml")); err != nil {
+			return err
+		}
 	}
 
 	for _, sub := range optionalSkillSupportDirs {
-		if err := copyTemplateSubtreeFromFS(srcFS, path.Join("skills", skillID, sub), filepath.Join(dstBase, sub), refresh); err != nil {
+		dstDir := filepath.Join(dstBase, sub)
+		if refresh {
+			if err := removePathIfExists(dstDir); err != nil {
+				return err
+			}
+		}
+		if err := copyTemplateSubtreeFromFS(srcFS, path.Join("skills", skillID, sub), dstDir, refresh); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
 		}
 	}
@@ -948,6 +958,14 @@ func readIfExists(srcFS fs.FS, name string) (string, bool, error) {
 		return "", false, err
 	}
 	return string(b), true, nil
+}
+
+func removePathIfExists(name string) error {
+	err := os.RemoveAll(name)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // copyTemplateSubtree walks an embedded template directory and writes each

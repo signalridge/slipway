@@ -128,6 +128,40 @@ func TestEmitSupportFilesSkipsEmpty(t *testing.T) {
 	assert.Empty(t, entries, "expected no support files in destination, got %v", entries)
 }
 
+// TestEmitSupportFilesRefreshPrunesStaleArtifacts verifies that refresh mode
+// makes support payloads mirror the template tree instead of accumulating
+// stale references/scripts/provenance from a previous render.
+func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
+	t.Parallel()
+
+	srcFS := fstest.MapFS{
+		"skills/sample/SKILL.md":              &fstest.MapFile{Data: []byte("# sample\n")},
+		"skills/sample/references/current.md": &fstest.MapFile{Data: []byte("# current\n")},
+		"skills/sample/scripts/current.sh":    &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\nexit 0\n")},
+	}
+
+	dst := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dst, "references"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dst, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dst, "provenance.yaml"), []byte("stale: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dst, "references", "stale.md"), []byte("# stale\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dst, "scripts", "stale.sh"), []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
+
+	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "sample", dst, true))
+
+	_, err := os.Stat(filepath.Join(dst, "provenance.yaml"))
+	assert.True(t, os.IsNotExist(err), "refresh should remove stale provenance when template-side provenance.yaml is absent")
+	_, err = os.Stat(filepath.Join(dst, "references", "stale.md"))
+	assert.True(t, os.IsNotExist(err), "refresh should prune stale reference files")
+	_, err = os.Stat(filepath.Join(dst, "scripts", "stale.sh"))
+	assert.True(t, os.IsNotExist(err), "refresh should prune stale script files")
+
+	_, err = os.Stat(filepath.Join(dst, "references", "current.md"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dst, "scripts", "current.sh"))
+	assert.NoError(t, err)
+}
+
 // TestEmitSupportFilesSkipsPythonCacheArtifacts verifies that copied support
 // trees ignore transient Python cache directories/files instead of exporting
 // them into generated skill trees.
