@@ -2,8 +2,10 @@ package toolgen
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -27,11 +29,11 @@ type hydrateReferenceEntry struct {
 	Reason string `yaml:"reason"`
 }
 
-// loadHydrateReferences parses a SKILL.md frontmatter block and returns the
-// declared hydrate_references[] records (empty slice when absent).
-func loadHydrateReferences(t *testing.T, path string) []hydrateReferenceEntry {
+// loadHydrateReferencesFromFS parses a SKILL.md frontmatter block from an fs.FS
+// and returns the declared hydrate_references[] records (empty slice when absent).
+func loadHydrateReferencesFromFS(t *testing.T, src fs.FS, name string) []hydrateReferenceEntry {
 	t.Helper()
-	raw, err := os.ReadFile(path)
+	raw, err := fs.ReadFile(src, name)
 	require.NoError(t, err)
 	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	lines := strings.Split(content, "\n")
@@ -50,13 +52,13 @@ func loadHydrateReferences(t *testing.T, path string) []hydrateReferenceEntry {
 		}
 	}
 	if end < 0 {
-		t.Fatalf("%s: unterminated frontmatter", path)
+		t.Fatalf("%s: unterminated frontmatter", name)
 	}
 	block := strings.Join(lines[start+1:end], "\n")
 	var fm struct {
 		HydrateReferences []hydrateReferenceEntry `yaml:"hydrate_references"`
 	}
-	require.NoErrorf(t, yaml.Unmarshal([]byte(block), &fm), "%s: parse frontmatter", path)
+	require.NoErrorf(t, yaml.Unmarshal([]byte(block), &fm), "%s: parse frontmatter", name)
 	return fm.HydrateReferences
 }
 
@@ -1326,16 +1328,16 @@ const referencesBudgetPerSkill = 64 * 1024
 // with an H1 so hydrate output renders a readable heading.
 func TestCatalogSkillHasReferences(t *testing.T) {
 	t.Parallel()
-	root := skillTemplatesRoot(t)
+	templateFS := tmpl.TemplateFS()
 	for _, id := range hydratedSkillIDs {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
-			refsDir := filepath.Join(root, id, "references")
-			info, err := os.Stat(refsDir)
+			refsDir := path.Join("skills", id, "references")
+			info, err := fs.Stat(templateFS, refsDir)
 			require.NoErrorf(t, err, "missing references/ dir for %s", id)
 			require.Truef(t, info.IsDir(), "%s: references path is not a directory", id)
 
-			entries, err := os.ReadDir(refsDir)
+			entries, err := fs.ReadDir(templateFS, refsDir)
 			require.NoError(t, err)
 			mdCount := 0
 			for _, e := range entries {
@@ -1343,7 +1345,7 @@ func TestCatalogSkillHasReferences(t *testing.T) {
 					continue
 				}
 				mdCount++
-				raw, err := os.ReadFile(filepath.Join(refsDir, e.Name()))
+				raw, err := fs.ReadFile(templateFS, path.Join(refsDir, e.Name()))
 				require.NoError(t, err)
 				head := strings.TrimLeft(string(raw), "\ufeff \t\n")
 				assert.Truef(t, strings.HasPrefix(head, "# "),
@@ -1361,8 +1363,8 @@ func TestCatalogSkillHasReferences(t *testing.T) {
 // must not contain path separators or ...
 func TestHydrateReferencesResolveToFiles(t *testing.T) {
 	t.Parallel()
-	root := skillTemplatesRoot(t)
-	entries, err := os.ReadDir(root)
+	templateFS := tmpl.TemplateFS()
+	entries, err := fs.ReadDir(templateFS, "skills")
 	require.NoError(t, err)
 
 	for _, e := range entries {
@@ -1370,11 +1372,11 @@ func TestHydrateReferencesResolveToFiles(t *testing.T) {
 			continue
 		}
 		id := e.Name()
-		skillPath := filepath.Join(root, id, "SKILL.md")
-		if _, err := os.Stat(skillPath); err != nil {
+		skillPath := path.Join("skills", id, "SKILL.md")
+		if _, err := fs.Stat(templateFS, skillPath); err != nil {
 			continue
 		}
-		refs := loadHydrateReferences(t, skillPath)
+		refs := loadHydrateReferencesFromFS(t, templateFS, skillPath)
 		if len(refs) == 0 {
 			continue
 		}
@@ -1395,8 +1397,8 @@ func TestHydrateReferencesResolveToFiles(t *testing.T) {
 				}
 				seen[r.Name] = struct{}{}
 
-				refPath := filepath.Join(root, id, "references", r.Name)
-				_, err := os.Stat(refPath)
+				refPath := path.Join("skills", id, "references", r.Name)
+				_, err := fs.Stat(templateFS, refPath)
 				assert.NoErrorf(t, err,
 					"%s: hydrate_references %q does not resolve to a file under references/", id, r.Name)
 			}
@@ -1408,8 +1410,8 @@ func TestHydrateReferencesResolveToFiles(t *testing.T) {
 // reference material so hydrate payloads stay bounded.
 func TestReferenceFileSizeBudget(t *testing.T) {
 	t.Parallel()
-	root := skillTemplatesRoot(t)
-	entries, err := os.ReadDir(root)
+	templateFS := tmpl.TemplateFS()
+	entries, err := fs.ReadDir(templateFS, "skills")
 	require.NoError(t, err)
 
 	for _, e := range entries {
@@ -1417,22 +1419,22 @@ func TestReferenceFileSizeBudget(t *testing.T) {
 			continue
 		}
 		id := e.Name()
-		refsDir := filepath.Join(root, id, "references")
-		info, err := os.Stat(refsDir)
+		refsDir := path.Join("skills", id, "references")
+		info, err := fs.Stat(templateFS, refsDir)
 		if err != nil || !info.IsDir() {
 			continue
 		}
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
-			files, err := os.ReadDir(refsDir)
+			files, err := fs.ReadDir(templateFS, refsDir)
 			require.NoError(t, err)
 			total := 0
 			for _, f := range files {
 				if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
 					continue
 				}
-				p := filepath.Join(refsDir, f.Name())
-				st, err := os.Stat(p)
+				p := path.Join(refsDir, f.Name())
+				st, err := fs.Stat(templateFS, p)
 				require.NoError(t, err)
 				size := int(st.Size())
 				assert.LessOrEqualf(t, size, referencesBudgetPerFile,
@@ -1504,17 +1506,6 @@ func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
 			assert.NotZerof(t, info.Size(), "%s: overlay is empty", name)
 		})
 	}
-}
-
-// skillTemplatesRoot locates the authoring-side skill template directory
-// from the toolgen test package.
-func skillTemplatesRoot(t *testing.T) string {
-	t.Helper()
-	p := filepath.Join("..", "tmpl", "templates", "skills")
-	info, err := os.Stat(p)
-	require.NoError(t, err)
-	require.True(t, info.IsDir(), "expected %s to be a directory", p)
-	return p
 }
 
 // generatedSkillsRoot generates a codex tree and returns the path to
@@ -2051,16 +2042,14 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
-		// The helper swallows per-call errors and emits stderr diagnostics;
-		// assert the credential signal appears in the output rather than
-		// requiring a non-zero exit, so the test does not flake on the
-		// upstream tool's error-handling shape.
-		out, _ := runCommandEnv(
+		out, cerr := runCommandEnv(
 			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
 			pythonPath, script, "--teams", "none-such-slipway-test",
 		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
 		assert.True(t,
-			strings.Contains(out, "Bad credentials") ||
+			strings.Contains(out, "invalid or unauthorized") ||
+				strings.Contains(out, "Bad credentials") ||
 				strings.Contains(out, "not authenticated") ||
 				strings.Contains(out, "gh auth"),
 			"fetch-review-requests must surface a stable credential-error signal, got:\n%s", out)
@@ -2107,11 +2096,21 @@ func TestOnlyExternalPolluter(t *testing.T) {
 			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
 			pythonPath, script, "--confirm", "PRRT_abc", "real body",
 		)
-		require.Error(t, cerr, "--confirm with invalid credentials must exit non-zero")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, cerr, &exitErr, "--confirm with invalid credentials must exit non-zero")
+		assert.Equal(t, 2, exitErr.ExitCode(), "invalid credentials should fail during preflight")
+		assert.Contains(t, out, "BEGIN REQUEST",
+			"reply-to-thread --confirm must print the pending request before posting")
+		assert.Contains(t, out, "addPullRequestReviewThreadReply",
+			"reply-to-thread --confirm must show the GraphQL mutation body")
+		assert.Contains(t, out, "PRRT_abc",
+			"reply-to-thread --confirm must echo the thread id in the request body")
+		assert.NotContains(t, out, "GraphQL error",
+			"invalid credentials should be rejected before attempting the GraphQL write")
 		assert.True(t,
-			strings.Contains(out, "Bad credentials") ||
+			strings.Contains(out, "invalid or unauthorized") ||
+				strings.Contains(out, "Bad credentials") ||
 				strings.Contains(out, "not authenticated") ||
-				strings.Contains(out, "GraphQL error") ||
 				strings.Contains(out, "gh auth"),
 			"reply-to-thread --confirm must surface the credential path, got:\n%s", out)
 	})

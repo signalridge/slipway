@@ -20,7 +20,8 @@ Lifted from ``getsentry/gh-review-requests/scripts/fetch_review_requests.py``
   - Replaced ``uv run`` invocation with a direct ``python3`` shebang so
     this helper matches the other Wave-3 scripts.
   - Added a fail-fast ``gh``/credentials preflight that exits 2 with an
-    actionable message when ``gh`` is missing or unauthenticated.
+    actionable message when ``gh`` is missing or credentials are missing or
+    invalid.
 
 Credentials come from ``GH_TOKEN`` / ``GITHUB_TOKEN`` or the existing
 ``gh`` login.
@@ -46,9 +47,6 @@ def preflight():
         _die(
             2, "fetch-review-requests: gh CLI not found on PATH; install gh or set PATH"
         )
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        return
     try:
         result = subprocess.run(
             ["gh", "auth", "status"],
@@ -59,6 +57,12 @@ def preflight():
     except (OSError, subprocess.TimeoutExpired) as exc:
         _die(2, "fetch-review-requests: gh auth status failed: {0}".format(exc))
     if result.returncode != 0:
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token:
+            _die(
+                2,
+                "fetch-review-requests: provided GH_TOKEN/GITHUB_TOKEN is invalid or unauthorized; refresh the token or run `gh auth login`",
+            )
         _die(
             2,
             "fetch-review-requests: gh not authenticated; "
@@ -70,16 +74,24 @@ def gh(path, paginate=False):
     cmd = ["gh", "api", path]
     if paginate:
         cmd.append("--paginate")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0 or not result.stdout:
-        sys.stderr.write(
-            "Error running gh {0}: {1}\n".format(" ".join(cmd), result.stderr)
-        )
-        return [] if paginate else {}
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _die(2, "fetch-review-requests: gh api failed for {0}: {1}".format(path, exc))
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "unknown gh api failure"
+        _die(2, "fetch-review-requests: gh api failed for {0}: {1}".format(path, detail))
+    if not result.stdout.strip():
+        _die(2, "fetch-review-requests: gh api returned empty output for {0}".format(path))
     try:
         return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return [] if paginate else {}
+    except json.JSONDecodeError as exc:
+        _die(
+            2,
+            "fetch-review-requests: gh api returned invalid JSON for {0}: {1}".format(
+                path, exc
+            ),
+        )
 
 
 def main():

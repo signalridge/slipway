@@ -197,18 +197,20 @@ func makeReviewCmd() *cobra.Command {
 				}
 				profile := buildChangeProfileView(change)
 				view := reviewView{
-					Slug:                  active.Slug,
-					ExecutionMode:         execMode,
-					QualityMode:           profile.QualityMode,
-					NeedsDiscovery:        profile.NeedsDiscovery,
-					CurrentState:          string(change.CurrentState),
-					Verdict:               verdict,
-					Mode:                  effectiveMode,
-					HydrateReferences:     hydrateKeys,
-					SuggestedCapabilities: buildSuggestedCapabilities("review", opts.focus),
-					Blockers:              blockers,
-					Waves:                 waveViews,
-					Gaps:                  classifyReviewGaps(blockers),
+					Slug:              active.Slug,
+					ExecutionMode:     execMode,
+					QualityMode:       profile.QualityMode,
+					NeedsDiscovery:    profile.NeedsDiscovery,
+					CurrentState:      string(change.CurrentState),
+					Verdict:           verdict,
+					Mode:              effectiveMode,
+					HydrateReferences: hydrateKeys,
+					SuggestedCapabilities: buildSuggestedCapabilities(
+						suggestedCapabilitySignalsForChange("review", opts.focus, change, execCtx.Summary, blockers),
+					),
+					Blockers: blockers,
+					Waves:    waveViews,
+					Gaps:     classifyReviewGaps(blockers),
 				}
 
 				if jsonOutput {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
@@ -63,9 +64,8 @@ func makeRepairCmd() *cobra.Command {
 			return withWorkspaceRepairLock(root, func(staleLockCleaned bool) error {
 				now := time.Now().UTC()
 				summary := repairSummary{
-					StaleLockCleaned:      staleLockCleaned,
-					Mode:                  effectiveMode,
-					SuggestedCapabilities: buildSuggestedCapabilities("repair", focus),
+					StaleLockCleaned: staleLockCleaned,
+					Mode:             effectiveMode,
 				}
 
 				cleaned, err := fsutil.CleanupAtomicTempArtifacts(root)
@@ -204,6 +204,7 @@ func makeRepairCmd() *cobra.Command {
 
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
+				summary.SuggestedCapabilities = buildRepairSuggestedCapabilities(root, focus, allChanges)
 
 				if jsonOutput {
 					return encodeJSONResponse(cmd, summary)
@@ -217,6 +218,44 @@ func makeRepairCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
+}
+
+func buildRepairSuggestedCapabilities(root, focus string, changes []model.Change) []suggestedCapabilityView {
+	var active []model.Change
+	uniqueActive := make(map[string]struct{})
+	for _, change := range changes {
+		if change.Status != model.ChangeStatusActive {
+			continue
+		}
+		active = append(active, change)
+		uniqueActive[change.Slug] = struct{}{}
+	}
+	if len(uniqueActive) != 1 {
+		return nil
+	}
+
+	sig := capability.Signals{
+		Command: "repair",
+		Focus:   strings.TrimSpace(focus),
+	}
+	var descriptions []string
+	var changedFiles []string
+	var blockers []string
+	for _, change := range active {
+		if desc := strings.TrimSpace(change.Description); desc != "" {
+			descriptions = append(descriptions, desc)
+		}
+		summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+		if err != nil || summary == nil {
+			continue
+		}
+		changedFiles = append(changedFiles, executionSummaryChangedFiles(summary)...)
+		blockers = append(blockers, executionSummaryBlockerSpecs(summary)...)
+	}
+	sig.UserText = strings.Join(uniqueSortedNonEmpty(descriptions), "\n")
+	sig.ChangedFiles = uniqueSortedNonEmpty(changedFiles)
+	sig.Blockers = uniqueSortedNonEmpty(blockers)
+	return buildSuggestedCapabilities(sig)
 }
 
 func writeRepairText(w io.Writer, summary repairSummary) error {

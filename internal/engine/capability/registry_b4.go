@@ -150,22 +150,22 @@ func performanceProfiling() Skill {
 		Function:          "profile and attribute performance against a baseline before optimizing",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when a change is suspected to affect performance. Triggers on validate or status commands, goal-verification host, or perf-related user text.",
+		Summary:           "Use when a change is suspected to affect performance. Triggers on validate command, goal-verification host, or perf-related user text.",
 		Evidence:          EvidenceArtifact,
 		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"validate", "status"},
-				Reason: "validate or status command invoked; profiling may apply"},
+			{Op: OpCommand, Value: "validate",
+				Reason: "validate command invoked; profiling may apply"},
 			{Op: OpHost, Value: "goal-verification",
 				Reason: "Verification host active; perf regression may be in scope"},
 			{Op: OpUserTextMatches, Values: []string{"perf", "profiling", "slow", "latency", "regression"},
 				Reason: "User text signals performance work"},
 		},
-		// Suggested-only on validate / status (§5.2). The status
-		// --view=performance-profiling surface was removed (§5.5).
+		// Suggested-only on validate (§5.2). The status
+		// --view=performance-profiling surface was removed (§5.5), and status no
+		// longer carries this skill as a suggested surface.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
-			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
 	}
 }

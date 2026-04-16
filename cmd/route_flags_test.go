@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"testing"
@@ -241,6 +242,77 @@ func TestResolveEffectiveViewHydrate_UnknownAliasReturnsNil(t *testing.T) {
 	got := resolveEffectiveViewHydrate("status", "does-not-exist")
 	if got != nil {
 		t.Fatalf("expected nil for unknown view, got %v", got)
+	}
+}
+
+func TestBuildSuggestedCapabilitiesSkipsBareCommandOnlyMatches(t *testing.T) {
+	got := buildSuggestedCapabilities(capability.Signals{Command: "repair"})
+	if got != nil {
+		t.Fatalf("expected no suggestions for bare repair, got %v", got)
+	}
+}
+
+func TestBuildSuggestedCapabilitiesUsesMatchedReason(t *testing.T) {
+	got := buildSuggestedCapabilities(capability.Signals{
+		Command:      "repair",
+		ChangedFiles: []string{".github/workflows/ci.yml"},
+	})
+	if len(got) != 1 {
+		t.Fatalf("expected one suggestion for workflow change, got %v", got)
+	}
+	if got[0].Name != "gha-security-review" {
+		t.Fatalf("expected gha-security-review suggestion, got %q", got[0].Name)
+	}
+	if got[0].Reason != "GitHub Actions workflow changed" {
+		t.Fatalf("expected changed-file reason, got %q", got[0].Reason)
+	}
+}
+
+func TestBuildSuggestedCapabilitiesProjectsExplicitFocusAlias(t *testing.T) {
+	got := buildSuggestedCapabilities(capability.Signals{
+		Command:  "validate",
+		UserText: "codeql",
+	})
+	if len(got) == 0 {
+		t.Fatalf("expected validate suggestions for codeql signal")
+	}
+
+	foundSAST := false
+	for _, item := range got {
+		if item.Name == "sast-orchestration" {
+			t.Fatalf("expected public alias, not raw backing id: %v", got)
+		}
+		if item.Name == "sast" {
+			foundSAST = true
+			if item.Kind != "explicit_focus" {
+				t.Fatalf("expected explicit_focus kind for sast, got %q", item.Kind)
+			}
+		}
+	}
+	if !foundSAST {
+		t.Fatalf("expected sast suggestion in %v", got)
+	}
+}
+
+func TestWriteSuggestedBlockUsesReasonBeforeSummary(t *testing.T) {
+	var buf bytes.Buffer
+	writer := newFormatWriter(&buf)
+	writeSuggestedBlock(writer, []suggestedCapabilityView{
+		{
+			Name:    "gha-security-review",
+			Summary: "generic summary should stay hidden",
+			Reason:  "GitHub Actions workflow changed",
+		},
+	})
+	if err := writer.Err(); err != nil {
+		t.Fatalf("unexpected write error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "GitHub Actions workflow changed") {
+		t.Fatalf("expected reason in suggested block, got %q", out)
+	}
+	if strings.Contains(out, "generic summary should stay hidden") {
+		t.Fatalf("expected summary to be suppressed when reason exists, got %q", out)
 	}
 }
 

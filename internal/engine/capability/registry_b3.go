@@ -104,7 +104,7 @@ func supplyChainAudit() Skill {
 		Function:          "audit third-party dependencies for CVE, provenance, and pinning risk",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review, repair, or status commands or on changes to package/lock files.",
+		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review or repair commands or on changes to package/lock files.",
 		Evidence:          EvidenceVerdict,
 		Triggers: []TriggerClause{
 			{Op: OpChangedFilesInclude, Values: []string{
@@ -114,15 +114,15 @@ func supplyChainAudit() Skill {
 				"requirements*.txt", "pyproject.toml", "poetry.lock", "uv.lock",
 			},
 				Reason: "Dependency manifest or lockfile changed"},
-			{Op: OpCommand, Values: []string{"review", "repair", "status"},
-				Reason: "Review/repair/status command invoked; dependency surface may apply"},
+			{Op: OpCommand, Values: []string{"review", "repair"},
+				Reason: "Review or repair command invoked; dependency surface may apply"},
 		},
-		// Suggested-only on review / repair / status (§5.2). The status
-		// --view=supply-chain-audit surface was removed (§5.5).
+		// Suggested-only on review / repair (§5.2). The status
+		// --view=supply-chain-audit surface was removed (§5.5), and status no
+		// longer carries this skill as a suggested surface.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
-			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "results-template.md", Reason: "Audit report schema for supply-chain findings"},

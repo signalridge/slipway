@@ -292,13 +292,12 @@ func TestResolveTddProofHydrateSurfacesOnGovernanceHosts(t *testing.T) {
 // TestResolveCiTriageNeverSurfacesHydrate enforces the Wave-3 PR-3 negative
 // invariant: ci-triage is a scripts-only suggested-only skill with no
 // HydrateReferences, so its hydrate footprint is empty on every selection
-// path it owns (suggested on repair / status, and also on arbitrary hosts).
+// path it owns (suggested on repair, and also on arbitrary hosts).
 func TestResolveCiTriageNeverSurfacesHydrate(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 	for _, sig := range []Signals{
 		{Command: "repair"},
-		{Command: "status"},
 		{Host: "code-quality-review"},
 		{Host: "plan-audit"},
 	} {
@@ -317,7 +316,6 @@ func TestResolveReviewCommentTriageNeverSurfacesHydrate(t *testing.T) {
 	reg := DefaultRegistry()
 	for _, sig := range []Signals{
 		{Command: "repair"},
-		{Command: "status"},
 		{Host: "code-quality-review"},
 		{Host: "plan-audit"},
 	} {

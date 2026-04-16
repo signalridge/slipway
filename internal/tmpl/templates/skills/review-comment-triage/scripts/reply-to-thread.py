@@ -11,7 +11,8 @@ SAFETY INVARIANT (Wave-3 PR-2 blast-radius contract):
     This helper is write-capable. It DEFAULTS TO DRY-RUN: without
     ``--confirm`` it prints the intended GraphQL mutation to stderr and
     exits with a non-zero status. Posting happens only when ``--confirm``
-    is supplied explicitly. Do not relax this default.
+    is supplied explicitly, and the confirm path still echoes the exact
+    request body to stderr before posting. Do not relax this default.
 
 Lifted from ``getsentry/iterate-pr/scripts/reply_to_thread.py`` (Wave-3
 PR-2). Narrowings vs upstream:
@@ -23,7 +24,8 @@ PR-2). Narrowings vs upstream:
     ``--confirm`` is set, so dry-run works offline).
 
 Credentials come from ``GH_TOKEN`` / ``GITHUB_TOKEN`` or the existing
-``gh`` login. Both must be absent for preflight to fail.
+``gh`` login. Invalid env tokens are rejected during preflight before any
+write attempt.
 """
 
 from __future__ import annotations
@@ -46,8 +48,6 @@ def preflight():
     if shutil.which("gh") is None:
         _die(2, "reply-to-thread: gh CLI not found on PATH; install gh or set PATH")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        return
     try:
         result = subprocess.run(
             ["gh", "auth", "status"],
@@ -58,6 +58,11 @@ def preflight():
     except (OSError, subprocess.TimeoutExpired) as exc:
         _die(2, "reply-to-thread: gh auth status failed: {0}".format(exc))
     if result.returncode != 0:
+        if token:
+            _die(
+                2,
+                "reply-to-thread: provided GH_TOKEN/GITHUB_TOKEN is invalid or unauthorized; refresh the token or run `gh auth login`",
+            )
         _die(
             2,
             "reply-to-thread: gh not authenticated; "
@@ -90,6 +95,25 @@ def build_mutation(pairs):
             "}}) {{ clientMutationId }}".format(i, escaped_thread_id, escaped_body)
         )
     return "mutation {\n" + "\n".join(mutations) + "\n}"
+
+
+def emit_request_preview(query, dry_run):
+    if dry_run:
+        sys.stderr.write(
+            "DRY-RUN: reply-to-thread would post the following GraphQL mutation.\n"
+            "Pass --confirm to actually submit it.\n"
+            "----- BEGIN DRY-RUN REQUEST -----\n"
+        )
+        sys.stderr.write(query + "\n")
+        sys.stderr.write("----- END DRY-RUN REQUEST -----\n")
+        return
+
+    sys.stderr.write(
+        "CONFIRM: reply-to-thread will post the following GraphQL mutation.\n"
+        "----- BEGIN REQUEST -----\n"
+    )
+    sys.stderr.write(query + "\n")
+    sys.stderr.write("----- END REQUEST -----\n")
 
 
 def reply_to_threads(pairs):
@@ -159,15 +183,10 @@ def main():
     query = build_mutation(pairs)
 
     if not parsed.confirm:
-        sys.stderr.write(
-            "DRY-RUN: reply-to-thread would post the following GraphQL mutation.\n"
-            "Pass --confirm to actually submit it.\n"
-            "----- BEGIN DRY-RUN REQUEST -----\n"
-        )
-        sys.stderr.write(query + "\n")
-        sys.stderr.write("----- END DRY-RUN REQUEST -----\n")
+        emit_request_preview(query, dry_run=True)
         sys.exit(3)
 
+    emit_request_preview(query, dry_run=False)
     preflight()
 
     results = reply_to_threads(pairs)

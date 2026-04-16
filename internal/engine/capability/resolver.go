@@ -31,7 +31,7 @@ type RouteSelection struct {
 // SuggestedCapability is one entry in Resolution.SuggestedCapabilities. See
 // route-surface plan §4.4: cap 3, stable order, disjoint from Supports.
 type SuggestedCapability struct {
-	Name    string // skill id today; PR-2 may remap to a public alias when one exists
+	Name    string // public surface name exposed to operators
 	Summary string
 	Reason  string
 	Kind    string // "suggested" or "explicit_focus"
@@ -201,7 +201,8 @@ func resolveRoute(reg *Registry, sig Signals, matches []resolverCandidate) *Rout
 
 // collectSuggestedCapabilities populates the bounded, deterministic
 // suggested-capabilities channel from BindingCommandAuto matches (route-
-// surface plan §4.4).
+// surface plan §4.4), projecting each backing skill through the checked-in
+// suggestion surface policy before exposing it publicly.
 func collectSuggestedCapabilities(matches []resolverCandidate, sig Signals, res Resolution) []SuggestedCapability {
 	if sig.Command == "" {
 		return nil
@@ -213,8 +214,6 @@ func collectSuggestedCapabilities(matches []resolverCandidate, sig Signals, res 
 	for _, s := range res.Supports {
 		excluded[s.SkillID] = struct{}{}
 	}
-	focusBackings := ExplicitFocusBackingIDs()
-
 	var out []SuggestedCapability
 	for _, m := range matches {
 		if _, skip := excluded[m.skill.ID]; skip {
@@ -223,14 +222,26 @@ func collectSuggestedCapabilities(matches []resolverCandidate, sig Signals, res 
 		if !skillHasCommandAutoFor(m.skill, sig.Command) {
 			continue
 		}
+		surface, ok := suggestionSurfaceForBacking(sig.Command, m.skill.ID)
+		if !ok {
+			continue
+		}
+		reason, ok := suggestedCapabilityReason(m.skill, sig)
+		if !ok {
+			continue
+		}
 		kind := "suggested"
-		if _, isFocus := focusBackings[m.skill.ID]; isFocus {
+		if surface.Class == SurfaceExplicitFocus {
 			kind = "explicit_focus"
 		}
+		summary := strings.TrimSpace(surface.Summary)
+		if summary == "" {
+			summary = m.skill.Summary
+		}
 		out = append(out, SuggestedCapability{
-			Name:    m.skill.ID,
-			Summary: m.skill.Summary,
-			Reason:  m.clause.Reason,
+			Name:    surface.PublicName,
+			Summary: summary,
+			Reason:  reason,
 			Kind:    kind,
 			Score:   m.score,
 		})
@@ -239,6 +250,44 @@ func collectSuggestedCapabilities(matches []resolverCandidate, sig Signals, res 
 		}
 	}
 	return out
+}
+
+func suggestedCapabilityReason(sk Skill, sig Signals) (string, bool) {
+	bestScore := -1
+	reason := ""
+	for _, clause := range sk.Triggers {
+		if !clause.Match(sig) || !clauseHasNonCommandSignal(clause) {
+			continue
+		}
+		score := scoreClause(clause, sig)
+		// Equal scores keep the earliest declared trigger. That makes the
+		// tiebreak deterministic and author-controlled without adding another
+		// secondary ordering layer.
+		if score > bestScore {
+			bestScore = score
+			reason = clause.Reason
+		}
+	}
+	if bestScore < 0 {
+		return "", false
+	}
+	return reason, true
+}
+
+func clauseHasNonCommandSignal(c TriggerClause) bool {
+	switch c.Op {
+	case OpCommand:
+		return false
+	case OpAllOf, OpAnyOf, OpNot:
+		for _, child := range c.Children {
+			if clauseHasNonCommandSignal(child) {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
 }
 
 func skillHasCommandAutoFor(sk Skill, command string) bool {

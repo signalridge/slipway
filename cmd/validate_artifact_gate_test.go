@@ -36,6 +36,7 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -47,6 +48,25 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_required_artifact:decision.md")
 		require.NotEmpty(t, view.Blockers)
 		assert.Equal(t, "missing_required_artifact", view.Blockers[0].Code)
+	})
+}
+
+func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		var out bytes.Buffer
+		cmd := makeValidateCmd()
+		cmd.SetArgs([]string{"--json=false"})
+		cmd.SetOut(&out)
+
+		require.NoError(t, cmd.Execute())
+
+		var view validateView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, "diagnostics", view.ExecutionMode)
+		assert.Equal(t, "spec-trace", view.Mode)
 	})
 }
 
@@ -108,6 +128,7 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -172,7 +193,7 @@ func TestValidateOnlyRequiresActivePlanningSkillAtPlanAudit(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView
@@ -369,6 +390,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 

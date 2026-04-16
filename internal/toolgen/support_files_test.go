@@ -113,6 +113,28 @@ func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "python cache artifacts must not be copied into generated trees")
 }
 
+// TestTemplateShellScriptsAreExecutable guards the checked-in template source
+// tree itself. Generated trees already normalize `*.sh` to 0755, but operators
+// and local tests may invoke template-side helpers directly during development.
+func TestTemplateShellScriptsAreExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit semantics are POSIX-only")
+	}
+
+	pattern := filepath.Join(checkedInSkillTemplatesRoot(t), "*", "scripts", "*.sh")
+	matches, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	require.NotEmpty(t, matches, "expected at least one template-side shell helper")
+
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.NotZerof(t, info.Mode().Perm()&0o111,
+			"%s: expected executable bit on checked-in template shell script, got %v",
+			path, info.Mode().Perm())
+	}
+}
+
 // TestGeneratedSkillTreeInventoryManifest catches accidental structural drift
 // in the generated `.codex/skills/slipway/` tree. The golden manifest tracks
 // (path, file_kind, executable) per file. Semantic content drift stays with
@@ -129,7 +151,7 @@ func TestGeneratedSkillTreeInventoryManifest(t *testing.T) {
 	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
 	manifest := buildSkillTreeInventory(t, skillsRoot)
 
-	goldenPath := filepath.Join("testdata", "skill_tree_inventory.codex.golden")
+	goldenPath := toolgenTestdataPath(t, "skill_tree_inventory.codex.golden")
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
 		require.NoError(t, os.MkdirAll(filepath.Dir(goldenPath), 0o755))
 		require.NoError(t, os.WriteFile(goldenPath, []byte(manifest), 0o644))
@@ -255,4 +277,26 @@ func firstNDiffLines(want, got string, n int) string {
 		}
 	}
 	return b.String()
+}
+
+func toolgenPackageDir(t *testing.T) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Dir(filename)
+}
+
+func toolgenRepoRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Clean(filepath.Join(toolgenPackageDir(t), "..", ".."))
+}
+
+func checkedInSkillTemplatesRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(toolgenRepoRoot(t), "internal", "tmpl", "templates", "skills")
+}
+
+func toolgenTestdataPath(t *testing.T, name string) string {
+	t.Helper()
+	return filepath.Join(toolgenPackageDir(t), "testdata", name)
 }

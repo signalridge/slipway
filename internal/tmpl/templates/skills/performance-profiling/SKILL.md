@@ -4,10 +4,10 @@ domain: verification
 function: profile and attribute performance against a baseline before optimizing
 tier: T1
 primary_attachment: procedure
-summary: "Use when a change is suspected to affect performance. Triggers on validate or status commands, goal-verification host, or perf-related user text."
+summary: "Use when a change is suspected to affect performance. Triggers on validate command, goal-verification host, or perf-related user text."
 trigger_signals:
-  - command: ["validate", "status"]
-    reason: "validate or status command invoked; profiling may apply"
+  - command: validate
+    reason: "validate command invoked; profiling may apply"
   - host: goal-verification
     reason: "Verification host active; perf regression may be in scope"
   - user_text_matches: ["perf", "profiling", "slow", "latency", "regression"]
@@ -19,9 +19,6 @@ bindings:
     attachment: procedure
   - type: host-embedded
     target: goal-verification
-    attachment: checklist
-  - type: command-auto
-    target: status
     attachment: checklist
 ---
 

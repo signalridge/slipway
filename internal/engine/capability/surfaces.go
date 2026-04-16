@@ -7,10 +7,9 @@ import (
 
 // SurfaceClass classifies a public surface record. Route-surface plan §4.2
 // defines four exposure classes: primary, suggested, explicit-focus, and
-// view. Only `primary`, `explicit_focus`, and `view` participate in surface
-// policy lookup; `suggested` is kept descriptive here for completeness but
-// runtime suggestions are still derived from BindingCommandAuto signals
-// plus the surface policy's disjointness rule (§4.4).
+// view. Primary / explicit-focus / view drive direct selector lookup;
+// suggested records own suggestion exposure and user-facing naming for the
+// bounded `suggested_capabilities[]` channel.
 type SurfaceClass string
 
 const (
@@ -33,8 +32,8 @@ type SurfaceRecord struct {
 }
 
 // surfacePolicy is the checked-in catalog of public surfaces. Primary routes
-// mirror route-surface plan §5.1; explicit focuses mirror §5.3; views mirror
-// §5.4.
+// mirror route-surface plan §5.1; suggested-only skills mirror §5.2; explicit
+// focuses mirror §5.3; views mirror §5.4.
 var surfacePolicy = []SurfaceRecord{
 	// §5.1 Primary routes — one per command surface.
 	{
@@ -61,6 +60,78 @@ var surfacePolicy = []SurfaceRecord{
 		Command: "health", Class: SurfacePrimary,
 		PublicName: "incident", BackingID: "incident-response",
 		Summary: "Change-scoped incident-response diagnostic view.",
+	},
+
+	// §5.2 Suggested-only skills — public recommendation names.
+	{
+		Command: "review", Class: SurfaceSuggested,
+		PublicName: "security-review", BackingID: "security-review",
+		Summary: "Attach the security checklist when auth, crypto, or input boundaries change.",
+	},
+	{
+		Command: "review", Class: SurfaceSuggested,
+		PublicName: "threat-modeling", BackingID: "threat-modeling",
+		Summary: "Model trust-boundary changes before approving risky architectural deltas.",
+	},
+	{
+		Command: "validate", Class: SurfaceSuggested,
+		PublicName: "threat-modeling", BackingID: "threat-modeling",
+		Summary: "Model trust-boundary changes before approving risky architectural deltas.",
+	},
+	{
+		Command: "review", Class: SurfaceSuggested,
+		PublicName: "gha-security-review", BackingID: "gha-security-review",
+		Summary: "Inspect workflow changes for GitHub Actions attack paths and unsafe permissions.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "gha-security-review", BackingID: "gha-security-review",
+		Summary: "Inspect workflow changes for GitHub Actions attack paths and unsafe permissions.",
+	},
+	{
+		Command: "review", Class: SurfaceSuggested,
+		PublicName: "supply-chain-audit", BackingID: "supply-chain-audit",
+		Summary: "Audit dependency, lockfile, and license risk when package manifests change.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "supply-chain-audit", BackingID: "supply-chain-audit",
+		Summary: "Audit dependency, lockfile, and license risk when package manifests change.",
+	},
+	{
+		Command: "validate", Class: SurfaceSuggested,
+		PublicName: "coverage-analysis", BackingID: "coverage-analysis",
+		Summary: "Check whether test coverage is sufficient for the current change.",
+	},
+	{
+		Command: "validate", Class: SurfaceSuggested,
+		PublicName: "performance-profiling", BackingID: "performance-profiling",
+		Summary: "Profile performance-sensitive changes when perf cues or bottlenecks are present.",
+	},
+	{
+		Command: "review", Class: SurfaceSuggested,
+		PublicName: "variant-analysis", BackingID: "variant-analysis",
+		Summary: "Search for closely related bug variants after confirming one concrete issue.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "variant-analysis", BackingID: "variant-analysis",
+		Summary: "Search for closely related bug variants after confirming one concrete issue.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "ci-triage", BackingID: "ci-triage",
+		Summary: "Triage failing CI signals before retrying or repairing the pipeline.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "review-comment-triage", BackingID: "review-comment-triage",
+		Summary: "Triage PR review feedback and reply workflows when comment context exists.",
+	},
+	{
+		Command: "repair", Class: SurfaceSuggested,
+		PublicName: "git-recovery", BackingID: "git-recovery",
+		Summary: "Recover from tangled git state before taking destructive repair actions.",
 	},
 
 	// §5.3 Explicit focuses — small opt-in set.
@@ -218,4 +289,23 @@ func ExplicitFocusBackingIDs() map[string]struct{} {
 		}
 	}
 	return out
+}
+
+// suggestionSurfaceForBacking resolves the public suggestion surface for a
+// command/backing pair. Explicit-focus aliases win when a focus-backed skill is
+// suggested; otherwise the command-specific suggested surface record is used.
+func suggestionSurfaceForBacking(command, backingID string) (SurfaceRecord, bool) {
+	command = strings.TrimSpace(command)
+	backingID = strings.TrimSpace(backingID)
+	for _, s := range surfacePolicy {
+		if s.Command == command && s.BackingID == backingID && s.Class == SurfaceExplicitFocus {
+			return s, true
+		}
+	}
+	for _, s := range surfacePolicy {
+		if s.Command == command && s.BackingID == backingID && s.Class == SurfaceSuggested {
+			return s, true
+		}
+	}
+	return SurfaceRecord{}, false
 }

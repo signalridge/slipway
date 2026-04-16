@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,4 +80,37 @@ func TestLookupMissingIsFalse(t *testing.T) {
 	reg := DefaultRegistry()
 	_, ok := reg.Lookup("unknown-skill")
 	assert.False(t, ok)
+}
+
+func TestStatusSuggestedOnlySkillsStayOffStatusCommand(t *testing.T) {
+	t.Parallel()
+
+	reg := DefaultRegistry()
+	for _, id := range []string{
+		"supply-chain-audit",
+		"performance-profiling",
+		"ci-triage",
+		"git-recovery",
+	} {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			sk, ok := reg.Lookup(id)
+			require.True(t, ok)
+
+			for _, trigger := range sk.Triggers {
+				if trigger.Op != OpCommand {
+					continue
+				}
+				assert.NotEqual(t, "status", trigger.Value, "status command trigger must stay removed")
+				assert.False(t, slices.Contains(trigger.Values, "status"), "status command trigger must stay removed")
+			}
+
+			for _, binding := range sk.Bindings {
+				if binding.Type != BindingCommandAuto {
+					continue
+				}
+				assert.NotEqual(t, "status", binding.Target, "status command binding must stay removed")
+			}
+		})
+	}
 }

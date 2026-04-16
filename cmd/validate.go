@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -93,6 +94,7 @@ func buildValidateViewBase(
 func makeValidateCmd() *cobra.Command {
 	var changeSlug string
 	var focus string
+	var jsonOutput bool
 	var listFocuses bool
 	var discoveryFormat string
 	cmd := &cobra.Command{
@@ -120,7 +122,10 @@ func makeValidateCmd() *cobra.Command {
 					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
 					view.Mode = effectiveMode
 					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
-					view.SuggestedCapabilities = buildSuggestedCapabilities("validate", focus)
+					view.SuggestedCapabilities = buildSuggestedCapabilities(capability.Signals{
+						Command: "validate",
+						Focus:   focus,
+					})
 					return encodeJSONResponse(cmd, view)
 				}
 				return err
@@ -130,15 +135,25 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			change, err := state.LoadChange(root, ref.Slug)
+			if err != nil {
+				return err
+			}
+			execSummary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+			if err != nil {
+				return err
+			}
 			view.Mode = effectiveMode
 			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
-			view.SuggestedCapabilities = buildSuggestedCapabilities("validate", focus)
+			view.SuggestedCapabilities = buildSuggestedCapabilities(
+				suggestedCapabilitySignalsForChange("validate", focus, change, execSummary, view.Blockers),
+			)
 			return encodeJSONResponse(cmd, view)
 		},
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().StringVar(&focus, "focus", "", "Validate focus (e.g. sast, property, mutation)")
-	cmd.Flags().Bool("json", false, "JSON output")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output (validate currently emits JSON only)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd

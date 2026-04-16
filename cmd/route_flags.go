@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/spf13/cobra"
 )
 
@@ -104,7 +105,7 @@ func resolveEffectiveFocus(command, alias string) string {
 }
 
 // resolveEffectiveView returns the effective view alias for status/health.
-// Precedence: explicit --view alias > resolver auto route > empty.
+// Precedence: explicit --view alias > primary surface view > empty.
 func resolveEffectiveView(command, alias string) string {
 	alias = strings.TrimSpace(alias)
 	if alias != "" {
@@ -112,14 +113,10 @@ func resolveEffectiveView(command, alias string) string {
 			return rec.PublicName
 		}
 	}
-	resolution := capability.Resolve(capability.DefaultRegistry(), capability.Signals{
-		Command: command,
-		View:    alias,
-	})
-	if resolution.Route == nil {
-		return ""
+	if rec, ok := capability.PrimaryForCommand(command); ok {
+		return rec.PublicName
 	}
-	return strings.TrimSpace(resolution.Route.View)
+	return ""
 }
 
 // resolveEffectiveFocusHydrate returns the hydrate reference keys for the
@@ -149,7 +146,7 @@ func resolveEffectiveViewHydrate(command, alias string) []string {
 		}
 		return nil
 	}
-	return capability.Resolve(reg, capability.Signals{Command: command, View: alias}).HydrateReferences
+	return capability.Resolve(reg, capability.Signals{Command: command}).HydrateReferences
 }
 
 // writeSuggestedBlock emits the `Suggested:` text block for routed command
@@ -161,8 +158,12 @@ func writeSuggestedBlock(writer *formatWriter, suggestions []suggestedCapability
 	writer.Writef("Suggested:\n")
 	for _, s := range suggestions {
 		line := "  - " + s.Name
-		if strings.TrimSpace(s.Summary) != "" {
-			line += " — " + s.Summary
+		reason := strings.TrimSpace(s.Reason)
+		if reason == "" {
+			reason = strings.TrimSpace(s.Summary)
+		}
+		if reason != "" {
+			line += " — " + reason
 		}
 		writer.Writef("%s\n", line)
 	}
@@ -233,11 +234,16 @@ func emitDiscovery(cmd *cobra.Command, format string, jsonPayload any, entries [
 
 // buildSuggestedCapabilities projects the resolver's SuggestedCapabilities
 // onto the stable public view. Score is intentionally dropped.
-func buildSuggestedCapabilities(command, focus string) []suggestedCapabilityView {
-	resolution := capability.Resolve(capability.DefaultRegistry(), capability.Signals{
-		Command: command,
-		Focus:   strings.TrimSpace(focus),
-	})
+func buildSuggestedCapabilities(sig capability.Signals) []suggestedCapabilityView {
+	sig.Command = strings.TrimSpace(sig.Command)
+	sig.Focus = strings.TrimSpace(sig.Focus)
+	sig.View = strings.TrimSpace(sig.View)
+	sig.UserText = strings.TrimSpace(sig.UserText)
+	sig.Blockers = uniqueSortedNonEmpty(sig.Blockers)
+	sig.ChangedFiles = uniqueSortedNonEmpty(sig.ChangedFiles)
+	sig.Paths = uniqueSortedNonEmpty(sig.Paths)
+
+	resolution := capability.Resolve(capability.DefaultRegistry(), sig)
 	if len(resolution.SuggestedCapabilities) == 0 {
 		return nil
 	}
@@ -250,5 +256,67 @@ func buildSuggestedCapabilities(command, focus string) []suggestedCapabilityView
 			Kind:    s.Kind,
 		})
 	}
+	return out
+}
+
+func suggestedCapabilitySignalsForChange(
+	command, focus string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	blockers []model.ReasonCode,
+) capability.Signals {
+	sig := capability.Signals{
+		Command:  command,
+		Focus:    strings.TrimSpace(focus),
+		UserText: strings.TrimSpace(change.Description),
+	}
+	sig.ChangedFiles = executionSummaryChangedFiles(summary)
+	sig.Blockers = uniqueSortedNonEmpty(append(executionSummaryBlockerSpecs(summary), model.ReasonSpecs(blockers)...))
+	return sig
+}
+
+func executionSummaryChangedFiles(summary *model.ExecutionSummary) []string {
+	if summary == nil {
+		return nil
+	}
+	var out []string
+	for _, task := range summary.Tasks {
+		out = append(out, task.ChangedFiles...)
+	}
+	return uniqueSortedNonEmpty(out)
+}
+
+func executionSummaryBlockerSpecs(summary *model.ExecutionSummary) []string {
+	if summary == nil {
+		return nil
+	}
+	out := model.ReasonSpecs(summary.OpenBlockers)
+	for _, task := range summary.Tasks {
+		out = append(out, model.ReasonSpecs(task.Blockers)...)
+	}
+	return uniqueSortedNonEmpty(out)
+}
+
+func uniqueSortedNonEmpty(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
 	return out
 }

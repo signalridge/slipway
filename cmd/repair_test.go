@@ -331,6 +331,16 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 	})
 }
 
+func TestBuildRepairSuggestedCapabilitiesSkipsMultiActiveAnomaly(t *testing.T) {
+	t.Parallel()
+
+	got := buildRepairSuggestedCapabilities("", "", []model.Change{
+		model.NewChange("change-a"),
+		model.NewChange("change-b"),
+	})
+	assert.Nil(t, got)
+}
+
 func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

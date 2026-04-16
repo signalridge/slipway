@@ -287,7 +287,7 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 		writeWorktreePreflightEvidence(t, root, slug, root, branch)
 
 		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())

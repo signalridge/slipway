@@ -3,25 +3,39 @@ package capability
 import (
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
-// skillsDir is the source-of-truth directory for catalog skill sources.
-func skillsDir(t *testing.T) string {
+func skillsFS() fs.FS {
+	return tmpl.TemplateFS()
+}
+
+func skillTemplatePath(id string) string {
+	return path.Join("skills", id, "SKILL.md")
+}
+
+// skillsRootPath points to the embedded source-of-truth directory for catalog skill sources.
+func skillsRootPath() string {
+	return "skills"
+}
+
+// loadFrontmatter parses SKILL.md frontmatter from the embedded template FS.
+func loadFrontmatter(t *testing.T, templates fs.FS, name string) frontmatter {
 	t.Helper()
-	p := filepath.Join("..", "..", "..", "internal", "tmpl", "templates", "skills")
-	info, err := os.Stat(p)
+	raw, err := fs.ReadFile(templates, name)
 	require.NoError(t, err)
-	require.True(t, info.IsDir())
-	return p
+	text := extractFrontmatterBlock(t, string(raw))
+	var fm frontmatter
+	require.NoError(t, yaml.Unmarshal([]byte(text), &fm))
+	return fm
 }
 
 // TestFrontmatterMirrorsRegistryBindings is the B1 binding-compare gate.
@@ -30,13 +44,12 @@ func skillsDir(t *testing.T) string {
 func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	root := skillsDir(t)
+	templates := skillsFS()
 	for _, sk := range reg.All() {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(root, sk.ID, "SKILL.md")
-			fm := loadFrontmatter(t, path)
+			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
 			assertBindingsEqual(t, sk, fm.Bindings)
 		})
 	}
@@ -49,13 +62,12 @@ func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	root := skillsDir(t)
+	templates := skillsFS()
 	for _, sk := range reg.All() {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(root, sk.ID, "SKILL.md")
-			fm := loadFrontmatter(t, path)
+			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
 			assertHydrateReferencesEqual(t, sk, fm.HydrateReferences)
 		})
 	}
@@ -67,17 +79,17 @@ func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
 func TestSizeBudgetsForRegisteredSkills(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	root := skillsDir(t)
+	templates := skillsFS()
 	for _, sk := range reg.All() {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(root, sk.ID, "SKILL.md")
-			raw, err := os.ReadFile(path)
+			name := skillTemplatePath(sk.ID)
+			raw, err := fs.ReadFile(templates, name)
 			require.NoError(t, err)
 			body := stripFrontmatter(string(raw))
 			size := len(body)
-			fm := loadFrontmatter(t, path)
+			fm := loadFrontmatter(t, templates, name)
 			if err := checkTierSizeBudget(sk.Tier, size, fm.SizeRationale); err != nil {
 				t.Fatalf("skill %s: %v", sk.ID, err)
 			}
@@ -103,12 +115,12 @@ func TestTierSizeBudgetRequiresRationaleAboveHardMax(t *testing.T) {
 func TestFrontmatterHasRequiredFields(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	root := skillsDir(t)
+	templates := skillsFS()
 	for _, sk := range reg.All() {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			fm := loadFrontmatter(t, filepath.Join(root, sk.ID, "SKILL.md"))
+			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
 			assert.Equal(t, sk.ID, fm.SkillID)
 			assert.Equal(t, string(sk.Domain), fm.Domain)
 			assert.Equal(t, string(sk.Tier), fm.Tier)
@@ -142,16 +154,6 @@ type frontBinding struct {
 type frontHydrateRef struct {
 	Name   string `yaml:"name"`
 	Reason string `yaml:"reason"`
-}
-
-func loadFrontmatter(t *testing.T, path string) frontmatter {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-	text := extractFrontmatterBlock(t, string(raw))
-	var fm frontmatter
-	require.NoError(t, yaml.Unmarshal([]byte(text), &fm))
-	return fm
 }
 
 func extractFrontmatterBlock(t *testing.T, content string) string {
@@ -262,9 +264,9 @@ func checkTierSizeBudget(tier Tier, size int, rationale string) error {
 func TestSkillDirectoryNamesMatchRegistry(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	root := skillsDir(t)
+	templates := skillsFS()
 	for _, id := range reg.IDs() {
-		info, err := os.Stat(filepath.Join(root, id))
+		info, err := fs.Stat(templates, path.Join(skillsRootPath(), id))
 		require.NoErrorf(t, err, "missing source dir for %s", id)
 		require.Truef(t, info.IsDir(), "source path for %s is not a directory", id)
 	}
@@ -275,20 +277,20 @@ func TestSkillDirectoryNamesMatchRegistry(t *testing.T) {
 // from B2 onward (context-assembly owns the first real use).
 func TestNoPrematureTiebreakPromises(t *testing.T) {
 	t.Parallel()
-	root := skillsDir(t)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	templates := skillsFS()
+	err := fs.WalkDir(templates, skillsRootPath(), func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		if filepath.Base(path) != "SKILL.md" {
+		if path.Base(name) != "SKILL.md" {
 			return nil
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := fs.ReadFile(templates, name)
 		if err != nil {
 			return err
 		}
 		fm := extractFrontmatterBlock(t, string(raw))
-		assert.NotContains(t, fm, "llm_tiebreak", "%s: llm_tiebreak is a B7+ surface", path)
+		assert.NotContains(t, fm, "llm_tiebreak", "%s: llm_tiebreak is a B7+ surface", name)
 		return nil
 	})
 	require.NoError(t, err)

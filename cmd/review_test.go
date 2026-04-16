@@ -90,6 +90,21 @@ func TestReviewRejectsMutuallyExclusiveFlags(t *testing.T) {
 	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
 }
 
+func TestReviewAllowsAllWhenChangedOnlyIsExplicitlyFalse(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--all", "--changed-only=false", "--json"})
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "no_active_change", cliErr.ErrorCode)
+		assert.NotEqual(t, "mutually_exclusive_flags", cliErr.ErrorCode)
+	})
+}
+
 func TestReviewRejectsUnsupportedArtifactFlag(t *testing.T) {
 	t.Parallel()
 

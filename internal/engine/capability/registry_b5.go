@@ -9,18 +9,17 @@ func ciTriage() Skill {
 		Function:          "triage failing CI runs to root cause before retrying",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when CI is failing and a retry is being considered. Triggers on repair or status commands, or user text naming CI failures.",
+		Summary:           "Use when CI is failing and a retry is being considered. Triggers on repair command or user text naming CI failures.",
 		Evidence:          EvidenceArtifact,
 		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"repair", "status"},
-				Reason: "repair or status command invoked; CI failures may be in scope"},
+			{Op: OpCommand, Value: "repair",
+				Reason: "repair command invoked; CI failures may be in scope"},
 			{Op: OpUserTextMatches, Values: []string{"ci failing", "ci broken", "build failing", "pipeline failing"},
 				Reason: "User text names a CI failure"},
 		},
-		// Suggested-only on repair / status (§5.2). No public explicit selector.
+		// Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
-			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 		},
 	}
 }
@@ -54,21 +53,20 @@ func gitRecovery() Skill {
 		Function:          "recover git state without destroying unsaved work or bypassing hooks",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when git state is entangled and a destructive operation is being considered. Triggers on repair or status commands or user text naming git recovery.",
+		Summary:           "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery.",
 		Evidence:          EvidenceArtifact,
 		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"repair", "status"},
-				Reason: "repair or status command invoked; git recovery may be in scope"},
+			{Op: OpCommand, Value: "repair",
+				Reason: "repair command invoked; git recovery may be in scope"},
 			{Op: OpBlockerReason, Values: []string{"worktree_dirty", "branch_diverged", "detached_head"},
 				Reason: "Blocker cites an entangled git state"},
 			{Op: OpUserTextMatches, Values: []string{"git reset", "git rebase", "--no-verify", "force push", "detached head"},
 				Reason: "User text names a destructive or high-risk git operation"},
 		},
-		// Suggested-only on repair / status (§5.2). Host-embedded attachment
+		// Suggested-only on repair (§5.2). Host-embedded attachment
 		// on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
-			{Type: BindingCommandAuto, Target: "status", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "worktree-preflight", Attachment: AttachmentProcedure},
 		},
 	}

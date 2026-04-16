@@ -350,21 +350,6 @@ func TestReviewFocusCalibrationAdvertisesHydrateReferences(t *testing.T) {
 	}
 }
 
-// TestValidateRawModeSkillIDRejected regresses the route-surface refactor gate:
-// raw `--mode=property-testing` must fail with the structured usage error, not
-// silently fall back to anything.
-func TestValidateRawModeSkillIDRejected(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-
-		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{"--mode", "property-testing"})
-		err := cmd.Execute()
-		require.Error(t, err, "--mode should not exist as a flag after the refactor")
-	})
-}
-
 func TestLoadHydrateBodyRejectsMalformedKey(t *testing.T) {
 	_, err := loadHydrateBody("", "not-a-shaped-key")
 	if err == nil {

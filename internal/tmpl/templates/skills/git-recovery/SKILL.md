@@ -4,10 +4,10 @@ domain: repair-ci
 function: recover git state without destroying unsaved work or bypassing hooks
 tier: T2
 primary_attachment: procedure
-summary: "Use when git state is entangled and a destructive operation is being considered. Triggers on repair or status commands or user text naming git recovery."
+summary: "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery."
 trigger_signals:
-  - command: ["repair", "status"]
-    reason: "repair or status command invoked; git recovery may be in scope"
+  - command: repair
+    reason: "repair command invoked; git recovery may be in scope"
   - blocker_reason: ["worktree_dirty", "branch_diverged", "detached_head"]
     reason: "Blocker cites an entangled git state"
   - user_text_matches: ["git reset", "git rebase", "--no-verify", "force push", "detached head"]
@@ -17,9 +17,6 @@ bindings:
   - type: command-auto
     target: repair
     attachment: procedure
-  - type: command-auto
-    target: status
-    attachment: checklist
   - type: host-embedded
     target: worktree-preflight
     attachment: procedure

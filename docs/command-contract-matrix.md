@@ -159,16 +159,19 @@ user-facing suggestion channel in both JSON and text output. This is
 `suggested_capabilities[]` in §4.4 of the route-surface refactor plan:
 
 - JSON output gains an optional `suggested_capabilities` array. Each entry
-  is `{ "name": <skill-id>, "summary": <prose>, "reason": <prose>, "kind":
+  is `{ "name": <public-name>, "summary": <prose>, "reason": <prose>, "kind":
   "suggested" | "explicit_focus" }`. `summary` and `reason` are omitted when
-  prose is unavailable. The list is capped at three entries, ordered by
-  (clause score desc, skill id asc), and disjoint from `Supports`.
+  prose is unavailable. `name` is the user-facing surface name (for example an
+  explicit-focus suggestion emits `sast`, not `sast-orchestration`). The list
+  is capped at three entries, ordered by (clause score desc, skill id asc),
+  and disjoint from `Supports`.
 - Text output emits a `Suggested:` block after the `Mode:` line whenever
-  the list is non-empty:
+  the list is non-empty. Each line prefers the matched `reason`; if `reason`
+  is unavailable, it falls back to `summary`:
 
   ```
   Suggested:
-    - <name> — <summary>
+    - <name> — <reason-or-summary>
   ```
 
 `status` and `health` intentionally do not emit

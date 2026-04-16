@@ -4,10 +4,10 @@ domain: repair-ci
 function: triage failing CI runs to root cause before retrying
 tier: T2
 primary_attachment: procedure
-summary: "Use when CI is failing and a retry is being considered. Triggers on repair or status commands, or user text naming CI failures."
+summary: "Use when CI is failing and a retry is being considered. Triggers on repair command, or user text naming CI failures."
 trigger_signals:
-  - command: ["repair", "status"]
-    reason: "repair or status command invoked; CI failures may be in scope"
+  - command: repair
+    reason: "repair command invoked; CI failures may be in scope"
   - user_text_matches: ["ci failing", "ci broken", "build failing", "pipeline failing"]
     reason: "User text names a CI failure"
 evidence_contract: artifact
@@ -15,9 +15,6 @@ bindings:
   - type: command-auto
     target: repair
     attachment: procedure
-  - type: command-auto
-    target: status
-    attachment: checklist
 ---
 
 # CI Triage
