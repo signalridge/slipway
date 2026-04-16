@@ -14,7 +14,13 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
-func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
+const planAuditLastCheckerFeedbackKey = "plan_audit.last_checker_feedback"
+
+func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary, error) {
+	var options AdvanceOptions
+	if len(opts) > 0 {
+		options = opts[0]
+	}
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
 		return AdvanceSummary{}, err
@@ -74,6 +80,8 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)), nil
 	}
 
+	preTransitionSideEffects := make([]SideEffect, 0, 2)
+
 	// Ensure research artifact exists for discovery changes entering S1_PLAN/research.
 	isResearchEntry := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepResearch
 	if isResearchEntry && change.NeedsDiscovery {
@@ -94,10 +102,12 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 
-	if summary, applied, err := attemptAutoPassSequence(root, change, fromState, fromState); err != nil {
-		return AdvanceSummary{}, err
-	} else if applied {
-		return summary, nil
+	if !options.SkipAutoPass {
+		if summary, applied, err := attemptAutoPassSequence(root, change, fromState, fromState); err != nil {
+			return AdvanceSummary{}, err
+		} else if applied {
+			return summary, nil
+		}
 	}
 
 	// 4. Skill evidence evaluation
@@ -133,12 +143,17 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		changeBeforeWorktreeBinding := change
 		worktreePathBefore := change.WorktreePath
 		worktreeBranchBefore := change.WorktreeBranch
-		worktreeBlockers, err := GovernedWorktreeBlockers(root, &change, passingSkills)
+		derivation, err := DeriveWorktreeBlockers(root, change, passingSkills)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		if len(worktreeBlockers) > 0 {
-			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(worktreeBlockers)), nil
+		if len(derivation.Blockers) > 0 {
+			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(derivation.Blockers)), nil
+		}
+		if err := ApplyWorktreeMetadata(&change, derivation); err != nil {
+			return blockedAdvanceSummary(fromState, []model.ReasonCode{
+				model.NewReasonCode("worktree_metadata_persist_failed", err.Error()),
+			}), nil
 		}
 		if change.WorktreePath != worktreePathBefore || change.WorktreeBranch != worktreeBranchBefore {
 			if err := state.RelocateGovernedBundle(root, changeBeforeWorktreeBinding, change); err != nil {
@@ -156,10 +171,12 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		return AdvanceSummary{}, err
 	}
 
-	if summary, applied, err := attemptAutoPassSequence(root, change, fromState, toState); err != nil {
-		return AdvanceSummary{}, err
-	} else if applied {
-		return summary, nil
+	if !options.SkipAutoPass {
+		if summary, applied, err := attemptAutoPassSequence(root, change, fromState, toState); err != nil {
+			return AdvanceSummary{}, err
+		} else if applied {
+			return summary, nil
+		}
 	}
 
 	// 6. Gate evaluation (state-specific)
@@ -189,10 +206,20 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 
 	isPlanAuditGate := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepAudit
 	if isPlanAuditGate {
-		planResult := CheckGateWithIteration(root, &change, passingSkills, presetPolicy.MaxPlanAuditIterations)
-		if planResult.Blocked {
-			return saveBlockedChange(root, change, fromState, planResult.Blockers)
+		planResult := CheckGateWithIteration(root, change, passingSkills, presetPolicy.MaxPlanAuditIterations)
+		sideEffects, err := ApplyPlanGateResult(&change, planResult)
+		if err != nil {
+			return AdvanceSummary{}, err
 		}
+		if planResult.Blocked {
+			summary := blockedAdvanceSummary(fromState, planResult.Blockers)
+			summary.FromSubStep = string(change.PlanSubStep)
+			summary.ToSubStep = string(change.PlanSubStep)
+			summary.Reason = "plan_audit_feedback_recorded"
+			summary.SideEffects = sideEffects
+			return saveChangeAndReturn(root, change, summary)
+		}
+		preTransitionSideEffects = append(preTransitionSideEffects, sideEffects...)
 	}
 
 	if fromState == model.StateS4Verify {
@@ -208,23 +235,33 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 	// 7. State transition
 	// S1_PLAN substep progression: advance within planning before leaving to S2_EXECUTE.
 	if fromState == model.StateS1Plan {
+		fromSub := string(change.PlanSubStep)
 		nextSub := computeNextPlanSubStep(change.PlanSubStep)
 		if nextSub != model.PlanSubStepNone {
 			// Advance substep within S1_PLAN.
 			change.PlanSubStep = nextSub
+			var sideEffects []SideEffect
 			if nextSub == model.PlanSubStepBundle {
 				if err := ensureGovernedBundleScaffolded(root, &change); err != nil {
 					return AdvanceSummary{}, err
 				}
+				sideEffects = append(sideEffects, SideEffect{
+					Kind:   "scaffolded_bundle",
+					Detail: "governed bundle artifacts created or verified",
+				})
 			}
 			if err := state.SaveChange(root, change); err != nil {
 				return AdvanceSummary{}, err
 			}
 			return AdvanceSummary{
-				Action:    "advanced",
-				FromState: fromState,
-				ToState:   fromState,
-				Message:   fmt.Sprintf("Advanced to S1_PLAN/%s.", nextSub),
+				Action:      "advanced",
+				FromState:   fromState,
+				ToState:     fromState,
+				FromSubStep: fromSub,
+				ToSubStep:   string(nextSub),
+				Reason:      "plan_substep_progression",
+				SideEffects: sideEffects,
+				Message:     fmt.Sprintf("Advanced to S1_PLAN/%s.", nextSub),
 			}, nil
 		}
 		// Exiting S1_PLAN: audit clean path runs post-audit machine validation
@@ -237,7 +274,12 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 				if err := state.SaveChange(root, change); err != nil {
 					return AdvanceSummary{}, err
 				}
-				return blockedAdvanceSummary(fromState, planResult.Blockers), nil
+				summary := blockedAdvanceSummary(fromState, planResult.Blockers)
+				summary.FromSubStep = fromSub
+				summary.ToSubStep = string(model.PlanSubStepValidate)
+				summary.RecoveryOnly = true
+				summary.Reason = "plan_validation_failed"
+				return summary, nil
 			}
 		}
 		// validate substep already checked by the gate above; fall through to S2_EXECUTE.
@@ -248,30 +290,50 @@ func AdvanceGoverned(root, slug string) (AdvanceSummary, error) {
 		return saveChangeAndReturn(root, change, doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize."))
 	}
 
+	sideEffects := append([]SideEffect(nil), preTransitionSideEffects...)
 	if toState == model.StateS2Execute {
 		if _, err := state.MaterializeWavePlan(root, change); err != nil {
 			return AdvanceSummary{}, err
 		}
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   "materialized_wave_plan",
+			Detail: "wave plan materialized from tasks.md",
+		})
 	}
 
+	fromSub := ""
+	if fromState == model.StateS1Plan {
+		fromSub = string(change.PlanSubStep)
+	}
+
+	var cleared []string
 	change.CurrentState = toState
 	// Clear substeps when leaving their parent state.
-	if toState != model.StateS1Plan {
+	if toState != model.StateS1Plan && change.PlanSubStep != model.PlanSubStepNone {
+		cleared = append(cleared, "plan_substep")
 		change.PlanSubStep = model.PlanSubStepNone
 	}
-	if toState != model.StateS0Intake {
+	if toState != model.StateS0Intake && change.IntakeSubStep != model.IntakeSubStepNone {
+		cleared = append(cleared, "intake_substep")
 		change.IntakeSubStep = model.IntakeSubStepNone
 	}
-	change.LastAutoPassedStates = nil
+	if change.LastAutoPassedStates != nil {
+		cleared = append(cleared, "last_auto_passed_states")
+		change.LastAutoPassedStates = nil
+	}
 	if err := state.SaveChange(root, change); err != nil {
 		return AdvanceSummary{}, err
 	}
 
 	return AdvanceSummary{
-		Action:    "advanced",
-		FromState: fromState,
-		ToState:   toState,
-		Message:   fmt.Sprintf("Advanced to %s.", toState),
+		Action:        "advanced",
+		FromState:     fromState,
+		ToState:       toState,
+		FromSubStep:   fromSub,
+		Reason:        "state_progression",
+		SideEffects:   sideEffects,
+		ClearedFields: cleared,
+		Message:       fmt.Sprintf("Advanced to %s.", toState),
 	}, nil
 }
 
@@ -317,23 +379,23 @@ func ComputeNextGovernedState(change model.Change) (model.WorkflowState, error) 
 	return "", fmt.Errorf("%w: no next state from %s", ErrNoNextState, change.CurrentState)
 }
 
-// CheckGateWithIteration evaluates the G_plan gate with iteration tracking.
-func CheckGateWithIteration(root string, change *model.Change, passingSkills map[string]model.VerificationRecord, maxIterations int) PlanGateResult {
-	result := EvaluatePlanGate(root, *change, passingSkills)
+// CheckGateWithIteration evaluates the G_plan gate with iteration tracking
+// without mutating the input change. Callers must explicitly apply the returned
+// mutation contract if they want to persist it.
+func CheckGateWithIteration(root string, change model.Change, passingSkills map[string]model.VerificationRecord, maxIterations int) PlanGateResult {
+	result := EvaluatePlanGate(root, change, passingSkills)
 	if result.Status != model.GateStatusBlocked {
-		change.PlanAuditIterations = 0
-		if change.EvidenceRefs != nil {
-			delete(change.EvidenceRefs, "plan_audit.last_checker_feedback")
+		return PlanGateResult{
+			NextPlanAuditIterations:  0,
+			ClearLastCheckerFeedback: true,
 		}
-		return PlanGateResult{}
 	}
 
-	change.PlanAuditIterations++
-	iteration := change.PlanAuditIterations
-	if change.EvidenceRefs == nil {
-		change.EvidenceRefs = map[string]string{}
+	iteration := change.PlanAuditIterations + 1
+	feedback := strings.Join(model.ReasonMessages(result.ReasonCodes), "; ")
+	if strings.TrimSpace(feedback) == "" {
+		feedback = strings.Join(model.ReasonSpecs(result.ReasonCodes), "; ")
 	}
-	change.EvidenceRefs["plan_audit.last_checker_feedback"] = strings.Join(model.ReasonMessages(result.ReasonCodes), "; ")
 
 	blockers := append([]model.ReasonCode(nil), result.ReasonCodes...)
 	blockers = append(blockers, model.NewReasonCode("plan_audit_iteration", fmt.Sprintf("%d/%d", iteration, maxIterations)))
@@ -344,7 +406,57 @@ func CheckGateWithIteration(root string, change *model.Change, passingSkills map
 		blockers = append(blockers, model.NewReasonCode("plan_checker_loop_terminated", ""))
 	}
 
-	return PlanGateResult{Blocked: true, Blockers: blockers}
+	return PlanGateResult{
+		Blocked:                 true,
+		Blockers:                blockers,
+		NextPlanAuditIterations: iteration,
+		LastCheckerFeedback:     feedback,
+	}
+}
+
+// ApplyPlanGateResult persists the explicit mutation contract returned by
+// CheckGateWithIteration and reports any runtime-owned side effects.
+func ApplyPlanGateResult(change *model.Change, result PlanGateResult) ([]SideEffect, error) {
+	if change == nil {
+		return nil, fmt.Errorf("change is required")
+	}
+	change.Normalize()
+
+	sideEffects := make([]SideEffect, 0, 2)
+	if change.PlanAuditIterations != result.NextPlanAuditIterations {
+		change.PlanAuditIterations = result.NextPlanAuditIterations
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   "updated_plan_audit_iterations",
+			Detail: fmt.Sprintf("%d", result.NextPlanAuditIterations),
+		})
+	}
+
+	if change.EvidenceRefs == nil {
+		change.EvidenceRefs = map[string]string{}
+	}
+	if result.ClearLastCheckerFeedback {
+		if _, ok := change.EvidenceRefs[planAuditLastCheckerFeedbackKey]; ok {
+			delete(change.EvidenceRefs, planAuditLastCheckerFeedbackKey)
+			sideEffects = append(sideEffects, SideEffect{
+				Kind:   "cleared_plan_checker_feedback",
+				Detail: planAuditLastCheckerFeedbackKey,
+			})
+		}
+		return sideEffects, nil
+	}
+
+	feedback := strings.TrimSpace(result.LastCheckerFeedback)
+	if feedback == "" {
+		return sideEffects, nil
+	}
+	if existing := strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]); existing != feedback {
+		change.EvidenceRefs[planAuditLastCheckerFeedbackKey] = feedback
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   "recorded_plan_checker_feedback",
+			Detail: planAuditLastCheckerFeedbackKey,
+		})
+	}
+	return sideEffects, nil
 }
 
 func EvaluatePlanGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord) gate.GateEvaluation {

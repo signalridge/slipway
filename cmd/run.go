@@ -144,13 +144,13 @@ func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextVie
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
 	nextResumeResponse := resumeResponse
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextView(root, ref, nextResumeResponse, false)
+		view, err := buildNextView(root, ref, nextResumeResponse, false, true, false)
 		if err != nil {
 			return nextView{}, err
 		}
 		nextResumeResponse = ""
 		lastView = view
-		if view.Advanced != nil && view.Advanced.Action != "preview" {
+		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)
 		}
 		if shouldStopRunLoop(view) {

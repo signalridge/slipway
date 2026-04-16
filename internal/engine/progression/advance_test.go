@@ -118,7 +118,7 @@ func TestCheckGateWithIteration_MissingEvidence(t *testing.T) {
 		Slug: "test-slug",
 	}
 	passingSkills := map[string]model.VerificationRecord{}
-	result := CheckGateWithIteration("/tmp/nonexistent", &change, passingSkills, 3)
+	result := CheckGateWithIteration("/tmp/nonexistent", change, passingSkills, 3)
 	if !result.Blocked {
 		t.Fatal("expected blocked when plan audit evidence is missing")
 	}
@@ -132,8 +132,21 @@ func TestCheckGateWithIteration_MissingEvidence(t *testing.T) {
 	if !found {
 		t.Fatalf("expected plan_audit_evidence_missing blocker, got %v", result.Blockers)
 	}
+	if change.PlanAuditIterations != 0 {
+		t.Fatalf("expected CheckGateWithIteration to keep input unchanged, got %d", change.PlanAuditIterations)
+	}
+	sideEffects, err := ApplyPlanGateResult(&change, result)
+	if err != nil {
+		t.Fatalf("apply plan gate result: %v", err)
+	}
 	if change.PlanAuditIterations != 1 {
 		t.Fatalf("expected PlanAuditIterations=1, got %d", change.PlanAuditIterations)
+	}
+	if len(sideEffects) == 0 {
+		t.Fatal("expected explicit side effects when applying plan gate result")
+	}
+	if strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]) == "" {
+		t.Fatal("expected checker feedback to be recorded in evidence refs")
 	}
 }
 
@@ -207,6 +220,26 @@ func TestAdvanceGoverned_UsesLightPlanAuditBudget(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected light preset to use 2-step plan audit budget, got %+v", summary.Blockers)
+	}
+	if summary.Reason != "plan_audit_feedback_recorded" {
+		t.Fatalf("expected structured blocked reason, got %q", summary.Reason)
+	}
+	if summary.FromSubStep != string(model.PlanSubStepAudit) || summary.ToSubStep != string(model.PlanSubStepAudit) {
+		t.Fatalf("expected audit substep to remain explicit, got from=%q to=%q", summary.FromSubStep, summary.ToSubStep)
+	}
+	if len(summary.SideEffects) == 0 {
+		t.Fatalf("expected side effects for plan audit feedback write, got %+v", summary)
+	}
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.PlanAuditIterations != 1 {
+		t.Fatalf("expected persisted plan audit iteration, got %d", reloaded.PlanAuditIterations)
+	}
+	if strings.TrimSpace(reloaded.EvidenceRefs[planAuditLastCheckerFeedbackKey]) == "" {
+		t.Fatal("expected persisted plan checker feedback")
 	}
 }
 
@@ -304,6 +337,12 @@ func TestAdvanceIntake_ClarifyToConfirm(t *testing.T) {
 	}
 	if !strings.Contains(summary.Message, "confirm") {
 		t.Fatalf("expected advance to confirm, got message: %s", summary.Message)
+	}
+	if summary.ToSubStep != string(model.IntakeSubStepConfirm) {
+		t.Fatalf("expected ToSubStep=%s, got %s", model.IntakeSubStepConfirm, summary.ToSubStep)
+	}
+	if summary.Reason == "" {
+		t.Fatal("expected non-empty Reason for structured advance")
 	}
 
 	// Reload and verify substep changed
@@ -425,6 +464,7 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 
 - [ ] `+"`task-a`"+` preserve change authority
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `), 0o644); err != nil {
 		t.Fatalf("write tasks.md: %v", err)

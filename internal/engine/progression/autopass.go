@@ -51,6 +51,7 @@ func attemptAutoPassSequence(
 				Action:           "done_ready",
 				FromState:        fromState,
 				ToState:          model.StateS4Verify,
+				Reason:           "auto_pass_complete",
 				Message:          "All governance gates passed. Run `slipway done` to finalize.",
 				Blockers:         []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
 				AutoPassedStates: autoPassed,
@@ -70,10 +71,43 @@ func attemptAutoPassSequence(
 		Action:           "advanced",
 		FromState:        fromState,
 		ToState:          current,
+		Reason:           "auto_pass_partial",
 		Message:          fmt.Sprintf("Advanced to %s.", current),
 		AutoPassedStates: autoPassed,
 	})
 	return summary, true, err
+}
+
+// AutoPassEligibility reports which states are eligible for auto-pass without
+// persisting any state change. It evaluates from the change's current state
+// forward so callers never see eligibility for states already advanced past.
+func AutoPassEligibility(root string, change model.Change) ([]model.AutoPassedState, error) {
+	if change.CurrentState != model.StateS3Review && change.CurrentState != model.StateS4Verify {
+		return nil, nil
+	}
+	policy, err := governance.ResolvePresetPolicy(root, change)
+	if err != nil {
+		return nil, err
+	}
+	var eligible []model.AutoPassedState
+	candidate := change
+	for current := change.CurrentState; current != ""; {
+		candidate.CurrentState = current
+		ok, reason, err := autoPassEligibleForState(root, candidate, policy)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			eligible = append(eligible, model.AutoPassedState{State: current, Reason: reason})
+		} else {
+			break
+		}
+		if current == model.StateS4Verify {
+			break
+		}
+		current = model.StateS4Verify
+	}
+	return eligible, nil
 }
 
 func autoPassEligibleForState(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {

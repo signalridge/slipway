@@ -7,8 +7,11 @@ import (
 
 // PlanGateResult captures the result of a plan gate evaluation with iteration tracking.
 type PlanGateResult struct {
-	Blocked  bool
-	Blockers []model.ReasonCode
+	Blocked                  bool
+	Blockers                 []model.ReasonCode
+	NextPlanAuditIterations  int
+	LastCheckerFeedback      string
+	ClearLastCheckerFeedback bool
 }
 
 func blockedAdvanceSummary(fromState model.WorkflowState, blockers []model.ReasonCode) AdvanceSummary {
@@ -23,6 +26,7 @@ func doneReadyAdvanceSummary(fromState model.WorkflowState, message string) Adva
 	return AdvanceSummary{
 		Action:    "done_ready",
 		FromState: fromState,
+		Reason:    "governance_gates_passed",
 		Message:   message,
 		Blockers:  []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
 	}
@@ -39,8 +43,12 @@ func saveBlockedChange(root string, change model.Change, fromState model.Workflo
 	return saveChangeAndReturn(root, change, blockedAdvanceSummary(fromState, blockers))
 }
 
+type AdvanceOptions struct {
+	SkipAutoPass bool
+}
+
 // Advance advances a change through its lifecycle.
 // All changes are governed and start at S1_PLAN.
-func Advance(root, slug string) (AdvanceSummary, error) {
-	return AdvanceGoverned(root, slug)
+func Advance(root, slug string, opts ...AdvanceOptions) (AdvanceSummary, error) {
+	return AdvanceGoverned(root, slug, opts...)
 }

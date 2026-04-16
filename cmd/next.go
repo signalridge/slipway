@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -40,11 +41,21 @@ type nextView struct {
 	GovernanceSignals         *governanceSignalView        `json:"governance_signals,omitempty"`
 	ActiveControls            []governanceControlView      `json:"active_controls,omitempty"`
 	RequiredActions           []governanceActionView       `json:"required_actions,omitempty"`
+	SkillEvidence             []skillEvidenceEntry         `json:"skill_evidence,omitempty"`
+	AutoPassEligible          []model.AutoPassedState      `json:"auto_pass_eligible,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent    `json:"artifact_amendments,omitempty"`
 	Warnings                  []string                     `json:"warnings,omitempty"`
 	Blockers                  []model.ReasonCode           `json:"blockers"`
 	Confirmation              bool                         `json:"confirmation_required"`
 
 	consumeActiveCheckpoint bool
+}
+
+type skillEvidenceEntry struct {
+	SkillName   string `json:"skill_name"`
+	HasEvidence bool   `json:"has_evidence"`
+	Status      string `json:"status,omitempty"`
+	Verdict     string `json:"verdict,omitempty"`
 }
 
 type agentConstraints struct {
@@ -162,6 +173,7 @@ func makeNextCmd() *cobra.Command {
 	var jsonOutput bool
 	var preview bool
 	var contextGuard bool
+	var noAutoPass bool
 	var changeSlug string
 
 	cmd := &cobra.Command{
@@ -185,7 +197,7 @@ func makeNextCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
-				view, err := buildNextView(root, ref, "", preview)
+				view, err := buildNextView(root, ref, "", preview, !jsonOutput, noAutoPass)
 				if err != nil {
 					return err
 				}
@@ -205,6 +217,7 @@ func makeNextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&preview, "preview", false, "Show next skill context without state advancement")
 	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format (requires --preview)")
+	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
@@ -224,8 +237,8 @@ func validateNextFlags(preview bool, contextGuard bool) error {
 	return nil
 }
 
-func buildNextView(root string, ref changeRef, resumeResponse string, preview bool) (nextView, error) {
-	advanced, err := advanceIfReady(root, ref, preview)
+func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -238,7 +251,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 			WorkspaceRoot: root,
 		},
 	}
-	if advanced.Action == "advanced" || advanced.Action == "done_ready" {
+	if shouldExposeAdvancedSummaryToCaller(advanced) {
 		view.Advanced = &advanced
 	}
 
@@ -290,6 +303,9 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		}
 		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
 		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
+		if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+			view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
+		}
 		nextSkillEvidence = readiness.PassingSkills
 		applyReadinessToNextContext(&view, readiness)
 		applyGovernanceSurfaceToNext(readiness, &view)
@@ -316,7 +332,14 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		return finalize()
 	}
 
-	if err := assembleSkillView(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence); err != nil {
+	if skipAutoPass && governedChange != nil {
+		eligible, eligErr := progression.AutoPassEligibility(root, *governedChange)
+		if eligErr == nil && len(eligible) > 0 {
+			view.AutoPassEligible = eligible
+		}
+	}
+
+	if err := assembleSkillView(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence, autoSkipEvidence); err != nil {
 		return nextView{}, err
 	}
 
@@ -341,16 +364,33 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 }
 
 // advanceIfReady attempts state advancement unless in preview mode.
-func advanceIfReady(root string, ref changeRef, preview bool) (progression.AdvanceSummary, error) {
+// When skipAutoPass is true, advancement proceeds but auto-pass is
+// suppressed so the caller can decide whether to accept auto-pass.
+func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool) (progression.AdvanceSummary, error) {
 	if preview {
 		return progression.AdvanceSummary{Action: "preview"}, nil
 	}
 
-	advanced, err := tryAdvance(root, ref)
+	var opts []progression.AdvanceOptions
+	if skipAutoPass {
+		opts = append(opts, progression.AdvanceOptions{SkipAutoPass: true})
+	}
+	advanced, err := tryAdvance(root, ref, opts...)
 	if err != nil {
 		return progression.AdvanceSummary{}, err
 	}
 	return advanced, nil
+}
+
+func shouldExposeAdvancedSummaryToCaller(summary progression.AdvanceSummary) bool {
+	switch summary.Action {
+	case "advanced", "done_ready":
+		return true
+	case "blocked":
+		return true
+	default:
+		return false
+	}
 }
 
 func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model.Change, execCtx *executionContext, view nextView) ([]string, error) {
@@ -474,7 +514,9 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		writeLine("Slug: %s\n", view.InputContext.Slug)
 	}
 	if view.Advanced != nil {
-		writeLine("\nAdvanced: %s -> %s (%s)\n", view.Advanced.FromState, view.Advanced.ToState, view.Advanced.Message)
+		if view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready" {
+			writeLine("\nAdvanced: %s -> %s (%s)\n", view.Advanced.FromState, view.Advanced.ToState, view.Advanced.Message)
+		}
 		if len(view.Advanced.AutoPassedStates) > 0 {
 			writeLine("Auto-Passed:\n")
 			for _, state := range view.Advanced.AutoPassedStates {
