@@ -187,6 +187,40 @@ func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "done_ready", view.Advanced.Action)
+		// After Wave 1.1, S3_REVIEW advances through normal gate evaluation
+		// (not auto-pass). Only S4_VERIFY is auto-passed.
+		require.Len(t, view.Advanced.AutoPassedStates, 1)
+		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
+
+		updated, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		require.Len(t, updated.LastAutoPassedStates, 1)
+		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+	})
+}
+
+func TestNextJSONAutoPassesByDefault(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "light preset json autopass advisory")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.WorkflowPreset = model.WorkflowPresetLight
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writeShipReadyGovernedBundle(t, root, change)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
@@ -197,14 +231,58 @@ func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
-		require.Len(t, view.Advanced.AutoPassedStates, 2)
-		assert.Equal(t, model.StateS3Review, view.Advanced.AutoPassedStates[0].State)
-		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[1].State)
+		// After Wave 1.1, only S4_VERIFY is auto-passed; S3_REVIEW advances
+		// through normal gate evaluation.
+		require.Len(t, view.Advanced.AutoPassedStates, 1)
+		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
+		assert.Empty(t, view.AutoPassEligible)
+		assert.Nil(t, view.NextSkill)
 
 		updated, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		require.Len(t, updated.LastAutoPassedStates, 2)
 		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+		require.Len(t, updated.LastAutoPassedStates, 1)
+	})
+}
+
+func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "light preset explicit no-auto-pass advisory")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.WorkflowPreset = model.WorkflowPresetLight
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writeShipReadyGovernedBundle(t, root, change)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		var buf bytes.Buffer
+		cmd := makeNextCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json", "--no-auto-pass", "--change", slug})
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "advanced", view.Advanced.Action)
+		assert.Empty(t, view.Advanced.AutoPassedStates)
+		require.Len(t, view.AutoPassEligible, 1)
+		assert.Equal(t, model.StateS4Verify, view.AutoPassEligible[0].State)
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+
+		updated, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+		assert.Empty(t, updated.LastAutoPassedStates)
 	})
 }
 
@@ -230,7 +308,9 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS3Review, view.CurrentState)
-		assert.Nil(t, view.Advanced, "review auto-pass must not bypass missing execution summary")
+		if view.Advanced != nil {
+			assert.Equal(t, "blocked", view.Advanced.Action, "review auto-pass must not bypass missing execution summary")
+		}
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
 	})
@@ -255,7 +335,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte("# Proposal")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte("# Spec")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte("# Design")))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - target_files: [\"cmd/done.go\"]\n  - task_kind: verification\n")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - wave: 1\n  - target_files: [\"cmd/done.go\"]\n  - task_kind: verification\n")))
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -271,7 +351,9 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS4Verify, view.CurrentState)
-		assert.Nil(t, view.Advanced, "verify auto-pass must not bypass missing goal-verification evidence")
+		if view.Advanced != nil {
+			assert.Equal(t, "blocked", view.Advanced.Action, "verify auto-pass must not bypass missing goal-verification evidence")
+		}
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
 	})
@@ -433,6 +515,51 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 	})
 }
 
+func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "json evidence status surface")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+		})
+
+		var buf bytes.Buffer
+		cmd := makeNextCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
+
+		statusBySkill := map[string]skillEvidenceEntry{}
+		for _, entry := range view.SkillEvidence {
+			statusBySkill[entry.SkillName] = entry
+		}
+		require.Contains(t, statusBySkill, progression.SkillSpecComplianceReview)
+		require.Contains(t, statusBySkill, progression.SkillCodeQualityReview)
+		assert.True(t, statusBySkill[progression.SkillSpecComplianceReview].HasEvidence)
+		assert.Equal(t, "passing", statusBySkill[progression.SkillSpecComplianceReview].Status)
+		assert.Equal(t, model.VerificationVerdictPass, statusBySkill[progression.SkillSpecComplianceReview].Verdict)
+		assert.False(t, statusBySkill[progression.SkillCodeQualityReview].HasEvidence)
+		assert.Equal(t, "missing", statusBySkill[progression.SkillCodeQualityReview].Status)
+	})
+}
+
 func TestNextNoReviewContextForNonReviewState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -501,6 +628,7 @@ func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
 					Timestamp: time.Now().UTC(),
 				},
 			},
+			true,
 		)
 		require.NoError(t, err)
 		require.NotNil(t, view.NextSkill)
@@ -531,11 +659,36 @@ func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		// Should not have advanced — evidence missing
-		assert.Nil(t, view.Advanced)
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "blocked", view.Advanced.Action)
+		assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
+		assert.False(t, view.Advanced.RecoveryOnly)
 		assert.Equal(t, model.StateS1Plan, view.CurrentState)
 		assert.NotEmpty(t, view.Blockers)
 	})
+}
+
+func TestShouldExposeAdvancedSummaryToCaller(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
+		Action: "preview",
+	}))
+	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
+		Action:    "blocked",
+		FromState: model.StateS1Plan,
+	}))
+	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
+		Action:       "blocked",
+		FromState:    model.StateS1Plan,
+		ToSubStep:    string(model.PlanSubStepValidate),
+		RecoveryOnly: true,
+	}))
+	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
+		Action:    "advanced",
+		FromState: model.StateS1Plan,
+		ToState:   model.StateS2Execute,
+	}))
 }
 
 func TestNextPreviewFailsWhenSkillEvidenceEvaluationFails(t *testing.T) {
@@ -601,6 +754,7 @@ REQ-001: The plan audit path must advance only when the task checklist is valid.
 `)))
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [ ] `+"`t-01`"+` implement plan audit checks
+  - wave: 1
   - target_files: ["internal/engine/example.go"]
   - task_kind: code
   - covers: [REQ-001]
@@ -673,8 +827,13 @@ func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		// G_plan gate should block — bundle artifacts missing
-		assert.Nil(t, view.Advanced)
+		// Bundle precondition blocks before the audit->validate recovery path.
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "blocked", view.Advanced.Action)
+		assert.Empty(t, view.Advanced.FromSubStep)
+		assert.Empty(t, view.Advanced.ToSubStep)
+		assert.False(t, view.Advanced.RecoveryOnly)
+		assert.Empty(t, view.Advanced.Reason)
 		assert.NotEmpty(t, view.Blockers)
 	})
 }
@@ -704,7 +863,8 @@ func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		assert.Nil(t, view.Advanced)
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "blocked", view.Advanced.Action)
 		assert.Nil(t, view.NextSkill)
 		requireBlockerContains(t, view.Blockers, state.WorktreeReasonDedicatedRequired)
 	})
@@ -1058,11 +1218,13 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` preserve completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` continue next wave after abort
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1121,11 +1283,13 @@ func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` checkpointed second wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1177,11 +1341,13 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1264,11 +1430,13 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -1346,11 +1514,13 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1402,11 +1572,13 @@ func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` decision checkpoint
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1561,6 +1733,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` refresh checkpoint freshness
+  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -1606,10 +1779,12 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`t-01`"+` implement bundle-first resume
+  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`t-02`"+` rerun verification
+  - wave: 2
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: verification
 `)))
@@ -1651,10 +1826,12 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`t-verify`"+` rerun verification
+  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: verification
 
 - [ ] `+"`t-next`"+` continue execution
+  - wave: 2
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -1688,6 +1865,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` execute schema-tightened wave task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -1745,6 +1923,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` authoritative wave task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -1754,6 +1933,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` mutated tasks.md should not replace authoritative wave plan
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -1827,10 +2007,12 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
 - [x] `+"`task-01`"+` preserve preview checkpoint context
+  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-09`"+` pending checkpoint task
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
@@ -1881,11 +2063,13 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` active checkpoint task
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
@@ -1967,6 +2151,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` preserve stale freshness on resume
+  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -2137,11 +2322,61 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		assert.Nil(t, view.Advanced)
+		if view.Advanced != nil {
+			assert.NotEqual(t, "advanced", view.Advanced.Action, "preview must not advance state")
+		}
 
 		changeAfter, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, changeBefore.CurrentState, changeAfter.CurrentState)
+	})
+}
+
+func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		slug := createGovernedRequest(t, root, "L2", "preview should expose artifact amendments without persisting")
+
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		intentPath := artifact.ResolveArtifactPath(bundlePath, slug, "intent.md")
+		oldContent := []byte("# Intent\nOriginal frozen content\n")
+		require.NoError(t, os.WriteFile(intentPath, oldContent, 0o644))
+		oldHash, err := model.ComputeFileContentHash(intentPath)
+		require.NoError(t, err)
+		change.Artifacts["intent"] = model.ArtifactState{
+			ID:          "intent",
+			Path:        intentPath,
+			State:       model.ArtifactLifecycleFrozen,
+			ContentHash: oldHash,
+			UpdatedAt:   time.Now().UTC(),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		require.NoError(t, os.WriteFile(intentPath, []byte("# Intent\nAmended content\n"), 0o644))
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.Len(t, view.ArtifactAmendments, 1)
+		assert.Equal(t, "intent", view.ArtifactAmendments[0].ArtifactID)
+		assert.Equal(t, string(model.ArtifactLifecycleFrozen), view.ArtifactAmendments[0].FromState)
+		assert.Equal(t, string(model.ArtifactLifecycleApproved), view.ArtifactAmendments[0].ToState)
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.ArtifactLifecycleFrozen, after.Artifacts["intent"].State)
+		assert.Equal(t, oldHash, after.Artifacts["intent"].ContentHash)
 	})
 }
 
@@ -2177,7 +2412,7 @@ func TestRunIncludesTransitionTrace(t *testing.T) {
 	})
 }
 
-func TestNextContextBudgetHardStopAddsBlocker(t *testing.T) {
+func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		t.Setenv("SPECLANE_CONTEXT_WINDOW_TOKENS", "1")
@@ -2199,7 +2434,14 @@ func TestNextContextBudgetHardStopAddsBlocker(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.ContextBudget)
 		assert.Equal(t, "stop", view.ContextBudget.GuardAction)
-		assert.Contains(t, strings.Join(model.ReasonSpecs(view.Blockers), "\n"), "hard stop")
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "stop threshold") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "stop action should produce a warning, not a blocker")
 	})
 }
 
@@ -2259,6 +2501,7 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-a`"+` materialize run summary
+  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))

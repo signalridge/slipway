@@ -10,14 +10,7 @@ func ciTriage() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when CI is failing and a retry is being considered. Triggers on repair command or user text naming CI failures.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "repair",
-				Reason: "repair command invoked; CI failures may be in scope"},
-			{Op: OpUserTextMatches, Values: []string{"ci failing", "ci broken", "build failing", "pipeline failing"},
-				Reason: "User text names a CI failure"},
-		},
-		// Suggested-only on repair (§5.2). No public explicit selector.
+		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
@@ -32,14 +25,7 @@ func reviewCommentTriage() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when addressing reviewer comments on an open PR. Triggers on repair command or user text naming PR review comments.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "repair",
-				Reason: "repair command invoked; reviewer comments may be in scope"},
-			{Op: OpUserTextMatches, Values: []string{"review comment", "pr comment", "address comment"},
-				Reason: "User text names PR review comments"},
-		},
-		// Suggested-only on repair (§5.2). No public explicit selector.
+		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
@@ -54,16 +40,7 @@ func gitRecovery() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "repair",
-				Reason: "repair command invoked; git recovery may be in scope"},
-			{Op: OpBlockerReason, Values: []string{"worktree_dirty", "branch_diverged", "detached_head"},
-				Reason: "Blocker cites an entangled git state"},
-			{Op: OpUserTextMatches, Values: []string{"git reset", "git rebase", "--no-verify", "force push", "detached head"},
-				Reason: "User text names a destructive or high-risk git operation"},
-		},
-		// Suggested-only on repair (§5.2). Host-embedded attachment
+		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). Host-embedded attachment
 		// on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
@@ -80,14 +57,7 @@ func incidentResponse() Skill {
 		Tier:              TierT3,
 		PrimaryAttachment: AttachmentReportSchema,
 		Summary:           "Use when a production incident is suspected or active. Triggers on status or health commands or user text naming an incident.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"status", "health"},
-				Reason: "status or health command invoked; incident may be in scope"},
-			{Op: OpUserTextMatches, Values: []string{"incident", "outage", "page", "sev1", "sev2"},
-				Reason: "User text names an incident"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingCommandView, Target: "status", Attachment: AttachmentReportSchema},
 			{Type: BindingCommandView, Target: "health", Attachment: AttachmentReportSchema},
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},

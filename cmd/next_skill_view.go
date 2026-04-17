@@ -37,6 +37,7 @@ func assembleSkillView(
 	governedChange *model.Change,
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
+	autoSkipEvidence bool,
 ) error {
 	// Build a synthetic Change for skill resolution when no governed change exists.
 	resolveChange := model.Change{CurrentState: view.CurrentState}
@@ -80,15 +81,25 @@ func assembleSkillView(
 		}
 	}
 
-	if nextSkillName == progression.SkillSpecComplianceReview && evidenceMap != nil {
-		if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
-			nextSkillName = progression.SkillCodeQualityReview
+	if evidenceMap != nil {
+		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills)
+		if err != nil {
+			return wrapRequiredSkillsEvaluationError("evaluate required skill evidence", ref.Slug, err)
 		}
+		view.SkillEvidence = requiredSkillEvidence
 	}
 
-	if nextSkillName == progression.SkillGoalVerification && evidenceMap != nil {
-		if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
-			nextSkillName = progression.SkillFinalCloseout
+	if autoSkipEvidence {
+		if nextSkillName == progression.SkillSpecComplianceReview && evidenceMap != nil {
+			if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
+				nextSkillName = progression.SkillCodeQualityReview
+			}
+		}
+
+		if nextSkillName == progression.SkillGoalVerification && evidenceMap != nil {
+			if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
+				nextSkillName = progression.SkillFinalCloseout
+			}
 		}
 	}
 
@@ -151,7 +162,7 @@ func assembleSkillView(
 
 	view.NextSkill = ns
 	view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)
-	view.Constraints = deriveAgentConstraints(nextSkillName)
+	view.Constraints = deriveAgentConstraints(registry, nextSkillName)
 
 	if advanced.Action == "blocked" {
 		view.Blockers = appendReasonCodes(view.Blockers, advanced.Blockers)
@@ -159,6 +170,96 @@ func assembleSkillView(
 	applyContextBudgetGuard(view)
 
 	return nil
+}
+
+func buildRequiredSkillEvidence(
+	root string,
+	change model.Change,
+	workflowState model.WorkflowState,
+	execCtx *executionContext,
+	precomputedPassingSkills map[string]model.VerificationRecord,
+) ([]skillEvidenceEntry, error) {
+	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
+	if err != nil {
+		return nil, err
+	}
+	latestRunVersion := 0
+	if execCtx != nil {
+		latestRunVersion = execCtx.LatestRunVersion
+	} else {
+		latestRunVersion, err = state.LatestRelevantExecutionRunVersion(root, change)
+		if err != nil {
+			return nil, err
+		}
+	}
+	registry, err := skill.LoadGovernanceRegistry(root)
+	if err != nil {
+		return nil, err
+	}
+	var planSubSteps []model.PlanSubStep
+	if workflowState == model.StateS1Plan && change.PlanSubStep != model.PlanSubStepNone {
+		planSubSteps = []model.PlanSubStep{change.PlanSubStep}
+	}
+	required := skill.RequiredSkillsForStateWithRegistry(
+		registry,
+		change.NeedsDiscovery,
+		workflowState,
+		presetPolicy.CloseoutRefreshRequired,
+		change.GuardrailDomain,
+		planSubSteps...,
+	)
+	evidence := make([]skillEvidenceEntry, 0, len(required))
+	if precomputedPassingSkills != nil {
+		for _, skillName := range required {
+			entry := skillEvidenceEntry{
+				SkillName: skillName,
+				Status:    "missing",
+			}
+			if rec, ok := precomputedPassingSkills[skillName]; ok {
+				entry.HasEvidence = true
+				entry.Verdict = rec.Verdict
+				entry.Status = "passing"
+			}
+			evidence = append(evidence, entry)
+		}
+		return evidence, nil
+	}
+	verifications, err := state.ListVerificationsForChange(root, change)
+	if err != nil {
+		return nil, err
+	}
+	for _, skillName := range required {
+		entry := skillEvidenceEntry{
+			SkillName: skillName,
+			Status:    "missing",
+		}
+		rec, ok := verifications[skillName]
+		if !ok {
+			evidence = append(evidence, entry)
+			continue
+		}
+		entry.HasEvidence = true
+		entry.Verdict = rec.Verdict
+		entry.Status = "not_ready"
+		if def, ok := skill.LookupDefinitionInRegistry(registry, skillName); ok {
+			switch {
+			case def.RunSummaryBound && latestRunVersion < 1:
+				entry.Status = "stale"
+			case def.RunSummaryBound && latestRunVersion > 0 && rec.RunVersion != latestRunVersion:
+				entry.Status = "stale"
+			case rec.IsPassing():
+				entry.Status = "passing"
+			case rec.Verdict == model.VerificationVerdictFail:
+				entry.Status = "failed"
+			case len(rec.Blockers) > 0:
+				entry.Status = "blocked"
+			}
+		} else if rec.IsPassing() {
+			entry.Status = "passing"
+		}
+		evidence = append(evidence, entry)
+	}
+	return evidence, nil
 }
 
 // appendCatalogHints runs the capability resolver against the current host

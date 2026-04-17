@@ -19,7 +19,8 @@ func TestReconcileFromFilesystemMaterializesRequiredArtifactsFromDisk(t *testing
 		Artifacts: map[string]model.ArtifactState{},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 
 	req, ok := change.Artifacts["requirements"]
 	require.True(t, ok)

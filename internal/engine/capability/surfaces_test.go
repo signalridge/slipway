@@ -139,15 +139,19 @@ func suggestedSurfaceBackingForCommand(command, publicName string) (string, bool
 	return "", false
 }
 
-func TestSuggestedCapabilitiesRequireContextBeyondBareCommand(t *testing.T) {
+func TestSuggestedCapabilitiesEmittedForBareCommand(t *testing.T) {
 	t.Parallel()
 
+	// After trigger DSL removal, binding-based resolution always emits
+	// available capabilities for a command. AI tools decide relevance.
 	for _, command := range []string{"review", "validate", "repair"} {
 		command := command
 		t.Run(command, func(t *testing.T) {
 			res := Resolve(DefaultRegistry(), Signals{Command: command})
-			assert.Empty(t, res.SuggestedCapabilities,
-				"bare %s invocation must not emit suggested capabilities without additional signals", command)
+			assert.NotEmpty(t, res.SuggestedCapabilities,
+				"%s invocation should emit available capabilities", command)
+			assert.LessOrEqual(t, len(res.SuggestedCapabilities), 3,
+				"suggestions capped at 3")
 		})
 	}
 }

@@ -187,8 +187,8 @@ func DeriveControls(input DeriveControlsInput) DeriveControlsResult {
 }
 
 // deriveDomains computes domains from the flat GuardrailDomain field.
-// Direct setup inference (InferGuardrailDomain) runs at change creation time
-// and populates GuardrailDomain; no runtime keyword fallback is needed.
+// GuardrailDomain is populated at change creation time via caller-provided
+// classification; no runtime inference is needed.
 func deriveDomains(input DeriveControlsInput) []string {
 	if d := strings.TrimSpace(input.GuardrailDomain); d != "" {
 		return []string{d}

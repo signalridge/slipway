@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -35,6 +36,7 @@ type validateView struct {
 	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 	SuggestedCapabilities     []suggestedCapabilityView   `json:"suggested_capabilities,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -193,10 +195,11 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 		return view, nil
 	}
 
-	// Validate only needs the shared blocker/gate snapshot. It intentionally
-	// leaves projection/review/ship surfaces off to keep the read path narrow.
+	// Validate remains read-only, but includes artifact projection so JSON callers
+	// can distinguish stable artifacts from projected auto-amendments.
 	readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
-		IncludeGateEvaluations: true,
+		IncludeGateEvaluations:    true,
+		IncludeArtifactProjection: true,
 	})
 	if err != nil {
 		return validateView{}, wrapGovernanceReadinessError("validate readiness", change.Slug, err)
@@ -229,5 +232,8 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	}
 	view.GateStatus = gateStatus
 	view.GateDetails = gateDetails
+	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
+	}
 	return view, nil
 }

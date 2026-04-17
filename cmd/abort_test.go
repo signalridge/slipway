@@ -181,11 +181,13 @@ func TestAbortTextUsesRunResumeWhenResumableWaveStateExists(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [x] `+"`task-01`"+` preserve completed wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` continue incomplete wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code

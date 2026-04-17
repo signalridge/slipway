@@ -234,6 +234,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 
 - [x] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `)
 
@@ -299,6 +300,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 
 - [x] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `)
 	plan, err := state.LoadWavePlanForChange(root, change)
@@ -359,6 +361,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 
 - [ ] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `)
 	plan, err := state.LoadWavePlanForChange(root, change)
@@ -419,6 +422,7 @@ func TestCurrentTasksPlanHashUsesSemanticTaskPlanHash(t *testing.T) {
 
 - [ ] ` + "`task-a`" + ` Implement A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasks), 0o644))
@@ -458,10 +462,12 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
 
 - [ ] ` + "`task-a`" + ` Implement task A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 
 - [ ] ` + "`task-b`" + ` Implement task B
   - target_files: ["cmd/status.go"]
+  - wave: 2
   - task_kind: doc
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, content)
@@ -541,10 +547,12 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 
 - [ ] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 
 - [ ] `+"`task-b`"+` Implement task B
   - target_files: ["cmd/status.go"]
+  - wave: 2
   - task_kind: code
 `)
 
@@ -614,6 +622,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 
 - [ ] ` + "`task-a`" + ` Initial objective
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
@@ -653,6 +662,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 
 - [ ] ` + "`task-a`" + ` Updated objective
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))
@@ -713,6 +723,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 
 - [ ] ` + "`task-a`" + ` Initial objective
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
@@ -752,6 +763,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 
 - [ ] ` + "`task-a`" + ` Updated objective
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))
@@ -794,6 +806,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 
 - [x] ` + "`task-a`" + ` Updated objective
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 `
 	currentTasksRaw, err := os.ReadFile(tasksPath)
@@ -835,6 +848,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 
 - [ ] ` + "`task-a`" + ` Initial objective
   - target_files: ["cmd/next.go"]
+  - wave: 1
   - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
@@ -857,6 +871,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 
 - [ ] ` + "`task-a`" + ` Updated objective
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))

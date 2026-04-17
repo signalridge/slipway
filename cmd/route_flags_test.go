@@ -245,26 +245,32 @@ func TestResolveEffectiveViewHydrate_UnknownAliasReturnsNil(t *testing.T) {
 	}
 }
 
-func TestBuildSuggestedCapabilitiesSkipsBareCommandOnlyMatches(t *testing.T) {
+func TestBuildSuggestedCapabilitiesEmitsForBareCommand(t *testing.T) {
+	// After trigger-DSL removal, binding-based resolution always emits
+	// available capabilities for a command. AI tools decide relevance.
 	got := buildSuggestedCapabilities(capability.Signals{Command: "repair"})
-	if got != nil {
-		t.Fatalf("expected no suggestions for bare repair, got %v", got)
+	if len(got) == 0 {
+		t.Fatalf("expected suggestions for bare repair command")
+	}
+	if len(got) > 3 {
+		t.Fatalf("expected at most 3 suggestions, got %d", len(got))
 	}
 }
 
-func TestBuildSuggestedCapabilitiesUsesMatchedReason(t *testing.T) {
+func TestBuildSuggestedCapabilitiesIncludesReasonFromSummary(t *testing.T) {
+	// After trigger-DSL removal, Reason is populated from the skill's
+	// Summary field rather than a matched trigger clause.
 	got := buildSuggestedCapabilities(capability.Signals{
 		Command:      "repair",
 		ChangedFiles: []string{".github/workflows/ci.yml"},
 	})
-	if len(got) != 1 {
-		t.Fatalf("expected one suggestion for workflow change, got %v", got)
+	if len(got) == 0 {
+		t.Fatalf("expected suggestions for repair with workflow change")
 	}
-	if got[0].Name != "gha-security-review" {
-		t.Fatalf("expected gha-security-review suggestion, got %q", got[0].Name)
-	}
-	if got[0].Reason != "GitHub Actions workflow changed" {
-		t.Fatalf("expected changed-file reason, got %q", got[0].Reason)
+	for _, item := range got {
+		if item.Reason == "" {
+			t.Fatalf("expected non-empty reason for %q", item.Name)
+		}
 	}
 }
 

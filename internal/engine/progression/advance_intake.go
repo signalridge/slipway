@@ -82,16 +82,22 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 	}
 
 	// If open questions have critical unknowns, route to research
-	if hasOpenQuestions(intentContent) {
+	openQuestions := hasOpenQuestions(intentContent)
+	fromSub := string(change.IntakeSubStep)
+	if openQuestions {
 		change.IntakeSubStep = model.IntakeSubStepResearch
 		if err := state.SaveChange(root, *change); err != nil {
 			return AdvanceSummary{}, err
 		}
 		return AdvanceSummary{
-			Action:    "advanced",
-			FromState: fromState,
-			ToState:   fromState,
-			Message:   "Advanced to S0_INTAKE/research for open questions.",
+			Action:      "advanced",
+			FromState:   fromState,
+			ToState:     fromState,
+			FromSubStep: fromSub,
+			ToSubStep:   string(model.IntakeSubStepResearch),
+			Reason:      "open_questions_detected",
+			Signals:     map[string]bool{"open_questions_detected": true},
+			Message:     "Advanced to S0_INTAKE/research for open questions.",
 		}, nil
 	}
 
@@ -100,10 +106,13 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
-		Action:    "advanced",
-		FromState: fromState,
-		ToState:   fromState,
-		Message:   "Advanced to S0_INTAKE/confirm.",
+		Action:      "advanced",
+		FromState:   fromState,
+		ToState:     fromState,
+		FromSubStep: fromSub,
+		ToSubStep:   string(model.IntakeSubStepConfirm),
+		Reason:      "clarification_complete",
+		Message:     "Advanced to S0_INTAKE/confirm.",
 	}, nil
 }
 
@@ -137,16 +146,21 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 	}
 
 	// If still has open questions, go back to clarify
+	fromSub := string(change.IntakeSubStep)
 	if hasOpenQuestions(intentContent) {
 		change.IntakeSubStep = model.IntakeSubStepClarify
 		if err := state.SaveChange(root, *change); err != nil {
 			return AdvanceSummary{}, err
 		}
 		return AdvanceSummary{
-			Action:    "advanced",
-			FromState: fromState,
-			ToState:   fromState,
-			Message:   "Returned to S0_INTAKE/clarify with remaining questions.",
+			Action:      "advanced",
+			FromState:   fromState,
+			ToState:     fromState,
+			FromSubStep: fromSub,
+			ToSubStep:   string(model.IntakeSubStepClarify),
+			Reason:      "open_questions_remaining",
+			Signals:     map[string]bool{"open_questions_detected": true},
+			Message:     "Returned to S0_INTAKE/clarify with remaining questions.",
 		}, nil
 	}
 
@@ -155,10 +169,13 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
-		Action:    "advanced",
-		FromState: fromState,
-		ToState:   fromState,
-		Message:   "Advanced to S0_INTAKE/confirm.",
+		Action:      "advanced",
+		FromState:   fromState,
+		ToState:     fromState,
+		FromSubStep: fromSub,
+		ToSubStep:   string(model.IntakeSubStepConfirm),
+		Reason:      "research_resolved",
+		Message:     "Advanced to S0_INTAKE/confirm.",
 	}, nil
 }
 
@@ -176,18 +193,28 @@ func advanceIntakeConfirm(root string, change *model.Change, fromState model.Wor
 	}
 
 	// Transition to S1_PLAN
+	fromSub := string(change.IntakeSubStep)
 	change.CurrentState = model.StateS1Plan
 	change.IntakeSubStep = model.IntakeSubStepNone
 	change.PlanSubStep = model.PlanEntrySubStep(change.NeedsDiscovery)
+	var cleared []string
+	cleared = append(cleared, "intake_substep")
+	if change.LastAutoPassedStates != nil {
+		cleared = append(cleared, "last_auto_passed_states")
+	}
 	change.LastAutoPassedStates = nil
 	if err := state.SaveChange(root, *change); err != nil {
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
-		Action:    "advanced",
-		FromState: fromState,
-		ToState:   model.StateS1Plan,
-		Message:   fmt.Sprintf("Advanced to S1_PLAN/%s.", change.PlanSubStep),
+		Action:        "advanced",
+		FromState:     fromState,
+		ToState:       model.StateS1Plan,
+		FromSubStep:   fromSub,
+		ToSubStep:     string(change.PlanSubStep),
+		Reason:        "intake_confirmed",
+		ClearedFields: cleared,
+		Message:       fmt.Sprintf("Advanced to S1_PLAN/%s.", change.PlanSubStep),
 	}, nil
 }
 

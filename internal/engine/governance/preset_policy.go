@@ -128,11 +128,21 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 		overrides.ModeOverrides[id] = mode
 	}
 	overrides.DisabledControls = append([]model.ControlID(nil), cfg.Governance.DisabledControls...)
+	overrides.DisabledControls = append(overrides.DisabledControls, change.CallerDisabledCtrls...)
+	for id, mode := range change.CallerControlModes {
+		overrides.ModeOverrides[id] = mode
+	}
 	if cfg.Governance.Thresholds.IndependentReviewBlastRadius.IsValid() {
 		overrides.IndependentReviewBlastRadius = cfg.Governance.Thresholds.IndependentReviewBlastRadius
 	}
 	if cfg.Governance.Thresholds.WorktreeBlastRadius.IsValid() {
 		overrides.WorktreeBlastRadius = cfg.Governance.Thresholds.WorktreeBlastRadius
+	}
+	if change.CallerIndependentReviewBlastRadius.IsValid() {
+		overrides.IndependentReviewBlastRadius = change.CallerIndependentReviewBlastRadius
+	}
+	if change.CallerWorktreeBlastRadius.IsValid() {
+		overrides.WorktreeBlastRadius = change.CallerWorktreeBlastRadius
 	}
 
 	// Guardrail-domain protections remain fail-closed in this wave.

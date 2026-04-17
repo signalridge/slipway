@@ -38,6 +38,7 @@ type ArtifactProjectionNode struct {
 
 type ArtifactProjection struct {
 	Nodes       []ArtifactProjectionNode
+	Amendments  []artifact.AmendmentEvent
 	Diagnostics []string
 }
 
@@ -210,12 +211,11 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readiness.SkillBlockers = model.ReasonCodesFromSpecs(skillBlockers)
 	readiness.Blockers = append(readiness.Blockers, readiness.SkillBlockers...)
 	if effectiveState == model.StateS2Execute && evaluationChange.NeedsDiscovery && strings.TrimSpace(evaluationChange.WorktreePath) == "" {
-		worktreeCandidate := evaluationChange
-		worktreeBlockers, err := GovernedWorktreeBlockers(root, &worktreeCandidate, passingSkills)
+		derivation, err := DeriveWorktreeBlockers(root, evaluationChange, passingSkills)
 		if err != nil {
 			return GovernanceReadiness{}, err
 		}
-		readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(worktreeBlockers)...)
+		readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(derivation.Blockers)...)
 	} else {
 		worktreeValidation, err := state.ValidateChangeWorktree(root, evaluationChange)
 		if err != nil {
@@ -451,7 +451,8 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 	}
 
 	projectedChange := cloneChangeForProjection(change)
-	if err := artifact.ReconcileFromFilesystem(root, &projectedChange, ctx.requiredPreset); err != nil {
+	reconcileResult, err := artifact.ReconcileFromFilesystem(root, &projectedChange, ctx.requiredPreset)
+	if err != nil {
 		return ArtifactProjection{}, err
 	}
 	artifactStates := projectedChange.Artifacts
@@ -533,6 +534,7 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 	})
 	return ArtifactProjection{
 		Nodes:       nodes,
+		Amendments:  append([]artifact.AmendmentEvent(nil), reconcileResult.Amendments...),
 		Diagnostics: append([]string(nil), ctx.resolution.Warnings...),
 	}, nil
 }

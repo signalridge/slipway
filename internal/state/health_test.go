@@ -122,6 +122,7 @@ func TestCollectHealthReportReportsMissingWavePlan(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` recover wave plan
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -173,6 +174,7 @@ func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` historical task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -197,6 +199,7 @@ func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-02`"+` replacement task after drift
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/repair.go"]
   - task_kind: code
@@ -237,6 +240,7 @@ func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` preserve original task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -247,6 +251,7 @@ func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-02`"+` replace task after drift
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/repair.go"]
   - task_kind: code
@@ -286,6 +291,7 @@ func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifte
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` historical task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -312,6 +318,7 @@ func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifte
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-02`"+` replacement task after drift
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/repair.go"]
   - task_kind: code
@@ -352,6 +359,7 @@ func TestCollectHealthReportReportsMissingWaveRuns(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` recover wave evidence
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -405,11 +413,13 @@ func TestCollectHealthReportReportsIncompleteWaveRuns(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`t-02`"+` pending second wave
+  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["cmd/review.go"]
   - task_kind: code
@@ -476,11 +486,13 @@ func TestCollectHealthReportReportsWaveTaskLinkageMismatch(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` build first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`t-02`"+` build second wave
+  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["cmd/review.go"]
   - task_kind: code

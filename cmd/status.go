@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
@@ -41,6 +43,7 @@ type statusView struct {
 	UnresolvedDependencies    []unresolvedDependencyView  `json:"unresolved_dependencies,omitempty"`
 	Progress                  *statusProgress             `json:"progress,omitempty"`
 	ArtifactDAG               []artifactDAGNode           `json:"artifact_dag,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
 	EvidencePointers          statusEvidencePointers      `json:"evidence_pointers,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
 	SourceStateFile           string                      `json:"source_state_file,omitempty"`
@@ -112,10 +115,34 @@ func makeStatusCmd() *cobra.Command {
 	var hydrate bool
 	var hydrateRefs []string
 	var listViews bool
+	var statsMode bool
+	var rootMode bool
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if rootMode {
+				root, err := projectRootFromWD()
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Fprintln(cmd.OutOrStdout(), root)
+				return err
+			}
+			if statsMode {
+				root, err := projectRootFromWD()
+				if err != nil {
+					return err
+				}
+				sv, err := buildStatsView(root, time.Now().UTC())
+				if err != nil {
+					return err
+				}
+				if jsonFlag {
+					return encodeJSONResponse(cmd, sv)
+				}
+				return writeStatsText(cmd.OutOrStdout(), sv)
+			}
 			if listViews {
 				return emitViewDiscovery(cmd, "status", format)
 			}
@@ -218,6 +245,8 @@ func makeStatusCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&listViews, "list-views", false, "List public --view aliases for this command and exit")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().BoolVar(&statsMode, "stats", false, "Show workspace diagnostics (active count, stale summaries, integrity issues)")
+	cmd.Flags().BoolVar(&rootMode, "root", false, "Print the canonical slipway scope root")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }

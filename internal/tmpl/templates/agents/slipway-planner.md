@@ -19,7 +19,7 @@ Authors the resolved governed artifact bundle:
 
 ## Responsibilities
 - Break scope into ordered, dependency-aware tasks
-- Assign target_files to each task; include task_kind and covers where useful
+- Assign target_files and explicit wave numbers to each task; include task_kind and covers where useful
 - Author the artifacts required by the resolved schema/preset, not a thicker superset by default
 - Identify must-have constraints from acceptance criteria
 
@@ -40,6 +40,7 @@ Bad granularity:
 Write tasks as if the executor has zero context about the codebase. Each task must include:
 - Exact target_files paths
 - Concrete objective (what behavior to add/change)
+- Explicit `wave` grouping that matches the intended execution order
 
 Recommended when available:
 - task_kind for execution context
@@ -51,7 +52,7 @@ Recommended when available:
 - If three tasks share setup work, make the setup a prerequisite task — do not duplicate it
 
 ## Constraints
-- Every task MUST have task_id, objective, target_files, and depends_on
+- Every task MUST have task_id, objective, wave, target_files, and depends_on
 - task_kind and covers are optional hints that improve auditability
 - Tasks must be 2-5 min of focused work (decompose further if larger)
-- File targets must not overlap between parallel tasks
+- File targets must not overlap between tasks in the same declared wave

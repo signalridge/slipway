@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/signalridge/slipway/internal/model"
 )
 
 var marshalContextBudgetInput = json.Marshal
@@ -152,8 +150,8 @@ func writeContextGuardHookMessages(w io.Writer, view nextView) error {
 	writer := newFormatWriter(w)
 	switch view.ContextBudget.GuardAction {
 	case "stop":
-		writer.Writef("BLOCK CONTEXT_WINDOW_STOP: remaining context %.1f%% is at or below the hard-stop threshold\n", view.ContextBudget.RemainingPercent)
-		writer.Writeln("Next: Pause execution and resume in a fresh session context before calling slipway next.")
+		writer.Writef("WARN CONTEXT_WINDOW_STOP: remaining context %.1f%% is at or below the stop threshold\n", view.ContextBudget.RemainingPercent)
+		writer.Writeln("Next: Consider pausing execution and resuming in a fresh session context.")
 	case "warn":
 		writer.Writef("WARN CONTEXT_WINDOW_WARN: remaining context %.1f%% is at or below the warning threshold\n", view.ContextBudget.RemainingPercent)
 		writer.Writeln("Next: Trim context payload and continue with smaller, task-scoped inputs.")
@@ -174,12 +172,10 @@ func applyContextBudgetGuard(view *nextView) {
 			view.ContextBudget.Thresholds.WarnBelowRemainingPercent,
 		))
 	case "stop":
-		view.Blockers = append(view.Blockers, model.NewReasonCode(
-			"context_window_stop",
-			fmt.Sprintf("context window remaining %.1f%% <= %.1f%% hard stop; pause and resume with a fresh context",
-				view.ContextBudget.RemainingPercent,
-				view.ContextBudget.Thresholds.StopBelowRemainingPercent,
-			),
+		view.Warnings = append(view.Warnings, fmt.Sprintf(
+			"context window remaining %.1f%% <= %.1f%% stop threshold; consider pausing and resuming with a fresh context",
+			view.ContextBudget.RemainingPercent,
+			view.ContextBudget.Thresholds.StopBelowRemainingPercent,
 		))
 	}
 }

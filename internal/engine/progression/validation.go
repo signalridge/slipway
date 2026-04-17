@@ -63,6 +63,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 	idSet := map[string]struct{}{}
 	dependencies := map[string][]string{}
 	coverageAsWarning := false
+	allTasksDeclareWave := true
 	if presetPolicy, presetErr := governance.ResolvePresetPolicy(root, change); presetErr == nil {
 		coverageAsWarning = presetPolicy.EffectivePreset == model.WorkflowPresetLight
 	}
@@ -81,6 +82,10 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 
 		if strings.TrimSpace(task.Objective) == "" {
 			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_completeness_missing_objective:%s", id))
+		}
+		if !task.HasDeclaredWave() {
+			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_execution_missing_wave:%s", id))
+			allTasksDeclareWave = false
 		}
 		if len(task.TargetFiles) == 0 {
 			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
@@ -126,6 +131,11 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 
 	if HasDependencyCycle(dependencies) {
 		result.Blockers = append(result.Blockers, "plan_dimension_dependency_cycle_detected")
+	}
+	if allTasksDeclareWave {
+		if _, err := wave.PlanWaves(plan.Nodes()); err != nil {
+			result.Blockers = append(result.Blockers, "plan_dimension_execution_invalid_wave_plan:"+err.Error())
+		}
 	}
 	coverageIssues := validateTaskCoverageAgainstSpec(root, change, plan)
 	if coverageAsWarning {
@@ -268,36 +278,40 @@ func ShouldCheckGovernedBundle(change model.Change) bool {
 	}
 }
 
-// GovernedWorktreeBlockers checks worktree validation for discovery-required
-// governed changes. Worktree binding is checked when transitioning toward
-// S2_EXECUTE (at S1_PLAN/audit when worktree is not yet bound).
-func GovernedWorktreeBlockers(
+// WorktreeDerivation holds the pure result of worktree metadata extraction and
+// validation. It contains blockers (if any) and the derived metadata, but does
+// not mutate the input change. The caller decides whether to apply the metadata.
+type WorktreeDerivation struct {
+	Blockers       []string
+	WorktreePath   string
+	WorktreeBranch string
+}
+
+// DeriveWorktreeBlockers is a pure function that extracts worktree metadata
+// from skill evidence, validates it, and returns blockers and derived metadata
+// without mutating the change. The caller is responsible for applying the
+// derived metadata via ApplyWorktreeMetadata if there are no blockers.
+func DeriveWorktreeBlockers(
 	root string,
-	change *model.Change,
+	change model.Change,
 	passingSkills map[string]model.VerificationRecord,
-) ([]string, error) {
-	if change == nil {
-		return []string{"governed_change_missing"}, nil
-	}
+) (WorktreeDerivation, error) {
 	isWorktreeState := change.CurrentState == model.StateS2Execute
 	if !change.NeedsDiscovery || !isWorktreeState {
-		return nil, nil
+		return WorktreeDerivation{}, nil
 	}
 
 	record, ok := passingSkills[SkillWorktreePreflight]
 	if !ok {
-		// worktree-preflight is not a governance skill, so it may not appear in
-		// passingSkills (which only contains governance-registry skills). Fall back
-		// to loading from verification directory.
 		diskRecord, err := state.LoadVerification(root, change.Slug, SkillWorktreePreflight)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				return []string{state.WorktreeReasonMetadataRequired}, nil
+				return WorktreeDerivation{Blockers: []string{state.WorktreeReasonMetadataRequired}}, nil
 			}
-			return nil, fmt.Errorf("load worktree-preflight verification: %w", err)
+			return WorktreeDerivation{}, fmt.Errorf("load worktree-preflight verification: %w", err)
 		}
 		if !diskRecord.IsPassing() {
-			return []string{state.WorktreeReasonMetadataRequired}, nil
+			return WorktreeDerivation{Blockers: []string{state.WorktreeReasonMetadataRequired}}, nil
 		}
 		record = diskRecord
 	}
@@ -308,23 +322,32 @@ func GovernedWorktreeBlockers(
 		for _, reason := range reasons {
 			blockers = append(blockers, state.WorktreeReasonMetadataRequired+":worktree-preflight:"+reason)
 		}
-		return stringutil.UniqueSorted(blockers), nil
+		return WorktreeDerivation{Blockers: stringutil.UniqueSorted(blockers)}, nil
 	}
 
-	candidate := *change
+	candidate := change
 	if err := state.PersistScopeWorktreeMetadata(&candidate, worktreePath, worktreeBranch); err != nil {
-		return []string{"worktree_metadata_persist_failed:" + err.Error()}, nil
+		return WorktreeDerivation{Blockers: []string{"worktree_metadata_persist_failed:" + err.Error()}}, nil
 	}
 
 	validation, err := state.ValidateChangeWorktree(root, candidate)
 	if err != nil {
-		return nil, err
+		return WorktreeDerivation{}, err
 	}
 	if len(validation.Blockers) > 0 {
-		return model.ReasonSpecs(validation.Blockers), nil
+		return WorktreeDerivation{Blockers: model.ReasonSpecs(validation.Blockers)}, nil
 	}
-	*change = candidate
-	return nil, nil
+	return WorktreeDerivation{
+		WorktreePath:   candidate.WorktreePath,
+		WorktreeBranch: candidate.WorktreeBranch,
+	}, nil
+}
+
+// ApplyWorktreeMetadata applies derived worktree metadata to a change.
+// This is the explicit mutation step that must be called by the mutating caller
+// after DeriveWorktreeBlockers returns no blockers.
+func ApplyWorktreeMetadata(change *model.Change, d WorktreeDerivation) error {
+	return state.PersistScopeWorktreeMetadata(change, d.WorktreePath, d.WorktreeBranch)
 }
 
 // PresetConfirmationBlockers returns a preset_confirmation_required blocker
@@ -352,8 +375,8 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 	// Worktree validation is deferred to the dedicated worktree gate (step 5 in
 	// AdvanceGoverned) for S2_EXECUTE when the worktree is not yet bound. Checking
 	// it here would return dedicated_worktree_metadata_required before
-	// GovernedWorktreeBlockers has a chance to consume worktree-preflight evidence
-	// and persist metadata — creating a deadlock.
+	// DeriveWorktreeBlockers has a chance to extract worktree-preflight evidence
+	// — creating a deadlock.
 	skipWorktreeCheck := change.CurrentState == model.StateS2Execute &&
 		change.NeedsDiscovery &&
 		change.WorktreePath == ""

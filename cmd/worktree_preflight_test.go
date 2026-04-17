@@ -302,10 +302,11 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 
 // TestNextL3WorktreePreflightEvidenceUnblocksS2Execute is a regression test
 // for the deadlock where GovernedBundleBlockers() called ValidateChangeWorktree()
-// before GovernedWorktreeBlockers() had a chance to consume worktree-preflight
-// evidence and persist metadata. Without the fix, this test would hang at
-// S2_EXECUTE with blocker=dedicated_worktree_metadata_required and
-// next_skill=worktree-preflight simultaneously.
+// before the explicit DeriveWorktreeBlockers + ApplyWorktreeMetadata path had
+// a chance to consume worktree-preflight evidence and persist metadata.
+// Without the fix, this test would hang at S2_EXECUTE with
+// blocker=dedicated_worktree_metadata_required and next_skill=worktree-preflight
+// simultaneously.
 func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -345,7 +346,7 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 		// Key assertion: the advance must NOT deadlock. The worktree metadata
 		// should be persisted from the preflight evidence.
 		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required",
-			"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_EXECUTE so GovernedWorktreeBlockers can consume evidence")
+			"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_EXECUTE so the explicit derive/apply path can consume evidence")
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)

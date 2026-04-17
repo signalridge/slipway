@@ -363,6 +363,7 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` recover wave execution state
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -409,6 +410,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` rebuild unreadable wave artifacts
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/repair.go"]
   - task_kind: code
@@ -463,6 +465,7 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` historical executed task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -479,6 +482,7 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-02`"+` replacement task after drift
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/repair.go"]
   - task_kind: code

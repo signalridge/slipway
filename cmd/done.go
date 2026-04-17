@@ -335,7 +335,7 @@ func reconcileDoneFilesystemState(root string, change *model.Change) error {
 	if err != nil {
 		return err
 	}
-	if err := artifact.ReconcileFromFilesystem(root, change, policy.EffectivePreset); err != nil {
+	if _, err := artifact.ReconcileFromFilesystem(root, change, policy.EffectivePreset); err != nil {
 		return err
 	}
 	return state.SaveChange(root, *change)

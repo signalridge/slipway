@@ -1,7 +1,6 @@
 package capability
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,14 +95,6 @@ func TestStatusSuggestedOnlySkillsStayOffStatusCommand(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			sk, ok := reg.Lookup(id)
 			require.True(t, ok)
-
-			for _, trigger := range sk.Triggers {
-				if trigger.Op != OpCommand {
-					continue
-				}
-				assert.NotEqual(t, "status", trigger.Value, "status command trigger must stay removed")
-				assert.False(t, slices.Contains(trigger.Values, "status"), "status command trigger must stay removed")
-			}
 
 			for _, binding := range sk.Bindings {
 				if binding.Type != BindingCommandAuto {

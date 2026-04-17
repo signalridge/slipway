@@ -79,8 +79,8 @@ A single wave SHOULD contain no more than 5 tasks. If a wave exceeds this thresh
 ### 2a. Dimension Checklist (8D)
 The plan audit MUST explicitly check all eight dimensions:
 1. **Coverage (Nyquist Check)**: every requirement in requirements.md SHOULD have at least one corresponding task in tasks.md. Walk through each requirement block in `requirements.md`, record its stable `REQ-*` ID, and verify at least one task lists that same `REQ-*` ID in its `covers` field. On **standard/strict** preset, uncovered requirements are blockers. On **light** preset, uncovered requirements are advisory warnings.
-2. **Completeness**: each task has objective, dependencies, and expected outputs.
-3. **Dependency Integrity**: `depends_on` references valid tasks and contains no cycles.
+2. **Completeness**: each task has objective, explicit `wave`, dependencies, and expected outputs.
+3. **Dependency Integrity**: `depends_on` references valid tasks, contains no cycles, and only points to earlier waves.
 4. **Key Links**: each task links to concrete `target_files` or evidence targets.
 5. **Scope Control**: task targets stay within declared change scope boundaries.
 6. **Context Compliance**: task metadata supports context-safe execution (task_kind where present).

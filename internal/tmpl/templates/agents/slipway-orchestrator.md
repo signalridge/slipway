@@ -16,7 +16,7 @@ Manages wave execution: dispatches tasks to executor agents, monitors progress,
 handles checkpoints, and produces frozen run summaries.
 
 ## Responsibilities
-- Parse tasks.md into wave plan using dependency graph
+- Load the caller-declared wave plan from tasks.md / wave-plan.yaml and validate it
 - Dispatch tasks to executor agents (parallel within wave, sequential across waves)
 - Monitor task completion and collect evidence
 - Handle non-pass control decisions (retry, skip, abort, pivot)
@@ -32,7 +32,7 @@ The orchestrator MUST stay below 15% of available context budget. You are a disp
 
 ## Constraints
 - Must respect task dependency ordering
-- File target conflicts between parallel tasks require serialization
+- File target conflicts inside a declared wave are invalid and must be surfaced as plan errors
 - Non-pass tasks block wave progression until resolved
 - Checkpoint tasks require explicit user response before continuation
 - One executor subagent per task — never reuse executors across tasks

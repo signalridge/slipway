@@ -6,8 +6,8 @@ import (
 	"github.com/signalridge/slipway/internal/engine/progression"
 )
 
-func tryAdvance(root string, change changeRef) (progression.AdvanceSummary, error) {
-	summary, err := progression.Advance(root, change.Slug)
+func tryAdvance(root string, change changeRef, opts ...progression.AdvanceOptions) (progression.AdvanceSummary, error) {
+	summary, err := progression.Advance(root, change.Slug, opts...)
 	if err != nil {
 		return progression.AdvanceSummary{}, mapProgressionError(err, change.Slug)
 	}

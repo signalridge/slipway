@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
+	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/intake"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -18,6 +20,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type recordingIntentClassifier struct {
+	classification progression.IntentClassification
+	err            error
+	inputs         []string
+}
+
+func (r *recordingIntentClassifier) Classify(_ context.Context, inferenceText string) (progression.IntentClassification, error) {
+	r.inputs = append(r.inputs, inferenceText)
+	if r.err != nil {
+		return progression.IntentClassification{}, r.err
+	}
+	return r.classification, nil
+}
 
 func TestNewCommandRequiresDescription(t *testing.T) {
 	root := t.TempDir()
@@ -76,7 +92,16 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "auth_authz",
+				NeedsDiscovery:  true,
+				Complexity:      "critical",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"update auth middleware timeout strategy"})
 		require.NoError(t, cmd.Execute())
 
@@ -86,6 +111,33 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 		assert.True(t, change.NeedsDiscovery)
 		assert.Equal(t, model.GuardrailDomainAuthAuthZ, change.GuardrailDomain)
 		assert.Equal(t, model.StateS0Intake, change.CurrentState)
+	})
+}
+
+func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		docPath := filepath.Join(root, "idea.md")
+		docBody := "# Session timeout\n\n## Constraints\n- keep middleware contract\n"
+		require.NoError(t, os.WriteFile(docPath, []byte(docBody), 0o644))
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
+		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--preset", "standard", "--from-doc", docPath, "session timeout"})
+		require.NoError(t, cmd.Execute())
+
+		require.Len(t, classifier.inputs, 1)
+		assert.Equal(t, "session timeout\n"+strings.TrimSpace(docBody), classifier.inputs[0])
 	})
 }
 
@@ -300,6 +352,311 @@ func TestNewCommandInteractivePromptShowsProjectContext(t *testing.T) {
 	})
 }
 
+func TestNewCommandInteractiveSafeDegradeStillRequiresPresetConfirmation(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+
+		_, err = writer.WriteString("fix login timeout\n")
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return true }
+
+		classifier := &recordingIntentClassifier{err: assert.AnError}
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{})
+		require.NoError(t, cmd.Execute())
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, change.WorkflowPresetConfirmationPending())
+		assert.Equal(t, model.WorkflowPresetStandard, change.SuggestedWorkflowPreset)
+		assert.Contains(t, buf.String(), "intent inference degraded; safe fallback applied")
+	})
+}
+
+func TestNewCommandInteractiveWithoutClassifierSafeDegradesAndRequiresPresetConfirmation(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+
+		_, err = writer.WriteString("fix login timeout\n")
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return true }
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{})
+		require.NoError(t, cmd.Execute())
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, change.WorkflowPresetConfirmationPending())
+		assert.Equal(t, model.WorkflowPresetStandard, change.SuggestedWorkflowPreset)
+		assert.True(t, change.NeedsDiscovery)
+		assert.Equal(t, "complex", change.ComplexityLevel)
+		assert.Empty(t, change.GuardrailDomain)
+		assert.Contains(t, buf.String(), "intent inference degraded; safe fallback applied")
+	})
+}
+
+func TestNewJSONStdinPersistsProjectContextAndCallerControlOverrides(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+
+		_, err = writer.WriteString(`{
+  "description":"fix login timeout",
+  "tech_stack":"TypeScript, React",
+  "conventions":"Keep CLI responses deterministic",
+  "test_cmd":"pnpm test",
+  "build_cmd":"pnpm build",
+  "languages":["ts","tsx"],
+  "recent_work":"migrated auth screens to app router",
+  "disabled_controls":["research"],
+  "control_modes":{"independent-review":"advisory"},
+  "independent_review_blast_radius":"medium",
+  "worktree_blast_radius":"low"
+}`)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return false }
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json"})
+		require.NoError(t, cmd.Execute())
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		require.NotNil(t, payload.ProjectContext)
+		assert.Equal(t, "TypeScript, React", payload.ProjectContext.TechStack)
+		assert.Equal(t, "Keep CLI responses deterministic", payload.ProjectContext.Conventions)
+		assert.Equal(t, "pnpm test", payload.ProjectContext.TestCmd)
+		assert.Equal(t, "pnpm build", payload.ProjectContext.BuildCmd)
+		assert.Equal(t, "migrated auth screens to app router", payload.ProjectContext.RecentWork)
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, "TypeScript, React", change.ProjectContext.TechStack)
+		assert.Equal(t, "Keep CLI responses deterministic", change.ProjectContext.Conventions)
+		assert.Equal(t, "pnpm test", change.ProjectContext.TestCmd)
+		assert.Equal(t, "pnpm build", change.ProjectContext.BuildCmd)
+		assert.Equal(t, []string{"ts", "tsx"}, change.ProjectContext.Languages)
+		assert.Equal(t, "migrated auth screens to app router", change.ProjectContext.RecentWork)
+		assert.Contains(t, change.CallerDisabledCtrls, model.ControlResearch)
+		assert.Equal(t, model.ControlModeAdvisory, change.CallerControlModes[model.ControlIndependentReview])
+		assert.Equal(t, model.SignalLevelMedium, change.CallerIndependentReviewBlastRadius)
+		assert.Equal(t, model.SignalLevelLow, change.CallerWorktreeBlastRadius)
+
+		policy, err := governance.ResolvePresetPolicy(root, change)
+		require.NoError(t, err)
+		require.NotNil(t, policy.Overrides)
+		assert.Contains(t, policy.Overrides.DisabledControls, model.ControlResearch)
+		assert.Equal(t, model.ControlModeAdvisory, policy.Overrides.ModeOverrides[model.ControlIndependentReview])
+		assert.Equal(t, model.SignalLevelMedium, policy.Overrides.IndependentReviewBlastRadius)
+		assert.Equal(t, model.SignalLevelLow, policy.Overrides.WorktreeBlastRadius)
+	})
+}
+
+func TestNewJSONModeDoesNotInferProjectContextFromRepo(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/noinfer\n\ngo 1.25.5\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "Makefile"), []byte("test:\n\tgo test ./...\n\nbuild:\n\tgo build ./...\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("Prefer Go table tests.\n"), 0o644))
+		runGit(t, root, "add", "go.mod", "Makefile", "CLAUDE.md")
+		runGit(t, root, "commit", "-m", "seed inferred context candidates")
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+
+		_, err = writer.WriteString(`{"description":"fix login timeout"}`)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return false }
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json"})
+		require.NoError(t, cmd.Execute())
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		assert.Nil(t, payload.ProjectContext)
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, change.ProjectContext.IsZero())
+	})
+}
+
+func TestNewJSONWithoutClassifierReportsSafeDegradeDefaults(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return false }
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json", "fix login timeout"})
+		require.NoError(t, cmd.Execute())
+
+		var payloadMap map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payloadMap))
+		assert.Equal(t, true, payloadMap["intent_inference_degraded"])
+		assert.Equal(t, "no_classifier", payloadMap["intent_inference_degradation_reason"])
+		_, hasLegacyDegradeReason := payloadMap["intent_degrade_reason"]
+		assert.False(t, hasLegacyDegradeReason)
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		assert.True(t, payload.IntentInferenceDegraded)
+		assert.Equal(t, "no_classifier", payload.IntentInferenceDegradationReason)
+		assert.True(t, payload.NeedsDiscovery)
+		assert.Equal(t, "complex", payload.ComplexityLevel)
+		assert.Empty(t, payload.GuardrailDomain)
+		assert.Nil(t, payload.ProjectContext)
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, change.NeedsDiscovery)
+		assert.Equal(t, "complex", change.ComplexityLevel)
+		assert.Empty(t, change.GuardrailDomain)
+	})
+}
+
+func TestPresetUsesPersistedProjectContextFromNewJSONInput(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/presetctx\n\ngo 1.25.5\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "Makefile"), []byte("test:\n\tgo test ./...\n\nbuild:\n\tgo build ./...\n"), 0o644))
+
+		oldStdin := newCommandStdin
+		oldIsTerminal := newCommandIsTerminal
+		defer func() {
+			newCommandStdin = oldStdin
+			newCommandIsTerminal = oldIsTerminal
+		}()
+
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+
+		_, err = writer.WriteString(`{
+  "description":"seed preset with caller project context",
+  "tech_stack":"TypeScript, Next.js",
+  "conventions":"Prefer route handlers over bespoke API wrappers",
+  "test_cmd":"pnpm test",
+  "build_cmd":"pnpm build",
+  "languages":["ts","tsx"]
+}`)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+
+		newCommandStdin = reader
+		newCommandIsTerminal = func(fd int) bool { return false }
+
+		cmd := makeNewCmd()
+		cmd.SetArgs([]string{"--json"})
+		require.NoError(t, cmd.Execute())
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		presetCmd := makePresetCmd()
+		presetCmd.SetArgs([]string{"light"})
+		require.NoError(t, presetCmd.Execute())
+
+		requirementsPath := filepath.Join(root, "artifacts", "changes", slug, "requirements.md")
+		raw, err := os.ReadFile(requirementsPath)
+		require.NoError(t, err)
+		content := string(raw)
+		assert.Contains(t, content, "TypeScript, Next.js")
+		assert.Contains(t, content, "Prefer route handlers over bespoke API wrappers")
+		assert.Contains(t, content, "pnpm test")
+		assert.Contains(t, content, "pnpm build")
+		assert.NotContains(t, content, "go test ./...")
+	})
+}
+
 func TestRestoreNewPresetAfterScaffoldFailureReturnsCombinedError(t *testing.T) {
 	t.Parallel()
 
@@ -324,7 +681,16 @@ func TestNewCommandUsesCoreSchemaForSimpleChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"fix login timeout"})
 		require.NoError(t, cmd.Execute())
 
@@ -333,6 +699,37 @@ func TestNewCommandUsesCoreSchemaForSimpleChange(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, change.NeedsDiscovery)
 		assert.Equal(t, model.ArtifactSchemaCore, change.ArtifactSchema)
+	})
+}
+
+func TestNewCommandSafeDegradeKeepsPendingPresetInJSONMode(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		classifier := &recordingIntentClassifier{err: assert.AnError}
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--json", "fix login timeout"})
+		require.NoError(t, cmd.Execute())
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		assert.Equal(t, true, payload["preset_confirmation_pending"])
+		assert.Equal(t, "standard", payload["suggested_workflow_preset"])
+		assert.Equal(t, "complex", payload["complexity_level"])
+		assert.Equal(t, true, payload["needs_discovery"])
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.True(t, change.WorkflowPresetConfirmationPending())
+		assert.Equal(t, "complex", change.ComplexityLevel)
+		assert.True(t, change.NeedsDiscovery)
+		assert.Empty(t, change.GuardrailDomain)
 	})
 }
 
@@ -448,7 +845,16 @@ func TestNewCommandWithoutPresetAutoConfirmsLowRiskChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"fix login timeout"})
 		require.NoError(t, cmd.Execute())
 
@@ -475,7 +881,16 @@ func TestNewCommandWithoutPresetDoesNotAutoConfirmWhenMinPresetConfigured(t *tes
 		cfg.Governance.MinPreset = model.WorkflowPresetLight
 		require.NoError(t, model.SaveConfig(cfgPath, cfg))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"fix login timeout"})
 		require.NoError(t, cmd.Execute())
 
@@ -640,6 +1055,13 @@ func TestNextAfterNewUsesDirectSetupState(t *testing.T) {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 		create := makeNewCmd()
+		create.SetContext(withIntentClassifierContext(create.Context(), &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}))
 		create.SetArgs([]string{"--preset", "standard", "fix login timeout"})
 		require.NoError(t, create.Execute())
 
@@ -807,8 +1229,10 @@ auth_authz
 
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
-		assert.Nil(t, payload["advanced"],
-			"pending preset must not advance intake or planning state even when prerequisites are already satisfied")
+		if adv, ok := payload["advanced"].(map[string]any); ok {
+			assert.Equal(t, "blocked", adv["action"],
+				"pending preset must block, not advance intake or planning state")
+		}
 		assert.Equal(t, string(model.StateS0Intake), payload["current_state"])
 		assert.Equal(t, string(model.IntakeSubStepClarify), payload["intake_substep"])
 		input, ok := payload["input_context"].(map[string]any)

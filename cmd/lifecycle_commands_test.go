@@ -12,6 +12,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -112,6 +113,7 @@ func TestDoneLightPresetAllowsMissingAssurance(t *testing.T) {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 		create := makeNewCmd()
+		create.SetContext(withIntentClassifierContext(create.Context(), simpleIntentClassifier()))
 		create.SetArgs([]string{"--preset", "light", "rename helper comment"})
 		require.NoError(t, create.Execute())
 
@@ -877,8 +879,9 @@ func TestGovernedPivotRerouteUpdatesGuardrailDomain(t *testing.T) {
 
 		assert.Equal(t, model.ChangeStatusActive, updated.Status)
 		assert.Equal(t, model.StateS1Plan, updated.CurrentState)
-		// After simplification, pivot uses direct model: GuardrailDomain is inferred from description.
-		assert.Equal(t, "auth_authz", updated.GuardrailDomain)
+		// Pivot reroute preserves original guardrail domain and forces discovery.
+		assert.Empty(t, updated.GuardrailDomain)
+		assert.True(t, updated.NeedsDiscovery)
 	})
 }
 
@@ -981,6 +984,7 @@ func writeActiveChange(t *testing.T, root, slug string) {
 func createGovernedRequest(t *testing.T, root, level, description string) string {
 	t.Helper()
 	create := makeNewCmd()
+	create.SetContext(withIntentClassifierContext(create.Context(), simpleIntentClassifier()))
 	create.SetArgs([]string{"--preset", "standard", description})
 	require.NoError(t, create.Execute())
 
@@ -1004,6 +1008,7 @@ func createGovernedRequest(t *testing.T, root, level, description string) string
 func createActiveNonDiscoveryChange(t *testing.T, root, description string) string {
 	t.Helper()
 	create := makeNewCmd()
+	create.SetContext(withIntentClassifierContext(create.Context(), simpleIntentClassifier()))
 	create.SetArgs([]string{"--preset", "standard", description})
 	require.NoError(t, create.Execute())
 
@@ -1016,6 +1021,16 @@ func createActiveNonDiscoveryChange(t *testing.T, root, description string) stri
 	require.NoError(t, state.SaveChange(root, change))
 
 	return slug
+}
+
+func simpleIntentClassifier() *recordingIntentClassifier {
+	return &recordingIntentClassifier{
+		classification: progression.IntentClassification{
+			GuardrailDomain: "",
+			NeedsDiscovery:  false,
+			Complexity:      "simple",
+		},
+	}
 }
 
 func validAssuranceContent() string {
@@ -1112,6 +1127,7 @@ Low risk; failures should surface as explicit readiness blockers.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` verify ship readiness parity
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/done.go"]
   - task_kind: verification
