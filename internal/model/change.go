@@ -36,10 +36,15 @@ type Change struct {
 	WorktreeBranch string `yaml:"worktree_branch,omitempty" json:"worktree_branch,omitempty"`
 
 	// Governance
-	ArtifactSchema      ArtifactSchemaName   `yaml:"artifact_schema,omitempty" json:"artifact_schema,omitempty"`
-	CustomArtifacts     []ArtifactDefinition `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
-	ContextDependencies ContextDependencies  `yaml:"context_dependencies,omitempty" json:"context_dependencies,omitempty"` // Execution-context metadata: drives prior-context selection and next input assembly, not consumed by progression/governance/gate logic.
-	PlanAuditIterations int                  `yaml:"plan_audit_iterations,omitempty" json:"plan_audit_iterations,omitempty"`
+	ArtifactSchema                     ArtifactSchemaName        `yaml:"artifact_schema,omitempty" json:"artifact_schema,omitempty"`
+	CustomArtifacts                    []ArtifactDefinition      `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
+	ContextDependencies                ContextDependencies       `yaml:"context_dependencies,omitempty" json:"context_dependencies,omitempty"` // Execution-context metadata: drives prior-context selection and next input assembly, not consumed by progression/governance/gate logic.
+	ProjectContext                     ProjectContext            `yaml:"project_context,omitempty" json:"project_context,omitempty"`
+	CallerDisabledCtrls                []ControlID               `yaml:"caller_disabled_controls,omitempty" json:"caller_disabled_controls,omitempty"`
+	CallerControlModes                 map[ControlID]ControlMode `yaml:"caller_control_modes,omitempty" json:"caller_control_modes,omitempty"`
+	CallerIndependentReviewBlastRadius SignalLevel               `yaml:"caller_independent_review_blast_radius,omitempty" json:"caller_independent_review_blast_radius,omitempty"`
+	CallerWorktreeBlastRadius          SignalLevel               `yaml:"caller_worktree_blast_radius,omitempty" json:"caller_worktree_blast_radius,omitempty"`
+	PlanAuditIterations                int                       `yaml:"plan_audit_iterations,omitempty" json:"plan_audit_iterations,omitempty"`
 
 	// Execution
 	ActiveCheckpoint *ActiveCheckpoint `yaml:"active_checkpoint,omitempty" json:"active_checkpoint,omitempty"`
@@ -145,6 +150,25 @@ func (c Change) Validate() error {
 	}
 	if err := c.ContextDependencies.Validate(); err != nil {
 		return fmt.Errorf("context_dependencies invalid: %w", err)
+	}
+	for i, id := range c.CallerDisabledCtrls {
+		if !id.IsValid() {
+			return fmt.Errorf("caller_disabled_controls[%d]: invalid control_id %q", i, id)
+		}
+	}
+	for id, mode := range c.CallerControlModes {
+		if !id.IsValid() {
+			return fmt.Errorf("caller_control_modes[%q]: invalid control_id", id)
+		}
+		if !mode.IsValid() {
+			return fmt.Errorf("caller_control_modes[%q]: invalid mode %q", id, mode)
+		}
+	}
+	if c.CallerIndependentReviewBlastRadius != "" && !c.CallerIndependentReviewBlastRadius.IsValid() {
+		return fmt.Errorf("caller_independent_review_blast_radius: invalid signal level %q", c.CallerIndependentReviewBlastRadius)
+	}
+	if c.CallerWorktreeBlastRadius != "" && !c.CallerWorktreeBlastRadius.IsValid() {
+		return fmt.Errorf("caller_worktree_blast_radius: invalid signal level %q", c.CallerWorktreeBlastRadius)
 	}
 	for key, artifact := range c.Artifacts {
 		if artifact.ID == "" {

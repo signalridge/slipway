@@ -8,11 +8,27 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 )
 
+// SideEffect records a runtime-owned mutation that occurred during advance.
+type SideEffect struct {
+	Kind   string `json:"kind"`
+	Detail string `json:"detail,omitempty"`
+}
+
 // AdvanceSummary captures what happened during a state advance attempt.
+// All fields are structured and machine-readable. The Message field is
+// human-only and non-authoritative — JSON callers should use the structured
+// fields instead.
 type AdvanceSummary struct {
 	Action           string                  `json:"action"`
 	FromState        model.WorkflowState     `json:"from_state"`
 	ToState          model.WorkflowState     `json:"to_state,omitempty"`
+	FromSubStep      string                  `json:"from_substep,omitempty"`
+	ToSubStep        string                  `json:"to_substep,omitempty"`
+	Reason           string                  `json:"reason,omitempty"`
+	RecoveryOnly     bool                    `json:"recovery_only,omitempty"`
+	Signals          map[string]bool         `json:"signals,omitempty"`
+	SideEffects      []SideEffect            `json:"side_effects,omitempty"`
+	ClearedFields    []string                `json:"cleared_fields,omitempty"`
 	Message          string                  `json:"message"`
 	Blockers         []model.ReasonCode      `json:"blockers,omitempty"`
 	AutoPassedStates []model.AutoPassedState `json:"auto_passed_states,omitempty"`

@@ -268,6 +268,7 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` preserve freshness across derived checkbox sync
+  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))

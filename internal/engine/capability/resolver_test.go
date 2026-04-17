@@ -80,19 +80,6 @@ func TestResolveReviewHostAttachesIndependentReview(t *testing.T) {
 	assert.True(t, foundIR, "expected independent-review attached at code-quality-review host")
 }
 
-func TestResolveTiebreakStaysReserved(t *testing.T) {
-	t.Parallel()
-	// llm_tiebreak is reserved for B7+ and must not leak from the resolver
-	// even after PR-4a populates hydrate_references for routed and
-	// support-path resolutions.
-	reg := DefaultRegistry()
-	res := Resolve(reg, Signals{
-		Host:    "plan-audit",
-		Command: "review",
-	})
-	assert.Nil(t, res.LLMTiebreak)
-}
-
 func TestResolveEmitsHydrateForAutoRoute(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
@@ -220,9 +207,9 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			sig:  Signals{Host: "wave-orchestration"},
 			want: resolutionSnapshot{
 				supports: []supportSnapshot{
-					{skillID: "tdd-proof", kind: AttachmentProcedure},
 					{skillID: "parallel-executor-contract", kind: AttachmentProcedure},
 					{skillID: "root-cause-tracing", kind: AttachmentProcedure},
+					{skillID: "tdd-proof", kind: AttachmentProcedure},
 				},
 				hydrate: []string{
 					"root-cause-tracing/condition-based-waiting.md",

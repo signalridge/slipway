@@ -40,12 +40,15 @@ func TestAppendCatalogHintsPreservesExisting(t *testing.T) {
 	assert.Equal(t, "slipway codebase-map", hints[0].Name)
 }
 
-func TestAppendCatalogHintsReactsToBlockers(t *testing.T) {
+func TestAppendCatalogHintsBlockersAloneDoNotPopulateSupports(t *testing.T) {
 	t.Parallel()
+	// After trigger-DSL removal, blocker-only signals without a host do not
+	// populate support attachments — host-embedded / technique-hint bindings
+	// require an active host. Blocker-based suggestions surface through the
+	// SuggestedCapabilities channel instead.
 	view := &nextView{Blockers: []model.ReasonCode{{Code: "missing_red_proof"}}}
 	hints := appendCatalogHints(nil, "", nil, view)
-	require.NotEmpty(t, hints)
-	assert.Equal(t, "skill:tdd-proof", hints[0].Name)
+	assert.Empty(t, hints)
 }
 
 func TestAppendCatalogHintsAttachesHydrateReferencesOnWaveHost(t *testing.T) {

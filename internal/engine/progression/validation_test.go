@@ -35,6 +35,7 @@ func TestValidateTasksChecklist_Valid(t *testing.T) {
 	content := `# Tasks
 
 - [ ] ` + "`t-01`" + ` do something
+  - wave: 1
   - target_files: [main.go]
   - task_kind: code
 `
@@ -85,6 +86,7 @@ func assertChecklistCoverageBlocker(t *testing.T, slug, coverRef, specContent, w
 	content := fmt.Sprintf(`# Tasks
 
 - [ ] %s implement auth flow
+  - wave: 1
   - target_files: [main.go]
   - task_kind: code
   - covers: [%s]
@@ -192,6 +194,7 @@ func TestValidateTasksChecklistDetailed_DowngradesOptionalFieldsAndCoverageToWar
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth flow
+  - wave: 1
   - depends_on: []
   - target_files: [main.go]
 `), 0o644))
@@ -384,7 +387,7 @@ func initGitRepoForValidationTests(t *testing.T, root string) {
 	runGitForValidationTests(t, root, "commit", "-m", "init")
 }
 
-func TestGovernedWorktreeBlockersSeedsScopeMetadataForBoundWorktree(t *testing.T) {
+func TestDeriveAndApplyWorktreeMetadataSeedsScopeMetadataForBoundWorktree(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -402,7 +405,7 @@ func TestGovernedWorktreeBlockersSeedsScopeMetadataForBoundWorktree(t *testing.T
 	runGitForValidationTests(t, root, "worktree", "add", worktreeRoot, "-b", branch)
 
 	updated := change
-	blockers, err := GovernedWorktreeBlockers(root, &updated, map[string]model.VerificationRecord{
+	derivation, err := DeriveWorktreeBlockers(root, updated, map[string]model.VerificationRecord{
 		SkillWorktreePreflight: {
 			Verdict:   model.VerificationVerdictPass,
 			Timestamp: time.Now().UTC(),
@@ -414,7 +417,8 @@ func TestGovernedWorktreeBlockersSeedsScopeMetadataForBoundWorktree(t *testing.T
 		},
 	})
 	require.NoError(t, err)
-	require.Empty(t, blockers)
+	require.Empty(t, derivation.Blockers)
+	require.NoError(t, ApplyWorktreeMetadata(&updated, derivation))
 	require.NoError(t, state.RelocateGovernedBundle(root, change, updated))
 	require.NoError(t, state.SaveChange(root, updated))
 

@@ -14,16 +14,19 @@ func TestParseTaskPlan_CheckboxNativeCapturesCompletionState(t *testing.T) {
 ## Task List
 
 - [x] ` + "`t-01`" + ` Setup database schema
+  - wave: 1
   - depends_on: []
   - target_files: ["internal/db/schema.go", "internal/db/migrate.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Implement API handlers
+  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["internal/api/handler.go"]
   - task_kind: code
 
 - [ ] ` + "`t-03`" + ` Write documentation
+  - wave: 3
   - depends_on: ["t-01", "t-02"]
   - target_files: ["docs/api.md"]
   - task_kind: doc
@@ -57,6 +60,7 @@ func TestParseTaskPlan_CommaSeparatedDeps(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` First
+  - wave: 1
   - depends_on: t-02, t-03
   - target_files: src/main.go
   - task_kind: code
@@ -94,6 +98,7 @@ func TestParseTaskPlan_CheckpointType(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Manual task
+  - wave: 1
   - task_kind: other
   - checkpoint_type: human_verify
 `
@@ -109,10 +114,12 @@ func TestParseTaskPlan_RejectsDuplicateTaskID(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` First task
+  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
 
 - [ ] ` + "`t-01`" + ` Duplicate task
+  - wave: 2
   - task_kind: code
   - target_files: ["b.go"]
 `
@@ -127,6 +134,7 @@ func TestParseTaskPlan_RejectsDuplicateMetadataKey(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Task with dup key
+  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
   - task_kind: test
@@ -142,6 +150,7 @@ func TestParseTaskPlan_RejectsUnknownMetadataKey(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Task with unknown key
+  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
   - some_random_key: value
@@ -157,15 +166,18 @@ func TestParseTaskPlan_IntegrationWithPlanWaves(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Foundation
+  - wave: 1
   - target_files: ["a.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Depends on t-01
+  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["b.go"]
   - task_kind: code
 
 - [ ] ` + "`t-03`" + ` Independent
+  - wave: 1
   - target_files: ["c.go"]
   - task_kind: code
 `
@@ -177,7 +189,7 @@ func TestParseTaskPlan_IntegrationWithPlanWaves(t *testing.T) {
 
 	waves, err := PlanWaves(nodes)
 	require.NoError(t, err)
-	require.Len(t, waves, 2) // wave 1: t-01 + t-03, wave 2: t-02
+	require.Len(t, waves, 2)
 
 	wave1IDs := make([]string, len(waves[0].Nodes))
 	for i, n := range waves[0].Nodes {
@@ -188,4 +200,21 @@ func TestParseTaskPlan_IntegrationWithPlanWaves(t *testing.T) {
 
 	assert.Len(t, waves[1].Nodes, 1)
 	assert.Equal(t, "t-02", waves[1].Nodes[0].TaskID)
+}
+
+func TestParseTaskPlan_CapturesDeclaredWave(t *testing.T) {
+	md := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Foundation
+  - wave: 3
+  - depends_on: []
+  - target_files: ["a.go"]
+  - task_kind: code
+`
+
+	plan, err := ParseTaskPlan(md)
+	require.NoError(t, err)
+	require.Len(t, plan.Tasks, 1)
+	assert.Equal(t, 3, plan.Tasks[0].WaveIndex)
+	assert.True(t, plan.Tasks[0].HasDeclaredWave())
 }

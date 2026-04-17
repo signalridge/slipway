@@ -191,13 +191,14 @@ func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
-		require.Len(t, view.Advanced.AutoPassedStates, 2)
-		assert.Equal(t, model.StateS3Review, view.Advanced.AutoPassedStates[0].State)
-		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[1].State)
+		// After Wave 1.1, S3_REVIEW advances through normal gate evaluation
+		// (not auto-pass). Only S4_VERIFY is auto-passed.
+		require.Len(t, view.Advanced.AutoPassedStates, 1)
+		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
 
 		updated, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		require.Len(t, updated.LastAutoPassedStates, 2)
+		require.Len(t, updated.LastAutoPassedStates, 1)
 		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
 	})
 }
@@ -230,16 +231,17 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
-		require.Len(t, view.Advanced.AutoPassedStates, 2)
-		assert.Equal(t, model.StateS3Review, view.Advanced.AutoPassedStates[0].State)
-		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[1].State)
+		// After Wave 1.1, only S4_VERIFY is auto-passed; S3_REVIEW advances
+		// through normal gate evaluation.
+		require.Len(t, view.Advanced.AutoPassedStates, 1)
+		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
 		assert.Empty(t, view.AutoPassEligible)
 		assert.Nil(t, view.NextSkill)
 
 		updated, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
-		require.Len(t, updated.LastAutoPassedStates, 2)
+		require.Len(t, updated.LastAutoPassedStates, 1)
 	})
 }
 

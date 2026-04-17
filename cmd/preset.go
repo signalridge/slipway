@@ -116,10 +116,12 @@ func makePresetCmd() *cobra.Command {
 						}
 						return err
 					}
-					// Use InferProjectContext so re-scaffold picks up
-					// auto-detected tech stack, languages, test/build
-					// commands — not just .slipway.yaml.
-					projectCtx := progression.InferProjectContext(root)
+					projectCtx := change.ProjectContext
+					if projectCtx.IsZero() {
+						// Fallback for legacy/pure-TTY changes that did not persist
+						// a caller-supplied or creation-time scaffold context.
+						projectCtx = progression.InferProjectContext(root)
+					}
 					docs, err := docSectionsFromIntent(root, change)
 					if err != nil {
 						err = fmt.Errorf("extracting doc sections from intent: %w", err)

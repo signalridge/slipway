@@ -153,9 +153,16 @@ func TestRepairSuggestedCapabilitiesSerializeInTextAndJSON(t *testing.T) {
 
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(jsonOut.Bytes(), &summary))
-		require.Len(t, summary.SuggestedCapabilities, 1)
-		assert.Equal(t, "gha-security-review", summary.SuggestedCapabilities[0].Name)
-		assert.NotEmpty(t, summary.SuggestedCapabilities[0].Reason)
+		require.NotEmpty(t, summary.SuggestedCapabilities)
+		require.LessOrEqual(t, len(summary.SuggestedCapabilities), 3)
+		foundGHA := false
+		for _, sc := range summary.SuggestedCapabilities {
+			assert.NotEmpty(t, sc.Reason)
+			if sc.Name == "gha-security-review" {
+				foundGHA = true
+			}
+		}
+		assert.True(t, foundGHA, "expected gha-security-review among suggestions")
 
 		var textOut bytes.Buffer
 		textCmd := makeRepairCmd()

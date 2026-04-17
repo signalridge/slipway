@@ -10,14 +10,7 @@ func threatModeling() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a change alters the trust boundary or asset surface. Triggers on review or validate commands, security-classified guardrails, or user text naming threats.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"review", "validate"},
-				Reason: "review or validate command invoked; enumerate threats against the change"},
-			{Op: OpUserTextMatches, Values: []string{"threat model", "attack surface", "adversary", "trust boundary"},
-				Reason: "User text asks for threat modeling"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
@@ -33,14 +26,7 @@ func sastOrchestration() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentToolRecipe,
 		Summary:           "Use when running SAST tooling against the change. Triggers on review, validate, or repair commands and user text naming SAST tools.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"review", "validate", "repair"},
-				Reason: "Review/validate/repair command invoked; SAST may apply"},
-			{Op: OpUserTextMatches, Values: []string{"codeql", "semgrep", "sast", "sarif"},
-				Reason: "User text names a SAST tool"},
-		},
-		// Explicit-focus backing for `--focus sast` on review / validate /
+		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus sast` on review / validate /
 		// repair (resolved via surfaces.go). Command-auto bindings also let
 		// the skill appear in suggested_capabilities[] when SAST triggers fire.
 		Bindings: []Binding{
@@ -70,14 +56,7 @@ func ghaSecurityReview() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when reviewing GitHub Actions workflows. Triggers on review or repair commands or on changes to .github/workflows paths.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpChangedFilesInclude, Values: []string{".github/workflows/*", ".github/workflows/**/*"},
-				Reason: "GitHub Actions workflow changed"},
-			{Op: OpCommand, Values: []string{"review", "repair"},
-				Reason: "Review or repair command invoked; workflow surface may be in scope"},
-		},
-		// Suggested-only on review / repair (§5.2). Command-auto feeds the
+		Evidence:          EvidenceVerdict,		// Suggested-only on review / repair (§5.2). Command-auto feeds the
 		// suggested_capabilities[] channel when workflow paths change.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
@@ -105,19 +84,7 @@ func supplyChainAudit() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review or repair commands or on changes to package/lock files.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpChangedFilesInclude, Values: []string{
-				"go.mod", "go.sum",
-				"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
-				"Cargo.toml", "Cargo.lock",
-				"requirements*.txt", "pyproject.toml", "poetry.lock", "uv.lock",
-			},
-				Reason: "Dependency manifest or lockfile changed"},
-			{Op: OpCommand, Values: []string{"review", "repair"},
-				Reason: "Review or repair command invoked; dependency surface may apply"},
-		},
-		// Suggested-only on review / repair (§5.2). The status
+		Evidence:          EvidenceVerdict,		// Suggested-only on review / repair (§5.2). The status
 		// --view=supply-chain-audit surface was removed (§5.5), and status no
 		// longer carries this skill as a suggested surface.
 		Bindings: []Binding{

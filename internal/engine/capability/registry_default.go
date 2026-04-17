@@ -44,22 +44,7 @@ func scopeClarification() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentPosture,
 		Summary:           "Use when user intent or scope is ambiguous before planning. Triggers on intake host, unclear acceptance, or open clarifying questions.",
-		Evidence:          EvidenceChecklist,
-		Triggers: []TriggerClause{
-			{
-				Op: OpAllOf,
-				Children: []TriggerClause{
-					{Op: OpHost, Value: "intake-clarification"},
-				},
-				Reason: "Intake host active; anchor scope posture before questions",
-			},
-			{
-				Op:     OpUserTextMatches,
-				Values: []string{"underspecified", "unclear scope", "ambiguous", "not sure what"},
-				Reason: "User text signals underspecified intent",
-			},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceChecklist,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "intake-clarification", Attachment: AttachmentPosture},
 			{Type: BindingHostEmbedded, Target: "intake-clarification", Attachment: AttachmentChecklist},
 			{Type: BindingTechniqueHint, Target: "intake-clarification", Attachment: AttachmentPosture},
@@ -75,20 +60,7 @@ func planAuthoring() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when drafting or auditing a plan bundle. Triggers on plan-audit host or on `plan` / `next` work that requires bounded execution-ready tasks.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{
-				Op:     OpHost,
-				Values: []string{"plan-audit"},
-				Reason: "Plan audit host active; enforce bounded-task and execution-contract shape",
-			},
-			{
-				Op:     OpChangedFilesInclude,
-				Values: []string{"docs/plans/*.md", "docs/plans/**/*.md"},
-				Reason: "Plan bundle touched; plan-authoring procedure applies",
-			},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentChecklist},
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentProcedure},
@@ -107,22 +79,7 @@ func tddProof() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when executing guardrail-domain work. Triggers on tdd-governance host or on execution covered by a guardrail domain.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{
-				Op: OpAllOf,
-				Children: []TriggerClause{
-					{Op: OpHost, Values: []string{"tdd-governance", "wave-orchestration"}},
-				},
-				Reason: "Execution host active; inject TDD procedure",
-			},
-			{
-				Op:     OpBlockerReason,
-				Values: []string{"guardrail_domain_requires_tdd", "missing_red_proof"},
-				Reason: "Blocker cites missing TDD proof",
-			},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "tdd-governance", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "tdd-governance", Attachment: AttachmentProcedure},
@@ -141,20 +98,7 @@ func freshVerificationEvidence() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when a change is approaching a verify/closeout gate. Triggers on goal-verification, final-closeout, or any completion-adjacent step.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{
-				Op:     OpHost,
-				Values: []string{"goal-verification", "final-closeout", "tdd-governance"},
-				Reason: "Verification or closeout host active; enforce fresh-evidence checklist",
-			},
-			{
-				Op:     OpBlockerReason,
-				Values: []string{"stale_verification_evidence", "missing_fresh_run"},
-				Reason: "Blocker cites stale or missing fresh verification",
-			},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentReportSchema},
 			{Type: BindingHostEmbedded, Target: "final-closeout", Attachment: AttachmentChecklist},
@@ -171,20 +115,7 @@ func independentReview() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when performing code review with a verdict contract. Triggers on review host or the `review` command surface.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{
-				Op:     OpHost,
-				Values: []string{"spec-compliance-review", "code-quality-review"},
-				Reason: "Review host active; anchor fresh-context review discipline",
-			},
-			{
-				Op:     OpCommand,
-				Value:  "review",
-				Reason: "review command invoked; attach independent-review procedure",
-			},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},

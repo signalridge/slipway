@@ -19,6 +19,10 @@ setup, diagnostics, and repair commands.
 If `slipway new` is run without a description in a TTY, Slipway opens an
 interactive intake prompt with inferred project context.
 
+Unless JSON stdin supplies explicit `guardrail_domain`, `needs_discovery`, or
+`complexity` metadata, `slipway new` starts from conservative safe-degrade
+classification defaults and reports that degradation in command output.
+
 Creation refinements:
 
 - `slipway new --preset <light|standard|strict>`: choose the governance preset during creation

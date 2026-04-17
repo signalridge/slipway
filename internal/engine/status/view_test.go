@@ -36,9 +36,11 @@ func TestBuildProjectionUsesBundleProgressOutsideExecutionStates(t *testing.T) {
 
 - [x] `+"`task-a`"+` completed
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 - [ ] `+"`task-b`"+` pending
   - target_files: ["cmd/status.go"]
+  - wave: 2
   - task_kind: verification
 `), 0o644))
 
@@ -68,6 +70,7 @@ func TestBuildProjectionKeepsExecutionSummaryProgressInExecutionStates(t *testin
 
 - [x] `+"`task-checklist-only`"+` should not replace execution summary
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 `), 0o644))
 
@@ -107,11 +110,13 @@ func TestBuildProjectionDoesNotSynthesizeWaveProgressWhenWaveRunsAreMissing(t *t
 - [x] `+"`task-a`"+` completed first wave
   - depends_on: []
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 
 - [ ] `+"`task-b`"+` pending second wave
   - depends_on: ["task-a"]
   - target_files: ["cmd/status.go"]
+  - wave: 2
   - task_kind: code
 `), 0o644))
 	_, err = state.MaterializeWavePlan(root, change)
@@ -153,11 +158,13 @@ func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing
 - [x] `+"`task-a`"+` completed first wave
   - depends_on: []
   - target_files: ["cmd/status.go"]
+  - wave: 1
   - task_kind: code
 
 - [x] `+"`task-b`"+` completed second wave
   - depends_on: ["task-a"]
   - target_files: ["cmd/status.go"]
+  - wave: 2
   - task_kind: code
 `), 0o644))
 	plan, err := state.MaterializeWavePlan(root, change)

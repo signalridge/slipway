@@ -875,7 +875,8 @@ func TestReconcileFromFilesystemMissingFileResetsToDraft(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 	assert.Equal(t, model.ArtifactLifecycleDraft, change.Artifacts["intent"].State)
 }
 
@@ -909,7 +910,8 @@ func TestReconcileFromFilesystemMissingUpstreamFileStalesDownstreamAndClearsHash
 		},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 
 	assert.Equal(t, model.ArtifactLifecycleDraft, change.Artifacts["intent"].State)
 	assert.Empty(t, change.Artifacts["intent"].ContentHash)
@@ -934,7 +936,8 @@ func TestReconcileFromFilesystemFrozenNotOverridden(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 	assert.Equal(t, model.ArtifactLifecycleFrozen, change.Artifacts["intent"].State)
 }
 
@@ -964,7 +967,8 @@ func TestReconcileFromFilesystemHashMatchNoChange(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 	assert.Equal(t, model.ArtifactLifecycleApproved, change.Artifacts["intent"].State)
 	assert.Equal(t, hash, change.Artifacts["intent"].ContentHash)
 }
@@ -1022,7 +1026,8 @@ func TestReconcileFromFilesystemHashMismatchPropagatesToDownstream(t *testing.T)
 		},
 	}
 
-	require.NoError(t, ReconcileFromFilesystem(root, change))
+	_, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
 
 	// intent state should be unchanged (hash mismatch does NOT change lifecycle).
 	assert.Equal(t, model.ArtifactLifecycleApproved, change.Artifacts["intent"].State)
@@ -1059,7 +1064,7 @@ func TestReconcileFromFilesystemFrozenAmendableUnreadableArtifactReturnsError(t 
 		},
 	}
 
-	err := ReconcileFromFilesystem(root, change)
+	_, err := ReconcileFromFilesystem(root, change)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "intent.md")
 }

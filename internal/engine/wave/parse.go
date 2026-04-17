@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -40,6 +41,10 @@ func (p TaskPlan) Nodes() []Node {
 
 func (t TaskNode) HasDeclaredTaskKind() bool {
 	return t.taskKindDeclared
+}
+
+func (t TaskNode) HasDeclaredWave() bool {
+	return t.WaveIndex > 0
 }
 
 // ParseTaskPlan parses the steady-state checkbox-native tasks.md contract.
@@ -82,6 +87,7 @@ func TaskPlanSemanticHash(content string) (string, error) {
 		tasks = append(tasks, map[string]any{
 			"task_id":         task.TaskID,
 			"objective":       strings.TrimSpace(task.Objective),
+			"wave":            task.WaveIndex,
 			"depends_on":      append([]string(nil), task.DependsOn...),
 			"target_files":    append([]string(nil), task.TargetFiles...),
 			"task_kind":       task.TaskKind.String(),
@@ -98,6 +104,7 @@ func TaskPlanSemanticHash(content string) (string, error) {
 // allowedMetadataKeys is the union of required + optional keys accepted by
 // the checkbox-native contract.
 var allowedMetadataKeys = map[string]struct{}{
+	"wave":            {},
 	"depends_on":      {},
 	"target_files":    {},
 	"task_kind":       {},
@@ -178,6 +185,7 @@ func parseCheckboxTaskPlan(content string) (TaskPlan, error) {
 type taskNodeBuilder struct {
 	taskID         string
 	objective      string
+	waveIndex      int
 	dependsOn      []string
 	targetFiles    []string
 	taskKind       string
@@ -197,11 +205,10 @@ func (b *taskNodeBuilder) applyStrictMetadata(key, value string) error {
 		return fmt.Errorf("task %q has duplicate metadata key %q", b.taskID, key)
 	}
 	b.seenKeys[key] = struct{}{}
-	b.applyMetadata(key, value)
-	return nil
+	return b.applyMetadata(key, value)
 }
 
-func (b *taskNodeBuilder) applyMetadata(key, value string) {
+func (b *taskNodeBuilder) applyMetadata(key, value string) error {
 	switch key {
 	case "task_id":
 		b.taskID = cleanValue(value)
@@ -217,7 +224,14 @@ func (b *taskNodeBuilder) applyMetadata(key, value string) {
 		b.objective = cleanValue(value)
 	case "checkpoint_type":
 		b.checkpointType = cleanValue(value)
+	case "wave":
+		waveIndex, err := parsePositiveInt(value)
+		if err != nil {
+			return fmt.Errorf("task %q has invalid wave %q: %w", b.taskID, cleanValue(value), err)
+		}
+		b.waveIndex = waveIndex
 	}
+	return nil
 }
 
 func (b *taskNodeBuilder) build() (TaskNode, error) {
@@ -249,6 +263,7 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 		Node: Node{
 			TaskID:         b.taskID,
 			Objective:      b.objective,
+			WaveIndex:      b.waveIndex,
 			DependsOn:      append([]string(nil), b.dependsOn...),
 			TargetFiles:    append([]string(nil), b.targetFiles...),
 			TaskKind:       kind,
@@ -389,4 +404,15 @@ func parseStringList(s string) []string {
 		}
 	}
 	return result
+}
+
+func parsePositiveInt(s string) (int, error) {
+	value, err := strconv.Atoi(cleanValue(s))
+	if err != nil {
+		return 0, err
+	}
+	if value < 1 {
+		return 0, fmt.Errorf("must be >= 1")
+	}
+	return value, nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/action"
@@ -24,6 +25,19 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
 		return AdvanceSummary{}, err
+	}
+
+	// Quick mode: inject advisory-control disablement in-memory (not persisted).
+	if options.QuickMode {
+		existing := make(map[model.ControlID]struct{}, len(change.CallerDisabledCtrls))
+		for _, id := range change.CallerDisabledCtrls {
+			existing[id] = struct{}{}
+		}
+		for _, id := range quickModeDisabledControls {
+			if _, ok := existing[id]; !ok {
+				change.CallerDisabledCtrls = append(change.CallerDisabledCtrls, id)
+			}
+		}
 	}
 
 	fromState := change.CurrentState
@@ -100,14 +114,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 	}
 	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap)); len(blockers) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
-	}
-
-	if !options.SkipAutoPass {
-		if summary, applied, err := attemptAutoPassSequence(root, change, fromState, fromState); err != nil {
-			return AdvanceSummary{}, err
-		} else if applied {
-			return summary, nil
-		}
 	}
 
 	// 4. Skill evidence evaluation
@@ -337,18 +343,22 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 	}, nil
 }
 
+// planSubStepOrder defines the linear progression of S1_PLAN substeps.
+// audit and validate are terminal — they exit S1_PLAN, not advance within it.
+var planSubStepOrder = []model.PlanSubStep{
+	model.PlanSubStepResearch,
+	model.PlanSubStepBundle,
+	model.PlanSubStepAudit,
+}
+
 // computeNextPlanSubStep returns the next planning substep, or PlanSubStepNone
-// when the current substep is the final one before exiting S1_PLAN.
+// when the current substep is terminal (audit/validate exit S1_PLAN).
 func computeNextPlanSubStep(current model.PlanSubStep) model.PlanSubStep {
-	switch current {
-	case model.PlanSubStepResearch:
-		return model.PlanSubStepBundle
-	case model.PlanSubStepBundle:
-		return model.PlanSubStepAudit
-	default:
-		// audit, validate: ready to exit S1_PLAN.
+	idx := slices.Index(planSubStepOrder, current)
+	if idx < 0 || idx+1 >= len(planSubStepOrder) {
 		return model.PlanSubStepNone
 	}
+	return planSubStepOrder[idx+1]
 }
 
 func ensureGovernedBundleScaffolded(root string, change *model.Change) error {

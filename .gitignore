@@ -45,4 +45,5 @@ __pycache__/
 *.pyc
 
 # Local research references (upstream skill repos)
-/skills_ref/
+skills_ref/
+.ruff_cache/

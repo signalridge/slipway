@@ -1,45 +1,131 @@
 package progression
 
 import (
+	"context"
 	"testing"
-
-	"github.com/signalridge/slipway/internal/model"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestInferDiscovery(t *testing.T) {
-	t.Parallel()
-
-	assert.False(t, InferDiscovery("fix login timeout", ""))
-	assert.True(t, InferDiscovery("refactor auth middleware timeout strategy", model.GuardrailDomainAuthAuthZ))
-	assert.True(t, InferDiscovery("not sure how to re-architect this service", ""))
+type stubIntentClassifier struct {
+	classification IntentClassification
+	err            error
 }
 
-func TestInferComplexity(t *testing.T) {
+func (s stubIntentClassifier) Classify(_ context.Context, _ string) (IntentClassification, error) {
+	if s.err != nil {
+		return IntentClassification{}, s.err
+	}
+	return s.classification, nil
+}
+
+func TestValidateClassification(t *testing.T) {
 	t.Parallel()
 
-	// Priority 1: guardrail domain → minimum "complex"
-	assert.Equal(t, "complex", InferComplexity("add new feature", "auth_authz"))
-	// Priority 1: guardrail domain + critical keyword → "critical"
-	assert.Equal(t, "critical", InferComplexity("add auth login flow", "auth_authz"))
-	assert.Equal(t, "critical", InferComplexity("update payment processing", "financial"))
+	tests := []struct {
+		name           string
+		classification IntentClassification
+		wantErr        bool
+	}{
+		{
+			name: "accepts low risk simple classification",
+			classification: IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		},
+		{
+			name: "rejects invalid guardrail domain",
+			classification: IntentClassification{
+				GuardrailDomain: "unknown_domain",
+				NeedsDiscovery:  true,
+				Complexity:      "complex",
+			},
+			wantErr: true,
+		},
+		{
+			name: "rejects invalid complexity",
+			classification: IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "easy",
+			},
+			wantErr: true,
+		},
+		{
+			name: "rejects guardrail without discovery",
+			classification: IntentClassification{
+				GuardrailDomain: "auth_authz",
+				NeedsDiscovery:  false,
+				Complexity:      "complex",
+			},
+			wantErr: true,
+		},
+		{
+			name: "rejects guardrail with simple complexity",
+			classification: IntentClassification{
+				GuardrailDomain: "auth_authz",
+				NeedsDiscovery:  true,
+				Complexity:      "simple",
+			},
+			wantErr: true,
+		},
+		{
+			name: "accepts guardrail discovery classification",
+			classification: IntentClassification{
+				GuardrailDomain: "auth_authz",
+				NeedsDiscovery:  true,
+				Complexity:      "critical",
+			},
+		},
+	}
 
-	// Priority 2: explicit trivial signals (no guardrail domain)
-	assert.Equal(t, "trivial", InferComplexity("trivial typo fix in readme", ""))
-	assert.Equal(t, "trivial", InferComplexity("quick fix for button color", ""))
-	assert.Equal(t, "trivial", InferComplexity("hello world example", ""))
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateClassification(tc.classification)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected validation error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+}
 
-	// Priority 3: complex keyword hints
-	assert.Equal(t, "complex", InferComplexity("architectural overhaul of the routing subsystem", ""))
-	assert.Equal(t, "complex", InferComplexity("multi-service integration for notifications", ""))
-	assert.Equal(t, "complex", InferComplexity("cross-cutting concern: add tracing", ""))
+func TestResolveIntentClassificationDegradesWithoutClassifier(t *testing.T) {
+	t.Parallel()
 
-	// Priority 4: default → "simple"
-	assert.Equal(t, "simple", InferComplexity("add button to dashboard", ""))
-	assert.Equal(t, "simple", InferComplexity("fix login timeout", ""))
+	result := ResolveIntentClassification(context.Background(), "fix login timeout", nil)
+	if !result.Degraded {
+		t.Fatal("expected degraded result without classifier")
+	}
+	if result.DegradeReason != "no_classifier" {
+		t.Fatalf("expected no_classifier degrade reason, got %q", result.DegradeReason)
+	}
+	if result.Classification != SafeDegradeClassification() {
+		t.Fatalf("expected safe degrade classification, got %#v", result.Classification)
+	}
+}
 
-	// Guardrail domain overrides trivial signal — "auth" triggers critical keyword within guardrail
-	assert.Equal(t, "critical", InferComplexity("trivial auth change", "auth_authz"))
-	// Guardrail domain without critical keyword → "complex" (not lowered by "trivial")
-	assert.Equal(t, "complex", InferComplexity("trivial config change", "security_credentials"))
+func TestResolveIntentClassificationDegradesOnValidationFailure(t *testing.T) {
+	t.Parallel()
+
+	result := ResolveIntentClassification(context.Background(), "rotate auth keys", stubIntentClassifier{
+		classification: IntentClassification{
+			GuardrailDomain: "auth_authz",
+			NeedsDiscovery:  false,
+			Complexity:      "simple",
+		},
+	})
+	if !result.Degraded {
+		t.Fatal("expected degraded result for invalid classifier output")
+	}
+	if result.DegradeReason == "" {
+		t.Fatal("expected degrade reason to be populated")
+	}
+	if result.Classification != SafeDegradeClassification() {
+		t.Fatalf("expected safe degrade classification, got %#v", result.Classification)
+	}
 }

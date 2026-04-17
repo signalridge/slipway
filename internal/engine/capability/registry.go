@@ -97,7 +97,6 @@ type Skill struct {
 	Tier              Tier
 	PrimaryAttachment AttachmentMode
 	Summary           string
-	Triggers          []TriggerClause
 	Evidence          EvidenceContract
 	Bindings          []Binding
 	HydrateReferences []HydrateReference
@@ -232,14 +231,6 @@ func validateSkill(sk Skill) error {
 		}
 		if !validAttachment(b.Attachment) {
 			return fmt.Errorf("binding[%d]: invalid attachment %q", i, b.Attachment)
-		}
-	}
-	if len(sk.Triggers) == 0 {
-		return fmt.Errorf("no trigger_signals declared")
-	}
-	for i, c := range sk.Triggers {
-		if err := c.validate(); err != nil {
-			return fmt.Errorf("trigger_signals[%d]: %w", i, err)
 		}
 	}
 	return nil

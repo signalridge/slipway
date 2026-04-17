@@ -10,16 +10,7 @@ func multiReviewerCalibration() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when more than one reviewer will sign off. Triggers on code-quality-review host or review commands naming multi-reviewer intent.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpHost, Value: "code-quality-review",
-				Reason: "Code-quality-review host active; calibrate reviewer severity"},
-			{Op: OpCommand, Value: "review",
-				Reason: "review command invoked; multi-reviewer calibration may apply"},
-			{Op: OpUserTextMatches, Values: []string{"second reviewer", "adversarial", "panel review"},
-				Reason: "User text signals multiple reviewers"},
-		},
-		// Explicit-focus backing for `--focus calibration` on review
+		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus calibration` on review
 		// (resolved via surfaces.go). Host attachment on code-quality-review
 		// stays so calibration still rides host-embedded flows without
 		// needing a public selector.
@@ -40,14 +31,7 @@ func variantAnalysis() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a bug has been fixed in one place and variants elsewhere are plausible. Triggers on review or repair commands or user text asking for similar-bug hunts.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Values: []string{"review", "repair"},
-				Reason: "Review or repair command invoked; hunt variants of the fix"},
-			{Op: OpUserTextMatches, Values: []string{"variants", "similar bug", "elsewhere"},
-				Reason: "User text asks for variant hunting"},
-		},
-		// Suggested-only on review / repair (§5.2). No public focus selector.
+		Evidence:          EvidenceArtifact,		// Suggested-only on review / repair (§5.2). No public focus selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
@@ -63,16 +47,7 @@ func coverageAnalysis() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when a change needs coverage evaluation. Triggers on validate command, goal-verification host, or coverage-related user text.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "validate",
-				Reason: "validate command invoked; coverage report applies"},
-			{Op: OpHost, Value: "goal-verification",
-				Reason: "Verification host active; coverage is a verification input"},
-			{Op: OpUserTextMatches, Values: []string{"coverage", "uncovered", "untested"},
-				Reason: "User text names coverage"},
-		},
-		// Host-embedded on goal-verification; also suggested on validate so
+		Evidence:          EvidenceVerdict,		// Host-embedded on goal-verification; also suggested on validate so
 		// verification flows keep coverage as a recommendation without a
 		// public focus selector.
 		Bindings: []Binding{
@@ -90,16 +65,7 @@ func propertyTesting() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when invariants are clearer than example cases. Triggers on validate command, goal-verification host, or property-oriented user text.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "validate",
-				Reason: "validate command invoked; property tests may apply"},
-			{Op: OpHost, Value: "goal-verification",
-				Reason: "Verification host active; consider property tests"},
-			{Op: OpUserTextMatches, Values: []string{"property test", "invariant", "quickcheck", "hypothesis"},
-				Reason: "User text signals property-based testing"},
-		},
-		// Explicit-focus backing for `--focus property` on validate
+		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus property` on validate
 		// (resolved via surfaces.go). Host attachment on goal-verification
 		// keeps it available from verification flows.
 		Bindings: []Binding{
@@ -123,16 +89,7 @@ func mutationTesting() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentToolRecipe,
 		Summary:           "Use when test strength is in doubt. Triggers on validate command, goal-verification host, or user text naming mutation testing.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "validate",
-				Reason: "validate command invoked; mutation testing may apply"},
-			{Op: OpHost, Value: "goal-verification",
-				Reason: "Verification host active; mutation testing is a verification booster"},
-			{Op: OpUserTextMatches, Values: []string{"mutation testing", "mutmut", "stryker", "pitest"},
-				Reason: "User text names a mutation testing tool"},
-		},
-		// Explicit-focus backing for `--focus mutation` on validate.
+		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus mutation` on validate.
 		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
 		},
@@ -151,16 +108,7 @@ func performanceProfiling() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a change is suspected to affect performance. Triggers on validate command, goal-verification host, or perf-related user text.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "validate",
-				Reason: "validate command invoked; profiling may apply"},
-			{Op: OpHost, Value: "goal-verification",
-				Reason: "Verification host active; perf regression may be in scope"},
-			{Op: OpUserTextMatches, Values: []string{"perf", "profiling", "slow", "latency", "regression"},
-				Reason: "User text signals performance work"},
-		},
-		// Suggested-only on validate (§5.2). The status
+		Evidence:          EvidenceArtifact,		// Suggested-only on validate (§5.2). The status
 		// --view=performance-profiling surface was removed (§5.5), and status no
 		// longer carries this skill as a suggested surface.
 		Bindings: []Binding{

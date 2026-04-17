@@ -180,11 +180,13 @@ func TestCheckpointRejectsTaskOutsideCurrentWave(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [ ] `+"`task-01`"+` first wave task
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/checkpoint.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` second wave task
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/checkpoint.go"]
   - task_kind: code
@@ -218,11 +220,13 @@ func TestCheckpointRejectsWhenWaveRunsAreMissing(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/checkpoint.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
+  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/checkpoint.go"]
   - task_kind: code

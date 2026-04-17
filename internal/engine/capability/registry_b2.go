@@ -10,14 +10,7 @@ func contextAssembly() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a task needs grounded context before planning or review. Triggers on research or plan-audit hosts, unclear context, or action-scoped hydration cues.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpHost, Values: []string{"research-orchestration", "plan-audit"},
-				Reason: "Research or plan host active; assemble context first"},
-			{Op: OpUserTextMatches, Values: []string{"context", "background", "how does this work"},
-				Reason: "User text asks for context"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "research-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentPosture},
 			{Type: BindingTechniqueHint, Target: "research-orchestration", Attachment: AttachmentProcedure},
@@ -36,14 +29,7 @@ func parallelExecutorContract() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when dispatching subagents in parallel. Triggers on wave-orchestration host or when the plan calls for multi-agent work.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpHost, Value: "wave-orchestration",
-				Reason: "Wave orchestration host active; enforce parallel executor contract"},
-			{Op: OpUserTextMatches, Values: []string{"parallel", "subagent", "in parallel"},
-				Reason: "Request involves parallel execution"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentChecklist},
 		},
@@ -58,16 +44,7 @@ func rootCauseTracing() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a fix is being considered before the root cause is documented. Triggers on repair, wave-orchestration host, or debugging-centric user text.",
-		Evidence:          EvidenceArtifact,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "repair",
-				Reason: "repair command invoked; block fixes until root cause is documented"},
-			{Op: OpHost, Value: "wave-orchestration",
-				Reason: "Execution host may be masking a missing root-cause step"},
-			{Op: OpUserTextMatches, Values: []string{"debug", "crash", "flaky", "regression"},
-				Reason: "User text signals debugging work"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},
@@ -90,16 +67,7 @@ func securityReview() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpCommand, Value: "review",
-				Reason: "review command invoked; attach security checklist"},
-			{Op: OpHost, Values: []string{"spec-compliance-review", "code-quality-review"},
-				Reason: "Review host active; include security checklist"},
-			{Op: OpChangedFilesInclude, Values: []string{"**/auth/*", "**/crypto/*", "**/session*"},
-				Reason: "Security-sensitive paths changed"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
@@ -123,14 +91,7 @@ func specTrace() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when verifying that implementation mirrors the approved plan. Triggers on spec-compliance host or validate/review commands.",
-		Evidence:          EvidenceVerdict,
-		Triggers: []TriggerClause{
-			{Op: OpHost, Value: "spec-compliance-review",
-				Reason: "Spec-compliance host active; enforce spec trace"},
-			{Op: OpCommand, Values: []string{"validate", "review"},
-				Reason: "Validation or review path; run spec trace"},
-		},
-		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},

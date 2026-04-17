@@ -45,6 +45,20 @@ func saveBlockedChange(root string, change model.Change, fromState model.Workflo
 
 type AdvanceOptions struct {
 	SkipAutoPass bool
+	// QuickMode disables advisory controls (clarification, research,
+	// independent_review, worktree_isolation) for this invocation, keeping
+	// only fail-closed guardrail protections.
+	QuickMode bool
+}
+
+// quickModeDisabledControls are the controls disabled in quick mode.
+// Guardrail-domain protections (domain_review, rollback_required) are
+// fail-closed and never disabled.
+var quickModeDisabledControls = []model.ControlID{
+	model.ControlClarification,
+	model.ControlResearch,
+	model.ControlIndependentReview,
+	model.ControlWorktreeIsolation,
 }
 
 // Advance advances a change through its lifecycle.

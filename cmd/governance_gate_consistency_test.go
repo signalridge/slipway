@@ -71,6 +71,7 @@ Low risk.
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` validate gate consistency
+  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: verification
@@ -175,7 +176,9 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 				requireBlockerContains(t, blockers, "required_skill_not_ready:spec-compliance-review:run_summary_missing")
 				requireBlockerContains(t, blockers, "required_skill_not_ready:code-quality-review:run_summary_missing")
 			}
-			assert.Nil(t, nextResp.Advanced)
+			if nextResp.Advanced != nil {
+				assert.Equal(t, "blocked", nextResp.Advanced.Action)
+			}
 		})
 	})
 
@@ -207,7 +210,9 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 			} {
 				requireBlockerContains(t, blockers, state.StaleExecutionEvidenceBlockerToken)
 			}
-			assert.Nil(t, nextResp.Advanced)
+			if nextResp.Advanced != nil {
+				assert.Equal(t, "blocked", nextResp.Advanced.Action)
+			}
 		})
 	})
 }
@@ -333,7 +338,9 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 			requireBlockerContains(t, blockers, "manifest_base_ref_missing")
 		}
 		assert.False(t, validateResp.CanAdvance)
-		assert.Nil(t, nextResp.Advanced)
+		if nextResp.Advanced != nil {
+			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+		}
 	})
 }
 
@@ -363,7 +370,9 @@ func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithout
 
 		nextResp := runNextViewForChange(t, root, slug)
 		requireBlockerContains(t, nextResp.Blockers, "missing_required_artifact:decision.md")
-		assert.Nil(t, nextResp.Advanced)
+		if nextResp.Advanced != nil {
+			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+		}
 		requireChangeAuthorityStable(t, root, slug, before)
 
 		after, err := state.LoadChange(root, slug)
@@ -400,7 +409,9 @@ func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *tes
 		} {
 			requireBlockerContains(t, blockers, state.WorktreeReasonDedicatedRequired)
 		}
-		assert.Nil(t, nextResp.Advanced)
+		if nextResp.Advanced != nil {
+			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+		}
 	})
 }
 

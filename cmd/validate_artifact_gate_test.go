@@ -97,7 +97,8 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "governed", view.ExecutionMode)
 		assert.Equal(t, model.StateS1Plan, view.CurrentState)
-		assert.Nil(t, view.Advanced)
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "blocked", view.Advanced.Action)
 		assert.Nil(t, view.NextSkill)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_required_artifact:decision.md")
 	})
@@ -174,6 +175,49 @@ func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *te
 		require.True(t, ok)
 		assert.Equal(t, model.ArtifactLifecycleApproved, decision.State)
 		assert.Equal(t, "stale-approved-hash", decision.ContentHash)
+	})
+}
+
+func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "validate should expose artifact amendments")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		intentPath := artifact.ResolveArtifactPath(bundlePath, change.Slug, "intent.md")
+		oldContent := []byte("# Intent\nFrozen validate baseline\n")
+		require.NoError(t, os.WriteFile(intentPath, oldContent, 0o644))
+		oldHash, err := model.ComputeFileContentHash(intentPath)
+		require.NoError(t, err)
+		change.Artifacts["intent"] = model.ArtifactState{
+			ID:          "intent",
+			Path:        intentPath,
+			State:       model.ArtifactLifecycleFrozen,
+			ContentHash: oldHash,
+			UpdatedAt:   time.Now().UTC(),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		require.NoError(t, os.WriteFile(intentPath, []byte("# Intent\nValidate amended content\n"), 0o644))
+
+		view, err := buildValidateViewForSlug(root, slug)
+		require.NoError(t, err)
+		require.Len(t, view.ArtifactAmendments, 1)
+		assert.Equal(t, "intent", view.ArtifactAmendments[0].ArtifactID)
+		assert.Equal(t, string(model.ArtifactLifecycleFrozen), view.ArtifactAmendments[0].FromState)
+		assert.Equal(t, string(model.ArtifactLifecycleApproved), view.ArtifactAmendments[0].ToState)
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		require.Contains(t, after.Artifacts, "intent")
+		assert.Equal(t, model.ArtifactLifecycleFrozen, after.Artifacts["intent"].State)
+		assert.Equal(t, oldHash, after.Artifacts["intent"].ContentHash)
 	})
 }
 

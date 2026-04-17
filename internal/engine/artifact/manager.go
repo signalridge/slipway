@@ -400,11 +400,13 @@ func seedTasks(data templateData) string {
 	var b strings.Builder
 	reqRefs := seededRequirementRefs(data, 0)
 	fmt.Fprintf(&b, "- [ ] `t-01` Implement %s\n", strings.ToLower(data.InitialRequest))
+	b.WriteString("  - wave: 1\n")
 	b.WriteString("  - depends_on: []\n")
 	b.WriteString("  - target_files: []\n")
 	b.WriteString("  - task_kind: code\n")
 	b.WriteString("  - covers: [REQ-001]\n\n")
 	b.WriteString("- [ ] `t-02` Add tests for the implementation\n")
+	b.WriteString("  - wave: 2\n")
 	b.WriteString("  - depends_on: [t-01]\n")
 	b.WriteString("  - target_files: []\n")
 	b.WriteString("  - task_kind: test\n")
@@ -426,6 +428,7 @@ func seedTasksFromDoc(data templateData, docs DocSections) string {
 	reqRefs := seededRequirementRefs(data, len(scopeItems))
 	for idx, line := range scopeItems {
 		fmt.Fprintf(&b, "- [ ] `t-%02d` %s\n", taskNum, capitalizeFirst(line))
+		b.WriteString("  - wave: 1\n")
 		b.WriteString("  - depends_on: []\n")
 		b.WriteString("  - target_files: []\n")
 		b.WriteString("  - task_kind: code\n")
@@ -436,6 +439,7 @@ func seedTasksFromDoc(data templateData, docs DocSections) string {
 
 	if len(codeTaskIDs) == 0 {
 		fmt.Fprintf(&b, "- [ ] `t-%02d` Implement %s\n", taskNum, strings.ToLower(data.InitialRequest))
+		b.WriteString("  - wave: 1\n")
 		b.WriteString("  - depends_on: []\n")
 		b.WriteString("  - target_files: []\n")
 		b.WriteString("  - task_kind: code\n")
@@ -448,6 +452,7 @@ func seedTasksFromDoc(data templateData, docs DocSections) string {
 		deps := strings.Join(codeTaskIDs, ", ")
 		for _, line := range acceptanceItems {
 			fmt.Fprintf(&b, "- [ ] `t-%02d` %s\n", taskNum, capitalizeFirst(line))
+			b.WriteString("  - wave: 2\n")
 			fmt.Fprintf(&b, "  - depends_on: [%s]\n", deps)
 			b.WriteString("  - target_files: []\n")
 			b.WriteString("  - task_kind: verification\n")
@@ -458,6 +463,7 @@ func seedTasksFromDoc(data templateData, docs DocSections) string {
 	}
 
 	fmt.Fprintf(&b, "- [ ] `t-%02d` Add tests for the implementation\n", taskNum)
+	b.WriteString("  - wave: 2\n")
 	fmt.Fprintf(&b, "  - depends_on: [%s]\n", strings.Join(codeTaskIDs, ", "))
 	b.WriteString("  - target_files: []\n")
 	b.WriteString("  - task_kind: test\n")
@@ -1210,15 +1216,33 @@ func stalePropagationOrderFromGraph(start string, g map[string][]string) ([]stri
 	return order, nil
 }
 
+// AmendmentEvent records a frozen artifact that was auto-amended during reconciliation.
+type AmendmentEvent struct {
+	ArtifactID   string `json:"artifact_id"`
+	FromState    string `json:"from_state"`
+	ToState      string `json:"to_state"`
+	PreviousHash string `json:"previous_hash,omitempty"`
+	NewHash      string `json:"new_hash,omitempty"`
+}
+
+// ReconcileResult captures the facts produced by ReconcileFromFilesystem.
+// Callers can inspect Amendments to surface auto-amendment events.
+type ReconcileResult struct {
+	Amendments []AmendmentEvent `json:"amendments,omitempty"`
+}
+
 // ReconcileFromFilesystem reconciles artifact states with filesystem reality for governed changes.
 // Rules:
-// - frozen: never overridden by filesystem reconciliation
+// - frozen: never overridden by filesystem reconciliation (unless in amendment-eligible state)
 // - file missing: state becomes draft
 // - file exists and content hash differs from stored: current lifecycle unchanged, downstream stale propagation
 // - file exists and content hash matches: no change
-func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.WorkflowPreset) error {
+//
+// Returns a ReconcileResult containing any amendment events that occurred.
+func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.WorkflowPreset) (ReconcileResult, error) {
+	var result ReconcileResult
 	if change == nil {
-		return fmt.Errorf("change is required")
+		return result, fmt.Errorf("change is required")
 	}
 	schemaName := change.ArtifactSchema
 	if schemaName == "" {
@@ -1226,11 +1250,11 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 	}
 	schema := ResolveSchema(schemaName, change.CustomArtifacts)
 	if err := materializeRequiredArtifacts(root, change, schema, preset...); err != nil {
-		return err
+		return result, err
 	}
 	bundleDir, err := state.GovernedBundleDir(root, *change)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// Amendment-eligible states: S2_EXECUTE and S3_REVIEW allow frozen
@@ -1255,20 +1279,28 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 				if errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
-				return err
+				return result, err
 			}
 			if diskHash == artifact.ContentHash {
 				continue // No change: stay frozen.
 			}
 			// Content changed: treat as amendment (unfreeze to approved).
+			previousHash := artifact.ContentHash
 			artifact.State = model.ArtifactLifecycleApproved
 			artifact.ContentHash = diskHash
 			change.Artifacts[id] = artifact
+			result.Amendments = append(result.Amendments, AmendmentEvent{
+				ArtifactID:   id,
+				FromState:    string(model.ArtifactLifecycleFrozen),
+				ToState:      string(model.ArtifactLifecycleApproved),
+				PreviousHash: previousHash,
+				NewHash:      diskHash,
+			})
 			// Propagate stale to downstream artifacts.
 			fileName := artifactFileName(id)
 			if err := PropagateStale(change, fileName); err != nil {
 				if !errors.Is(err, ErrUnknownArtifact) {
-					return err
+					return result, err
 				}
 			}
 			continue
@@ -1291,7 +1323,7 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 					fileName := artifactFileName(id)
 					if err := PropagateStale(change, fileName); err != nil {
 						if !errors.Is(err, ErrUnknownArtifact) {
-							return err
+							return result, err
 						}
 					}
 				}
@@ -1300,13 +1332,13 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 				change.Artifacts[id] = artifact
 				continue
 			}
-			return err
+			return result, err
 		}
 
 		// File exists: compute content hash and compare.
 		diskHash, err := model.ComputeFileContentHash(filePath)
 		if err != nil {
-			return err
+			return result, err
 		}
 
 		if diskHash != artifact.ContentHash {
@@ -1315,7 +1347,7 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 			if err := PropagateStale(change, fileName); err != nil {
 				// Unknown artifact in the stale graph is non-fatal; skip propagation.
 				if !errors.Is(err, ErrUnknownArtifact) {
-					return err
+					return result, err
 				}
 			}
 			artifact.ContentHash = diskHash
@@ -1324,7 +1356,7 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 		// Hash matches: no change needed.
 	}
 
-	return nil
+	return result, nil
 }
 
 func materializeRequiredArtifacts(root string, change *model.Change, schema []ArtifactSpec, preset ...model.WorkflowPreset) error {

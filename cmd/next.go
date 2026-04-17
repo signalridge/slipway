@@ -174,6 +174,7 @@ func makeNextCmd() *cobra.Command {
 	var preview bool
 	var contextGuard bool
 	var noAutoPass bool
+	var quickMode bool
 	var changeSlug string
 
 	cmd := &cobra.Command{
@@ -197,7 +198,7 @@ func makeNextCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
-				view, err := buildNextView(root, ref, "", preview, !jsonOutput, noAutoPass)
+				view, err := buildNextView(root, ref, "", preview, !jsonOutput, noAutoPass, quickMode)
 				if err != nil {
 					return err
 				}
@@ -218,6 +219,7 @@ func makeNextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&preview, "preview", false, "Show next skill context without state advancement")
 	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format (requires --preview)")
 	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
+	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
@@ -237,8 +239,9 @@ func validateNextFlags(preview bool, contextGuard bool) error {
 	return nil
 }
 
-func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
+func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, quickMode ...bool) (nextView, error) {
+	quick := len(quickMode) > 0 && quickMode[0]
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, quick)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -366,14 +369,17 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 // advanceIfReady attempts state advancement unless in preview mode.
 // When skipAutoPass is true, advancement proceeds but auto-pass is
 // suppressed so the caller can decide whether to accept auto-pass.
-func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool) (progression.AdvanceSummary, error) {
+func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, quickMode bool) (progression.AdvanceSummary, error) {
 	if preview {
 		return progression.AdvanceSummary{Action: "preview"}, nil
 	}
 
 	var opts []progression.AdvanceOptions
-	if skipAutoPass {
-		opts = append(opts, progression.AdvanceOptions{SkipAutoPass: true})
+	if skipAutoPass || quickMode {
+		opts = append(opts, progression.AdvanceOptions{
+			SkipAutoPass: skipAutoPass,
+			QuickMode:    quickMode,
+		})
 	}
 	advanced, err := tryAdvance(root, ref, opts...)
 	if err != nil {

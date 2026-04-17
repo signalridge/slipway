@@ -13,6 +13,7 @@ func compareNodesByTaskID(a, b Node) int { return cmp.Compare(a.TaskID, b.TaskID
 type Node struct {
 	TaskID         string         `json:"task_id"`
 	Objective      string         `json:"objective,omitempty"`
+	WaveIndex      int            `json:"wave,omitempty"`
 	DependsOn      []string       `json:"depends_on,omitempty"`
 	TargetFiles    []string       `json:"target_files,omitempty"`
 	TaskKind       model.TaskKind `json:"task_kind,omitempty"`
@@ -56,8 +57,8 @@ func PlanWaves(nodes []Node) ([]Wave, error) {
 	}
 
 	nodeByID := map[string]Node{}
-	inDegree := map[string]int{}
-	edges := map[string][]string{}
+	declaredWaves := map[int][]Node{}
+	maxWaveIndex := 0
 	for _, node := range nodes {
 		if err := model.ValidateTaskID(node.TaskID); err != nil {
 			return nil, err
@@ -65,90 +66,56 @@ func PlanWaves(nodes []Node) ([]Wave, error) {
 		if _, exists := nodeByID[node.TaskID]; exists {
 			return nil, fmt.Errorf("duplicate task_id %q", node.TaskID)
 		}
+		if node.WaveIndex < 1 {
+			return nil, fmt.Errorf("task %q missing required wave declaration", node.TaskID)
+		}
 		nodeByID[node.TaskID] = node
-		inDegree[node.TaskID] = 0
+		declaredWaves[node.WaveIndex] = append(declaredWaves[node.WaveIndex], node)
+		if node.WaveIndex > maxWaveIndex {
+			maxWaveIndex = node.WaveIndex
+		}
 	}
+
+	for waveIndex := 1; waveIndex <= maxWaveIndex; waveIndex++ {
+		layer, exists := declaredWaves[waveIndex]
+		if !exists || len(layer) == 0 {
+			return nil, fmt.Errorf("wave %d missing from declared wave plan", waveIndex)
+		}
+	}
+
 	for _, node := range nodes {
 		for _, dep := range node.DependsOn {
-			if _, exists := nodeByID[dep]; !exists {
+			dependency, exists := nodeByID[dep]
+			if !exists {
 				return nil, fmt.Errorf("task %q depends on unknown task %q", node.TaskID, dep)
 			}
-			inDegree[node.TaskID]++
-			edges[dep] = append(edges[dep], node.TaskID)
+			if dependency.WaveIndex >= node.WaveIndex {
+				return nil, fmt.Errorf("task %q depends on %q in same or later wave", node.TaskID, dep)
+			}
 		}
 	}
 
-	processed := map[string]struct{}{}
-	waves := []Wave{}
-	for len(processed) < len(nodes) {
-		layer := []Node{}
-		for id, node := range nodeByID {
-			if _, done := processed[id]; done {
-				continue
-			}
-			if inDegree[id] == 0 {
-				layer = append(layer, node)
-			}
-		}
-		if len(layer) == 0 {
-			return nil, fmt.Errorf("dependency cycle detected")
-		}
+	waves := make([]Wave, 0, maxWaveIndex)
+	for waveIndex := 1; waveIndex <= maxWaveIndex; waveIndex++ {
+		layer := append([]Node(nil), declaredWaves[waveIndex]...)
 		slices.SortFunc(layer, compareNodesByTaskID)
-
-		waves = append(waves, splitLayerIntoWaves(layer)...)
-
-		for _, node := range layer {
-			processed[node.TaskID] = struct{}{}
-			for _, next := range edges[node.TaskID] {
-				inDegree[next]--
-			}
+		if err := validateWaveStaticConflicts(waveIndex, layer); err != nil {
+			return nil, err
 		}
+		waves = append(waves, Wave{Nodes: layer})
 	}
-
 	return waves, nil
 }
 
-func splitLayerIntoWaves(layer []Node) []Wave {
-	result := []Wave{}
-	packed := []Wave{}
-
-	for _, node := range layer {
-		if node.TaskKind == model.TaskKindOther || len(node.TargetFiles) == 0 {
-			result = append(result, Wave{Nodes: []Node{node}})
-			continue
-		}
-
-		placed := false
-		for i := range packed {
-			if hasStaticConflict(packed[i].Nodes, node) {
-				continue
-			}
-			packed[i].Nodes = append(packed[i].Nodes, node)
-			placed = true
-			break
-		}
-		if !placed {
-			packed = append(packed, Wave{Nodes: []Node{node}})
-		}
-	}
-
-	for i := range packed {
-		slices.SortFunc(packed[i].Nodes, compareNodesByTaskID)
-	}
-	return append(result, packed...)
-}
-
-func hasStaticConflict(existing []Node, candidate Node) bool {
-	targets := map[string]struct{}{}
-	for _, node := range existing {
+func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {
+	targetOwners := map[string]string{}
+	for _, node := range nodes {
 		for _, file := range node.TargetFiles {
-			targets[file] = struct{}{}
+			if existing, exists := targetOwners[file]; exists && existing != node.TaskID {
+				return fmt.Errorf("wave %d has static target conflict: %q and %q both target %q", waveIndex, existing, node.TaskID, file)
+			}
+			targetOwners[file] = node.TaskID
 		}
 	}
-	for _, file := range candidate.TargetFiles {
-		if _, exists := targets[file]; exists {
-			return true
-		}
-	}
-	return false
+	return nil
 }

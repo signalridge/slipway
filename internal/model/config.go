@@ -79,6 +79,15 @@ type ProjectContext struct {
 	RecentWork  string   `yaml:"recent_work,omitempty" json:"recent_work,omitempty"`
 }
 
+func (c ProjectContext) IsZero() bool {
+	return c.TechStack == "" &&
+		c.Conventions == "" &&
+		c.TestCmd == "" &&
+		c.BuildCmd == "" &&
+		len(c.Languages) == 0 &&
+		c.RecentWork == ""
+}
+
 type ArtifactSchemaName string
 
 const (

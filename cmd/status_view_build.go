@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	enginestatus "github.com/signalridge/slipway/internal/engine/status"
@@ -120,6 +121,9 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	}
 	view.SelectedPriorContext, view.UnresolvedDependencies = buildSelectedPriorContext(root, change.ContextDependencies)
 	applyGovernanceSurfaceToStatus(readiness, &view)
+	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
+	}
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)

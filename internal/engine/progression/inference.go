@@ -1,140 +1,102 @@
 package progression
 
 import (
-	"regexp"
+	"context"
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
 )
 
-var schemaWordPattern = regexp.MustCompile(`\bschema\b`)
-
-var discoverySignals = []string{
-	"not sure",
-	"investigate",
-	"explore",
-	"new project",
-	"from scratch",
-	"major refactor",
-	"rewrite",
-	"re-architect",
+type IntentClassification struct {
+	GuardrailDomain string `json:"guardrail_domain"`
+	NeedsDiscovery  bool   `json:"needs_discovery"`
+	Complexity      string `json:"complexity"`
 }
 
-// InferGuardrailDomain infers a guardrail domain from description text using
-// whole-word and multi-word phrase matching. When detailed is true, additional
-// multi-word patterns are checked.
-func InferGuardrailDomain(description string, detailed bool) string {
-	text := strings.ToLower(description)
-	switch {
-	case containsWord(text, "auth"), containsWord(text, "oauth"), containsWord(text, "rbac"),
-		containsPhrase(text, "authorization"), containsPhrase(text, "authentication"):
-		return model.GuardrailDomainAuthAuthZ
-	case containsWord(text, "credential"), containsWord(text, "secret"),
-		containsPhrase(text, "api token"), containsPhrase(text, "access token"),
-		containsPhrase(text, "api key"):
-		return model.GuardrailDomainSecurityCredentials
-	case containsWord(text, "pii"), containsWord(text, "privacy"):
-		return model.GuardrailDomainPrivacyPII
-	case containsWord(text, "payment"), containsWord(text, "billing"), containsWord(text, "financial"):
-		return model.GuardrailDomainFinancialFlows
-	case schemaWordPattern.MatchString(text),
-		containsPhrase(text, "data migration"),
-		containsPhrase(text, "database migration"):
-		return model.GuardrailDomainSchemaDataMigration
-	case detailed && (containsPhrase(text, "table migration") ||
-		containsPhrase(text, "column migration") ||
-		containsPhrase(text, "drop table") ||
-		containsPhrase(text, "drop database")):
-		return model.GuardrailDomainSchemaDataMigration
-	case containsPhrase(text, "hard delete"),
-		containsPhrase(text, "permanently delete"),
-		containsPhrase(text, "irreversible operation"),
-		containsWord(text, "delete"),
-		containsWord(text, "irreversible"):
-		return model.GuardrailDomainIrreversibleOps
-	case containsPhrase(text, "api contract"), containsPhrase(text, "public api"):
-		return model.GuardrailDomainExternalAPIContracts
-	case detailed && (containsPhrase(text, "webhook contract") || containsPhrase(text, "external api contract")):
-		return model.GuardrailDomainExternalAPIContracts
-	default:
-		return ""
-	}
+type IntentClassifier interface {
+	Classify(ctx context.Context, inferenceText string) (IntentClassification, error)
 }
 
-// InferDiscovery determines whether a change needs discovery based on its
-// description and guardrail domain.
-func InferDiscovery(description string, guardrailDomain string) bool {
-	if strings.TrimSpace(guardrailDomain) != "" {
-		return true
-	}
-	lowered := strings.ToLower(description)
-	for _, signal := range discoverySignals {
-		if strings.Contains(lowered, signal) {
-			return true
-		}
-	}
-	return false
+var allowedGuardrailDomains = []string{
+	"",
+	model.GuardrailDomainAuthAuthZ,
+	model.GuardrailDomainSecurityCredentials,
+	model.GuardrailDomainPrivacyPII,
+	model.GuardrailDomainFinancialFlows,
+	model.GuardrailDomainSchemaDataMigration,
+	model.GuardrailDomainIrreversibleOps,
+	model.GuardrailDomainExternalAPIContracts,
 }
 
-// InferComplexity infers a complexity level from the description and guardrail domains.
-// Priority: guardrail domain > explicit trivial signal > keyword hints > default "simple".
-func InferComplexity(description string, guardrailDomain string) string {
-	text := strings.ToLower(description)
-
-	// Priority 1: guardrail domain present → minimum "complex"
-	if strings.TrimSpace(guardrailDomain) != "" {
-		// Critical keywords within guardrail domain elevate to "critical"
-		for _, kw := range []string{"auth", "payment", "migration", "credential", "secret"} {
-			if strings.Contains(text, kw) {
-				return "critical"
-			}
-		}
-		return "complex"
-	}
-
-	// Priority 2: explicit trivial signals
-	for _, signal := range []string{"trivial", "poc", "hello world", "quick fix", "typo", "one-liner"} {
-		if strings.Contains(text, signal) {
-			return "trivial"
-		}
-	}
-
-	// Priority 3: complex keyword hints (only elevate, never lower)
-	for _, kw := range []string{"subsystem", "integration", "architectural", "multi-service", "cross-cutting", "major refactor"} {
-		if strings.Contains(text, kw) {
-			return "complex"
-		}
-	}
-
-	// Priority 4: default
-	return "simple"
+var allowedComplexityLevels = []string{
+	"trivial",
+	"simple",
+	"complex",
+	"critical",
 }
 
-func containsWord(text, word string) bool {
-	idx := strings.Index(text, word)
-	if idx < 0 {
-		return false
-	}
-	if idx > 0 {
-		c := text[idx-1]
-		if isWordChar(c) {
-			return false
-		}
-	}
-	end := idx + len(word)
-	if end < len(text) {
-		c := text[end]
-		if isWordChar(c) {
-			return false
-		}
-	}
-	return true
+func GuardrailDomainEnumValues() []string {
+	return append([]string(nil), allowedGuardrailDomains...)
 }
 
-func isWordChar(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+func ComplexityEnumValues() []string {
+	return append([]string(nil), allowedComplexityLevels...)
 }
 
-func containsPhrase(text, phrase string) bool {
-	return strings.Contains(text, phrase)
+// InferenceResult holds a resolved intent classification with degradation
+// metadata. When Degraded is true, the classification fell back to
+// SafeDegradeClassification and DegradeReason explains why.
+type InferenceResult struct {
+	Classification IntentClassification
+	Degraded       bool
+	DegradeReason  string
+}
+
+func ResolveIntentClassification(
+	ctx context.Context,
+	inferenceText string,
+	classifier IntentClassifier,
+) InferenceResult {
+	if strings.TrimSpace(inferenceText) == "" {
+		return InferenceResult{SafeDegradeClassification(), true, "empty_inference_text"}
+	}
+	if classifier == nil {
+		return InferenceResult{SafeDegradeClassification(), true, "no_classifier"}
+	}
+	classification, err := classifier.Classify(ctx, inferenceText)
+	if err != nil {
+		return InferenceResult{SafeDegradeClassification(), true, fmt.Sprintf("classifier_error: %s", err)}
+	}
+	if err := validateClassification(classification); err != nil {
+		return InferenceResult{SafeDegradeClassification(), true, fmt.Sprintf("validation_failed: %s", err)}
+	}
+	return InferenceResult{classification, false, ""}
+}
+
+func validateClassification(c IntentClassification) error {
+	if !slices.Contains(allowedGuardrailDomains, strings.TrimSpace(c.GuardrailDomain)) {
+		return fmt.Errorf("invalid guardrail_domain %q", c.GuardrailDomain)
+	}
+	if !slices.Contains(allowedComplexityLevels, strings.TrimSpace(c.Complexity)) {
+		return fmt.Errorf("invalid complexity %q", c.Complexity)
+	}
+	if strings.TrimSpace(c.GuardrailDomain) != "" {
+		if !c.NeedsDiscovery {
+			return fmt.Errorf("guardrail_domain %q requires needs_discovery=true", c.GuardrailDomain)
+		}
+		if c.Complexity == "trivial" || c.Complexity == "simple" {
+			return fmt.Errorf("guardrail_domain %q requires complexity >= complex, got %q", c.GuardrailDomain, c.Complexity)
+		}
+	}
+	return nil
+}
+
+func SafeDegradeClassification() IntentClassification {
+	return IntentClassification{
+		GuardrailDomain: "",
+		NeedsDiscovery:  true,
+		Complexity:      "complex",
+	}
 }

@@ -47,10 +47,9 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 		// Rescope forces discovery re-entry; preserve GuardrailDomain.
 		change.NeedsDiscovery = true
 	} else {
-		// Reroute recomputes everything through the shared setup path.
-		setup := resolveChangeSetup(change.Description)
-		change.GuardrailDomain = setup.GuardrailDomain
-		change.NeedsDiscovery = setup.NeedsDiscovery
+		// Reroute preserves the existing guardrail domain and forces
+		// discovery re-entry with conservative complexity.
+		change.NeedsDiscovery = true
 	}
 	change.ArtifactSchema = progression.ResolveFrozenArtifactSchema(change.ArtifactSchema, cfg.Defaults.ArtifactSchema, change.NeedsDiscovery)
 

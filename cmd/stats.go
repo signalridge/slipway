@@ -35,9 +35,10 @@ func makeStatsCmd() *cobra.Command {
 	var jsonOutput bool
 
 	cmd := &cobra.Command{
-		Use:   "stats",
-		Short: desc("stats"),
-		Args:  cobra.NoArgs,
+		Use:    "stats",
+		Short:  desc("stats"),
+		Args:   cobra.NoArgs,
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {

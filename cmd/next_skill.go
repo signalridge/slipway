@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	"github.com/signalridge/slipway/internal/engine/gate"
-	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/review"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
@@ -73,40 +71,20 @@ func buildReviewContext(guardrailDomain string) *reviewContextView {
 }
 
 // deriveAgentConstraints returns the allowed operations, required outputs,
-// and hard-gate flag for a given skill in the current runtime context.
-func deriveAgentConstraints(skillName string) *agentConstraints {
+// and hard-gate flag for a given skill, sourced from the skill registry.
+func deriveAgentConstraints(registry []skill.Definition, skillName string) *agentConstraints {
 	c := &agentConstraints{
 		MaxRetries: defaultMaxRetriesPerSkill,
 	}
-	switch skillName {
-	case progression.SkillResearchOrchestration:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-	case progression.SkillIntakeClarification:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-	case progression.SkillPlanAudit:
-		c.AllowedOperations = []string{"read_artifacts", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-		c.HardGate = string(gate.GatePlan)
-	case progression.SkillWaveOrchestration:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "write_code", "run_tests", "write_evidence", "git_commit"}
-		c.RequiredOutputs = []string{"evidence_record", "task_results", "changed_files"}
-	case progression.SkillSpecComplianceReview, progression.SkillCodeQualityReview:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record", "review_findings"}
-	case progression.SkillTDDGovernance:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-	case progression.SkillGoalVerification:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-		c.HardGate = string(gate.GateShip)
-	case progression.SkillFinalCloseout:
-		c.AllowedOperations = []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"}
-		c.RequiredOutputs = []string{"evidence_record"}
-	default:
+	if def, ok := skill.LookupDefinitionInRegistry(registry, skillName); ok {
+		c.AllowedOperations = def.AllowedOperations
+		c.RequiredOutputs = def.RequiredOutputs
+		c.HardGate = def.HardGate
+	}
+	if len(c.AllowedOperations) == 0 {
 		c.AllowedOperations = []string{"read_codebase", "write_evidence"}
+	}
+	if len(c.RequiredOutputs) == 0 {
 		c.RequiredOutputs = []string{"evidence_record"}
 	}
 	return c

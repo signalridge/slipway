@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -28,6 +29,7 @@ type reviewView struct {
 	Mode                  string                    `json:"mode,omitempty"`
 	HydrateReferences     []string                  `json:"hydrate_references,omitempty"`
 	SuggestedCapabilities []suggestedCapabilityView `json:"suggested_capabilities,omitempty"`
+	ArtifactAmendments    []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
 	Blockers              []model.ReasonCode        `json:"blockers,omitempty"`
 	Waves                 []reviewWaveView          `json:"waves,omitempty"`
 	Gaps                  *reviewGaps               `json:"gaps,omitempty"`
@@ -211,6 +213,9 @@ func makeReviewCmd() *cobra.Command {
 					Blockers: blockers,
 					Waves:    waveViews,
 					Gaps:     classifyReviewGaps(blockers),
+				}
+				if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+					view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 				}
 
 				if jsonOutput {
