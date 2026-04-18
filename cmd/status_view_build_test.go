@@ -37,210 +37,207 @@ func TestBuildGovernedStatusViewUsesExecutionSummaryForProgress(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("summary-progress")
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictFail,
-			CompletedTasks:    []string{"task-a"},
-			NonPassTasks:      []string{"task-b"},
-			OpenBlockers:      model.ReasonCodesFromSpecs([]string{"task:task-b:lint_failed"}),
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "task-a",
-					Verdict:      model.TaskVerdictPass,
-					ChangedFiles: []string{"cmd/status.go"},
-					EvidenceRef:  filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv1", "task-a.json")),
-					CapturedAt:   time.Now().UTC(),
-				},
-				{
-					TaskID:       "task-b",
-					Verdict:      model.TaskVerdictFail,
-					ChangedFiles: []string{"cmd/review.go"},
-					Blockers:     []model.ReasonCode{model.NewReasonCode("lint_failed", "")},
-					CapturedAt:   time.Now().UTC(),
-				},
+	change := model.NewChange("summary-progress")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		CompletedTasks:    []string{"task-a"},
+		NonPassTasks:      []string{"task-b"},
+		OpenBlockers:      model.ReasonCodesFromSpecs([]string{"task:task-b:lint_failed"}),
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "task-a",
+				Verdict:      model.TaskVerdictPass,
+				ChangedFiles: []string{"cmd/status.go"},
+				EvidenceRef:  filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv1", "task-a.json")),
+				CapturedAt:   time.Now().UTC(),
 			},
-		}))
+			{
+				TaskID:       "task-b",
+				Verdict:      model.TaskVerdictFail,
+				ChangedFiles: []string{"cmd/review.go"},
+				Blockers:     []model.ReasonCode{model.NewReasonCode("lint_failed", "")},
+				CapturedAt:   time.Now().UTC(),
+			},
+		},
+	}))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotNil(t, view.Progress)
-		assert.Equal(t, 1, view.Progress.TasksCompleted)
-		assert.Equal(t, 2, view.Progress.TasksTotal)
-		assert.Equal(t, 1, view.Progress.RunSummaryVersion)
-		assert.Equal(t, 1, view.Progress.TasksByVerdict["pass"])
-		assert.Equal(t, 1, view.Progress.TasksByVerdict["fail"])
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotNil(t, view.Progress)
+	assert.Equal(t, 1, view.Progress.TasksCompleted)
+	assert.Equal(t, 2, view.Progress.TasksTotal)
+	assert.Equal(t, 1, view.Progress.RunSummaryVersion)
+	assert.Equal(t, 1, view.Progress.TasksByVerdict["pass"])
+	assert.Equal(t, 1, view.Progress.TasksByVerdict["fail"])
 }
 
 func TestBuildGovernedStatusViewExposesSummaryBlockersSeparately(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("summary-blockers")
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	change := model.NewChange("summary-blockers")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
 
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictFail,
-			OpenBlockers:      model.ReasonCodesFromSpecs([]string{"session_isolation_warning:session_id=abc:shared_by=task-a,task-b"}),
-			Tasks:             []model.ExecutionTaskSummary{},
-		}))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		OpenBlockers:      model.ReasonCodesFromSpecs([]string{"session_isolation_warning:session_id=abc:shared_by=task-a,task-b"}),
+		Tasks:             []model.ExecutionTaskSummary{},
+	}))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Contains(t, model.ReasonSpecs(view.SummaryBlockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(view.SummaryBlockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
 }
 
 func TestBuildGovernedStatusViewPreAuditOmitsShipGateDebt(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should omit ship gate debt before verify")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "status should omit ship gate debt before verify")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.NotContains(t, view.GateStatus, "G_ship")
-		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.NotContains(t, view.GateStatus, "G_ship")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
 }
 
 func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("stale-execution-summary")
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	change := model.NewChange("stale-execution-summary")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
 
-		staleAt := time.Now().Add(-time.Minute).UTC()
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        staleAt,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"task-a"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:     "task-a",
-					Verdict:    model.TaskVerdictPass,
-					TaskKind:   model.TaskKindCode,
-					CapturedAt: staleAt,
-				},
+	staleAt := time.Now().Add(-time.Minute).UTC()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        staleAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:     "task-a",
+				Verdict:    model.TaskVerdictPass,
+				TaskKind:   model.TaskKindCode,
+				CapturedAt: staleAt,
 			},
-		}))
+		},
+	}))
 
-		bundleDir, err := state.GovernedBundleDir(root, change)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Equal(t, "stale", view.EvidenceFreshness)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), state.StaleExecutionEvidenceBlockerToken)
-		assert.Contains(t, view.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, "stale", view.EvidenceFreshness)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), state.StaleExecutionEvidenceBlockerToken)
+	assert.Contains(t, view.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 }
 
 func TestBuildGovernedStatusViewKeepsExecutionSummaryProgressWhenChecklistExists(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("summary-progress-authority")
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	change := model.NewChange("summary-progress-authority")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
 
-		bundleDir, err := state.GovernedBundleDir(root, change)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`task-a`"+` checklist should not override execution summary
   - target_files: ["cmd/status.go"]
   - task_kind: code
 `), 0o644))
 
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictFail,
-			CompletedTasks:    []string{"task-a"},
-			NonPassTasks:      []string{"task-b"},
-			OpenBlockers:      model.ReasonCodesFromSpecs([]string{"task:task-b:lint_failed"}),
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "task-a",
-					Verdict:      model.TaskVerdictPass,
-					ChangedFiles: []string{"cmd/status.go"},
-					CapturedAt:   time.Now().UTC(),
-				},
-				{
-					TaskID:       "task-b",
-					Verdict:      model.TaskVerdictFail,
-					ChangedFiles: []string{"cmd/review.go"},
-					Blockers:     []model.ReasonCode{model.NewReasonCode("lint_failed", "")},
-					CapturedAt:   time.Now().UTC(),
-				},
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		CompletedTasks:    []string{"task-a"},
+		NonPassTasks:      []string{"task-b"},
+		OpenBlockers:      model.ReasonCodesFromSpecs([]string{"task:task-b:lint_failed"}),
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "task-a",
+				Verdict:      model.TaskVerdictPass,
+				ChangedFiles: []string{"cmd/status.go"},
+				CapturedAt:   time.Now().UTC(),
 			},
-		}))
+			{
+				TaskID:       "task-b",
+				Verdict:      model.TaskVerdictFail,
+				ChangedFiles: []string{"cmd/review.go"},
+				Blockers:     []model.ReasonCode{model.NewReasonCode("lint_failed", "")},
+				CapturedAt:   time.Now().UTC(),
+			},
+		},
+	}))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotNil(t, view.Progress)
-		assert.Equal(t, 2, view.Progress.TasksTotal)
-		assert.Equal(t, 1, view.Progress.RunSummaryVersion)
-		assert.Equal(t, 1, view.Progress.TasksByVerdict["pass"])
-		assert.Equal(t, 1, view.Progress.TasksByVerdict["fail"])
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotNil(t, view.Progress)
+	assert.Equal(t, 2, view.Progress.TasksTotal)
+	assert.Equal(t, 1, view.Progress.RunSummaryVersion)
+	assert.Equal(t, 1, view.Progress.TasksByVerdict["pass"])
+	assert.Equal(t, 1, view.Progress.TasksByVerdict["fail"])
 }
 
 func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryIsNotReady(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("summary-progress-not-ready")
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	change := model.NewChange("summary-progress-not-ready")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
 
-		bundleDir, err := state.GovernedBundleDir(root, change)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`task-a`"+` checklist must not stand in for execution summary
   - target_files: ["cmd/status.go"]
@@ -251,59 +248,57 @@ func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryI
   - task_kind: verification
 `), 0o644))
 
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictPass,
-			Tasks:             []model.ExecutionTaskSummary{},
-		}))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		Tasks:             []model.ExecutionTaskSummary{},
+	}))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotNil(t, view.Progress)
-		assert.Equal(t, 0, view.Progress.TasksCompleted)
-		assert.Equal(t, 0, view.Progress.TasksTotal)
-		assert.Equal(t, 1, view.Progress.RunSummaryVersion)
-		assert.Equal(t, "unknown", view.EvidenceFreshness)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotNil(t, view.Progress)
+	assert.Equal(t, 0, view.Progress.TasksCompleted)
+	assert.Equal(t, 0, view.Progress.TasksTotal)
+	assert.Equal(t, 1, view.Progress.RunSummaryVersion)
+	assert.Equal(t, "unknown", view.EvidenceFreshness)
 }
 
 func TestBuildGovernedStatusViewIgnoresExecutionSummaryOutsideExecutionStates(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("stale-plan-summary")
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepValidate
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 7,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"task-a"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:      "task-a",
-					Verdict:     model.TaskVerdictPass,
-					TaskKind:    model.TaskKindCode,
-					EvidenceRef: filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv7", "task-a.json")),
-					CapturedAt:  time.Now().UTC(),
-				},
+	change := model.NewChange("stale-plan-summary")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepValidate
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 7,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:      "task-a",
+				Verdict:     model.TaskVerdictPass,
+				TaskKind:    model.TaskKindCode,
+				EvidenceRef: filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv7", "task-a.json")),
+				CapturedAt:  time.Now().UTC(),
 			},
-		}))
+		},
+	}))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotNil(t, view.Progress)
-		assert.Equal(t, 0, view.Progress.RunSummaryVersion, "plan-state status should ignore stale execution summaries")
-		assert.Equal(t, "unknown", view.EvidenceFreshness)
-		assert.Empty(t, view.EvidencePointers.TaskEvidence)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotNil(t, view.Progress)
+	assert.Equal(t, 0, view.Progress.RunSummaryVersion, "plan-state status should ignore stale execution summaries")
+	assert.Equal(t, "unknown", view.EvidenceFreshness)
+	assert.Empty(t, view.EvidencePointers.TaskEvidence)
 }
 
 func TestBuildGovernedStatusViewKeepsPlanAuditInNormalFlow(t *testing.T) {
@@ -384,93 +379,90 @@ func TestBuildGovernedStatusViewIncludesWorkflowPresetAndForecast(t *testing.T) 
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("preset-status")
-		change.CurrentState = model.StateS1Plan
-		change.WorkflowPreset = model.WorkflowPresetLight
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("preset-status")
+	change.CurrentState = model.StateS1Plan
+	change.WorkflowPreset = model.WorkflowPresetLight
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Equal(t, "light", view.WorkflowPreset)
-		assert.Equal(t, "light", view.EffectiveWorkflowPreset)
-		require.NotNil(t, view.GovernanceForecast)
-		assert.Equal(t, "light", view.GovernanceForecast.DownstreamLevel)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, "light", view.WorkflowPreset)
+	assert.Equal(t, "light", view.EffectiveWorkflowPreset)
+	require.NotNil(t, view.GovernanceForecast)
+	assert.Equal(t, "light", view.GovernanceForecast.DownstreamLevel)
 }
 
 func TestBuildGovernedStatusViewIncludesTaskChecklistAdvisories(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("status-advisories")
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.ArtifactSchema = model.ArtifactSchemaCore
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("status-advisories")
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.ArtifactSchema = model.ArtifactSchemaCore
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`## Requirements
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`## Requirements
 
 ### Requirement: Auth
 REQ-001: The system must authenticate requests.
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth flow
   - depends_on: []
   - target_files: [cmd/status.go]
 `), 0o644))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		diagnostics := strings.Join(view.Diagnostics, "\n")
-		assert.Contains(t, diagnostics, "plan_dimension_context_missing_task_kind_warning:t-01")
-		assert.Contains(t, diagnostics, "plan_dimension_coverage_missing_requirement_warning:REQ-001")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	diagnostics := strings.Join(view.Diagnostics, "\n")
+	assert.Contains(t, diagnostics, "plan_dimension_context_missing_task_kind_warning:t-01")
+	assert.Contains(t, diagnostics, "plan_dimension_coverage_missing_requirement_warning:REQ-001")
 }
 
 func TestBuildGovernedStatusViewIncludesTaskChecklistBlockers(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("status-checklist-blockers")
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.ArtifactSchema = model.ArtifactSchemaCore
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("status-checklist-blockers")
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.ArtifactSchema = model.ArtifactSchemaCore
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`## Requirements
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`## Requirements
 
 ### Requirement: Auth
 REQ-001: The system must authenticate requests.
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth flow
   - depends_on: [t-99]
   - target_files: [cmd/status.go]
 `), 0o644))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_dependency_unknown:t-01->t-99")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_dependency_unknown:t-01->t-99")
 }
 
 func TestBuildGovernedStatusViewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
@@ -496,64 +488,61 @@ func TestBuildGovernedStatusViewIncludesAutoPassedStates(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("autopass-status")
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		change.LastAutoPassedStates = []model.AutoPassedState{
-			{State: model.StateS3Review, Reason: "no_blocking_review_obligations"},
-		}
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("autopass-status")
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	change.LastAutoPassedStates = []model.AutoPassedState{
+		{State: model.StateS3Review, Reason: "no_blocking_review_obligations"},
+	}
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.Len(t, view.AutoPassedStates, 1)
-		assert.Equal(t, model.StateS3Review, view.AutoPassedStates[0].State)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.Len(t, view.AutoPassedStates, 1)
+	assert.Equal(t, model.StateS3Review, view.AutoPassedStates[0].State)
 }
 
 func TestBuildGovernedStatusViewUsesResolvedWorktreeEvidencePaths(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initGitRepoForWorktreeTests(t, root)
-		initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("worktree-evidence")
-		worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
-		branch := "feat/" + change.Slug
-		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+	change := model.NewChange("worktree-evidence")
+	worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
 
-		normalizedWT, err := state.NormalizePath(worktreeRoot)
-		require.NoError(t, err)
-		change.WorktreePath = normalizedWT
-		change.WorktreeBranch = branch
-		require.NoError(t, state.SaveChange(root, change))
-		writeSkillVerification(t, root, change.Slug, "plan-audit", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  time.Now().UTC(),
-			RunVersion: 0,
-		})
-
-		loaded, err := state.LoadChange(root, change.Slug)
-		require.NoError(t, err)
-
-		view, err := buildStatusViewFromChange(root, loaded)
-		require.NoError(t, err)
-
-		assert.Equal(t, filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "change.yaml"), view.SourceStateFile)
-		require.Contains(t, view.EvidencePointers.NonTaskEvidence, "skill.plan-audit")
-		assert.Equal(
-			t,
-			filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "verification", "plan-audit.yaml"),
-			view.EvidencePointers.NonTaskEvidence["skill.plan-audit"],
-		)
+	normalizedWT, err := state.NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	change.WorktreePath = normalizedWT
+	change.WorktreeBranch = branch
+	require.NoError(t, state.SaveChange(root, change))
+	writeSkillVerification(t, root, change.Slug, "plan-audit", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 0,
 	})
+
+	loaded, err := state.LoadChange(root, change.Slug)
+	require.NoError(t, err)
+
+	view, err := buildStatusViewFromChange(root, loaded)
+	require.NoError(t, err)
+
+	assert.Equal(t, filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "change.yaml"), view.SourceStateFile)
+	require.Contains(t, view.EvidencePointers.NonTaskEvidence, "skill.plan-audit")
+	assert.Equal(
+		t,
+		filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "verification", "plan-audit.yaml"),
+		view.EvidencePointers.NonTaskEvidence["skill.plan-audit"],
+	)
 }
 
 func TestBuildGovernedStatusViewIncludesSelectedArchivedDependencyContext(t *testing.T) {
@@ -596,81 +585,78 @@ func TestForecastDownstreamLevelNeverBelowEffectivePreset(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		// Set min_preset to standard so effective_preset is upgraded.
-		cfgPath := state.ConfigPath(root)
-		cfg, err := model.LoadConfig(cfgPath)
-		require.NoError(t, err)
-		cfg.Governance.MinPreset = model.WorkflowPresetStandard
-		require.NoError(t, model.SaveConfig(cfgPath, cfg))
+	// Set min_preset to standard so effective_preset is upgraded.
+	cfgPath := state.ConfigPath(root)
+	cfg, err := model.LoadConfig(cfgPath)
+	require.NoError(t, err)
+	cfg.Governance.MinPreset = model.WorkflowPresetStandard
+	require.NoError(t, model.SaveConfig(cfgPath, cfg))
 
-		change := model.NewChange("forecast-floor")
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS1Plan
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("forecast-floor")
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS1Plan
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Equal(t, "light", view.WorkflowPreset, "confirmed preset remains light")
-		assert.Equal(t, "standard", view.EffectiveWorkflowPreset, "effective preset upgraded by min_preset")
-		require.NotNil(t, view.GovernanceForecast)
-		assert.NotEqual(t, "light", view.GovernanceForecast.DownstreamLevel,
-			"forecast downstream_level must not be lower than effective_preset")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, "light", view.WorkflowPreset, "confirmed preset remains light")
+	assert.Equal(t, "standard", view.EffectiveWorkflowPreset, "effective preset upgraded by min_preset")
+	require.NotNil(t, view.GovernanceForecast)
+	assert.NotEqual(t, "light", view.GovernanceForecast.DownstreamLevel,
+		"forecast downstream_level must not be lower than effective_preset")
 }
 
 func TestBuildGovernedStatusViewPendingPresetShowsPresetInNextActions(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
 
-		change := model.NewChange("pending-hint")
-		change.SuggestedWorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS1Plan
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("pending-hint")
+	change.SuggestedWorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS1Plan
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.True(t, view.PresetConfirmationPending)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Contains(t, view.NextReadyActions[0], "preset",
-			"first next-ready action should mention preset when confirmation is pending")
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.True(t, view.PresetConfirmationPending)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Contains(t, view.NextReadyActions[0], "preset",
+		"first next-ready action should mention preset when confirmation is pending")
 
-		// Verify minimal view: no downstream bundle fields leaked.
-		assert.Nil(t, view.Progress,
-			"progress must not appear when preset is pending")
-		assert.Nil(t, view.ArtifactDAG,
-			"artifact_dag must not appear when preset is pending")
-		assert.Empty(t, view.SourceStateFile,
-			"source_state_file must not appear when preset is pending")
-		assert.Len(t, view.NextReadyActions, 1,
-			"only preset action should be in next_ready_actions when pending")
-	})
+	assert.Nil(t, view.Progress,
+		"progress must not appear when preset is pending")
+	assert.Nil(t, view.ArtifactDAG,
+		"artifact_dag must not appear when preset is pending")
+	assert.Empty(t, view.SourceStateFile,
+		"source_state_file must not appear when preset is pending")
+	assert.Len(t, view.NextReadyActions, 1,
+		"only preset action should be in next_ready_actions when pending")
 }
 
 func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	t.Parallel()
 
-		slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ActiveCheckpoint = &model.ActiveCheckpoint{
+		PausedTaskID:    "task-02",
+		PausedWaveIndex: 2,
+		PausedAt:        time.Now().UTC(),
+		CheckpointType:  string(model.CheckpointHumanVerify),
+	}
+	require.NoError(t, state.SaveChange(root, change))
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
   - wave: 1
@@ -684,73 +670,75 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 `)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, `run --resume-response "<response>"`, view.NextReadyActions[0])
-		assert.Contains(t, renderStatusText(view), `slipway run --resume-response "<response>"`)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, `run --resume-response "<response>"`, view.NextReadyActions[0])
+	assert.Contains(t, renderStatusText(view), `slipway run --resume-response "<response>"`)
 }
 
 func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when pre-summary wave plan is missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
+	slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when pre-summary wave plan is missing")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ActiveCheckpoint = &model.ActiveCheckpoint{
+		PausedTaskID:    "task-02",
+		PausedWaveIndex: 2,
+		PausedAt:        time.Now().UTC(),
+		CheckpointType:  string(model.CheckpointHumanVerify),
+	}
+	require.NoError(t, state.SaveChange(root, change))
+
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "repair", view.NextReadyActions[0])
+	assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave-plan.yaml")
+
+	found := false
+	for _, blocker := range view.Blockers {
+		if blocker.Code == "wave_plan_missing" {
+			found = true
+			break
 		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "repair", view.NextReadyActions[0])
-		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave-plan.yaml")
-
-		found := false
-		for _, blocker := range view.Blockers {
-			if blocker.Code == "wave_plan_missing" {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "expected status blockers to include wave_plan_missing")
-	})
+	}
+	assert.True(t, found, "expected status blockers to include wave_plan_missing")
 }
 
 func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAreMissing(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ActiveCheckpoint = &model.ActiveCheckpoint{
+		PausedTaskID:    "task-02",
+		PausedWaveIndex: 2,
+		PausedAt:        time.Now().UTC(),
+		CheckpointType:  string(model.CheckpointHumanVerify),
+	}
+	require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+	writePassingExecutionSummary(t, root, slug, 1, "task-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
   - wave: 1
   - depends_on: []
@@ -763,41 +751,42 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAre
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 `)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "repair", view.NextReadyActions[0])
-		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "repair", view.NextReadyActions[0])
+	assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
 
-		found := false
-		for _, blocker := range view.Blockers {
-			if blocker.Code == "wave_runs_missing" {
-				found = true
-				break
-			}
+	found := false
+	for _, blocker := range view.Blockers {
+		if blocker.Code == "wave_runs_missing" {
+			found = true
+			break
 		}
-		assert.True(t, found, "expected status blockers to include wave_runs_missing")
-	})
+	}
+	assert.True(t, found, "expected status blockers to include wave_runs_missing")
 }
 
 func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+	writePassingExecutionSummary(t, root, slug, 1, "task-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
   - wave: 1
   - depends_on: []
@@ -810,32 +799,33 @@ func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testi
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 `)))
-		materializeWaveExecutionForSummary(t, root, slug)
+	materializeWaveExecutionForSummary(t, root, slug)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "run --resume", view.NextReadyActions[0])
-		assert.Contains(t, renderStatusText(view), "slipway run --resume")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "run --resume", view.NextReadyActions[0])
+	assert.Contains(t, renderStatusText(view), "slipway run --resume")
 }
 
 func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
+	require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+	writePassingExecutionSummary(t, root, slug, 1, "task-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
   - wave: 1
   - depends_on: []
@@ -848,33 +838,34 @@ func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 `)))
-		materializeWaveExecutionForSummary(t, root, slug)
+	materializeWaveExecutionForSummary(t, root, slug)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "2026-04-11T10:30:00Z", view.InterruptedExecutionAt)
-		assert.Equal(t, "run --resume", view.NextReadyActions[0])
-		assert.Contains(t, view.Narrative, "interrupted at 2026-04-11T10:30:00Z")
-		assert.Contains(t, renderStatusText(view), "Interrupted Execution: 2026-04-11T10:30:00Z")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "2026-04-11T10:30:00Z", view.InterruptedExecutionAt)
+	assert.Equal(t, "run --resume", view.NextReadyActions[0])
+	assert.Contains(t, view.Narrative, "interrupted at 2026-04-11T10:30:00Z")
+	assert.Contains(t, renderStatusText(view), "Interrupted Execution: 2026-04-11T10:30:00Z")
 }
 
 func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+	writePassingExecutionSummary(t, root, slug, 1, "task-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
   - wave: 1
   - depends_on: []
@@ -888,71 +879,71 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
   - task_kind: code
 `)))
 
-		plan, err := state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-		summary, err := state.LoadExecutionSummary(root, slug)
-		require.NoError(t, err)
-		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
-		require.NoError(t, err)
-		require.Len(t, runs, 2)
-		require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))
+	plan, err := state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "repair", view.NextReadyActions[0])
-		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "incomplete wave run evidence")
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "repair", view.NextReadyActions[0])
+	assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "incomplete wave run evidence")
 
-		found := false
-		for _, blocker := range view.Blockers {
-			if blocker.Code == "wave_runs_incomplete" {
-				found = true
-				break
-			}
+	found := false
+	for _, blocker := range view.Blockers {
+		if blocker.Code == "wave_runs_incomplete" {
+			found = true
+			break
 		}
-		assert.True(t, found, "expected status blockers to include wave_runs_incomplete")
-	})
+	}
+	assert.True(t, found, "expected status blockers to include wave_runs_incomplete")
 }
 
 func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+	writePassingExecutionSummary(t, root, slug, 1, "task-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed only wave
   - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: verification
 `)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, view.NextReadyActions)
-		assert.Equal(t, "repair", view.NextReadyActions[0])
-		assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.NextReadyActions)
+	assert.Equal(t, "repair", view.NextReadyActions[0])
+	assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave run evidence")
 
-		found := false
-		for _, blocker := range view.Blockers {
-			if blocker.Code == "wave_runs_missing" {
-				found = true
-				break
-			}
+	found := false
+	for _, blocker := range view.Blockers {
+		if blocker.Code == "wave_runs_missing" {
+			found = true
+			break
 		}
-		assert.True(t, found, "expected status blockers to include wave_runs_missing")
-	})
+	}
+	assert.True(t, found, "expected status blockers to include wave_runs_missing")
 }
 
 func TestComputeProgressExcludesPassWithBlockersFromCompleted(t *testing.T) {

@@ -15,30 +15,30 @@ import (
 )
 
 func TestStatsDoesNotMislabelMalformedVerificationAsExecutionSummaryFailure(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "stats should classify readiness failures correctly")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "stats should classify readiness failures correctly")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
-		require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
-		require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
+	verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
+	require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
+	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
 
-		view, err := buildStatsView(root, time.Now().UTC())
-		require.NoError(t, err)
-		require.Len(t, view.IntegrityIssues, 1)
-		assert.Contains(t, view.IntegrityIssues[0], slug)
-		assert.Contains(t, view.IntegrityIssues[0], "verification_load_failed")
-		assert.NotContains(t, view.IntegrityIssues[0], "execution_summary_load_failed")
-		assert.Contains(t, view.IntegrityIssues[0], "evaluate stats readiness")
-		assert.Contains(t, view.IntegrityIssues[0], "remediation: Run `slipway repair` to inspect authoritative verification files")
-	})
+	view, err := buildStatsView(root, time.Now().UTC())
+	require.NoError(t, err)
+	require.Len(t, view.IntegrityIssues, 1)
+	assert.Contains(t, view.IntegrityIssues[0], slug)
+	assert.Contains(t, view.IntegrityIssues[0], "verification_load_failed")
+	assert.NotContains(t, view.IntegrityIssues[0], "execution_summary_load_failed")
+	assert.Contains(t, view.IntegrityIssues[0], "evaluate stats readiness")
+	assert.Contains(t, view.IntegrityIssues[0], "remediation: Run `slipway repair` to inspect authoritative verification files")
 }
 
 func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {

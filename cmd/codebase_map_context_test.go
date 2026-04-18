@@ -40,47 +40,47 @@ func TestNextIncludesDurableCodebaseMapPathsForGovernedRequests(t *testing.T) {
 }
 
 func TestBuildNextContextFallsBackToProjectRootWithoutWorktreeBinding(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		change := model.NewChange("discovery-no-worktree")
-		change.Description = "discovery change without bound worktree"
-		change.NeedsDiscovery = true
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepResearch
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("discovery-no-worktree")
+	change.Description = "discovery change without bound worktree"
+	change.NeedsDiscovery = true
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	require.NoError(t, state.SaveChange(root, change))
 
-		var view nextView
-		loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
-		require.NoError(t, err)
-		require.NotNil(t, loaded)
+	var view nextView
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
 
-		expectedRoot, err := state.NormalizePath(root)
-		require.NoError(t, err)
-		assert.Equal(t, expectedRoot, view.InputContext.WorkspaceRoot)
-		assert.Equal(t, "artifacts/changes/"+change.Slug, view.InputContext.ArtifactBundle)
-		assert.Equal(t, "artifacts/codebase", view.InputContext.CodebaseMapDir)
-	})
+	expectedRoot, err := state.NormalizePath(root)
+	require.NoError(t, err)
+	assert.Equal(t, expectedRoot, view.InputContext.WorkspaceRoot)
+	assert.Equal(t, "artifacts/changes/"+change.Slug, view.InputContext.ArtifactBundle)
+	assert.Equal(t, "artifacts/codebase", view.InputContext.CodebaseMapDir)
 }
 
 func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "gate status warning on malformed verification")
-		verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
-		require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
-		require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
+	slug := createGovernedRequest(t, root, "L2", "gate status warning on malformed verification")
+	verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
+	require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
+	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
 
-		var view nextView
-		loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: slug}, "", true)
-		require.NoError(t, err)
-		require.NotNil(t, loaded)
-		assert.Nil(t, view.InputContext.GateStatus)
-		assert.Empty(t, strings.Join(view.Warnings, "\n"))
-	})
+	var view nextView
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: slug}, "", true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	assert.Nil(t, view.InputContext.GateStatus)
+	assert.Empty(t, strings.Join(view.Warnings, "\n"))
 }
 
 func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
@@ -128,43 +128,43 @@ func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
 }
 
 func TestBuildNextContextIncludesSelectedArchivedDependencyContext(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		archived := model.NewChange("baseline-auth")
-		archived.CurrentState = model.StateS4Verify
-		archived.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, archived))
-		require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", archived.Slug), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "changes", archived.Slug, "change.yaml"), []byte("id: x"), 0o644))
-		_, err := state.ArchiveChange(root, archived, model.ChangeStatusDone)
-		require.NoError(t, err)
+	archived := model.NewChange("baseline-auth")
+	archived.CurrentState = model.StateS4Verify
+	archived.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, archived))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", archived.Slug), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "changes", archived.Slug, "change.yaml"), []byte("id: x"), 0o644))
+	_, err := state.ArchiveChange(root, archived, model.ChangeStatusDone)
+	require.NoError(t, err)
 
-		change := model.NewChange("consumer")
-		change.Description = "consumer change"
-		change.ContextDependencies = model.ContextDependencies{
-			Requires: []model.ContextRequirement{
-				{Slug: "baseline-auth", Provides: []string{"auth-contract"}},
-				{Slug: "missing-auth", Provides: []string{"session-model"}},
-			},
-		}
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("consumer")
+	change.Description = "consumer change"
+	change.ContextDependencies = model.ContextDependencies{
+		Requires: []model.ContextRequirement{
+			{Slug: "baseline-auth", Provides: []string{"auth-contract"}},
+			{Slug: "missing-auth", Provides: []string{"session-model"}},
+		},
+	}
+	require.NoError(t, state.SaveChange(root, change))
 
-		var view nextView
-		loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
-		require.NoError(t, err)
-		require.NotNil(t, loaded)
+	var view nextView
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
 
-		require.NotNil(t, view.InputContext.ContextDependencies)
-		assert.Equal(t, change.ContextDependencies, *view.InputContext.ContextDependencies)
-		require.Len(t, view.InputContext.SelectedPriorContext, 1)
-		assert.Equal(t, "baseline-auth", view.InputContext.SelectedPriorContext[0].Slug)
-		assert.Equal(t, "artifacts/changes/archived/baseline-auth/change.yaml", view.InputContext.SelectedPriorContext[0].SourceStateFile)
-		assert.Equal(t, []string{"requires:auth-contract"}, view.InputContext.SelectedPriorContext[0].SelectedBecause)
-		require.Len(t, view.InputContext.UnresolvedDependencies, 1)
-		assert.Equal(t, "missing-auth", view.InputContext.UnresolvedDependencies[0].Slug)
-		assert.Equal(t, []string{"session-model"}, view.InputContext.UnresolvedDependencies[0].Provides)
-		assert.Equal(t, "archive_not_found", view.InputContext.UnresolvedDependencies[0].Reason)
-	})
+	require.NotNil(t, view.InputContext.ContextDependencies)
+	assert.Equal(t, change.ContextDependencies, *view.InputContext.ContextDependencies)
+	require.Len(t, view.InputContext.SelectedPriorContext, 1)
+	assert.Equal(t, "baseline-auth", view.InputContext.SelectedPriorContext[0].Slug)
+	assert.Equal(t, "artifacts/changes/archived/baseline-auth/change.yaml", view.InputContext.SelectedPriorContext[0].SourceStateFile)
+	assert.Equal(t, []string{"requires:auth-contract"}, view.InputContext.SelectedPriorContext[0].SelectedBecause)
+	require.Len(t, view.InputContext.UnresolvedDependencies, 1)
+	assert.Equal(t, "missing-auth", view.InputContext.UnresolvedDependencies[0].Slug)
+	assert.Equal(t, []string{"session-model"}, view.InputContext.UnresolvedDependencies[0].Provides)
+	assert.Equal(t, "archive_not_found", view.InputContext.UnresolvedDependencies[0].Reason)
 }

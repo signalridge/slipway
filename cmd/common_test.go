@@ -20,25 +20,25 @@ import (
 )
 
 func TestResolveExplicitChangeRejectsInactiveSlug(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "inactive explicit request")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.Status = model.ChangeStatusCancelled
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "inactive explicit request")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.Status = model.ChangeStatusCancelled
+	require.NoError(t, state.SaveChange(root, change))
 
-		_, err = resolveExplicitChange(root, slug)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "not_active", cliErr.ErrorCode)
-		assert.Equal(t, categoryPrecondition, cliErr.Category)
-		assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
-		assert.Equal(t, slug, cliErr.Slug)
-		assert.Equal(t, string(model.ChangeStatusCancelled), cliErr.Details["status"])
-	})
+	_, err = resolveExplicitChange(root, slug)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "not_active", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, slug, cliErr.Slug)
+	assert.Equal(t, string(model.ChangeStatusCancelled), cliErr.Details["status"])
 }
 
 func TestProjectRootFromWDRejectsUninitializedGitRepo(t *testing.T) {
@@ -52,116 +52,116 @@ func TestProjectRootFromWDRejectsUninitializedGitRepo(t *testing.T) {
 }
 
 func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		_, err := resolveExplicitChange(root, "slug-missing")
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "no_active_change", cliErr.ErrorCode)
-		assert.Equal(t, categoryPrecondition, cliErr.Category)
-		assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
-		assert.Equal(t, "slug-missing", cliErr.Slug)
-	})
+	_, err := resolveExplicitChange(root, "slug-missing")
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "no_active_change", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, "slug-missing", cliErr.Slug)
 }
 
 func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "corrupt explicit governed request")
-		require.NoError(t, os.WriteFile(
-			state.BundleChangeFilePath(root, slug),
-			[]byte("slug: ["),
-			0o644,
-		))
+	slug := createGovernedRequest(t, root, "L2", "corrupt explicit governed request")
+	require.NoError(t, os.WriteFile(
+		state.BundleChangeFilePath(root, slug),
+		[]byte("slug: ["),
+		0o644,
+	))
 
-		_, err := resolveExplicitChange(root, slug)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-		assert.Equal(t, slug, cliErr.Slug)
-	})
+	_, err := resolveExplicitChange(root, slug)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	assert.Equal(t, slug, cliErr.Slug)
 }
 
 func TestLoadActiveChangeRejectsInactiveStatus(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "inactive change helper")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.Status = model.ChangeStatusDone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "inactive change helper")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.Status = model.ChangeStatusDone
+	require.NoError(t, state.SaveChange(root, change))
 
-		_, err = loadActiveChange(
-			root,
-			slug,
-			"cannot operate on governed status %q",
-			"Only active governed changes are supported.",
-		)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "not_active", cliErr.ErrorCode)
-		assert.Equal(t, slug, cliErr.Slug)
-		assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
-	})
+	_, err = loadActiveChange(
+		root,
+		slug,
+		"cannot operate on governed status %q",
+		"Only active governed changes are supported.",
+	)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "not_active", cliErr.ErrorCode)
+	assert.Equal(t, slug, cliErr.Slug)
+	assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
 }
 
 func TestLoadActiveChangeSurfacesCorruptStateIntegrity(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "corrupt change helper")
-		require.NoError(t, os.WriteFile(
-			state.BundleChangeFilePath(root, slug),
-			[]byte("slug: ["),
-			0o644,
-		))
+	slug := createGovernedRequest(t, root, "L2", "corrupt change helper")
+	require.NoError(t, os.WriteFile(
+		state.BundleChangeFilePath(root, slug),
+		[]byte("slug: ["),
+		0o644,
+	))
 
-		_, err := loadActiveChange(
-			root,
-			slug,
-			"cannot operate on governed status %q",
-			"Only active governed changes are supported.",
-		)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-		assert.Equal(t, slug, cliErr.Slug)
-	})
+	_, err := loadActiveChange(
+		root,
+		slug,
+		"cannot operate on governed status %q",
+		"Only active governed changes are supported.",
+	)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	assert.Equal(t, slug, cliErr.Slug)
 }
 
 func TestLoadExecutionContextWrapsCorruptExecutionSummaryIntegrity(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "corrupt execution summary helper")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "corrupt execution summary helper")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		summaryPath := executionSummaryPathForTest(root, slug)
-		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
-		require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
+	summaryPath := executionSummaryPathForTest(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
+	require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
 
-		_, err = loadExecutionContext(root, change)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "execution_summary_load_failed", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-		assert.Equal(t, slug, cliErr.Slug)
-		assert.Contains(t, cliErr.Remediation, "slipway repair")
-		assert.Equal(t, summaryPath, cliErr.Details["path"])
-	})
+	_, err = loadExecutionContext(root, change)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "execution_summary_load_failed", cliErr.ErrorCode)
+	assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	assert.Equal(t, slug, cliErr.Slug)
+	assert.Contains(t, cliErr.Remediation, "slipway repair")
+	assert.Equal(t, summaryPath, cliErr.Details["path"])
 }
 
 func TestGovernanceReadinessErrorCodeDoesNotGuessFromMessageText(t *testing.T) {
@@ -225,112 +225,112 @@ func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChang
 }
 
 func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "freshness should ignore derived task checkbox sync")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "freshness should ignore derived task checkbox sync")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		oldTS := time.Now().UTC().Add(-3 * time.Second)
-		capturedAt := oldTS.Add(time.Second)
-		evidenceInputHash, err := state.ComputeTaskEvidenceInputHash(slug, 1, "task-01", "")
-		require.NoError(t, err)
-		writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  capturedAt,
-			RunVersion: 1,
-		})
+	oldTS := time.Now().UTC().Add(-3 * time.Second)
+	capturedAt := oldTS.Add(time.Second)
+	evidenceInputHash, err := state.ComputeTaskEvidenceInputHash(slug, 1, "task-01", "")
+	require.NoError(t, err)
+	writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt,
+		RunVersion: 1,
+	})
 
-		taskEvidence := map[string]any{
-			"task_id":             "task-01",
-			"run_summary_version": 1,
-			"task_kind":           "code",
-			"verdict":             "pass",
-			"changed_files":       []string{"cmd/next.go"},
-			"blockers":            []string{},
-			"captured_at":         capturedAt.Format(time.RFC3339Nano),
-			"evidence_input_hash": evidenceInputHash,
-		}
-		raw, err := json.Marshal(taskEvidence)
-		require.NoError(t, err)
-		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-01.json")
-		require.NoError(t, os.MkdirAll(filepath.Dir(taskEvidencePath), 0o755))
-		require.NoError(t, os.WriteFile(taskEvidencePath, raw, 0o644))
+	taskEvidence := map[string]any{
+		"task_id":             "task-01",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go"},
+		"blockers":            []string{},
+		"captured_at":         capturedAt.Format(time.RFC3339Nano),
+		"evidence_input_hash": evidenceInputHash,
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-01.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskEvidencePath), 0o755))
+	require.NoError(t, os.WriteFile(taskEvidencePath, raw, 0o644))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` preserve freshness across derived checkbox sync
   - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))
-		for _, name := range []string{"change.yaml", "intent.md", "requirements.md", "research.md", "decision.md", "tasks.md", "assurance.md"} {
-			path := filepath.Join(bundlePath, name)
-			if _, err := os.Stat(path); err == nil {
-				require.NoError(t, os.Chtimes(path, oldTS, oldTS))
-			}
+	for _, name := range []string{"change.yaml", "intent.md", "requirements.md", "research.md", "decision.md", "tasks.md", "assurance.md"} {
+		path := filepath.Join(bundlePath, name)
+		if _, err := os.Stat(path); err == nil {
+			require.NoError(t, os.Chtimes(path, oldTS, oldTS))
 		}
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
+	}
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
-		result, err := progression.SyncGovernedWaveExecution(root, change)
-		require.NoError(t, err)
-		require.True(t, result.Updated)
+	result, err := progression.SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	require.True(t, result.Updated)
 
-		summary, err := state.LoadExecutionSummary(root, slug)
-		require.NoError(t, err)
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
 
-		assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
-	})
+	assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
 func TestProjectFreshnessTracksBundleArtifactMTime(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "freshness tracks bundle artifact mtime")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "freshness tracks bundle artifact mtime")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte("# Requirements\n\n- keep evidence fresh\n")))
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte("# Requirements\n\n- keep evidence fresh\n")))
 
-		oldTS := time.Now().UTC().Add(-5 * time.Second)
-		capturedAt := oldTS.Add(time.Second)
-		for _, name := range []string{"change.yaml", "intent.md", "requirements.md", "research.md", "decision.md", "tasks.md", "assurance.md"} {
-			path := filepath.Join(bundlePath, name)
-			if _, err := os.Stat(path); err == nil {
-				require.NoError(t, os.Chtimes(path, oldTS, oldTS))
-			}
+	oldTS := time.Now().UTC().Add(-5 * time.Second)
+	capturedAt := oldTS.Add(time.Second)
+	for _, name := range []string{"change.yaml", "intent.md", "requirements.md", "research.md", "decision.md", "tasks.md", "assurance.md"} {
+		path := filepath.Join(bundlePath, name)
+		if _, err := os.Stat(path); err == nil {
+			require.NoError(t, os.Chtimes(path, oldTS, oldTS))
 		}
+	}
 
-		summary := model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        capturedAt,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"task-01"},
-		}
-		writeExecutionSummary(t, root, slug, summary)
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-01"},
+	}
+	writeExecutionSummary(t, root, slug, summary)
 
-		assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
+	assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
 
-		laterTS := capturedAt.Add(2 * time.Second)
-		require.NoError(t, os.Chtimes(filepath.Join(bundlePath, "requirements.md"), laterTS, laterTS))
+	laterTS := capturedAt.Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(filepath.Join(bundlePath, "requirements.md"), laterTS, laterTS))
 
-		assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
-	})
+	assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
 func TestProjectFreshnessIgnoresNonFreshnessBlockers(t *testing.T) {
@@ -349,48 +349,48 @@ func TestProjectFreshnessIgnoresNonFreshnessBlockers(t *testing.T) {
 }
 
 func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "freshness fails closed on unreadable artifact")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "freshness fails closed on unreadable artifact")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		deniedDir := filepath.Join(bundlePath, "denied")
-		targetPath := filepath.Join(deniedDir, "secret.md")
-		require.NoError(t, os.MkdirAll(deniedDir, 0o755))
-		require.NoError(t, os.WriteFile(targetPath, []byte("secret\n"), 0o644))
-		require.NoError(t, os.RemoveAll(filepath.Join(bundlePath, "tasks.md")))
-		require.NoError(t, os.Symlink(targetPath, filepath.Join(bundlePath, "tasks.md")))
-		require.NoError(t, os.Chmod(deniedDir, 0o000))
-		t.Cleanup(func() {
-			_ = os.Chmod(deniedDir, 0o755)
-		})
-		if _, err := os.ReadFile(filepath.Join(bundlePath, "tasks.md")); err == nil {
-			t.Skip("permission-denied freshness scenario is not reproducible for the current user")
-		}
-
-		summary := model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        time.Now().UTC(),
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"task-01"},
-			Tasks: []model.ExecutionTaskSummary{{
-				TaskID:     "task-01",
-				Verdict:    model.TaskVerdictPass,
-				TaskKind:   model.TaskKindCode,
-				CapturedAt: time.Now().UTC(),
-			}},
-		}
-
-		assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	deniedDir := filepath.Join(bundlePath, "denied")
+	targetPath := filepath.Join(deniedDir, "secret.md")
+	require.NoError(t, os.MkdirAll(deniedDir, 0o755))
+	require.NoError(t, os.WriteFile(targetPath, []byte("secret\n"), 0o644))
+	require.NoError(t, os.RemoveAll(filepath.Join(bundlePath, "tasks.md")))
+	require.NoError(t, os.Symlink(targetPath, filepath.Join(bundlePath, "tasks.md")))
+	require.NoError(t, os.Chmod(deniedDir, 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(deniedDir, 0o755)
 	})
+	if _, err := os.ReadFile(filepath.Join(bundlePath, "tasks.md")); err == nil {
+		t.Skip("permission-denied freshness scenario is not reproducible for the current user")
+	}
+
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
+	}
+
+	assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
 func TestResolveActiveChangeRefPropagatesWorktreeResolutionErrors(t *testing.T) {

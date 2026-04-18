@@ -180,71 +180,72 @@ func TestShouldFallbackValidateDiagnostics(t *testing.T) {
 }
 
 func TestBuildStatusViewFromChange(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createActiveNonDiscoveryChange(t, root, "status change builder")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createActiveNonDiscoveryChange(t, root, "status change builder")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Equal(t, "governed", view.ExecutionMode)
-		assert.Equal(t, slug, view.Slug)
-		assert.Equal(t, string(change.Status), view.LifecycleStatus)
-		assert.Equal(t, change.CurrentState, view.CurrentState)
-		assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, "governed", view.ExecutionMode)
+	assert.Equal(t, slug, view.Slug)
+	assert.Equal(t, string(change.Status), view.LifecycleStatus)
+	assert.Equal(t, change.CurrentState, view.CurrentState)
+	assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
 }
 
 func TestBuildGovernedStatusView(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status governed builder")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "status governed builder")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Equal(t, "governed", view.ExecutionMode)
-		assert.Equal(t, slug, view.Slug)
-		assert.Equal(t, string(change.Status), view.LifecycleStatus)
-		assert.Equal(t, change.CurrentState, view.CurrentState)
-		assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
-		require.Contains(t, view.GateStatus, "G_plan")
-		assert.NotEmpty(t, view.ArtifactDAG)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, "governed", view.ExecutionMode)
+	assert.Equal(t, slug, view.Slug)
+	assert.Equal(t, string(change.Status), view.LifecycleStatus)
+	assert.Equal(t, change.CurrentState, view.CurrentState)
+	assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
+	require.Contains(t, view.GateStatus, "G_plan")
+	assert.NotEmpty(t, view.ArtifactDAG)
 }
 
 func TestBuildGovernedStatusViewRecomputesGovernanceReadinessWithoutPersistingSnapshot(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status governance recompute")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		change.GuardrailDomain = "auth_authz"
-		change.ArtifactSchema = model.ArtifactSchemaExpanded
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status governance recompute")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = "auth_authz"
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte(`# Intent
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte(`# Intent
 INT-001: protect auth flows
 ## Open Questions
 (none)
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`# Requirements
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`# Requirements
 ### Requirement: auth review
 REQ-001: Auth changes must keep MFA intact. Traces to INT-001.
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "decision.md"), []byte(`# Decision
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "decision.md"), []byte(`# Decision
 ## Alternatives Considered
 ### Option A
 Keep existing MFA policy and update login checks.
@@ -263,11 +264,11 @@ Roll forward with a guarded rollout and roll back by restoring the prior auth ha
 ## Risk
 Regression risk is concentrated in auth flows.
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 - [ ] audit auth flow
   covers: [REQ-001]
 `), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "assurance.md"), []byte(`# Assurance
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "assurance.md"), []byte(`# Assurance
 ## Scope Summary
 Auth review.
 
@@ -287,96 +288,89 @@ Pending.
 Not ready.
 `), 0o644))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		require.NotNil(t, view.GovernanceSignals)
-		assert.Contains(t, view.GovernanceSignals.Domains, "auth_authz")
-		require.NotEmpty(t, view.ActiveControls)
-		require.NotEmpty(t, view.RequiredActions)
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.NotNil(t, view.GovernanceSignals)
+	assert.Contains(t, view.GovernanceSignals.Domains, "auth_authz")
+	require.NotEmpty(t, view.ActiveControls)
+	require.NotEmpty(t, view.RequiredActions)
 
-		foundDomainReview := false
-		for _, action := range view.RequiredActions {
-			if action.ControlID == "domain-review" {
-				foundDomainReview = true
-				assert.False(t, action.Satisfied)
-			}
+	foundDomainReview := false
+	for _, action := range view.RequiredActions {
+		if action.ControlID == "domain-review" {
+			foundDomainReview = true
+			assert.False(t, action.Satisfied)
 		}
-		assert.True(t, foundDomainReview, "expected domain-review action to be surfaced")
+	}
+	assert.True(t, foundDomainReview, "expected domain-review action to be surfaced")
 
-		_, err = os.Stat(governance.SnapshotPath(root, slug))
-		assert.True(t, os.IsNotExist(err), "status should not persist governance snapshots on read paths")
-	})
+	_, err = os.Stat(governance.SnapshotPath(root, slug))
+	assert.True(t, os.IsNotExist(err), "status should not persist governance snapshots on read paths")
 }
 
 func TestBuildGovernedStatusViewChecksInvalidBoundWorktreeBeforeBundle(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
+	initGitRepoForWorktreeTests(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status invalid bound worktree")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "status invalid bound worktree")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepBundle
-		change.ArtifactSchema = model.ArtifactSchemaExpanded
-		change.WorktreePath = root
-		change.WorktreeBranch = currentGitBranch(t, root)
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	change.WorktreePath = root
+	change.WorktreeBranch = currentGitBranch(t, root)
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		requireBlockerContains(t, view.Blockers, state.WorktreeReasonDedicatedRequired)
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	requireBlockerContains(t, view.Blockers, state.WorktreeReasonDedicatedRequired)
 }
 
 func TestBuildMultiChangeSummaryView(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		governedSlug := createGovernedRequest(t, root, "L2", "status governed summary")
+	governedSlug := createGovernedRequest(t, root, "L2", "status governed summary")
+	createIntakeChangeFixture(t, root, "status admission summary")
 
-		// Create a second L1 change
-		cmd := makeNewCmd()
-		cmd.SetArgs([]string{"status admission summary"})
-		// Can't create a second one due to conflict checking, so just test with what we have.
-		// Build the summary view with all active changes.
-		changes, err := state.ListChanges(root)
-		require.NoError(t, err)
+	changes, err := state.ListChanges(root)
+	require.NoError(t, err)
 
-		view := buildMultiChangeSummaryView(changes)
-		require.Len(t, view.ActiveChanges, len(changes))
+	view := buildMultiChangeSummaryView(changes)
+	require.Len(t, view.ActiveChanges, len(changes))
 
-		// Find the governed entry
-		found := false
-		for _, entry := range view.ActiveChanges {
-			if entry.Slug == governedSlug {
-				assert.Equal(t, "governed", entry.ExecMode)
-				found = true
-			}
+	found := false
+	for _, entry := range view.ActiveChanges {
+		if entry.Slug == governedSlug {
+			assert.Equal(t, "governed", entry.ExecMode)
+			found = true
 		}
-		assert.True(t, found, "expected governed entry in multi-change summary")
-	})
+	}
+	assert.True(t, found, "expected governed entry in multi-change summary")
 }
 
 func TestBuildGovernedStatusViewPlanAuditKeepsNextAction(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status plan finalized")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "status plan finalized")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildStatusViewFromChange(root, change)
-		require.NoError(t, err)
-		assert.Contains(t, view.NextReadyActions, "next")
-	})
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.Contains(t, view.NextReadyActions, "next")
 }
 
 func TestStatusDirectExecutionView(t *testing.T) {
@@ -531,20 +525,20 @@ func TestRepairRecreatesMissingConfig(t *testing.T) {
 }
 
 func TestResolveExplicitRequestInactiveRemediationDoesNotPointToUnsupportedStatusRequest(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "inactive explicit request remediation")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.Status = model.ChangeStatusDone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "inactive explicit request remediation")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.Status = model.ChangeStatusDone
+	require.NoError(t, state.SaveChange(root, change))
 
-		_, err = resolveExplicitChange(root, slug)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "not_active", cliErr.ErrorCode)
-		assert.NotContains(t, cliErr.Remediation, "status --change")
-	})
+	_, err = resolveExplicitChange(root, slug)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "not_active", cliErr.ErrorCode)
+	assert.NotContains(t, cliErr.Remediation, "status --change")
 }

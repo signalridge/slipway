@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var generatedHydrateWorkspaceEnvMu sync.Mutex
 
 // TestEmitHydrateBlocksRendersDelimiter locks the `===== SLIPWAY HYDRATE:
 // <skill-id>/<name> =====` delimiter contract and ensures each selected
@@ -77,6 +80,7 @@ func TestEmitHydrateBlocksUsesInvocationWorkspaceRoot(t *testing.T) {
 // hydrate keys are selected, so commands without active references do not
 // emit spurious delimiter lines.
 func TestEmitHydrateBlocksEmptyIsNoOp(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	if err := emitHydrateBlocks("", &buf, nil); err != nil {
 		t.Fatalf("emitHydrateBlocks(nil): %v", err)
@@ -89,6 +93,7 @@ func TestEmitHydrateBlocksEmptyIsNoOp(t *testing.T) {
 // TestEmitHydrateBlocksRejectsUnsafeKey verifies that keys carrying `=` or
 // newlines trip the delimiter-safety guard before any body is emitted.
 func TestEmitHydrateBlocksRejectsUnsafeKey(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"security-review/foo=bar.md", "security-review/a\nb.md"} {
 		var buf bytes.Buffer
 		err := emitHydrateBlocks("", &buf, []string{key})
@@ -156,6 +161,7 @@ func TestEmitHydrateBlocksOverWarnThresholdContinuesRendering(t *testing.T) {
 }
 
 func TestSelectHydrateKeysRejectsUnknownRequestedKey(t *testing.T) {
+	t.Parallel()
 	_, err := selectHydrateKeys(
 		[]string{"security-review/authentication.md", "security-review/injection.md"},
 		[]string{"security-review/does-not-exist.md"},
@@ -380,6 +386,7 @@ func TestReviewFocusCalibrationAdvertisesHydrateReferences(t *testing.T) {
 }
 
 func TestLoadHydrateBodyRejectsMalformedKey(t *testing.T) {
+	t.Parallel()
 	_, err := loadHydrateBody("", "not-a-shaped-key")
 	if err == nil {
 		t.Fatal("expected error for malformed key")
@@ -426,8 +433,20 @@ func TestLoadHydrateBodyFailsWhenGeneratedReferenceDriftsMissing(t *testing.T) {
 
 func generatedHydrateWorkspace(t *testing.T) string {
 	t.Helper()
+	generatedHydrateWorkspaceEnvMu.Lock()
+	t.Cleanup(generatedHydrateWorkspaceEnvMu.Unlock)
+
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
+	codexHome := t.TempDir()
+	previousCodeXHome, hadCodeXHome := os.LookupEnv("CODEX_HOME")
+	require.NoError(t, os.Setenv("CODEX_HOME", codexHome))
+	t.Cleanup(func() {
+		if hadCodeXHome {
+			require.NoError(t, os.Setenv("CODEX_HOME", previousCodeXHome))
+			return
+		}
+		require.NoError(t, os.Unsetenv("CODEX_HOME"))
+	})
 	if err := toolgen.Generate(root, []string{"codex"}, true); err != nil {
 		t.Fatalf("generate codex skill tree: %v", err)
 	}

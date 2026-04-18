@@ -118,100 +118,9 @@ func makeReviewCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, active.Slug, "review", func() error {
-				change, err := loadActiveChange(
-					root,
-					active.Slug,
-					"review requires active change; current status=%s",
-					"Only active changes can be reviewed.",
-				)
+				view, err := buildReviewViewForSlug(root, active.Slug, reviewAll, effectiveMode, hydrateKeys)
 				if err != nil {
 					return err
-				}
-
-				execCtx, err := loadExecutionContext(root, change)
-				if err != nil {
-					return err
-				}
-				if err := ensureReviewEntryState(change.CurrentState, execCtx.Summary); err != nil {
-					return err
-				}
-				if change.CurrentState == model.StateS2Execute {
-					change.CurrentState = model.StateS3Review
-				}
-
-				execMode := governedExecutionMode
-
-				reviewState := model.StateS3Review
-				readiness, evalErr := progression.EvaluateGovernanceReadiness(
-					root,
-					change,
-					progression.GovernanceReadinessOptions{
-						WorkflowStateOverride: &reviewState,
-						// Review renders both artifact and review-specific context, so
-						// it opts into only those optional readiness surfaces.
-						IncludeArtifactProjection: true,
-						IncludeReviewSurface:      true,
-					},
-				)
-				if evalErr != nil {
-					return wrapGovernanceReadinessError("evaluate review prerequisites", change.Slug, evalErr)
-				}
-				artifactReviewEvidence := model.VerificationRecord{}
-				if readiness.ReviewSurface != nil {
-					artifactReviewEvidence = readiness.ReviewSurface.PassingSkills[progression.SkillSpecComplianceReview]
-				}
-				var waveViews []reviewWaveView
-				var waveCtx *waveExecutionContext
-				if execCtx.Ready {
-					waveCtx, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
-					if err != nil {
-						return err
-					}
-				}
-
-				verdict, blockers, waveStatus := evaluateReviewVerdict(execCtx, waveCtx)
-				waveViews = waveStatus
-				blockers = append(blockers, readiness.Blockers...)
-				if reviewAll {
-					blockers = append(blockers, progression.EvaluateReviewLayerBlockers(change, artifactReviewEvidence, readiness.ArtifactProjection, true)...)
-				}
-				blockers = model.NormalizeReasonCodes(blockers)
-				if len(blockers) > 0 {
-					verdict = "fail"
-				}
-
-				if verdict == "fail" && hasIntentDriftSignal(blockers, artifactReviewEvidence) {
-					change.ReviewIntentDriftFailures++
-				} else {
-					change.ReviewIntentDriftFailures = 0
-				}
-				if change.ReviewIntentDriftFailures >= 2 {
-					blockers = appendReasonCodes(blockers, []model.ReasonCode{model.NewReasonCode("pivot_required", "intent_drift")})
-					verdict = "fail"
-				}
-
-				if verdict == "fail" {
-					change.CurrentState = model.StateS2Execute
-				}
-				if err := state.SaveChange(root, change); err != nil {
-					return err
-				}
-				profile := buildChangeProfileView(change)
-				view := reviewView{
-					Slug:              active.Slug,
-					ExecutionMode:     execMode,
-					QualityMode:       profile.QualityMode,
-					NeedsDiscovery:    profile.NeedsDiscovery,
-					CurrentState:      string(change.CurrentState),
-					Verdict:           verdict,
-					Mode:              effectiveMode,
-					HydrateReferences: hydrateKeys,
-					Blockers:          blockers,
-					Waves:             waveViews,
-					Gaps:              classifyReviewGaps(blockers),
-				}
-				if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
-					view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 				}
 
 				if jsonOutput {
@@ -239,6 +148,105 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
+}
+
+func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode string, hydrateKeys []string) (reviewView, error) {
+	change, err := loadActiveChange(
+		root,
+		slug,
+		"review requires active change; current status=%s",
+		"Only active changes can be reviewed.",
+	)
+	if err != nil {
+		return reviewView{}, err
+	}
+
+	execCtx, err := loadExecutionContext(root, change)
+	if err != nil {
+		return reviewView{}, err
+	}
+	if err := ensureReviewEntryState(change.CurrentState, execCtx.Summary); err != nil {
+		return reviewView{}, err
+	}
+	if change.CurrentState == model.StateS2Execute {
+		change.CurrentState = model.StateS3Review
+	}
+
+	reviewState := model.StateS3Review
+	readiness, err := progression.EvaluateGovernanceReadiness(
+		root,
+		change,
+		progression.GovernanceReadinessOptions{
+			WorkflowStateOverride: &reviewState,
+			// Review renders both artifact and review-specific context, so
+			// it opts into only those optional readiness surfaces.
+			IncludeArtifactProjection: true,
+			IncludeReviewSurface:      true,
+		},
+	)
+	if err != nil {
+		return reviewView{}, wrapGovernanceReadinessError("evaluate review prerequisites", change.Slug, err)
+	}
+	artifactReviewEvidence := model.VerificationRecord{}
+	if readiness.ReviewSurface != nil {
+		artifactReviewEvidence = readiness.ReviewSurface.PassingSkills[progression.SkillSpecComplianceReview]
+	}
+
+	var waveViews []reviewWaveView
+	var waveCtx *waveExecutionContext
+	if execCtx.Ready {
+		waveCtx, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
+		if err != nil {
+			return reviewView{}, err
+		}
+	}
+
+	verdict, blockers, waveStatus := evaluateReviewVerdict(execCtx, waveCtx)
+	waveViews = waveStatus
+	blockers = append(blockers, readiness.Blockers...)
+	if reviewAll {
+		blockers = append(blockers, progression.EvaluateReviewLayerBlockers(change, artifactReviewEvidence, readiness.ArtifactProjection, true)...)
+	}
+	blockers = model.NormalizeReasonCodes(blockers)
+	if len(blockers) > 0 {
+		verdict = "fail"
+	}
+
+	if verdict == "fail" && hasIntentDriftSignal(blockers, artifactReviewEvidence) {
+		change.ReviewIntentDriftFailures++
+	} else {
+		change.ReviewIntentDriftFailures = 0
+	}
+	if change.ReviewIntentDriftFailures >= 2 {
+		blockers = appendReasonCodes(blockers, []model.ReasonCode{model.NewReasonCode("pivot_required", "intent_drift")})
+		verdict = "fail"
+	}
+
+	if verdict == "fail" {
+		change.CurrentState = model.StateS2Execute
+	}
+	if err := state.SaveChange(root, change); err != nil {
+		return reviewView{}, err
+	}
+
+	profile := buildChangeProfileView(change)
+	view := reviewView{
+		Slug:              slug,
+		ExecutionMode:     governedExecutionMode,
+		QualityMode:       profile.QualityMode,
+		NeedsDiscovery:    profile.NeedsDiscovery,
+		CurrentState:      string(change.CurrentState),
+		Verdict:           verdict,
+		Mode:              effectiveMode,
+		HydrateReferences: hydrateKeys,
+		Blockers:          blockers,
+		Waves:             waveViews,
+		Gaps:              classifyReviewGaps(blockers),
+	}
+	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
+	}
+	return view, nil
 }
 
 func writeReviewText(w io.Writer, view reviewView) error {

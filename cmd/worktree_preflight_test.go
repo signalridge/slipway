@@ -157,34 +157,34 @@ func TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence(t *testing.T) {
 }
 
 func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
 
-		change := model.NewChange("l3-scope-artifact")
-		change.Description = "scope entry should have canonical research artifact"
-		change.NeedsDiscovery = true
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepResearch
-		require.NoError(t, state.SaveChange(root, change))
+	change := model.NewChange("l3-scope-artifact")
+	change.Description = "scope entry should have canonical research artifact"
+	change.NeedsDiscovery = true
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	require.NoError(t, state.SaveChange(root, change))
 
-		worktreePath := filepath.Join(t.TempDir(), change.Slug)
-		branch := "feat/" + change.Slug
-		runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
-		writeWorktreePreflightEvidence(t, root, change.Slug, worktreePath, branch)
+	worktreePath := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
+	writeWorktreePreflightEvidence(t, root, change.Slug, worktreePath, branch)
 
-		view, err := buildNextView(root, changeRef{Slug: change.Slug}, "", false, true, false)
-		require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: change.Slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		assert.Equal(t, model.StateS1Plan, view.CurrentState)
+	assert.Equal(t, model.StateS1Plan, view.CurrentState)
 
-		// Research artifact should be created at the project root bundle dir
-		// (not worktree) at S1_PLAN/research entry for discovery changes.
-		researchPath := filepath.Join(root, "artifacts", "changes", change.Slug, "research.md")
-		_, err = os.Stat(researchPath)
-		require.NoError(t, err)
-	})
+	// Research artifact should be created at the project root bundle dir
+	// (not worktree) at S1_PLAN/research entry for discovery changes.
+	researchPath := filepath.Join(root, "artifacts", "changes", change.Slug, "research.md")
+	_, err = os.Stat(researchPath)
+	require.NoError(t, err)
 }
 
 func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
@@ -228,38 +228,38 @@ func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
 }
 
 func TestNextMovesGovernedBundleIntoDedicatedWorktreeAfterPreflight(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree bundle migration")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
+	slug := createGovernedRequest(t, root, "L3", "l3 worktree bundle migration")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		projectBundle := filepath.Join(root, "artifacts", "changes", slug)
-		_, err = os.Stat(filepath.Join(projectBundle, "intent.md"))
-		require.NoError(t, err)
+	projectBundle := filepath.Join(root, "artifacts", "changes", slug)
+	_, err = os.Stat(filepath.Join(projectBundle, "intent.md"))
+	require.NoError(t, err)
 
-		worktreePath := filepath.Join(t.TempDir(), change.Slug)
-		branch := "feat/" + change.Slug
-		runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
+	worktreePath := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
 
-		// Bind worktree, advance to audit, and relocate bundle manually.
-		changeBeforeWT := change // value copy before worktree binding
-		change.PlanSubStep = model.PlanSubStepAudit
-		change.WorktreePath = worktreePath
-		change.WorktreeBranch = branch
-		require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
-		require.NoError(t, state.SaveChange(root, change))
+	// Bind worktree, advance to audit, and relocate bundle manually.
+	changeBeforeWT := change // value copy before worktree binding
+	change.PlanSubStep = model.PlanSubStepAudit
+	change.WorktreePath = worktreePath
+	change.WorktreeBranch = branch
+	require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
+	require.NoError(t, state.SaveChange(root, change))
 
-		normalizedWT, normErr := state.NormalizePath(worktreePath)
-		require.NoError(t, normErr)
-		worktreeBundle := filepath.Join(normalizedWT, "artifacts", "changes", slug)
-		_, err = os.Stat(filepath.Join(worktreeBundle, "intent.md"))
-		require.NoError(t, err)
-		_, err = os.Stat(projectBundle)
-		assert.True(t, os.IsNotExist(err))
-	})
+	normalizedWT, normErr := state.NormalizePath(worktreePath)
+	require.NoError(t, normErr)
+	worktreeBundle := filepath.Join(normalizedWT, "artifacts", "changes", slug)
+	_, err = os.Stat(filepath.Join(worktreeBundle, "intent.md"))
+	require.NoError(t, err)
+	_, err = os.Stat(projectBundle)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *testing.T) {
@@ -302,46 +302,46 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 // blocker=dedicated_worktree_metadata_required and next_skill=worktree-preflight
 // simultaneously.
 func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree deadlock regression")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
+	slug := createGovernedRequest(t, root, "L3", "l3 worktree deadlock regression")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		// Create a real worktree so the preflight evidence points to a valid path.
-		worktreePath := filepath.Join(t.TempDir(), change.Slug)
-		branch := "feat/" + change.Slug
-		runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
-		normalizedWT, normErr := state.NormalizePath(worktreePath)
-		require.NoError(t, normErr)
+	// Create a real worktree so the preflight evidence points to a valid path.
+	worktreePath := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
+	normalizedWT, normErr := state.NormalizePath(worktreePath)
+	require.NoError(t, normErr)
 
-		// Place the change at S2_EXECUTE with NO worktree bound — this is the
-		// state after S1_PLAN completes when worktree gate is at S2.
-		change.CurrentState = model.StateS2Execute
-		change.IntakeSubStep = ""
-		change.PlanSubStep = model.PlanSubStepNone
-		// WorktreePath deliberately left empty.
-		require.NoError(t, state.SaveChange(root, change))
+	// Place the change at S2_EXECUTE with NO worktree bound — this is the
+	// state after S1_PLAN completes when worktree gate is at S2.
+	change.CurrentState = model.StateS2Execute
+	change.IntakeSubStep = ""
+	change.PlanSubStep = model.PlanSubStepNone
+	// WorktreePath deliberately left empty.
+	require.NoError(t, state.SaveChange(root, change))
 
-		// Write passing worktree-preflight evidence referencing the real worktree.
-		writeWorktreePreflightEvidence(t, root, slug, normalizedWT, branch)
+	// Write passing worktree-preflight evidence referencing the real worktree.
+	writeWorktreePreflightEvidence(t, root, slug, normalizedWT, branch)
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		// Key assertion: the advance must NOT deadlock. The worktree metadata
-		// should be persisted from the preflight evidence.
-		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required",
-			"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_EXECUTE so the explicit derive/apply path can consume evidence")
+	// Key assertion: the advance must NOT deadlock. The worktree metadata
+	// should be persisted from the preflight evidence.
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required",
+		"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_EXECUTE so the explicit derive/apply path can consume evidence")
 
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, normalizedWT, change.WorktreePath,
-			"worktree metadata should be persisted from preflight evidence")
-		assert.Equal(t, branch, change.WorktreeBranch)
-	})
+	change, err = state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, normalizedWT, change.WorktreePath,
+		"worktree metadata should be persisted from preflight evidence")
+	assert.Equal(t, branch, change.WorktreeBranch)
 }
 
 func initGitRepoForWorktreeTests(t *testing.T, root string) {

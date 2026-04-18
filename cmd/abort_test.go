@@ -205,6 +205,7 @@ func TestAbortTextUsesRunResumeWhenResumableWaveStateExists(t *testing.T) {
 }
 
 func TestWritePreemptionEvidenceUsesActionSpecificPathAndPayload(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 
 	abortPath, err := writePreemptionEvidence(root, "change-abort", "abort", []int{101}, []int{202})

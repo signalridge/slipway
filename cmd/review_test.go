@@ -508,20 +508,21 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 }
 
 func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` preserve first review wave
   - wave: 1
@@ -537,66 +538,65 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
   - task_kind: verification
 `), 0o644))
 
-		now := time.Now().UTC()
-		require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
+	now := time.Now().UTC()
+	require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        now,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01", "t-02"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "t-01",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindVerification,
+				ChangedFiles: []string{"cmd/review.go"},
+				CapturedAt:   now,
+			},
+			{
+				TaskID:       "t-02",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindVerification,
+				ChangedFiles: []string{"cmd/review.go"},
+				CapturedAt:   now.Add(time.Second),
+			},
+		},
+	}))
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, slug, 1, []model.WaveRun{
+		{
+			WaveIndex:         1,
 			RunSummaryVersion: 1,
-			CapturedAt:        now,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01", "t-02"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "t-01",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindVerification,
-					ChangedFiles: []string{"cmd/review.go"},
-					CapturedAt:   now,
-				},
-				{
-					TaskID:       "t-02",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindVerification,
-					ChangedFiles: []string{"cmd/review.go"},
-					CapturedAt:   now.Add(time.Second),
-				},
-			},
-		}))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-		require.NoError(t, state.SaveWaveRuns(root, slug, 1, []model.WaveRun{
-			{
-				WaveIndex:         1,
+			TaskRuns: []model.TaskRunRef{{
+				TaskID:            "t-02",
 				RunSummaryVersion: 1,
-				TaskRuns: []model.TaskRunRef{{
-					TaskID:            "t-02",
-					RunSummaryVersion: 1,
-				}},
-				Verdict: model.WaveVerdictPass,
-			},
-			{
-				WaveIndex:         2,
+			}},
+			Verdict: model.WaveVerdictPass,
+		},
+		{
+			WaveIndex:         2,
+			RunSummaryVersion: 1,
+			TaskRuns: []model.TaskRunRef{{
+				TaskID:            "t-01",
 				RunSummaryVersion: 1,
-				TaskRuns: []model.TaskRunRef{{
-					TaskID:            "t-01",
-					RunSummaryVersion: 1,
-				}},
-				Verdict: model.WaveVerdictPass,
-			},
-		}))
+			}},
+			Verdict: model.WaveVerdictPass,
+		},
+	}))
 
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
-		execCtx, err := loadExecutionContext(root, change)
-		require.NoError(t, err)
+	change, err = state.LoadChange(root, slug)
+	require.NoError(t, err)
+	execCtx, err := loadExecutionContext(root, change)
+	require.NoError(t, err)
 
-		_, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
-		require.Error(t, err)
+	_, err = loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "review")
+	require.Error(t, err)
 
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "wave_task_linkage_mismatch", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-	})
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "wave_task_linkage_mismatch", cliErr.ErrorCode)
+	assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 }
 
 func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {

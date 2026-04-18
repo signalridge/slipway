@@ -108,6 +108,7 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 }
 
 func TestDoneAllReadyFlagUsageMatchesBulkBehavior(t *testing.T) {
+	t.Parallel()
 	flag := makeDoneCmd().Flags().Lookup("all-ready")
 	require.NotNil(t, flag)
 	assert.Equal(t, "Archive every active change that is done-ready", flag.Usage)

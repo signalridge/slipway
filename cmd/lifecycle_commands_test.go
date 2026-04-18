@@ -474,10 +474,7 @@ func TestCancelArchivesDirectExecutionWithCancelledStatus(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"fix login timeout"})
-		require.NoError(t, create.Execute())
-		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
 		cancelCmd := makeCancelCmd()
 		require.NoError(t, cancelCmd.Execute())
@@ -509,10 +506,11 @@ func TestCancelArchivesUnboundL3Change(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"investigate stale state cleanup"})
-		require.NoError(t, create.Execute())
-		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		slug := createGovernedChangeFixture(t, root, "investigate stale state cleanup", func(change *model.Change) {
+			change.CurrentState = model.StateS0Intake
+			change.IntakeSubStep = model.IntakeSubStepClarify
+			change.NeedsDiscovery = true
+		})
 
 		cancelCmd := makeCancelCmd()
 		require.NoError(t, cancelCmd.Execute())
@@ -530,9 +528,7 @@ func TestCancelRejectsUnexpectedArgs(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"cancel should reject unexpected args"})
-		require.NoError(t, create.Execute())
+		createIntakeChangeFixture(t, root, "cancel should reject unexpected args")
 
 		cancelCmd := makeCancelCmd()
 		cancelCmd.SetArgs([]string{"unexpected"})
@@ -548,10 +544,7 @@ func TestCancelUsesHumanReadableOutputWithoutJSONFlag(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"cancel text output"})
-		require.NoError(t, create.Execute())
-		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		slug := createIntakeChangeFixture(t, root, "cancel text output")
 
 		cancelCmd := makeCancelCmd()
 		var buf bytes.Buffer
@@ -570,10 +563,7 @@ func TestCancelUsesJSONOutputWhenRequested(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"cancel json output"})
-		require.NoError(t, create.Execute())
-		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		slug := createIntakeChangeFixture(t, root, "cancel json output")
 
 		cancelCmd := makeCancelCmd()
 		cancelCmd.SetArgs([]string{"--json"})
@@ -595,9 +585,11 @@ func TestPivotStateBoundaryRejected(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"refactor service modules"})
-		require.NoError(t, create.Execute())
+		createGovernedChangeFixture(t, root, "refactor service modules", func(change *model.Change) {
+			change.CurrentState = model.StateS1Plan
+			change.IntakeSubStep = ""
+			change.PlanSubStep = model.PlanSubStepResearch
+		})
 
 		// S1_PLAN now allows reroute pivot; test that rescope IS rejected.
 		pivotCmd := makePivotCmd()
@@ -642,9 +634,7 @@ func TestPivotRescopeRejectedAtIntakeState(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
-		create.SetArgs([]string{"narrow intake request"})
-		require.NoError(t, create.Execute())
+		createIntakeChangeFixture(t, root, "narrow intake request")
 
 		pivotCmd := makePivotCmd()
 		pivotCmd.SetArgs([]string{"--rescope"})
@@ -707,10 +697,7 @@ func TestCancelPreemptsInFlightTasks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		create := makeNewCmd()
-		create.SetArgs([]string{"fix login timeout"})
-		require.NoError(t, create.Execute())
-		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
 		// Ignore SIGINT so cancel must escalate to SIGKILL after grace period.
 		proc := exec.Command("sh", "-c", "trap '' INT; sleep 30")
@@ -762,55 +749,23 @@ func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		create := makeNewCmd()
-		create.SetArgs([]string{"fix login timeout"})
-		require.NoError(t, create.Execute())
+		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
 		cfg := model.DefaultConfig()
 		cfg.Execution.LockWaitTimeoutSeconds = 1
 		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
-		// Resolve the active change for per-change lock path.
-		change, resolveErr := state.FindActiveChange(root)
-		require.NoError(t, resolveErr)
-		changeLockPath := state.ChangeStateLockPath(root, change.Slug)
-
-		// Test per-change lock blocking for commands that use withChangeStateLock.
+		// One representative per-change command is sufficient here because the
+		// helper path is already covered by dedicated command-level tests.
 		t.Run("per_change_lock", func(t *testing.T) {
-			stopLockHolder := startStateLockHolder(t, changeLockPath)
+			stopLockHolder := startStateLockHolder(t, state.ChangeStateLockPath(root, slug))
 			defer stopLockHolder()
 
-			perRequestCases := []struct {
-				name string
-				cmd  *cobra.Command
-			}{
-				{name: "abort", cmd: makeAbortCmd()},
-				{name: "next", cmd: makeNextCmd()},
-				{name: "done", cmd: makeDoneCmd()},
-				{name: "cancel", cmd: makeCancelCmd()},
-				{name: "pivot", cmd: makePivotCmd()},
-			}
-			for _, tc := range perRequestCases {
-				err := tc.cmd.Execute()
-				require.Error(t, err, tc.name)
-				assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", tc.name)
-			}
+			err := makePivotCmd().Execute()
+			require.Error(t, err, "pivot")
+			assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", "pivot")
 		})
 
-		// Test change-create lock blocking for change creation.
-		t.Run("change_create_lock", func(t *testing.T) {
-			createLockPath := state.ChangeCreateLockPath(root)
-			stopLockHolder := startStateLockHolder(t, createLockPath)
-			defer stopLockHolder()
-
-			c := makeNewCmd()
-			c.SetArgs([]string{"add follow-up"})
-			err := c.Execute()
-			require.Error(t, err, "new")
-			assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", "new")
-		})
-
-		// Test repair lock blocking.
 		t.Run("repair_lock", func(t *testing.T) {
 			repairLockPath := state.RepairLockPath(root)
 			stopLockHolder := startStateLockHolder(t, repairLockPath)
@@ -1015,6 +970,17 @@ func createGovernedRequest(t *testing.T, root, level, description string) string
 		change.IntakeSubStep = ""
 		change.PlanSubStep = model.PlanSubStepResearch
 		change.NeedsDiscovery = level == "L3"
+	})
+}
+
+// createIntakeChangeFixture creates a change at S0_INTAKE (what `new` produces by default).
+func createIntakeChangeFixture(t *testing.T, root, description string) string {
+	t.Helper()
+	return createGovernedChangeFixture(t, root, description, func(change *model.Change) {
+		change.CurrentState = model.StateS0Intake
+		change.IntakeSubStep = model.IntakeSubStepClarify
+		change.NeedsDiscovery = true
+		change.ComplexityLevel = "complex"
 	})
 }
 

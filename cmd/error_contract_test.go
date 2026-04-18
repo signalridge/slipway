@@ -41,9 +41,7 @@ func TestExecuteFailureEnvelopeInvalidUsage(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		// pivot with an unknown flag triggers invalid usage
-		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
-		require.NoError(t, err)
+		createIntakeChangeFixture(t, root, "fix login timeout")
 
 		_, stderr, err := runRootCommand([]string{"pivot", "--invalid-flag"})
 		require.Error(t, err)
@@ -58,8 +56,7 @@ func TestExecuteFailureEnvelopeStateIntegrityForCorruptConfig(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
-		require.NoError(t, err)
+		createIntakeChangeFixture(t, root, "fix login timeout")
 		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("defaults: ["), 0o644))
 
 		_, stderr, err := runRootCommand([]string{"next"})
@@ -201,8 +198,7 @@ func TestExecuteFailureEnvelopeGovernanceBlocked(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
-		require.NoError(t, err)
+		createIntakeChangeFixture(t, root, "fix login timeout")
 
 		_, stderr, err := runRootCommand([]string{"done"})
 		require.Error(t, err)
@@ -232,18 +228,14 @@ func TestExecuteFailureEnvelopeStateLockTimeout(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
-		require.NoError(t, err)
+		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
 		cfg := model.DefaultConfig()
 		cfg.Execution.LockWaitTimeoutSeconds = 1
 		cfg.Execution.LockStaleAfterSeconds = 1
 		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
-		// Resolve the active change to hold its per-change lock.
-		change, resolveErr := state.FindActiveChange(root)
-		require.NoError(t, resolveErr)
-		lockPath := state.ChangeStateLockPath(root, change.Slug)
+		lockPath := state.ChangeStateLockPath(root, slug)
 		stopLockHolder := startStateLockHolder(t, lockPath)
 		defer stopLockHolder()
 

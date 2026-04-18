@@ -1,11 +1,10 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,38 +17,39 @@ import (
 )
 
 func TestGateStatusUsesPlanningEvidenceAcrossStatusValidateAndNext(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "gate status should stay stable outside planning")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
-		branch := "feat/" + change.Slug
-		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
-		normalizedWT, err := state.NormalizePath(worktreeRoot)
-		require.NoError(t, err)
-		changeBeforeWT := change
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		change.WorktreePath = normalizedWT
-		change.WorktreeBranch = branch
-		require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L3", "gate status should stay stable outside planning")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+	normalizedWT, err := state.NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	changeBeforeWT := change
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorktreePath = normalizedWT
+	change.WorktreeBranch = branch
+	require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(normalizedWT, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "intent.md", []byte(`# Intent
+	bundlePath := filepath.Join(normalizedWT, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "intent.md", []byte(`# Intent
 INT-001: validate gate status reuse
 ## Open Questions
 (none)
 `)))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte(`# Requirements
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte(`# Requirements
 ### Requirement: StableGateStatus
 REQ-001: Planning gate evidence must remain visible after execution.
 `)))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "decision.md", []byte(`# Decision
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "decision.md", []byte(`# Decision
 ## Alternatives Considered
 ### Option A
 Recompute gates from current state.
@@ -68,7 +68,7 @@ Roll forward by reusing planning evidence everywhere.
 ## Risk
 Low risk.
 `)))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` validate gate consistency
   - wave: 1
@@ -77,7 +77,7 @@ Low risk.
   - task_kind: verification
   - covers: [REQ-001]
 `)))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "research.md", []byte(`## Alternatives Considered
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "research.md", []byte(`## Alternatives Considered
 ### Option A
 Keep gate state duplicated per surface.
 
@@ -90,157 +90,47 @@ Planning evidence remains authoritative after S1.
 ## Canonical References
 - docs/plans/2026-04-07-governance-authority-simplification-plan.md
 `)))
-		writeAssuranceMD(t, root, slug, validAssuranceContent())
+	writeAssuranceMD(t, root, slug, validAssuranceContent())
 
-		writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-			Verdict:   model.VerificationVerdictPass,
-			Blockers:  []model.ReasonCode{},
-			Timestamp: time.Now().UTC(),
-		})
-		writeSkillVerification(t, root, slug, "research-orchestration", model.VerificationRecord{
-			Verdict:   model.VerificationVerdictPass,
-			Blockers:  []model.ReasonCode{},
-			Timestamp: time.Now().UTC().Add(time.Second),
-		})
-
-		var statusOut bytes.Buffer
-		statusCmd := makeStatusCmd()
-		statusCmd.SetArgs([]string{"--json", "--change", slug})
-		statusCmd.SetOut(&statusOut)
-		require.NoError(t, statusCmd.Execute())
-
-		var statusResp statusView
-		require.NoError(t, json.Unmarshal(statusOut.Bytes(), &statusResp))
-		assert.Equal(t, model.GateStatusApproved, statusResp.GateStatus["G_plan"].Status)
-		assert.Equal(t, model.GateStatusApproved, statusResp.GateStatus["G_scope"].Status)
-
-		var validateOut bytes.Buffer
-		validateCmd := makeValidateCmd()
-		validateCmd.SetArgs([]string{"--json", "--change", slug})
-		validateCmd.SetOut(&validateOut)
-		require.NoError(t, validateCmd.Execute())
-
-		var validateResp validateView
-		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validateResp))
-		assert.Equal(t, "approved", validateResp.GateStatus["G_plan"])
-		assert.Equal(t, "approved", validateResp.GateStatus["G_scope"])
-
-		var nextOut bytes.Buffer
-		nextCmd := makeNextCmd()
-		nextCmd.SetArgs([]string{"--json", "--change", slug})
-		nextCmd.SetOut(&nextOut)
-		require.NoError(t, nextCmd.Execute())
-
-		var nextResp nextView
-		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextResp))
-		assert.Equal(t, "approved", nextResp.InputContext.GateStatus["G_plan"])
-		assert.Equal(t, "approved", nextResp.InputContext.GateStatus["G_scope"])
+	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
 	})
+	writeSkillVerification(t, root, slug, "research-orchestration", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC().Add(time.Second),
+	})
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+	assert.Equal(t, model.GateStatusApproved, statusResp.GateStatus["G_plan"].Status)
+	assert.Equal(t, model.GateStatusApproved, statusResp.GateStatus["G_scope"].Status)
+	assert.Equal(t, "approved", validateResp.GateStatus["G_plan"])
+	assert.Equal(t, "approved", validateResp.GateStatus["G_scope"])
+	assert.Equal(t, "approved", nextResp.InputContext.GateStatus["G_plan"])
+	assert.Equal(t, "approved", nextResp.InputContext.GateStatus["G_scope"])
 }
 
 func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T) {
 	t.Run("missing execution summary", func(t *testing.T) {
+		t.Parallel()
 		root := t.TempDir()
-		withWorkspace(t, root, func() {
-			initTestWorkspace(t, root)
-
-			slug := createGovernedRequest(t, root, "L2", "execution summary blockers should stay aligned")
-			change, err := state.LoadChange(root, slug)
-			require.NoError(t, err)
-			change.CurrentState = model.StateS3Review
-			change.PlanSubStep = model.PlanSubStepNone
-			require.NoError(t, state.SaveChange(root, change))
-
-			writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
-				Verdict:    model.VerificationVerdictPass,
-				Blockers:   []model.ReasonCode{},
-				Timestamp:  time.Now().UTC(),
-				RunVersion: 1,
-			})
-			writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
-				Verdict:    model.VerificationVerdictPass,
-				Blockers:   []model.ReasonCode{},
-				Timestamp:  time.Now().UTC().Add(time.Second),
-				RunVersion: 1,
-			})
-
-			statusResp := runStatusViewForChange(t, root, slug)
-			validateResp := runValidateViewForChange(t, root, slug)
-			nextResp := runNextViewForChange(t, root, slug)
-
-			for _, blockers := range [][]model.ReasonCode{
-				statusResp.Blockers,
-				validateResp.Blockers,
-				nextResp.Blockers,
-			} {
-				requireBlockerContains(t, blockers, "required_skill_not_ready:spec-compliance-review:run_summary_missing")
-				requireBlockerContains(t, blockers, "required_skill_not_ready:code-quality-review:run_summary_missing")
-			}
-			if nextResp.Advanced != nil {
-				assert.Equal(t, "query", nextResp.Advanced.Action)
-			}
-		})
-	})
-
-	t.Run("stale execution evidence", func(t *testing.T) {
-		root := t.TempDir()
-		withWorkspace(t, root, func() {
-			initTestWorkspace(t, root)
-
-			slug := createGovernedRequest(t, root, "L2", "stale execution evidence should stay aligned")
-			change, err := state.LoadChange(root, slug)
-			require.NoError(t, err)
-			change.CurrentState = model.StateS3Review
-			change.PlanSubStep = model.PlanSubStepNone
-			require.NoError(t, state.SaveChange(root, change))
-
-			writePassingExecutionSummary(t, root, slug, 1, "t-01")
-			materializeWaveExecutionForSummary(t, root, slug)
-			bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-			require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
-
-			statusResp := runStatusViewForChange(t, root, slug)
-			validateResp := runValidateViewForChange(t, root, slug)
-			nextResp := runNextViewForChange(t, root, slug)
-
-			for _, blockers := range [][]model.ReasonCode{
-				statusResp.Blockers,
-				validateResp.Blockers,
-				nextResp.Blockers,
-			} {
-				requireBlockerContains(t, blockers, state.StaleExecutionEvidenceBlockerToken)
-			}
-			if nextResp.Advanced != nil {
-				assert.Equal(t, "query", nextResp.Advanced.Action)
-			}
-		})
-	})
-}
-
-func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
+		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review layer blockers should stay aligned")
+		slug := createGovernedRequest(t, root, "L2", "execution summary blockers should stay aligned")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
-		writeShipReadyGovernedBundle(t, root, change)
-		writeAssuranceMD(t, root, slug, validAssuranceContent())
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		materializeWaveExecutionForSummary(t, root, slug)
-		writePassingWaveEvidence(t, root, slug, 1)
 		writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
-			References: []string{"layer:R0=pass"},
 		})
 		writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -249,217 +139,283 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 			RunVersion: 1,
 		})
 
-		statusResp := runStatusViewForChange(t, root, slug)
-		validateResp := runValidateViewForChange(t, root, slug)
-		nextResp := runNextViewForChange(t, root, slug)
-		reviewResp := runReviewViewForChange(t, root, slug)
-
-		for _, blockers := range [][]model.ReasonCode{
-			statusResp.Blockers,
-			validateResp.Blockers,
-			nextResp.Blockers,
-			reviewResp.Blockers,
-		} {
-			requireBlockerContains(t, blockers, "review_layer_missing:IR1")
-		}
-	})
-}
-
-func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, "L2", "done should reuse shared ship gate result")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-
-		writeShipReadyGovernedBundle(t, root, change)
-		writeAssuranceMD(t, root, slug, validAssuranceContent())
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-
-		readiness, err := progression.EvaluateGovernanceReadiness(
-			root,
-			change,
-			progression.GovernanceReadinessOptions{
-				IncludeShipSurface: true,
-			},
-		)
-		require.NoError(t, err)
-		require.NotNil(t, readiness.ShipSurface)
-		require.Equal(t, model.GateStatusBlocked, readiness.ShipSurface.Result.Status, "test setup must exercise a ship-gate blocker")
-
-		shipEval, shipBlocked, err := refreshDoneShipGate(root, &change)
-		require.NoError(t, err)
-		require.True(t, shipBlocked)
-		assert.ElementsMatch(t, model.ReasonSpecs(readiness.ShipSurface.Result.ReasonCodes), model.ReasonSpecs(shipEval.ReasonCodes))
-		assert.ElementsMatch(t, readiness.ShipSurface.Result.ReasonCodes, shipEval.ReasonCodes)
-	})
-}
-
-func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, "L2", "ship-only blockers should stay aligned")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		change.BaseRef = ""
-		require.NoError(t, state.SaveChange(root, change))
-
-		writeShipReadyGovernedBundle(t, root, change)
-		writeAssuranceMD(t, root, slug, validAssuranceContent())
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-
-		statusResp := runStatusViewForChange(t, root, slug)
-		validateResp := runValidateViewForChange(t, root, slug)
-		nextResp := runNextViewForChange(t, root, slug)
-
-		assert.Equal(t, model.GateStatusBlocked, statusResp.GateStatus["G_ship"].Status)
-		assert.Equal(t, "blocked", validateResp.GateStatus["G_ship"])
-		assert.Equal(t, "blocked", nextResp.InputContext.GateStatus["G_ship"])
+		statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
 
 		for _, blockers := range [][]model.ReasonCode{
 			statusResp.Blockers,
 			validateResp.Blockers,
 			nextResp.Blockers,
 		} {
-			requireBlockerContains(t, blockers, "manifest_base_ref_missing")
-		}
-		assert.False(t, validateResp.CanAdvance)
-		if nextResp.Advanced != nil {
-			assert.Equal(t, "query", nextResp.Advanced.Action)
-		}
-	})
-}
-
-func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithoutMutatingChangeAuthority(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, "L2", "missing artifacts should block every read surface")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepBundle
-		change.ArtifactSchema = model.ArtifactSchemaExpanded
-		require.NoError(t, state.SaveChange(root, change))
-
-		require.NoError(t, os.Remove(filepath.Join(root, "artifacts", "changes", slug, "decision.md")))
-		before := readGovernedChangeAuthorityBytes(t, root, slug)
-
-		statusResp := runStatusViewForChange(t, root, slug)
-		requireBlockerContains(t, statusResp.Blockers, "missing_required_artifact:decision.md")
-		requireChangeAuthorityStable(t, root, slug, before)
-
-		validateResp := runValidateViewForChange(t, root, slug)
-		requireBlockerContains(t, validateResp.Blockers, "missing_required_artifact:decision.md")
-		requireChangeAuthorityStable(t, root, slug, before)
-
-		nextResp := runNextViewForChange(t, root, slug)
-		requireBlockerContains(t, nextResp.Blockers, "missing_required_artifact:decision.md")
-		if nextResp.Advanced != nil {
-			assert.Equal(t, "query", nextResp.Advanced.Action)
-		}
-		requireChangeAuthorityStable(t, root, slug, before)
-
-		after, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, model.StateS1Plan, after.CurrentState)
-		assert.Equal(t, model.PlanSubStepBundle, after.PlanSubStep)
-	})
-}
-
-func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
-
-		slug := createGovernedRequest(t, root, "L2", "invalid worktree binding should stay aligned")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepBundle
-		change.ArtifactSchema = model.ArtifactSchemaExpanded
-		change.WorktreePath = root
-		change.WorktreeBranch = currentGitBranch(t, root)
-		require.NoError(t, state.SaveChange(root, change))
-
-		statusResp := runStatusViewForChange(t, root, slug)
-		validateResp := runValidateViewForChange(t, root, slug)
-		nextResp := runNextViewForChange(t, root, slug)
-
-		for _, blockers := range [][]model.ReasonCode{
-			statusResp.Blockers,
-			validateResp.Blockers,
-			nextResp.Blockers,
-		} {
-			requireBlockerContains(t, blockers, state.WorktreeReasonDedicatedRequired)
+			requireBlockerContains(t, blockers, "required_skill_not_ready:spec-compliance-review:run_summary_missing")
+			requireBlockerContains(t, blockers, "required_skill_not_ready:code-quality-review:run_summary_missing")
 		}
 		if nextResp.Advanced != nil {
 			assert.Equal(t, "query", nextResp.Advanced.Action)
 		}
 	})
-}
 
-func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	t.Run("stale execution evidence", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should surface governance blockers")
+		slug := createGovernedRequest(t, root, "L2", "stale execution evidence should stay aligned")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
-		change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
 		require.NoError(t, state.SaveChange(root, change))
-		writeAuthReviewGovernedBundle(t, root, slug)
 
-		var out bytes.Buffer
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
 
-		var nextResp nextView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &nextResp))
-		// domain-review is advisory by default (Wave 1), so it no longer
-		// produces a governance_action_required blocker.
-		blockerSpecs := strings.Join(model.ReasonSpecs(nextResp.Blockers), "\n")
-		assert.NotContains(t, blockerSpecs, "governance_action_required:domain-review")
+		statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+
+		for _, blockers := range [][]model.ReasonCode{
+			statusResp.Blockers,
+			validateResp.Blockers,
+			nextResp.Blockers,
+		} {
+			requireBlockerContains(t, blockers, state.StaleExecutionEvidenceBlockerToken)
+		}
+		if nextResp.Advanced != nil {
+			assert.Equal(t, "query", nextResp.Advanced.Action)
+		}
 	})
 }
 
-func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
+func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "governance surface should reuse computed readiness snapshot")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepBundle
-		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.SuggestedWorkflowPreset = ""
-		require.NoError(t, state.SaveChange(root, change))
+	slug := createGovernedRequest(t, root, "L2", "review layer blockers should stay aligned")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	writeShipReadyGovernedBundle(t, root, change)
+	writeAssuranceMD(t, root, slug, validAssuranceContent())
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	materializeWaveExecutionForSummary(t, root, slug)
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:R0=pass"},
+	})
+	writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC().Add(time.Second),
+		RunVersion: 1,
+	})
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+	reviewResp := runReviewViewForChange(t, root, slug)
+
+	for _, blockers := range [][]model.ReasonCode{
+		statusResp.Blockers,
+		validateResp.Blockers,
+		nextResp.Blockers,
+		reviewResp.Blockers,
+	} {
+		requireBlockerContains(t, blockers, "review_layer_missing:IR1")
+	}
+}
+
+func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "done should reuse shared ship gate result")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeShipReadyGovernedBundle(t, root, change)
+	writeAssuranceMD(t, root, slug, validAssuranceContent())
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	readiness, err := progression.EvaluateGovernanceReadiness(
+		root,
+		change,
+		progression.GovernanceReadinessOptions{
+			IncludeShipSurface: true,
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, readiness.ShipSurface)
+	require.Equal(t, model.GateStatusBlocked, readiness.ShipSurface.Result.Status, "test setup must exercise a ship-gate blocker")
+
+	shipEval, shipBlocked, err := refreshDoneShipGate(root, &change)
+	require.NoError(t, err)
+	require.True(t, shipBlocked)
+	assert.ElementsMatch(t, model.ReasonSpecs(readiness.ShipSurface.Result.ReasonCodes), model.ReasonSpecs(shipEval.ReasonCodes))
+	assert.ElementsMatch(t, readiness.ShipSurface.Result.ReasonCodes, shipEval.ReasonCodes)
+}
+
+func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "ship-only blockers should stay aligned")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	change.BaseRef = ""
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeShipReadyGovernedBundle(t, root, change)
+	writeAssuranceMD(t, root, slug, validAssuranceContent())
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+
+	assert.Equal(t, model.GateStatusBlocked, statusResp.GateStatus["G_ship"].Status)
+	assert.Equal(t, "blocked", validateResp.GateStatus["G_ship"])
+	assert.Equal(t, "blocked", nextResp.InputContext.GateStatus["G_ship"])
+
+	for _, blockers := range [][]model.ReasonCode{
+		statusResp.Blockers,
+		validateResp.Blockers,
+		nextResp.Blockers,
+	} {
+		requireBlockerContains(t, blockers, "manifest_base_ref_missing")
+	}
+	assert.False(t, validateResp.CanAdvance)
+	if nextResp.Advanced != nil {
+		assert.Equal(t, "query", nextResp.Advanced.Action)
+	}
+}
+
+func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithoutMutatingChangeAuthority(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "missing artifacts should block every read surface")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	require.NoError(t, state.SaveChange(root, change))
+
+	require.NoError(t, os.Remove(filepath.Join(root, "artifacts", "changes", slug, "decision.md")))
+	before := readGovernedChangeAuthorityBytes(t, root, slug)
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+	requireBlockerContains(t, statusResp.Blockers, "missing_required_artifact:decision.md")
+	requireChangeAuthorityStable(t, root, slug, before)
+
+	requireBlockerContains(t, validateResp.Blockers, "missing_required_artifact:decision.md")
+	requireChangeAuthorityStable(t, root, slug, before)
+
+	requireBlockerContains(t, nextResp.Blockers, "missing_required_artifact:decision.md")
+	if nextResp.Advanced != nil {
+		assert.Equal(t, "query", nextResp.Advanced.Action)
+	}
+	requireChangeAuthorityStable(t, root, slug, before)
+
+	after, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS1Plan, after.CurrentState)
+	assert.Equal(t, model.PlanSubStepBundle, after.PlanSubStep)
+}
+
+func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "invalid worktree binding should stay aligned")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	change.WorktreePath = root
+	change.WorktreeBranch = currentGitBranch(t, root)
+	require.NoError(t, state.SaveChange(root, change))
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+
+	for _, blockers := range [][]model.ReasonCode{
+		statusResp.Blockers,
+		validateResp.Blockers,
+		nextResp.Blockers,
+	} {
+		requireBlockerContains(t, blockers, state.WorktreeReasonDedicatedRequired)
+	}
+	if nextResp.Advanced != nil {
+		assert.Equal(t, "query", nextResp.Advanced.Action)
+	}
+}
+
+func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "next should surface governance blockers")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
+	require.NoError(t, state.SaveChange(root, change))
+	writeAuthReviewGovernedBundle(t, root, slug)
+
+	nextResp := runNextViewForChange(t, root, slug)
+	// domain-review is advisory by default (Wave 1), so it no longer
+	// produces a governance_action_required blocker.
+	blockerSpecs := strings.Join(model.ReasonSpecs(nextResp.Blockers), "\n")
+	assert.NotContains(t, blockerSpecs, "governance_action_required:domain-review")
+}
+
+func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "governance surface should reuse computed readiness snapshot")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.SuggestedWorkflowPreset = ""
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` medium blast radius
   - depends_on: []
@@ -467,10 +423,10 @@ func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
   - task_kind: verification
 `)))
 
-		readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{})
-		require.NoError(t, err)
+	readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{})
+	require.NoError(t, err)
 
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` low blast radius
   - depends_on: []
@@ -478,69 +434,100 @@ func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
   - task_kind: verification
 `)))
 
-		view := statusView{}
-		applyGovernanceSurfaceToStatus(readiness, &view)
-		require.NotNil(t, view.GovernanceSignals)
-		assert.Equal(t, "medium", view.GovernanceSignals.BlastRadius)
-	})
+	view := statusView{}
+	applyGovernanceSurfaceToStatus(readiness, &view)
+	require.NotNil(t, view.GovernanceSignals)
+	assert.Equal(t, "medium", view.GovernanceSignals.BlastRadius)
 }
 
 func runStatusViewForChange(t *testing.T, root, slug string) statusView {
 	t.Helper()
 
-	var out bytes.Buffer
-	cmd := makeStatusCmd()
-	cmd.SetArgs([]string{"--json", "--change", slug})
-	cmd.SetOut(&out)
-	require.NoError(t, cmd.Execute())
-
-	var view statusView
-	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
 	return view
+}
+
+func runReadOnlyGovernanceViewsForChange(t *testing.T, root, slug string) (statusView, validateView, nextView) {
+	t.Helper()
+
+	var (
+		statusResp   statusView
+		validateResp validateView
+		nextResp     nextView
+	)
+	errCh := make(chan error, 3)
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		change, err := state.LoadChange(root, slug)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		view, err := buildStatusViewFromChange(root, change)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		statusResp = view
+	}()
+
+	go func() {
+		defer wg.Done()
+		view, err := buildValidateViewForSlug(root, slug)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		validateResp = view
+	}()
+
+	go func() {
+		defer wg.Done()
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		nextResp = view
+	}()
+
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+
+	return statusResp, validateResp, nextResp
 }
 
 func runValidateViewForChange(t *testing.T, root, slug string) validateView {
 	t.Helper()
 
-	var out bytes.Buffer
-	cmd := makeValidateCmd()
-	cmd.SetArgs([]string{"--json", "--change", slug})
-	cmd.SetOut(&out)
-	require.NoError(t, cmd.Execute())
-
-	var view validateView
-	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+	view, err := buildValidateViewForSlug(root, slug)
+	require.NoError(t, err)
 	return view
 }
 
 func runNextViewForChange(t *testing.T, root, slug string, extraArgs ...string) nextView {
 	t.Helper()
 
-	args := []string{"--json", "--change", slug}
-	args = append(args, extraArgs...)
-
-	var out bytes.Buffer
-	cmd := makeNextCmd()
-	cmd.SetArgs(args)
-	cmd.SetOut(&out)
-	require.NoError(t, cmd.Execute())
-
-	var view nextView
-	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+	require.Empty(t, extraArgs, "runNextViewForChange only supports default next --json semantics")
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	require.NoError(t, err)
 	return view
 }
 
 func runReviewViewForChange(t *testing.T, root, slug string) reviewView {
 	t.Helper()
 
-	var out bytes.Buffer
-	cmd := makeReviewCmd()
-	cmd.SetArgs([]string{"--json", "--change", slug})
-	cmd.SetOut(&out)
-	require.NoError(t, cmd.Execute())
-
-	var view reviewView
-	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+	view, err := buildReviewViewForSlug(root, slug, true, "", nil)
+	require.NoError(t, err)
 	return view
 }
 

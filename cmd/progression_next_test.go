@@ -169,109 +169,109 @@ func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 }
 
 func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "light preset autopass")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		writeShipReadyGovernedBundle(t, root, change)
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+	slug := createGovernedRequest(t, root, "L2", "light preset autopass")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "done_ready", view.Advanced.Action)
-		// After Wave 1.1, S3_REVIEW advances through normal gate evaluation
-		// (not auto-pass). Only S4_VERIFY is auto-passed.
-		require.Len(t, view.Advanced.AutoPassedStates, 1)
-		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "done_ready", view.Advanced.Action)
+	// After Wave 1.1, S3_REVIEW advances through normal gate evaluation
+	// (not auto-pass). Only S4_VERIFY is auto-passed.
+	require.Len(t, view.Advanced.AutoPassedStates, 1)
+	assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
 
-		updated, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		require.Len(t, updated.LastAutoPassedStates, 1)
-		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
-	})
+	updated, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	require.Len(t, updated.LastAutoPassedStates, 1)
+	assert.Equal(t, model.StateS4Verify, updated.CurrentState)
 }
 
 func TestNextJSONAutoPassesByDefault(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "light preset json autopass advisory")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		writeShipReadyGovernedBundle(t, root, change)
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+	slug := createGovernedRequest(t, root, "L2", "light preset json autopass advisory")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		// Advancement is tested via buildNextView with preview=false (run path).
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "done_ready", view.Advanced.Action)
-		require.Len(t, view.Advanced.AutoPassedStates, 1)
-		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
-		assert.Empty(t, view.AutoPassEligible)
-		assert.Nil(t, view.NextSkill)
+	// Advancement is tested via buildNextView with preview=false (run path).
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "done_ready", view.Advanced.Action)
+	require.Len(t, view.Advanced.AutoPassedStates, 1)
+	assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
+	assert.Empty(t, view.AutoPassEligible)
+	assert.Nil(t, view.NextSkill)
 
-		updated, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
-		require.Len(t, updated.LastAutoPassedStates, 1)
-	})
+	updated, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+	require.Len(t, updated.LastAutoPassedStates, 1)
 }
 
 func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "light preset explicit no-auto-pass advisory")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		writeShipReadyGovernedBundle(t, root, change)
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+	slug := createGovernedRequest(t, root, "L2", "light preset explicit no-auto-pass advisory")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.WorkflowPreset = model.WorkflowPresetLight
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		// Advancement with no-auto-pass is tested via buildNextView (run path).
-		// autoSkipEvidence=false mirrors the original --json path.
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, false, true)
-		require.NoError(t, err)
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "advanced", view.Advanced.Action)
-		assert.Empty(t, view.Advanced.AutoPassedStates)
-		require.Len(t, view.AutoPassEligible, 1)
-		assert.Equal(t, model.StateS4Verify, view.AutoPassEligible[0].State)
-		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+	// Advancement with no-auto-pass is tested via buildNextView (run path).
+	// autoSkipEvidence=false mirrors the original --json path.
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, false, true)
+	require.NoError(t, err)
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "advanced", view.Advanced.Action)
+	assert.Empty(t, view.Advanced.AutoPassedStates)
+	require.Len(t, view.AutoPassEligible, 1)
+	assert.Equal(t, model.StateS4Verify, view.AutoPassEligible[0].State)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
 
-		updated, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, model.StateS4Verify, updated.CurrentState)
-		assert.Empty(t, updated.LastAutoPassedStates)
-	})
+	updated, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+	assert.Empty(t, updated.LastAutoPassedStates)
 }
 
 func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.T) {
@@ -540,77 +540,77 @@ func TestNextNoReviewContextForNonReviewState(t *testing.T) {
 }
 
 func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "reuse precomputed next evidence")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "reuse precomputed next evidence")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		verificationDir := state.VerificationDir(root, slug)
-		require.NoError(t, os.MkdirAll(verificationDir, 0o755))
-		require.NoError(t, os.WriteFile(
-			filepath.Join(verificationDir, "broken.yaml"),
-			[]byte("not valid yaml: [[["),
-			0o644,
-		))
+	verificationDir := state.VerificationDir(root, slug)
+	require.NoError(t, os.MkdirAll(verificationDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(verificationDir, "broken.yaml"),
+		[]byte("not valid yaml: [[["),
+		0o644,
+	))
 
-		view := &nextView{
-			CurrentState: change.CurrentState,
-			InputContext: nextContext{},
-		}
-		err = assembleSkillView(
-			root,
-			view,
-			changeRef{Slug: slug},
-			progression.AdvanceSummary{},
-			&change,
-			nil,
-			map[string]model.VerificationRecord{
-				progression.SkillSpecComplianceReview: {
-					Verdict:   model.VerificationVerdictPass,
-					Blockers:  []model.ReasonCode{},
-					Timestamp: time.Now().UTC(),
-				},
+	view := &nextView{
+		CurrentState: change.CurrentState,
+		InputContext: nextContext{},
+	}
+	err = assembleSkillView(
+		root,
+		view,
+		changeRef{Slug: slug},
+		progression.AdvanceSummary{},
+		&change,
+		nil,
+		map[string]model.VerificationRecord{
+			progression.SkillSpecComplianceReview: {
+				Verdict:   model.VerificationVerdictPass,
+				Blockers:  []model.ReasonCode{},
+				Timestamp: time.Now().UTC(),
 			},
-			true,
-		)
-		require.NoError(t, err)
-		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.Name)
-	})
+		},
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.Name)
 }
 
 func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test gplan blocking")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "test gplan blocking")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		// Move to S1_PLAN/audit without evidence
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	// Move to S1_PLAN/audit without evidence
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		// Advancement blocking is tested via buildNextView (run path).
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	// Advancement blocking is tested via buildNextView (run path).
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "blocked", view.Advanced.Action)
-		assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
-		assert.False(t, view.Advanced.RecoveryOnly)
-		assert.Equal(t, model.StateS1Plan, view.CurrentState)
-		assert.NotEmpty(t, view.Blockers)
-	})
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "blocked", view.Advanced.Action)
+	assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
+	assert.False(t, view.Advanced.RecoveryOnly)
+	assert.Equal(t, model.StateS1Plan, view.CurrentState)
+	assert.NotEmpty(t, view.Blockers)
 }
 
 func TestShouldExposeAdvancedSummaryToCaller(t *testing.T) {
@@ -676,28 +676,29 @@ description: [
 }
 
 func TestNextAdvancesWithPlanAuditEvidence(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test gplan passing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "test gplan passing")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		// Create required L2 artifacts
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Proposal"), 0o644))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
+	// Create required L2 artifacts
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Proposal"), 0o644))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
 
 ### Requirement: Plan Audit
 REQ-001: The plan audit path must advance only when the task checklist is valid.
 `)))
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [ ] `+"`t-01`"+` implement plan audit checks
   - wave: 1
   - target_files: ["internal/engine/example.go"]
@@ -705,97 +706,96 @@ REQ-001: The plan audit path must advance only when the task checklist is valid.
   - covers: [REQ-001]
 `), 0o644))
 
-		// Write plan-audit evidence with correct planning input hash.
-		writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-			Verdict:   model.VerificationVerdictPass,
-			Blockers:  []model.ReasonCode{},
-			Timestamp: time.Now().UTC(),
-		})
-
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
-
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "advanced", view.Advanced.Action)
-		assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
-		// Audit clean path: post-audit machine validation runs inline.
-		// If validation passes, it advances to S2_EXECUTE.
-		// If it fails, it persists at S1_PLAN/validate.
-		// This test provides sufficient artifacts for the clean path.
-		assert.Equal(t, model.StateS2Execute, view.Advanced.ToState)
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+	// Write plan-audit evidence with correct planning input hash.
+	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
 	})
+
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
+
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "advanced", view.Advanced.Action)
+	assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
+	// Audit clean path: post-audit machine validation runs inline.
+	// If validation passes, it advances to S2_EXECUTE.
+	// If it fails, it persists at S1_PLAN/validate.
+	// This test provides sufficient artifacts for the clean path.
+	assert.Equal(t, model.StateS2Execute, view.Advanced.ToState)
+	assert.Equal(t, model.StateS2Execute, view.CurrentState)
 }
 
 func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test bundle missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "test bundle missing")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
 
-		// Remove scaffolded artifact files but keep change.yaml (bundle
-		// authority). LoadChange is fail-closed — removing change.yaml
-		// would trigger a different error path.
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		entries, _ := os.ReadDir(bundlePath)
-		for _, e := range entries {
-			if e.Name() != "change.yaml" {
-				_ = os.RemoveAll(filepath.Join(bundlePath, e.Name()))
-			}
+	// Remove scaffolded artifact files but keep change.yaml (bundle
+	// authority). LoadChange is fail-closed — removing change.yaml
+	// would trigger a different error path.
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	entries, _ := os.ReadDir(bundlePath)
+	for _, e := range entries {
+		if e.Name() != "change.yaml" {
+			_ = os.RemoveAll(filepath.Join(bundlePath, e.Name()))
 		}
+	}
 
-		writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-			Verdict:   model.VerificationVerdictPass,
-			Blockers:  []model.ReasonCode{},
-			Timestamp: time.Now().UTC(),
-		})
-
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
-
-		// Bundle precondition blocks before the audit->validate recovery path.
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "blocked", view.Advanced.Action)
-		assert.Empty(t, view.Advanced.FromSubStep)
-		assert.Empty(t, view.Advanced.ToSubStep)
-		assert.False(t, view.Advanced.RecoveryOnly)
-		assert.Empty(t, view.Advanced.Reason)
-		assert.NotEmpty(t, view.Blockers)
+	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
 	})
+
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
+
+	// Bundle precondition blocks before the audit->validate recovery path.
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "blocked", view.Advanced.Action)
+	assert.Empty(t, view.Advanced.FromSubStep)
+	assert.Empty(t, view.Advanced.ToSubStep)
+	assert.False(t, view.Advanced.RecoveryOnly)
+	assert.Empty(t, view.Advanced.Reason)
+	assert.NotEmpty(t, view.Blockers)
 }
 
 func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "bundle invalid bound worktree")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "bundle invalid bound worktree")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepBundle
-		change.ArtifactSchema = model.ArtifactSchemaExpanded
-		change.WorktreePath = root
-		change.WorktreeBranch = currentGitBranch(t, root)
-		require.NoError(t, state.SaveChange(root, change))
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	change.WorktreePath = root
+	change.WorktreeBranch = currentGitBranch(t, root)
+	require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "blocked", view.Advanced.Action)
-		assert.Nil(t, view.NextSkill)
-		requireBlockerContains(t, view.Blockers, state.WorktreeReasonDedicatedRequired)
-	})
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "blocked", view.Advanced.Action)
+	assert.Nil(t, view.NextSkill)
+	requireBlockerContains(t, view.Blockers, state.WorktreeReasonDedicatedRequired)
 }
 
 func TestNextBlocksWhenTasksChecklistMissingTargetFiles(t *testing.T) {
@@ -984,78 +984,78 @@ func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 }
 
 func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "done ready contract")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "done ready contract")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		writeShipReadyGovernedBundle(t, root, change)
-		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
-		// Refresh the execution summary after mutating bundle artifacts so the
-		// evidence timestamp remains newer than the governed tasks plan.
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	writeShipReadyGovernedBundle(t, root, change)
+	writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+	// Refresh the execution summary after mutating bundle artifacts so the
+	// evidence timestamp remains newer than the governed tasks plan.
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "done_ready", view.Advanced.Action)
-		assert.Equal(t, model.StateS4Verify, view.CurrentState)
-		assert.Nil(t, view.NextSkill)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
-		assert.Contains(t, view.Warnings, "optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired")
-	})
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "done_ready", view.Advanced.Action)
+	assert.Equal(t, model.StateS4Verify, view.CurrentState)
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
+	assert.Contains(t, view.Warnings, "optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired")
 }
 
 func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPath(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "standard request done ready contract")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
+	slug := createGovernedRequest(t, root, "L2", "standard request done ready contract")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
 
-		change.QualityMode = model.QualityModeStandard
-		change.CurrentState = model.StateS4Verify
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	change.QualityMode = model.QualityModeStandard
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
-		writeShipReadyGovernedBundle(t, root, change)
-		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
-		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	writeShipReadyGovernedBundle(t, root, change)
+	writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		require.NotNil(t, view.Advanced)
-		assert.Equal(t, "done_ready", view.Advanced.Action)
-		assert.Equal(t, model.StateS4Verify, view.CurrentState)
-		assert.Nil(t, view.NextSkill)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
-		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
-	})
+	require.NotNil(t, view.Advanced)
+	assert.Equal(t, "done_ready", view.Advanced.Action)
+	assert.Equal(t, model.StateS4Verify, view.CurrentState)
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
 }
 
 func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
@@ -1588,6 +1588,7 @@ func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 }
 
 func TestValidateResumeResponseUnit(t *testing.T) {
+	t.Parallel()
 	t.Run("empty response rejected", func(t *testing.T) {
 		cp := &model.ActiveCheckpoint{
 			PausedTaskID:   "task-x",
@@ -1644,6 +1645,7 @@ func TestValidateResumeResponseUnit(t *testing.T) {
 }
 
 func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
+	t.Parallel()
 	t.Run("informational resume progress does not stop run", func(t *testing.T) {
 		view := nextView{
 			CurrentState: model.StateS2Execute,
@@ -2190,6 +2192,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 }
 
 func TestCheckGovernedBundleReadyL2(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	slug := "test-bundle"
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -2212,6 +2215,7 @@ func TestCheckGovernedBundleReadyL2(t *testing.T) {
 }
 
 func TestCheckGovernedBundleReadyL3(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	slug := "test-bundle-l3"
 	worktreeRoot := t.TempDir()
@@ -2255,6 +2259,7 @@ Docs`), 0o644))
 }
 
 func TestCheckGovernedBundleReadyRequiresAssuranceArtifact(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	slug := "test-bundle-requires-assurance"
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -2268,6 +2273,7 @@ func TestCheckGovernedBundleReadyRequiresAssuranceArtifact(t *testing.T) {
 }
 
 func TestCheckGovernedBundleReadyRejectsMissingDesignDependency(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	slug := "test-bundle-missing-design"
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -2447,79 +2453,78 @@ func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 }
 
 func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "materialize run summary")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "materialize run summary")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  time.Now().UTC(),
-			RunVersion: 1,
-			References: []string{"task:evidence"},
-		})
-		writeTaskEvidenceFile(t, root, slug, 1, "task-a", map[string]any{
-			"task_id":             "task-a",
-			"run_summary_version": 1,
-			"task_kind":           "code",
-			"verdict":             "pass",
-			"changed_files":       []string{"cmd/next.go"},
-			"blockers":            []string{},
-		})
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"task:evidence"},
+	})
+	writeTaskEvidenceFile(t, root, slug, 1, "task-a", map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go"},
+		"blockers":            []string{},
+	})
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-a`"+` materialize run summary
   - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
-		_, err = buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
+	_, err = buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
 
-		summary, err := state.LoadExecutionSummary(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, 1, summary.RunSummaryVersion)
-		require.Len(t, summary.Tasks, 1)
-		assert.Equal(t, "task-a", summary.Tasks[0].TaskID)
-		assert.Equal(t, model.TaskVerdictPass, summary.Tasks[0].Verdict)
-
-	})
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.RunSummaryVersion)
+	require.Len(t, summary.Tasks, 1)
+	assert.Equal(t, "task-a", summary.Tasks[0].TaskID)
+	assert.Equal(t, model.TaskVerdictPass, summary.Tasks[0].Verdict)
 }
 
 func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
 
-		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  time.Now().UTC(),
-			RunVersion: 1,
-		})
-
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
-		require.NoError(t, err)
-
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:rv1")
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
 	})
+
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	require.NoError(t, err)
+
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:rv1")
+	assert.Equal(t, model.StateS2Execute, view.CurrentState)
 }
 
 func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion int, taskID string, payload map[string]any) {

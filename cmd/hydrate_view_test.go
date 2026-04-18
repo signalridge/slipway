@@ -9,6 +9,7 @@ import (
 // TestReviewTextRendersHydrateLine verifies that review text rendering keeps
 // the explicit manual-review hydrate keys for the real Wave-1 review surface.
 func TestReviewTextRendersHydrateLine(t *testing.T) {
+	t.Parallel()
 	view := reviewView{
 		Slug:              "demo",
 		CurrentState:      "S3_REVIEW",
@@ -33,6 +34,7 @@ func TestReviewTextRendersHydrateLine(t *testing.T) {
 // TestStatusTextRendersHydrateLine verifies the change-selected incident view
 // renders the real incident-response hydrate keys.
 func TestStatusTextRendersHydrateLine(t *testing.T) {
+	t.Parallel()
 	view := statusView{
 		ExecutionMode:     "governed",
 		Slug:              "demo",
@@ -56,6 +58,7 @@ func TestStatusTextRendersHydrateLine(t *testing.T) {
 // TestStatusDiagnosticsRendersHydrateLine verifies hydrate rendering on the
 // diagnostics-mode explicit-view path with a real manual status skill.
 func TestStatusDiagnosticsRendersHydrateLine(t *testing.T) {
+	t.Parallel()
 	view := statusView{
 		ExecutionMode:     "diagnostics",
 		Mode:              "supply-chain-audit",
@@ -73,6 +76,7 @@ func TestStatusDiagnosticsRendersHydrateLine(t *testing.T) {
 }
 
 func TestHealthTextUsesFocusLabel(t *testing.T) {
+	t.Parallel()
 	view := healthView{
 		ExecutionMode:     "diagnostics",
 		Mode:              "incident",
@@ -95,6 +99,7 @@ func TestHealthTextUsesFocusLabel(t *testing.T) {
 // hydrate references scoped to support hints instead of inventing a top-level
 // next-skill hydrate line.
 func TestNextTextRendersSupportHydrateOnly(t *testing.T) {
+	t.Parallel()
 	view := nextView{
 		Slug:            "demo",
 		Phase:           "execution",
@@ -130,6 +135,7 @@ func TestNextTextRendersSupportHydrateOnly(t *testing.T) {
 
 // TestNormalizeHydrateKeysDedupesAndSorts locks the surface contract.
 func TestNormalizeHydrateKeysDedupesAndSorts(t *testing.T) {
+	t.Parallel()
 	got := normalizeHydrateKeys([]string{
 		"security-review/xss.md",
 		"security-review/authentication.md",
