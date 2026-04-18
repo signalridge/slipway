@@ -131,16 +131,3 @@ func TestExecutionResultJSONUsesTaskResultsKey(t *testing.T) {
 	assert.Contains(t, string(raw), `"task_results"`)
 	assert.NotContains(t, string(raw), `"task_runs"`)
 }
-
-func containsAll(haystack []string, values ...string) bool {
-	found := map[string]bool{}
-	for _, item := range haystack {
-		found[item] = true
-	}
-	for _, value := range values {
-		if !found[value] {
-			return false
-		}
-	}
-	return true
-}

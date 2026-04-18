@@ -244,32 +244,6 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 	summary, summaryErr := LoadOptionalRelevantExecutionSummary(root, change)
 	plan, err := LoadOptionalWavePlanForChange(root, change)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			if blockedReason, blockerErr := wavePlanRepairBlockedReason(root, change, summary); blockerErr != nil {
-				return nil, blockerErr
-			} else if strings.TrimSpace(blockedReason) != "" {
-				findings = append(findings, HealthFinding{
-					Severity:   model.ReasonSeverityError,
-					Category:   "wave_execution",
-					Slug:       change.Slug,
-					Message:    "Wave plan is missing and cannot be safely reconstructed from current tasks.md",
-					Repairable: false,
-					RepairHint: wavePlanRepairHint(),
-					Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_repair_blocked", blockedReason)},
-				})
-				return findings, nil
-			}
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityError,
-				Category:   "wave_execution",
-				Slug:       change.Slug,
-				Message:    "Wave plan is missing",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` to materialize wave-plan.yaml from the governed tasks plan.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_missing", change.Slug)},
-			})
-			return findings, nil
-		}
 		findings = append(findings, HealthFinding{
 			Severity: model.ReasonSeverityError,
 			Category: "wave_execution",

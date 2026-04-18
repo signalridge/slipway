@@ -101,34 +101,6 @@ var surfacePolicy = []SurfaceRecord{
 	},
 }
 
-// AllSurfaces returns a defensive copy of the shipped surface policy in
-// stable (command, class, public-name) order. Callers must not mutate the
-// returned slice.
-func AllSurfaces() []SurfaceRecord {
-	out := make([]SurfaceRecord, len(surfacePolicy))
-	copy(out, surfacePolicy)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Command != out[j].Command {
-			return out[i].Command < out[j].Command
-		}
-		if out[i].Class != out[j].Class {
-			return classOrder(out[i].Class) < classOrder(out[j].Class)
-		}
-		return out[i].PublicName < out[j].PublicName
-	})
-	return out
-}
-
-func classOrder(c SurfaceClass) int {
-	switch c {
-	case SurfacePrimary:
-		return 0
-	case SurfaceExplicitFocus:
-		return 1
-	}
-	return 2
-}
-
 // PrimaryForCommand returns the primary surface record for a command
 // surface, if any. For `status` / `health`, the command layer is responsible
 // for gating use on an active/selected change target before consulting the

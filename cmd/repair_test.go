@@ -371,14 +371,14 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
 		assert.Contains(t, summary.ClearedCheckpoints, slug)
 
-		_, err = state.LoadWavePlan(root, slug)
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		_, err = state.LoadWavePlanForChange(root, change)
 		require.NoError(t, err)
 		runs, err := state.LoadWaveRuns(root, slug, 1)
 		require.NoError(t, err)
 		require.Len(t, runs, 1)
 
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
 		assert.Nil(t, change.ActiveCheckpoint)
 	})
 }
@@ -421,7 +421,9 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 		assert.Contains(t, summary.MaterializedWavePlans, slug)
 		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
 
-		plan, err := state.LoadWavePlan(root, slug)
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		plan, err := state.LoadWavePlanForChange(root, change)
 		require.NoError(t, err)
 		assert.Equal(t, model.WavePlanVersion, plan.Version)
 
@@ -508,11 +510,11 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		_, err = os.Stat(evidencePath)
 		require.NoError(t, err, "historical task evidence must be preserved")
 
-		_, err = state.LoadWavePlan(root, slug)
-		require.Error(t, err, "repair must not materialize a replacement wave-plan when current tasks drifted")
-
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
+		_, err = state.LoadWavePlanForChange(root, change)
+		require.Error(t, err, "repair must not materialize a replacement wave-plan when current tasks drifted")
+
 		require.NotNil(t, change.ActiveCheckpoint, "repair must preserve the historical checkpoint when reconstruction is blocked")
 		assert.Equal(t, "t-01", change.ActiveCheckpoint.PausedTaskID)
 	})

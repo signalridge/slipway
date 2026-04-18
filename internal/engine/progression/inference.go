@@ -37,14 +37,6 @@ var allowedComplexityLevels = []string{
 	"critical",
 }
 
-func GuardrailDomainEnumValues() []string {
-	return append([]string(nil), allowedGuardrailDomains...)
-}
-
-func ComplexityEnumValues() []string {
-	return append([]string(nil), allowedComplexityLevels...)
-}
-
 // InferenceResult holds a resolved intent classification with degradation
 // metadata. When Degraded is true, the classification fell back to
 // SafeDegradeClassification and DegradeReason explains why.

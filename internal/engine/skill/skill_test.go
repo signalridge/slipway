@@ -13,7 +13,7 @@ import (
 
 func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, closeoutRequired bool) []string {
 	return RequiredSkillsForStateWithRegistry(
-		GovernanceRegistry(),
+		definitionsToSortedSlice(defaultGovernanceRegistry),
 		needsDiscovery,
 		state,
 		closeoutRequired,
@@ -22,7 +22,7 @@ func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, clos
 
 func TestGovernanceRegistryCompleteness(t *testing.T) {
 	t.Parallel()
-	registry := GovernanceRegistry()
+	registry := definitionsToSortedSlice(defaultGovernanceRegistry)
 	require.Len(t, registry, 8)
 }
 

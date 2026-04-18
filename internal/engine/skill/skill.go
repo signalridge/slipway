@@ -99,22 +99,11 @@ var defaultGovernanceRegistry = map[string]Definition{
 	},
 }
 
-func GovernanceRegistry() []Definition {
-	return definitionsToSortedSlice(defaultGovernanceRegistry)
-}
-
 func AgentHintForSkillInRegistry(registry []Definition, name string) string {
 	if def, ok := LookupDefinitionInRegistry(registry, name); ok {
 		return def.AgentHint
 	}
 	return ""
-}
-
-// LookupDefinition returns the governance skill Definition for the given name.
-// Returns the zero value and false if the skill is not in the registry.
-func LookupDefinition(name string) (Definition, bool) {
-	def, ok := defaultGovernanceRegistry[name]
-	return def, ok
 }
 
 // LookupDefinitionInRegistry returns the governance skill Definition from a loaded registry.

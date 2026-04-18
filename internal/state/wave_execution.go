@@ -23,29 +23,12 @@ func WavePlanPathForRead(root, slug string) string {
 	return filepath.Join(verificationDirPathForRead(root, slug), WavePlanFileName)
 }
 
-func wavePlanReadPath(root, slug string) (string, error) {
-	dir, err := resolveExistingVerificationDir(root, slug)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, WavePlanFileName), nil
-}
-
 func wavePlanReadPathForChange(root string, change model.Change) (string, error) {
 	dir, err := verificationDirForChange(root, change)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, WavePlanFileName), nil
-}
-
-func LoadWavePlan(root, slug string) (model.WavePlan, error) {
-	displayPath := WavePlanPathForRead(root, slug)
-	path, err := wavePlanReadPath(root, slug)
-	if err != nil {
-		return model.WavePlan{}, wrapExecutionSummaryLoadError(displayPath, err)
-	}
-	return loadWavePlanFromPath(path)
 }
 
 func LoadWavePlanForChange(root string, change model.Change) (model.WavePlan, error) {
@@ -73,17 +56,6 @@ func loadWavePlanFromPath(path string) (model.WavePlan, error) {
 		return model.WavePlan{}, fmt.Errorf("invalid wave plan: %w", err)
 	}
 	return plan, nil
-}
-
-func LoadOptionalWavePlan(root, slug string) (*model.WavePlan, error) {
-	plan, err := LoadWavePlan(root, slug)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &plan, nil
 }
 
 func LoadOptionalWavePlanForChange(root string, change model.Change) (*model.WavePlan, error) {

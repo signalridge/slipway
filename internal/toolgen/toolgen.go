@@ -140,15 +140,6 @@ const (
 	CommandClassMutation CommandClass = "mutation"
 )
 
-func (c CommandClass) IsValid() bool {
-	switch c {
-	case CommandClassQuery, CommandClassMutation:
-		return true
-	default:
-		return false
-	}
-}
-
 type CommandDef struct {
 	ID              string
 	Class           CommandClass
@@ -951,13 +942,9 @@ func removePathIfExists(name string) error {
 	return nil
 }
 
-// copyTemplateSubtree walks an embedded template directory and writes each
+// copyTemplateSubtreeFromFS walks an embedded template directory and writes each
 // file to dstDir preserving relative paths. Missing source directories are
 // a no-op.
-func copyTemplateSubtree(srcPrefix, dstDir string, refresh bool) error {
-	return copyTemplateSubtreeFromFS(tmpl.TemplateFS(), srcPrefix, dstDir, refresh)
-}
-
 func copyTemplateSubtreeFromFS(tfs fs.FS, srcPrefix, dstDir string, refresh bool) error {
 	info, err := fs.Stat(tfs, srcPrefix)
 	if err != nil {

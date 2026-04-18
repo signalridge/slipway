@@ -100,7 +100,8 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
 		assert.NotEmpty(t, def.ID, "registry entry missing ID")
-		assert.True(t, def.Class.IsValid(), "registry entry %s has invalid Class %q", def.ID, def.Class)
+		assert.Contains(t, []CommandClass{CommandClassQuery, CommandClassMutation}, def.Class,
+			"registry entry %s has invalid Class %q", def.ID, def.Class)
 		assert.NotEmpty(t, def.Description, "registry entry %s missing Description", def.ID)
 		assert.NotEmpty(t, def.Tier, "registry entry %s missing Tier", def.ID)
 		assert.True(t, def.Tier == "core" || def.Tier == "situational" || def.Tier == "diagnostics",

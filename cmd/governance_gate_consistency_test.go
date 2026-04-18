@@ -440,16 +440,6 @@ func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
 	assert.Equal(t, "medium", view.GovernanceSignals.BlastRadius)
 }
 
-func runStatusViewForChange(t *testing.T, root, slug string) statusView {
-	t.Helper()
-
-	change, err := state.LoadChange(root, slug)
-	require.NoError(t, err)
-	view, err := buildStatusViewFromChange(root, change)
-	require.NoError(t, err)
-	return view
-}
-
 func runReadOnlyGovernanceViewsForChange(t *testing.T, root, slug string) (statusView, validateView, nextView) {
 	t.Helper()
 
@@ -504,14 +494,6 @@ func runReadOnlyGovernanceViewsForChange(t *testing.T, root, slug string) (statu
 	}
 
 	return statusResp, validateResp, nextResp
-}
-
-func runValidateViewForChange(t *testing.T, root, slug string) validateView {
-	t.Helper()
-
-	view, err := buildValidateViewForSlug(root, slug)
-	require.NoError(t, err)
-	return view
 }
 
 func runNextViewForChange(t *testing.T, root, slug string, extraArgs ...string) nextView {

@@ -1,7 +1,6 @@
 package capability
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,7 +85,7 @@ func TestSurfacePolicyBackingsResolveToRegisteredSkills(t *testing.T) {
 	t.Parallel()
 
 	reg := DefaultRegistry()
-	for _, rec := range AllSurfaces() {
+	for _, rec := range surfacePolicy {
 		rec := rec
 		t.Run(rec.Command+"-"+rec.PublicName, func(t *testing.T) {
 			_, ok := reg.Lookup(rec.BackingID)
@@ -127,29 +126,4 @@ func TestCommandScopedBindingsDoNotAutoPopulateSupports(t *testing.T) {
 				"command-only resolution for %s must not auto-populate supports from command-scoped bindings", command)
 		})
 	}
-}
-
-func TestAllSurfacesStableOrder(t *testing.T) {
-	t.Parallel()
-
-	surfaces := AllSurfaces()
-	require.NotEmpty(t, surfaces)
-	assert.True(t, slices.IsSortedFunc(surfaces, func(a, b SurfaceRecord) int {
-		switch {
-		case a.Command < b.Command:
-			return -1
-		case a.Command > b.Command:
-			return 1
-		case classOrder(a.Class) < classOrder(b.Class):
-			return -1
-		case classOrder(a.Class) > classOrder(b.Class):
-			return 1
-		case a.PublicName < b.PublicName:
-			return -1
-		case a.PublicName > b.PublicName:
-			return 1
-		default:
-			return 0
-		}
-	}), "AllSurfaces must return stable command/class/name order")
 }

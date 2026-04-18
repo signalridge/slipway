@@ -11,6 +11,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -194,7 +195,10 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 
 func TestDeriveAgentConstraintsDoesNotGateFinalCloseout(t *testing.T) {
 	t.Parallel()
-	registry := skill.GovernanceRegistry()
+	root := t.TempDir()
+	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+	registry, err := skill.LoadGovernanceRegistry(root)
+	require.NoError(t, err)
 	c := deriveAgentConstraints(registry, "final-closeout")
 	require.NotNil(t, c)
 	assert.Empty(t, c.HardGate)

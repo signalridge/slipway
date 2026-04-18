@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -28,8 +26,6 @@ func authoritativeWavePlanView(root string, change model.Change) *wavePlanView {
 	case err == nil && plan != nil:
 		return wavePlanViewFromModel(*plan)
 	case err == nil:
-		return &wavePlanView{ParseError: "authoritative wave-plan.yaml is missing; run `slipway repair`"}
-	case errors.Is(err, fs.ErrNotExist):
 		return &wavePlanView{ParseError: "authoritative wave-plan.yaml is missing; run `slipway repair`"}
 	default:
 		return &wavePlanView{ParseError: fmt.Sprintf("failed to load authoritative wave-plan.yaml: %v", err)}

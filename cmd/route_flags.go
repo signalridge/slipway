@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
-	"github.com/signalridge/slipway/internal/model"
 	"github.com/spf13/cobra"
 )
 
@@ -123,50 +122,4 @@ func emitDiscovery(cmd *cobra.Command, format string, jsonPayload any, entries [
 			nil,
 		)
 	}
-}
-
-func executionSummaryChangedFiles(summary *model.ExecutionSummary) []string {
-	if summary == nil {
-		return nil
-	}
-	var out []string
-	for _, task := range summary.Tasks {
-		out = append(out, task.ChangedFiles...)
-	}
-	return uniqueSortedNonEmpty(out)
-}
-
-func executionSummaryBlockerSpecs(summary *model.ExecutionSummary) []string {
-	if summary == nil {
-		return nil
-	}
-	out := model.ReasonSpecs(summary.OpenBlockers)
-	for _, task := range summary.Tasks {
-		out = append(out, model.ReasonSpecs(task.Blockers)...)
-	}
-	return uniqueSortedNonEmpty(out)
-}
-
-func uniqueSortedNonEmpty(items []string) []string {
-	if len(items) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(items))
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		if _, ok := seen[item]; ok {
-			continue
-		}
-		seen[item] = struct{}{}
-		out = append(out, item)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	sort.Strings(out)
-	return out
 }

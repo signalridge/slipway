@@ -141,7 +141,7 @@ func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSu
 	if err == nil && plan != nil {
 		return plan, false, "", nil
 	}
-	unreadable := err != nil && !errors.Is(err, fs.ErrNotExist)
+	unreadable := err != nil
 	if blockedReason, err := wavePlanRepairBlockedReason(root, change, summary); err != nil {
 		return nil, false, "", err
 	} else if strings.TrimSpace(blockedReason) != "" {
@@ -244,7 +244,7 @@ func repairCheckpointAgainstWavePlan(change *model.Change, plan *model.WavePlan,
 
 func recoverWaveRunsFromSummary(root, slug string, plan model.WavePlan, summary model.ExecutionSummary) (bool, error) {
 	existing, err := LoadOptionalWaveRuns(root, slug, summary.RunSummaryVersion)
-	unreadable := err != nil && !errors.Is(err, fs.ErrNotExist)
+	unreadable := err != nil
 	recovered, err := BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
 	if err != nil {
 		return false, err
