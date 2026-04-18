@@ -93,7 +93,7 @@ func TestReviewRejectsMutuallyExclusiveFlags(t *testing.T) {
 func TestReviewAllowsAllWhenChangedOnlyIsExplicitlyFalse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeReviewCmd()
 		cmd.SetArgs([]string{"--all", "--changed-only=false", "--json"})
@@ -202,7 +202,7 @@ func TestEnsureReviewEntryStateRejectsEarlierState(t *testing.T) {
 func TestReviewExplicitRequestRejectsInactiveGovernedChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review inactive governed change")
 		change, err := state.LoadChange(root, slug)
@@ -224,7 +224,7 @@ func TestReviewExplicitRequestRejectsInactiveGovernedChange(t *testing.T) {
 func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review requires frozen execution summary")
 		change, err := state.LoadChange(root, slug)
@@ -259,7 +259,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should preserve governed done-ready state")
 		change, err := state.LoadChange(root, slug)
@@ -348,7 +348,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should use execution summary")
 		change, err := state.LoadChange(root, slug)
@@ -435,7 +435,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should fail closed when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
@@ -510,7 +510,7 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
 		change, err := state.LoadChange(root, slug)
@@ -602,7 +602,7 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should fail on stale evidence")
 		change, err := state.LoadChange(root, slug)
@@ -639,7 +639,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 func TestReviewChangedOnlyUsesInMemoryArtifactReconcile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review changed-only should follow stale artifact projection")
 		change, err := state.LoadChange(root, slug)
@@ -737,7 +737,7 @@ How do we prove changed-only review still sees stale downstream artifacts?
 func TestReviewChangedOnlyIncludesNonRequiredRuntimeArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review changed-only should include non-required runtime artifacts")
 		change, err := state.LoadChange(root, slug)
@@ -837,7 +837,7 @@ Auth-specific follow-up still needs review.
 func TestReviewFailsWhenTasksChecklistCoverageDrifts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should fail when requirement coverage drifts")
 		change, err := state.LoadChange(root, slug)

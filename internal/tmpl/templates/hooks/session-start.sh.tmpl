@@ -4,7 +4,7 @@ set -euo pipefail
 # Slipway session-start hook helper for {{.ToolID}}.
 # This hook is intentionally read-only:
 # - status provides active change and lifecycle health
-# - next --preview provides next skill context without state advancement
+# - next provides next skill context (query-only, no state advancement)
 
 if ! command -v slipway >/dev/null 2>&1; then
   exit 0
@@ -39,7 +39,7 @@ run_slipway_readonly() {
   local output
   local status
   set +e
-  output="$(cd "${hook_cwd}" && slipway "$@" 2>&1)"
+  output="$(cd "${hook_cwd}" && SLIPWAY_TOOL="{{.ToolID}}" slipway "$@" 2>&1)"
   status=$?
   set -e
   printf '%s' "${output}"
@@ -54,10 +54,10 @@ else
 fi
 
 next_json=""
-if next_output="$(run_slipway_readonly next --json --preview --hook-lite)"; then
+if next_output="$(run_slipway_readonly next --json --hook-lite)"; then
   next_json="${next_output}"
 else
-  diagnostics+=("hook_diagnostic: slipway next --json --preview --hook-lite failed: $(normalize_hook_message "${next_output}")")
+  diagnostics+=("hook_diagnostic: slipway next --json --hook-lite failed: $(normalize_hook_message "${next_output}")")
 fi
 
 diagnostics_text=""

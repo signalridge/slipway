@@ -24,12 +24,9 @@ func TestResolveSelectsCommandPrimaryRoute_Status(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 
+	// status no longer has a primary route; default is neutral.
 	res := Resolve(reg, Signals{Command: "status"})
-	require.NotNil(t, res.Route)
-	assert.Equal(t, "incident-response", res.Route.SkillID)
-	// Mode carries the public surface alias after the view→primary cutover.
-	assert.Equal(t, "incident", res.Route.Mode)
-	assert.NotEmpty(t, res.Route.Reason)
+	assert.Nil(t, res.Route)
 }
 
 func TestResolveAttachesIntakeSupportOnIntakeHost(t *testing.T) {
@@ -83,12 +80,11 @@ func TestResolveReviewHostAttachesIndependentReview(t *testing.T) {
 func TestResolveEmitsHydrateForAutoRoute(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	res := Resolve(reg, Signals{Command: "status"})
+	// health retains its primary route with incident-response hydrate refs.
+	res := Resolve(reg, Signals{Command: "health"})
 	require.NotNil(t, res.Route)
 	require.Equal(t, "incident-response", res.Route.SkillID)
-	assert.Contains(t, res.HydrateReferences, "incident-response/incident-severity-matrix.md")
-	assert.Contains(t, res.HydrateReferences, "incident-response/incident-response-framework.md")
-	// Keys are sorted.
+	assert.NotEmpty(t, res.HydrateReferences)
 	sorted := append([]string(nil), res.HydrateReferences...)
 	for i := 1; i < len(sorted); i++ {
 		assert.LessOrEqual(t, sorted[i-1], sorted[i], "hydrate references must be sorted")
@@ -159,17 +155,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			name: "status",
 			sig:  Signals{Command: "status"},
 			want: resolutionSnapshot{
-				routeSkill: "incident-response",
-				routeMode:  "incident",
-				supports:   []supportSnapshot{},
-				hydrate: []string{
-					"incident-response/communication-templates.md",
-					"incident-response/incident-response-framework.md",
-					"incident-response/incident-severity-matrix.md",
-					"incident-response/rca-frameworks-guide.md",
-					"incident-response/regulatory-deadlines.md",
-					"incident-response/sla-management-guide.md",
-				},
+				supports: []supportSnapshot{},
 			},
 		},
 		{

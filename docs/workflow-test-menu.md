@@ -103,7 +103,7 @@ Commands:
 go run . new --json --preset standard "workflow smoke: tighten validate-requirements description consistency"
 go run . status --format yaml
 go run . validate --json
-go run . next --preview
+go run . next
 go run . validate-requirements --json
 go run . cancel --json
 go run . status --json
@@ -114,7 +114,7 @@ What to observe:
 1. `new --json` should return a governed change starting at `S0_INTAKE`.
 2. `status` should show the active governed change instead of diagnostics mode.
 3. `validate --json` should be read-only and keep the change in the same state.
-4. `next --preview` should show the next skill context without advancing state.
+4. `next` should show the next skill context without advancing state.
 5. `validate-requirements --json` should validate the current change's
    `requirements.md` and stay read-only.
 6. `cancel --json` should archive the change as terminal.
@@ -142,10 +142,10 @@ align validate-requirements command description with current read-only behavior
 ```bash
 go run . new --json --preset standard "align validate-requirements command description with current read-only behavior"
 go run . status --format yaml
-go run . next --preview
+go run . next
 ```
 
-At this point, use the surfaced skill/context from `next --preview` as the
+At this point, use the surfaced skill/context from `next` as the
 source of truth for what artifact work is expected first.
 
 ### Step 2: Fill Intake And Planning Artifacts
@@ -163,7 +163,7 @@ Useful checkpoints while doing artifact work:
 ```bash
 go run . status --format yaml
 go run . validate --json
-go run . next --preview
+go run . next
 ```
 
 ### Step 3: Implement The Sample Change
@@ -186,7 +186,7 @@ Useful commands while implementing:
 rg -n '"validate-requirements"|requirements.md|read-only' cmd internal README.md
 go test ./cmd -run 'TestRootHelpUsesCurrentEntrySurfaceDescriptions|TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements' -count=1
 go run . status --format yaml
-go run . next --preview
+go run . next
 ```
 
 ### Step 4: Review, Validate, And Close Out
@@ -270,7 +270,7 @@ If you want one practical sequence instead of picking freely, use this order:
 
 ## Notes For Interpreting Results
 
-1. `status`, `validate`, and `next --preview` are the safest inspection tools
+1. `status`, `validate`, and `next` are the safest inspection tools
    because they are read-only.
 2. `review` and `done` are meaningful only when the workflow has reached the
    appropriate governed state.

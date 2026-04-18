@@ -466,12 +466,6 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 	}
 
 	workspaceRoot := invocationWorkspaceRoot(root)
-	activeTool := toolgen.ResolveWorkspaceTool(workspaceRoot)
-	detectedTools := toolgen.DetectExistingTools(workspaceRoot)
-	validateGeneratedSurface := slices.Contains(detectedTools, activeTool.ID) &&
-		strings.TrimSpace(activeTool.AgentStyle) != "" &&
-		strings.TrimSpace(activeTool.AgentsDir) != ""
-
 	validAgents := map[string]struct{}{}
 	missingTemplates := map[string]error{}
 	for _, name := range tmpl.AgentNames() {
@@ -513,49 +507,71 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 			continue
 		}
 	}
-	if !validateGeneratedSurface {
+
+	detectedToolIDs := toolgen.DetectExistingTools(workspaceRoot)
+	if len(detectedToolIDs) == 0 {
+		return findings
+	}
+	configByID := map[string]toolgen.ToolConfig{}
+	for _, cfg := range toolgen.Registry() {
+		configByID[cfg.ID] = cfg
+	}
+	activeTools := make([]toolgen.ToolConfig, 0, len(detectedToolIDs))
+	for _, id := range detectedToolIDs {
+		cfg, ok := configByID[id]
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(cfg.AgentStyle) == "" || strings.TrimSpace(cfg.AgentsDir) == "" {
+			continue
+		}
+		activeTools = append(activeTools, cfg)
+	}
+	if len(activeTools) == 0 {
 		return findings
 	}
 
-	for _, def := range registry {
-		agentName := strings.TrimSpace(def.AgentHint)
-		if agentName == "" {
-			continue
-		}
+	for _, activeTool := range activeTools {
+		for _, def := range registry {
+			agentName := strings.TrimSpace(def.AgentHint)
+			if agentName == "" {
+				continue
+			}
 
-		agentPath := toolgen.AgentPath(activeTool, agentName)
-		if strings.TrimSpace(agentPath) == "" {
-			continue
-		}
-		fullPath := filepath.Join(workspaceRoot, agentPath)
-		if _, err := os.Stat(fullPath); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
+			agentPath := toolgen.AgentPath(activeTool, agentName)
+			if strings.TrimSpace(agentPath) == "" {
+				continue
+			}
+			fullPath := filepath.Join(workspaceRoot, agentPath)
+			if _, err := os.Stat(fullPath); err == nil {
+				continue
+			} else if !errors.Is(err, os.ErrNotExist) {
+				findings = append(findings, state.HealthFinding{
+					Severity:   model.ReasonSeverityError,
+					Category:   "agent_contract",
+					Slug:       def.Name,
+					Message:    fmt.Sprintf("Governance skill %q points to unreadable generated agent file for %s", def.Name, activeTool.ID),
+					Repairable: false,
+					RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace, then retry.", activeTool.ID),
+					Reasons: []model.ReasonCode{
+						model.NewReasonCode("agent_generated_surface_unreadable", state.DisplayPath(workspaceRoot, fullPath)),
+					},
+				})
+				continue
+			}
+
 			findings = append(findings, state.HealthFinding{
 				Severity:   model.ReasonSeverityError,
 				Category:   "agent_contract",
 				Slug:       def.Name,
-				Message:    fmt.Sprintf("Governance skill %q points to unreadable generated agent file for %s", def.Name, activeTool.ID),
+				Message:    fmt.Sprintf("Governance skill %q points to missing generated agent file for %s", def.Name, activeTool.ID),
 				Repairable: false,
-				RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace, then retry.", activeTool.ID),
+				RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace.", activeTool.ID),
 				Reasons: []model.ReasonCode{
-					model.NewReasonCode("agent_generated_surface_unreadable", state.DisplayPath(workspaceRoot, fullPath)),
+					model.NewReasonCode("agent_generated_surface_missing", state.DisplayPath(workspaceRoot, fullPath)),
 				},
 			})
-			continue
 		}
-
-		findings = append(findings, state.HealthFinding{
-			Severity:   model.ReasonSeverityError,
-			Category:   "agent_contract",
-			Slug:       def.Name,
-			Message:    fmt.Sprintf("Governance skill %q points to missing generated agent file for %s", def.Name, activeTool.ID),
-			Repairable: false,
-			RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace.", activeTool.ID),
-			Reasons: []model.ReasonCode{
-				model.NewReasonCode("agent_generated_surface_missing", state.DisplayPath(workspaceRoot, fullPath)),
-			},
-		})
 	}
 	return findings
 }

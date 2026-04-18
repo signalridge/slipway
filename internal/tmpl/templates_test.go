@@ -285,8 +285,25 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
-	assert.Contains(t, content, "slipway next --json --preview --hook-lite")
-	assert.NotContains(t, content, "slipway next --preview --context-guard")
+	assert.Contains(t, content, "slipway next --json --hook-lite")
+	assert.Contains(t, content, `SLIPWAY_TOOL="claude" slipway`)
+	assert.NotContains(t, content, "--preview")
+}
+
+func TestRenderNextSkillTemplateUsesQueryOnlyContract(t *testing.T) {
+	t.Parallel()
+	data := map[string]string{
+		"ToolID":  "claude",
+		"Trigger": "/slipway:next",
+	}
+	content, err := Render("skills/next/SKILL.md.tmpl", data)
+	require.NoError(t, err, "failed to render skills/next/SKILL.md.tmpl")
+	assert.NotContains(t, content, "{{.", "next skill template has unrendered template vars")
+	assert.Contains(t, content, "query-only next-skill context")
+	assert.Contains(t, content, "This is the query surface for governed changes.")
+	assert.Contains(t, content, "Post-action progression check (`slipway run --json`).")
+	assert.NotContains(t, content, "single-step progression command")
+	assert.NotContains(t, content, "state progression context")
 }
 
 func TestContentReturnsAgentDefinitions(t *testing.T) {

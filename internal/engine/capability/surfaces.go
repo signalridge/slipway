@@ -32,25 +32,17 @@ type SurfaceRecord struct {
 // suggested/view cleanup.
 var surfacePolicy = []SurfaceRecord{
 	// §5.1 Primary routes — one per command surface.
+	// status and validate no longer have primary routes; their default output
+	// is neutral and state-focused. Expert posture is available via --focus.
 	{
 		Command: "review", Class: SurfacePrimary,
 		PublicName: "independent-review", BackingID: "independent-review",
 		Summary: "Stable default review contract with explicit verdict.",
 	},
 	{
-		Command: "validate", Class: SurfacePrimary,
-		PublicName: "spec-trace", BackingID: "spec-trace",
-		Summary: "Default code-to-artifact verification trace.",
-	},
-	{
 		Command: "repair", Class: SurfacePrimary,
 		PublicName: "root-cause-tracing", BackingID: "root-cause-tracing",
 		Summary: "Default repair posture: trace the root cause before fixing.",
-	},
-	{
-		Command: "status", Class: SurfacePrimary,
-		PublicName: "incident", BackingID: "incident-response",
-		Summary: "Change-scoped incident-response diagnostic view.",
 	},
 	{
 		Command: "health", Class: SurfacePrimary,
@@ -76,6 +68,11 @@ var surfacePolicy = []SurfaceRecord{
 		Command: "review", Class: SurfaceExplicitFocus,
 		PublicName: "sast", BackingID: "sast-orchestration",
 		Summary: "Run SAST tooling (CodeQL/Semgrep) with SARIF triage.",
+	},
+	{
+		Command: "validate", Class: SurfaceExplicitFocus,
+		PublicName: "spec-trace", BackingID: "spec-trace",
+		Summary: "Code-to-artifact verification trace.",
 	},
 	{
 		Command: "validate", Class: SurfaceExplicitFocus,

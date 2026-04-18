@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
+	"github.com/signalridge/slipway/internal/toolgen"
 )
 
 type FailureCategory string
@@ -143,6 +145,18 @@ func asCLIError(err error) *CLIError {
 	var typed *CLIError
 	if errors.As(err, &typed) {
 		return typed
+	}
+	var toolAmbiguity *toolgen.ToolAmbiguityError
+	if errors.As(err, &toolAmbiguity) {
+		detected := append([]string(nil), toolAmbiguity.DetectedAdapters...)
+		slices.Sort(detected)
+		return newPreconditionError(
+			"tool_ambiguity",
+			toolAmbiguity.Error(),
+			"Set `SLIPWAY_TOOL=<tool>` to select the adapter explicitly, for example `SLIPWAY_TOOL=codex slipway next --json`.",
+			"",
+			map[string]any{"detected_adapters": detected},
+		)
 	}
 
 	msg := strings.TrimSpace(err.Error())

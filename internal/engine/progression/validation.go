@@ -59,6 +59,10 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 		return result
 	}
 
+	// target_files enforcement is deferred to S1_PLAN/audit and later.
+	// Pre-audit drafts may begin with empty target_files.
+	enforceTargetFiles := isAtOrPastPlanAudit(change)
+
 	seen := map[string]struct{}{}
 	idSet := map[string]struct{}{}
 	dependencies := map[string][]string{}
@@ -87,17 +91,19 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_execution_missing_wave:%s", id))
 			allTasksDeclareWave = false
 		}
-		if len(task.TargetFiles) == 0 {
-			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
-		} else {
-			for _, file := range task.TargetFiles {
-				target := strings.TrimSpace(file)
-				if target == "" {
-					result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_invalid_target:%s", id))
-					continue
-				}
-				if filepath.IsAbs(target) || strings.Contains(target, "..") {
-					result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_out_of_bounds_target:%s:%s", id, target))
+		if enforceTargetFiles {
+			if len(task.TargetFiles) == 0 {
+				result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
+			} else {
+				for _, file := range task.TargetFiles {
+					target := strings.TrimSpace(file)
+					if target == "" {
+						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_invalid_target:%s", id))
+						continue
+					}
+					if filepath.IsAbs(target) || strings.Contains(target, "..") {
+						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_out_of_bounds_target:%s:%s", id, target))
+					}
 				}
 			}
 		}
@@ -258,6 +264,25 @@ func HasDependencyCycle(dependencies map[string][]string) bool {
 		}
 	}
 	return false
+}
+
+// isAtOrPastPlanAudit returns true when the change is at S1_PLAN/audit or
+// any later lifecycle position. Pre-audit states (S0_INTAKE, S1_PLAN/research,
+// S1_PLAN/bundle) return false.
+func isAtOrPastPlanAudit(change model.Change) bool {
+	switch change.CurrentState {
+	case model.StateS0Intake:
+		return false
+	case model.StateS1Plan:
+		switch change.PlanSubStep {
+		case model.PlanSubStepAudit, model.PlanSubStepValidate:
+			return true
+		default:
+			return false
+		}
+	default:
+		return true
+	}
 }
 
 // ShouldCheckGovernedBundle reports whether bundle blockers should be surfaced

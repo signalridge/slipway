@@ -10,19 +10,16 @@ surfaces and config-driven agent coordination.
 
 ## `next` Versus `run`
 
-| Surface | Contract | Writes state by default | Primary flags |
+| Surface | Contract | Writes state | Primary flags |
 |---|---|---|---|
-| `next` | Show readiness, advance one step if able, and surface the next skill | yes, unless `--preview` is used | `--json`, `--preview`, `--context-guard`, `--change` |
+| `next` | Query next actionable skill (read-only) | no | `--json`, `--context-guard`, `--change` |
 | `run` | Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced | yes | `--json`, `--resume`, `--resume-response`, `--change` |
 
 Design rules:
 
-- `next` owns decision visibility and single-step advancement.
-- `run` owns continuous execution control.
-- Execution mutation is no longer hidden behind `next --auto`.
-- Checkpoint continuation is no longer hidden behind `next --resume-response`.
-- `run` is a first-class adapter-visible product command, not a CLI-only
-  special case.
+- `next` is query-only: it answers "what is the next action?" and never mutates state.
+- `run` is the only explicit execution surface and owns all state advancement.
+- Checkpoint continuation is owned by `run --resume-response`.
 
 ## Flag Migration
 
@@ -30,7 +27,7 @@ Design rules:
 |---|---|---|
 | `slipway next --auto` | `slipway run` | continuous governed execution moved to `run` |
 | `slipway next --resume-response "<text>"` | `slipway run --resume-response "<text>"` | active checkpoint continuation moved to `run` |
-| `slipway next --preview` | unchanged | remains the read-only inspection mode |
+| `slipway next --preview` | `slipway next` | removed; `next` is now query-only by default |
 | `slipway next --context-guard` | unchanged | remains a `next` query surface |
 
 ## Resume Taxonomy

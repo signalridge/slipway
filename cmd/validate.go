@@ -187,6 +187,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	if err != nil {
 		return validateView{}, wrapGovernanceReadinessError("validate readiness", change.Slug, err)
 	}
+	readiness.GateEvaluations = defaultVisibleGateEvaluations(change, readiness.GateEvaluations)
 	blockers := append([]model.ReasonCode(nil), readiness.Blockers...)
 	diagnostics := append([]string{}, readiness.Diagnostics...)
 

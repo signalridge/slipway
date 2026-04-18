@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -21,7 +20,7 @@ import (
 func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "add caching layer")
 
@@ -47,7 +46,7 @@ func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "governance blocker preview")
 		change, err := state.LoadChange(root, slug)
@@ -58,7 +57,7 @@ func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -86,19 +85,19 @@ func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 		assert.False(t, foundResearch, "L2 change (NeedsDiscovery=false) should not trigger research control after simplification")
 
 		_, err = os.Stat(state.GovernanceSnapshotCachePath(root, slug))
-		assert.True(t, os.IsNotExist(err), "next --preview should not persist governance snapshots")
+		assert.True(t, os.IsNotExist(err), "next (query-only) should not persist governance snapshots")
 	})
 }
 
 func TestNextDoesNotPersistArtifactReconcile(t *testing.T) {
 	assertReadOnlyArtifactReconcileDoesNotPersist(
 		t,
-		"next preview read-only reconcile",
-		"fixed-hash-before-next-preview",
+		"next query-only read-only reconcile",
+		"fixed-hash-before-next-query",
 		func(out *bytes.Buffer) error {
 			cmd := makeNextCmd()
 			cmd.SetOut(out)
-			cmd.SetArgs([]string{"--json", "--preview"})
+			cmd.SetArgs([]string{"--json"})
 			return cmd.Execute()
 		},
 	)
@@ -107,7 +106,7 @@ func TestNextDoesNotPersistArtifactReconcile(t *testing.T) {
 func TestNextPreviewIgnoresUnreadableGovernanceSnapshot(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "recover from corrupt governance snapshot")
 		change, err := state.LoadChange(root, slug)
@@ -126,7 +125,7 @@ func TestNextPreviewIgnoresUnreadableGovernanceSnapshot(t *testing.T) {
 		))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -139,14 +138,14 @@ func TestNextPreviewIgnoresUnreadableGovernanceSnapshot(t *testing.T) {
 
 		raw, err := os.ReadFile(snapshotPath)
 		require.NoError(t, err)
-		assert.Equal(t, "version: [", string(raw), "next --preview should not repair or rewrite snapshot cache")
+		assert.Equal(t, "version: [", string(raw), "next (query-only) should not repair or rewrite snapshot cache")
 	})
 }
 
 func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "preview should expose plan recovery state")
 		change, err := state.LoadChange(root, slug)
@@ -157,7 +156,7 @@ func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -172,7 +171,7 @@ func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "light preset autopass")
 		change, err := state.LoadChange(root, slug)
@@ -206,7 +205,7 @@ func TestNextAutoPassesReviewAndVerifyForLightPreset(t *testing.T) {
 func TestNextJSONAutoPassesByDefault(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "light preset json autopass advisory")
 		change, err := state.LoadChange(root, slug)
@@ -221,18 +220,11 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		var buf bytes.Buffer
-		cmd := makeNextCmd()
-		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		// Advancement is tested via buildNextView with preview=false (run path).
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
-		// After Wave 1.1, only S4_VERIFY is auto-passed; S3_REVIEW advances
-		// through normal gate evaluation.
 		require.Len(t, view.Advanced.AutoPassedStates, 1)
 		assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
 		assert.Empty(t, view.AutoPassEligible)
@@ -248,7 +240,7 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "light preset explicit no-auto-pass advisory")
 		change, err := state.LoadChange(root, slug)
@@ -263,14 +255,10 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		var buf bytes.Buffer
-		cmd := makeNextCmd()
-		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--no-auto-pass", "--change", slug})
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		// Advancement with no-auto-pass is tested via buildNextView (run path).
+		// autoSkipEvidence=false mirrors the original --json path.
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, false, true)
+		require.NoError(t, err)
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "advanced", view.Advanced.Action)
 		assert.Empty(t, view.Advanced.AutoPassedStates)
@@ -289,7 +277,7 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "light preset review still requires execution authority")
 		change, err := state.LoadChange(root, slug)
@@ -309,7 +297,7 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS3Review, view.CurrentState)
 		if view.Advanced != nil {
-			assert.Equal(t, "blocked", view.Advanced.Action, "review auto-pass must not bypass missing execution summary")
+			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing execution-summary blockers")
 		}
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
@@ -319,7 +307,7 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "verify auto-pass still requires goal verification")
 		change, err := state.LoadChange(root, slug)
@@ -352,7 +340,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS4Verify, view.CurrentState)
 		if view.Advanced != nil {
-			assert.Equal(t, "blocked", view.Advanced.Action, "verify auto-pass must not bypass missing goal-verification evidence")
+			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing goal-verification evidence")
 		}
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
@@ -362,7 +350,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "strict preset review")
 		change, err := state.LoadChange(root, slug)
@@ -406,59 +394,10 @@ func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	assert.Contains(t, buf.String(), "Planning Note: This is a recovery-only planning state entered after post-audit machine validation failed.")
 }
 
-func TestValidateNextFlags(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		preview      bool
-		contextGuard bool
-		hookLite     bool
-		wantMessage  string
-	}{
-		{
-			name:         "context guard requires preview",
-			contextGuard: true,
-			wantMessage:  "--context-guard requires --preview",
-		},
-		{
-			name:         "context guard with preview is valid",
-			preview:      true,
-			contextGuard: true,
-		},
-		{
-			name:        "hook-lite requires preview",
-			hookLite:    true,
-			wantMessage: "--hook-lite requires --preview",
-		},
-		{
-			name:     "hook-lite with preview is valid",
-			preview:  true,
-			hookLite: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateNextFlags(tt.preview, tt.contextGuard, tt.hookLite)
-			if tt.wantMessage == "" {
-				require.NoError(t, err)
-				return
-			}
-
-			require.Error(t, err)
-			var cliErr *CLIError
-			require.ErrorAs(t, err, &cliErr)
-			assert.Equal(t, "flag_conflict", cliErr.ErrorCode)
-			assert.Equal(t, tt.wantMessage, cliErr.Message)
-		})
-	}
-}
-
 func TestNextIncludesAgentHint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test agent hint")
 		change, err := state.LoadChange(root, slug)
@@ -487,7 +426,7 @@ func TestNextIncludesAgentHint(t *testing.T) {
 func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service module")
 		change, err := state.LoadChange(root, slug)
@@ -529,7 +468,7 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "json evidence status surface")
 		change, err := state.LoadChange(root, slug)
@@ -549,7 +488,7 @@ func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -574,7 +513,7 @@ func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 func TestNextNoReviewContextForNonReviewState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "add pagination")
 		change, err := state.LoadChange(root, slug)
@@ -603,7 +542,7 @@ func TestNextNoReviewContextForNonReviewState(t *testing.T) {
 func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "reuse precomputed next evidence")
 		change, err := state.LoadChange(root, slug)
@@ -650,7 +589,7 @@ func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
 func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test gplan blocking")
 		change, err := state.LoadChange(root, slug)
@@ -661,14 +600,9 @@ func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepAudit
 		require.NoError(t, state.SaveChange(root, change))
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		// Advancement blocking is tested via buildNextView (run path).
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "blocked", view.Advanced.Action)
@@ -682,8 +616,8 @@ func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 func TestShouldExposeAdvancedSummaryToCaller(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
-		Action: "preview",
+	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
+		Action: "query",
 	}))
 	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
 		Action:    "blocked",
@@ -705,7 +639,7 @@ func TestShouldExposeAdvancedSummaryToCaller(t *testing.T) {
 func TestNextPreviewFailsWhenSkillEvidenceEvaluationFails(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review malformed skill registry handling")
 		change, err := state.LoadChange(root, slug)
@@ -725,7 +659,7 @@ description: [
 `)), 0o644))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 
@@ -744,7 +678,7 @@ description: [
 func TestNextAdvancesWithPlanAuditEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test gplan passing")
 		change, err := state.LoadChange(root, slug)
@@ -778,14 +712,8 @@ REQ-001: The plan audit path must advance only when the task checklist is valid.
 			Timestamp: time.Now().UTC(),
 		})
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "advanced", view.Advanced.Action)
@@ -802,7 +730,7 @@ REQ-001: The plan audit path must advance only when the task checklist is valid.
 func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test bundle missing")
 		change, err := state.LoadChange(root, slug)
@@ -829,14 +757,8 @@ func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 			Timestamp: time.Now().UTC(),
 		})
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
 		// Bundle precondition blocks before the audit->validate recovery path.
 		require.NotNil(t, view.Advanced)
@@ -852,7 +774,7 @@ func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "bundle invalid bound worktree")
@@ -866,14 +788,9 @@ func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 		change.WorktreeBranch = currentGitBranch(t, root)
 		require.NoError(t, state.SaveChange(root, change))
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "blocked", view.Advanced.Action)
 		assert.Nil(t, view.NextSkill)
@@ -884,7 +801,7 @@ func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 func TestNextBlocksWhenTasksChecklistMissingTargetFiles(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "tasks checklist validation")
 		change, err := state.LoadChange(root, slug)
@@ -930,7 +847,7 @@ func TestNextBlocksWhenTasksChecklistMissingTargetFiles(t *testing.T) {
 func TestNextBlocksWhenTasksChecklistHasDependencyCycle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "tasks checklist dependency cycle")
 		change, err := state.LoadChange(root, slug)
@@ -980,7 +897,7 @@ func TestNextBlocksWhenTasksChecklistHasDependencyCycle(t *testing.T) {
 func TestNextPreviewIncludesTaskChecklistBlockers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "preview tasks checklist blockers")
 		change, err := state.LoadChange(root, slug)
@@ -1007,7 +924,7 @@ REQ-001: The system must authenticate requests.
 `), 0o644))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1021,7 +938,7 @@ REQ-001: The system must authenticate requests.
 func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "preview assurance contract blocker")
 		change, err := state.LoadChange(root, slug)
@@ -1033,7 +950,7 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 		writeAssuranceMD(t, root, slug, "## Scope Summary\nIncomplete\n")
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1047,7 +964,7 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		_ = createGovernedRequest(t, root, "L2", "test no checkpoint")
 
@@ -1069,7 +986,7 @@ func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "done ready contract")
 		change, err := state.LoadChange(root, slug)
@@ -1092,16 +1009,10 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-
-		require.NotNilf(t, view.Advanced, "raw next output: %s", buf.String())
+		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
 		assert.Equal(t, model.StateS4Verify, view.CurrentState)
 		assert.Nil(t, view.NextSkill)
@@ -1113,7 +1024,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPath(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "standard request done ready contract")
 		change, err := state.LoadChange(root, slug)
@@ -1135,16 +1046,10 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-
-		require.NotNilf(t, view.Advanced, "raw next output: %s", buf.String())
+		require.NotNil(t, view.Advanced)
 		assert.Equal(t, "done_ready", view.Advanced.Action)
 		assert.Equal(t, model.StateS4Verify, view.CurrentState)
 		assert.Nil(t, view.NextSkill)
@@ -1156,7 +1061,7 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "hook-lite done ready contract")
 		change, err := state.LoadChange(root, slug)
@@ -1178,7 +1083,7 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		previewCmd := makeNextCmd()
-		previewCmd.SetArgs([]string{"--json", "--preview"})
+		previewCmd.SetArgs([]string{"--json"})
 		var previewBuf bytes.Buffer
 		previewCmd.SetOut(&previewBuf)
 		require.NoError(t, previewCmd.Execute())
@@ -1187,7 +1092,7 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 		require.NoError(t, json.Unmarshal(previewBuf.Bytes(), &previewView))
 
 		hookLiteCmd := makeNextCmd()
-		hookLiteCmd.SetArgs([]string{"--json", "--preview", "--hook-lite"})
+		hookLiteCmd.SetArgs([]string{"--json", "--hook-lite"})
 		var hookLiteBuf bytes.Buffer
 		hookLiteCmd.SetOut(&hookLiteBuf)
 		require.NoError(t, hookLiteCmd.Execute())
@@ -1216,7 +1121,7 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test checkpoint requires response")
 		change, err := state.LoadChange(root, slug)
@@ -1245,7 +1150,7 @@ func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort without wave-backed state should not require resume")
 		change, err := state.LoadChange(root, slug)
@@ -1276,7 +1181,7 @@ func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
 func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort with wave-backed state should require resume")
 		change, err := state.LoadChange(root, slug)
@@ -1336,7 +1241,7 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test checkpoint resume")
 		change, err := state.LoadChange(root, slug)
@@ -1393,7 +1298,7 @@ func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when wave artifacts are missing")
 		change, err := state.LoadChange(root, slug)
@@ -1444,7 +1349,7 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 func TestRunRejectsResumeResponseWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when pre-summary wave plan is missing")
 		change, err := state.LoadChange(root, slug)
@@ -1482,7 +1387,7 @@ func TestRunRejectsResumeResponseWhenWavePlanIsMissingBeforeExecutionSummaryRead
 func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should fail closed when checkpoint wave artifacts are missing")
 		change, err := state.LoadChange(root, slug)
@@ -1533,7 +1438,7 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should fail closed when pre-summary checkpoint wave plan is missing")
 		change, err := state.LoadChange(root, slug)
@@ -1571,7 +1476,7 @@ func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummary
 func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "run resume should fail closed when wave evidence is incomplete")
 		change, err := state.LoadChange(root, slug)
@@ -1624,7 +1529,7 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test allowed responses")
 		change, err := state.LoadChange(root, slug)
@@ -1789,7 +1694,7 @@ func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
 func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "test freshness in checkpoint")
 		change, err := state.LoadChange(root, slug)
@@ -1830,7 +1735,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "bundle checklist resume")
 		change, err := state.LoadChange(root, slug)
@@ -1861,7 +1766,7 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 `)))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1877,7 +1782,7 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "bundle checkpoint without skip-safe tasks")
 		change, err := state.LoadChange(root, slug)
@@ -1908,7 +1813,7 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 `)))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1923,7 +1828,7 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "wave plan protocol version")
 		change, err := state.LoadChange(root, slug)
@@ -1945,7 +1850,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		require.NoError(t, err)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1981,7 +1886,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "authoritative wave plan should win during execution")
 		change, err := state.LoadChange(root, slug)
@@ -2011,7 +1916,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 `)))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2045,7 +1950,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "preview checkpoint bundle")
 		change, err := state.LoadChange(root, slug)
@@ -2091,7 +1996,7 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2116,7 +2021,7 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should inspect active checkpoint without resume response")
 		change, err := state.LoadChange(root, slug)
@@ -2172,7 +2077,7 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "freshness stale after input update")
 		change, err := state.LoadChange(root, slug)
@@ -2232,7 +2137,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2247,7 +2152,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "passing research verification should advance to next skill")
@@ -2271,7 +2176,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -2378,7 +2283,7 @@ func TestCheckGovernedBundleReadyRejectsMissingDesignDependency(t *testing.T) {
 func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "preview should be read-only")
 
 		changeBefore, err := state.LoadChange(root, slug)
@@ -2386,16 +2291,15 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 		require.Equal(t, model.StateS1Plan, changeBefore.CurrentState)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		if view.Advanced != nil {
-			assert.NotEqual(t, "advanced", view.Advanced.Action, "preview must not advance state")
-		}
+		require.NotNil(t, view.Advanced)
+		assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must surface the read-only action explicitly")
 
 		changeAfter, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -2406,7 +2310,7 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "preview should expose artifact amendments without persisting")
 
 		change, err := state.LoadChange(root, slug)
@@ -2432,7 +2336,7 @@ func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testi
 		require.NoError(t, os.WriteFile(intentPath, []byte("# Intent\nAmended content\n"), 0o644))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2454,7 +2358,7 @@ func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testi
 func TestRunIncludesTransitionTrace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "run transition trace")
 
 		// createGovernedRequest runs request + one next, leaving governed lane at S1.
@@ -2487,7 +2391,7 @@ func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		t.Setenv("SPECLANE_CONTEXT_WINDOW_TOKENS", "1")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "context hard stop")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -2496,7 +2400,7 @@ func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2519,7 +2423,7 @@ func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "document diagnostics warning")
 
 		change, err := state.LoadChange(root, slug)
@@ -2530,7 +2434,7 @@ func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2545,7 +2449,7 @@ func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "materialize run summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -2579,11 +2483,8 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 		_, err = state.MaterializeWavePlan(root, change)
 		require.NoError(t, err)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		_, err = buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
 		summary, err := state.LoadExecutionSummary(root, slug)
 		require.NoError(t, err)
@@ -2598,7 +2499,7 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -2613,14 +2514,9 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 			RunVersion: 1,
 		})
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:rv1")
 		assert.Equal(t, model.StateS2Execute, view.CurrentState)
 	})

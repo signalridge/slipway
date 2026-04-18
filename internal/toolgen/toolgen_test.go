@@ -129,8 +129,8 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 5, core, "expected 5 core commands")
 	assert.Equal(t, 10, sit, "expected 10 situational commands")
 	assert.Equal(t, 3, diag, "expected 3 diagnostics commands")
-	assert.Equal(t, 5, query, "expected 5 query commands")
-	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
+	assert.Equal(t, 6, query, "expected 6 query commands")
+	assert.Equal(t, 12, mutation, "expected 12 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
 	ids := commandIDs()
@@ -202,41 +202,45 @@ func TestResolveWorkspaceTool(t *testing.T) {
 		writeGeneratedAdapterMarker(t, root, toolRegistry["codex"])
 		setSlipwayToolEnv(t, "codex")
 
-		cfg := ResolveWorkspaceTool(root)
+		cfg, err := ResolveWorkspaceTool(root)
+		require.NoError(t, err)
 		assert.Equal(t, "codex", cfg.ID)
 	})
 
-	t.Run("env override falls back to automatic selection when adapter missing", func(t *testing.T) {
+	t.Run("env override with missing adapter returns error", func(t *testing.T) {
 		root := t.TempDir()
 		writeGeneratedAdapterMarker(t, root, toolRegistry["cursor"])
 		setSlipwayToolEnv(t, "gemini")
 
-		cfg := ResolveWorkspaceTool(root)
-		assert.Equal(t, "cursor", cfg.ID)
+		_, err := ResolveWorkspaceTool(root)
+		assert.Error(t, err)
 	})
 
 	t.Run("single generated adapter wins", func(t *testing.T) {
 		root := t.TempDir()
 		writeGeneratedAdapterMarker(t, root, toolRegistry["gemini"])
 
-		cfg := ResolveWorkspaceTool(root)
+		cfg, err := ResolveWorkspaceTool(root)
+		require.NoError(t, err)
 		assert.Equal(t, "gemini", cfg.ID)
 	})
 
-	t.Run("multiple generated adapters use registry order", func(t *testing.T) {
+	t.Run("multiple generated adapters returns ambiguity error", func(t *testing.T) {
 		root := t.TempDir()
 		writeGeneratedAdapterMarker(t, root, toolRegistry["gemini"])
 		writeGeneratedAdapterMarker(t, root, toolRegistry["codex"])
 
-		cfg := ResolveWorkspaceTool(root)
-		assert.Equal(t, "codex", cfg.ID)
+		_, err := ResolveWorkspaceTool(root)
+		var ambErr *ToolAmbiguityError
+		require.ErrorAs(t, err, &ambErr)
+		assert.ElementsMatch(t, []string{"codex", "gemini"}, ambErr.DetectedAdapters)
 	})
 
-	t.Run("no generated adapters falls back to claude", func(t *testing.T) {
+	t.Run("no generated adapters returns error", func(t *testing.T) {
 		root := t.TempDir()
 
-		cfg := ResolveWorkspaceTool(root)
-		assert.Equal(t, "claude", cfg.ID)
+		_, err := ResolveWorkspaceTool(root)
+		assert.Error(t, err)
 	})
 }
 

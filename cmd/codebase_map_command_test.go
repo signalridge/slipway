@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +14,7 @@ import (
 func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeCodebaseMapCmd()

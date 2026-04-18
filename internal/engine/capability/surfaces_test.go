@@ -17,7 +17,6 @@ func TestPrimarySurfaceForCommand(t *testing.T) {
 		backingID  string
 	}{
 		{command: "review", publicName: "independent-review", backingID: "independent-review"},
-		{command: "validate", publicName: "spec-trace", backingID: "spec-trace"},
 		{command: "repair", publicName: "root-cause-tracing", backingID: "root-cause-tracing"},
 	}
 
@@ -36,17 +35,25 @@ func TestPrimarySurfaceForCommand(t *testing.T) {
 func TestChangeScopedPrimaryViewForCommand(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"status", "health"} {
-		command := command
-		t.Run(command, func(t *testing.T) {
-			rec, ok := PrimaryForCommand(command)
-			require.True(t, ok, "expected primary view for %s", command)
-			assert.Equal(t, "incident", rec.PublicName)
-			assert.Equal(t, "incident-response", rec.BackingID)
-			assert.Equal(t, SurfacePrimary, rec.Class)
-			assert.Contains(t, rec.Summary, "Change-scoped")
-		})
-	}
+	// health retains its primary route; status no longer has one.
+	t.Run("health", func(t *testing.T) {
+		rec, ok := PrimaryForCommand("health")
+		require.True(t, ok, "expected primary view for health")
+		assert.Equal(t, "incident", rec.PublicName)
+		assert.Equal(t, "incident-response", rec.BackingID)
+		assert.Equal(t, SurfacePrimary, rec.Class)
+		assert.Contains(t, rec.Summary, "Change-scoped")
+	})
+
+	t.Run("status_no_primary", func(t *testing.T) {
+		_, ok := PrimaryForCommand("status")
+		assert.False(t, ok, "status must not have a primary route")
+	})
+
+	t.Run("validate_no_primary", func(t *testing.T) {
+		_, ok := PrimaryForCommand("validate")
+		assert.False(t, ok, "validate must not have a primary route")
+	})
 }
 
 func TestExplicitFocusRegistryPerCommand(t *testing.T) {
@@ -57,7 +64,7 @@ func TestExplicitFocusRegistryPerCommand(t *testing.T) {
 		want    []string
 	}{
 		{command: "review", want: []string{"calibration", "sast"}},
-		{command: "validate", want: []string{"mutation", "property", "sast"}},
+		{command: "validate", want: []string{"mutation", "property", "sast", "spec-trace"}},
 		{command: "repair", want: []string{"sast"}},
 	}
 

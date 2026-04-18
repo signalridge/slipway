@@ -18,7 +18,7 @@ import (
 func TestExecuteGovernedEntryDoesNotShortCircuitToAdvisory(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		stdout, _, err := runRootCommand([]string{"new", "how do i set this up?"})
 		require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestExecuteGovernedEntryDoesNotShortCircuitToAdvisory(t *testing.T) {
 func TestExecuteFailureEnvelopeInvalidUsage(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// pivot with an unknown flag triggers invalid usage
 		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
@@ -57,7 +57,7 @@ func TestExecuteFailureEnvelopeInvalidUsage(t *testing.T) {
 func TestExecuteFailureEnvelopeStateIntegrityForCorruptConfig(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("defaults: ["), 0o644))
@@ -75,7 +75,7 @@ func TestExecuteFailureEnvelopeStateIntegrityForCorruptConfig(t *testing.T) {
 func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkill(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review malformed governance skill")
 		change, err := state.LoadChange(root, slug)
@@ -88,7 +88,7 @@ func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkill(t *test
 		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
 		require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: code-quality-review\ndescription: [\n---\n"), 0o644))
 
-		_, stderr, err := runRootCommand([]string{"next", "--json", "--preview"})
+		_, stderr, err := runRootCommand([]string{"next", "--json"})
 		require.Error(t, err)
 
 		var payload CLIError
@@ -107,7 +107,7 @@ func assertMalformedGovernanceSkillCommandFailsStateIntegrity(t *testing.T, comm
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", description)
 		change, err := state.LoadChange(root, slug)
@@ -165,10 +165,42 @@ func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkillStateCom
 	}
 }
 
+func TestExecuteFailureEnvelopeToolAmbiguityForNextJSON(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
+
+		slug := createGovernedRequest(t, root, "L2", "next json ambiguity contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepAudit
+		require.NoError(t, state.SaveChange(root, change))
+
+		_, stderr, err := runRootCommand([]string{"next", "--json"})
+		require.Error(t, err)
+
+		var payload CLIError
+		require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
+		assert.Equal(t, categoryPrecondition, payload.Category)
+		assert.Equal(t, exitCodePrecondition, payload.ExitCode)
+		assert.Equal(t, "tool_ambiguity", payload.ErrorCode)
+		assert.Contains(t, payload.Remediation, "SLIPWAY_TOOL=<tool>")
+
+		rawDetected, ok := payload.Details["detected_adapters"].([]any)
+		require.True(t, ok, "detected_adapters must be a JSON array")
+		detected := make([]string, 0, len(rawDetected))
+		for _, item := range rawDetected {
+			detected = append(detected, item.(string))
+		}
+		assert.ElementsMatch(t, []string{"claude", "codex"}, detected)
+	})
+}
+
 func TestExecuteFailureEnvelopeGovernanceBlocked(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
 		require.NoError(t, err)
 
@@ -184,7 +216,7 @@ func TestExecuteFailureEnvelopeGovernanceBlocked(t *testing.T) {
 func TestExecuteFailureEnvelopeUnknownHelpTopic(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		_, stderr, err := runRootCommand([]string{"help", "help"})
 		require.Error(t, err)
@@ -199,7 +231,7 @@ func TestExecuteFailureEnvelopeUnknownHelpTopic(t *testing.T) {
 func TestExecuteFailureEnvelopeStateLockTimeout(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_, _, err := runRootCommand([]string{"new", "fix login timeout"})
 		require.NoError(t, err)
 

@@ -9,6 +9,8 @@ import (
 )
 
 func TestValidateFocus_EmptyAllowed(t *testing.T) {
+	t.Parallel()
+
 	for _, cmd := range []string{"review", "validate", "repair"} {
 		if err := validateFocus(cmd, ""); err != nil {
 			t.Fatalf("%s: empty focus should be allowed: %v", cmd, err)
@@ -17,6 +19,8 @@ func TestValidateFocus_EmptyAllowed(t *testing.T) {
 }
 
 func TestValidateFocus_AcceptsPublicAliases(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		command string
 		alias   string
@@ -36,6 +40,8 @@ func TestValidateFocus_AcceptsPublicAliases(t *testing.T) {
 }
 
 func TestValidateFocus_RejectsPrimaryName(t *testing.T) {
+	t.Parallel()
+
 	// The primary route "independent-review" is NOT an explicit focus alias.
 	err := validateFocus("review", "independent-review")
 	if err == nil {
@@ -48,6 +54,8 @@ func TestValidateFocus_RejectsPrimaryName(t *testing.T) {
 }
 
 func TestValidateFocus_RejectsLegacySecondOpinion(t *testing.T) {
+	t.Parallel()
+
 	err := validateFocus("review", "second-opinion")
 	if err == nil {
 		t.Fatal("expected rejection for legacy `second-opinion`")
@@ -59,6 +67,8 @@ func TestValidateFocus_RejectsLegacySecondOpinion(t *testing.T) {
 }
 
 func TestValidateFocus_RejectsUnknownWithRemediation(t *testing.T) {
+	t.Parallel()
+
 	for _, cmd := range []string{"review", "validate", "repair"} {
 		err := validateFocus(cmd, "does-not-exist")
 		if err == nil {
@@ -79,6 +89,8 @@ func TestValidateFocus_RejectsUnknownWithRemediation(t *testing.T) {
 
 func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 	t.Run("explicit alias wins and returns public name", func(t *testing.T) {
+		t.Parallel()
+
 		got := resolveEffectiveFocus("review", "sast")
 		if got != "sast" {
 			t.Fatalf("expected public alias `sast`, got %q", got)
@@ -86,6 +98,8 @@ func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 	})
 
 	t.Run("empty explicit falls back to resolver primary", func(t *testing.T) {
+		t.Parallel()
+
 		got := resolveEffectiveFocus("review", "")
 		if got == "" {
 			t.Fatal("expected resolver-selected review mode")
@@ -97,6 +111,8 @@ func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 	})
 
 	t.Run("unknown command falls back to empty", func(t *testing.T) {
+		t.Parallel()
+
 		got := resolveEffectiveFocus("next", "")
 		if got != "" {
 			t.Fatalf("expected empty fallback, got %q", got)
@@ -105,6 +121,8 @@ func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 }
 
 func TestResolveEffectiveFocusHydrate_ExplicitAliasShortCircuits(t *testing.T) {
+	t.Parallel()
+
 	// `sast` focus is backed by sast-orchestration.
 	got := resolveEffectiveFocusHydrate("validate", "sast")
 	if len(got) == 0 {
@@ -121,6 +139,8 @@ func TestResolveEffectiveFocusHydrate_ExplicitAliasShortCircuits(t *testing.T) {
 }
 
 func TestResolveEffectiveFocusHydrate_EmptyFallsBackToResolver(t *testing.T) {
+	t.Parallel()
+
 	got := resolveEffectiveFocusHydrate("review", "")
 	want := capability.Resolve(capability.DefaultRegistry(), capability.Signals{Command: "review"}).HydrateReferences
 	if !equalStrings(got, want) {
@@ -129,6 +149,8 @@ func TestResolveEffectiveFocusHydrate_EmptyFallsBackToResolver(t *testing.T) {
 }
 
 func TestResolveEffectiveFocusHydrate_UnknownAliasReturnsNil(t *testing.T) {
+	t.Parallel()
+
 	got := resolveEffectiveFocusHydrate("review", "does-not-exist")
 	if got != nil {
 		t.Fatalf("expected nil for unknown focus, got %v", got)

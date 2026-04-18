@@ -24,7 +24,7 @@ func TestNextIncludesDurableCodebaseMapPathsForGovernedRequests(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -42,7 +42,7 @@ func TestNextIncludesDurableCodebaseMapPathsForGovernedRequests(t *testing.T) {
 func TestBuildNextContextFallsBackToProjectRootWithoutWorktreeBinding(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("discovery-no-worktree")
 		change.Description = "discovery change without bound worktree"
@@ -67,7 +67,7 @@ func TestBuildNextContextFallsBackToProjectRootWithoutWorktreeBinding(t *testing
 func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "gate status warning on malformed verification")
 		verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
@@ -86,7 +86,7 @@ func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "repo-scoped codebase map in worktree")
@@ -130,7 +130,7 @@ func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
 func TestBuildNextContextIncludesSelectedArchivedDependencyContext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		archived := model.NewChange("baseline-auth")
 		archived.CurrentState = model.StateS4Verify

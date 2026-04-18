@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -19,7 +18,7 @@ import (
 func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats view should summarize workflow state")
 		change, err := state.LoadChange(root, slug)
@@ -46,7 +45,7 @@ func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
 func TestStatsUsesExecutionSummaryForFrozenEvidenceFreshness(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := "stats-execution-summary"
 		change := model.NewChange(slug)
@@ -106,7 +105,7 @@ REQ-001: Stats must treat execution-summary.yaml as the frozen execution evidenc
 func TestStatsDoesNotTreatMissingReviewEvidenceAsStaleRunSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats should separate stale execution evidence from missing review evidence")
 		change, err := state.LoadChange(root, slug)
@@ -129,7 +128,7 @@ func TestStatsDoesNotTreatMissingReviewEvidenceAsStaleRunSummary(t *testing.T) {
 func TestStatsMarksStaleRunSummaryWhenExecutionEvidenceDrifts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats should still report stale execution evidence")
 		change, err := state.LoadChange(root, slug)
@@ -156,7 +155,7 @@ func TestStatsMarksStaleRunSummaryWhenExecutionEvidenceDrifts(t *testing.T) {
 func TestStatsIgnoresBrokenExecutionSummaryOutsideExecutionStates(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats should ignore irrelevant broken summary")
 		change, err := state.LoadChange(root, slug)
@@ -179,7 +178,7 @@ func TestStatsIgnoresBrokenExecutionSummaryOutsideExecutionStates(t *testing.T) 
 func TestStatsReportsBrokenExecutionSummaryInExecutionStatesWithoutFailing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats should degrade when execution summary is corrupt")
 		change, err := state.LoadChange(root, slug)
@@ -204,7 +203,7 @@ func TestStatsReportsBrokenExecutionSummaryInExecutionStatesWithoutFailing(t *te
 func TestStatsIncludesHiddenBoundWorktreeChanges(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "stats should not lose hidden bound worktree changes")
@@ -240,7 +239,7 @@ func TestStatsIncludesHiddenBoundWorktreeChanges(t *testing.T) {
 func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "stats should still see hidden siblings and archived owners")
@@ -282,7 +281,7 @@ func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing
 func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshness(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "stats should keep hidden worktree closeout freshness authoritative")

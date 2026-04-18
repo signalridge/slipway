@@ -11,11 +11,15 @@ import (
 )
 
 func TestMapProgressionError_PassesThroughUnknownError(t *testing.T) {
+	t.Parallel()
+
 	original := errors.New("task_evidence_invalid: rv1/task-a.json")
 	assert.Same(t, original, mapProgressionError(original, "req-1"))
 }
 
 func TestMapProgressionError_NoNextState(t *testing.T) {
+	t.Parallel()
+
 	err := mapProgressionError(fmt.Errorf("%w: no next state from S7 at level L2", progression.ErrNoNextState), "req-2")
 	cliErr := asCLIError(err)
 	require.NotNil(t, cliErr)
@@ -25,6 +29,8 @@ func TestMapProgressionError_NoNextState(t *testing.T) {
 }
 
 func TestMapProgressionError_GateBlocked(t *testing.T) {
+	t.Parallel()
+
 	err := mapProgressionError(fmt.Errorf("%w: approval still pending", progression.ErrGateBlocked), "req-3")
 	cliErr := asCLIError(err)
 	require.NotNil(t, cliErr)
@@ -35,6 +41,8 @@ func TestMapProgressionError_GateBlocked(t *testing.T) {
 }
 
 func TestTryAdvanceRejectsInvalidSlug(t *testing.T) {
+	t.Parallel()
+
 	// tryAdvance now takes changeRef{Slug}; passing an invalid slug
 	// should fail because there's no matching change state file.
 	_, err := tryAdvance(t.TempDir(), changeRef{

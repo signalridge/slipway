@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +15,7 @@ import (
 func TestValidateRequirementsCommandValidatesRequirements(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "sync requirements")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -65,7 +64,7 @@ func runValidateRequirementsCommand(t *testing.T, slug string) validateRequireme
 func TestValidateRequirementsCommandMissingRequirementsReportsFailure(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "sync no requirements")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -121,7 +120,7 @@ Auth MUST remain deterministic.
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			withWorkspace(t, root, func() {
-				require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+				initTestWorkspace(t, root)
 
 				slug := createGovernedRequest(t, root, "L2", tt.description)
 				change, err := state.LoadChange(root, slug)
@@ -142,7 +141,7 @@ Auth MUST remain deterministic.
 func TestValidateRequirementsCommandAcceptsAllGovernedChanges(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_ = createActiveNonDiscoveryChange(t, root, "simple governed task")
 
 		cmd := makeValidateRequirementsCmd()
@@ -161,7 +160,7 @@ func TestValidateRequirementsCommandAcceptsAllGovernedChanges(t *testing.T) {
 func TestValidateRequirementsCommandUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "sync l3 worktree")
 		change, err := state.LoadChange(root, slug)

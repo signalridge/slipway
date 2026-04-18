@@ -22,7 +22,7 @@ import (
 func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("defaults: ["), 0o644))
 
 		var out bytes.Buffer
@@ -49,7 +49,7 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should surface wave repair")
 		change, err := state.LoadChange(root, slug)
@@ -84,7 +84,7 @@ func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 func TestHealthCommandDoctorUsesCommandSpecificRepairHint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
@@ -112,7 +112,7 @@ func TestHealthCommandDoctorUsesCommandSpecificRepairHint(t *testing.T) {
 func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRepair(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before wave repair")
 		change, err := state.LoadChange(root, slug)
@@ -169,7 +169,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRepair(t *testing.T) {
 func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before pre-summary wave plan repair")
 		change, err := state.LoadChange(root, slug)
@@ -208,7 +208,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 func TestHealthCommandDoctorExplainsNoActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
@@ -239,7 +239,7 @@ func TestHealthCommandDoctorExplainsNoActiveChange(t *testing.T) {
 func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should explain interrupted execution")
 		change, err := state.LoadChange(root, slug)
@@ -295,7 +295,7 @@ func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
 func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should not auto-repair drifted wave state")
 		change, err := state.LoadChange(root, slug)
@@ -356,7 +356,7 @@ func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health should promote repairable execution summary finding")
 		change, err := state.LoadChange(root, slug)
@@ -397,7 +397,7 @@ func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceE
 func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should surface pivot for wave drift")
 		change, err := state.LoadChange(root, slug)
@@ -455,7 +455,7 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 func TestHealthCommandDoctorIncludesUnreadableLegacySidecarRepair(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should include unreadable legacy sidecar repair")
 		change, err := state.LoadChange(root, slug)
@@ -501,7 +501,7 @@ func TestHealthCommandDoctorIncludesUnreadableLegacySidecarRepair(t *testing.T) 
 func TestHealthCommandReportsInvalidAgentMapping(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
 		cfg.Agents.Mappings = map[string]string{}
@@ -536,7 +536,7 @@ func TestHealthCommandReportsInvalidAgentMapping(t *testing.T) {
 func TestHealthCommandRejectsManualOnlyAgentMapping(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
 		cfg.Agents.Mappings = map[string]string{}
@@ -603,10 +603,67 @@ func TestHealthCommandReportsMissingGeneratedAgentSurface(t *testing.T) {
 	})
 }
 
+func TestHealthCommandDoesNotReportToolResolutionFailureForMultiAdapterWorkspace(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
+
+		slug := createGovernedRequest(t, root, "L2", "health should stay query-only in multi-adapter workspace")
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		for _, finding := range view.Findings {
+			assert.NotEqual(t, "Tool adapter resolution failed", finding.Message)
+			for _, reason := range finding.Reasons {
+				assert.NotEqual(t, "tool_resolution_failed", reason.Code)
+			}
+		}
+	})
+}
+
+func TestHealthCommandReportsMissingGeneratedAgentSurfaceForMultiAdapterWorkspace(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
+		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "agents", "slipway-planner.md")))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "agent_contract" || finding.Slug != "intake-clarification" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "agent_generated_surface_missing" {
+					found = true
+					assert.Contains(t, finding.Message, "missing generated agent file for claude")
+					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
+				}
+			}
+		}
+		assert.True(t, found, "expected missing generated agent surface finding in multi-adapter workspace")
+	})
+}
+
 func TestHealthCommandDoctorIncludesGovernanceFailuresWithoutExtraFlags(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "doctor should include governance failures")
@@ -643,7 +700,7 @@ func TestHealthCommandDoctorIncludesGovernanceFailuresWithoutExtraFlags(t *testi
 func TestHealthCommandDoctorSkipsNonCommandRepairHints(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
 		cfg.Agents.Mappings = map[string]string{
@@ -687,7 +744,7 @@ func TestHealthCommandRejectsUninitializedGitRepo(t *testing.T) {
 func TestHealthCommandObservationsFlagIncludesSignalProvenance(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health observations")
 		change, err := state.LoadChange(root, slug)
@@ -719,7 +776,7 @@ func TestHealthCommandObservationsFlagIncludesSignalProvenance(t *testing.T) {
 func TestHealthCommandGovernanceReportsUnreadableSnapshotInsteadOfFailing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health unreadable snapshot")
 		snapshotPath := governance.SnapshotPath(root, slug)
@@ -757,7 +814,7 @@ func TestHealthCommandGovernanceReportsUnreadableSnapshotInsteadOfFailing(t *tes
 func TestHealthCommandGovernanceObservationsStillRenderWhenSnapshotUnreadable(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health unreadable snapshot observations")
 		change, err := state.LoadChange(root, slug)
@@ -791,7 +848,7 @@ func TestHealthCommandGovernanceObservationsStillRenderWhenSnapshotUnreadable(t 
 func TestHealthCommandGovernanceSkipsRecomputeWhenBoundWorktreeInvalid(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health invalid bound worktree")
@@ -852,7 +909,7 @@ func TestHealthCommandGovernanceSkipsRecomputeWhenBoundWorktreeInvalid(t *testin
 func TestHealthCommandGovernanceRecomputesCurrentArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health live recompute")
 		change, err := state.LoadChange(root, slug)
@@ -952,7 +1009,7 @@ Not ready.
 func TestHealthCommandGovernancePreservesPersistedFreshnessSignal(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health stale persisted snapshot")
 		change, err := state.LoadChange(root, slug)
@@ -1052,7 +1109,7 @@ Not ready.
 func TestHealthCommandGovernanceUsesFreshnessFromRecomputedSnapshotWhenMaterialStateChanges(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "health refreshed snapshot")
 		change, err := state.LoadChange(root, slug)
@@ -1156,7 +1213,7 @@ Not ready.
 func TestHealthCommandGovernanceBlocksOnStateLock(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
 		cfg.Execution.LockWaitTimeoutSeconds = 1
@@ -1179,7 +1236,7 @@ func TestHealthCommandGovernanceBlocksOnStateLock(t *testing.T) {
 func TestHealthCommandGovernanceSurfacesMultipleActiveChangeError(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Create two active changes at the state layer to trigger ErrMultipleActiveChanges.
 		changeA := model.NewChange("health-multi-a")
@@ -1200,7 +1257,7 @@ func TestHealthCommandGovernanceSurfacesMultipleActiveChangeError(t *testing.T) 
 func TestHealthCommandDoctorDoesNotFailWhenMultipleActiveChangesExist(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		changeA := model.NewChange("health-doctor-multi-a")
 		require.NoError(t, state.SaveChange(root, changeA))
@@ -1233,7 +1290,7 @@ func TestHealthCommandDoctorDoesNotFailWhenMultipleActiveChangesExist(t *testing
 func TestHealthCommandGovernanceWithNoActiveChangeDoesNotRenderRepoHealthFallback(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()

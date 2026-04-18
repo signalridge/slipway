@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -21,7 +20,7 @@ import (
 func TestExecuteGovernedPivotRerouteReturnsDirectWorktreeState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
 
 		change, err := state.LoadChange(root, slug)
@@ -40,7 +39,7 @@ func TestExecuteGovernedPivotRerouteReturnsDirectWorktreeState(t *testing.T) {
 func TestExecuteGovernedPivotFromPlanAuditReturnsToWorktree(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "plan finalized pivot")
 
 		change, err := state.LoadChange(root, slug)
@@ -62,7 +61,7 @@ func TestExecuteGovernedPivotFromPlanAuditReturnsToWorktree(t *testing.T) {
 func TestExecuteGovernedPivotKeepsBundleInBoundWorktreeWhenDiscoveryClears(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "pivot bundle relocation")
 
@@ -105,7 +104,7 @@ func TestExecuteGovernedPivotKeepsBundleInBoundWorktreeWhenDiscoveryClears(t *te
 func TestExecuteGovernedPivotPromotesCoreSchemaWhenDiscoveryBecomesRequired(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "schema promotion pivot")
 
 		change, err := state.LoadChange(root, slug)
@@ -129,7 +128,7 @@ func TestExecuteGovernedPivotPromotesCoreSchemaWhenDiscoveryBecomesRequired(t *t
 func TestExecuteGovernedPivotWritesControlDeactivationAuditTrail(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "pivot deactivation audit")
 
 		change, err := state.LoadChange(root, slug)
@@ -164,7 +163,7 @@ func TestExecuteGovernedPivotWritesControlDeactivationAuditTrail(t *testing.T) {
 func TestExecuteGovernedPivotRecoversFromUnreadableGovernanceSnapshot(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "pivot unreadable snapshot")
 
 		change, err := state.LoadChange(root, slug)
@@ -202,7 +201,7 @@ func TestExecuteGovernedPivotRecoversFromUnreadableGovernanceSnapshot(t *testing
 func TestExecuteGovernedPivotRescopeClearsApprovedSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "rescope intent amendment")
 
 		change, err := state.LoadChange(root, slug)
@@ -252,7 +251,7 @@ User approved this on 2026-04-01.
 func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "pivot clears execution state")
 
 		change, err := state.LoadChange(root, slug)
@@ -310,7 +309,7 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 func TestExecuteGovernedPivotClearsWorktreeOwnedExecutionSummary(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "pivot clears worktree execution summary")

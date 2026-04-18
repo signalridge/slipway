@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	enginestatus "github.com/signalridge/slipway/internal/engine/status"
@@ -39,7 +38,7 @@ func TestBuildGovernedStatusViewUsesExecutionSummaryForProgress(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("summary-progress")
 		change.CurrentState = model.StateS2Execute
@@ -87,7 +86,7 @@ func TestBuildGovernedStatusViewExposesSummaryBlockersSeparately(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("summary-blockers")
 		change.CurrentState = model.StateS2Execute
@@ -111,12 +110,28 @@ func TestBuildGovernedStatusViewExposesSummaryBlockersSeparately(t *testing.T) {
 	})
 }
 
+func TestBuildGovernedStatusViewPreAuditOmitsShipGateDebt(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "status should omit ship gate debt before verify")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		view, err := buildStatusViewFromChange(root, change)
+		require.NoError(t, err)
+		assert.NotContains(t, view.GateStatus, "G_ship")
+		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
+	})
+}
+
 func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("stale-execution-summary")
 		change.CurrentState = model.StateS3Review
@@ -158,7 +173,7 @@ func TestBuildGovernedStatusViewKeepsExecutionSummaryProgressWhenChecklistExists
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("summary-progress-authority")
 		change.CurrentState = model.StateS2Execute
@@ -215,7 +230,7 @@ func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryI
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("summary-progress-not-ready")
 		change.CurrentState = model.StateS2Execute
@@ -259,7 +274,7 @@ func TestBuildGovernedStatusViewIgnoresExecutionSummaryOutsideExecutionStates(t 
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("stale-plan-summary")
 		change.CurrentState = model.StateS1Plan
@@ -370,7 +385,7 @@ func TestBuildGovernedStatusViewIncludesWorkflowPresetAndForecast(t *testing.T) 
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("preset-status")
 		change.CurrentState = model.StateS1Plan
@@ -391,7 +406,7 @@ func TestBuildGovernedStatusViewIncludesTaskChecklistAdvisories(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("status-advisories")
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -428,7 +443,7 @@ func TestBuildGovernedStatusViewIncludesTaskChecklistBlockers(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("status-checklist-blockers")
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -482,7 +497,7 @@ func TestBuildGovernedStatusViewIncludesAutoPassedStates(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("autopass-status")
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -506,7 +521,7 @@ func TestBuildGovernedStatusViewUsesResolvedWorktreeEvidencePaths(t *testing.T) 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initGitRepoForWorktreeTests(t, root)
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("worktree-evidence")
 		worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
@@ -582,7 +597,7 @@ func TestForecastDownstreamLevelNeverBelowEffectivePreset(t *testing.T) {
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Set min_preset to standard so effective_preset is upgraded.
 		cfgPath := state.ConfigPath(root)
@@ -611,7 +626,7 @@ func TestBuildGovernedStatusViewPendingPresetShowsPresetInNextActions(t *testing
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("pending-hint")
 		change.SuggestedWorkflowPreset = model.WorkflowPresetLight
@@ -640,7 +655,7 @@ func TestBuildGovernedStatusViewPendingPresetShowsPresetInNextActions(t *testing
 func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
 		change, err := state.LoadChange(root, slug)
@@ -683,7 +698,7 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
 func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when pre-summary wave plan is missing")
 		change, err := state.LoadChange(root, slug)
@@ -718,7 +733,7 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsM
 func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
@@ -771,7 +786,7 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAre
 func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
 		change, err := state.LoadChange(root, slug)
@@ -808,7 +823,7 @@ func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testi
 func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
 		change, err := state.LoadChange(root, slug)
@@ -848,7 +863,7 @@ func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T
 func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
 		change, err := state.LoadChange(root, slug)
@@ -902,7 +917,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
 func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
 		change, err := state.LoadChange(root, slug)

@@ -14,13 +14,16 @@ import (
 	"github.com/signalridge/slipway/internal/toolgen"
 )
 
-func resolveWorkspaceSkillPaths(root, skillName, agentHint string) (promptPath, agentDefinitionPath string) {
-	cfg := toolgen.ResolveWorkspaceTool(invocationWorkspaceRoot(root))
+func resolveWorkspaceSkillPaths(root, skillName, agentHint string) (promptPath, agentDefinitionPath, resolvedToolID string, err error) {
+	cfg, err := toolgen.ResolveWorkspaceTool(invocationWorkspaceRoot(root))
+	if err != nil {
+		return "", "", "", err
+	}
 	promptPath = toolgen.SkillPath(cfg, skillName)
 	if strings.TrimSpace(agentHint) != "" {
 		agentDefinitionPath = toolgen.AgentPath(cfg, agentHint)
 	}
-	return promptPath, agentDefinitionPath
+	return promptPath, agentDefinitionPath, cfg.ID, nil
 }
 
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
@@ -123,7 +126,10 @@ func assembleSkillView(
 
 	verificationDir := state.DisplayPath(root, filepath.Dir(state.VerificationFilePath(root, ref.Slug, nextSkillName)))
 	agentHint := skill.AgentHintForSkillInRegistry(registry, nextSkillName)
-	promptPath, agentDefPath := resolveWorkspaceSkillPaths(root, nextSkillName, agentHint)
+	promptPath, agentDefPath, resolvedToolID, err := resolveWorkspaceSkillPaths(root, nextSkillName, agentHint)
+	if err != nil {
+		return err
+	}
 
 	ns := &nextSkillView{
 		Name:                nextSkillName,
@@ -132,6 +138,7 @@ func assembleSkillView(
 		State:               nextState,
 		AgentHint:           agentHint,
 		AgentDefinitionPath: agentDefPath,
+		ResolvedToolID:      resolvedToolID,
 	}
 
 	if governedChange != nil {

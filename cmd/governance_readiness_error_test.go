@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +17,7 @@ import (
 func TestStatsDoesNotMislabelMalformedVerificationAsExecutionSummaryFailure(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "stats should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -45,7 +44,7 @@ func TestStatsDoesNotMislabelMalformedVerificationAsExecutionSummaryFailure(t *t
 func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -60,7 +59,7 @@ func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -80,7 +79,7 @@ func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 func TestNextReadinessFailureEnvelopeJSON(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next JSON envelope should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -93,7 +92,7 @@ func TestNextReadinessFailureEnvelopeJSON(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
 		require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
 
-		_, stderr, err := runRootCommand([]string{"next", "--json", "--preview"})
+		_, stderr, err := runRootCommand([]string{"next", "--json"})
 		require.Error(t, err)
 
 		var payload CLIError
@@ -110,7 +109,7 @@ func TestNextReadinessFailureEnvelopeJSON(t *testing.T) {
 func TestStatusReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -142,7 +141,7 @@ func TestStatusReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 func TestValidateReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -174,7 +173,7 @@ func TestValidateReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
@@ -209,7 +208,7 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 func TestNextProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should classify projection failures consistently")
 		change, err := state.LoadChange(root, slug)
@@ -226,7 +225,7 @@ func TestNextProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -245,7 +244,7 @@ func TestNextProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should not consume checkpoint on readiness failure")
 		change, err := state.LoadChange(root, slug)

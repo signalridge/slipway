@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -21,7 +20,7 @@ import (
 func TestGateStatusUsesPlanningEvidenceAcrossStatusValidateAndNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "gate status should stay stable outside planning")
@@ -143,7 +142,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 	t.Run("missing execution summary", func(t *testing.T) {
 		root := t.TempDir()
 		withWorkspace(t, root, func() {
-			require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+			initTestWorkspace(t, root)
 
 			slug := createGovernedRequest(t, root, "L2", "execution summary blockers should stay aligned")
 			change, err := state.LoadChange(root, slug)
@@ -178,7 +177,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 				requireBlockerContains(t, blockers, "required_skill_not_ready:code-quality-review:run_summary_missing")
 			}
 			if nextResp.Advanced != nil {
-				assert.Equal(t, "blocked", nextResp.Advanced.Action)
+				assert.Equal(t, "query", nextResp.Advanced.Action)
 			}
 		})
 	})
@@ -186,7 +185,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 	t.Run("stale execution evidence", func(t *testing.T) {
 		root := t.TempDir()
 		withWorkspace(t, root, func() {
-			require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+			initTestWorkspace(t, root)
 
 			slug := createGovernedRequest(t, root, "L2", "stale execution evidence should stay aligned")
 			change, err := state.LoadChange(root, slug)
@@ -212,7 +211,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 				requireBlockerContains(t, blockers, state.StaleExecutionEvidenceBlockerToken)
 			}
 			if nextResp.Advanced != nil {
-				assert.Equal(t, "blocked", nextResp.Advanced.Action)
+				assert.Equal(t, "query", nextResp.Advanced.Action)
 			}
 		})
 	})
@@ -221,7 +220,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review layer blockers should stay aligned")
 		change, err := state.LoadChange(root, slug)
@@ -269,7 +268,7 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "done should reuse shared ship gate result")
 		change, err := state.LoadChange(root, slug)
@@ -306,7 +305,7 @@ func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
 func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "ship-only blockers should stay aligned")
 		change, err := state.LoadChange(root, slug)
@@ -340,7 +339,7 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 		}
 		assert.False(t, validateResp.CanAdvance)
 		if nextResp.Advanced != nil {
-			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+			assert.Equal(t, "query", nextResp.Advanced.Action)
 		}
 	})
 }
@@ -348,7 +347,7 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithoutMutatingChangeAuthority(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "missing artifacts should block every read surface")
 		change, err := state.LoadChange(root, slug)
@@ -372,7 +371,7 @@ func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithout
 		nextResp := runNextViewForChange(t, root, slug)
 		requireBlockerContains(t, nextResp.Blockers, "missing_required_artifact:decision.md")
 		if nextResp.Advanced != nil {
-			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+			assert.Equal(t, "query", nextResp.Advanced.Action)
 		}
 		requireChangeAuthorityStable(t, root, slug, before)
 
@@ -386,7 +385,7 @@ func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithout
 func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "invalid worktree binding should stay aligned")
@@ -411,7 +410,7 @@ func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *tes
 			requireBlockerContains(t, blockers, state.WorktreeReasonDedicatedRequired)
 		}
 		if nextResp.Advanced != nil {
-			assert.Equal(t, "blocked", nextResp.Advanced.Action)
+			assert.Equal(t, "query", nextResp.Advanced.Action)
 		}
 	})
 }
@@ -419,7 +418,7 @@ func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *tes
 func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should surface governance blockers")
 		change, err := state.LoadChange(root, slug)
@@ -448,7 +447,7 @@ func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
 func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "governance surface should reuse computed readiness snapshot")
 		change, err := state.LoadChange(root, slug)

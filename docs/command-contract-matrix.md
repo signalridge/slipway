@@ -49,7 +49,7 @@ surfaces.
 |---|---|---|---|---|---|
 | `new` | mutation | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `preset` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
-| `next` | mutation | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
+| `next` | query | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `run` | mutation | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `status` | query | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `done` | mutation | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
@@ -129,6 +129,7 @@ views). The public alias registry is:
 | `validate` | `mutation` | `mutation-testing` |
 | `validate` | `property` | `property-testing` |
 | `validate` | `sast` | `sast-orchestration` |
+| `validate` | `spec-trace` | `spec-trace` |
 | `repair` | `sast` | `sast-orchestration` |
 
 ### `--view` aliases
@@ -143,14 +144,12 @@ views). The public alias registry is:
 | Command | Backing skill |
 |---|---|
 | `review` | `independent-review` |
-| `validate` | `spec-trace` |
 | `repair` | `root-cause-tracing` |
-| `status` | `incident-response` (change-scoped; requires `ConcreteChangeTarget`) |
 | `health` | `incident-response` (change-scoped; requires `ConcreteChangeTarget`) |
 
-Primary routes on `status` and `health` are change-scoped: they are only
-selected automatically when `ConcreteChangeTarget(sig)` is true. Diagnostics
-paths without an active change intentionally return an empty `view`.
+`status` and `validate` no longer have primary routes; their default output is
+neutral and state-focused. Expert posture is available via `--focus`. `health`
+retains its primary route gated on `ConcreteChangeTarget`.
 
 ### `suggested_capabilities[]` output contract
 

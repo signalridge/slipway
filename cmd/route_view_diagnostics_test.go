@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +12,7 @@ import (
 func TestDiagnosticsModeDoesNotAutoSelectViewWithoutChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var statusOut bytes.Buffer
 		statusCmd := makeStatusCmd()
@@ -42,7 +41,7 @@ func TestDiagnosticsModeDoesNotAutoSelectViewWithoutChange(t *testing.T) {
 func TestStatusDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
@@ -60,7 +59,7 @@ func TestStatusDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T)
 func TestStatusDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
@@ -78,7 +77,7 @@ func TestStatusDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T)
 func TestHealthDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
@@ -96,7 +95,7 @@ func TestHealthDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T)
 func TestHealthDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()

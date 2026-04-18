@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +14,7 @@ import (
 func TestWrongSurfaceDiscoveryFlagsFailAtParseTime(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cases := []struct {
 			args    []string
@@ -40,7 +39,7 @@ func TestWrongSurfaceDiscoveryFlagsFailAtParseTime(t *testing.T) {
 func TestLegacyRawModeFlagFailsAtParseTime(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cases := []struct {
 			args []string
@@ -67,7 +66,7 @@ func TestLegacyRawModeFlagFailsAtParseTime(t *testing.T) {
 func TestStatusExplicitViewEmitsPublicAliasAndHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status route-surface command contract")
 
@@ -88,7 +87,7 @@ func TestStatusExplicitViewEmitsPublicAliasAndHydrateReferences(t *testing.T) {
 func TestReviewFocusCalibrationEmitsPublicAliasAndHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review focus calibration route-surface contract")
 		change, err := state.LoadChange(root, slug)

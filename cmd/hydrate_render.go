@@ -98,7 +98,9 @@ func selectHydrateKeys(available, requested []string) ([]string, error) {
 
 // hydrateReferencePath resolves a hydrate key against the generated workspace
 // tree so runtime hydrate output mirrors the files agents actually see under
-// `.codex/skills/`, `.claude/skills/`, etc.
+// `.codex/skills/`, `.claude/skills/`, etc. When callers pass the canonical
+// scope root, we follow the current invocation worktree if the scope root does
+// not itself carry generated adapters.
 func hydrateReferencePath(root, key string) (string, error) {
 	skillID, name, ok := strings.Cut(key, "/")
 	if !ok || skillID == "" || name == "" {
@@ -117,8 +119,15 @@ func hydrateReferencePath(root, key string) (string, error) {
 			map[string]any{"key": key},
 		)
 	}
-	cfg := toolgen.ResolveWorkspaceTool(root)
-	return filepath.Join(root, cfg.SkillsDir, "slipway", skillID, "references", filepath.FromSlash(name)), nil
+	workspaceRoot := root
+	if len(toolgen.DetectExistingTools(workspaceRoot)) == 0 {
+		workspaceRoot = invocationWorkspaceRoot(root)
+	}
+	cfg, err := toolgen.ResolveWorkspaceTool(workspaceRoot)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspaceRoot, cfg.SkillsDir, "slipway", skillID, "references", filepath.FromSlash(name)), nil
 }
 
 // loadHydrateBody returns the file body for a `<skill-id>/<name>` hydrate

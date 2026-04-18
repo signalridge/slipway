@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -39,7 +38,7 @@ func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair restores missing bound worktree scope metadata")
 		change, err := state.LoadChange(root, slug)
@@ -134,7 +133,7 @@ func TestRepairRecoversMissingConfigAfterInitWorkspace(t *testing.T) {
 		runGit(t, root, "init")
 		runGit(t, root, "commit", "--allow-empty", "-m", "init")
 
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.Remove(state.ConfigPath(root)))
 
 		require.NoError(t, makeRepairCmd().Execute())
@@ -148,7 +147,7 @@ func TestRepairRecoversMissingConfigAfterInitWorkspace(t *testing.T) {
 func TestRepairRepairsInterruptedArchivedBundleResidue(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := "interrupted-archive"
 		change := model.NewChange(slug)
@@ -195,7 +194,7 @@ func TestRepairRepairsInterruptedArchivedBundleResidue(t *testing.T) {
 func TestRepairReportsOrphanBundleDirectoryFinding(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", "orphan-dir"), 0o755))
 
 		var out bytes.Buffer
@@ -222,7 +221,7 @@ func TestRepairReportsOrphanBundleDirectoryFinding(t *testing.T) {
 func TestRepairReportsUnreadableChangeAuthorityFinding(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		change := model.NewChange("corrupt-change")
 		require.NoError(t, state.SaveChange(root, change))
 		require.NoError(t, os.WriteFile(state.BundleChangeFilePath(root, change.Slug), []byte("slug: corrupt-change\ncurrent_state: [\n"), 0o644))
@@ -254,7 +253,7 @@ func TestRepairReportsHiddenUnreadableChangeAuthorityFinding(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair reports hidden unreadable authority")
 		change, err := state.LoadChange(root, slug)
@@ -297,7 +296,7 @@ func TestRepairReportsHiddenUnreadableChangeAuthorityFinding(t *testing.T) {
 func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair reports unreadable execution summary")
 		change, err := state.LoadChange(root, slug)
@@ -334,7 +333,7 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair should recover wave execution artifacts")
 		change, err := state.LoadChange(root, slug)
@@ -387,7 +386,7 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair should rebuild unreadable wave artifacts")
 		change, err := state.LoadChange(root, slug)
@@ -436,7 +435,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair should not rewrite drifted historical execution")
 		change, err := state.LoadChange(root, slug)
@@ -522,7 +521,7 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 func TestRepairCleansUpLegacyRuntimeStateSidecar(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair should clean up legacy sidecar")
 		change, err := state.LoadChange(root, slug)
@@ -570,7 +569,7 @@ evidence_refs:
 func TestRepairCleansUpUnreadableLegacyRuntimeState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "repair should clean up unreadable legacy sidecar")
 		change, err := state.LoadChange(root, slug)

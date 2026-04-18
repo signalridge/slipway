@@ -44,6 +44,35 @@ func TestEmitHydrateBlocksRendersDelimiter(t *testing.T) {
 	}
 }
 
+func TestEmitHydrateBlocksUsesInvocationWorkspaceRoot(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initGitRepoForWorktreeTests(t, root)
+
+		worktreeRoot := filepath.Join(t.TempDir(), "linked-worktree")
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", "feat/hydrate-worktree", "HEAD")
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(worktreeRoot))
+		defer func() {
+			_ = os.Chdir(previousWD)
+		}()
+
+		require.NoError(t, bootstrap.InitWorkspace(worktreeRoot, []string{"codex"}, false))
+
+		_, err = os.Stat(filepath.Join(root, ".codex"))
+		assert.True(t, os.IsNotExist(err), "main scope should not need codex adapters for hydrate rendering")
+		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway", "security-review", "references", "authentication.md"))
+		require.NoError(t, err)
+
+		var buf bytes.Buffer
+		err = emitHydrateBlocks(root, &buf, []string{"security-review/authentication.md"})
+		require.NoError(t, err)
+		assert.Contains(t, buf.String(), "===== SLIPWAY HYDRATE: security-review/authentication.md =====")
+	})
+}
+
 // TestEmitHydrateBlocksEmptyIsNoOp ensures the helper stays silent when no
 // hydrate keys are selected, so commands without active references do not
 // emit spurious delimiter lines.
@@ -228,7 +257,7 @@ func TestHealthCommandHydrateRefNarrowsOutput(t *testing.T) {
 func TestValidateDiagnosticsFocusStillAdvertisesHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -253,7 +282,7 @@ func TestValidateDiagnosticsFocusStillAdvertisesHydrateReferences(t *testing.T) 
 func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -292,7 +321,7 @@ func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
 func TestValidateFocusMutationAdvertisesHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()

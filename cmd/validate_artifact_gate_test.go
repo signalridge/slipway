@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -20,7 +19,7 @@ import (
 func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should gate incomplete bundle")
 		change, err := state.LoadChange(root, slug)
@@ -54,7 +53,7 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -66,14 +65,28 @@ func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
 		var view validateView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "spec-trace", view.Mode)
+		assert.Empty(t, view.Mode, "default validate (no --focus) should omit mode")
+	})
+}
+
+func TestValidatePreAuditDefaultViewOmitsShipGateDebt(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "validate should omit ship gate debt before verify")
+
+		view, err := buildValidateViewForSlug(root, slug)
+		require.NoError(t, err)
+		assert.NotContains(t, view.GateDetails, "G_ship")
+		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
 	})
 }
 
 func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "next should gate incomplete bundle")
 		change, err := state.LoadChange(root, slug)
@@ -87,14 +100,9 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, change.Slug, "decision.md")))
 
-		var out bytes.Buffer
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "governed", view.ExecutionMode)
 		assert.Equal(t, model.StateS1Plan, view.CurrentState)
 		require.NotNil(t, view.Advanced)
@@ -107,7 +115,7 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should gate missing artifacts at plan audit")
 		change, err := state.LoadChange(root, slug)
@@ -144,7 +152,7 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should use filesystem artifact readiness")
 		change, err := state.LoadChange(root, slug)
@@ -181,7 +189,7 @@ func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *te
 func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should expose artifact amendments")
 		change, err := state.LoadChange(root, slug)
@@ -224,7 +232,7 @@ func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.
 func TestValidateOnlyRequiresActivePlanningSkillAtPlanAudit(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should scope skill blockers to the active plan sub-step")
 		change, err := state.LoadChange(root, slug)
@@ -251,7 +259,7 @@ func TestValidateOnlyRequiresActivePlanningSkillAtPlanAudit(t *testing.T) {
 func TestValidateSkillsReadyScopesToActivePlanningSubStep(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "validate should scope passing skills to the active plan sub-step")
 		change, err := state.LoadChange(root, slug)
@@ -282,7 +290,7 @@ func TestValidateSkillsReadyScopesToActivePlanningSubStep(t *testing.T) {
 func TestValidateExposesPlanningRecoveryState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should expose plan recovery state")
 		change, err := state.LoadChange(root, slug)
@@ -302,7 +310,7 @@ func TestValidateExposesPlanningRecoveryState(t *testing.T) {
 func TestValidateDoesNotLeakBundleBlockersBeforeWorktreeBinding(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "validate should not leak bundle blockers before worktree")
 		change, err := state.LoadChange(root, slug)
@@ -325,7 +333,7 @@ func TestValidateDoesNotLeakBundleBlockersBeforeWorktreeBinding(t *testing.T) {
 func TestValidateIncludesGovernanceActionBlockersAtReviewState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate governance action blockers")
 		change, err := state.LoadChange(root, slug)
@@ -347,7 +355,7 @@ func TestValidateIncludesGovernanceActionBlockersAtReviewState(t *testing.T) {
 func TestValidateIncludesTaskChecklistAdvisories(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate task checklist advisories")
 		change, err := state.LoadChange(root, slug)
@@ -384,7 +392,7 @@ REQ-001: The system must authenticate requests.
 func TestValidateIncludesTaskChecklistBlockers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate task checklist blockers")
 		change, err := state.LoadChange(root, slug)
@@ -419,7 +427,7 @@ REQ-001: The system must authenticate requests.
 func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate review evidence at ship gate")
 		change, err := state.LoadChange(root, slug)
@@ -460,7 +468,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "validate should block stale evidence")
 		change, err := state.LoadChange(root, slug)

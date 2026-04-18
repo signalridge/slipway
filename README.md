@@ -11,7 +11,7 @@ setup, diagnostics, and repair commands.
 
 - `slipway new [description]`: create a governed change starting at intake (S0_INTAKE)
 - `slipway preset <light|standard|strict>`: confirm or update the governance preset for the active change
-- `slipway next`: validate evidence, advance state when ready, and surface the next required skill
+- `slipway next`: query the next required skill, blockers, and current action without advancing state
 - `slipway run`: advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced
 - `slipway status`: inspect lifecycle state, blockers, and next actions
 - `slipway done`: finalize a done-ready change and archive it
@@ -33,13 +33,12 @@ Creation refinements:
 
 ## Governed progression
 
-After governed work exists, use either the single-step surface (`next`) or the
-loop surface (`run`) to advance the lifecycle.
+After governed work exists, use either the query surface (`next`) or the
+execution surface (`run`) to manage the lifecycle.
 
-- `slipway next`: validate evidence, advance at most one governed step, and surface the next required skill
-  - Use `--preview` to inspect the next skill context without advancing state
-  - Use this when you want step-by-step control
-- `slipway run`: keep advancing until Slipway hits an operator-facing stop condition
+- `slipway next`: inspect the next required skill, blockers, and current action without advancing state
+  - Use this when you want step-by-step control before deciding whether to advance
+- `slipway run`: validate current evidence and keep advancing until Slipway hits an operator-facing stop condition
   - Stop conditions are: next skill surfaced, blockers surfaced, checkpoint surfaced, or done-ready reached
   - Use `--resume` to continue resumable non-checkpoint execution from the latest incomplete wave
   - Use `--resume-response <value>` to resume from an active checkpoint
@@ -103,10 +102,10 @@ Choose one of the two progression styles below. `review`, `validate`, and
 ```bash
 slipway init --tools codex
 slipway new "refresh governance docs" --preset standard
-slipway next --preview     # optional: inspect without advancing state
-slipway next               # surface the next required skill
+slipway next --json        # inspect the current next step (read-only)
 # execute the surfaced skill
-slipway next               # repeat after each completed skill
+slipway run                # validate evidence and advance once the skill is complete
+slipway next --json        # inspect the newly surfaced next step
 slipway done
 ```
 
@@ -126,7 +125,7 @@ Use the situational commands only when they help with the current stop point:
 - `slipway status`: inspect the current state, blockers, and next actions
 - `slipway validate`: recompute evidence and gate readiness without advancing state
 - `slipway review`: run explicit review after execution evidence exists (S2_EXECUTE onward)
-- `slipway next --preview`: inspect the next skill context without mutating state
+- `slipway next --json`: inspect the next skill context without mutating state
 
 If execution pauses for a checkpoint, inspect the paused task in `status` or
 `next --json`, then resume with `slipway run --resume-response <value>`.
@@ -158,7 +157,7 @@ Slipway now splits governed state by concern instead of treating one file as the
 | `artifacts/changes/<slug>/{intent,requirements,decision,tasks,assurance}.md` | Intent and contract authority |
 | Computed governance readiness | Read-only command projection used by `status`, `validate`, `next`, `review`, `done`, and `stats`; never persisted as authority |
 
-`status`, `validate`, and `next --preview` are read-only surfaces. They recompute readiness and projection in-process and do not rewrite `change.yaml` or artifact runtime state during inspection.
+`status`, `validate`, and `next` are read-only surfaces. They recompute readiness and projection in-process and do not rewrite `change.yaml` or artifact runtime state during inspection.
 
 ## Repository layout
 

@@ -90,7 +90,7 @@ func TestGenerateUniqueChangeSlugFailsWhenAttemptsExhausted(t *testing.T) {
 func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		classifier := &recordingIntentClassifier{
 			classification: progression.IntentClassification{
@@ -117,7 +117,7 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		docBody := "# Session timeout\n\n## Constraints\n- keep middleware contract\n"
@@ -144,7 +144,7 @@ func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T
 func TestNewCommandFromDocSeedsRequirementsAndTasks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -176,7 +176,7 @@ func TestNewCommandFromDocSeedsRequirementsAndTasks(t *testing.T) {
 func TestNewCommandFromDocAcceptanceOnlySeedsTasks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -202,7 +202,7 @@ func TestNewCommandFromDocAcceptanceOnlySeedsTasks(t *testing.T) {
 func TestNewCommandFromDocSeedsIntentSectionsAndSourceDocument(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -241,7 +241,7 @@ func TestNewCommandFromDocSeedsIntentSectionsAndSourceDocument(t *testing.T) {
 func TestNewCommandFromDocIgnoresInlineHeadingMentionsBeforeRealSections(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -285,7 +285,7 @@ func TestExtractDocSectionsSupportsColonSuffixedHeadings(t *testing.T) {
 func TestNewCommandFromDocRejectsUnreadableFile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeNewCmd()
 		cmd.SetArgs([]string{"--from-doc", filepath.Join(root, "missing.md")})
@@ -298,7 +298,7 @@ func TestNewCommandFromDocRejectsUnreadableFile(t *testing.T) {
 func TestNewCommandFromDocRejectsEmptyDocument(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "empty.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(" \n\t\n"), 0o644))
@@ -314,7 +314,7 @@ func TestNewCommandFromDocRejectsEmptyDocument(t *testing.T) {
 func TestNewCommandInteractivePromptShowsProjectContext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/interactive\n\ngo 1.25.5\n"), 0o644))
 		runGit(t, root, "add", "go.mod")
 		runGit(t, root, "commit", "-m", "seed project context")
@@ -355,7 +355,7 @@ func TestNewCommandInteractivePromptShowsProjectContext(t *testing.T) {
 func TestNewCommandInteractiveSafeDegradeStillRequiresPresetConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		oldStdin := newCommandStdin
 		oldIsTerminal := newCommandIsTerminal
@@ -396,7 +396,7 @@ func TestNewCommandInteractiveSafeDegradeStillRequiresPresetConfirmation(t *test
 func TestNewCommandInteractiveWithoutClassifierSafeDegradesAndRequiresPresetConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		oldStdin := newCommandStdin
 		oldIsTerminal := newCommandIsTerminal
@@ -437,7 +437,7 @@ func TestNewCommandInteractiveWithoutClassifierSafeDegradesAndRequiresPresetConf
 func TestNewJSONStdinPersistsProjectContextAndCallerControlOverrides(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		oldStdin := newCommandStdin
 		oldIsTerminal := newCommandIsTerminal
@@ -511,7 +511,7 @@ func TestNewJSONStdinPersistsProjectContextAndCallerControlOverrides(t *testing.
 func TestNewJSONModeDoesNotInferProjectContextFromRepo(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/noinfer\n\ngo 1.25.5\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "Makefile"), []byte("test:\n\tgo test ./...\n\nbuild:\n\tgo build ./...\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("Prefer Go table tests.\n"), 0o644))
@@ -556,7 +556,7 @@ func TestNewJSONModeDoesNotInferProjectContextFromRepo(t *testing.T) {
 func TestNewJSONWithoutClassifierReportsSafeDegradeDefaults(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		oldStdin := newCommandStdin
 		oldIsTerminal := newCommandIsTerminal
@@ -607,7 +607,7 @@ func TestNewJSONWithoutClassifierReportsSafeDegradeDefaults(t *testing.T) {
 func TestPresetUsesPersistedProjectContextFromNewJSONInput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/presetctx\n\ngo 1.25.5\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(root, "Makefile"), []byte("test:\n\tgo test ./...\n\nbuild:\n\tgo build ./...\n"), 0o644))
 
@@ -679,7 +679,7 @@ func TestRestoreNewPresetAfterScaffoldFailureReturnsCombinedError(t *testing.T) 
 func TestNewCommandUsesCoreSchemaForSimpleChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		classifier := &recordingIntentClassifier{
 			classification: progression.IntentClassification{
@@ -705,7 +705,7 @@ func TestNewCommandUsesCoreSchemaForSimpleChange(t *testing.T) {
 func TestNewCommandSafeDegradeKeepsPendingPresetInJSONMode(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		classifier := &recordingIntentClassifier{err: assert.AnError}
 
@@ -736,7 +736,7 @@ func TestNewCommandSafeDegradeKeepsPendingPresetInJSONMode(t *testing.T) {
 func TestNewCommandAutoPromotesDiscoveryForGuardrails(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeNewCmd()
 		cmd.SetArgs([]string{"refactor auth policy enforcement"})
@@ -753,7 +753,7 @@ func TestNewCommandAutoPromotesDiscoveryForGuardrails(t *testing.T) {
 func TestNewCommandDiscussPersistsQualityMode(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var buf bytes.Buffer
 		cmd := makeNewCmd()
@@ -780,7 +780,7 @@ func TestNewCommandDiscussPersistsQualityMode(t *testing.T) {
 func TestNewCommandFullPersistsFullQualityMode(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeNewCmd()
 		cmd.SetArgs([]string{"--full", "fix login timeout"})
@@ -796,7 +796,7 @@ func TestNewCommandFullPersistsFullQualityMode(t *testing.T) {
 func TestNewCommandDiscussAndFullAreComposable(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var buf bytes.Buffer
 		cmd := makeNewCmd()
@@ -819,7 +819,7 @@ func TestNewCommandDiscussAndFullAreComposable(t *testing.T) {
 func TestNewCommandPresetPersistsConfirmedWorkflowPreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var buf bytes.Buffer
 		cmd := makeNewCmd()
@@ -843,7 +843,7 @@ func TestNewCommandPresetPersistsConfirmedWorkflowPreset(t *testing.T) {
 func TestNewCommandWithoutPresetAutoConfirmsLowRiskChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		classifier := &recordingIntentClassifier{
 			classification: progression.IntentClassification{
@@ -873,7 +873,7 @@ func TestNewCommandWithoutPresetAutoConfirmsLowRiskChange(t *testing.T) {
 func TestNewCommandWithoutPresetDoesNotAutoConfirmWhenMinPresetConfigured(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfgPath := state.ConfigPath(root)
 		cfg, err := model.LoadConfig(cfgPath)
@@ -908,7 +908,7 @@ func TestNewCommandWithoutPresetDoesNotAutoConfirmWhenMinPresetConfigured(t *tes
 func TestNewCommandExplicitLightScaffoldsAssuranceWhenMinPresetUpgradesEffectivePreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfgPath := state.ConfigPath(root)
 		cfg, err := model.LoadConfig(cfgPath)
@@ -929,7 +929,7 @@ func TestNewCommandExplicitLightScaffoldsAssuranceWhenMinPresetUpgradesEffective
 func TestNewCommandWithoutPresetCreatesPendingConfirmationForGuardrailDomain(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeNewCmd()
 		cmd.SetArgs([]string{"update auth middleware timeout strategy"})
@@ -951,7 +951,7 @@ func TestNewCommandWithoutPresetCreatesPendingConfirmationForGuardrailDomain(t *
 func TestNewCommandPendingPresetStillScaffoldsIntentMD(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeNewCmd()
 		cmd.SetArgs([]string{"update auth middleware timeout strategy"})
@@ -982,7 +982,7 @@ func TestNewCommandPendingPresetStillScaffoldsIntentMD(t *testing.T) {
 func TestNewCommandRejectsWhenActiveChangeAlreadyExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		existing := model.NewChange("existing-change")
 		require.NoError(t, state.SaveChange(root, existing))
@@ -1002,7 +1002,7 @@ func TestNewCommandRejectsWhenActiveChangeAlreadyExists(t *testing.T) {
 func TestNewCommandRejectsWhenHiddenBoundWorktreeActiveChangeExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		runGit(t, root, "config", "user.email", "test@example.com")
 		runGit(t, root, "config", "user.name", "Test User")
 		runGit(t, root, "add", ".")
@@ -1052,7 +1052,7 @@ func TestNewHelpDoesNotMentionLevelOrPlanOnly(t *testing.T) {
 func TestNextAfterNewUsesDirectSetupState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetContext(withIntentClassifierContext(create.Context(), &recordingIntentClassifier{
@@ -1097,7 +1097,7 @@ func TestNextAfterNewUsesDirectSetupState(t *testing.T) {
 func TestNextAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1121,7 +1121,7 @@ func TestNextAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T) {
 func TestNextPreviewAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1130,13 +1130,13 @@ func TestNextPreviewAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
-		next.SetArgs([]string{"--json", "--preview"})
+		next.SetArgs([]string{"--json"})
 		require.NoError(t, next.Execute())
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.ReasonCodesFromSpecs([]string{"preset_confirmation_required"}), view.Blockers,
-			"next --preview must surface exactly preset_confirmation_required, no downstream leakage")
+			"next must surface exactly preset_confirmation_required, no downstream leakage")
 		assert.Nil(t, view.NextSkill,
 			"next_skill must be nil when preset is pending")
 	})
@@ -1145,7 +1145,7 @@ func TestNextPreviewAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T
 func TestValidateAfterNewWithoutPresetShowsPendingConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1164,7 +1164,7 @@ func TestValidateAfterNewWithoutPresetShowsPendingConfirmation(t *testing.T) {
 func TestNextPendingPresetDoesNotLeakArtifactStatusOrMutateChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1215,7 +1215,7 @@ auth_authz
 		before, err := os.ReadFile(state.BundleChangeFilePath(root, slug))
 		require.NoError(t, err)
 
-		// Run next (non-preview) — should NOT mutate change.yaml.
+		// Run next (query-only) — should NOT mutate change.yaml.
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
@@ -1230,8 +1230,8 @@ auth_authz
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
 		if adv, ok := payload["advanced"].(map[string]any); ok {
-			assert.Equal(t, "blocked", adv["action"],
-				"pending preset must block, not advance intake or planning state")
+			assert.Equal(t, "query", adv["action"],
+				"pending preset must keep next read-only while surfacing the confirmation blocker")
 		}
 		assert.Equal(t, string(model.StateS0Intake), payload["current_state"])
 		assert.Equal(t, string(model.IntakeSubStepClarify), payload["intake_substep"])
@@ -1254,7 +1254,7 @@ auth_authz
 func TestNextPreviewPendingPresetDoesNotLeakArtifactStatus(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1263,7 +1263,7 @@ func TestNextPreviewPendingPresetDoesNotLeakArtifactStatus(t *testing.T) {
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
-		next.SetArgs([]string{"--json", "--preview"})
+		next.SetArgs([]string{"--json"})
 		require.NoError(t, next.Execute())
 
 		var payload map[string]any
@@ -1272,14 +1272,14 @@ func TestNextPreviewPendingPresetDoesNotLeakArtifactStatus(t *testing.T) {
 		require.True(t, ok)
 		_, hasArtifactStatus := input["artifact_status"]
 		assert.False(t, hasArtifactStatus,
-			"artifact_status must not appear in next --preview JSON when preset is pending")
+			"artifact_status must not appear in next JSON when preset is pending")
 	})
 }
 
 func TestStatusPendingPresetMinimalView(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})
@@ -1321,7 +1321,7 @@ func TestStatusPendingPresetMinimalView(t *testing.T) {
 func TestNextPromotesCoreConfigDefaultToExpandedWhenDiscoveryIsRequired(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cfgPath := state.ConfigPath(root)
 		cfg, err := model.LoadConfig(cfgPath)
@@ -1351,7 +1351,7 @@ func TestNextPromotesCoreConfigDefaultToExpandedWhenDiscoveryIsRequired(t *testi
 func TestDiscoveryPathNextBlocksOnPresetConfirmationBeforeArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Create a discovery-path change (guardrail domain inferred from description).
 		create := makeNewCmd()
@@ -1385,7 +1385,7 @@ func TestDiscoveryPathNextBlocksOnPresetConfirmationBeforeArtifacts(t *testing.T
 func TestDiscoveryPathStatusBlocksOnPresetConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth middleware timeout strategy"})
@@ -1414,6 +1414,23 @@ func withWorkspace(t *testing.T, root string, fn func()) {
 		_ = os.Chdir(previousWD)
 	}()
 	fn()
+}
+
+// initTestWorkspace wraps bootstrap.InitWorkspace and seeds a default claude
+// tool adapter so that ResolveWorkspaceTool succeeds in tests.
+func initTestWorkspace(t *testing.T, root string) {
+	t.Helper()
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+	seedTestToolAdapter(t, root)
+}
+
+// seedTestToolAdapter writes a minimal claude adapter marker so that
+// toolgen.ResolveWorkspaceTool resolves successfully in test workspaces.
+func seedTestToolAdapter(t *testing.T, root string) {
+	t.Helper()
+	markerPath := filepath.Join(root, ".claude", "skills", "slipway", "next", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
+	require.NoError(t, os.WriteFile(markerPath, []byte("test marker"), 0o644))
 }
 
 // ensureTestGitRepo initializes a bare-minimum git repo if one doesn't exist.
@@ -1448,7 +1465,7 @@ func singleChangeSlug(t *testing.T, dir string) string {
 func TestSuggestWorkflowPreset_RespectsMinPreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Set min_preset to strict in config.
 		cfgPath := state.ConfigPath(root)
@@ -1475,7 +1492,7 @@ func TestSuggestWorkflowPreset_RespectsMinPreset(t *testing.T) {
 func TestNewCommandWithMalformedConfigFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Write a corrupt .slipway.yaml.
 		cfgPath := state.ConfigPath(root)
@@ -1492,7 +1509,7 @@ func TestNewCommandWithMalformedConfigFailsClosed(t *testing.T) {
 func TestNewCommandFailsClosedWhenSlugNamespaceIsCorrupt(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := model.SlugifyTitle("fix login timeout")
 		corruptBundleDir := filepath.Join(state.ActiveBundlesDir(root), slug)
@@ -1510,7 +1527,7 @@ func TestNewCommandFailsClosedWhenSlugNamespaceIsCorrupt(t *testing.T) {
 func TestSuggestWorkflowPreset_DefaultPresetDoesNotBypassGuardrailFloor(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Set default_preset to light.
 		cfgPath := state.ConfigPath(root)
@@ -1538,7 +1555,7 @@ func TestSuggestWorkflowPreset_DefaultPresetDoesNotBypassGuardrailFloor(t *testi
 func TestStatusPendingPresetShowsPresetHintNotNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"update auth session validation"})

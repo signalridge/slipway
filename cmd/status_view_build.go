@@ -78,6 +78,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	if err != nil {
 		return statusView{}, wrapGovernanceReadinessError("build status view", change.Slug, err)
 	}
+	readiness.GateEvaluations = defaultVisibleGateEvaluations(change, readiness.GateEvaluations)
 	blockers = append(blockers, readiness.Blockers...)
 
 	projection, err := enginestatus.BuildProjection(
@@ -313,6 +314,36 @@ func buildEvidencePointers(inventory enginestatus.EvidenceInventory, extraNonTas
 
 func gateStatusFromEvaluations(evaluations map[gate.GateID]gate.GateEvaluation) map[string]model.GateRecord {
 	return enginestatus.GateStatusFromEvaluations(evaluations)
+}
+
+func defaultVisibleGateEvaluations(change model.Change, evaluations map[gate.GateID]gate.GateEvaluation) map[gate.GateID]gate.GateEvaluation {
+	if len(evaluations) == 0 {
+		return nil
+	}
+	if defaultSurfaceShowsShipGate(change.CurrentState) {
+		return evaluations
+	}
+
+	visible := make(map[gate.GateID]gate.GateEvaluation, len(evaluations))
+	for id, evaluation := range evaluations {
+		if id == gate.GateShip {
+			continue
+		}
+		visible[id] = evaluation
+	}
+	if len(visible) == 0 {
+		return nil
+	}
+	return visible
+}
+
+func defaultSurfaceShowsShipGate(state model.WorkflowState) bool {
+	switch state {
+	case model.StateS4Verify, model.StateDone:
+		return true
+	default:
+		return false
+	}
 }
 
 func collectSkillVerificationPointers(root, slug string) map[string]string {

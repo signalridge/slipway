@@ -99,7 +99,7 @@ func TestSkillConstraintsPopulatedInNextOutput(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -149,7 +149,7 @@ Low risk.
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -179,7 +179,7 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 

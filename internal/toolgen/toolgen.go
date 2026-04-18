@@ -166,8 +166,8 @@ var commandRegistry = []CommandDef{
 	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasAdapterSkill: true,
 		Arguments:     `"<description>" [--preset light|standard|strict] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
-	{ID: "next", Class: CommandClassMutation, Description: "Show readiness, advance one step if ready, and show next skill", Tier: "core", HasAdapterSkill: true,
-		Arguments: "[--json] [--preview] [--context-guard] [--change <slug>]"},
+	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasAdapterSkill: true,
+		Arguments: "[--json] [--context-guard] [--change <slug>]"},
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
@@ -339,17 +339,33 @@ func Registry() []ToolConfig {
 	return out
 }
 
-// ResolveWorkspaceTool selects the best matching generated tool adapter for the
+// ToolAmbiguityError is returned when multiple generated adapters exist and
+// no SLIPWAY_TOOL override disambiguates the selection.
+type ToolAmbiguityError struct {
+	DetectedAdapters []string
+}
+
+func (e *ToolAmbiguityError) Error() string {
+	return fmt.Sprintf("tool_ambiguity: multiple adapters detected [%s]; set SLIPWAY_TOOL=<tool> to disambiguate (e.g. SLIPWAY_TOOL=codex slipway next --json)",
+		strings.Join(e.DetectedAdapters, ", "))
+}
+
+// ResolveWorkspaceTool selects the matching generated tool adapter for the
 // current workspace. Selection order:
-// 1. SLIPWAY_TOOL env override, when that adapter is generated
-// 2. the single generated adapter, when exactly one exists
-// 3. the first generated adapter in deterministic registry order
-// 4. Claude fallback when no generated adapters exist
-func ResolveWorkspaceTool(root string) ToolConfig {
+// 1. SLIPWAY_TOOL env override, when that adapter exists in the workspace
+// 2. exactly one generated adapter in the workspace
+// 3. fail closed with ToolAmbiguityError when multiple adapters exist
+// 4. fail closed when no generated adapter exists
+func ResolveWorkspaceTool(root string) (ToolConfig, error) {
 	if override := strings.ToLower(strings.TrimSpace(os.Getenv("SLIPWAY_TOOL"))); override != "" {
-		if cfg, ok := toolRegistry[override]; ok && hasGeneratedAdapter(root, cfg) {
-			return cfg
+		cfg, ok := toolRegistry[override]
+		if !ok {
+			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: unknown tool adapter", override)
 		}
+		if !hasGeneratedAdapter(root, cfg) {
+			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: adapter not generated in workspace; run `slipway init --tools %s`", override, override)
+		}
+		return cfg, nil
 	}
 
 	generated := make([]ToolConfig, 0, len(toolRegistry))
@@ -359,12 +375,16 @@ func ResolveWorkspaceTool(root string) ToolConfig {
 		}
 	}
 	if len(generated) == 1 {
-		return generated[0]
+		return generated[0], nil
 	}
-	if len(generated) > 0 {
-		return generated[0]
+	if len(generated) > 1 {
+		ids := make([]string, 0, len(generated))
+		for _, cfg := range generated {
+			ids = append(ids, cfg.ID)
+		}
+		return ToolConfig{}, &ToolAmbiguityError{DetectedAdapters: ids}
 	}
-	return toolRegistry["claude"]
+	return ToolConfig{}, fmt.Errorf("no generated tool adapter found in workspace; run `slipway init --tools <tool>`")
 }
 
 // ResolveTools parses tool selection string into a list of tool IDs.

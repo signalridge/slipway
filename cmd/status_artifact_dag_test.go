@@ -65,6 +65,8 @@ func buildArtifactDAGWithSchema(change model.Change, schema []artifact.ArtifactS
 }
 
 func TestBuildArtifactDAGUsesArtifactIDsAndFiltersLevelScopedDependencies(t *testing.T) {
+	t.Parallel()
+
 	change := model.NewChange("status-dag")
 	change.Artifacts["intent"] = model.ArtifactState{ID: "intent", State: model.ArtifactLifecycleApproved}
 	change.Artifacts["requirements"] = model.ArtifactState{ID: "requirements", State: model.ArtifactLifecycleApproved}
@@ -85,6 +87,8 @@ func TestBuildArtifactDAGUsesArtifactIDsAndFiltersLevelScopedDependencies(t *tes
 }
 
 func TestBuildArtifactDAGKeepsAllRequiredDependenciesWhenArtifactIsNotReady(t *testing.T) {
+	t.Parallel()
+
 	change := model.NewChange("status-dag")
 	change.Artifacts["intent"] = model.ArtifactState{ID: "intent", State: model.ArtifactLifecycleDraft}
 	change.Artifacts["requirements"] = model.ArtifactState{ID: "requirements", State: model.ArtifactLifecycleDraft}
@@ -106,6 +110,8 @@ func TestBuildArtifactDAGKeepsAllRequiredDependenciesWhenArtifactIsNotReady(t *t
 }
 
 func TestBuildArtifactDAGUsesEffectivePresetForRequiredArtifacts(t *testing.T) {
+	t.Parallel()
+
 	change := model.NewChange("status-dag")
 	change.WorkflowPreset = model.WorkflowPresetLight
 
@@ -122,6 +128,8 @@ func TestBuildArtifactDAGUsesEffectivePresetForRequiredArtifacts(t *testing.T) {
 }
 
 func TestArtifactDAGFromProjectionSkipsNonRequiredNodes(t *testing.T) {
+	t.Parallel()
+
 	change := model.NewChange("projection-dag")
 	change.CurrentState = model.StateS1Plan
 	projection, err := enginestatus.BuildProjection(t.TempDir(), change, nil, nil, progression.GovernanceReadiness{

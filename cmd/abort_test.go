@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +17,7 @@ import (
 func TestAbortRequiresExecuteState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_ = createGovernedRequest(t, root, "L2", "abort wrong state")
 
 		cmd := makeAbortCmd()
@@ -40,7 +39,7 @@ func TestAbortRequiresExecuteState(t *testing.T) {
 func TestAbortRejectsUnexpectedArgs(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_ = createGovernedRequest(t, root, "L2", "abort rejects unexpected args")
 
 		cmd := makeAbortCmd()
@@ -55,7 +54,7 @@ func TestAbortRejectsUnexpectedArgs(t *testing.T) {
 func TestAbortOutsideExecuteDoesNotPreemptTrackedProcesses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort should not preempt outside execute")
 
@@ -99,7 +98,7 @@ func TestAbortOutsideExecuteDoesNotPreemptTrackedProcesses(t *testing.T) {
 func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort preserve change")
 		change, err := state.LoadChange(root, slug)
@@ -144,7 +143,7 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 func TestAbortTextUsesRunWhenNoResumableWaveStateExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort text should suggest fresh run")
 		change, err := state.LoadChange(root, slug)
@@ -168,7 +167,7 @@ func TestAbortTextUsesRunWhenNoResumableWaveStateExists(t *testing.T) {
 func TestAbortTextUsesRunResumeWhenResumableWaveStateExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort text should suggest resume")
 		change, err := state.LoadChange(root, slug)

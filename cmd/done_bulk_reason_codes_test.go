@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -16,7 +15,7 @@ import (
 func TestDoneAllReadyPreservesShipGateReasonCodes(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		blocked := model.NewChange("bulk-ship-blocked-reasons")
 		blocked.CurrentState = model.StateS4Verify
@@ -45,7 +44,7 @@ func TestDoneAllReadyPreservesShipGateReasonCodes(t *testing.T) {
 func TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		blocked := model.NewChange("bulk-ship-blocked-artifact-reason")
 		blocked.CurrentState = model.StateS4Verify

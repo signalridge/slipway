@@ -3,14 +3,14 @@ name: slipway-next
 type: orchestration
 tool: "{{.ToolID}}"
 trigger: "{{.Trigger}}"
-description: "Use when you need the next governed step, evidence validation, and state progression context."
+description: "Use when you need the next governed step, evidence validation, and query-only next-skill context."
 ---
 
-# Slipway Step Execution
+# Slipway Next-Step Query
 
-Inspect the next actionable governance skill for the active change, advancing at
-most one lifecycle step.
-This is the single-step progression command for governed changes.
+Inspect the next actionable governance skill for the active change without
+advancing lifecycle state.
+This is the query surface for governed changes.
 
 ## Prerequisites
 1. Active change exists (`slipway status --json` shows a change).
@@ -41,12 +41,12 @@ Show:
 - Key findings and decisions
 - Proposed next step
 
-`slipway next` is intentionally single-step.
-If continuous governed execution is needed, use `slipway run`.
+`slipway next` is intentionally query-only.
+If state progression is needed, use `slipway run`.
 
 ### 5. Advance
 ```bash
-slipway next --json
+slipway run --json
 ```
 CLI validates evidence, checks gates, advances state, and returns next instructions.
 
@@ -100,7 +100,7 @@ Otherwise, execute the skill directly in the current context.
 ## DO NOT SKIP
 1. Pre-action status check (`slipway next --json`).
 2. Blocker resolution before execution.
-3. Post-action verification (`slipway next`).
+3. Post-action progression check (`slipway run --json`).
 4. Use `slipway run` instead of looping `slipway next` when continuous governed execution is required.
 
 ## Rationalization Red Flags

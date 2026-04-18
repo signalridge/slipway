@@ -40,8 +40,8 @@ func TestSessionStartHookFindsNearestParentScope(t *testing.T) {
 	logContent := readHookLog(t, logPath)
 	assert.Contains(t, logContent, nested+"|root")
 	assert.Contains(t, logContent, nested+"|status --json")
-	assert.Contains(t, logContent, nested+"|next --json --preview --hook-lite")
-	assert.NotContains(t, logContent, nested+"|next --preview --context-guard")
+	assert.Contains(t, logContent, nested+"|next --json --hook-lite")
+	assert.NotContains(t, logContent, "--preview")
 }
 
 func TestSessionStartHookReadsScopeScopedHandoff(t *testing.T) {
@@ -185,7 +185,7 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
     echo 'status contract broke' >&2
     exit 1
     ;;
-	  "next --json --preview --hook-lite")
+	  "next --json --hook-lite")
 	    printf '{"next_skill":null}'
 	    ;;
 	esac
@@ -204,6 +204,58 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	require.NoError(t, err)
 
 	assert.Contains(t, string(out), "hook_diagnostic: slipway status --json failed: status contract broke")
+}
+
+func TestSessionStartHookSetsToolEnvForReadOnlyCommands(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, initHookGitRepo(root))
+	writeHookProjectConfig(t, root)
+	writeHookSharedScopeMarker(t, root, "")
+
+	logPath, binDir := installHookTestSlipwayScript(t, root, fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%%s|%%s|%%s\n' "$PWD" "${SLIPWAY_TOOL:-}" "$*" >> "${SLIPWAY_HOOK_LOG}"
+case "$*" in
+  "root")
+    printf '%%s\n' %q
+    ;;
+  "status --json")
+    if [ "${SLIPWAY_TOOL:-}" != "claude" ]; then
+      echo 'missing tool env for status' >&2
+      exit 1
+    fi
+    printf '{"change":"demo"}'
+    ;;
+  "next --json --hook-lite")
+    if [ "${SLIPWAY_TOOL:-}" != "claude" ]; then
+      echo 'missing tool env for next' >&2
+      exit 1
+    fi
+    printf '{"next_skill":{"name":"plan-audit"}}'
+    ;;
+esac
+`, root))
+	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
+		"ToolID": "claude",
+	})
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SLIPWAY_HOOK_LOG="+logPath,
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(out), "hook_diagnostic:")
+	assert.Contains(t, string(out), `{"next_skill":{"name":"plan-audit"}}`)
+
+	logContent := readHookLog(t, logPath)
+	assert.Contains(t, logContent, root+"|claude|status --json")
+	assert.Contains(t, logContent, root+"|claude|next --json --hook-lite")
 }
 
 func TestSessionStartHookSurfacesRootFailureDiagnostic(t *testing.T) {
@@ -249,7 +301,7 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	  "status --json")
     printf '{"change":"demo"}'
     ;;
-	  "next --json --preview --hook-lite")
+	  "next --json --hook-lite")
 	    printf '{"next_skill":null}'
 	    ;;
 	esac

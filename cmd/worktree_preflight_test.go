@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -21,7 +20,7 @@ import (
 func TestNextL3S1RequiresWorktreePreflightSkill(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree preflight")
 
 		// Advance to S2_EXECUTE where the worktree gate is now checked.
@@ -33,7 +32,7 @@ func TestNextL3S1RequiresWorktreePreflightSkill(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -51,7 +50,7 @@ func TestNextL3S1RequiresWorktreePreflightSkill(t *testing.T) {
 func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree gate")
 
 		// Advance to S2_EXECUTE where the worktree gate is now checked.
@@ -84,7 +83,7 @@ func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 func TestNextL3PreviewDoesNotRequireResearchContractBeforeResearchPhase(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		change := model.NewChange("l3-s1-preview")
 		change.Description = "preview should not require research contract at S1 research"
@@ -94,7 +93,7 @@ func TestNextL3PreviewDoesNotRequireResearchContractBeforeResearchPhase(t *testi
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -109,7 +108,7 @@ func TestNextL3PreviewDoesNotRequireResearchContractBeforeResearchPhase(t *testi
 func TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree advance")
 		change, err := state.LoadChange(root, slug)
@@ -160,7 +159,7 @@ func TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence(t *testing.T) {
 func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		change := model.NewChange("l3-scope-artifact")
@@ -175,20 +174,15 @@ func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
 		runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
 		writeWorktreePreflightEvidence(t, root, change.Slug, worktreePath, branch)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
+		view, err := buildNextView(root, changeRef{Slug: change.Slug}, "", false, true, false)
+		require.NoError(t, err)
 
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS1Plan, view.CurrentState)
 
 		// Research artifact should be created at the project root bundle dir
 		// (not worktree) at S1_PLAN/research entry for discovery changes.
 		researchPath := filepath.Join(root, "artifacts", "changes", change.Slug, "research.md")
-		_, err := os.Stat(researchPath)
+		_, err = os.Stat(researchPath)
 		require.NoError(t, err)
 	})
 }
@@ -196,7 +190,7 @@ func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
 func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree paths")
 		change, err := state.LoadChange(root, slug)
@@ -236,7 +230,7 @@ func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
 func TestNextMovesGovernedBundleIntoDedicatedWorktreeAfterPreflight(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree bundle migration")
 		change, err := state.LoadChange(root, slug)
@@ -271,7 +265,7 @@ func TestNextMovesGovernedBundleIntoDedicatedWorktreeAfterPreflight(t *testing.T
 func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 invalid main worktree")
 
@@ -310,7 +304,7 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree deadlock regression")
 		change, err := state.LoadChange(root, slug)
@@ -334,14 +328,8 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 		// Write passing worktree-preflight evidence referencing the real worktree.
 		writeWorktreePreflightEvidence(t, root, slug, normalizedWT, branch)
 
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		require.NoError(t, err)
 
 		// Key assertion: the advance must NOT deadlock. The worktree metadata
 		// should be persisted from the preflight evidence.

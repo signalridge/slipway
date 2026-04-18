@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -19,7 +18,7 @@ import (
 func TestStatusDiagnosticsWhenNoActiveRequest(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
@@ -40,7 +39,7 @@ func TestStatusCommandDefaultsToBoundWorktreeChangeWhenMultipleActiveChanges(t *
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		boundSlug := createGovernedRequest(t, root, "L3", "bound worktree status default route")
 		boundChange, err := state.LoadChange(root, boundSlug)
@@ -183,7 +182,7 @@ func TestShouldFallbackValidateDiagnostics(t *testing.T) {
 func TestBuildStatusViewFromChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createActiveNonDiscoveryChange(t, root, "status change builder")
 		change, err := state.LoadChange(root, slug)
@@ -202,7 +201,7 @@ func TestBuildStatusViewFromChange(t *testing.T) {
 func TestBuildGovernedStatusView(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status governed builder")
 		change, err := state.LoadChange(root, slug)
@@ -223,7 +222,7 @@ func TestBuildGovernedStatusView(t *testing.T) {
 func TestBuildGovernedStatusViewRecomputesGovernanceReadinessWithoutPersistingSnapshot(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status governance recompute")
 		change, err := state.LoadChange(root, slug)
@@ -312,7 +311,7 @@ Not ready.
 func TestBuildGovernedStatusViewChecksInvalidBoundWorktreeBeforeBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status invalid bound worktree")
@@ -335,7 +334,7 @@ func TestBuildGovernedStatusViewChecksInvalidBoundWorktreeBeforeBundle(t *testin
 func TestBuildMultiChangeSummaryView(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		governedSlug := createGovernedRequest(t, root, "L2", "status governed summary")
 
@@ -365,7 +364,7 @@ func TestBuildMultiChangeSummaryView(t *testing.T) {
 func TestBuildGovernedStatusViewPlanAuditKeepsNextAction(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "status plan finalized")
 		change, err := state.LoadChange(root, slug)
@@ -383,7 +382,7 @@ func TestBuildGovernedStatusViewPlanAuditKeepsNextAction(t *testing.T) {
 func TestStatusDirectExecutionView(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"fix login timeout"})
@@ -412,7 +411,7 @@ func assertReadOnlyArtifactReconcileDoesNotPersist(
 
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", description)
 
 		change, err := state.LoadChange(root, slug)
@@ -455,7 +454,7 @@ func TestStatusDoesNotPersistArtifactReconcile(t *testing.T) {
 func TestStatusRejectsInvalidFormat(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makeStatusCmd()
 		cmd.SetArgs([]string{"--format", "xml"})
@@ -481,7 +480,7 @@ func TestValidateDoesNotPersistArtifactReconcile(t *testing.T) {
 func TestRepairRecoversCorruptConfig(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		configPath := state.ConfigPath(root)
 		require.NoError(t, os.WriteFile(configPath, []byte("execution: ["), 0o644))
@@ -509,7 +508,7 @@ func TestRepairRecoversCorruptConfig(t *testing.T) {
 func TestRepairRecreatesMissingConfig(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		require.NoError(t, os.MkdirAll(filepath.Join(state.GitStateDir(root), "runtime"), 0o755))
 
 		configPath := state.ConfigPath(root)
@@ -534,7 +533,7 @@ func TestRepairRecreatesMissingConfig(t *testing.T) {
 func TestResolveExplicitRequestInactiveRemediationDoesNotPointToUnsupportedStatusRequest(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "inactive explicit request remediation")
 		change, err := state.LoadChange(root, slug)

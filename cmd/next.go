@@ -96,6 +96,7 @@ type nextSkillView struct {
 	State               string             `json:"state"`
 	AgentHint           string             `json:"agent_hint,omitempty"`
 	AgentDefinitionPath string             `json:"agent_definition_path,omitempty"`
+	ResolvedToolID      string             `json:"resolved_tool_id,omitempty"`
 	SkillConstraints    *skillConstraints  `json:"skill_constraints,omitempty"`
 	ReviewContext       *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints      []techniqueHint    `json:"technique_hints,omitempty"`
@@ -171,7 +172,6 @@ type resumeCheckpoint struct {
 
 func makeNextCmd() *cobra.Command {
 	var jsonOutput bool
-	var preview bool
 	var contextGuard bool
 	var noAutoPass bool
 	var quickMode bool
@@ -185,11 +185,6 @@ func makeNextCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromWD()
 			if err != nil {
-				return err
-			}
-
-			// Validate flag conflicts before acquiring any locks.
-			if err := validateNextFlags(preview, contextGuard, hookLite); err != nil {
 				return err
 			}
 
@@ -207,7 +202,8 @@ func makeNextCmd() *cobra.Command {
 					return encodeJSONResponse(cmd, view)
 				}
 
-				view, err := buildNextView(root, ref, "", preview, !jsonOutput, noAutoPass, quickMode)
+				// next is always query-only; state advancement is owned by `run`.
+				view, err := buildNextView(root, ref, "", true, !jsonOutput, noAutoPass, quickMode)
 				if err != nil {
 					return err
 				}
@@ -225,39 +221,13 @@ func makeNextCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().BoolVar(&preview, "preview", false, "Show next skill context without state advancement")
-	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format (requires --preview)")
+	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format")
 	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
 	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
 	cmd.Flags().BoolVar(&hookLite, "hook-lite", false, "")
 	_ = cmd.Flags().MarkHidden("hook-lite")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
-}
-
-func validateNextFlags(preview bool, contextGuard bool, hookLite bool) error {
-	if contextGuard && !preview {
-		return newCLIError(
-			categoryInvalidUsage,
-			"flag_conflict",
-			"--context-guard requires --preview",
-			"Use --context-guard with --preview.",
-			"",
-			nil,
-		)
-	}
-	if hookLite && !preview {
-		return newCLIError(
-			categoryInvalidUsage,
-			"flag_conflict",
-			"--hook-lite requires --preview",
-			"Use --hook-lite with --preview.",
-			"",
-			nil,
-		)
-	}
-
-	return nil
 }
 
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, quickMode ...bool) (nextView, error) {
@@ -392,7 +362,7 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 // suppressed so the caller can decide whether to accept auto-pass.
 func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, quickMode bool) (progression.AdvanceSummary, error) {
 	if preview {
-		return progression.AdvanceSummary{Action: "preview"}, nil
+		return progression.AdvanceSummary{Action: "query"}, nil
 	}
 
 	var opts []progression.AdvanceOptions
@@ -411,7 +381,7 @@ func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool,
 
 func shouldExposeAdvancedSummaryToCaller(summary progression.AdvanceSummary) bool {
 	switch summary.Action {
-	case "advanced", "done_ready":
+	case "query", "advanced", "done_ready":
 		return true
 	case "blocked":
 		return true

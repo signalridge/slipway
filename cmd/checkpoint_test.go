@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +15,7 @@ import (
 func TestCheckpointSetsActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -51,7 +50,7 @@ func TestCheckpointSetsActiveCheckpoint(t *testing.T) {
 func TestCheckpointDecisionWithAllowedResponses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test decision checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -84,7 +83,7 @@ func TestCheckpointDecisionWithAllowedResponses(t *testing.T) {
 func TestCheckpointRejectsWrongState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		_ = createGovernedRequest(t, root, "L2", "test wrong state")
 
 		cmd := makeCheckpointCmd()
@@ -98,7 +97,7 @@ func TestCheckpointRejectsWrongState(t *testing.T) {
 func TestCheckpointRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test duplicate checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -122,7 +121,7 @@ func TestCheckpointRejectsDuplicate(t *testing.T) {
 func TestCheckpointRequiresTaskID(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test missing task id")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -147,7 +146,7 @@ func TestCheckpointRequiresTaskID(t *testing.T) {
 func TestCheckpointDecisionRequiresAllowedResponses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test decision no responses")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -168,7 +167,7 @@ func TestCheckpointDecisionRequiresAllowedResponses(t *testing.T) {
 func TestCheckpointRejectsTaskOutsideCurrentWave(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "test checkpoint current wave enforcement")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -208,7 +207,7 @@ func TestCheckpointRejectsTaskOutsideCurrentWave(t *testing.T) {
 func TestCheckpointRejectsWhenWaveRunsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "checkpoint should fail closed when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)

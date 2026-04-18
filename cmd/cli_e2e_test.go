@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -32,7 +31,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		errPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "runtime_failure", errPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"init", "--tools", "none"})
+		stdout, stderr, err = runRootCommand([]string{"init", "--tools", "claude"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		assert.Contains(t, stdout, "initialized slipway workspace")
@@ -85,7 +84,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		_, _, err := runRootCommand([]string{"init", "--tools", "none"})
+		_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
 		require.NoError(t, err)
 
 		stdout, stderr, err := runRootCommand([]string{"new", "--json", "--preset", "standard", "fix status output"})
@@ -155,7 +154,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "run should stop at research orchestration")
 
@@ -176,7 +175,7 @@ func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "run resume-response e2e")
 		change, err := state.LoadChange(root, slug)
@@ -230,7 +229,7 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort then resume e2e")
 		change, err := state.LoadChange(root, slug)
@@ -312,7 +311,7 @@ func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
 func TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "sync e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -343,7 +342,7 @@ func TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements(t *testing.
 func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "checkpoint e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -382,7 +381,7 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "review e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -427,7 +426,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "done e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -460,7 +459,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 func TestCLIEndToEndValidateRequirementsAfterRequestNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		// Create governed change via helper (request + scaffold + advance to S1).
 		slug := createGovernedRequest(t, root, "L2", "implement token rotation")

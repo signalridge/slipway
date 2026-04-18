@@ -29,7 +29,7 @@ func TestNextUsesCodexPathsWhenWorkspaceIsCodexOnly(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -74,7 +74,7 @@ func TestNextUsesCurrentLinkedWorktreeAdaptersForSkillPaths(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -97,7 +97,7 @@ func TestNextUsesExistingPromptPathForIntakeHost(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--preview"})
+		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 

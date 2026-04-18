@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -23,7 +22,7 @@ import (
 func TestResolveExplicitChangeRejectsInactiveSlug(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "inactive explicit request")
 		change, err := state.LoadChange(root, slug)
@@ -55,7 +54,7 @@ func TestProjectRootFromWDRejectsUninitializedGitRepo(t *testing.T) {
 func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		_, err := resolveExplicitChange(root, "slug-missing")
 		cliErr := asCLIError(err)
@@ -70,7 +69,7 @@ func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
 func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "corrupt explicit governed request")
 		require.NoError(t, os.WriteFile(
@@ -90,7 +89,7 @@ func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
 func TestLoadActiveChangeRejectsInactiveStatus(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "inactive change helper")
 		change, err := state.LoadChange(root, slug)
@@ -115,7 +114,7 @@ func TestLoadActiveChangeRejectsInactiveStatus(t *testing.T) {
 func TestLoadActiveChangeSurfacesCorruptStateIntegrity(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "corrupt change helper")
 		require.NoError(t, os.WriteFile(
@@ -140,7 +139,7 @@ func TestLoadActiveChangeSurfacesCorruptStateIntegrity(t *testing.T) {
 func TestLoadExecutionContextWrapsCorruptExecutionSummaryIntegrity(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "corrupt execution summary helper")
 		change, err := state.LoadChange(root, slug)
@@ -184,7 +183,7 @@ func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChang
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "hidden worktree summary path should stay authoritative")
 		change, err := state.LoadChange(root, slug)
@@ -228,7 +227,7 @@ func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChang
 func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "freshness should ignore derived task checkbox sync")
 		change, err := state.LoadChange(root, slug)
@@ -295,7 +294,7 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 func TestProjectFreshnessTracksBundleArtifactMTime(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "freshness tracks bundle artifact mtime")
 		change, err := state.LoadChange(root, slug)
@@ -352,7 +351,7 @@ func TestProjectFreshnessIgnoresNonFreshnessBlockers(t *testing.T) {
 func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "freshness fails closed on unreadable artifact")
 		change, err := state.LoadChange(root, slug)
@@ -397,7 +396,7 @@ func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing
 func TestResolveActiveChangeRefPropagatesWorktreeResolutionErrors(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 		createGovernedRequest(t, root, "L2", "worktree resolution failure")
 
 		realGit, err := exec.LookPath("git")
@@ -429,7 +428,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "bound worktree should read main-scope config")
 		change, err := state.LoadChange(root, slug)
@@ -488,7 +487,7 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "nested bound worktree active change resolution")
 		change, err := state.LoadChange(root, slug)

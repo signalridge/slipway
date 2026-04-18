@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +17,7 @@ import (
 func TestPresetCommandConfirmsPendingPresetAndScaffoldsBundle(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"fix login timeout"})
@@ -50,7 +49,7 @@ func TestPresetCommandConfirmsPendingPresetAndScaffoldsBundle(t *testing.T) {
 func TestPresetCommandPendingFromDocSeedsArtifactsFromIntentSections(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -97,7 +96,7 @@ func TestPresetCommandPendingFromDocSeedsArtifactsFromIntentSections(t *testing.
 func TestPresetCommandPendingFromLongDocRetainsAcceptanceSections(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		doc := `# Session timeout
@@ -136,7 +135,7 @@ func TestPresetCommandPendingFromLongDocRetainsAcceptanceSections(t *testing.T) 
 func TestPresetCommandPrefersCanonicalIntentSectionsOverSourceDocument(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		docPath := filepath.Join(root, "idea.md")
 		require.NoError(t, os.WriteFile(docPath, []byte(`# Session timeout
@@ -176,7 +175,7 @@ func TestPresetCommandPrefersCanonicalIntentSectionsOverSourceDocument(t *testin
 func TestPresetCommandRejectsInvalidPreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"fix login timeout"})
@@ -196,7 +195,7 @@ func TestPresetCommandRejectsInvalidPreset(t *testing.T) {
 func TestPresetCommandCanUpgradeExistingConfirmedPresetDuringPlanning(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"--preset", "light", "fix login timeout"})
@@ -218,7 +217,7 @@ func TestPresetCommandCanUpgradeExistingConfirmedPresetDuringPlanning(t *testing
 func TestPresetCommandRejectsDowngradeAfterLeavingS1Plan(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"--preset", "strict", "refactor auth"})
@@ -253,7 +252,7 @@ func TestPresetCommandRejectsDowngradeAfterLeavingS1Plan(t *testing.T) {
 func TestPresetCommandAllowsUpgradeAfterLeavingS1Plan(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"--preset", "light", "fix login timeout"})
@@ -282,7 +281,7 @@ func TestPresetCommandAllowsUpgradeAfterLeavingS1Plan(t *testing.T) {
 func TestPresetCommandRequiresActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		cmd := makePresetCmd()
 		cmd.SetArgs([]string{"light"})
@@ -298,7 +297,7 @@ func TestPresetCommandRequiresActiveChange(t *testing.T) {
 func TestPresetCommandPreservesChangeFileAfterConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"fix login timeout"})
@@ -319,7 +318,7 @@ func TestPresetCommandPreservesChangeFileAfterConfirmation(t *testing.T) {
 func TestPresetCommandScaffoldFailureRollsBackToPendingConfirmation(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"implement auth timeout strategy"})
@@ -357,7 +356,7 @@ func TestPresetCommandScaffoldFailureRollsBackToPendingConfirmation(t *testing.T
 func TestPresetCommandReScaffoldFailurePreservesConfirmedPreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		initTestWorkspace(t, root)
 
 		create := makeNewCmd()
 		create.SetArgs([]string{"implement auth timeout strategy"})
