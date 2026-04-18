@@ -144,7 +144,7 @@ func TestStatusCommandHydrateRefRequiresHydrate(t *testing.T) {
 
 		cmd := makeStatusCmd()
 		cmd.SetArgs([]string{
-			"--view", "incident",
+			"--focus", "incident",
 			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})
 		err := cmd.Execute()
@@ -170,7 +170,7 @@ func TestStatusCommandHydrateWarnsButStillRendersBodies(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--view", "incident", "--hydrate"})
+		cmd.SetArgs([]string{"--focus", "incident", "--hydrate"})
 		require.NoError(t, cmd.Execute())
 
 		rendered := out.String()
@@ -189,7 +189,7 @@ func TestStatusCommandHydrateRefNarrowsOutput(t *testing.T) {
 		cmd := makeStatusCmd()
 		cmd.SetOut(&out)
 		cmd.SetArgs([]string{
-			"--view", "incident",
+			"--focus", "incident",
 			"--hydrate",
 			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})
@@ -212,7 +212,7 @@ func TestHealthCommandHydrateRefNarrowsOutput(t *testing.T) {
 		cmd := makeHealthCmd()
 		cmd.SetOut(&out)
 		cmd.SetArgs([]string{
-			"--view", "incident",
+			"--focus", "incident",
 			"--hydrate",
 			"--hydrate-ref", "incident-response/incident-severity-matrix.md",
 		})

@@ -105,3 +105,19 @@ func TestStatusSuggestedOnlySkillsStayOffStatusCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultSkillsDoNotUseRemovedCommandViewBindings(t *testing.T) {
+	t.Parallel()
+
+	for _, sk := range defaultSkills() {
+		for _, binding := range sk.Bindings {
+			assert.NotEqual(
+				t,
+				"command-view",
+				string(binding.Type),
+				"skill %q still uses removed command-view binding",
+				sk.ID,
+			)
+		}
+	}
+}

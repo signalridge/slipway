@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -35,7 +34,6 @@ type validateView struct {
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
-	SuggestedCapabilities     []suggestedCapabilityView   `json:"suggested_capabilities,omitempty"`
 	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
 }
 
@@ -124,10 +122,6 @@ func makeValidateCmd() *cobra.Command {
 					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
 					view.Mode = effectiveMode
 					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
-					view.SuggestedCapabilities = buildSuggestedCapabilities(capability.Signals{
-						Command: "validate",
-						Focus:   focus,
-					})
 					return encodeJSONResponse(cmd, view)
 				}
 				return err
@@ -137,19 +131,8 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			change, err := state.LoadChange(root, ref.Slug)
-			if err != nil {
-				return err
-			}
-			execSummary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-			if err != nil {
-				return err
-			}
 			view.Mode = effectiveMode
 			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
-			view.SuggestedCapabilities = buildSuggestedCapabilities(
-				suggestedCapabilitySignalsForChange("validate", focus, change, execSummary, view.Blockers),
-			)
 			return encodeJSONResponse(cmd, view)
 		},
 	}

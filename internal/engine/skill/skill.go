@@ -14,7 +14,6 @@ type Definition struct {
 	Mitigation          string              `json:"mitigation"`
 	RunSummaryBound     bool                `json:"run_summary_bound"`
 	DiscoveryOnly       bool                `json:"discovery_only,omitempty"`
-	GuardrailRequired   bool                `json:"guardrail_required,omitempty"`
 	CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
 	AgentHint           string              `json:"agent_hint,omitempty"`
 	AllowedOperations   []string            `json:"allowed_operations,omitempty"`
@@ -59,16 +58,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		AgentHint:         "slipway-orchestrator",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_code", "run_tests", "write_evidence", "git_commit"},
 		RequiredOutputs:   []string{"evidence_record", "task_results", "changed_files"},
-	},
-	"tdd-governance": {
-		Name:              "tdd-governance",
-		State:             model.StateS2Execute,
-		Mitigation:        "guardrail-domain tasks executed without test-driven proof",
-		RunSummaryBound:   true,
-		GuardrailRequired: true,
-		AgentHint:         "slipway-orchestrator",
-		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
-		RequiredOutputs:   []string{"evidence_record"},
 	},
 	"spec-compliance-review": {
 		Name:              "spec-compliance-review",
@@ -140,11 +129,9 @@ func RequiredSkillsForStateWithRegistry(
 	needsDiscovery bool,
 	state model.WorkflowState,
 	closeoutRequired bool,
-	guardrailDomain string,
 	planSubSteps ...model.PlanSubStep,
 ) []string {
 	required := []string{}
-	hasGuardrail := strings.TrimSpace(guardrailDomain) != ""
 
 	// Build set of active plan sub-steps for S1_PLAN matching.
 	activeSubSteps := make(map[model.PlanSubStep]bool, len(planSubSteps))
@@ -163,9 +150,6 @@ func RequiredSkillsForStateWithRegistry(
 			}
 		}
 		if def.CloseoutConditional && !closeoutRequired {
-			continue
-		}
-		if def.GuardrailRequired && !hasGuardrail {
 			continue
 		}
 		if def.DiscoveryOnly && !needsDiscovery {

@@ -1,15 +1,14 @@
 // Package capability owns two runtime authorities:
 //
 //  1. The catalog-skill registry (internal identity): bindings for hosts,
-//     command-auto / command-view routes, technique hints, and export-only
-//     metadata. Generated SKILL.md frontmatter mirrors this registry and the
+//     command-auto routes, technique hints, and export-only metadata.
+//     Generated SKILL.md frontmatter mirrors this registry and the
 //     binding-compare gate enforces 1:1 equality.
 //  2. The surface policy registry (public exposure), owned by surfaces.go.
-//     It classifies each user-facing selector as primary / suggested /
-//     explicit focus / view, and resolves public aliases to their backing
-//     skill id. --focus / --view resolution reads surfaces.go, not catalog
-//     bindings, so BindingCommandAuto metadata is never equivalent to a
-//     public selector.
+//     It classifies each user-facing selector as primary / explicit focus
+//     and resolves public aliases to their backing skill id. --focus
+//     resolution reads surfaces.go, not catalog bindings, so BindingCommandAuto
+//     metadata is never equivalent to a public selector.
 //
 // Catalog skills do not replace the governance kernel. ResolveNextSkill in
 // internal/engine/progression remains the only progression authority; this
@@ -65,7 +64,6 @@ const (
 	BindingHostEmbedded  BindingType = "host-embedded"
 	BindingCommandAuto   BindingType = "command-auto"
 	BindingTechniqueHint BindingType = "technique-hint"
-	BindingCommandView   BindingType = "command-view"
 	BindingExportOnly    BindingType = "export-only"
 )
 
@@ -274,7 +272,7 @@ func validEvidence(e EvidenceContract) bool {
 func validBindingType(t BindingType) bool {
 	switch t {
 	case BindingHostEmbedded, BindingCommandAuto,
-		BindingTechniqueHint, BindingCommandView, BindingExportOnly:
+		BindingTechniqueHint, BindingExportOnly:
 		return true
 	}
 	return false

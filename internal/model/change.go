@@ -49,16 +49,13 @@ type Change struct {
 	// Execution
 	ActiveCheckpoint *ActiveCheckpoint `yaml:"active_checkpoint,omitempty" json:"active_checkpoint,omitempty"`
 
-	// Runtime sidecar (runtime-state.yaml). These are intentionally excluded
-	// from change.yaml so lifecycle authority stays narrow. The read path uses
-	// strict decoding with KnownFields(true), so yaml:"-" here is also the
-	// contract that persisted runtime receipts like gates/artifacts/evidence_refs
-	// must be rejected rather than silently accepted from change.yaml.
-	Artifacts                 map[string]ArtifactState `yaml:"-" json:"-"`
-	LastAutoPassedStates      []AutoPassedState        `yaml:"-" json:"-"`
-	EvidenceRefs              map[string]string        `yaml:"-" json:"-"`
-	ReviewIntentDriftFailures int                      `yaml:"-" json:"-"`
-	InterruptedExecutionAt    time.Time                `yaml:"-" json:"-"`
+	// Runtime fields (formerly in a separate runtime-state.yaml sidecar, now
+	// unified into change.yaml as part of the single-authority model).
+	Artifacts                 map[string]ArtifactState `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
+	LastAutoPassedStates      []AutoPassedState        `yaml:"last_auto_passed_states,omitempty" json:"last_auto_passed_states,omitempty"`
+	EvidenceRefs              map[string]string        `yaml:"evidence_refs,omitempty" json:"evidence_refs,omitempty"`
+	ReviewIntentDriftFailures int                      `yaml:"review_intent_drift_failures,omitempty" json:"review_intent_drift_failures,omitempty"`
+	InterruptedExecutionAt    time.Time                `yaml:"interrupted_execution_at,omitempty" json:"interrupted_execution_at,omitempty"`
 }
 
 // Phase returns the user-facing phase for this change.
@@ -186,10 +183,8 @@ func (c Change) Validate() error {
 			return fmt.Errorf("active_checkpoint: %w", err)
 		}
 	}
-	// These fields are hydrated from runtime-state.yaml after LoadChange reads the
-	// lifecycle authority file. Validation still matters here because callers work
-	// with a unified in-memory Change that includes both lifecycle and runtime
-	// sidecar data.
+	// Runtime fields are now part of change.yaml. Validation ensures in-memory
+	// Change consistency for all callers.
 	for i, autoPassed := range c.LastAutoPassedStates {
 		if err := autoPassed.Validate(); err != nil {
 			return fmt.Errorf("last_auto_passed_states[%d]: %w", i, err)

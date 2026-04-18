@@ -5,18 +5,14 @@ import (
 	"strings"
 )
 
-// SurfaceClass classifies a public surface record. Route-surface plan §4.2
-// defines four exposure classes: primary, suggested, explicit-focus, and
-// view. Primary / explicit-focus / view drive direct selector lookup;
-// suggested records own suggestion exposure and user-facing naming for the
-// bounded `suggested_capabilities[]` channel.
+// SurfaceClass classifies a public surface record. Two classes remain:
+// primary (the default route for a command) and explicit_focus (opt-in
+// selection via --focus).
 type SurfaceClass string
 
 const (
 	SurfacePrimary       SurfaceClass = "primary"
-	SurfaceSuggested     SurfaceClass = "suggested"
 	SurfaceExplicitFocus SurfaceClass = "explicit_focus"
-	SurfaceView          SurfaceClass = "view"
 )
 
 // SurfaceRecord is a single public-surface entry. Every record in this plan
@@ -32,8 +28,8 @@ type SurfaceRecord struct {
 }
 
 // surfacePolicy is the checked-in catalog of public surfaces. Primary routes
-// mirror route-surface plan §5.1; suggested-only skills mirror §5.2; explicit
-// focuses mirror §5.3; views mirror §5.4.
+// mirror route-surface plan §5.1; explicit focuses mirror §5.3 after the
+// suggested/view cleanup.
 var surfacePolicy = []SurfaceRecord{
 	// §5.1 Primary routes — one per command surface.
 	{
@@ -62,79 +58,20 @@ var surfacePolicy = []SurfaceRecord{
 		Summary: "Change-scoped incident-response diagnostic view.",
 	},
 
-	// §5.2 Suggested-only skills — public recommendation names.
-	{
-		Command: "review", Class: SurfaceSuggested,
-		PublicName: "security-review", BackingID: "security-review",
-		Summary: "Attach the security checklist when auth, crypto, or input boundaries change.",
-	},
-	{
-		Command: "review", Class: SurfaceSuggested,
-		PublicName: "threat-modeling", BackingID: "threat-modeling",
-		Summary: "Model trust-boundary changes before approving risky architectural deltas.",
-	},
-	{
-		Command: "validate", Class: SurfaceSuggested,
-		PublicName: "threat-modeling", BackingID: "threat-modeling",
-		Summary: "Model trust-boundary changes before approving risky architectural deltas.",
-	},
-	{
-		Command: "review", Class: SurfaceSuggested,
-		PublicName: "gha-security-review", BackingID: "gha-security-review",
-		Summary: "Inspect workflow changes for GitHub Actions attack paths and unsafe permissions.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "gha-security-review", BackingID: "gha-security-review",
-		Summary: "Inspect workflow changes for GitHub Actions attack paths and unsafe permissions.",
-	},
-	{
-		Command: "review", Class: SurfaceSuggested,
-		PublicName: "supply-chain-audit", BackingID: "supply-chain-audit",
-		Summary: "Audit dependency, lockfile, and license risk when package manifests change.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "supply-chain-audit", BackingID: "supply-chain-audit",
-		Summary: "Audit dependency, lockfile, and license risk when package manifests change.",
-	},
-	{
-		Command: "validate", Class: SurfaceSuggested,
-		PublicName: "coverage-analysis", BackingID: "coverage-analysis",
-		Summary: "Check whether test coverage is sufficient for the current change.",
-	},
-	{
-		Command: "validate", Class: SurfaceSuggested,
-		PublicName: "performance-profiling", BackingID: "performance-profiling",
-		Summary: "Profile performance-sensitive changes when perf cues or bottlenecks are present.",
-	},
-	{
-		Command: "review", Class: SurfaceSuggested,
-		PublicName: "variant-analysis", BackingID: "variant-analysis",
-		Summary: "Search for closely related bug variants after confirming one concrete issue.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "variant-analysis", BackingID: "variant-analysis",
-		Summary: "Search for closely related bug variants after confirming one concrete issue.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "ci-triage", BackingID: "ci-triage",
-		Summary: "Triage failing CI signals before retrying or repairing the pipeline.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "review-comment-triage", BackingID: "review-comment-triage",
-		Summary: "Triage PR review feedback and reply workflows when comment context exists.",
-	},
-	{
-		Command: "repair", Class: SurfaceSuggested,
-		PublicName: "git-recovery", BackingID: "git-recovery",
-		Summary: "Recover from tangled git state before taking destructive repair actions.",
-	},
-
 	// §5.3 Explicit focuses — small opt-in set.
+	//
+	// After Wave-3 view→focus unification, status/health "incident" is
+	// exposed as an explicit focus so `--focus incident` validates.
+	{
+		Command: "status", Class: SurfaceExplicitFocus,
+		PublicName: "incident", BackingID: "incident-response",
+		Summary: "Incident-response diagnostic focus for status.",
+	},
+	{
+		Command: "health", Class: SurfaceExplicitFocus,
+		PublicName: "incident", BackingID: "incident-response",
+		Summary: "Incident-response diagnostic focus for health.",
+	},
 	{
 		Command: "review", Class: SurfaceExplicitFocus,
 		PublicName: "sast", BackingID: "sast-orchestration",
@@ -165,18 +102,6 @@ var surfacePolicy = []SurfaceRecord{
 		PublicName: "mutation", BackingID: "mutation-testing",
 		Summary: "Score test strength with mutation testing.",
 	},
-
-	// §5.4 Read-only views.
-	{
-		Command: "status", Class: SurfaceView,
-		PublicName: "incident", BackingID: "incident-response",
-		Summary: "Read-only incident-response diagnostic view.",
-	},
-	{
-		Command: "health", Class: SurfaceView,
-		PublicName: "incident", BackingID: "incident-response",
-		Summary: "Read-only incident-response diagnostic view.",
-	},
 }
 
 // AllSurfaces returns a defensive copy of the shipped surface policy in
@@ -203,12 +128,8 @@ func classOrder(c SurfaceClass) int {
 		return 0
 	case SurfaceExplicitFocus:
 		return 1
-	case SurfaceView:
-		return 2
-	case SurfaceSuggested:
-		return 3
 	}
-	return 4
+	return 2
 }
 
 // PrimaryForCommand returns the primary surface record for a command
@@ -239,38 +160,12 @@ func ExplicitFocusesForCommand(command string) []SurfaceRecord {
 	return out
 }
 
-// ViewsForCommand returns the view records registered for a command surface,
-// sorted by public name.
-func ViewsForCommand(command string) []SurfaceRecord {
-	command = strings.TrimSpace(command)
-	var out []SurfaceRecord
-	for _, s := range surfacePolicy {
-		if s.Class == SurfaceView && s.Command == command {
-			out = append(out, s)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].PublicName < out[j].PublicName })
-	return out
-}
-
 // LookupFocus resolves a `--focus <alias>` selector for a command surface.
 func LookupFocus(command, alias string) (SurfaceRecord, bool) {
 	command = strings.TrimSpace(command)
 	alias = strings.TrimSpace(alias)
 	for _, s := range surfacePolicy {
 		if s.Class == SurfaceExplicitFocus && s.Command == command && s.PublicName == alias {
-			return s, true
-		}
-	}
-	return SurfaceRecord{}, false
-}
-
-// LookupView resolves a `--view <alias>` selector for a command surface.
-func LookupView(command, alias string) (SurfaceRecord, bool) {
-	command = strings.TrimSpace(command)
-	alias = strings.TrimSpace(alias)
-	for _, s := range surfacePolicy {
-		if s.Class == SurfaceView && s.Command == command && s.PublicName == alias {
 			return s, true
 		}
 	}
@@ -289,23 +184,4 @@ func ExplicitFocusBackingIDs() map[string]struct{} {
 		}
 	}
 	return out
-}
-
-// suggestionSurfaceForBacking resolves the public suggestion surface for a
-// command/backing pair. Explicit-focus aliases win when a focus-backed skill is
-// suggested; otherwise the command-specific suggested surface record is used.
-func suggestionSurfaceForBacking(command, backingID string) (SurfaceRecord, bool) {
-	command = strings.TrimSpace(command)
-	backingID = strings.TrimSpace(backingID)
-	for _, s := range surfacePolicy {
-		if s.Command == command && s.BackingID == backingID && s.Class == SurfaceExplicitFocus {
-			return s, true
-		}
-	}
-	for _, s := range surfacePolicy {
-		if s.Command == command && s.BackingID == backingID && s.Class == SurfaceSuggested {
-			return s, true
-		}
-	}
-	return SurfaceRecord{}, false
 }

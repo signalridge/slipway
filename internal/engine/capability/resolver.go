@@ -17,35 +17,21 @@ type Attachment struct {
 }
 
 // RouteSelection names a routed command choice. Mode carries the public
-// focus alias (or primary public name); View carries the public view alias
-// (or primary public name for status/health). BackingID is the catalog
-// skill id that implements the route.
+// focus alias (or primary public name). BackingID is the catalog skill id
+// that implements the route.
 type RouteSelection struct {
 	SkillID   string
 	BackingID string
-	Mode      string // public focus/primary alias for review/validate/repair
-	View      string // public view/primary alias for status/health
+	Mode      string
 	Reason    string
 }
 
-// SuggestedCapability is one entry in Resolution.SuggestedCapabilities.
-// Cap 3, stable order, disjoint from Supports.
-type SuggestedCapability struct {
-	Name    string // public surface name exposed to operators
-	Summary string
-	Reason  string
-	Kind    string // "suggested" or "explicit_focus"
-	Score   int
-}
-
 // Resolution is the full resolver output for one invocation. Supports are
-// capped at three entries. SuggestedCapabilities are capped at three, stable-
-// ordered, disjoint from Supports.
+// capped at three entries.
 type Resolution struct {
-	Route                 *RouteSelection
-	Supports              []Attachment
-	SuggestedCapabilities []SuggestedCapability
-	HydrateReferences     []string
+	Route             *RouteSelection
+	Supports          []Attachment
+	HydrateReferences []string
 }
 
 // Signals carries the context inputs for capability resolution.
@@ -59,16 +45,13 @@ type Signals struct {
 	// Focus names an explicit `--focus <alias>` selection resolved through
 	// surface policy. Empty means no explicit focus was requested.
 	Focus string
-	// View names an explicit `--view <alias>` selection (status / health).
-	View string
 }
 
 // Resolve scans the registry using Binding metadata (not dynamic trigger DSL)
 // and returns:
-//   - the routed primary/explicit-focus/view selection (via surface policy),
+//   - the routed primary/explicit-focus selection (via surface policy),
 //   - up to three supporting attachments from host-embedded / technique-hint
 //     bindings,
-//   - up to three suggested capabilities from command-auto bindings,
 //   - the union of hydrate references eligible on the current context.
 func Resolve(reg *Registry, sig Signals) Resolution {
 	if reg == nil {
@@ -83,9 +66,6 @@ func Resolve(reg *Registry, sig Signals) Resolution {
 	// Supports come from host-embedded / technique-hint bindings.
 	resolution.Supports = collectSupports(reg, sig, resolution.Route)
 
-	// Suggested capabilities from command-auto bindings.
-	resolution.SuggestedCapabilities = collectSuggestedCapabilities(reg, sig, resolution)
-
 	// Hydrate references from routed + support skills.
 	resolution.HydrateReferences = collectHydrateReferences(reg, sig, resolution)
 
@@ -93,9 +73,8 @@ func Resolve(reg *Registry, sig Signals) Resolution {
 }
 
 // resolveRoute applies the surface-policy-based route contract. It returns
-// the explicit-focus alias when requested, else the explicit-view alias,
-// else the primary route for the command. Returns nil when no surface
-// policy applies.
+// the explicit-focus alias when requested, else the primary route for the
+// command. Returns nil when no surface policy applies.
 func resolveRoute(reg *Registry, sig Signals) *RouteSelection {
 	if sig.Command == "" {
 		return nil
@@ -113,18 +92,6 @@ func resolveRoute(reg *Registry, sig Signals) *RouteSelection {
 			}
 		}
 	}
-	if alias := strings.TrimSpace(sig.View); alias != "" {
-		if rec, ok := LookupView(sig.Command, alias); ok {
-			if _, regOk := reg.Lookup(rec.BackingID); regOk {
-				return &RouteSelection{
-					SkillID:   rec.BackingID,
-					BackingID: rec.BackingID,
-					View:      rec.PublicName,
-					Reason:    "explicit view: " + rec.PublicName,
-				}
-			}
-		}
-	}
 
 	rec, ok := PrimaryForCommand(sig.Command)
 	if !ok {
@@ -134,18 +101,12 @@ func resolveRoute(reg *Registry, sig Signals) *RouteSelection {
 		return nil
 	}
 
-	route := &RouteSelection{
+	return &RouteSelection{
 		SkillID:   rec.BackingID,
 		BackingID: rec.BackingID,
+		Mode:      rec.PublicName,
 		Reason:    rec.Summary,
 	}
-	switch sig.Command {
-	case "status", "health":
-		route.View = rec.PublicName
-	default:
-		route.Mode = rec.PublicName
-	}
-	return route
 }
 
 // collectSupports finds skills with BindingHostEmbedded or BindingTechniqueHint
@@ -183,54 +144,6 @@ func collectSupports(reg *Registry, sig Signals, route *RouteSelection) []Attach
 			Kind:    m.mode,
 			Reason:  m.skill.Summary,
 		})
-	}
-	return out
-}
-
-// collectSuggestedCapabilities finds skills with BindingCommandAuto matching
-// the command, filtered through surface policy. Capped at 3, disjoint from
-// route and supports.
-func collectSuggestedCapabilities(reg *Registry, sig Signals, res Resolution) []SuggestedCapability {
-	if sig.Command == "" {
-		return nil
-	}
-	excluded := make(map[string]struct{})
-	if res.Route != nil && res.Route.BackingID != "" {
-		excluded[res.Route.BackingID] = struct{}{}
-	}
-	for _, s := range res.Supports {
-		excluded[s.SkillID] = struct{}{}
-	}
-
-	var out []SuggestedCapability
-	for _, sk := range reg.All() {
-		if _, skip := excluded[sk.ID]; skip {
-			continue
-		}
-		if !skillHasCommandAutoFor(sk, sig.Command) {
-			continue
-		}
-		surface, ok := suggestionSurfaceForBacking(sig.Command, sk.ID)
-		if !ok {
-			continue
-		}
-		kind := "suggested"
-		if surface.Class == SurfaceExplicitFocus {
-			kind = "explicit_focus"
-		}
-		summary := strings.TrimSpace(surface.Summary)
-		if summary == "" {
-			summary = sk.Summary
-		}
-		out = append(out, SuggestedCapability{
-			Name:    surface.PublicName,
-			Summary: summary,
-			Reason:  sk.Summary,
-			Kind:    kind,
-		})
-		if len(out) >= 3 {
-			break
-		}
 	}
 	return out
 }
@@ -346,17 +259,6 @@ func pickSupportAttachment(sk Skill, sig Signals) (AttachmentMode, bool) {
 	return "", false
 }
 
-// skillHasCommandAutoFor checks whether the skill has a BindingCommandAuto
-// for the given command.
-func skillHasCommandAutoFor(sk Skill, command string) bool {
-	for _, b := range sk.Bindings {
-		if b.Type == BindingCommandAuto && bindingMatchesCommand(b, command) {
-			return true
-		}
-	}
-	return false
-}
-
 // bindingMatchesCommand returns true when the binding target refers to the
 // supplied command surface.
 func bindingMatchesCommand(b Binding, command string) bool {
@@ -373,8 +275,6 @@ func bindingMatchesCommand(b Binding, command string) bool {
 		return strings.TrimSpace(target[len("command:"):]) == command
 	case len(target) > len("mode:") && target[:len("mode:")] == "mode:":
 		return commandScopeFromPrefixedTarget(target[len("mode:"):]) == command
-	case len(target) > len("view:") && target[:len("view:")] == "view:":
-		return commandScopeFromPrefixedTarget(target[len("view:"):]) == command
 	}
 	return false
 }

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 	"testing"
@@ -78,62 +77,6 @@ func TestValidateFocus_RejectsUnknownWithRemediation(t *testing.T) {
 	}
 }
 
-func TestValidateViewAlias_EmptyAllowed(t *testing.T) {
-	for _, cmd := range []string{"status", "health"} {
-		if err := validateViewAlias(cmd, ""); err != nil {
-			t.Fatalf("%s: empty view should be allowed: %v", cmd, err)
-		}
-	}
-}
-
-func TestValidateViewAlias_AcceptsIncident(t *testing.T) {
-	for _, cmd := range []string{"status", "health"} {
-		if err := validateViewAlias(cmd, "incident"); err != nil {
-			t.Fatalf("%s: view `incident` should be accepted: %v", cmd, err)
-		}
-	}
-}
-
-func TestValidateViewAlias_RejectsLegacyReviewQueue(t *testing.T) {
-	err := validateViewAlias("status", "review-queue")
-	if err == nil {
-		t.Fatal("expected rejection for legacy `review-queue`")
-	}
-	cliErr := asCLIError(err)
-	if cliErr == nil || cliErr.ErrorCode != "unknown_route_view" {
-		t.Fatalf("expected unknown_route_view, got %v", err)
-	}
-}
-
-func TestValidateViewAlias_RejectsLegacyObservabilityQuery(t *testing.T) {
-	for _, cmd := range []string{"status", "health"} {
-		err := validateViewAlias(cmd, "observability-query")
-		if err == nil {
-			t.Fatalf("%s: expected rejection for legacy `observability-query`", cmd)
-		}
-		cliErr := asCLIError(err)
-		if cliErr == nil || cliErr.ErrorCode != "unknown_route_view" {
-			t.Fatalf("%s: expected unknown_route_view, got %v", cmd, err)
-		}
-	}
-}
-
-func TestValidateViewAlias_RejectsUnknown(t *testing.T) {
-	for _, cmd := range []string{"status", "health"} {
-		err := validateViewAlias(cmd, "does-not-exist")
-		if err == nil {
-			t.Fatalf("%s: expected rejection for unknown view", cmd)
-		}
-		cliErr := asCLIError(err)
-		if cliErr == nil {
-			t.Fatalf("%s: expected CLI error, got %T", cmd, err)
-		}
-		if cliErr.ErrorCode != "unknown_route_view" {
-			t.Fatalf("%s: unexpected error code %q", cmd, cliErr.ErrorCode)
-		}
-	}
-}
-
 func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 	t.Run("explicit alias wins and returns public name", func(t *testing.T) {
 		got := resolveEffectiveFocus("review", "sast")
@@ -155,29 +98,6 @@ func TestResolveEffectiveFocus_PrecedenceAndFallback(t *testing.T) {
 
 	t.Run("unknown command falls back to empty", func(t *testing.T) {
 		got := resolveEffectiveFocus("next", "")
-		if got != "" {
-			t.Fatalf("expected empty fallback, got %q", got)
-		}
-	})
-}
-
-func TestResolveEffectiveView_PrecedenceAndFallback(t *testing.T) {
-	t.Run("explicit alias wins", func(t *testing.T) {
-		got := resolveEffectiveView("status", "incident")
-		if got != "incident" {
-			t.Fatalf("expected public alias `incident`, got %q", got)
-		}
-	})
-
-	t.Run("empty explicit falls back to resolver primary view", func(t *testing.T) {
-		got := resolveEffectiveView("status", "")
-		if got == "" {
-			t.Fatal("expected resolver-selected status view")
-		}
-	})
-
-	t.Run("unknown command falls back to empty", func(t *testing.T) {
-		got := resolveEffectiveView("next", "")
 		if got != "" {
 			t.Fatalf("expected empty fallback, got %q", got)
 		}
@@ -212,113 +132,6 @@ func TestResolveEffectiveFocusHydrate_UnknownAliasReturnsNil(t *testing.T) {
 	got := resolveEffectiveFocusHydrate("review", "does-not-exist")
 	if got != nil {
 		t.Fatalf("expected nil for unknown focus, got %v", got)
-	}
-}
-
-func TestResolveEffectiveViewHydrate_IncidentShortCircuits(t *testing.T) {
-	got := resolveEffectiveViewHydrate("status", "incident")
-	if len(got) == 0 {
-		t.Fatal("expected incident-response hydrate keys")
-	}
-	for _, key := range got {
-		if !strings.HasPrefix(key, "incident-response/") {
-			t.Fatalf("expected incident-response/ prefix, got %q", key)
-		}
-	}
-	if !slices.Contains(got, "incident-response/incident-severity-matrix.md") {
-		t.Fatalf("expected incident-severity-matrix key in %v", got)
-	}
-}
-
-func TestResolveEffectiveViewHydrate_EmptyFallsBackToResolver(t *testing.T) {
-	got := resolveEffectiveViewHydrate("status", "")
-	want := capability.Resolve(capability.DefaultRegistry(), capability.Signals{Command: "status"}).HydrateReferences
-	if !equalStrings(got, want) {
-		t.Fatalf("expected resolver hydrate fallback %v, got %v", want, got)
-	}
-}
-
-func TestResolveEffectiveViewHydrate_UnknownAliasReturnsNil(t *testing.T) {
-	got := resolveEffectiveViewHydrate("status", "does-not-exist")
-	if got != nil {
-		t.Fatalf("expected nil for unknown view, got %v", got)
-	}
-}
-
-func TestBuildSuggestedCapabilitiesEmitsForBareCommand(t *testing.T) {
-	// After trigger-DSL removal, binding-based resolution always emits
-	// available capabilities for a command. AI tools decide relevance.
-	got := buildSuggestedCapabilities(capability.Signals{Command: "repair"})
-	if len(got) == 0 {
-		t.Fatalf("expected suggestions for bare repair command")
-	}
-	if len(got) > 3 {
-		t.Fatalf("expected at most 3 suggestions, got %d", len(got))
-	}
-}
-
-func TestBuildSuggestedCapabilitiesIncludesReasonFromSummary(t *testing.T) {
-	// After trigger-DSL removal, Reason is populated from the skill's
-	// Summary field rather than a matched trigger clause.
-	got := buildSuggestedCapabilities(capability.Signals{
-		Command:      "repair",
-		ChangedFiles: []string{".github/workflows/ci.yml"},
-	})
-	if len(got) == 0 {
-		t.Fatalf("expected suggestions for repair with workflow change")
-	}
-	for _, item := range got {
-		if item.Reason == "" {
-			t.Fatalf("expected non-empty reason for %q", item.Name)
-		}
-	}
-}
-
-func TestBuildSuggestedCapabilitiesProjectsExplicitFocusAlias(t *testing.T) {
-	got := buildSuggestedCapabilities(capability.Signals{
-		Command:  "validate",
-		UserText: "codeql",
-	})
-	if len(got) == 0 {
-		t.Fatalf("expected validate suggestions for codeql signal")
-	}
-
-	foundSAST := false
-	for _, item := range got {
-		if item.Name == "sast-orchestration" {
-			t.Fatalf("expected public alias, not raw backing id: %v", got)
-		}
-		if item.Name == "sast" {
-			foundSAST = true
-			if item.Kind != "explicit_focus" {
-				t.Fatalf("expected explicit_focus kind for sast, got %q", item.Kind)
-			}
-		}
-	}
-	if !foundSAST {
-		t.Fatalf("expected sast suggestion in %v", got)
-	}
-}
-
-func TestWriteSuggestedBlockUsesReasonBeforeSummary(t *testing.T) {
-	var buf bytes.Buffer
-	writer := newFormatWriter(&buf)
-	writeSuggestedBlock(writer, []suggestedCapabilityView{
-		{
-			Name:    "gha-security-review",
-			Summary: "generic summary should stay hidden",
-			Reason:  "GitHub Actions workflow changed",
-		},
-	})
-	if err := writer.Err(); err != nil {
-		t.Fatalf("unexpected write error: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "GitHub Actions workflow changed") {
-		t.Fatalf("expected reason in suggested block, got %q", out)
-	}
-	if strings.Contains(out, "generic summary should stay hidden") {
-		t.Fatalf("expected summary to be suppressed when reason exists, got %q", out)
 	}
 }
 

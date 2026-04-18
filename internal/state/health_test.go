@@ -566,7 +566,7 @@ func TestCollectHealthReportReportsWaveTaskLinkageMismatch(t *testing.T) {
 	assert.True(t, found, "expected wave/task linkage mismatch finding")
 }
 
-func TestCollectHealthReportReportsRuntimeStateDrift(t *testing.T) {
+func TestCollectHealthReportReportsLegacySidecarPendingMigration(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
@@ -579,8 +579,9 @@ func TestCollectHealthReportReportsRuntimeStateDrift(t *testing.T) {
 	}
 	require.NoError(t, SaveChange(root, change))
 
+	// Place a readable legacy sidecar next to change.yaml.
 	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, ChangeRuntimeStateFileName), []byte(`current_state: S2_EXECUTE
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, ChangeRuntimeStateFileName), []byte(`current_state: S3_REVIEW
 status: active
 artifacts:
   intent:
@@ -597,16 +598,16 @@ artifacts:
 			continue
 		}
 		for _, reason := range finding.Reasons {
-			if reason.Code == "runtime_state_current_state_drift" {
+			if reason.Code == "legacy_runtime_state_pending_migration" {
 				found = true
 				assert.True(t, finding.Repairable)
 			}
 		}
 	}
-	assert.True(t, found, "expected runtime-state drift finding")
+	assert.True(t, found, "expected legacy sidecar pending migration finding")
 }
 
-func TestCollectHealthReportReportsUnreadableRuntimeState(t *testing.T) {
+func TestCollectHealthReportReportsUnreadableLegacySidecar(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
@@ -616,6 +617,7 @@ func TestCollectHealthReportReportsUnreadableRuntimeState(t *testing.T) {
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
+	// Place an unreadable legacy sidecar.
 	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
 
@@ -627,18 +629,18 @@ func TestCollectHealthReportReportsUnreadableRuntimeState(t *testing.T) {
 		if finding.Slug != change.Slug {
 			continue
 		}
-		assert.NotEqual(t, "bundle_integrity", finding.Category, "runtime-state corruption must not downgrade the whole change to unreadable bundle integrity")
+		assert.NotEqual(t, "bundle_integrity", finding.Category, "legacy sidecar corruption must not downgrade the whole change to unreadable bundle integrity")
 		if finding.Category != "runtime_state" {
 			continue
 		}
 		for _, reason := range finding.Reasons {
-			if reason.Code == "runtime_state_unreadable" {
+			if reason.Code == "legacy_runtime_state_unreadable" {
 				foundRuntimeState = true
 				assert.True(t, finding.Repairable)
 			}
 		}
 	}
-	assert.True(t, foundRuntimeState, "expected unreadable runtime-state finding")
+	assert.True(t, foundRuntimeState, "expected unreadable legacy sidecar finding")
 }
 
 func TestCollectHealthReportReportsStaleCheckpoint(t *testing.T) {

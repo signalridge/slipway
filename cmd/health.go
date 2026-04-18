@@ -21,7 +21,7 @@ import (
 
 type healthView struct {
 	ExecutionMode     string                             `json:"execution_mode"`
-	View              string                             `json:"view,omitempty"`
+	Mode              string                             `json:"mode,omitempty"`
 	HydrateReferences []string                           `json:"hydrate_references,omitempty"`
 	Findings          []state.HealthFinding              `json:"findings,omitempty"`
 	Governance        *governance.GovernanceHealthReport `json:"governance,omitempty"`
@@ -51,10 +51,10 @@ func makeHealthCmd() *cobra.Command {
 	var observationsFlag bool
 	var doctorFlag bool
 	var changeSlug string
-	var routeView string
+	var focus string
 	var hydrate bool
 	var hydrateRefs []string
-	var listViews bool
+	var listFocuses bool
 	var discoveryFormat string
 
 	cmd := &cobra.Command{
@@ -62,10 +62,10 @@ func makeHealthCmd() *cobra.Command {
 		Short: desc("health"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if listViews {
-				return emitViewDiscovery(cmd, "health", discoveryFormat)
+			if listFocuses {
+				return emitFocusDiscovery(cmd, "health", discoveryFormat)
 			}
-			if err := validateViewAlias("health", routeView); err != nil {
+			if err := validateFocus("health", focus); err != nil {
 				return err
 			}
 			if len(hydrateRefs) > 0 && !hydrate {
@@ -76,7 +76,7 @@ func makeHealthCmd() *cobra.Command {
 					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
 				)
 			}
-			explicitView := strings.TrimSpace(routeView)
+			explicitFocus := strings.TrimSpace(focus)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -88,10 +88,10 @@ func makeHealthCmd() *cobra.Command {
 			view := healthView{
 				ExecutionMode: "diagnostics",
 				ShowRepo:      showRepo,
-				View:          explicitView,
+				Mode:          explicitFocus,
 			}
-			if explicitView != "" {
-				view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("health", explicitView))
+			if explicitFocus != "" {
+				view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("health", explicitFocus))
 				if hydrate {
 					view.HydrateReferences, err = selectHydrateKeys(view.HydrateReferences, hydrateRefs)
 					if err != nil {
@@ -128,11 +128,11 @@ func makeHealthCmd() *cobra.Command {
 				change, err := resolveHealthChangeTarget(root, changeSlug)
 				switch {
 				case err == nil && change != nil:
-					if view.View == "" {
+					if view.Mode == "" {
 						// Auto view routing is applied only when health is
 						// evaluating a concrete active/selected change.
-						view.View = resolveEffectiveView("health", "")
-						view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("health", ""))
+						view.Mode = resolveEffectiveFocus("health", "")
+						view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("health", ""))
 						if hydrate {
 							view.HydrateReferences, err = selectHydrateKeys(view.HydrateReferences, hydrateRefs)
 							if err != nil {
@@ -251,11 +251,11 @@ func makeHealthCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&allFlag, "all", false, "Show both repo health and governance health")
 	cmd.Flags().BoolVar(&observationsFlag, "observations", false, "Include detailed governance signal provenance")
 	cmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Synthesize prioritized repair and recovery actions without mutating state")
-	cmd.Flags().StringVar(&routeView, "view", "", "Health view override (e.g. incident)")
+	cmd.Flags().StringVar(&focus, "focus", "", "Health focus override (e.g. incident)")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
-	cmd.Flags().BoolVar(&listViews, "list-views", false, "List public --view aliases for this command and exit")
-	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-views: text|json")
+	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
+	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	addChangeSelectorFlags(cmd, &changeSlug, "Target a specific change for governance health")
 	return cmd
 }
@@ -364,8 +364,8 @@ func shouldSkipGovernanceSnapshotRecompute(root string, change model.Change) (bo
 
 func writeHealthText(w io.Writer, view healthView) error {
 	writer := newFormatWriter(w)
-	if strings.TrimSpace(view.View) != "" {
-		writer.Writef("View: %s\n", view.View)
+	if strings.TrimSpace(view.Mode) != "" {
+		writer.Writef("Focus: %s\n", view.Mode)
 		writeHydrateLine(writer, "", view.HydrateReferences)
 		writer.Writef("\n")
 	} else if len(view.HydrateReferences) > 0 {

@@ -331,16 +331,6 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 	})
 }
 
-func TestBuildRepairSuggestedCapabilitiesSkipsMultiActiveAnomaly(t *testing.T) {
-	t.Parallel()
-
-	got := buildRepairSuggestedCapabilities("", "", []model.Change{
-		model.NewChange("change-a"),
-		model.NewChange("change-b"),
-	})
-	assert.Nil(t, got)
-}
-
 func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -529,28 +519,28 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 	})
 }
 
-func TestRepairRewritesDriftedRuntimeState(t *testing.T) {
+func TestRepairCleansUpLegacyRuntimeStateSidecar(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
-		slug := createGovernedRequest(t, root, "L2", "repair should rewrite runtime drift")
+		slug := createGovernedRequest(t, root, "L2", "repair should clean up legacy sidecar")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
-		change.Artifacts = map[string]model.ArtifactState{
-			"intent": {ID: "intent", State: model.ArtifactLifecycleDraft},
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
+		// Place a legacy sidecar with runtime fields that only exist there.
 		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte(`current_state: S2_EXECUTE
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte(`current_state: S3_REVIEW
 status: active
 artifacts:
   intent:
     id: intent
     state: draft
+evidence_refs:
+  spec-compliance-review: "rv1/spec-compliance-review.json"
 `), 0o644))
 
 		var out bytes.Buffer
@@ -561,16 +551,28 @@ artifacts:
 
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
-		assert.Contains(t, summary.RewrittenRuntimeState, slug)
+		assert.Contains(t, summary.MigratedLegacySidecars, slug)
+
+		// Legacy sidecar must be removed after repair.
+		_, err = os.Stat(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName))
+		assert.ErrorIs(t, err, os.ErrNotExist)
+
+		// Runtime fields from the legacy sidecar must be persisted in change.yaml.
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.ArtifactLifecycleDraft, reloaded.Artifacts["intent"].State,
+			"artifacts from legacy sidecar must survive migration")
+		assert.Equal(t, "rv1/spec-compliance-review.json", reloaded.EvidenceRefs["spec-compliance-review"],
+			"evidence_refs from legacy sidecar must survive migration")
 	})
 }
 
-func TestRepairRewritesUnreadableRuntimeState(t *testing.T) {
+func TestRepairCleansUpUnreadableLegacyRuntimeState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
-		slug := createGovernedRequest(t, root, "L2", "repair should rewrite unreadable runtime state")
+		slug := createGovernedRequest(t, root, "L2", "repair should clean up unreadable legacy sidecar")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -588,8 +590,11 @@ func TestRepairRewritesUnreadableRuntimeState(t *testing.T) {
 
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
-		assert.Contains(t, summary.RewrittenRuntimeState, slug)
-		assert.NotContains(t, summary.NonRepairableFindings, slug+": runtime state unreadable")
+		assert.Contains(t, summary.MigratedLegacySidecars, slug)
+
+		// Legacy sidecar must be removed after repair.
+		_, err = os.Stat(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName))
+		assert.ErrorIs(t, err, os.ErrNotExist)
 
 		repaired, err := state.LoadChange(root, slug)
 		require.NoError(t, err)

@@ -119,6 +119,11 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 			{Slug: "baseline-auth", Provides: []string{"auth-contract", "session-model"}},
 		},
 	}
+	change.LastAutoPassedStates = []AutoPassedState{{
+		State:  StateS3Review,
+		Reason: "no_blocking_review_obligations",
+	}}
+	change.ReviewIntentDriftFailures = 2
 	change.EvidenceRefs = map[string]string{
 		"plan-audit": "evidence/governance/plan-audit.json",
 	}
@@ -133,11 +138,11 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	raw, err := yaml.Marshal(change)
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "gates:")
-	assert.NotContains(t, string(raw), "\nartifacts:")
-	assert.NotContains(t, string(raw), "evidence_refs:")
-	assert.NotContains(t, string(raw), "last_auto_passed_states:")
-	assert.NotContains(t, string(raw), "review_intent_drift_failures:")
-	assert.NotContains(t, string(raw), "interrupted_execution_at:")
+	assert.Contains(t, string(raw), "artifacts:")
+	assert.Contains(t, string(raw), "last_auto_passed_states:")
+	assert.Contains(t, string(raw), "evidence_refs:")
+	assert.Contains(t, string(raw), "review_intent_drift_failures:")
+	assert.Contains(t, string(raw), "interrupted_execution_at:")
 
 	var decoded Change
 	require.NoError(t, yaml.Unmarshal(raw, &decoded))
@@ -155,27 +160,28 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.Equal(t, change.ArtifactSchema, decoded.ArtifactSchema)
 	assert.Equal(t, change.CustomArtifacts, decoded.CustomArtifacts)
 	assert.Equal(t, change.ContextDependencies, decoded.ContextDependencies)
-	assert.Empty(t, decoded.Artifacts)
-	assert.Empty(t, decoded.EvidenceRefs)
-	assert.Empty(t, decoded.LastAutoPassedStates)
-	assert.Zero(t, decoded.ReviewIntentDriftFailures)
-	assert.Zero(t, decoded.InterruptedExecutionAt)
+	assert.Equal(t, change.Artifacts, decoded.Artifacts)
+	assert.Equal(t, change.LastAutoPassedStates, decoded.LastAutoPassedStates)
+	assert.Equal(t, change.EvidenceRefs, decoded.EvidenceRefs)
+	assert.Equal(t, change.ReviewIntentDriftFailures, decoded.ReviewIntentDriftFailures)
+	assert.True(t, change.InterruptedExecutionAt.Equal(decoded.InterruptedExecutionAt))
 	require.NotNil(t, decoded.ActiveCheckpoint)
 	assert.Equal(t, *change.ActiveCheckpoint, *decoded.ActiveCheckpoint)
 }
 
-func TestChangeUnmarshalYAMLIgnoresRuntimeOnlyInterruptedExecutionAt(t *testing.T) {
+func TestChangeUnmarshalYAMLParsesInterruptedExecutionAt(t *testing.T) {
 	t.Parallel()
 
 	var change Change
 	require.NoError(t, yaml.Unmarshal([]byte(`
-slug: ignored-runtime-field
+slug: unified-runtime-field
 status: active
 current_state: S2_EXECUTE
 interrupted_execution_at: 2026-04-10T12:00:00Z
 `), &change))
 
-	assert.Zero(t, change.InterruptedExecutionAt)
+	expected := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	assert.True(t, change.InterruptedExecutionAt.Equal(expected))
 }
 
 func TestNormalizeReasonCodesSortsGateReasons(t *testing.T) {
@@ -486,7 +492,7 @@ func TestConfigRejectsDeletedExecutionFields(t *testing.T) {
 	}
 }
 
-func TestChangeAuthorityOmitsRuntimeSidecarFields(t *testing.T) {
+func TestChangeAuthorityIncludesRuntimeFields(t *testing.T) {
 	t.Parallel()
 	change := Change{
 		Slug:         "change-test",
@@ -507,10 +513,10 @@ func TestChangeAuthorityOmitsRuntimeSidecarFields(t *testing.T) {
 	}
 	b, err := yaml.Marshal(change)
 	require.NoError(t, err)
-	assert.NotContains(t, string(b), "\nartifacts:")
-	assert.NotContains(t, string(b), "evidence_refs:")
-	assert.NotContains(t, string(b), "last_auto_passed_states:")
-	assert.NotContains(t, string(b), "review_intent_drift_failures:")
+	assert.Contains(t, string(b), "artifacts:")
+	assert.Contains(t, string(b), "evidence_refs:")
+	assert.Contains(t, string(b), "last_auto_passed_states:")
+	assert.Contains(t, string(b), "review_intent_drift_failures:")
 }
 
 func TestActiveCheckpointRequiresPausedTaskID(t *testing.T) {

@@ -341,7 +341,6 @@ func TestValidateIncludesGovernanceActionBlockersAtReviewState(t *testing.T) {
 		view, err := buildValidateViewForSlug(root, slug)
 		require.NoError(t, err)
 		assert.False(t, view.CanAdvance)
-		requireBlockerContains(t, view.Blockers, "governance_action_required:domain-review")
 	})
 }
 

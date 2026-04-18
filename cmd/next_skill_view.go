@@ -205,7 +205,6 @@ func buildRequiredSkillEvidence(
 		change.NeedsDiscovery,
 		workflowState,
 		presetPolicy.CloseoutRefreshRequired,
-		change.GuardrailDomain,
 		planSubSteps...,
 	)
 	evidence := make([]skillEvidenceEntry, 0, len(required))

@@ -17,29 +17,13 @@ func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, clos
 		needsDiscovery,
 		state,
 		closeoutRequired,
-		"",
-	)
-}
-
-func requiredSkillsForStateWithGuardrail(
-	needsDiscovery bool,
-	state model.WorkflowState,
-	closeoutRequired bool,
-	guardrailDomain string,
-) []string {
-	return RequiredSkillsForStateWithRegistry(
-		GovernanceRegistry(),
-		needsDiscovery,
-		state,
-		closeoutRequired,
-		guardrailDomain,
 	)
 }
 
 func TestGovernanceRegistryCompleteness(t *testing.T) {
 	t.Parallel()
 	registry := GovernanceRegistry()
-	require.Len(t, registry, 9)
+	require.Len(t, registry, 8)
 }
 
 func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
@@ -98,20 +82,6 @@ func TestResearchOrchestrationRequiredForDiscoveryAtS1Plan(t *testing.T) {
 	assert.Equal(t, []string{"plan-audit"}, requiredSkillsForState(false, model.StateS1Plan, false))
 }
 
-func TestTDDGovernanceRequiredOnlyForGuardrailDomain(t *testing.T) {
-	t.Parallel()
-	assert.Equal(
-		t,
-		[]string{"wave-orchestration"},
-		requiredSkillsForStateWithGuardrail(false, model.StateS2Execute, false, ""),
-	)
-	assert.Equal(
-		t,
-		[]string{"tdd-governance", "wave-orchestration"},
-		requiredSkillsForStateWithGuardrail(false, model.StateS2Execute, false, "auth_authz"),
-	)
-}
-
 func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -119,7 +89,7 @@ func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {
 
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 9)
+	require.Len(t, registry, 8)
 
 	defByName := map[string]Definition{}
 	for _, def := range registry {
@@ -155,7 +125,7 @@ body
 	// Unknown skills are silently skipped (not errors).
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 9)
+	require.Len(t, registry, 8)
 }
 
 func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
@@ -165,7 +135,7 @@ func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
 
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 9)
+	require.Len(t, registry, 8)
 
 	// Values come from Go registry defaults, not frontmatter overrides.
 	defByName := map[string]Definition{}

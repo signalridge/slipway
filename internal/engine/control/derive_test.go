@@ -314,8 +314,8 @@ func TestDeriveControls_ModeOverrideAdvisory(t *testing.T) {
 		}
 		// Other controls should retain their defaults.
 		if c.ControlID == model.ControlDomainReview {
-			assert.Equal(t, model.ControlModeBlocking, c.Mode,
-				"domain-review should remain blocking (not overridden)")
+			assert.Equal(t, model.ControlModeAdvisory, c.Mode,
+				"domain-review should be advisory (new default, not overridden)")
 		}
 	}
 	assert.True(t, found, "independent-review should still be activated")
@@ -369,9 +369,10 @@ func TestDeriveControls_NoOverridePreservesDefaults(t *testing.T) {
 		switch c.ControlID {
 		case model.ControlRollbackRequired:
 			assert.Equal(t, model.ControlModeAdvisory, c.Mode, "rollback-required default is advisory")
-		case model.ControlClarification, model.ControlResearch,
-			model.ControlDomainReview, model.ControlIndependentReview:
+		case model.ControlClarification, model.ControlResearch:
 			assert.Equal(t, model.ControlModeBlocking, c.Mode, "%s default is blocking", c.ControlID)
+		case model.ControlDomainReview, model.ControlIndependentReview:
+			assert.Equal(t, model.ControlModeAdvisory, c.Mode, "%s default is advisory", c.ControlID)
 		case model.ControlWorktreeIsolation:
 			assert.Equal(t, model.ControlModeAdvisory, c.Mode, "%s default is advisory", c.ControlID)
 		}

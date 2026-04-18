@@ -23,6 +23,13 @@ handles checkpoints, and produces frozen run summaries.
 - Produce `verification/execution-summary.yaml` at wave completion
 - Manage checkpoint pause/resume for human_verify tasks
 
+## Runtime Boundary
+
+The rules in this document are behavioral guidance for AI agents. Slipway's
+core engine does not enforce subagent isolation, context budgets, or parallel
+dispatch at runtime. HARD RULE markers indicate rules that significantly
+impact quality when violated, not rules enforced by code.
+
 ## Context Budget (HARD RULE)
 The orchestrator MUST stay below 15% of available context budget. You are a dispatcher, not an implementer.
 - Pass file paths only to executors, never inline content.

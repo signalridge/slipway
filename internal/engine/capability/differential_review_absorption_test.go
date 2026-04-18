@@ -86,14 +86,14 @@ func TestDifferentialReviewAbsentFromRegistry(t *testing.T) {
 
 // TestNonViewSkillsNotAdmittedOnStatusHealthViews regresses the §8 cleanup:
 // supply-chain-audit / ci-triage / git-recovery / performance-profiling must
-// not resolve as a `--view` alias on status or health after reclassification.
-func TestNonViewSkillsNotAdmittedOnStatusHealthViews(t *testing.T) {
+// not resolve as a `--focus` alias on status or health after reclassification.
+func TestNonFocusSkillsNotAdmittedOnStatusHealthFocuses(t *testing.T) {
 	t.Parallel()
 
 	for _, alias := range []string{"supply-chain-audit", "ci-triage", "git-recovery", "performance-profiling"} {
 		for _, cmd := range []string{"status", "health"} {
-			_, ok := LookupView(cmd, alias)
-			assert.False(t, ok, "%s must not be a valid --view alias on %s", alias, cmd)
+			_, ok := LookupFocus(cmd, alias)
+			assert.False(t, ok, "%s must not be a valid --focus alias on %s", alias, cmd)
 		}
 	}
 }

@@ -44,8 +44,8 @@ func TestAppendCatalogHintsBlockersAloneDoNotPopulateSupports(t *testing.T) {
 	t.Parallel()
 	// After trigger-DSL removal, blocker-only signals without a host do not
 	// populate support attachments — host-embedded / technique-hint bindings
-	// require an active host. Blocker-based suggestions surface through the
-	// SuggestedCapabilities channel instead.
+	// require an active host. Blocker-based suggestions are no longer surfaced
+	// through a separate channel.
 	view := &nextView{Blockers: []model.ReasonCode{{Code: "missing_red_proof"}}}
 	hints := appendCatalogHints(nil, "", nil, view)
 	assert.Empty(t, hints)

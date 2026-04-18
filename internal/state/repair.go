@@ -94,9 +94,6 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 		if err := fsutil.WriteFileAtomic(BundleArchivedChangeFilePath(root, slug), raw, 0o644); err != nil {
 			return false, err
 		}
-		if err := saveChangeRuntimeStateToBundleDir(filepath.Join(ArchivedBundlesDir(root), slug), change); err != nil {
-			return false, err
-		}
 	}
 
 	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug); err != nil {

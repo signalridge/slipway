@@ -21,7 +21,6 @@ func TestWrongSurfaceDiscoveryFlagsFailAtParseTime(t *testing.T) {
 			args    []string
 			wantMsg string
 		}{
-			{args: []string{"status", "--list-focuses"}, wantMsg: "unknown flag: --list-focuses"},
 			{args: []string{"review", "--list-views"}, wantMsg: "unknown flag: --list-views"},
 		}
 
@@ -75,13 +74,13 @@ func TestStatusExplicitViewEmitsPublicAliasAndHydrateReferences(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--change", slug, "--view", "incident"})
+		cmd.SetArgs([]string{"--json", "--change", slug, "--focus", "incident"})
 		require.NoError(t, cmd.Execute())
 
 		var view statusView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "governed", view.ExecutionMode)
-		assert.Equal(t, "incident", view.View)
+		assert.Equal(t, "incident", view.Mode)
 		assert.Contains(t, view.HydrateReferences, "incident-response/incident-severity-matrix.md")
 	})
 }
@@ -113,62 +112,5 @@ func TestReviewFocusCalibrationEmitsPublicAliasAndHydrateReferences(t *testing.T
 			assert.NotContains(t, ref, "ci-triage/")
 			assert.NotContains(t, ref, "review-comment-triage/")
 		}
-	})
-}
-
-func TestRepairSuggestedCapabilitiesSerializeInTextAndJSON(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-
-		slug := createGovernedRequest(t, root, "L2", "repair should suggest gha review for workflow changes")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-
-		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        change.CreatedAt.UTC(),
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "t-01",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindCode,
-					ChangedFiles: []string{".github/workflows/ci.yml"},
-					CapturedAt:   change.CreatedAt.UTC(),
-				},
-			},
-		})
-
-		var jsonOut bytes.Buffer
-		jsonCmd := makeRepairCmd()
-		jsonCmd.SetOut(&jsonOut)
-		jsonCmd.SetArgs([]string{"--json"})
-		require.NoError(t, jsonCmd.Execute())
-
-		var summary repairSummary
-		require.NoError(t, json.Unmarshal(jsonOut.Bytes(), &summary))
-		require.NotEmpty(t, summary.SuggestedCapabilities)
-		require.LessOrEqual(t, len(summary.SuggestedCapabilities), 3)
-		foundGHA := false
-		for _, sc := range summary.SuggestedCapabilities {
-			assert.NotEmpty(t, sc.Reason)
-			if sc.Name == "gha-security-review" {
-				foundGHA = true
-			}
-		}
-		assert.True(t, foundGHA, "expected gha-security-review among suggestions")
-
-		var textOut bytes.Buffer
-		textCmd := makeRepairCmd()
-		textCmd.SetOut(&textOut)
-		require.NoError(t, textCmd.Execute())
-		assert.Contains(t, textOut.String(), "Suggested:")
-		assert.Contains(t, textOut.String(), "gha-security-review")
 	})
 }

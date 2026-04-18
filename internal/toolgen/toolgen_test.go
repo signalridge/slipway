@@ -355,16 +355,6 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		}
 
 		switch {
-		case cfg.PostToolHook != "":
-			hookPath := filepath.Join(root, cfg.PostToolHook)
-			_, err := os.Stat(hookPath)
-			assert.NoError(t, err, "%s: missing post-tool hook", toolID)
-
-			settingsPath := filepath.Join(root, cfg.SettingsPath)
-			content, err := os.ReadFile(settingsPath)
-			assert.NoError(t, err, "%s: missing hook settings", toolID)
-			settings := string(content)
-			assert.Contains(t, settings, cfg.PostToolEvent, "%s: missing post-tool event registration", toolID)
 		case cfg.SettingsPath != "":
 			settingsPath := filepath.Join(root, cfg.SettingsPath)
 			content, err := os.ReadFile(settingsPath)
@@ -520,14 +510,6 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 				filepath.Join(root, cfg.SettingsPath),
 				cfg.SessionEvent,
 				`bash "`+filepath.ToSlash(cfg.SessionHook)+`"`,
-			)
-		}
-		if cfg.SettingsPath != "" && cfg.PostToolHook != "" {
-			assertHookCommandRegistered(
-				t,
-				filepath.Join(root, cfg.SettingsPath),
-				cfg.PostToolEvent,
-				`node "`+filepath.ToSlash(cfg.PostToolHook)+`"`,
 			)
 		}
 	}
@@ -770,16 +752,43 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.Contains(t, string(claudeSettings), "PostToolUse")
+	assert.NotContains(t, string(claudeSettings), "PostToolUse", "post-tool hook removed")
 	assert.Contains(t, string(claudeSettings), "slipway-session-start.sh")
-	assert.Contains(t, string(claudeSettings), "slipway-context-monitor.js")
+	assert.NotContains(t, string(claudeSettings), "slipway-context-monitor.js", "post-tool hook removed")
 
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiSettings), "SessionStart")
-	assert.Contains(t, string(geminiSettings), "AfterTool")
+	assert.NotContains(t, string(geminiSettings), "AfterTool", "post-tool hook removed")
 	assert.Contains(t, string(geminiSettings), "slipway-session-start.sh")
-	assert.Contains(t, string(geminiSettings), "slipway-context-monitor.js")
+	assert.NotContains(t, string(geminiSettings), "slipway-context-monitor.js", "post-tool hook removed")
+}
+
+func TestRefreshRemovesLegacyPostToolHookRegistration(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	// Simulate an old-style settings.json that includes PostToolUse hook.
+	claudeDir := filepath.Join(root, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
+	oldSettings := `{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "bash \".claude/hooks/slipway-session-start.sh\""}]}],
+    "PostToolUse": [{"hooks": [{"type": "command", "command": "node \".claude/hooks/slipway-context-monitor.js\""}]}]
+  }
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(oldSettings), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	claudeSettings, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claudeSettings), "SessionStart")
+	assert.NotContains(t, string(claudeSettings), "PostToolUse",
+		"refresh must remove legacy PostToolUse hook registration")
+	assert.NotContains(t, string(claudeSettings), "slipway-context-monitor",
+		"refresh must remove legacy context-monitor hook command")
 }
 
 func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {

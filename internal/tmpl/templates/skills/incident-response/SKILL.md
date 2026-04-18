@@ -26,12 +26,6 @@ hydrate_references:
   - name: regulatory-deadlines.md
     reason: "GDPR/HIPAA/PCI notification windows and wording"
 bindings:
-  - type: command-view
-    target: status
-    attachment: report-schema
-  - type: command-view
-    target: health
-    attachment: report-schema
   - type: export-only
     target: using-slipway-catalog
     attachment: report-schema

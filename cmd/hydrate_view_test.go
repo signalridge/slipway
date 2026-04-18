@@ -39,7 +39,7 @@ func TestStatusTextRendersHydrateLine(t *testing.T) {
 		Phase:             "execution",
 		LifecycleStatus:   "active",
 		CurrentState:      "S2_EXECUTE",
-		View:              "incident-response",
+		Mode:              "incident-response",
 		EvidenceFreshness: "fresh",
 		HydrateReferences: []string{"incident-response/incident-response-framework.md", "incident-response/incident-severity-matrix.md"},
 	}
@@ -48,6 +48,9 @@ func TestStatusTextRendersHydrateLine(t *testing.T) {
 	if !strings.Contains(rendered, wantLine) {
 		t.Fatalf("status text missing hydrate line %q; got:\n%s", wantLine, rendered)
 	}
+	if !strings.Contains(rendered, "Focus: incident-response") {
+		t.Fatalf("status text missing Focus label; got:\n%s", rendered)
+	}
 }
 
 // TestStatusDiagnosticsRendersHydrateLine verifies hydrate rendering on the
@@ -55,7 +58,7 @@ func TestStatusTextRendersHydrateLine(t *testing.T) {
 func TestStatusDiagnosticsRendersHydrateLine(t *testing.T) {
 	view := statusView{
 		ExecutionMode:     "diagnostics",
-		View:              "supply-chain-audit",
+		Mode:              "supply-chain-audit",
 		EvidenceFreshness: "unknown",
 		Diagnostics:       []string{"no active change"},
 		HydrateReferences: []string{"supply-chain-audit/results-template.md"},
@@ -63,6 +66,28 @@ func TestStatusDiagnosticsRendersHydrateLine(t *testing.T) {
 	rendered := renderStatusText(view)
 	if !strings.Contains(rendered, "Hydrate: supply-chain-audit/results-template.md") {
 		t.Fatalf("diagnostics status text missing hydrate line; got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "Focus: supply-chain-audit") {
+		t.Fatalf("diagnostics status text missing Focus label; got:\n%s", rendered)
+	}
+}
+
+func TestHealthTextUsesFocusLabel(t *testing.T) {
+	view := healthView{
+		ExecutionMode:     "diagnostics",
+		Mode:              "incident",
+		HydrateReferences: []string{"incident-response/incident-severity-matrix.md"},
+	}
+	var buf bytes.Buffer
+	if err := writeHealthText(&buf, view); err != nil {
+		t.Fatalf("writeHealthText: %v", err)
+	}
+	rendered := buf.String()
+	if !strings.Contains(rendered, "Focus: incident") {
+		t.Fatalf("health text missing Focus label; got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "View: incident") {
+		t.Fatalf("health text should not render View label anymore; got:\n%s", rendered)
 	}
 }
 

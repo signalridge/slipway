@@ -9,15 +9,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
 const ChangeRuntimeStateFileName = "runtime-state.yaml"
 
-var writeRuntimeStateFileAtomic = fsutil.WriteFileAtomic
-
+// ChangeRuntimeStateLoadError is retained for backward compatibility with
+// diagnostic/health callers that check for legacy sidecar load failures.
 type ChangeRuntimeStateLoadError struct {
 	Path string
 	Err  error
@@ -40,7 +39,9 @@ func (e *ChangeRuntimeStateLoadError) Unwrap() error {
 	return e.Err
 }
 
-type ChangeRuntimeState struct {
+// legacyRuntimeState is the on-disk shape of the legacy runtime-state.yaml
+// sidecar. Kept only for migration reads.
+type legacyRuntimeState struct {
 	CurrentState              model.WorkflowState            `yaml:"current_state,omitempty"`
 	Status                    model.ChangeStatus             `yaml:"status,omitempty"`
 	Artifacts                 map[string]model.ArtifactState `yaml:"artifacts,omitempty"`
@@ -50,34 +51,30 @@ type ChangeRuntimeState struct {
 	InterruptedExecutionAt    time.Time                      `yaml:"interrupted_execution_at,omitempty"`
 }
 
-func (s *ChangeRuntimeState) normalize() {
-	if s.Artifacts == nil {
-		s.Artifacts = map[string]model.ArtifactState{}
+// loadLegacyRuntimeStateFromPath reads and parses a legacy runtime-state.yaml.
+func loadLegacyRuntimeStateFromPath(path string) (legacyRuntimeState, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return legacyRuntimeState{}, fs.ErrNotExist
+		}
+		return legacyRuntimeState{}, err
 	}
-	if s.EvidenceRefs == nil {
-		s.EvidenceRefs = map[string]string{}
+
+	var runtime legacyRuntimeState
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&runtime); err != nil {
+		return legacyRuntimeState{}, err
 	}
-	if !s.InterruptedExecutionAt.IsZero() {
-		s.InterruptedExecutionAt = s.InterruptedExecutionAt.Round(0).UTC()
+	if err := runtime.validate(); err != nil {
+		return legacyRuntimeState{}, err
 	}
+	return runtime, nil
 }
 
-func (s ChangeRuntimeState) empty() bool {
-	return len(s.Artifacts) == 0 &&
-		len(s.EvidenceRefs) == 0 &&
-		len(s.LastAutoPassedStates) == 0 &&
-		s.ReviewIntentDriftFailures == 0 &&
-		s.InterruptedExecutionAt.IsZero()
-}
-
-func (s ChangeRuntimeState) Validate() error {
-	if s.CurrentState != "" && !s.CurrentState.IsValid() {
-		return fmt.Errorf("current_state has invalid value %q", s.CurrentState)
-	}
-	if s.Status != "" && !s.Status.IsValid() {
-		return fmt.Errorf("status has invalid value %q", s.Status)
-	}
-	for key, artifact := range s.Artifacts {
+func (r legacyRuntimeState) validate() error {
+	for key, artifact := range r.Artifacts {
 		if artifact.ID == "" {
 			return fmt.Errorf("artifacts[%q] is missing id", key)
 		}
@@ -85,97 +82,68 @@ func (s ChangeRuntimeState) Validate() error {
 			return fmt.Errorf("artifacts[%q] has invalid state: %q", key, artifact.State)
 		}
 	}
-	for i, autoPassed := range s.LastAutoPassedStates {
+	for i, autoPassed := range r.LastAutoPassedStates {
 		if err := autoPassed.Validate(); err != nil {
 			return fmt.Errorf("last_auto_passed_states[%d]: %w", i, err)
 		}
 	}
-	if s.ReviewIntentDriftFailures < 0 {
+	if r.ReviewIntentDriftFailures < 0 {
 		return fmt.Errorf("review_intent_drift_failures must be >= 0")
 	}
 	return nil
 }
 
-func buildChangeRuntimeState(change model.Change) (ChangeRuntimeState, error) {
-	runtime := ChangeRuntimeState{
-		CurrentState:              change.CurrentState,
-		Status:                    change.Status,
-		Artifacts:                 change.Artifacts,
-		EvidenceRefs:              change.EvidenceRefs,
-		LastAutoPassedStates:      append([]model.AutoPassedState(nil), change.LastAutoPassedStates...),
-		ReviewIntentDriftFailures: change.ReviewIntentDriftFailures,
-		InterruptedExecutionAt:    change.InterruptedExecutionAt,
-	}
-	runtime.normalize()
-	if err := runtime.Validate(); err != nil {
-		return ChangeRuntimeState{}, err
-	}
-	return runtime, nil
-}
-
-func marshalChangeRuntimeState(change model.Change) ([]byte, bool, error) {
-	runtime, err := buildChangeRuntimeState(change)
-	if err != nil {
-		return nil, false, err
-	}
-	if runtime.empty() {
-		return nil, true, nil
-	}
-	raw, err := yaml.Marshal(runtime)
-	if err != nil {
-		return nil, false, err
-	}
-	return raw, false, nil
-}
-
-func loadChangeRuntimeStateFromPath(path string) (ChangeRuntimeState, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			state := ChangeRuntimeState{}
-			state.normalize()
-			return state, nil
-		}
-		return ChangeRuntimeState{}, err
-	}
-
-	var runtime ChangeRuntimeState
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&runtime); err != nil {
-		return ChangeRuntimeState{}, err
-	}
-	runtime.normalize()
-	if err := runtime.Validate(); err != nil {
-		return ChangeRuntimeState{}, err
-	}
-	return runtime, nil
-}
-
-func saveChangeRuntimeStateToBundleDir(bundleDir string, change model.Change) error {
-	path := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
-	raw, empty, err := marshalChangeRuntimeState(change)
-	if err != nil {
-		return err
-	}
-	return persistPreparedRuntimeState(path, raw, empty)
-}
-
-func loadAndApplyChangeRuntimeState(bundleDir string, change *model.Change) error {
+// mergeLegacyRuntimeState checks for a legacy runtime-state.yaml sidecar and
+// merges its fields into the change without deleting the sidecar file. Used on
+// the load path so health diagnostics can still observe the sidecar.
+func mergeLegacyRuntimeState(bundleDir string, change *model.Change) error {
 	if change == nil {
 		return fmt.Errorf("change is required")
 	}
 
 	path := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
-	runtime, err := loadChangeRuntimeStateFromPath(path)
+	runtime, err := loadLegacyRuntimeStateFromPath(path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		return &ChangeRuntimeStateLoadError{Path: path, Err: err}
 	}
-	change.Artifacts = runtime.Artifacts
-	change.EvidenceRefs = runtime.EvidenceRefs
-	change.LastAutoPassedStates = append([]model.AutoPassedState(nil), runtime.LastAutoPassedStates...)
-	change.ReviewIntentDriftFailures = runtime.ReviewIntentDriftFailures
-	change.InterruptedExecutionAt = runtime.InterruptedExecutionAt
+
+	// Merge legacy fields into the change only if the change doesn't already
+	// have them populated (the unified change.yaml is authoritative).
+	if len(change.Artifacts) == 0 && len(runtime.Artifacts) > 0 {
+		change.Artifacts = runtime.Artifacts
+	}
+	if len(change.EvidenceRefs) == 0 && len(runtime.EvidenceRefs) > 0 {
+		change.EvidenceRefs = runtime.EvidenceRefs
+	}
+	if len(change.LastAutoPassedStates) == 0 && len(runtime.LastAutoPassedStates) > 0 {
+		change.LastAutoPassedStates = append([]model.AutoPassedState(nil), runtime.LastAutoPassedStates...)
+	}
+	if change.ReviewIntentDriftFailures == 0 && runtime.ReviewIntentDriftFailures != 0 {
+		change.ReviewIntentDriftFailures = runtime.ReviewIntentDriftFailures
+	}
+	if change.InterruptedExecutionAt.IsZero() && !runtime.InterruptedExecutionAt.IsZero() {
+		change.InterruptedExecutionAt = runtime.InterruptedExecutionAt
+	}
+
 	change.Normalize()
-	return change.Validate()
+	return nil
+}
+
+// deleteLegacyRuntimeState removes a legacy runtime-state.yaml if it exists.
+func deleteLegacyRuntimeState(bundleDir string) error {
+	path := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// legacyRuntimeStateExists reports whether a legacy sidecar file is present.
+func legacyRuntimeStateExists(bundleDir string) bool {
+	path := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
+	_, err := os.Stat(path)
+	return err == nil
 }

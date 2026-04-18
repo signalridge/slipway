@@ -49,113 +49,6 @@ func TestChangeScopedPrimaryViewForCommand(t *testing.T) {
 	}
 }
 
-func TestSuggestedCapabilitiesCappedAtThreeStableOrder(t *testing.T) {
-	t.Parallel()
-
-	res := Resolve(DefaultRegistry(), Signals{
-		Command:  "validate",
-		UserText: "coverage perf codeql",
-	})
-	require.Len(t, res.SuggestedCapabilities, 3)
-
-	var names []string
-	for _, s := range res.SuggestedCapabilities {
-		names = append(names, s.Name)
-	}
-	assert.Equal(t,
-		[]string{"coverage-analysis", "performance-profiling", "sast"},
-		names,
-	)
-	assert.Equal(t, "suggested", res.SuggestedCapabilities[0].Kind)
-	assert.Equal(t, "suggested", res.SuggestedCapabilities[1].Kind)
-	assert.Equal(t, "explicit_focus", res.SuggestedCapabilities[2].Kind)
-}
-
-func TestSuggestionSurfaceForBackingPrefersExplicitFocusAlias(t *testing.T) {
-	t.Parallel()
-
-	rec, ok := suggestionSurfaceForBacking("validate", "sast-orchestration")
-	require.True(t, ok, "expected suggestion surface for explicit focus backing")
-	assert.Equal(t, SurfaceExplicitFocus, rec.Class)
-	assert.Equal(t, "sast", rec.PublicName)
-
-	rec, ok = suggestionSurfaceForBacking("repair", "ci-triage")
-	require.True(t, ok, "expected suggested-only surface for ci-triage")
-	assert.Equal(t, SurfaceSuggested, rec.Class)
-	assert.Equal(t, "ci-triage", rec.PublicName)
-}
-
-func TestStatusDoesNotShipSuggestedCapabilitySurfaces(t *testing.T) {
-	t.Parallel()
-
-	for _, backingID := range []string{
-		"supply-chain-audit",
-		"performance-profiling",
-		"ci-triage",
-		"git-recovery",
-	} {
-		_, ok := suggestionSurfaceForBacking("status", backingID)
-		assert.Falsef(t, ok, "status should not ship suggested surface %q", backingID)
-	}
-}
-
-func TestSuggestedCapabilitiesDisjointFromSupports(t *testing.T) {
-	t.Parallel()
-
-	res := Resolve(DefaultRegistry(), Signals{
-		Command:      "review",
-		Host:         "code-quality-review",
-		ChangedFiles: []string{".github/workflows/ci.yml"},
-		UserText:     "variants codeql",
-	})
-	require.NotNil(t, res.Route)
-	require.NotEmpty(t, res.Supports)
-	require.NotEmpty(t, res.SuggestedCapabilities)
-
-	supports := make(map[string]struct{}, len(res.Supports))
-	for _, s := range res.Supports {
-		supports[s.SkillID] = struct{}{}
-	}
-
-	for _, s := range res.SuggestedCapabilities {
-		backingID, ok := suggestedSurfaceBackingForCommand("review", s.Name)
-		require.Truef(t, ok, "suggested capability %q must resolve back to a surface backing id", s.Name)
-
-		_, overlap := supports[backingID]
-		assert.Falsef(t, overlap, "suggested capability %q (%s) leaked into supports", s.Name, backingID)
-		assert.NotEqual(t, res.Route.BackingID, backingID, "route backing %q must not reappear in suggestions", backingID)
-	}
-}
-
-func suggestedSurfaceBackingForCommand(command, publicName string) (string, bool) {
-	if rec, ok := LookupFocus(command, publicName); ok {
-		return rec.BackingID, true
-	}
-	for _, rec := range AllSurfaces() {
-		if rec.Command == command && rec.Class == SurfaceSuggested && rec.PublicName == publicName {
-			return rec.BackingID, true
-		}
-	}
-	return "", false
-}
-
-func TestSuggestedCapabilitiesEmittedForBareCommand(t *testing.T) {
-	t.Parallel()
-
-	// After trigger DSL removal, binding-based resolution always emits
-	// available capabilities for a command. AI tools decide relevance.
-	for _, command := range []string{"review", "validate", "repair"} {
-		command := command
-		t.Run(command, func(t *testing.T) {
-			res := Resolve(DefaultRegistry(), Signals{Command: command})
-			assert.NotEmpty(t, res.SuggestedCapabilities,
-				"%s invocation should emit available capabilities", command)
-			assert.LessOrEqual(t, len(res.SuggestedCapabilities), 3,
-				"suggestions capped at 3")
-		})
-	}
-}
-
 func TestExplicitFocusRegistryPerCommand(t *testing.T) {
 	t.Parallel()
 
@@ -178,21 +71,6 @@ func TestExplicitFocusRegistryPerCommand(t *testing.T) {
 				assert.Equal(t, SurfaceExplicitFocus, rec.Class)
 			}
 			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
-func TestViewRegistryPerCommand(t *testing.T) {
-	t.Parallel()
-
-	for _, command := range []string{"status", "health"} {
-		command := command
-		t.Run(command, func(t *testing.T) {
-			records := ViewsForCommand(command)
-			require.Len(t, records, 1)
-			assert.Equal(t, "incident", records[0].PublicName)
-			assert.Equal(t, "incident-response", records[0].BackingID)
-			assert.Equal(t, SurfaceView, records[0].Class)
 		})
 	}
 }

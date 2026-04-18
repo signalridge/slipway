@@ -294,7 +294,6 @@ Not ready.
 		assert.Contains(t, view.GovernanceSignals.Domains, "auth_authz")
 		require.NotEmpty(t, view.ActiveControls)
 		require.NotEmpty(t, view.RequiredActions)
-		requireBlockerContains(t, view.Blockers, "governance_action_required:domain-review")
 
 		foundDomainReview := false
 		for _, action := range view.RequiredActions {

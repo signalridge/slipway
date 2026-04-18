@@ -54,17 +54,10 @@ else
 fi
 
 next_json=""
-if next_output="$(run_slipway_readonly next --json --preview)"; then
+if next_output="$(run_slipway_readonly next --json --preview --hook-lite)"; then
   next_json="${next_output}"
 else
-  diagnostics+=("hook_diagnostic: slipway next --json --preview failed: $(normalize_hook_message "${next_output}")")
-fi
-
-context_guard_msg=""
-if context_guard_output="$(run_slipway_readonly next --preview --context-guard)"; then
-  context_guard_msg="${context_guard_output}"
-else
-  diagnostics+=("hook_diagnostic: slipway next --preview --context-guard failed: $(normalize_hook_message "${context_guard_output}")")
+  diagnostics+=("hook_diagnostic: slipway next --json --preview --hook-lite failed: $(normalize_hook_message "${next_output}")")
 fi
 
 diagnostics_text=""
@@ -103,7 +96,7 @@ if [ -f "${handoff_path}" ]; then
   handoff="$(cat "${handoff_path}")"
 fi
 
-if [ -z "${status_json}" ] && [ -z "${next_json}" ] && [ -z "${context_guard_msg}" ] && [ -z "${handoff}" ] && [ -z "${diagnostics_text}" ]; then
+if [ -z "${status_json}" ] && [ -z "${next_json}" ] && [ -z "${handoff}" ] && [ -z "${diagnostics_text}" ]; then
   exit 0
 fi
 
@@ -111,7 +104,6 @@ cat <<EOF
 <slipway-session-start tool="{{.ToolID}}">
 ${status_json}
 ${next_json}
-${context_guard_msg}
 ${diagnostics_text}
 ${handoff:+<session-handoff>
 ${handoff}

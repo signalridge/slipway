@@ -452,12 +452,12 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 	})
 }
 
-func TestHealthCommandDoctorIncludesUnreadableRuntimeStateRepair(t *testing.T) {
+func TestHealthCommandDoctorIncludesUnreadableLegacySidecarRepair(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should include unreadable runtime state repair")
+		slug := createGovernedRequest(t, root, "L2", "doctor should include unreadable legacy sidecar repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -484,7 +484,7 @@ func TestHealthCommandDoctorIncludesUnreadableRuntimeStateRepair(t *testing.T) {
 				assert.True(t, finding.Repairable)
 			}
 		}
-		assert.True(t, foundFinding, "expected unreadable runtime-state finding")
+		assert.True(t, foundFinding, "expected unreadable legacy sidecar finding")
 
 		foundAction := false
 		for _, action := range view.Doctor.Actions {
@@ -494,7 +494,7 @@ func TestHealthCommandDoctorIncludesUnreadableRuntimeStateRepair(t *testing.T) {
 				assert.True(t, action.Repairable)
 			}
 		}
-		assert.True(t, foundAction, "expected doctor to recommend repair for unreadable runtime-state")
+		assert.True(t, foundAction, "expected doctor to recommend repair for unreadable legacy sidecar")
 	})
 }
 

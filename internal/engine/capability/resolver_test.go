@@ -20,15 +20,15 @@ func TestResolveSelectsCommandRoute(t *testing.T) {
 	assert.NotEmpty(t, res.Route.Reason)
 }
 
-func TestResolveSelectsCommandViewRoute(t *testing.T) {
+func TestResolveSelectsCommandPrimaryRoute_Status(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 
 	res := Resolve(reg, Signals{Command: "status"})
 	require.NotNil(t, res.Route)
 	assert.Equal(t, "incident-response", res.Route.SkillID)
-	// View carries the public view alias after the surface-policy cutover.
-	assert.Equal(t, "incident", res.Route.View)
+	// Mode carries the public surface alias after the view→primary cutover.
+	assert.Equal(t, "incident", res.Route.Mode)
 	assert.NotEmpty(t, res.Route.Reason)
 }
 
@@ -136,7 +136,6 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 	type resolutionSnapshot struct {
 		routeSkill string
 		routeMode  string
-		routeView  string
 		supports   []supportSnapshot
 		hydrate    []string
 	}
@@ -152,8 +151,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 				routeSkill: "independent-review",
 				routeMode:  "independent-review",
 				// After the surface-policy cutover Supports is host/technique-
-				// only; command-auto skills populate SuggestedCapabilities
-				// instead (route-surface plan §4.4).
+				// only for routed commands.
 				supports: []supportSnapshot{},
 			},
 		},
@@ -162,7 +160,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			sig:  Signals{Command: "status"},
 			want: resolutionSnapshot{
 				routeSkill: "incident-response",
-				routeView:  "incident",
+				routeMode:  "incident",
 				supports:   []supportSnapshot{},
 				hydrate: []string{
 					"incident-response/communication-templates.md",
@@ -232,7 +230,6 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 				require.NotNil(t, res.Route)
 				assert.Equal(t, tc.want.routeSkill, res.Route.SkillID)
 				assert.Equal(t, tc.want.routeMode, res.Route.Mode)
-				assert.Equal(t, tc.want.routeView, res.Route.View)
 				assert.NotEmpty(t, res.Route.Reason)
 			}
 

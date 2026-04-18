@@ -27,7 +27,7 @@ func TestResolvePresetPolicyFromConfig_LightPresetEnablesLowCeremonyPolicy(t *te
 	assert.Equal(t, model.ControlModeAdvisory, policy.Overrides.ModeOverrides[model.ControlIndependentReview])
 }
 
-func TestResolvePresetPolicyFromConfig_GuardrailFloorsLightToStandard(t *testing.T) {
+func TestResolvePresetPolicyFromConfig_GuardrailNoLongerFloorsLightToStandard(t *testing.T) {
 	t.Parallel()
 
 	cfg := model.DefaultConfig()
@@ -37,10 +37,10 @@ func TestResolvePresetPolicyFromConfig_GuardrailFloorsLightToStandard(t *testing
 
 	policy := resolvePresetPolicyFromConfig(cfg, change)
 
-	assert.Equal(t, model.WorkflowPresetStandard, policy.EffectivePreset)
-	assert.Contains(t, policy.UpgradeReasons, "guardrail_domain=auth_authz")
-	require.NotNil(t, policy.Overrides)
-	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlDomainReview])
+	assert.Equal(t, model.WorkflowPresetLight, policy.EffectivePreset,
+		"guardrail domain must no longer force preset upgrade")
+	assert.Empty(t, policy.UpgradeReasons,
+		"no upgrade reasons when guardrail domain does not force upgrade")
 }
 
 func TestResolvePresetPolicyFromConfig_MinPresetFloorsConfirmedPreset(t *testing.T) {
@@ -205,61 +205,26 @@ func TestResolvePresetPolicyFromConfig_PendingConfirmationUseSuggested(t *testin
 	assert.False(t, policy.VerifyAutoPassEnabled, "auto-pass disabled while pending confirmation")
 }
 
-func TestResolvePresetPolicyFromConfig_RollbackRequiredFailClosedForSchemaMigration(t *testing.T) {
+func TestResolvePresetPolicyFromConfig_GuardrailDomainNoLongerForcesControlOverrides(t *testing.T) {
 	t.Parallel()
 
 	cfg := model.DefaultConfig()
-	// Project config explicitly disables rollback-required.
 	cfg.Governance.DisabledControls = []model.ControlID{model.ControlRollbackRequired}
-	change := model.NewChange("rollback-failclosed")
+	change := model.NewChange("guardrail-no-override")
 	change.WorkflowPreset = model.WorkflowPresetStandard
 	change.GuardrailDomain = model.GuardrailDomainSchemaDataMigration
 
 	policy := resolvePresetPolicyFromConfig(cfg, change)
 	require.NotNil(t, policy.Overrides)
 
-	// rollback-required must be re-escalated to blocking and removed from
-	// disabled list for release-sensitive guardrail domains.
-	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlRollbackRequired],
-		"rollback-required must be fail-closed for schema_data_migration")
-	for _, id := range policy.Overrides.DisabledControls {
-		assert.NotEqual(t, model.ControlRollbackRequired, id,
-			"rollback-required must not be in disabled list for schema_data_migration")
-	}
-}
+	// GuardrailDomain no longer forces domain-review to blocking.
+	_, hasDomainReview := policy.Overrides.ModeOverrides[model.ControlDomainReview]
+	assert.False(t, hasDomainReview,
+		"guardrail domain must no longer force domain-review mode override")
 
-func TestResolvePresetPolicyFromConfig_RollbackRequiredFailClosedForIrreversibleOps(t *testing.T) {
-	t.Parallel()
-
-	cfg := model.DefaultConfig()
-	cfg.Governance.DisabledControls = []model.ControlID{model.ControlRollbackRequired}
-	change := model.NewChange("rollback-failclosed-irrev")
-	change.WorkflowPreset = model.WorkflowPresetLight
-	change.GuardrailDomain = model.GuardrailDomainIrreversibleOps
-
-	policy := resolvePresetPolicyFromConfig(cfg, change)
-	require.NotNil(t, policy.Overrides)
-
-	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlRollbackRequired],
-		"rollback-required must be fail-closed for irreversible_operations")
-}
-
-func TestResolvePresetPolicyFromConfig_RollbackNotEscalatedForNonSensitiveDomain(t *testing.T) {
-	t.Parallel()
-
-	cfg := model.DefaultConfig()
-	cfg.Governance.DisabledControls = []model.ControlID{model.ControlRollbackRequired}
-	change := model.NewChange("rollback-nonsensitive")
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.GuardrailDomain = model.GuardrailDomainPrivacyPII
-
-	policy := resolvePresetPolicyFromConfig(cfg, change)
-	require.NotNil(t, policy.Overrides)
-
-	// For non-rollback-sensitive domains, project config can still disable
-	// rollback-required (it's advisory by default for standard).
+	// GuardrailDomain no longer forces rollback-required to blocking.
 	assert.Contains(t, policy.Overrides.DisabledControls, model.ControlRollbackRequired,
-		"rollback-required should remain disableable for non-sensitive domains")
+		"project-disabled rollback-required must remain disabled regardless of guardrail domain")
 }
 
 func TestResolvePresetPolicyFromConfig_LightPlanAuditIterationFloor(t *testing.T) {

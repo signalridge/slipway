@@ -10,7 +10,7 @@ func ciTriage() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when CI is failing and a retry is being considered. Triggers on repair command or user text naming CI failures.",
-		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). No public explicit selector.
+		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
@@ -25,7 +25,7 @@ func reviewCommentTriage() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when addressing reviewer comments on an open PR. Triggers on repair command or user text naming PR review comments.",
-		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). No public explicit selector.
+		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 		},
@@ -40,7 +40,7 @@ func gitRecovery() Skill {
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery.",
-		Evidence:          EvidenceArtifact,		// Suggested-only on repair (§5.2). Host-embedded attachment
+		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). Host-embedded attachment
 		// on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
@@ -57,9 +57,8 @@ func incidentResponse() Skill {
 		Tier:              TierT3,
 		PrimaryAttachment: AttachmentReportSchema,
 		Summary:           "Use when a production incident is suspected or active. Triggers on status or health commands or user text naming an incident.",
-		Evidence:          EvidenceArtifact,		Bindings: []Binding{
-			{Type: BindingCommandView, Target: "status", Attachment: AttachmentReportSchema},
-			{Type: BindingCommandView, Target: "health", Attachment: AttachmentReportSchema},
+		// Public status/health exposure is owned by surfaces.go, not catalog bindings.
+		Evidence: EvidenceArtifact, Bindings: []Binding{
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
 		},
 		HydrateReferences: []HydrateReference{

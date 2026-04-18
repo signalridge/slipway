@@ -14,7 +14,7 @@ import (
 
 type statusView struct {
 	ExecutionMode             string                      `json:"execution_mode"`
-	View                      string                      `json:"view,omitempty"`
+	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 	Slug                      string                      `json:"slug,omitempty"`
 	QualityMode               string                      `json:"quality_mode,omitempty"`
@@ -111,10 +111,10 @@ func makeStatusCmd() *cobra.Command {
 	var format string
 	var changeSlug string
 	var jsonFlag bool
-	var view string
+	var focus string
 	var hydrate bool
 	var hydrateRefs []string
-	var listViews bool
+	var listFocuses bool
 	var statsMode bool
 	var rootMode bool
 	cmd := &cobra.Command{
@@ -143,10 +143,10 @@ func makeStatusCmd() *cobra.Command {
 				}
 				return writeStatsText(cmd.OutOrStdout(), sv)
 			}
-			if listViews {
-				return emitViewDiscovery(cmd, "status", format)
+			if listFocuses {
+				return emitFocusDiscovery(cmd, "status", format)
 			}
-			if err := validateViewAlias("status", view); err != nil {
+			if err := validateFocus("status", focus); err != nil {
 				return err
 			}
 			if len(hydrateRefs) > 0 && !hydrate {
@@ -157,7 +157,7 @@ func makeStatusCmd() *cobra.Command {
 					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
 				)
 			}
-			explicitView := strings.TrimSpace(view)
+			explicitFocus := strings.TrimSpace(focus)
 			root, err := projectRootFromWD()
 			if err != nil {
 				return err
@@ -180,8 +180,8 @@ func makeStatusCmd() *cobra.Command {
 
 			// When --change is provided, show detail view for that specific change.
 			if changeSlug != "" {
-				effectiveView := resolveEffectiveView("status", explicitView)
-				hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+				effectiveView := resolveEffectiveFocus("status", explicitFocus)
+				hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 				if hydrate {
 					hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
 					if err != nil {
@@ -212,12 +212,12 @@ func makeStatusCmd() *cobra.Command {
 			if route.multiChange {
 				return printMultiChangeSummary(cmd, active, outputFormat)
 			}
-			if route.diagnostics != nil {
-				// Diagnostics mode is not a routed command context. When no
-				// active change exists, only preserve an explicit --view value.
-				route.diagnostics.View = explicitView
-				if explicitView != "" {
-					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+				if route.diagnostics != nil {
+					// Diagnostics mode is not a routed command context. When no
+					// active change exists, only preserve an explicit --focus value.
+					route.diagnostics.Mode = explicitFocus
+				if explicitFocus != "" {
+					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 					if hydrate {
 						route.diagnostics.HydrateReferences, err = selectHydrateKeys(route.diagnostics.HydrateReferences, hydrateRefs)
 						if err != nil {
@@ -228,8 +228,8 @@ func makeStatusCmd() *cobra.Command {
 				return printStatusView(cmd, root, *route.diagnostics, outputFormat, hydrate)
 			}
 
-			effectiveView := resolveEffectiveView("status", explicitView)
-			hydrateKeys := normalizeHydrateKeys(resolveEffectiveViewHydrate("status", explicitView))
+			effectiveView := resolveEffectiveFocus("status", explicitFocus)
+			hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 			if hydrate {
 				hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
 				if err != nil {
@@ -240,9 +240,9 @@ func makeStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output (shorthand for --format json)")
-	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json (also used by --list-views: text|json)")
-	cmd.Flags().StringVar(&view, "view", "", "Status view override (e.g. incident)")
-	cmd.Flags().BoolVar(&listViews, "list-views", false, "List public --view aliases for this command and exit")
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text|yaml|json (also used by --list-focuses: text|json)")
+	cmd.Flags().StringVar(&focus, "focus", "", "Status focus override (e.g. incident)")
+	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	cmd.Flags().BoolVar(&statsMode, "stats", false, "Show workspace diagnostics (active count, stale summaries, integrity issues)")
@@ -312,7 +312,7 @@ func showStatusForChange(cmd *cobra.Command, root string, change model.Change, o
 		if err != nil {
 			return err
 		}
-		view.View = requestedView
+		view.Mode = requestedView
 		view.HydrateReferences = hydrateKeys
 		return printStatusView(cmd, root, view, outputFormat, hydrate)
 	})

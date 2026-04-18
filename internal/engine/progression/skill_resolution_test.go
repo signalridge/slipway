@@ -70,11 +70,11 @@ func TestResolveNextSkill_S2Execute(t *testing.T) {
 		t.Errorf("expected %s, got %s", model.StateS2Execute, state)
 	}
 
-	// With guardrail domain -> tdd-governance
+	// With guardrail domain -> still wave-orchestration (no kernel-level dispatch override)
 	change.GuardrailDomain = model.GuardrailDomainAuthAuthZ
 	name, _ = ResolveNextSkill(change)
-	if name != SkillTDDGovernance {
-		t.Errorf("expected %s for guardrail domain, got %s", SkillTDDGovernance, name)
+	if name != SkillWaveOrchestration {
+		t.Errorf("expected %s for guardrail domain, got %s", SkillWaveOrchestration, name)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -437,8 +438,10 @@ func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
 
 		var nextResp nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &nextResp))
-		requireBlockerContains(t, nextResp.Blockers, "governance_action_required:domain-review")
-		assert.NotEmpty(t, nextResp.RequiredActions)
+		// domain-review is advisory by default (Wave 1), so it no longer
+		// produces a governance_action_required blocker.
+		blockerSpecs := strings.Join(model.ReasonSpecs(nextResp.Blockers), "\n")
+		assert.NotContains(t, blockerSpecs, "governance_action_required:domain-review")
 	})
 }
 

@@ -22,8 +22,8 @@ type ControlOverrides struct {
 var defaultControlModes = map[model.ControlID]model.ControlMode{
 	model.ControlClarification:     model.ControlModeBlocking,
 	model.ControlResearch:          model.ControlModeBlocking,
-	model.ControlDomainReview:      model.ControlModeBlocking,
-	model.ControlIndependentReview: model.ControlModeBlocking,
+	model.ControlDomainReview:      model.ControlModeAdvisory,
+	model.ControlIndependentReview: model.ControlModeAdvisory,
 	model.ControlWorktreeIsolation: model.ControlModeAdvisory,
 	model.ControlRollbackRequired:  model.ControlModeAdvisory,
 }

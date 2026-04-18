@@ -14,14 +14,16 @@ import (
 )
 
 type ExecutionRepairResult struct {
-	MaterializedWavePlans []string
-	RecoveredWaveRuns     []string
-	RewrittenRuntimeState []string
-	ClearedCheckpoints    []string
-	RepairedCheckpoints   []string
-	PrunedTaskEvidence    []string
-	NonRepairableFindings []string
+	MaterializedWavePlans  []string
+	RecoveredWaveRuns      []string
+	MigratedLegacySidecars []string
+	ClearedCheckpoints     []string
+	RepairedCheckpoints    []string
+	PrunedTaskEvidence     []string
+	NonRepairableFindings  []string
 }
+
+var resolveChangePathsForRepair = ResolveChangePaths
 
 func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
@@ -36,11 +38,21 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 		}
 
 		changed := false
-		if drifted, err := runtimeStateDrifted(root, change); err != nil {
-			result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: runtime state check failed: %v", change.Slug, err))
-		} else if drifted {
-			result.RewrittenRuntimeState = append(result.RewrittenRuntimeState, change.Slug)
-			changed = true
+		// Clean up any legacy runtime-state.yaml sidecar.
+		if paths, pathErr := resolveChangePathsForRepair(root, change); pathErr == nil {
+			if legacyRuntimeStateExists(paths.GovernedBundleDir) {
+				if delErr := deleteLegacyRuntimeState(paths.GovernedBundleDir); delErr != nil {
+					result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: legacy sidecar cleanup failed: %v", change.Slug, delErr))
+				} else {
+					result.MigratedLegacySidecars = append(result.MigratedLegacySidecars, change.Slug)
+					changed = true
+				}
+			}
+		} else {
+			result.NonRepairableFindings = append(
+				result.NonRepairableFindings,
+				fmt.Sprintf("%s: legacy sidecar cleanup path resolution failed: %v", change.Slug, pathErr),
+			)
 		}
 
 		var summary *model.ExecutionSummary
@@ -100,14 +112,14 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 
 	slices.Sort(result.MaterializedWavePlans)
 	slices.Sort(result.RecoveredWaveRuns)
-	slices.Sort(result.RewrittenRuntimeState)
+	slices.Sort(result.MigratedLegacySidecars)
 	slices.Sort(result.ClearedCheckpoints)
 	slices.Sort(result.RepairedCheckpoints)
 	slices.Sort(result.PrunedTaskEvidence)
 	slices.Sort(result.NonRepairableFindings)
 	result.MaterializedWavePlans = slices.Compact(result.MaterializedWavePlans)
 	result.RecoveredWaveRuns = slices.Compact(result.RecoveredWaveRuns)
-	result.RewrittenRuntimeState = slices.Compact(result.RewrittenRuntimeState)
+	result.MigratedLegacySidecars = slices.Compact(result.MigratedLegacySidecars)
 	result.ClearedCheckpoints = slices.Compact(result.ClearedCheckpoints)
 	result.RepairedCheckpoints = slices.Compact(result.RepairedCheckpoints)
 	result.PrunedTaskEvidence = slices.Compact(result.PrunedTaskEvidence)
@@ -307,24 +319,4 @@ func pruneOrphanTaskEvidence(root, slug string, runVersion int, allowed map[stri
 		pruned = append(pruned, filepath.ToSlash(filepath.Join(slug, fmt.Sprintf("rv%d", runVersion), filepath.Base(path))))
 	}
 	return pruned, nil
-}
-
-func runtimeStateDrifted(root string, change model.Change) (bool, error) {
-	paths, err := ResolveChangePaths(root, change)
-	if err != nil {
-		return false, err
-	}
-	runtimePath := filepath.Join(paths.GovernedBundleDir, ChangeRuntimeStateFileName)
-	if _, err := os.Stat(runtimePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	runtime, err := loadChangeRuntimeStateFromPath(runtimePath)
-	if err != nil {
-		return true, nil
-	}
-	return runtime.CurrentState != "" && runtime.CurrentState != change.CurrentState ||
-		runtime.Status != "" && runtime.Status != change.Status, nil
 }

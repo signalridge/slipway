@@ -114,15 +114,6 @@ func ArchiveChange(
 		}
 		return model.Change{}, err
 	}
-	if err := saveChangeRuntimeStateToBundleDir(paths.GovernedBundleArchive, archived); err != nil {
-		if rollbackErr := moveDirIfExists(paths.GovernedBundleArchive, srcArtifacts); rollbackErr != nil {
-			return model.Change{}, wrapRollbackError(err, rollbackErr)
-		}
-		if rollbackErr := restoreChangeAuthorityIfNeeded(root, change); rollbackErr != nil {
-			return model.Change{}, wrapRollbackError(err, rollbackErr)
-		}
-		return model.Change{}, err
-	}
 	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, change.Slug); err != nil {
 		if rollbackErr := moveDirIfExists(paths.GovernedBundleArchive, srcArtifacts); rollbackErr != nil {
 			return model.Change{}, wrapRollbackError(err, rollbackErr)

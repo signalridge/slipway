@@ -37,7 +37,7 @@ func newTestSnapshot() model.GovernanceSnapshot {
 		ActiveControls: []model.ControlActivation{
 			{
 				ControlID:    model.ControlDomainReview,
-				Mode:         model.ControlModeBlocking,
+				Mode:         model.ControlModeAdvisory,
 				Scope:        model.ControlScopeReview,
 				Active:       true,
 				TriggeredBy:  []string{"auth_authz"},
@@ -45,7 +45,7 @@ func newTestSnapshot() model.GovernanceSnapshot {
 			},
 			{
 				ControlID:    model.ControlIndependentReview,
-				Mode:         model.ControlModeBlocking,
+				Mode:         model.ControlModeAdvisory,
 				Scope:        model.ControlScopeReview,
 				Active:       true,
 				TriggeredBy:  []string{"domain_present"},

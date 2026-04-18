@@ -10,11 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAutoViewRequiresConcreteChangeTarget(t *testing.T) {
-	assert.Equal(t, "incident", resolveEffectiveView("status", ""))
-	assert.Equal(t, "incident", resolveEffectiveView("health", ""))
-}
-
 func TestDiagnosticsModeDoesNotAutoSelectViewWithoutChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -29,7 +24,7 @@ func TestDiagnosticsModeDoesNotAutoSelectViewWithoutChange(t *testing.T) {
 		var status statusView
 		require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
 		assert.Equal(t, "diagnostics", status.ExecutionMode)
-		assert.Empty(t, status.View)
+		assert.Empty(t, status.Mode)
 
 		var healthOut bytes.Buffer
 		healthCmd := makeHealthCmd()
@@ -40,7 +35,7 @@ func TestDiagnosticsModeDoesNotAutoSelectViewWithoutChange(t *testing.T) {
 		var health healthView
 		require.NoError(t, json.Unmarshal(healthOut.Bytes(), &health))
 		assert.Equal(t, "diagnostics", health.ExecutionMode)
-		assert.Empty(t, health.View)
+		assert.Empty(t, health.Mode)
 	})
 }
 
@@ -58,7 +53,7 @@ func TestStatusDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T)
 		var view statusView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Empty(t, view.View)
+		assert.Empty(t, view.Mode)
 	})
 }
 
@@ -69,14 +64,14 @@ func TestStatusDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T)
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
-		cmd.SetArgs([]string{"--json", "--view", "incident"})
+		cmd.SetArgs([]string{"--json", "--focus", "incident"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
 		var view statusView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "incident", view.View)
+		assert.Equal(t, "incident", view.Mode)
 	})
 }
 
@@ -94,7 +89,7 @@ func TestHealthDiagnosticsDoesNotAutoSelectViewWithoutActiveChange(t *testing.T)
 		var view healthView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Empty(t, view.View)
+		assert.Empty(t, view.Mode)
 	})
 }
 
@@ -105,13 +100,13 @@ func TestHealthDiagnosticsPreservesExplicitViewWithoutActiveChange(t *testing.T)
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
-		cmd.SetArgs([]string{"--json", "--view", "incident"})
+		cmd.SetArgs([]string{"--json", "--focus", "incident"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
 		var view healthView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Equal(t, "incident", view.View)
+		assert.Equal(t, "incident", view.Mode)
 	})
 }

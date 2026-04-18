@@ -413,6 +413,7 @@ func TestValidateNextFlags(t *testing.T) {
 		name         string
 		preview      bool
 		contextGuard bool
+		hookLite     bool
 		wantMessage  string
 	}{
 		{
@@ -425,11 +426,21 @@ func TestValidateNextFlags(t *testing.T) {
 			preview:      true,
 			contextGuard: true,
 		},
+		{
+			name:        "hook-lite requires preview",
+			hookLite:    true,
+			wantMessage: "--hook-lite requires --preview",
+		},
+		{
+			name:     "hook-lite with preview is valid",
+			preview:  true,
+			hookLite: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateNextFlags(tt.preview, tt.contextGuard)
+			err := validateNextFlags(tt.preview, tt.contextGuard, tt.hookLite)
 			if tt.wantMessage == "" {
 				require.NoError(t, err)
 				return
@@ -1139,6 +1150,66 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 		assert.Nil(t, view.NextSkill)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
+	})
+}
+
+func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := createGovernedRequest(t, root, "L2", "hook-lite done ready contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		writeShipReadyGovernedBundle(t, root, change)
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		previewCmd := makeNextCmd()
+		previewCmd.SetArgs([]string{"--json", "--preview"})
+		var previewBuf bytes.Buffer
+		previewCmd.SetOut(&previewBuf)
+		require.NoError(t, previewCmd.Execute())
+
+		var previewView nextView
+		require.NoError(t, json.Unmarshal(previewBuf.Bytes(), &previewView))
+
+		hookLiteCmd := makeNextCmd()
+		hookLiteCmd.SetArgs([]string{"--json", "--preview", "--hook-lite"})
+		var hookLiteBuf bytes.Buffer
+		hookLiteCmd.SetOut(&hookLiteBuf)
+		require.NoError(t, hookLiteCmd.Execute())
+
+		var hookLiteView nextView
+		require.NoError(t, json.Unmarshal(hookLiteBuf.Bytes(), &hookLiteView))
+
+		assert.Equal(t, previewView.CurrentState, hookLiteView.CurrentState)
+		assert.Equal(t, previewView.Blockers, hookLiteView.Blockers)
+		assert.Equal(t, previewView.Advanced, hookLiteView.Advanced)
+		if previewView.NextSkill == nil {
+			assert.Nil(t, hookLiteView.NextSkill)
+		} else {
+			require.NotNil(t, hookLiteView.NextSkill)
+			assert.Equal(t, previewView.NextSkill.Name, hookLiteView.NextSkill.Name)
+			assert.Equal(t, previewView.NextSkill.State, hookLiteView.NextSkill.State)
+			assert.Equal(t, previewView.NextSkill.AgentHint, hookLiteView.NextSkill.AgentHint)
+		}
+		assert.Nil(t, hookLiteView.ContextBudget, "hook-lite should strip heavyweight context budget output")
+		assert.Nil(t, hookLiteView.Constraints, "hook-lite should strip heavyweight constraint output")
+		assert.Equal(t, previewView.InputContext.WorkspaceRoot, hookLiteView.InputContext.WorkspaceRoot)
+		assert.Equal(t, change.Description, hookLiteView.InputContext.Description)
 	})
 }
 

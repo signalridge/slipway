@@ -44,8 +44,8 @@ func renderStatusText(view statusView) string {
 
 	if view.ExecutionMode == "diagnostics" {
 		writeLine("Mode: diagnostics\n")
-		if strings.TrimSpace(view.View) != "" {
-			writeLine("View: %s\n", view.View)
+		if strings.TrimSpace(view.Mode) != "" {
+			writeLine("Focus: %s\n", view.Mode)
 		}
 		writer := newFormatWriter(&builder)
 		writeHydrateLine(writer, "", view.HydrateReferences)
@@ -62,8 +62,8 @@ func renderStatusText(view statusView) string {
 	label := view.Slug
 	writeLine("# %s\n\n", label)
 	writeLine("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
-	if strings.TrimSpace(view.View) != "" {
-		writeLine("View: %s\n", view.View)
+	if strings.TrimSpace(view.Mode) != "" {
+		writeLine("Focus: %s\n", view.Mode)
 	}
 	writer := newFormatWriter(&builder)
 	writeHydrateLine(writer, "", view.HydrateReferences)

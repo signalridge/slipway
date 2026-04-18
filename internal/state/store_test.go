@@ -72,15 +72,15 @@ func TestSaveLoadChangeSlugRoundTrip(t *testing.T) {
 	assert.NotNil(t, loaded.EvidenceRefs)
 }
 
-func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
+func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 
-	change := model.NewChange("runtime-sidecar")
+	change := model.NewChange("runtime-unified")
 	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.Artifacts["intent"] = model.ArtifactState{ID: "intent", State: model.ArtifactLifecycleApproved}
-	change.EvidenceRefs["plan-audit"] = "artifacts/changes/runtime-sidecar/verification/plan-audit.yaml"
+	change.EvidenceRefs["plan-audit"] = "artifacts/changes/runtime-unified/verification/plan-audit.yaml"
 	change.LastAutoPassedStates = []model.AutoPassedState{{
 		State:  model.StateS3Review,
 		Reason: "no_blocking_review_obligations",
@@ -90,23 +90,18 @@ func TestSaveChangePersistsRuntimeStateOutsideChangeAuthority(t *testing.T) {
 
 	require.NoError(t, SaveChange(root, change))
 
+	// Runtime fields must now be IN change.yaml.
 	changeRaw, err := os.ReadFile(BundleChangeFilePath(root, change.Slug))
 	require.NoError(t, err)
-	assert.NotContains(t, string(changeRaw), "\nartifacts:")
-	assert.NotContains(t, string(changeRaw), "evidence_refs:")
-	assert.NotContains(t, string(changeRaw), "last_auto_passed_states:")
-	assert.NotContains(t, string(changeRaw), "review_intent_drift_failures:")
-	assert.NotContains(t, string(changeRaw), "interrupted_execution_at:")
+	assert.Contains(t, string(changeRaw), "artifacts:")
+	assert.Contains(t, string(changeRaw), "evidence_refs:")
+	assert.Contains(t, string(changeRaw), "last_auto_passed_states:")
+	assert.Contains(t, string(changeRaw), "review_intent_drift_failures:")
+	assert.Contains(t, string(changeRaw), "interrupted_execution_at:")
 
-	runtimeRaw, err := os.ReadFile(filepath.Join(ActiveBundlesDir(root), change.Slug, ChangeRuntimeStateFileName))
-	require.NoError(t, err)
-	var runtime ChangeRuntimeState
-	require.NoError(t, yaml.Unmarshal(runtimeRaw, &runtime))
-	assert.Equal(t, change.Artifacts, runtime.Artifacts)
-	assert.Equal(t, change.EvidenceRefs, runtime.EvidenceRefs)
-	assert.Equal(t, change.LastAutoPassedStates, runtime.LastAutoPassedStates)
-	assert.Equal(t, change.ReviewIntentDriftFailures, runtime.ReviewIntentDriftFailures)
-	assert.True(t, change.InterruptedExecutionAt.Equal(runtime.InterruptedExecutionAt))
+	// runtime-state.yaml must NOT exist.
+	_, err = os.Stat(filepath.Join(ActiveBundlesDir(root), change.Slug, ChangeRuntimeStateFileName))
+	assert.ErrorIs(t, err, os.ErrNotExist)
 
 	loaded, err := LoadChange(root, change.Slug)
 	require.NoError(t, err)
@@ -161,36 +156,6 @@ func TestSaveChangeRejectsInvalidRuntimeStateWithoutPersistingAuthority(t *testi
 	assert.Zero(t, loaded.ReviewIntentDriftFailures)
 }
 
-func TestSaveChangeRollsBackAuthorityWhenRuntimeStateWriteFails(t *testing.T) {
-	root := createRuntimeLayout(t)
-
-	change := model.NewChange("runtime-write-fails")
-	change.Description = "before"
-	change.EvidenceRefs["plan-audit"] = "artifacts/changes/runtime-write-fails/verification/plan-audit.yaml"
-	require.NoError(t, SaveChange(root, change))
-
-	originalWriteRuntimeStateFileAtomic := writeRuntimeStateFileAtomic
-	writeRuntimeStateFileAtomic = func(path string, data []byte, perm os.FileMode) error {
-		return errors.New("runtime-state write failed")
-	}
-	t.Cleanup(func() {
-		writeRuntimeStateFileAtomic = originalWriteRuntimeStateFileAtomic
-	})
-
-	change.Description = "after"
-	change.EvidenceRefs["review"] = "artifacts/changes/runtime-write-fails/verification/review.yaml"
-	err := SaveChange(root, change)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "runtime-state write failed")
-
-	loaded, loadErr := LoadChange(root, change.Slug)
-	require.NoError(t, loadErr)
-	assert.Equal(t, "before", loaded.Description)
-	assert.Equal(t, map[string]string{
-		"plan-audit": "artifacts/changes/runtime-write-fails/verification/plan-audit.yaml",
-	}, loaded.EvidenceRefs)
-}
-
 func TestLoadChangeRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
@@ -206,57 +171,6 @@ func TestLoadChangeRejectsUnknownFields(t *testing.T) {
 
 	_, err = LoadChange(root, "strict-load")
 	require.Error(t, err, "unknown fields must be rejected by KnownFields(true)")
-}
-
-func TestLoadChangeRejectsRuntimeFieldsInChangeAuthority(t *testing.T) {
-	t.Parallel()
-	root := createRuntimeLayout(t)
-
-	tests := []struct {
-		name string
-		yaml string
-	}{
-		{
-			name: "gates",
-			yaml: "\ngates:\n  G_plan:\n    gate_id: G_plan\n    status: approved\n",
-		},
-		{
-			name: "artifacts",
-			yaml: "\nartifacts:\n  intent:\n    id: intent\n    state: approved\n",
-		},
-		{
-			name: "evidence_refs",
-			yaml: "\nevidence_refs:\n  plan-audit: verification/plan-audit.yaml\n",
-		},
-		{
-			name: "last_auto_passed_states",
-			yaml: "\nlast_auto_passed_states:\n  - state: S3_REVIEW\n    reason: no_blocking_review_obligations\n",
-		},
-		{
-			name: "review_intent_drift_failures",
-			yaml: "\nreview_intent_drift_failures: 2\n",
-		},
-		{
-			name: "interrupted_execution_at",
-			yaml: "\ninterrupted_execution_at: 2026-04-10T12:00:00Z\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			change := model.NewChange("runtime-field-rejected-" + tt.name)
-			require.NoError(t, SaveChange(root, change))
-
-			path := BundleChangeFilePath(root, change.Slug)
-			raw, err := os.ReadFile(path)
-			require.NoError(t, err)
-			raw = append(raw, []byte(tt.yaml)...)
-			require.NoError(t, os.WriteFile(path, raw, 0o644))
-
-			_, err = LoadChange(root, change.Slug)
-			require.Error(t, err)
-		})
-	}
 }
 
 func TestFindActiveChangeSingle(t *testing.T) {
@@ -869,7 +783,7 @@ func TestListChangesBestEffortSkipsUnreadableChangeBundle(t *testing.T) {
 
 }
 
-func TestListChangesBestEffortIncludesChangeWhenRuntimeStateIsUnreadable(t *testing.T) {
+func TestListChangesBestEffortIncludesChangeWhenLegacySidecarIsUnreadable(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
@@ -877,7 +791,9 @@ func TestListChangesBestEffortIncludesChangeWhenRuntimeStateIsUnreadable(t *test
 	change := model.NewChange("runtime-state-bad")
 	change.Status = model.ChangeStatusActive
 	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
+	// Place an unreadable legacy sidecar next to change.yaml.
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(BundleChangeFilePath(root, change.Slug)), ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
 
 	changes, issues, err := ListChangesBestEffortWithIssues(root)
@@ -886,6 +802,31 @@ func TestListChangesBestEffortIncludesChangeWhenRuntimeStateIsUnreadable(t *test
 	require.Len(t, changes, 1)
 	assert.Equal(t, change.Slug, changes[0].Slug)
 	assert.Equal(t, model.StateS3Review, changes[0].CurrentState)
+}
+
+func TestLoadChangeRejectsLegacySidecarWithInvalidSemantics(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+
+	change := model.NewChange("runtime-state-semantically-bad")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	// Place a legacy sidecar with a negative review_intent_drift_failures value.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(filepath.Dir(BundleChangeFilePath(root, change.Slug)), ChangeRuntimeStateFileName),
+		[]byte("review_intent_drift_failures: -1\n"), 0o644))
+
+	// The load path should treat this as an unreadable sidecar and still load the change.
+	changes, issues, err := ListChangesBestEffortWithIssues(root)
+	require.NoError(t, err)
+	require.Len(t, issues, 0)
+	require.Len(t, changes, 1)
+	assert.Equal(t, 0, changes[0].ReviewIntentDriftFailures,
+		"invalid legacy sidecar value must not leak into the change")
 }
 
 func TestLoadChangeReturnsWorktreeEnumerationErrorWhenGitWorkspaceLookupMisses(t *testing.T) {

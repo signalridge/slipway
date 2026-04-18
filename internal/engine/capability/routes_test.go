@@ -19,8 +19,8 @@ func TestBindingMatchesCommand_PrefixedTargetsAreCommandScoped(t *testing.T) {
 		{name: "command prefix mismatch", target: "command:validate", command: "review", want: false},
 		{name: "mode prefix with command and route", target: "mode:review:security-review", command: "review", want: true},
 		{name: "mode prefix rejects other commands", target: "mode:review:security-review", command: "repair", want: false},
-		{name: "view prefix with command and view", target: "view:status:incident-response", command: "status", want: true},
-		{name: "view prefix rejects other commands", target: "view:status:incident-response", command: "health", want: false},
+		{name: "legacy view prefix no longer matches", target: "view:status:incident-response", command: "status", want: false},
+		{name: "legacy view prefix remains unmatched for other commands", target: "view:status:incident-response", command: "health", want: false},
 		{name: "mode prefix single segment treated as command scope", target: "mode:repair", command: "repair", want: true},
 		{name: "empty target never matches", target: "", command: "review", want: false},
 	}

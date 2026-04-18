@@ -447,53 +447,42 @@ func runtimeStateHealthFindings(root string, change model.Change) ([]HealthFindi
 	if err != nil {
 		return nil, nil
 	}
-	runtimePath := filepath.Join(paths.GovernedBundleDir, ChangeRuntimeStateFileName)
-	if _, err := os.Stat(runtimePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	runtime, err := loadChangeRuntimeStateFromPath(runtimePath)
-	if err != nil {
-		return []HealthFinding{{
-			Severity:   model.ReasonSeverityError,
-			Category:   "runtime_state",
-			Slug:       change.Slug,
-			Message:    "Runtime state authority is unreadable",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to rewrite runtime-state.yaml from lifecycle authority.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("runtime_state_unreadable", err.Error())},
-		}}, nil
-	}
+	bundleDir := paths.GovernedBundleDir
 
 	findings := []HealthFinding{}
-	if runtime.CurrentState != "" && runtime.CurrentState != change.CurrentState {
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityWarning,
-			Category:   "runtime_state",
-			Slug:       change.Slug,
-			Message:    "Runtime state current_state drift detected",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to rewrite runtime-state.yaml from change.yaml authority.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("runtime_state_current_state_drift", string(runtime.CurrentState))},
-		})
+
+	// Check for legacy runtime-state.yaml sidecar presence.
+	if legacyRuntimeStateExists(bundleDir) {
+		runtimePath := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
+		_, loadErr := loadLegacyRuntimeStateFromPath(runtimePath)
+		if loadErr != nil {
+			findings = append(findings, HealthFinding{
+				Severity:   model.ReasonSeverityError,
+				Category:   "runtime_state",
+				Slug:       change.Slug,
+				Message:    "Legacy runtime-state.yaml sidecar is unreadable",
+				Repairable: true,
+				RepairHint: "Run `slipway repair` to remove the unreadable legacy sidecar.",
+				Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_state_unreadable", loadErr.Error())},
+			})
+		} else {
+			findings = append(findings, HealthFinding{
+				Severity:   model.ReasonSeverityInfo,
+				Category:   "runtime_state",
+				Slug:       change.Slug,
+				Message:    "Legacy runtime-state.yaml sidecar is pending migration",
+				Repairable: true,
+				RepairHint: "Run `slipway repair` or save the change to migrate and remove the legacy sidecar.",
+				Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_state_pending_migration", change.Slug)},
+			})
+		}
 	}
-	if runtime.Status != "" && runtime.Status != change.Status {
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityWarning,
-			Category:   "runtime_state",
-			Slug:       change.Slug,
-			Message:    "Runtime state status drift detected",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to rewrite runtime-state.yaml from change.yaml authority.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("runtime_state_status_drift", string(runtime.Status))},
-		})
-	}
-	if !runtime.InterruptedExecutionAt.IsZero() &&
+
+	// Check for interrupted execution from the change itself.
+	if !change.InterruptedExecutionAt.IsZero() &&
 		change.Status == model.ChangeStatusActive &&
 		change.CurrentState == model.StateS2Execute {
-		interruptedAt := runtime.InterruptedExecutionAt.UTC().Format(time.RFC3339)
+		interruptedAt := change.InterruptedExecutionAt.UTC().Format(time.RFC3339)
 		findings = append(findings, HealthFinding{
 			Severity:   model.ReasonSeverityWarning,
 			Category:   "execution_session",

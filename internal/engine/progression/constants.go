@@ -11,5 +11,4 @@ const (
 	SkillCodeQualityReview     = "code-quality-review"
 	SkillGoalVerification      = "goal-verification"
 	SkillFinalCloseout         = "final-closeout"
-	SkillTDDGovernance         = "tdd-governance"
 )

@@ -538,7 +538,10 @@ func TestArchiveChangeScrubsRuntimeEvidenceRefsFromChange(t *testing.T) {
 
 	raw, err := os.ReadFile(BundleArchivedChangeFilePath(root, slug))
 	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "evidence_refs:")
+	// Absolute-path evidence ref must be scrubbed from persisted YAML.
+	assert.NotContains(t, string(raw), "cancel_preemption_12345")
+	// Inline text evidence ref must survive in persisted YAML.
+	assert.Contains(t, string(raw), "plan_audit.last_checker_feedback")
 
 	archived, err := LoadArchivedChange(root, slug)
 	require.NoError(t, err)

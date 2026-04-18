@@ -25,7 +25,6 @@ func EvaluateRequiredSkillsForChange(
 		root,
 		change.Slug,
 		change.NeedsDiscovery,
-		change.GuardrailDomain,
 		workflowState,
 		latestRunSummaryVersion,
 		closeoutRequired,
@@ -47,7 +46,6 @@ func evaluateRequiredSkills(
 	root string,
 	slug string,
 	needsDiscovery bool,
-	guardrailDomain string,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
 	closeoutRequired bool,
@@ -63,7 +61,6 @@ func evaluateRequiredSkills(
 		needsDiscovery,
 		workflowState,
 		closeoutRequired,
-		guardrailDomain,
 		planSubSteps...,
 	)
 	// Read authoritative verification files before the empty-required-skills

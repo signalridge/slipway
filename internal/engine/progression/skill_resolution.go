@@ -10,7 +10,7 @@ import (
 // ResolveNextSkill determines what skill should run at the given state.
 // For S0_INTAKE, it dispatches based on the change's IntakeSubStep.
 // For S1_PLAN, it dispatches based on the change's PlanSubStep.
-// For S2_EXECUTE, it returns wave-orchestration (and tdd-governance for guardrail domains).
+// For S2_EXECUTE, it returns wave-orchestration.
 // For S3_REVIEW, it returns spec-compliance-review (then code-quality-review via evidence evaluation).
 // For S4_VERIFY, it returns goal-verification (then final-closeout via evidence evaluation).
 func ResolveNextSkill(change model.Change) (skillName string, evidenceState string) {
@@ -66,15 +66,10 @@ func resolveS1Plan(change model.Change) (string, string) {
 }
 
 // resolveS2Execute returns the execution skill. Discovery changes without a
-// bound worktree must complete worktree-preflight first. Guardrail domains
-// additionally require tdd-governance, but the primary dispatch is
-// wave-orchestration.
+// bound worktree must complete worktree-preflight first.
 func resolveS2Execute(change model.Change) (string, string) {
 	if change.NeedsDiscovery && change.WorktreePath == "" {
 		return SkillWorktreePreflight, string(model.StateS2Execute)
-	}
-	if change.GuardrailDomain != "" {
-		return SkillTDDGovernance, string(model.StateS2Execute)
 	}
 	return SkillWaveOrchestration, string(model.StateS2Execute)
 }

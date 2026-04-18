@@ -12,8 +12,8 @@ func TestResolveControlModeNoOverrides(t *testing.T) {
 	// Without overrides, built-in defaults apply.
 	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlClarification, nil))
 	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlResearch, nil))
-	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlDomainReview, nil))
-	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlIndependentReview, nil))
+	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlDomainReview, nil))
+	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlIndependentReview, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlWorktreeIsolation, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlRollbackRequired, nil))
 }
@@ -28,7 +28,7 @@ func TestResolveControlModeWithOverride(t *testing.T) {
 	// Overridden control returns advisory.
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlIndependentReview, overrides))
 	// Non-overridden control returns default.
-	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlDomainReview, overrides))
+	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlDomainReview, overrides))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlRollbackRequired, overrides))
 }
 

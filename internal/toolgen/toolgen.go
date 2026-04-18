@@ -34,8 +34,6 @@ type ToolConfig struct {
 	SettingsPath   string
 	SessionEvent   string
 	SessionHook    string
-	PostToolEvent  string
-	PostToolHook   string
 	TriggerPrefix  string
 	TriggerStyle   string
 	AutoDetectPath []string
@@ -54,8 +52,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".claude/hooks/slipway-session-start.sh",
-		PostToolEvent: "PostToolUse",
-		PostToolHook:  ".claude/hooks/slipway-context-monitor.js",
 		TriggerPrefix: "/slipway",
 		TriggerStyle:  "slash-colon",
 		AutoDetectPath: []string{
@@ -74,8 +70,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  "",
 		SessionEvent:  "",
 		SessionHook:   ".cursor/hooks/slipway-session-start.sh",
-		PostToolEvent: "",
-		PostToolHook:  "",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -94,8 +88,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  "",
 		SessionEvent:  "",
 		SessionHook:   "",
-		PostToolEvent: "",
-		PostToolHook:  "",
 		TriggerPrefix: "$slipway-",
 		TriggerStyle:  "dollar-mention",
 		AutoDetectPath: []string{
@@ -114,8 +106,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  "",
 		SessionEvent:  "",
 		SessionHook:   ".opencode/hooks/slipway-session-start.sh",
-		PostToolEvent: "",
-		PostToolHook:  "",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -134,8 +124,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  ".gemini/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".gemini/hooks/slipway-session-start.sh",
-		PostToolEvent: "AfterTool",
-		PostToolHook:  ".gemini/hooks/slipway-context-monitor.js",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -183,7 +171,7 @@ var commandRegistry = []CommandDef{
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
-		Arguments:     "[--json] [--view <alias>] [--list-views] [--change <slug>]",
+		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
@@ -217,7 +205,7 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
-		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--view <alias>] [--list-views] [--change <slug>]",
+		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
@@ -642,16 +630,6 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return err
 		}
 	}
-	if strings.TrimSpace(cfg.PostToolHook) != "" {
-		content, err := renderPostToolHook(cfg)
-		if err != nil {
-			return fmt.Errorf("render post-tool hook for %s: %w", cfg.ID, err)
-		}
-		path := filepath.Join(root, cfg.PostToolHook)
-		if err := writeDeterministic(path, content, refresh); err != nil {
-			return err
-		}
-	}
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
 		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
 			return err
@@ -1063,14 +1041,6 @@ func renderSessionHook(cfg ToolConfig) (string, error) {
 	return tmpl.Render(path.Join("hooks", "session-start.sh.tmpl"), data)
 }
 
-func renderPostToolHook(cfg ToolConfig) (string, error) {
-	data := map[string]string{
-		"ToolID":    cfg.ID,
-		"HookEvent": cfg.PostToolEvent,
-	}
-	return tmpl.Render(path.Join("hooks", "post-tool-context-monitor.js.tmpl"), data)
-}
-
 func writeDeterministic(path, content string, refresh bool) error {
 	if !refresh {
 		if _, err := os.Stat(path); err == nil {
@@ -1118,9 +1088,7 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
 		mergeHookEventCommand(hooks, cfg.SessionEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.SessionHook)))
 	}
-	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, fmt.Sprintf(`node "%s"`, filepath.ToSlash(cfg.PostToolHook)))
-	}
+	removeLegacyHookCommands(hooks, []string{"PostToolUse", "AfterTool"}, "slipway-context-monitor")
 	settings["hooks"] = hooks
 
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
@@ -1193,6 +1161,53 @@ func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
 			},
 		},
 	})
+}
+
+func removeLegacyHookCommands(hooks map[string]any, eventNames []string, substring string) {
+	for _, eventName := range eventNames {
+		rawEntries, ok := hooks[eventName]
+		if !ok {
+			continue
+		}
+		entries, ok := rawEntries.([]any)
+		if !ok {
+			continue
+		}
+		var kept []any
+		for _, entry := range entries {
+			entryMap, ok := entry.(map[string]any)
+			if !ok {
+				kept = append(kept, entry)
+				continue
+			}
+			hookList, ok := entryMap["hooks"].([]any)
+			if !ok {
+				kept = append(kept, entry)
+				continue
+			}
+			var filteredHooks []any
+			for _, hook := range hookList {
+				hookMap, ok := hook.(map[string]any)
+				if !ok {
+					filteredHooks = append(filteredHooks, hook)
+					continue
+				}
+				cmd, _ := hookMap["command"].(string)
+				if !strings.Contains(cmd, substring) {
+					filteredHooks = append(filteredHooks, hook)
+				}
+			}
+			if len(filteredHooks) > 0 {
+				entryMap["hooks"] = filteredHooks
+				kept = append(kept, entry)
+			}
+		}
+		if len(kept) == 0 {
+			delete(hooks, eventName)
+		} else {
+			hooks[eventName] = kept
+		}
+	}
 }
 
 func commandTrigger(cfg ToolConfig, commandID string) string {

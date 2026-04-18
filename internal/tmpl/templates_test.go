@@ -285,20 +285,8 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
-	assert.Contains(t, content, "slipway next --json --preview")
-}
-
-func TestRenderPostToolContextMonitorHookTemplate(t *testing.T) {
-	t.Parallel()
-	data := map[string]string{
-		"ToolID":    "claude",
-		"HookEvent": "PostToolUse",
-	}
-	content, err := Render("hooks/post-tool-context-monitor.js.tmpl", data)
-	require.NoError(t, err, "failed to render post-tool-context-monitor.js.tmpl")
-	assert.NotContains(t, content, "{{.", "post-tool hook has unrendered template vars")
-	assert.Contains(t, content, "'next', '--preview', '--context-guard'")
-	assert.Contains(t, content, "PostToolUse")
+	assert.Contains(t, content, "slipway next --json --preview --hook-lite")
+	assert.NotContains(t, content, "slipway next --preview --context-guard")
 }
 
 func TestContentReturnsAgentDefinitions(t *testing.T) {

@@ -20,19 +20,18 @@ type reviewOptions struct {
 }
 
 type reviewView struct {
-	Slug                  string                    `json:"slug"`
-	ExecutionMode         string                    `json:"execution_mode"`
-	QualityMode           string                    `json:"quality_mode,omitempty"`
-	NeedsDiscovery        bool                      `json:"needs_discovery,omitempty"`
-	CurrentState          string                    `json:"current_state"`
-	Verdict               string                    `json:"verdict"`
-	Mode                  string                    `json:"mode,omitempty"`
-	HydrateReferences     []string                  `json:"hydrate_references,omitempty"`
-	SuggestedCapabilities []suggestedCapabilityView `json:"suggested_capabilities,omitempty"`
-	ArtifactAmendments    []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
-	Blockers              []model.ReasonCode        `json:"blockers,omitempty"`
-	Waves                 []reviewWaveView          `json:"waves,omitempty"`
-	Gaps                  *reviewGaps               `json:"gaps,omitempty"`
+	Slug               string                    `json:"slug"`
+	ExecutionMode      string                    `json:"execution_mode"`
+	QualityMode        string                    `json:"quality_mode,omitempty"`
+	NeedsDiscovery     bool                      `json:"needs_discovery,omitempty"`
+	CurrentState       string                    `json:"current_state"`
+	Verdict            string                    `json:"verdict"`
+	Mode               string                    `json:"mode,omitempty"`
+	HydrateReferences  []string                  `json:"hydrate_references,omitempty"`
+	ArtifactAmendments []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
+	Blockers           []model.ReasonCode        `json:"blockers,omitempty"`
+	Waves              []reviewWaveView          `json:"waves,omitempty"`
+	Gaps               *reviewGaps               `json:"gaps,omitempty"`
 }
 
 type reviewGaps struct {
@@ -207,12 +206,9 @@ func makeReviewCmd() *cobra.Command {
 					Verdict:           verdict,
 					Mode:              effectiveMode,
 					HydrateReferences: hydrateKeys,
-					SuggestedCapabilities: buildSuggestedCapabilities(
-						suggestedCapabilitySignalsForChange("review", opts.focus, change, execCtx.Summary, blockers),
-					),
-					Blockers: blockers,
-					Waves:    waveViews,
-					Gaps:     classifyReviewGaps(blockers),
+					Blockers:          blockers,
+					Waves:             waveViews,
+					Gaps:              classifyReviewGaps(blockers),
 				}
 				if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 					view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
@@ -253,7 +249,6 @@ func writeReviewText(w io.Writer, view reviewView) error {
 	if strings.TrimSpace(view.Mode) != "" {
 		writer.Writef("Mode: %s\n", view.Mode)
 	}
-	writeSuggestedBlock(writer, view.SuggestedCapabilities)
 	writeHydrateLine(writer, "", view.HydrateReferences)
 
 	if len(view.Waves) > 0 {

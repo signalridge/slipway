@@ -338,11 +338,13 @@ func loadChangeCandidateIgnoringRuntimeState(path string) (model.Change, error) 
 	if err != nil {
 		return model.Change{}, err
 	}
-	if err := loadAndApplyChangeRuntimeState(filepath.Dir(path), &change); err != nil {
+	// Best-effort legacy migration: merge any sidecar data, ignore errors.
+	if migrateErr := mergeLegacyRuntimeState(filepath.Dir(path), &change); migrateErr != nil {
 		var runtimeErr *ChangeRuntimeStateLoadError
-		if !errors.As(err, &runtimeErr) {
-			return model.Change{}, err
+		if !errors.As(migrateErr, &runtimeErr) {
+			return model.Change{}, migrateErr
 		}
+		// Ignore unreadable legacy sidecar for diagnostics path.
 	}
 	return change, nil
 }
@@ -439,22 +441,9 @@ func SaveChange(root string, st model.Change) error {
 	if err != nil {
 		return err
 	}
-	runtimeRaw, runtimeEmpty, err := marshalChangeRuntimeState(st)
-	if err != nil {
-		return err
-	}
 
 	// Write to bundle directory (canonical authority alongside plan artifacts).
 	bundlePath, err := bundleChangeFilePathForChange(root, st)
-	if err != nil {
-		return err
-	}
-	runtimePath := filepath.Join(filepath.Dir(bundlePath), ChangeRuntimeStateFileName)
-	previousChangeRaw, changeExisted, err := readOptionalFile(bundlePath)
-	if err != nil {
-		return err
-	}
-	previousRuntimeRaw, runtimeExisted, err := readOptionalFile(runtimePath)
 	if err != nil {
 		return err
 	}
@@ -464,57 +453,16 @@ func SaveChange(root string, st model.Change) error {
 	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
 		return err
 	}
-	if err := persistPreparedRuntimeState(runtimePath, runtimeRaw, runtimeEmpty); err != nil {
-		rollbackErrs := []error{}
-		if rollbackErr := restoreOptionalFile(bundlePath, previousChangeRaw, changeExisted); rollbackErr != nil {
-			rollbackErrs = append(rollbackErrs, rollbackErr)
-		}
-		if rollbackErr := restoreOptionalFile(runtimePath, previousRuntimeRaw, runtimeExisted); rollbackErr != nil {
-			rollbackErrs = append(rollbackErrs, rollbackErr)
-		}
-		return wrapRollbackError(err, rollbackErrs...)
-	}
+	// Clean up any legacy runtime-state.yaml sidecar.
+	_ = deleteLegacyRuntimeState(filepath.Dir(bundlePath))
 	return nil
-}
-
-func readOptionalFile(path string) ([]byte, bool, error) {
-	raw, err := os.ReadFile(path)
-	if err == nil {
-		return raw, true, nil
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, false, nil
-	}
-	return nil, false, err
-}
-
-func restoreOptionalFile(path string, raw []byte, existed bool) error {
-	if !existed {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return fsutil.WriteFileAtomic(path, raw, 0o644)
-}
-
-func persistPreparedRuntimeState(path string, raw []byte, empty bool) error {
-	if empty {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	return writeRuntimeStateFileAtomic(path, raw, 0o644)
 }
 
 func decodeChangeStrict(raw []byte, change *model.Change) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	// Combined with yaml:"-" on runtime-sidecar fields, KnownFields(true)
-	// intentionally fail-closes persisted runtime receipts in change.yaml.
+	// KnownFields(true) rejects truly unknown fields while allowing the
+	// unified runtime fields (artifacts, evidence_refs, etc.) which now
+	// have proper yaml tags in the Change struct.
 	decoder.KnownFields(true)
 	return decoder.Decode(change)
 }
@@ -540,7 +488,8 @@ func loadChangeCandidate(path string) (model.Change, error) {
 	if err != nil {
 		return model.Change{}, err
 	}
-	if err := loadAndApplyChangeRuntimeState(filepath.Dir(path), &change); err != nil {
+	// Transparently migrate any legacy runtime-state.yaml sidecar.
+	if err := mergeLegacyRuntimeState(filepath.Dir(path), &change); err != nil {
 		return model.Change{}, err
 	}
 	return change, nil
@@ -755,7 +704,8 @@ func restoreChangeAuthorityIfNeeded(root string, expected model.Change) error {
 	raw, err := os.ReadFile(bundlePath)
 	if err == nil {
 		current, decodeErr := decodeAndValidateChange(raw)
-		if decodeErr == nil && loadAndApplyChangeRuntimeState(filepath.Dir(bundlePath), &current) == nil {
+		if decodeErr == nil {
+			_ = mergeLegacyRuntimeState(filepath.Dir(bundlePath), &current)
 			current.Normalize()
 			if reflect.DeepEqual(current, expected) {
 				return nil

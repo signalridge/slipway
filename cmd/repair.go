@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
@@ -25,20 +24,19 @@ import (
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
 type repairSummary struct {
-	CleanedAtomicTemps        []string                  `json:"cleaned_atomic_temps,omitempty"`
-	ConfigBackupPath          string                    `json:"config_backup_path,omitempty"`
-	StaleLockCleaned          bool                      `json:"stale_lock_cleaned"`
-	WorktreeScopeRepairs      []string                  `json:"worktree_scope_repairs,omitempty"`
-	MaterializedWavePlans     []string                  `json:"materialized_wave_plans,omitempty"`
-	RecoveredWaveRuns         []string                  `json:"recovered_wave_runs,omitempty"`
-	RewrittenRuntimeState     []string                  `json:"rewritten_runtime_state,omitempty"`
-	ClearedCheckpoints        []string                  `json:"cleared_checkpoints,omitempty"`
-	RepairedCheckpoints       []string                  `json:"repaired_checkpoints,omitempty"`
-	PrunedTaskEvidence        []string                  `json:"pruned_task_evidence,omitempty"`
-	RebuiltExecutionSummaries []string                  `json:"rebuilt_execution_summaries,omitempty"`
-	NonRepairableFindings     []string                  `json:"non_repairable_findings,omitempty"`
-	Mode                      string                    `json:"mode,omitempty"`
-	SuggestedCapabilities     []suggestedCapabilityView `json:"suggested_capabilities,omitempty"`
+	CleanedAtomicTemps        []string `json:"cleaned_atomic_temps,omitempty"`
+	ConfigBackupPath          string   `json:"config_backup_path,omitempty"`
+	StaleLockCleaned          bool     `json:"stale_lock_cleaned"`
+	WorktreeScopeRepairs      []string `json:"worktree_scope_repairs,omitempty"`
+	MaterializedWavePlans     []string `json:"materialized_wave_plans,omitempty"`
+	RecoveredWaveRuns         []string `json:"recovered_wave_runs,omitempty"`
+	MigratedLegacySidecars    []string `json:"migrated_legacy_sidecars,omitempty"`
+	ClearedCheckpoints        []string `json:"cleared_checkpoints,omitempty"`
+	RepairedCheckpoints       []string `json:"repaired_checkpoints,omitempty"`
+	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
+	RebuiltExecutionSummaries []string `json:"rebuilt_execution_summaries,omitempty"`
+	NonRepairableFindings     []string `json:"non_repairable_findings,omitempty"`
+	Mode                      string   `json:"mode,omitempty"`
 }
 
 func makeRepairCmd() *cobra.Command {
@@ -130,7 +128,7 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.MaterializedWavePlans = execRepair.MaterializedWavePlans
 				summary.RecoveredWaveRuns = execRepair.RecoveredWaveRuns
-				summary.RewrittenRuntimeState = execRepair.RewrittenRuntimeState
+				summary.MigratedLegacySidecars = execRepair.MigratedLegacySidecars
 				summary.ClearedCheckpoints = execRepair.ClearedCheckpoints
 				summary.RepairedCheckpoints = execRepair.RepairedCheckpoints
 				summary.PrunedTaskEvidence = execRepair.PrunedTaskEvidence
@@ -204,8 +202,6 @@ func makeRepairCmd() *cobra.Command {
 
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
-				summary.SuggestedCapabilities = buildRepairSuggestedCapabilities(root, focus, allChanges)
-
 				if jsonOutput {
 					return encodeJSONResponse(cmd, summary)
 				}
@@ -220,52 +216,12 @@ func makeRepairCmd() *cobra.Command {
 	return cmd
 }
 
-func buildRepairSuggestedCapabilities(root, focus string, changes []model.Change) []suggestedCapabilityView {
-	var active []model.Change
-	uniqueActive := make(map[string]struct{})
-	for _, change := range changes {
-		if change.Status != model.ChangeStatusActive {
-			continue
-		}
-		active = append(active, change)
-		uniqueActive[change.Slug] = struct{}{}
-	}
-	if len(uniqueActive) != 1 {
-		return nil
-	}
-
-	sig := capability.Signals{
-		Command: "repair",
-		Focus:   strings.TrimSpace(focus),
-	}
-	var descriptions []string
-	var changedFiles []string
-	var blockers []string
-	for _, change := range active {
-		if desc := strings.TrimSpace(change.Description); desc != "" {
-			descriptions = append(descriptions, desc)
-		}
-		summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-		if err != nil || summary == nil {
-			continue
-		}
-		changedFiles = append(changedFiles, executionSummaryChangedFiles(summary)...)
-		blockers = append(blockers, executionSummaryBlockerSpecs(summary)...)
-	}
-	sig.UserText = strings.Join(uniqueSortedNonEmpty(descriptions), "\n")
-	sig.ChangedFiles = uniqueSortedNonEmpty(changedFiles)
-	sig.Blockers = uniqueSortedNonEmpty(blockers)
-	return buildSuggestedCapabilities(sig)
-}
-
 func writeRepairText(w io.Writer, summary repairSummary) error {
 	writer := newFormatWriter(w)
 	writer.Writef("Repair Summary\n")
 	if strings.TrimSpace(summary.Mode) != "" {
 		writer.Writef("Mode: %s\n", summary.Mode)
 	}
-	writeSuggestedBlock(writer, summary.SuggestedCapabilities)
-
 	writeRepairSection := func(title string, items []string) {
 		if len(items) == 0 {
 			return
@@ -287,7 +243,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Worktree scope repairs", summary.WorktreeScopeRepairs)
 	writeRepairSection("Materialized wave plans", summary.MaterializedWavePlans)
 	writeRepairSection("Recovered wave runs", summary.RecoveredWaveRuns)
-	writeRepairSection("Rewritten runtime state", summary.RewrittenRuntimeState)
+	writeRepairSection("Migrated legacy sidecars", summary.MigratedLegacySidecars)
 	writeRepairSection("Cleared checkpoints", summary.ClearedCheckpoints)
 	writeRepairSection("Repaired checkpoints", summary.RepairedCheckpoints)
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
@@ -300,7 +256,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.WorktreeScopeRepairs) == 0 &&
 		len(summary.MaterializedWavePlans) == 0 &&
 		len(summary.RecoveredWaveRuns) == 0 &&
-		len(summary.RewrittenRuntimeState) == 0 &&
+		len(summary.MigratedLegacySidecars) == 0 &&
 		len(summary.ClearedCheckpoints) == 0 &&
 		len(summary.RepairedCheckpoints) == 0 &&
 		len(summary.PrunedTaskEvidence) == 0 &&

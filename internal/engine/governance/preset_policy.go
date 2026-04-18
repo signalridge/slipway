@@ -3,8 +3,6 @@ package governance
 import (
 	"fmt"
 	"os"
-	"slices"
-	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/control"
 	"github.com/signalridge/slipway/internal/model"
@@ -64,10 +62,6 @@ func resolvePresetPolicyFromConfig(cfg model.Config, change model.Change) Preset
 	if cfg.Governance.MinPreset.IsValid() && effective.Rank() < cfg.Governance.MinPreset.Rank() {
 		effective = cfg.Governance.MinPreset
 		upgradeReasons = append(upgradeReasons, "project_min_preset="+string(cfg.Governance.MinPreset))
-	}
-	if strings.TrimSpace(change.GuardrailDomain) != "" && effective.Rank() < model.WorkflowPresetStandard.Rank() {
-		effective = model.WorkflowPresetStandard
-		upgradeReasons = append(upgradeReasons, "guardrail_domain="+change.GuardrailDomain)
 	}
 
 	overrides := buildPresetOverrides(change, cfg, effective)
@@ -145,20 +139,6 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 		overrides.WorktreeBlastRadius = change.CallerWorktreeBlastRadius
 	}
 
-	// Guardrail-domain protections remain fail-closed in this wave.
-	if strings.TrimSpace(change.GuardrailDomain) != "" {
-		overrides.ModeOverrides[model.ControlDomainReview] = model.ControlModeBlocking
-		overrides.DisabledControls = removeDisabledControl(overrides.DisabledControls, model.ControlDomainReview)
-
-		// rollback-required is fail-closed for release-sensitive guardrail
-		// domains. A project config must not be able to disable rollback
-		// readiness for schema migrations or irreversible operations.
-		if isRollbackSensitiveDomain(change.GuardrailDomain) {
-			overrides.ModeOverrides[model.ControlRollbackRequired] = model.ControlModeBlocking
-			overrides.DisabledControls = removeDisabledControl(overrides.DisabledControls, model.ControlRollbackRequired)
-		}
-	}
-
 	if len(overrides.ModeOverrides) == 0 &&
 		len(overrides.DisabledControls) == 0 &&
 		overrides.IndependentReviewBlastRadius == "" &&
@@ -166,27 +146,4 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 		return nil
 	}
 	return overrides
-}
-
-// isRollbackSensitiveDomain returns true for guardrail domains where
-// rollback-required must remain fail-closed regardless of project config.
-func isRollbackSensitiveDomain(domain string) bool {
-	switch strings.TrimSpace(domain) {
-	case model.GuardrailDomainSchemaDataMigration, model.GuardrailDomainIrreversibleOps:
-		return true
-	default:
-		return false
-	}
-}
-
-func removeDisabledControl(disabled []model.ControlID, target model.ControlID) []model.ControlID {
-	filtered := make([]model.ControlID, 0, len(disabled))
-	for _, id := range disabled {
-		if id == target {
-			continue
-		}
-		filtered = append(filtered, id)
-	}
-	slices.Sort(filtered)
-	return filtered
 }
