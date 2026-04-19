@@ -31,7 +31,6 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 		"stats":                 makeStatsCmd,
 		"status":                makeStatusCmd,
 		"validate":              makeValidateCmd,
-		"validate-requirements": makeValidateRequirementsCmd,
 	}
 
 	for id, factory := range commands {
@@ -52,8 +51,7 @@ func TestValidationCommandLongHelpStartsWithToolgenDescription(t *testing.T) {
 	t.Parallel()
 
 	commands := map[string]func() *cobra.Command{
-		"validate":              makeValidateCmd,
-		"validate-requirements": makeValidateRequirementsCmd,
+		"validate": makeValidateCmd,
 	}
 
 	for id, factory := range commands {

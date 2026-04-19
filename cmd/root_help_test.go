@@ -22,6 +22,7 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	assert.Contains(t, help, "Show repo-wide governance freshness and workflow statistics")
 	assert.Contains(t, help, "Show repo-local integrity and repairability findings")
 	assert.Contains(t, help, "Finalize a done-ready change and archive it")
+	assert.NotContains(t, help, "validate-requirements")
 	assert.NotContains(t, help, "completed change")
 	assert.NotContains(t, help, "Auto-classify advisory versus governed work")
 }

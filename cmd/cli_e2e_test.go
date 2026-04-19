@@ -99,18 +99,15 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		assert.Empty(t, stderr)
 		validatePayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S0_INTAKE", validatePayload["current_state"])
+		requirementsContract, ok := validatePayload["requirements_contract"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "valid", requirementsContract["status"])
 
 		stdout, stderr, err = runRootCommand([]string{"next", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		nextPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S0_INTAKE", nextPayload["current_state"])
-
-		stdout, stderr, err = runRootCommand([]string{"validate-requirements", "--json"})
-		require.NoError(t, err)
-		assert.Empty(t, stderr)
-		validateRequirementsPayload := decodeJSONMap(t, stdout)
-		assert.Equal(t, true, validateRequirementsPayload["valid"])
 
 		stdout, stderr, err = runRootCommand([]string{"checkpoint", "--json", "--task-id", "task-01", "--type", "human_verify"})
 		require.Error(t, err)
@@ -308,7 +305,7 @@ func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements(t *testing.T) {
+func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -323,19 +320,33 @@ func TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements(t *testing.
 		reqContent := "# Requirements\n\n### Requirement: Token Auth\nREQ-001: The system MUST support token-based authentication.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
-		stdout, stderr, err := runRootCommand([]string{"validate-requirements", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommand([]string{"validate", "--json", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
-		view := validateRequirementsView{}
+		view := validateView{}
 		require.NoError(t, json.Unmarshal([]byte(stdout), &view))
-		assert.True(t, view.Valid)
+		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, slug, view.Slug)
-		assert.Contains(t, view.Message, "validated")
+		assert.Equal(t, "valid", view.RequirementsContract.Status)
+		assert.Contains(t, view.RequirementsContract.Message, "validated")
 
 		// Verify no published directory is created.
 		_, err = os.Stat(filepath.Join(root, "artifacts", "requirements", slug))
 		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestCLIEndToEndRetiredValidateRequirementsCommandIsUnknown(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		stdout, stderr, err := runRootCommand([]string{"validate-requirements", "--json"})
+		require.Error(t, err)
+		assert.Empty(t, stdout)
+		assert.Contains(t, stderr, "unknown command")
+		assert.Contains(t, stderr, "validate-requirements")
 	})
 }
 
@@ -456,7 +467,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndValidateRequirementsAfterRequestNext(t *testing.T) {
+func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -473,16 +484,17 @@ func TestCLIEndToEndValidateRequirementsAfterRequestNext(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
 		validateOut := bytes.NewBuffer(nil)
-		validateCmd := makeValidateRequirementsCmd()
+		validateCmd := makeValidateCmd()
 		validateCmd.SetOut(validateOut)
 		validateCmd.SetErr(validateOut)
 		validateCmd.SetArgs([]string{"--json", "--change", slug})
 		require.NoError(t, validateCmd.Execute())
 
-		realView := validateRequirementsView{}
+		realView := validateView{}
 		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &realView))
-		assert.True(t, realView.Valid)
-		assert.Contains(t, realView.Message, "validated")
+		require.NotNil(t, realView.RequirementsContract)
+		assert.Equal(t, "valid", realView.RequirementsContract.Status)
+		assert.Contains(t, realView.RequirementsContract.Message, "validated")
 
 		// No published directory should exist.
 		_, err = os.Stat(filepath.Join(root, "artifacts", "requirements", slug))

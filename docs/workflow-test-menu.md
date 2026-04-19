@@ -12,8 +12,8 @@ step.
 Use this concrete exercise when you want one realistic, low-risk change that
 still touches the actual product surface:
 
-**Sample change:** tighten `validate-requirements` command description
-consistency across CLI, root help, generated command metadata, and docs.
+**Sample change:** tighten `validate` requirements-contract summary consistency
+across CLI, generated command metadata, and docs.
 
 Why this sample works well:
 
@@ -21,22 +21,21 @@ Why this sample works well:
 2. It exercises real governed work: command help, generated metadata, tests,
    and docs.
 3. It is low runtime risk compared with changing lifecycle state logic.
-4. It gives you a clean success signal: all public
-   `validate-requirements` descriptions should describe the same read-only
-   behavior.
+4. It gives you a clean success signal: the public `validate` surface should
+   consistently describe the same read-only behavior and requirements sidecar.
 
 Likely files involved:
 
-- `cmd/sync.go` (current implementation home of `validate-requirements`)
+- `cmd/validate.go`
 - `internal/toolgen/toolgen.go`
 - `cmd/root_help_test.go`
 - `README.md`
 
 Primary acceptance signals:
 
-1. `go run . --help` and `go run . validate-requirements --help` both describe
-   `validate-requirements` as read-only validation of `requirements.md`.
-2. Generated command metadata stays aligned with the CLI help surface.
+1. `go run . --help` no longer lists a standalone requirements-check command.
+2. `go run . validate --json --change <slug>` exposes `requirements_contract`
+   for governed changes.
 3. Targeted tests and the normal verification bundle pass.
 
 ## Preconditions
@@ -88,23 +87,22 @@ go test ./cmd -run TestCLIEndToEndDiagnosticsAndCodebaseMapFlow -count=1
 
 ## Menu 1: Lifecycle Smoke Test Without Shipping A Change
 
-Use this when you want to exercise `new`, `status`, `validate`, `next`,
-`validate-requirements`, and `cancel` with minimal risk.
+Use this when you want to exercise `new`, `status`, `validate`, `next`, and
+`cancel` with minimal risk.
 
 Suggested description:
 
 ```text
-workflow smoke: tighten validate-requirements description consistency
+workflow smoke: tighten validate requirements-contract summary consistency
 ```
 
 Commands:
 
 ```bash
-go run . new --json --preset standard "workflow smoke: tighten validate-requirements description consistency"
+go run . new --json --preset standard "workflow smoke: tighten validate requirements-contract summary consistency"
 go run . status --format yaml
 go run . validate --json
 go run . next
-go run . validate-requirements --json
 go run . cancel --json
 go run . status --json
 ```
@@ -115,8 +113,8 @@ What to observe:
 2. `status` should show the active governed change instead of diagnostics mode.
 3. `validate --json` should be read-only and keep the change in the same state.
 4. `next` should show the next skill context without advancing state.
-5. `validate-requirements --json` should validate the current change's
-   `requirements.md` and stay read-only.
+5. `validate --json` should include `requirements_contract` for the governed
+   change and stay read-only.
 6. `cancel --json` should archive the change as terminal.
 7. Final `status --json` should return to diagnostics mode.
 
@@ -134,13 +132,13 @@ governed execution.
 Suggested change:
 
 ```text
-align validate-requirements command description with current read-only behavior
+align validate requirements-contract summary with current read-only behavior
 ```
 
 ### Step 1: Create The Governed Change
 
 ```bash
-go run . new --json --preset standard "align validate-requirements command description with current read-only behavior"
+go run . new --json --preset standard "align validate requirements-contract summary with current read-only behavior"
 go run . status --format yaml
 go run . next
 ```
@@ -152,11 +150,12 @@ source of truth for what artifact work is expected first.
 
 Work the change as Slipway asks you to. For this sample, the intended content is:
 
-1. The problem is public-surface description drift around
-   `validate-requirements`.
+1. The problem is public-surface drift around the requirements contract summary
+   exposed by `validate`.
 2. The scope is description alignment plus regression guards.
 3. The acceptance target is consistent wording across CLI help, generated
-   command metadata, tests, and docs.
+   command metadata, tests, and docs, with no standalone requirements-check
+   surface remaining.
 
 Useful checkpoints while doing artifact work:
 
@@ -172,19 +171,18 @@ Once the workflow reaches execution, make the actual code and doc changes.
 
 Suggested implementation checklist:
 
-1. Align the `validate-requirements` description in
-   `internal/toolgen/toolgen.go` with the real read-only behavior implemented
-   by `cmd/sync.go`, which now backs the retired `sync` verb's replacement
-   surface.
+1. Align the `validate` description and generated command surfaces with the
+   real read-only behavior implemented by `cmd/validate.go`.
 2. Keep root help and generated command surfaces consistent with that wording.
-3. Update docs if the public command wording changes.
+3. Update docs so `requirements.md` contract checking is documented as part of
+   `validate`, not as a standalone command.
 4. Add or adjust tests so this drift is caught again.
 
 Useful commands while implementing:
 
 ```bash
-rg -n '"validate-requirements"|requirements.md|read-only' cmd internal README.md
-go test ./cmd -run 'TestRootHelpUsesCurrentEntrySurfaceDescriptions|TestCLIEndToEndSuccessfulValidateRequirementsChecksRequirements' -count=1
+rg -n 'requirements_contract|requirements.md|read-only|requirements contract' cmd internal README.md docs
+go test ./cmd -run 'TestRootHelpUsesCurrentEntrySurfaceDescriptions|TestCLIEndToEndValidateIncludesRequirementsContract' -count=1
 go run . status --format yaml
 go run . next
 ```
@@ -265,7 +263,7 @@ If you want one practical sequence instead of picking freely, use this order:
 
 1. Run Menu 0 once.
 2. Run Menu 1 once to confirm the basic lifecycle loop.
-3. Run Menu 2 with the `validate-requirements` description consistency sample.
+3. Run Menu 2 with the `validate` requirements-contract summary consistency sample.
 4. Run the checkpoint and done-archive subsets from Menu 3.
 
 ## Notes For Interpreting Results

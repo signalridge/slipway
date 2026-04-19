@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"errors"
+	"io/fs"
+
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -31,10 +34,17 @@ type validateView struct {
 	GateStatus                map[string]string           `json:"gate_status,omitempty"`
 	GateDetails               map[string]model.GateRecord `json:"gate_details,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
+	RequirementsContract      *requirementsContractView   `json:"requirements_contract,omitempty"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
+}
+
+type requirementsContractView struct {
+	Status  string `json:"status"`
+	Source  string `json:"source,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -178,12 +188,29 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 		return view, nil
 	}
 
+	var requirementsContract *requirementsContractView
+	if bundleDir, err := state.GovernedBundleDir(root, change); err == nil {
+		contract, err := artifact.EvaluateRequirementsContract(bundleDir, change.Slug)
+		if err == nil {
+			requirementsContract = &requirementsContractView{
+				Status:  string(contract.Status),
+				Source:  contract.Source,
+				Message: contract.Message,
+			}
+		}
+	}
+
 	// Validate remains read-only, but includes artifact projection so JSON callers
 	// can distinguish stable artifacts from projected auto-amendments.
 	readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
 		IncludeGateEvaluations:    true,
 		IncludeArtifactProjection: true,
 	})
+	if err != nil && errors.Is(err, fs.ErrPermission) {
+		readiness, err = progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
+			IncludeGateEvaluations: true,
+		})
+	}
 	if err != nil {
 		return validateView{}, wrapGovernanceReadinessError("validate readiness", change.Slug, err)
 	}
@@ -209,6 +236,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.PresetUpgradeReasons = presetFields.PresetUpgradeReasons
 	view.GovernanceForecast = presetFields.GovernanceForecast
 	view.NeedsDiscovery = profile.NeedsDiscovery
+	view.RequirementsContract = requirementsContract
 	gateDetails := gateStatusFromEvaluations(readiness.GateEvaluations)
 	gateStatus := map[string]string{}
 	for name, gate := range gateDetails {

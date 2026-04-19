@@ -51,7 +51,6 @@ var helpGroups = []commandGroup{
 		Commands: []groupedCommand{
 			{Name: "review", Description: desc("review")},
 			{Name: "validate", Description: desc("validate")},
-			{Name: "validate-requirements", Description: desc("validate-requirements")},
 			{Name: "pivot", Description: desc("pivot")},
 			{Name: "abort", Description: desc("abort")},
 			{Name: "cancel", Description: desc("cancel")},
@@ -150,7 +149,6 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeCancelCmd())
 	cmd.AddCommand(makeReviewCmd())
 	cmd.AddCommand(makeValidateCmd())
-	cmd.AddCommand(makeValidateRequirementsCmd())
 	cmd.AddCommand(makePivotCmd())
 	cmd.AddCommand(makeRepairCmd())
 	cmd.AddCommand(makeCheckpointCmd())

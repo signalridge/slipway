@@ -50,7 +50,6 @@ var frozenAdapterCommandIDs = []string{
 	"review",
 	"run",
 	"status",
-	"validate-requirements",
 	"validate",
 }
 

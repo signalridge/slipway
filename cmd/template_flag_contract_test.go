@@ -31,7 +31,6 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 		"cancel":                makeCancelCmd(),
 		"review":                makeReviewCmd(),
 		"validate":              makeValidateCmd(),
-		"validate-requirements": makeValidateRequirementsCmd(),
 		"pivot":                 makePivotCmd(),
 		"health":                makeHealthCmd(),
 		"run":                   makeRunCmd(),
@@ -133,7 +132,6 @@ func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *test
 		"run",
 		"status",
 		"validate",
-		"validate-requirements",
 	} {
 		raw, err := os.ReadFile(filepath.Join(commandsDir, id+".md"))
 		require.NoError(t, err)

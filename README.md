@@ -49,8 +49,7 @@ execution surface (`run`) to manage the lifecycle.
 ### Situational commands
 
 - `slipway review`: explicit bidirectional artifact-code alignment review (available from S2_EXECUTE onward); not part of every progression cycle
-- `slipway validate`: read-only evidence and gate check for the active change; useful when blocked or when you want a non-mutating readiness check
-- `slipway validate-requirements`: validate the active change's `requirements.md` contract (read-only)
+- `slipway validate`: read-only evidence and gate check for the active change; governed JSON output also includes a `requirements_contract` summary when the bundle can be evaluated cleanly
 - `slipway pivot`: reroute (`--reroute`) or rescope (`--rescope`) an active change (available from S2_EXECUTE onward)
 - `slipway abort`: abort only the active execution session without archiving the change
 - `slipway cancel`: cancel the active change and archive it as terminal

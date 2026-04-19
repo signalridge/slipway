@@ -94,8 +94,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 18 commands (5 core + 10 situational + 3 diagnostics).
-	assert.Len(t, commandRegistry, 18)
+	// Verify registry has 17 commands (5 core + 9 situational + 3 diagnostics).
+	assert.Len(t, commandRegistry, 17)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -128,14 +128,14 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 5, core, "expected 5 core commands")
-	assert.Equal(t, 10, sit, "expected 10 situational commands")
+	assert.Equal(t, 9, sit, "expected 9 situational commands")
 	assert.Equal(t, 3, diag, "expected 3 diagnostics commands")
-	assert.Equal(t, 6, query, "expected 6 query commands")
+	assert.Equal(t, 5, query, "expected 5 query commands")
 	assert.Equal(t, 12, mutation, "expected 12 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
 	ids := commandIDs()
-	assert.Len(t, ids, 15)
+	assert.Len(t, ids, 14)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -586,7 +586,7 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 	// Build set of valid commands.
 	validCmds := map[string]bool{
 		"new": true, "next": true, "run": true, "status": true, "done": true,
-		"abort": true, "cancel": true, "review": true, "validate": true, "validate-requirements": true,
+		"abort": true, "cancel": true, "review": true, "validate": true,
 		"pivot": true, "preset": true, "repair": true, "init": true, "checkpoint": true,
 	}
 
@@ -670,9 +670,9 @@ func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync codex prompt")
 
 	_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "validate-requirements.md"))
-	assert.NoError(t, err, "current validate-requirements command entry should remain present")
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements command entry")
 	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway-validate-requirements.md"))
-	assert.NoError(t, err, "current validate-requirements codex prompt should remain present")
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements codex prompt")
 }
 
 func TestCodexAgentTOMLGeneration(t *testing.T) {
@@ -820,7 +820,7 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 
 	assert.Contains(t, readme, "`slipway new`")
 	assert.Contains(t, readme, "`slipway run`")
-	assert.Contains(t, readme, "`slipway validate-requirements`")
+	assert.NotContains(t, readme, "`slipway validate-requirements`")
 	assert.Contains(t, readme, "`artifacts/changes/`")
 	assert.Contains(t, readme, "`artifacts/codebase/`")
 	assert.NotContains(t, readme, "request intake")

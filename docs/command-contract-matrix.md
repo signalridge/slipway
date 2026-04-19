@@ -18,7 +18,7 @@ previously-missing execution surfaces:
 
 Current product command count:
 
-- 15 adapter-visible surfaced commands
+- 14 adapter-visible surfaced commands
 - 3 surfaced CLI-only diagnostics commands
 - 1 hidden product helper command: `root`
 
@@ -55,7 +55,6 @@ surfaces.
 | `done` | mutation | surfaced / core | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `review` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `validate` | query | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
-| `validate-requirements` | query | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `pivot` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `abort` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `cancel` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
@@ -76,7 +75,7 @@ authority layer. Current group membership is intentional:
 |---|---|
 | `Core lifecycle` | `new`, `preset`, `next`, `run`, `status`, `done` |
 | `Discovery` | `codebase-map` |
-| `Situational` | `review`, `validate`, `validate-requirements`, `pivot`, `abort`, `cancel`, `repair`, `checkpoint` |
+| `Situational` | `review`, `validate`, `pivot`, `abort`, `cancel`, `repair`, `checkpoint` |
 | `Diagnostics` | `stats`, `health` |
 | `Setup` | `init` |
 
