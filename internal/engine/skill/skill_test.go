@@ -123,14 +123,15 @@ func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) 
 	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
 }
 
-func TestLoadGovernanceRegistrySkipsUnknownSkillName(t *testing.T) {
+func TestLoadGovernanceRegistrySkipsUnknownSkillID(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	skillDir := filepath.Join(root, ".claude", "skills", "slipway", "custom")
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-custom")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
 ---
-name: custom-skill
+skill_id: custom
+name: slipway-custom
 description: "unknown skill"
 ---
 body
@@ -170,11 +171,12 @@ func TestLoadGovernanceRegistryIgnoresGeneratedRoutingMetadata(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	skillDir := filepath.Join(root, ".claude", "skills", "slipway", "wave-orchestration")
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
 ---
-name: wave-orchestration
+skill_id: wave-orchestration
+name: slipway-wave-orchestration
 description: "tampered"
 state: S9_DONE
 agent_hint: slipway-missing
@@ -191,6 +193,65 @@ body
 	assert.Equal(t, model.StateS2Execute, def.State)
 	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
 	assert.Equal(t, "uncontrolled parallel execution drift", def.Mitigation)
+}
+
+func TestLoadGovernanceRegistryRejectsMissingSkillID(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
+---
+name: slipway-wave-orchestration
+description: "tampered"
+---
+body
+`), 0o644))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing skill_id")
+}
+
+func TestLoadGovernanceRegistryRejectsMissingSkillIDWithLegacyBareName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
+---
+name: wave-orchestration
+description: "tampered"
+---
+body
+`), 0o644))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing skill_id")
+	assert.Contains(t, err.Error(), "wave-orchestration")
+}
+
+func TestLoadGovernanceRegistryRejectsPublicNameSkillIDDrift(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
+---
+skill_id: wave-orchestration
+name: slipway-plan-audit
+description: "tampered"
+---
+body
+`), 0o644))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slipway-wave-orchestration")
 }
 
 func TestLoadGovernanceRegistryAppliesConfiguredAgentMappings(t *testing.T) {

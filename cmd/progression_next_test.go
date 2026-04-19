@@ -649,7 +649,7 @@ func TestNextPreviewFailsWhenSkillEvidenceEvaluationFails(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		skillPath := filepath.Join(root, ".codex", "skills", "slipway", "code-quality-review", "SKILL.md")
+		skillPath := filepath.Join(root, ".codex", "skills", "slipway-code-quality-review", "SKILL.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
 		require.NoError(t, os.WriteFile(skillPath, []byte(strings.TrimSpace(`
 ---

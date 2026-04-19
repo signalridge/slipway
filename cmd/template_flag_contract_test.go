@@ -23,19 +23,19 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 
 	// Map command names to their Cobra constructors.
 	cmds := map[string]*cobra.Command{
-		"init":                  makeInitCmd(),
-		"new":                   makeNewCmd(),
-		"next":                  makeNextCmd(),
-		"status":                makeStatusCmd(),
-		"done":                  makeDoneCmd(),
-		"cancel":                makeCancelCmd(),
-		"review":                makeReviewCmd(),
-		"validate":              makeValidateCmd(),
-		"pivot":                 makePivotCmd(),
-		"health":                makeHealthCmd(),
-		"run":                   makeRunCmd(),
-		"abort":                 makeAbortCmd(),
-		"repair":                makeRepairCmd(),
+		"init":     makeInitCmd(),
+		"new":      makeNewCmd(),
+		"next":     makeNextCmd(),
+		"status":   makeStatusCmd(),
+		"done":     makeDoneCmd(),
+		"cancel":   makeCancelCmd(),
+		"review":   makeReviewCmd(),
+		"validate": makeValidateCmd(),
+		"pivot":    makePivotCmd(),
+		"health":   makeHealthCmd(),
+		"run":      makeRunCmd(),
+		"abort":    makeAbortCmd(),
+		"repair":   makeRepairCmd(),
 	}
 
 	// Collect registered flags per command.
@@ -54,7 +54,7 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 	re := regexp.MustCompile("`slipway ([a-z][a-z-]*)(?:\\s[^`]*?)\\s--([a-z][a-z-]*)`")
 
 	// Walk all generated skill files.
-	skillsDir := filepath.Join(root, ".claude", "skills", "slipway")
+	skillsDir := filepath.Join(root, ".claude", "skills")
 	err := filepath.Walk(skillsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
 			return err

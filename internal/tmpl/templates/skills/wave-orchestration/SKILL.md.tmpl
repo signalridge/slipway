@@ -1,6 +1,6 @@
 ---
 skill_id: wave-orchestration
-name: wave-orchestration
+name: slipway-wave-orchestration
 description: "Use when executing dependency-ordered implementation waves with conflict detection. Triggers on post-plan-audit execution or whenever governed tasks must be executed in sequence."
 tool: "{{.ToolID}}"
 ---
@@ -14,16 +14,16 @@ IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION
 ## Purpose
 Execute implementation tasks in dependency-ordered waves with conflict
 detection. This is the governed execution host skill; overlays such as
-`tdd-proof` can attach procedure detail without changing the routed execution
+`slipway-tdd-proof` can attach procedure detail without changing the routed execution
 surface.
 Mitigates: uncontrolled parallel execution drift.
 
-## Technique Overlay: `coding-discipline`
-Use `coding-discipline` as the execution posture for this host:
+## Technique Overlay: `slipway-coding-discipline`
+Use `slipway-coding-discipline` as the execution posture for this host:
 - think before coding: state assumptions and blockers before dispatching work
 - simplicity first: prefer the smallest task slice that satisfies the acceptance criteria
 - surgical changes: avoid drive-by refactors while a wave is in flight
-- goal-driven execution: keep posture here, and use `tdd-proof` / `root-cause-tracing` for detailed procedure
+- goal-driven execution: keep posture here, and use `slipway-tdd-proof` / `slipway-root-cause-tracing` for detailed procedure
 
 ## Workflow Outline
 1. Read the governed task bundle, resume/checkpoint state, and durable mapping

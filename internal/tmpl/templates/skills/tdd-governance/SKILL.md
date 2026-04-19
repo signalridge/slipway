@@ -1,6 +1,6 @@
 ---
 skill_id: tdd-governance
-name: tdd-governance
+name: slipway-tdd-governance
 description: "Use when verifying TDD discipline for guardrail-domain wave execution. Triggers on guardrail-domain execution or before wave verification is frozen."
 ---
 
@@ -15,7 +15,7 @@ Violating the letter of this rule is violating the spirit of this rule.
 ## Purpose
 Enforce test-driven development discipline during wave execution for
 guardrail-domain changes. This is the guardrail execution host skill;
-`tdd-proof` attaches the RED/GREEN/REFACTOR procedure that this host verifies
+`slipway-tdd-proof` attaches the RED/GREEN/REFACTOR procedure that this host verifies
 for each task.
 Mitigates: guardrail-domain tasks executed without test-driven proof.
 
@@ -31,7 +31,7 @@ During wave execution phase for guardrail-domain governed changes. Validates tha
 
 ### 1. Read Context
 Run `slipway next --json` and read the task plan and wave execution state.
-Treat the attached `tdd-proof` procedure as the source for what counts as valid
+Treat the attached `slipway-tdd-proof` procedure as the source for what counts as valid
 RED, GREEN, REFACTOR, and EVIDENCE proof for each task.
 
 ### 2. TDD Compliance Checklist (MANDATORY)
@@ -115,7 +115,7 @@ After confirmation: `slipway next`
 ## DO NOT SKIP
 1. Test-first verification for EACH task (not a sample).
 2. Git history verification (not implementer claims).
-3. RED/GREEN/REFACTOR evidence language must match the attached `tdd-proof` procedure.
+3. RED/GREEN/REFACTOR evidence language must match the attached `slipway-tdd-proof` procedure.
 4. Coverage gate for critical paths.
 5. Test quality assessment (not just "tests exist").
 6. Verification record written after compliance check.

@@ -44,13 +44,13 @@ and evidence model.
 ## Goal-Driven Execution
 Keep the goal visible, then delegate detailed mechanics to the owning Slipway
 skills:
-- planning and task decomposition -> `plan-authoring`
-- guarded implementation and test-first execution -> `tdd-proof`
-- completion and freshness proof -> `goal-verification`
-- explicit review verdict and handoff -> `independent-review`
+- planning and task decomposition -> `slipway-plan-authoring`
+- guarded implementation and test-first execution -> `slipway-tdd-proof`
+- completion and freshness proof -> `slipway-goal-verification`
+- explicit review verdict and handoff -> `slipway-independent-review`
 
 If a host already owns a detailed procedure, follow that host for mechanics and
-use `coding-discipline` for posture.
+use `slipway-coding-discipline` for posture.
 
 ## Tradeoff
 These guidelines bias toward caution, smaller diffs, and explicit reasoning.

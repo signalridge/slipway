@@ -13,6 +13,9 @@ import (
 // It is a one-way export. The kernel does not read this file back, so the
 // output shape is free to evolve as authoring needs change — only the
 // renderer must remain deterministic so regenerations produce stable diffs.
+//
+// Adapter-visible skill labels use the canonical `slipway-<id>` public name,
+// while runtime-owned metadata such as bindings stay on the bare internal IDs.
 func BuildCatalogManifest(reg *Registry) string {
 	if reg == nil {
 		return ""
@@ -31,7 +34,7 @@ func BuildCatalogManifest(reg *Registry) string {
 	for _, sk := range reg.All() {
 		b.WriteString(fmt.Sprintf(
 			"| `%s` | %s | %s | %s | %s |\n",
-			sk.ID,
+			adapterSkillPublicName(sk.ID),
 			string(sk.Tier),
 			string(sk.Domain),
 			string(sk.PrimaryAttachment),
@@ -51,7 +54,7 @@ func BuildCatalogManifest(reg *Registry) string {
 }
 
 func writeSkillSection(b *strings.Builder, sk Skill) {
-	fmt.Fprintf(b, "### `%s` (%s)\n\n", sk.ID, string(sk.Tier))
+	fmt.Fprintf(b, "### `%s` (%s)\n\n", adapterSkillPublicName(sk.ID), string(sk.Tier))
 	fmt.Fprintf(b, "- Function: %s\n", sk.Function)
 	fmt.Fprintf(b, "- Primary attachment: %s\n", string(sk.PrimaryAttachment))
 	fmt.Fprintf(b, "- Evidence contract: %s\n", string(sk.Evidence))
@@ -67,6 +70,10 @@ func writeSkillSection(b *strings.Builder, sk Skill) {
 		}
 	}
 	b.WriteString("\n")
+}
+
+func adapterSkillPublicName(id string) string {
+	return "slipway-" + strings.TrimSpace(id)
 }
 
 func formatBindingTargets(bindings []Binding) string {

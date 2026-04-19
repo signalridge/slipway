@@ -66,7 +66,7 @@ func TestEmitHydrateBlocksUsesInvocationWorkspaceRoot(t *testing.T) {
 
 		_, err = os.Stat(filepath.Join(root, ".codex"))
 		assert.True(t, os.IsNotExist(err), "main scope should not need codex adapters for hydrate rendering")
-		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway", "security-review", "references", "authentication.md"))
+		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway-security-review", "references", "authentication.md"))
 		require.NoError(t, err)
 
 		var buf bytes.Buffer
@@ -399,7 +399,7 @@ func TestLoadHydrateBodyRejectsMalformedKey(t *testing.T) {
 
 func TestLoadHydrateBodyReadsGeneratedWorkspaceTree(t *testing.T) {
 	root := generatedHydrateWorkspace(t)
-	refPath := filepath.Join(root, ".codex", "skills", "slipway", "security-review", "references", "authentication.md")
+	refPath := filepath.Join(root, ".codex", "skills", "slipway-security-review", "references", "authentication.md")
 	want := "# Workspace Override\n\nOnly the generated workspace tree should be read here.\n"
 	if err := os.WriteFile(refPath, []byte(want), 0o644); err != nil {
 		t.Fatalf("override generated hydrate file: %v", err)
@@ -416,7 +416,7 @@ func TestLoadHydrateBodyReadsGeneratedWorkspaceTree(t *testing.T) {
 
 func TestLoadHydrateBodyFailsWhenGeneratedReferenceDriftsMissing(t *testing.T) {
 	root := generatedHydrateWorkspace(t)
-	refPath := filepath.Join(root, ".codex", "skills", "slipway", "security-review", "references", "authentication.md")
+	refPath := filepath.Join(root, ".codex", "skills", "slipway-security-review", "references", "authentication.md")
 	if err := os.Remove(refPath); err != nil {
 		t.Fatalf("remove generated hydrate file: %v", err)
 	}

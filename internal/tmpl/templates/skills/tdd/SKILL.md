@@ -16,7 +16,7 @@ Violating the letter of this rule is violating the spirit of this rule.
 ## Purpose
 Apply a strict RED → GREEN → REFACTOR loop so implementation never gets ahead
 of verification. This is a technique skill used by execution hosts; it does
-not replace governance gates such as `tdd-governance`. It is not a suggestion
+not replace governance gates such as `slipway-tdd-governance`. It is not a suggestion
 for code changes.
 
 ## Workflow Outline

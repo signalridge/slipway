@@ -39,6 +39,7 @@ func (e *GovernanceRegistryError) Unwrap() error {
 
 type governanceFrontMatter struct {
 	// Active fields (used by loader)
+	SkillID     string `yaml:"skill_id"`
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 }
@@ -51,7 +52,7 @@ func LoadGovernanceRegistry(root string) ([]Definition, error) {
 
 	dirs := candidateSkillDirs(root)
 	for _, dir := range dirs {
-		pattern := filepath.Join(dir, "slipway", "*", "SKILL.md")
+		pattern := filepath.Join(dir, "slipway-*", "SKILL.md")
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			return nil, err
@@ -180,20 +181,52 @@ func parseGovernanceSkillFromFile(
 		return Definition{}, false, &GovernanceRegistryError{Path: path, Err: err}
 	}
 
-	skillName := strings.TrimSpace(fm.Name)
-	if skillName == "" {
+	skillID := strings.TrimSpace(fm.SkillID)
+	publicName := strings.TrimSpace(fm.Name)
+	if skillID == "" {
+		if bareID, ok := bareGovernanceIDFromOverlayPath(path, defaults); ok {
+			return Definition{}, false, &GovernanceRegistryError{
+				Path: path,
+				Err:  fmt.Errorf("missing skill_id for governance overlay %q", bareID),
+			}
+		}
+		if bareID, ok := bareGovernanceIDFromPublicName(publicName, defaults); ok {
+			return Definition{}, false, &GovernanceRegistryError{
+				Path: path,
+				Err:  fmt.Errorf("missing skill_id for governance overlay %q", bareID),
+			}
+		}
 		return Definition{}, false, nil
 	}
 
-	// Name-based lookup replaces the old type == "governance" filter.
-	// Non-governance skills are simply not in the defaults map.
-	def, hasDefault := defaults[skillName]
+	def, hasDefault := defaults[skillID]
 	if !hasDefault {
 		return Definition{}, false, nil
+	}
+	if publicName != "" && publicName != toolgen.AdapterSkillName(skillID) {
+		return Definition{}, false, &GovernanceRegistryError{
+			Path: path,
+			Err:  fmt.Errorf("governance overlay name %q must equal %q", publicName, toolgen.AdapterSkillName(skillID)),
+		}
 	}
 
 	// Return the default definition — routing metadata is exclusively owned by the Go registry.
 	return def, true, nil
+}
+
+func bareGovernanceIDFromOverlayPath(path string, defaults map[string]Definition) (string, bool) {
+	publicName := filepath.Base(filepath.Dir(path))
+	return bareGovernanceIDFromPublicName(publicName, defaults)
+}
+
+func bareGovernanceIDFromPublicName(publicName string, defaults map[string]Definition) (string, bool) {
+	publicName = strings.TrimSpace(publicName)
+	if !strings.HasPrefix(publicName, "slipway-") {
+		return "", false
+	}
+	bareID := strings.TrimPrefix(publicName, "slipway-")
+	_, ok := defaults[bareID]
+	return bareID, ok
 }
 
 func candidateSkillDirs(root string) []string {

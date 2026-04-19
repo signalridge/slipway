@@ -13,12 +13,12 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/tmpl"
+	"gopkg.in/yaml.v3"
 )
 
 // catalogManifestFileName is the outbound `using-slipway-catalog.md`
 // document that describes the Go-owned capability registry to external
-// agents. It sits alongside the generated SKILL.md directories under
-// `<SkillsDir>/slipway/`.
+// agents. It sits at the top level of `<SkillsDir>/`.
 const catalogManifestFileName = "using-slipway-catalog.md"
 
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
@@ -432,9 +432,14 @@ func HasSentinel(root string, cfg ToolConfig) bool {
 // HasWorkspaceLocalSurfaces returns true if workspace-local Slipway-generated
 // surfaces exist for the given tool (skill dirs under the tool root).
 func HasWorkspaceLocalSurfaces(root string, cfg ToolConfig) bool {
-	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
-	if _, err := os.Stat(skillsRoot); err == nil {
-		return true
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	if entries, err := os.ReadDir(skillsRoot); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasPrefix(name, "slipway-") || name == catalogManifestFileName {
+				return true
+			}
+		}
 	}
 	if cfg.CommandsDir != "" {
 		var cmdDir string
@@ -534,16 +539,32 @@ func GeneratedAdapterMarkerPath(cfg ToolConfig) string {
 	return filepath.Join(ToolRootPath(cfg), "slipway", ".adapter-generated")
 }
 
+func adapterSkillName(id string) string {
+	return "slipway-" + id
+}
+
+func AdapterSkillName(id string) string {
+	return adapterSkillName(id)
+}
+
+func exportedSkillDirName(id string) string {
+	return adapterSkillName(id)
+}
+
+func sourceSkillTemplatePath(id, leaf string) string {
+	return path.Join("skills", id, leaf)
+}
+
 // SkillPath returns the relative path to a skill's SKILL.md for the given tool config.
 func SkillPath(cfg ToolConfig, skillName string) string {
-	return filepath.Join(cfg.SkillsDir, "slipway", skillName, "SKILL.md")
+	return filepath.Join(cfg.SkillsDir, exportedSkillDirName(skillName), "SKILL.md")
 }
 
 // CatalogManifestPath returns the relative path to the generated
 // `using-slipway-catalog.md` outbound manifest for the given tool config.
 // External agents read this file to triage catalog skills by description.
 func CatalogManifestPath(cfg ToolConfig) string {
-	return filepath.Join(cfg.SkillsDir, "slipway", catalogManifestFileName)
+	return filepath.Join(cfg.SkillsDir, catalogManifestFileName)
 }
 
 // AgentPath returns the relative path to an agent definition for the given tool config.
@@ -583,9 +604,13 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	allStaticGovernance := append([]string{}, GovernanceSkillNames...)
 	allStaticGovernance = append(allStaticGovernance, standaloneGovernanceNames...)
 	for _, name := range allStaticGovernance {
-		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load governance skill %q: %w", name, err)
+		}
+		content, err = renderSourceManagedSkill(content, name)
+		if err != nil {
+			return fmt.Errorf("canonicalize governance skill %q: %w", name, err)
 		}
 		skillPath := filepath.Join(root, SkillPath(cfg, name))
 		if err := writeDeterministic(skillPath, content, refresh); err != nil {
@@ -634,7 +659,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 
 	// Standalone skills (static content, not governance, not technique)
 	for _, name := range standaloneNames {
-		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load standalone %q: %w", name, err)
 		}
@@ -649,9 +674,13 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 
 	// Technique skills (static content)
 	for _, name := range techniqueNames {
-		content, err := tmpl.Content(path.Join("skills", name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load technique %q: %w", name, err)
+		}
+		content, err = renderSourceManagedSkill(content, name)
+		if err != nil {
+			return fmt.Errorf("canonicalize technique %q: %w", name, err)
 		}
 		p := filepath.Join(root, SkillPath(cfg, name))
 		if err := writeDeterministic(p, content, refresh); err != nil {
@@ -796,7 +825,11 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
 }
 
 func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
-	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	if err := removePathIfExists(filepath.Join(skillsRoot, "slipway")); err != nil {
+		return err
+	}
+
 	expected := map[string]struct{}{}
 	for _, names := range [][]string{
 		GovernanceSkillNames,
@@ -807,11 +840,30 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 		techniqueNames,
 	} {
 		for _, name := range names {
-			expected[name] = struct{}{}
+			expected[exportedSkillDirName(name)] = struct{}{}
 		}
 	}
 	expected[catalogManifestFileName] = struct{}{}
-	return cleanupUnexpectedEntries(skillsRoot, expected)
+
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if _, ok := expected[name]; ok {
+			continue
+		}
+		if name == catalogManifestFileName || strings.HasPrefix(name, "slipway-") {
+			if err := os.RemoveAll(filepath.Join(skillsRoot, name)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
@@ -926,26 +978,26 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) er
 // ...) are preserved below them so audit and binding-compare gates still
 // work.
 func renderCatalogSkill(sk capability.Skill) (string, error) {
-	base, err := tmpl.Content(path.Join("skills", sk.ID, "SKILL.md"))
+	base, err := tmpl.Content(sourceSkillTemplatePath(sk.ID, "SKILL.md"))
 	if err != nil {
 		return "", fmt.Errorf("load catalog base body: %w", err)
 	}
-	base, err = injectAdapterFrontmatter(base, sk)
+	base, err = injectAdapterFrontmatter(base, adapterSkillName(sk.ID), sk.Summary)
 	if err != nil {
 		return "", fmt.Errorf("rewrite frontmatter for %q: %w", sk.ID, err)
 	}
 
 	// Typed partials are assembled whenever authored on disk; attachment-mode
 	// gating lives in the capability layer, not in the assembler.
-	prose, err := loadOptionalTemplate(path.Join("skills", sk.ID, "PROSE.tmpl"), true)
+	prose, err := loadOptionalTemplate(sourceSkillTemplatePath(sk.ID, "PROSE.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
-	checklist, err := loadOptionalTemplate(path.Join("skills", sk.ID, "CHECKLIST.tmpl"), true)
+	checklist, err := loadOptionalTemplate(sourceSkillTemplatePath(sk.ID, "CHECKLIST.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
-	verdict, err := loadOptionalTemplate(path.Join("skills", sk.ID, "VERDICT.tmpl"), true)
+	verdict, err := loadOptionalTemplate(sourceSkillTemplatePath(sk.ID, "VERDICT.tmpl"), true)
 	if err != nil {
 		return "", err
 	}
@@ -970,6 +1022,14 @@ func renderCatalogSkill(sk capability.Skill) (string, error) {
 	return strings.Join(out, "\n\n") + "\n", nil
 }
 
+func renderSourceManagedSkill(raw, id string) (string, error) {
+	description, stripped, err := extractAndStripAdapterFields(raw, id)
+	if err != nil {
+		return "", err
+	}
+	return injectAdapterFrontmatter(stripped, adapterSkillName(id), description)
+}
+
 // injectAdapterFrontmatter prepends `name` and `description` to the source
 // frontmatter so adapter loaders (Codex/Claude) accept the output. The
 // existing authoring fields are preserved verbatim below them.
@@ -977,22 +1037,92 @@ func renderCatalogSkill(sk capability.Skill) (string, error) {
 // The function is string-based on purpose: it keeps the body byte-for-byte
 // identical to the source (important for tier-size and schema-lint gates
 // that measure post-frontmatter bytes).
-func injectAdapterFrontmatter(raw string, sk capability.Skill) (string, error) {
+func injectAdapterFrontmatter(raw, publicName, description string) (string, error) {
+	fm, tail, err := splitSkillFrontmatter(raw)
+	if err != nil {
+		return "", err
+	}
+
+	header := "name: " + publicName + "\n" +
+		"description: " + yamlDoubleQuoted(description) + "\n"
+	return "---\n" + header + fm + tail, nil
+}
+
+func extractAndStripAdapterFields(raw, id string) (description string, stripped string, err error) {
+	fm, tail, err := splitSkillFrontmatter(raw)
+	if err != nil {
+		return "", "", err
+	}
+
+	lines := strings.Split(fm, "\n")
+	kept := make([]string, 0, len(lines))
+	var skillID string
+	var publicName string
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "skill_id:"):
+			skillID, err = parseSingleLineFrontmatterScalar(strings.TrimPrefix(line, "skill_id:"), "skill_id", id)
+			if err != nil {
+				return "", "", err
+			}
+			kept = append(kept, line)
+		case strings.HasPrefix(line, "name:"):
+			publicName, err = parseSingleLineFrontmatterScalar(strings.TrimPrefix(line, "name:"), "name", id)
+			if err != nil {
+				return "", "", err
+			}
+		case strings.HasPrefix(line, "description:"):
+			description, err = parseSingleLineFrontmatterScalar(strings.TrimPrefix(line, "description:"), "description", id)
+			if err != nil {
+				return "", "", err
+			}
+		default:
+			kept = append(kept, line)
+		}
+	}
+
+	if skillID == "" {
+		return "", "", fmt.Errorf("skill %q missing skill_id", id)
+	}
+	if skillID != id {
+		return "", "", fmt.Errorf("skill %q has unexpected skill_id %q", id, skillID)
+	}
+	if description == "" {
+		return "", "", fmt.Errorf("skill %q missing description", id)
+	}
+	if publicName != "" && publicName != adapterSkillName(id) {
+		return "", "", fmt.Errorf("skill %q name must equal %q", id, adapterSkillName(id))
+	}
+
+	return description, "---\n" + strings.Join(kept, "\n") + tail, nil
+}
+
+func splitSkillFrontmatter(raw string) (fm string, tail string, err error) {
 	const open = "---\n"
 	if !strings.HasPrefix(raw, open) {
-		return "", fmt.Errorf("SKILL.md missing opening `---` delimiter")
+		return "", "", fmt.Errorf("SKILL.md missing opening `---` delimiter")
 	}
 	rest := raw[len(open):]
 	idx := strings.Index(rest, "\n---")
 	if idx < 0 {
-		return "", fmt.Errorf("SKILL.md missing closing `---` delimiter")
+		return "", "", fmt.Errorf("SKILL.md missing closing `---` delimiter")
 	}
-	fm := rest[:idx]
-	tail := rest[idx:] // starts with "\n---"
+	return rest[:idx], rest[idx:], nil
+}
 
-	header := "name: slipway-" + sk.ID + "\n" +
-		"description: " + yamlDoubleQuoted(sk.Summary) + "\n"
-	return open + header + fm + tail, nil
+func parseSingleLineFrontmatterScalar(raw, field, id string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "|") || strings.HasPrefix(raw, ">") {
+		return "", fmt.Errorf("skill %q %s must use a single-line YAML scalar", id, field)
+	}
+
+	var decoded struct {
+		Value string `yaml:"value"`
+	}
+	if err := yaml.Unmarshal([]byte("value: "+raw+"\n"), &decoded); err != nil {
+		return "", fmt.Errorf("parse %s for %q: %w", field, id, err)
+	}
+	return strings.TrimSpace(decoded.Value), nil
 }
 
 // yamlDoubleQuoted renders s as a YAML double-quoted scalar. It escapes `\`
@@ -1050,7 +1180,7 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 		if err := emitSharedSkillSupportFromFS(srcFS, skillID, sub, dstDir, refresh); err != nil {
 			return fmt.Errorf("copy shared %s for %q: %w", sub, skillID, err)
 		}
-		if err := copyTemplateSubtreeFromFS(srcFS, path.Join("skills", skillID, sub), dstDir, refresh); err != nil {
+		if err := copyTemplateSubtreeFromFS(srcFS, sourceSkillTemplatePath(skillID, sub), dstDir, refresh); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
 		}
 	}
@@ -1072,7 +1202,7 @@ func emitSharedSkillSupportFromFS(srcFS fs.FS, skillID, sub, dstDir string, refr
 }
 
 func skillUsesSharedScriptHelper(srcFS fs.FS, skillID string) (bool, error) {
-	scriptsDir := path.Join("skills", skillID, "scripts")
+	scriptsDir := sourceSkillTemplatePath(skillID, "scripts")
 	info, err := fs.Stat(srcFS, scriptsDir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1195,7 +1325,11 @@ func renderTemplatedGovernanceSkill(cfg ToolConfig, id string) (string, error) {
 		"Trigger":     commandTrigger(cfg, id),
 		"Description": commandDescriptions[id],
 	}
-	return tmpl.Render(path.Join("skills", id, "SKILL.md.tmpl"), data)
+	raw, err := tmpl.Render(sourceSkillTemplatePath(id, "SKILL.md.tmpl"), data)
+	if err != nil {
+		return "", err
+	}
+	return renderSourceManagedSkill(raw, id)
 }
 
 // renderCommandEntry renders an inline command prompt from the appropriate template.

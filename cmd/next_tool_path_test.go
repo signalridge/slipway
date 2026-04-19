@@ -36,7 +36,7 @@ func TestNextUsesCodexPathsWhenWorkspaceIsCodexOnly(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, ".codex/skills/slipway/plan-audit/SKILL.md", view.NextSkill.PromptPath)
+		assert.Equal(t, ".codex/skills/slipway-plan-audit/SKILL.md", view.NextSkill.PromptPath)
 		assert.Equal(t, ".codex/agents/slipway-auditor.toml", view.NextSkill.AgentDefinitionPath)
 	})
 }
@@ -69,7 +69,7 @@ func TestNextUsesCurrentLinkedWorktreeAdaptersForSkillPaths(t *testing.T) {
 
 		_, err = os.Stat(filepath.Join(root, ".codex"))
 		assert.True(t, os.IsNotExist(err), "main scope should not need codex adapters for this regression")
-		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway", "plan-audit", "SKILL.md"))
+		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway-plan-audit", "SKILL.md"))
 		require.NoError(t, err)
 
 		var out bytes.Buffer
@@ -81,7 +81,7 @@ func TestNextUsesCurrentLinkedWorktreeAdaptersForSkillPaths(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, ".codex/skills/slipway/plan-audit/SKILL.md", view.NextSkill.PromptPath)
+		assert.Equal(t, ".codex/skills/slipway-plan-audit/SKILL.md", view.NextSkill.PromptPath)
 		assert.Equal(t, ".codex/agents/slipway-auditor.toml", view.NextSkill.AgentDefinitionPath)
 	})
 }
@@ -105,7 +105,7 @@ func TestNextUsesExistingPromptPathForIntakeHost(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, "intake-clarification", view.NextSkill.Name)
-		assert.Equal(t, ".claude/skills/slipway/intake-clarification/SKILL.md", view.NextSkill.PromptPath)
+		assert.Equal(t, ".claude/skills/slipway-intake-clarification/SKILL.md", view.NextSkill.PromptPath)
 		_, err := os.Stat(filepath.Join(root, view.NextSkill.PromptPath))
 		require.NoError(t, err, "next should not point to a non-existent exported skill prompt")
 	})

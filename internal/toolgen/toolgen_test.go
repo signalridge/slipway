@@ -267,14 +267,14 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		allStaticGov := append([]string{}, GovernanceSkillNames...)
 		allStaticGov = append(allStaticGov, standaloneGovernanceNames...)
 		for _, name := range allStaticGov {
-			path := filepath.Join(root, cfg.SkillsDir, "slipway", name, "SKILL.md")
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
 			_, err := os.Stat(path)
 			assert.NoError(t, err, "%s: missing governance skill %s", toolID, name)
 		}
 
 		// Templated governance skills (tool-aware)
 		for _, name := range TemplatedGovernanceSkillNames {
-			path := filepath.Join(root, cfg.SkillsDir, "slipway", name, "SKILL.md")
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
 			_, err := os.Stat(path)
 			assert.NoError(t, err, "%s: missing templated governance skill %s", toolID, name)
 		}
@@ -305,7 +305,7 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 
 		// Technique skills
 		for _, name := range techniqueNames {
-			path := filepath.Join(root, cfg.SkillsDir, "slipway", name, "SKILL.md")
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
 			_, err := os.Stat(path)
 			assert.NoError(t, err, "%s: missing technique %s", toolID, name)
 		}
@@ -315,7 +315,7 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		// `description`).
 		reg := capability.DefaultRegistry()
 		for _, id := range catalogSkillIDs {
-			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway", id)
+			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway-"+id)
 			skillPath := filepath.Join(skillDir, "SKILL.md")
 			body, err := os.ReadFile(skillPath)
 			assert.NoError(t, err, "%s: missing catalog skill %s", toolID, id)
@@ -410,7 +410,7 @@ func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T)
 
 	// Output equals the source body with the adapter-frontmatter header
 	// prepended; no typed-template sections are appended.
-	injected, err := injectAdapterFrontmatter(raw, skill)
+	injected, err := injectAdapterFrontmatter(raw, "slipway-"+skill.ID, skill.Summary)
 	require.NoError(t, err)
 	assert.Equal(t, injected, content)
 }
@@ -419,9 +419,8 @@ func TestInjectAdapterFrontmatterPrependsNameAndDescription(t *testing.T) {
 	t.Parallel()
 
 	src := "---\nskill_id: demo\nsummary: \"Use when X. Triggers on Y.\"\n---\n\n# Body\n"
-	sk := capability.Skill{ID: "demo", Summary: "Use when X. Triggers on Y."}
 
-	out, err := injectAdapterFrontmatter(src, sk)
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", "Use when X. Triggers on Y.")
 	require.NoError(t, err)
 
 	// Header lines appear before existing fields.
@@ -442,9 +441,8 @@ func TestInjectAdapterFrontmatterEscapesDoubleQuotes(t *testing.T) {
 	t.Parallel()
 
 	src := "---\nskill_id: demo\n---\n\nbody\n"
-	sk := capability.Skill{ID: "demo", Summary: `needs "quote" and \backslash`}
 
-	out, err := injectAdapterFrontmatter(src, sk)
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", `needs "quote" and \backslash`)
 	require.NoError(t, err)
 	assert.Contains(t, out, `description: "needs \"quote\" and \\backslash"`)
 }
@@ -452,8 +450,42 @@ func TestInjectAdapterFrontmatterEscapesDoubleQuotes(t *testing.T) {
 func TestInjectAdapterFrontmatterRejectsMissingDelimiter(t *testing.T) {
 	t.Parallel()
 
-	_, err := injectAdapterFrontmatter("no frontmatter here", capability.Skill{ID: "x"})
+	_, err := injectAdapterFrontmatter("no frontmatter here", "slipway-x", "desc")
 	assert.Error(t, err)
+}
+
+func TestExtractAndStripAdapterFieldsStripsCanonicalFields(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: slipway-demo\ndescription: \"Use when X. Triggers on Y.\"\nsummary: \"keep me\"\n---\n\n# Body\n"
+
+	description, stripped, err := extractAndStripAdapterFields(src, "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "Use when X. Triggers on Y.", description)
+	assert.Contains(t, stripped, "skill_id: demo")
+	assert.Contains(t, stripped, "summary: \"keep me\"")
+	assert.NotContains(t, stripped, "\nname:")
+	assert.NotContains(t, stripped, "\ndescription:")
+}
+
+func TestExtractAndStripAdapterFieldsRejectsPublicNameDrift(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: demo\ndescription: \"Use when X. Triggers on Y.\"\n---\n"
+
+	_, _, err := extractAndStripAdapterFields(src, "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slipway-demo")
+}
+
+func TestExtractAndStripAdapterFieldsRejectsMissingDescription(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: slipway-demo\n---\n"
+
+	_, _, err := extractAndStripAdapterFields(src, "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing description")
 }
 
 func TestRenderCatalogSkillUsesTypedTemplatesForProductionSkill(t *testing.T) {
@@ -598,7 +630,7 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 	allSkillIDs = append(allSkillIDs, techniqueNames...)
 
 	for _, id := range allSkillIDs {
-		path := filepath.Join(root, cfg.SkillsDir, "slipway", id, "SKILL.md")
+		path := filepath.Join(root, cfg.SkillsDir, "slipway-"+id, "SKILL.md")
 		content, err := os.ReadFile(path)
 		if err != nil {
 			continue // skip if file doesn't exist
@@ -648,7 +680,7 @@ func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
 
 	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
 
-	staleSkill := filepath.Join(root, ".claude", "skills", "slipway", "sync", "SKILL.md")
+	staleSkill := filepath.Join(root, ".claude", "skills", "slipway-sync", "SKILL.md")
 	staleCommand := filepath.Join(root, ".claude", "commands", "slipway", "sync.md")
 	stalePrompt := filepath.Join(codexHome, "prompts", "slipway-sync.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(staleSkill), 0o755))
@@ -671,6 +703,31 @@ func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements command entry")
 	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway-validate-requirements.md"))
 	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements codex prompt")
+}
+
+func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	staleSkillDir := filepath.Join(root, ".claude", "skills", "slipway-sync")
+	unrelatedDir := filepath.Join(root, ".claude", "skills", "user-owned")
+	unrelatedFile := filepath.Join(unrelatedDir, "SKILL.md")
+
+	require.NoError(t, os.MkdirAll(staleSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("stale sync skill"), 0o644))
+	require.NoError(t, os.MkdirAll(unrelatedDir, 0o755))
+	require.NoError(t, os.WriteFile(unrelatedFile, []byte("keep me"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	_, err := os.Stat(staleSkillDir)
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired top-level slipway-* skills")
+	_, err = os.Stat(unrelatedFile)
+	assert.NoError(t, err, "refresh must not delete unrelated user-managed entries under skills dir")
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", catalogManifestFileName))
+	assert.NoError(t, err, "catalog manifest should remain at the top level of the skills dir")
 }
 
 func TestCodexAgentTOMLGeneration(t *testing.T) {
@@ -903,7 +960,7 @@ func TestGeneratedWaveOrchestrationSkillUsesDescriptionPlaceholder(t *testing.T)
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
-	path := filepath.Join(root, ".claude", "skills", "slipway", "wave-orchestration", "SKILL.md")
+	path := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration", "SKILL.md")
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 
@@ -1100,7 +1157,7 @@ func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
 	allStaticGov := append([]string{}, GovernanceSkillNames...)
 	allStaticGov = append(allStaticGov, standaloneGovernanceNames...)
 	for _, name := range allStaticGov {
-		path := filepath.Join(root, ".claude", "skills", "slipway", name, "SKILL.md")
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
 		content, err := os.ReadFile(path)
 		require.NoError(t, err, "failed to read %s", name)
 		s := string(content)
@@ -1120,7 +1177,7 @@ func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
 	}
 
 	for _, name := range TemplatedGovernanceSkillNames {
-		path := filepath.Join(root, ".claude", "skills", "slipway", name, "SKILL.md")
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
 		content, err := os.ReadFile(path)
 		require.NoError(t, err, "failed to read %s", name)
 		s := string(content)
@@ -1149,7 +1206,7 @@ func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testi
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
 	for _, name := range standaloneNames {
-		path := filepath.Join(root, ".claude", "skills", "slipway", name, "SKILL.md")
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
 		content, err := os.ReadFile(path)
 		require.NoError(t, err, "failed to read %s", name)
 		parts := splitFrontmatter(string(content))
@@ -1461,7 +1518,7 @@ func TestTypedPartsRendered(t *testing.T) {
 		tc := tc
 		t.Run(tc.skill, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(root, tc.skill, "SKILL.md")
+			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
 			raw, err := os.ReadFile(path)
 			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
 			body := string(raw)
@@ -1480,7 +1537,7 @@ func TestTypedPartsRendered(t *testing.T) {
 // infrastructure overlays authored after removing language-specific overlays.
 func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
 	root := generatedSkillsRoot(t)
-	refsDir := filepath.Join(root, "security-review", "references")
+	refsDir := filepath.Join(root, "slipway-security-review", "references")
 	expected := []string{
 		"authentication.md",
 		"authorization.md",
@@ -1502,15 +1559,77 @@ func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
 	}
 }
 
+// TestRenderedSkillProseUsesCanonicalPublicNames verifies that exported-skill
+// prose references stay on the adapter-visible `slipway-<id>` form once the
+// generated tree has been canonicalized. Runtime-owned identifiers such as
+// `skill_id`, bindings, and verification filenames are covered elsewhere.
+func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	cases := []struct {
+		skill       string
+		mustContain []string
+		mustOmit    []string
+	}{
+		{
+			skill: "research-orchestration",
+			mustContain: []string{
+				"`slipway-plan-audit` can validate it",
+				"[Questions that slipway-plan-audit must address]",
+				"`slipway-plan-audit` to validate",
+			},
+			mustOmit: []string{
+				"`plan-audit` can validate it",
+				"[Questions that plan-audit must address]",
+				"`plan-audit` to validate",
+			},
+		},
+		{
+			skill: "codebase-mapping",
+			mustContain: []string{
+				"`slipway-research-orchestration`, `slipway-plan-audit`, and `slipway-wave-orchestration` SHOULD consume",
+			},
+			mustOmit: []string{
+				"research-orchestration, plan-audit, and wave-orchestration SHOULD consume",
+			},
+		},
+		{
+			skill: "tdd",
+			mustContain: []string{
+				"`slipway-tdd-governance`",
+			},
+			mustOmit: []string{
+				"`tdd-governance`",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.skill, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
+			raw, err := os.ReadFile(path)
+			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
+			body := string(raw)
+			for _, want := range tc.mustContain {
+				assert.Containsf(t, body, want, "%s: expected canonical public-name prose", tc.skill)
+			}
+			for _, unwanted := range tc.mustOmit {
+				assert.NotContainsf(t, body, unwanted, "%s: found stale bare public-name prose", tc.skill)
+			}
+		})
+	}
+}
+
 // generatedSkillsRoot generates a codex tree and returns the path to
-// `<root>/.codex/skills/slipway/` for script-contract tests.
+// `<root>/.codex/skills/` for script-contract tests.
 func generatedSkillsRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 	cfg := toolRegistry["codex"]
-	return filepath.Join(root, cfg.SkillsDir, "slipway")
+	return filepath.Join(root, cfg.SkillsDir)
 }
 
 // TestScriptExecutableBit asserts every rendered scripts/*.sh file has an
@@ -1602,7 +1721,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if _, err := execLookPath("jq"); err != nil {
 			t.Skipf("jq unavailable: %v", err)
 		}
-		script := filepath.Join(root, "sast-orchestration", "scripts", "merge-sarif.sh")
+		script := filepath.Join(root, "slipway-sast-orchestration", "scripts", "merge-sarif.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1648,7 +1767,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if _, err := execLookPath("jq"); err != nil {
 			t.Skipf("jq unavailable: %v", err)
 		}
-		script := filepath.Join(root, "sast-orchestration", "scripts", "merge-sarif.sh")
+		script := filepath.Join(root, "slipway-sast-orchestration", "scripts", "merge-sarif.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1699,7 +1818,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "gha-security-review", "scripts", "pin-actions.sh")
+		script := filepath.Join(root, "slipway-gha-security-review", "scripts", "pin-actions.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1749,7 +1868,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1773,7 +1892,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 			t.Skipf("go unavailable: %v", err)
 		}
 
-		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1794,7 +1913,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 			t.Skipf("go unavailable: %v", err)
 		}
 
-		script := filepath.Join(root, "root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1831,7 +1950,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "performance-profiling", "scripts", "repo-performance-scan.py")
+		script := filepath.Join(root, "slipway-performance-profiling", "scripts", "repo-performance-scan.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1868,7 +1987,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "performance-profiling", "scripts", "repo-performance-scan.py")
+		script := filepath.Join(root, "slipway-performance-profiling", "scripts", "repo-performance-scan.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1889,7 +2008,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1920,7 +2039,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1944,7 +2063,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1963,7 +2082,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "variant-analysis", "scripts", "find-variant.sh")
+		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1986,7 +2105,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "ci-triage", "scripts", "fetch-pr-checks.py")
+		script := filepath.Join(root, "slipway-ci-triage", "scripts", "fetch-pr-checks.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2009,7 +2128,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-pr-feedback.py")
+		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-pr-feedback.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2032,7 +2151,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.sh")
+		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-review-requests.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2051,7 +2170,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 
 	t.Run("fetch-review-requests avoids bash4-only syntax", func(t *testing.T) {
 		t.Parallel()
-		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.sh")
+		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-review-requests.sh")
 		raw, err := os.ReadFile(script)
 		require.NoError(t, err)
 
@@ -2070,7 +2189,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "review-comment-triage", "scripts", "reply-to-thread.py")
+		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "reply-to-thread.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2097,7 +2216,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "review-comment-triage", "scripts", "reply-to-thread.py")
+		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "reply-to-thread.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 

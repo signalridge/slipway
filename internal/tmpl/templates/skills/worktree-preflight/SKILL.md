@@ -1,6 +1,6 @@
 ---
 skill_id: worktree-preflight
-name: worktree-preflight
+name: slipway-worktree-preflight
 description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on discovery-required execution before wave work starts."
 ---
 

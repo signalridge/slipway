@@ -153,7 +153,7 @@ func TestTemplateShellScriptsAreExecutable(t *testing.T) {
 }
 
 // TestGeneratedSkillTreeInventoryManifest catches accidental structural drift
-// in the generated `.codex/skills/slipway/` tree. The golden manifest tracks
+// in the generated `.codex/skills/` tree. The golden manifest tracks
 // (path, file_kind, executable) per file. Semantic content drift stays with
 // rendered-tree review and feature-specific fixture tests; this gate only
 // catches missing files, unexpected extras, and executable-bit flips.
@@ -165,7 +165,7 @@ func TestGeneratedSkillTreeInventoryManifest(t *testing.T) {
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	cfg := toolRegistry["codex"]
-	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
 	manifest := buildSkillTreeInventory(t, skillsRoot)
 
 	goldenPath := toolgenTestdataPath(t, "skill_tree_inventory.codex.golden")

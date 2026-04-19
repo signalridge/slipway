@@ -598,10 +598,10 @@ func TestCodingDisciplineSkillKeepsFourPrinciplesAndProvenance(t *testing.T) {
 	assert.Contains(t, content, "## Simplicity First")
 	assert.Contains(t, content, "## Surgical Changes")
 	assert.Contains(t, content, "## Goal-Driven Execution")
-	assert.Contains(t, content, "`plan-authoring`")
-	assert.Contains(t, content, "`tdd-proof`")
-	assert.Contains(t, content, "`goal-verification`")
-	assert.Contains(t, content, "`independent-review`")
+	assert.Contains(t, content, "`slipway-plan-authoring`")
+	assert.Contains(t, content, "`slipway-tdd-proof`")
+	assert.Contains(t, content, "`slipway-goal-verification`")
+	assert.Contains(t, content, "`slipway-independent-review`")
 }
 
 func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
@@ -609,7 +609,7 @@ func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
 
 	planAudit, err := Content("skills/plan-audit/SKILL.md")
 	require.NoError(t, err)
-	assert.Contains(t, planAudit, "`coding-discipline`")
+	assert.Contains(t, planAudit, "`slipway-coding-discipline`")
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range []string{
@@ -619,7 +619,7 @@ func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
-		assert.Contains(t, content, "`coding-discipline`", "%s must reference coding-discipline", name)
+		assert.Contains(t, content, "`slipway-coding-discipline`", "%s must reference slipway-coding-discipline", name)
 	}
 }
 

@@ -1,6 +1,6 @@
 ---
 skill_id: intake-clarification
-name: intake-clarification
+name: slipway-intake-clarification
 description: "Use when clarifying user intent, scope boundaries, and acceptance signals before planning. Triggers on governed intake or any change that cannot be planned from the initial request alone."
 ---
 

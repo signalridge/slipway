@@ -1,6 +1,6 @@
 ---
 skill_id: plan-audit
-name: plan-audit
+name: slipway-plan-audit
 description: "Use when validating that the governed artifact bundle is ready for execution. Triggers on post-authoring audit or whenever plan artifacts change materially."
 ---
 
@@ -17,8 +17,8 @@ Validate that the governed artifact bundle is ready for execution. This is the
 execution-readiness host skill that gates entry into governed implementation.
 Mitigates: stale or incomplete plan bundle.
 
-## Technique Overlay: `coding-discipline`
-Use `coding-discipline` as the planning posture for this host:
+## Technique Overlay: `slipway-coding-discipline`
+Use `slipway-coding-discipline` as the planning posture for this host:
 - think before coding: surface hidden assumptions and scope ambiguity before execution starts
 - simplicity first: prefer the smallest task graph that still covers the requirements
 - surgical changes: keep target files precise and push unrelated cleanup out of the bundle

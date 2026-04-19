@@ -1,6 +1,6 @@
 ---
 skill_id: spec-compliance-review
-name: spec-compliance-review
+name: slipway-spec-compliance-review
 description: "Use when verifying bidirectional alignment between specification artifacts and implementation. Triggers on post-execution review or whenever spec-to-code traceability is under review."
 ---
 
@@ -19,12 +19,12 @@ attached `spec-trace` checklist supplies the line-level traceability contract
 used during the review.
 Mitigates: implementation divergence from spec.
 
-## Technique Overlay: `coding-discipline`
-Use `coding-discipline` as the review posture for this host:
+## Technique Overlay: `slipway-coding-discipline`
+Use `slipway-coding-discipline` as the review posture for this host:
 - think before coding: challenge assumptions before accepting claimed alignment
 - simplicity first: flag overbuilt implementations that exceed approved scope
 - surgical changes: distinguish true requirement work from drive-by edits
-- goal-driven execution: keep the spec verdict here while the shared discipline stays in `coding-discipline`
+- goal-driven execution: keep the spec verdict here while the shared discipline stays in `slipway-coding-discipline`
 
 ## When This Runs
 After wave execution. `slipway next` returns `next_skill: spec-compliance-review`.

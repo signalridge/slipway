@@ -43,7 +43,7 @@ func TestInitCommandToolsAll(t *testing.T) {
 		require.NoError(t, err)
 
 		// Technique skills in tool dirs
-		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway", "tdd", "SKILL.md"))
+		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-tdd", "SKILL.md"))
 		require.NoError(t, err)
 
 		// Init command entry exists
@@ -51,9 +51,9 @@ func TestInitCommandToolsAll(t *testing.T) {
 		require.NoError(t, err)
 
 		// Governance skills ARE in tool adapter dirs (namespace: slipway/<name>/)
-		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "worktree-preflight", "SKILL.md"))
+		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-worktree-preflight", "SKILL.md"))
 		require.NoError(t, err)
-		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "goal-verification", "SKILL.md"))
+		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-goal-verification", "SKILL.md"))
 		require.NoError(t, err)
 
 		// Agent definitions in tool dirs
@@ -334,7 +334,7 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
 		require.NoError(t, os.WriteFile(stalePrompt, []byte("stale prompt"), 0o644))
 
-		blockedSkillDir := filepath.Join(root, ".codex", "skills", "slipway", "intake-clarification")
+		blockedSkillDir := filepath.Join(root, ".codex", "skills", "slipway-intake-clarification")
 		require.NoError(t, os.RemoveAll(blockedSkillDir))
 		require.NoError(t, os.WriteFile(blockedSkillDir, []byte("blocked"), 0o644))
 
@@ -387,7 +387,7 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		require.FileExists(t, sentinelPath)
 		require.FileExists(t, commandPath)
 
-		blockedSkillDir := filepath.Join(root, ".claude", "skills", "slipway", "intake-clarification")
+		blockedSkillDir := filepath.Join(root, ".claude", "skills", "slipway-intake-clarification")
 		require.NoError(t, os.RemoveAll(blockedSkillDir))
 		require.NoError(t, os.WriteFile(blockedSkillDir, []byte("blocked"), 0o644))
 

@@ -1,6 +1,6 @@
 ---
 skill_id: codebase-mapping
-name: codebase-mapping
+name: slipway-codebase-mapping
 description: "Use when mapping repository architecture, dependency graphs, and module boundaries before planning. Triggers on brownfield discovery or whenever durable structural context is missing."
 ---
 
@@ -154,7 +154,7 @@ artifacts/codebase/CONCERNS.md
 ## Relationship to Governance
 Advisory only. Referenced in `technique_hints` during `S1_PLAN` discovery and bundle substeps but does NOT produce governance evidence. Missing codebase mapping SHALL NOT block any gate.
 
-However, research-orchestration, plan-audit, and wave-orchestration SHOULD consume the durable `artifacts/codebase/` documents when present. A thorough codebase map improves scope validation, task targeting, and execution safety.
+However, `slipway-research-orchestration`, `slipway-plan-audit`, and `slipway-wave-orchestration` SHOULD consume the durable `artifacts/codebase/` documents when present. A thorough codebase map improves scope validation, task targeting, and execution safety.
 
 ## Rationalization Red Flags
 | Rationalization | Counter-rule |

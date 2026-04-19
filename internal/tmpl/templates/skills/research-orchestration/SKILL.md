@@ -1,6 +1,6 @@
 ---
 skill_id: research-orchestration
-name: research-orchestration
+name: slipway-research-orchestration
 description: "Use when governed discovery needs architecture, pattern, risk, and test-strategy coverage before planning. Triggers on discovery-required changes or unresolved technical unknowns during intake."
 ---
 
@@ -15,7 +15,7 @@ Violating the letter of this rule is violating the spirit of this rule.
 ## Purpose
 Ensure governed discovery has sufficient breadth across architecture, patterns,
 risks, and test strategy before plan audit begins. This is the governed
-research host skill; `codebase-mapping` remains the reusable technique that
+research host skill; `slipway-codebase-mapping` remains the reusable technique that
 supplies durable structural context.
 Mitigates: insufficient discovery breadth before plan audit.
 
@@ -66,7 +66,7 @@ If `input_context.codebase_map_dir` already contains documents, read at least:
 - `TESTING.md`
 - `CONCERNS.md`
 
-If the durable codebase map is missing or stale, run the `codebase-mapping` technique skill first and write the documents into `input_context.codebase_map_dir`.
+If the durable codebase map is missing or stale, run the `slipway-codebase-mapping` technique skill first and write the documents into `input_context.codebase_map_dir`.
 This provides reusable structural context for research findings instead of one-off chat notes.
 
 ### 4. Write Verification
@@ -85,7 +85,7 @@ notes: |
 Present structured research summary to user organized by dimension using the following format:
 
 #### Structured Research Output Format
-The research output MUST follow this structure so that `plan-audit` can validate it:
+The research output MUST follow this structure so that `slipway-plan-audit` can validate it:
 
 ```markdown
 ## Research Findings
@@ -115,10 +115,10 @@ The research output MUST follow this structure so that `plan-audit` can validate
 - [Entry-time unknown or open question] → [Resolution or finding]
 
 ### Remaining Questions
-- [Questions that plan-audit must address]
+- [Questions that slipway-plan-audit must address]
 ```
 
-This format enables `plan-audit` to validate that all research dimensions have findings and that entry-time unknowns have been addressed.
+This format enables `slipway-plan-audit` to validate that all research dimensions have findings and that entry-time unknowns have been addressed.
 
 After presenting findings, <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
 

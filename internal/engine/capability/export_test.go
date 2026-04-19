@@ -24,8 +24,9 @@ func TestBuildCatalogManifest_IncludesEverySkill(t *testing.T) {
 	reg := DefaultRegistry()
 	manifest := BuildCatalogManifest(reg)
 	for _, id := range reg.IDs() {
-		if !strings.Contains(manifest, "`"+id+"`") {
-			t.Errorf("manifest missing skill %q", id)
+		publicName := adapterSkillPublicName(id)
+		if !strings.Contains(manifest, "`"+publicName+"`") {
+			t.Errorf("manifest missing public skill %q", publicName)
 		}
 	}
 }
@@ -53,6 +54,37 @@ func TestBuildCatalogManifest_ListsBindings(t *testing.T) {
 			fragment := "`" + string(binding.Type) + "` -> `" + binding.Target + "`"
 			if !strings.Contains(manifest, fragment) {
 				t.Errorf("skill %s: manifest missing binding fragment %q", sk.ID, fragment)
+			}
+		}
+	}
+}
+
+func TestBuildCatalogManifest_UsesCanonicalPublicSkillLabels(t *testing.T) {
+	reg := DefaultRegistry()
+	manifest := BuildCatalogManifest(reg)
+	for _, sk := range reg.All() {
+		publicName := adapterSkillPublicName(sk.ID)
+		if !strings.Contains(manifest, "| `"+publicName+"` |") {
+			t.Errorf("triage index missing public skill label %q", publicName)
+		}
+		if !strings.Contains(manifest, "### `"+publicName+"` ("+string(sk.Tier)+")") {
+			t.Errorf("skill section missing public skill label %q", publicName)
+		}
+	}
+}
+
+func TestBuildCatalogManifest_LeavesBindingTargetsOnBareInternalIDs(t *testing.T) {
+	reg := DefaultRegistry()
+	manifest := BuildCatalogManifest(reg)
+	for _, sk := range reg.All() {
+		for _, binding := range sk.Bindings {
+			bareFragment := "`" + string(binding.Type) + "` -> `" + binding.Target + "`"
+			if !strings.Contains(manifest, bareFragment) {
+				t.Errorf("skill %s: manifest missing bare binding fragment %q", sk.ID, bareFragment)
+			}
+			prefixedFragment := "`" + string(binding.Type) + "` -> `" + adapterSkillPublicName(binding.Target) + "`"
+			if strings.Contains(manifest, prefixedFragment) {
+				t.Errorf("skill %s: manifest should keep runtime binding target bare, found %q", sk.ID, prefixedFragment)
 			}
 		}
 	}

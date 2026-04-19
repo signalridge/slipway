@@ -127,7 +127,8 @@ func hydrateReferencePath(root, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(workspaceRoot, cfg.SkillsDir, "slipway", skillID, "references", filepath.FromSlash(name)), nil
+	skillDir := filepath.Dir(toolgen.SkillPath(cfg, skillID))
+	return filepath.Join(workspaceRoot, skillDir, "references", filepath.FromSlash(name)), nil
 }
 
 // loadHydrateBody returns the file body for a `<skill-id>/<name>` hydrate
