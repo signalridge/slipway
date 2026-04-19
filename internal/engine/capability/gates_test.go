@@ -127,6 +127,10 @@ func TestFrontmatterHasRequiredFields(t *testing.T) {
 			assert.Equal(t, string(sk.PrimaryAttachment), fm.PrimaryAttachment)
 			assert.Contains(t, fm.Summary, "Use when")
 			assert.Contains(t, fm.Summary, "Triggers on")
+			if _, ok := ExplicitFocusBackingIDs()[sk.ID]; ok && len(sk.Bindings) == 0 {
+				assert.Empty(t, fm.Bindings)
+				return
+			}
 			assert.NotEmpty(t, fm.Bindings)
 		})
 	}

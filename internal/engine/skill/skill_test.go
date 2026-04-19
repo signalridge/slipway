@@ -109,6 +109,20 @@ func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {
 	assert.True(t, research.DiscoveryOnly)
 }
 
+func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	registry, err := LoadGovernanceRegistry(root)
+	require.NoError(t, err)
+	require.Len(t, registry, 8)
+
+	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
+	require.True(t, ok)
+	assert.Equal(t, model.StateS2Execute, def.State)
+	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
+}
+
 func TestLoadGovernanceRegistrySkipsUnknownSkillName(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -150,6 +164,33 @@ func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
 		assert.Equal(t, expected.RunSummaryBound, def.RunSummaryBound, "run_summary_bound mismatch for %s", name)
 		assert.Equal(t, expected.DiscoveryOnly, def.DiscoveryOnly, "discovery_only mismatch for %s", name)
 	}
+}
+
+func TestLoadGovernanceRegistryIgnoresGeneratedRoutingMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway", "wave-orchestration")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`
+---
+name: wave-orchestration
+description: "tampered"
+state: S9_DONE
+agent_hint: slipway-missing
+hard_gate: fake
+---
+body
+`), 0o644))
+
+	registry, err := LoadGovernanceRegistry(root)
+	require.NoError(t, err)
+
+	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
+	require.True(t, ok)
+	assert.Equal(t, model.StateS2Execute, def.State)
+	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
+	assert.Equal(t, "uncontrolled parallel execution drift", def.Mitigation)
 }
 
 func TestLoadGovernanceRegistryAppliesConfiguredAgentMappings(t *testing.T) {

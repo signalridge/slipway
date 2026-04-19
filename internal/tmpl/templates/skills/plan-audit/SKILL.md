@@ -17,6 +17,13 @@ Validate that the governed artifact bundle is ready for execution. This is the
 execution-readiness host skill that gates entry into governed implementation.
 Mitigates: stale or incomplete plan bundle.
 
+## Technique Overlay: `coding-discipline`
+Use `coding-discipline` as the planning posture for this host:
+- think before coding: surface hidden assumptions and scope ambiguity before execution starts
+- simplicity first: prefer the smallest task graph that still covers the requirements
+- surgical changes: keep target files precise and push unrelated cleanup out of the bundle
+- goal-driven execution: keep detailed mechanics delegated to the owning governed skills
+
 ## Workflow Outline
 1. Read the governed bundle and any durable codebase-map context.
 2. Audit the artifact set, task dimensions, and requirement coverage.

@@ -44,8 +44,10 @@ type governanceFrontMatter struct {
 }
 
 func LoadGovernanceRegistry(root string) ([]Definition, error) {
+	// The Go registry is the routing authority. Generated SKILL.md files are an
+	// optional runtime overlay for adapter-facing prompt text only; they may not
+	// override workflow state, hard gates, or agent defaults.
 	definitions := defaultGovernanceRegistryMap()
-	loadedAny := false
 
 	dirs := candidateSkillDirs(root)
 	for _, dir := range dirs {
@@ -64,7 +66,6 @@ func LoadGovernanceRegistry(root string) ([]Definition, error) {
 			if !ok {
 				continue
 			}
-			loadedAny = true
 			definitions[def.Name] = def
 		}
 	}
@@ -85,9 +86,6 @@ func LoadGovernanceRegistry(root string) ([]Definition, error) {
 		return nil, &GovernanceRegistryError{Path: configPath, Err: err}
 	}
 
-	if !loadedAny {
-		return definitionsToSortedSlice(definitions), nil
-	}
 	return definitionsToSortedSlice(definitions), nil
 }
 
@@ -199,6 +197,8 @@ func parseGovernanceSkillFromFile(
 }
 
 func candidateSkillDirs(root string) []string {
+	// These are generated adapter trees under the active workspace/worktree.
+	// Missing directories are expected; loader falls back to Go defaults.
 	var dirs []string
 	for _, cfg := range toolgen.Registry() {
 		dirs = append(dirs, filepath.Join(root, cfg.SkillsDir))

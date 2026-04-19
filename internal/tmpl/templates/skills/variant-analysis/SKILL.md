@@ -63,3 +63,11 @@ labelled `affected`, `safe-with-reason`, or `needs-followup`.
   Supported languages per engine: `python`, `go`, `java`,
   `javascript`, `cpp`. Invalid engine/language pairs exit 2 with a
   usage message.
+
+## Reference Shelf
+When reading this skill directly, use the local `references/` shelf as the
+next layer of detail:
+- `references/methodology.md` for the anti-predicate workflow and callsite triage
+- `references/codeql-variant-queries.md` for CodeQL-oriented search patterns
+- `references/semgrep-variant-rules.md` for Semgrep-oriented rule drafting
+- `references/variant-report-template.md` for a concrete output format

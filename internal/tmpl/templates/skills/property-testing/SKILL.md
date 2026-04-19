@@ -4,12 +4,10 @@ domain: verification
 function: write property-based tests that specify invariants, not examples
 tier: T1
 primary_attachment: procedure
-summary: "Use when invariants are clearer than example cases. Triggers on validate command, goal-verification host, or property-oriented user text."
+summary: "Use when invariants are clearer than example cases. Triggers on validate command or property-oriented user text."
 trigger_signals:
   - command: validate
     reason: "validate command invoked; property tests may apply"
-  - host: goal-verification
-    reason: "Verification host active; consider property tests"
   - user_text_matches: ["property test", "invariant", "quickcheck", "hypothesis"]
     reason: "User text signals property-based testing"
 evidence_contract: artifact
@@ -24,10 +22,6 @@ hydrate_references:
     reason: "Choose an appropriate property-testing library"
   - name: interpreting-failures.md
     reason: "Read shrunk counterexamples and extract real bugs"
-bindings:
-  - type: host-embedded
-    target: goal-verification
-    attachment: checklist
 ---
 
 # Property Testing

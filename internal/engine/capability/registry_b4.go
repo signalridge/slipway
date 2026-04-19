@@ -64,13 +64,11 @@ func propertyTesting() Skill {
 		Function:          "write property-based tests that specify invariants, not examples",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when invariants are clearer than example cases. Triggers on validate command, goal-verification host, or property-oriented user text.",
+		Summary:           "Use when invariants are clearer than example cases. Triggers on validate command or property-oriented user text.",
 		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus property` on validate
-		// (resolved via surfaces.go). Host attachment on goal-verification
-		// keeps it available from verification flows.
-		Bindings: []Binding{
-			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
-		},
+		// (resolved via surfaces.go). It remains validate-only until a different
+		// routed discoverability path is intentionally added.
+		Bindings:          nil,
 		HydrateReferences: []HydrateReference{
 			{Name: "design.md", Reason: "How to pick properties that are worth testing"},
 			{Name: "generating.md", Reason: "Write generators that exercise the property space"},
@@ -88,11 +86,9 @@ func mutationTesting() Skill {
 		Function:          "run mutation testing to score the test suite, not the implementation",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentToolRecipe,
-		Summary:           "Use when test strength is in doubt. Triggers on validate command, goal-verification host, or user text naming mutation testing.",
+		Summary:           "Use when test strength is in doubt. Triggers on validate command or user text naming mutation testing.",
 		Evidence:          EvidenceArtifact,		// Explicit-focus backing for `--focus mutation` on validate.
-		Bindings: []Binding{
-			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
-		},
+		Bindings:          nil,
 		HydrateReferences: []HydrateReference{
 			{Name: "optimization-strategies.md", Reason: "Make mutation runs finish in bounded time"},
 			{Name: "configuration.md", Reason: "Pick the right mutators and exclusions for the target"},

@@ -4,6 +4,7 @@ ci-triage/scripts/fetch-pr-checks.py	script_py	non-exec
 code-quality-review/SKILL.md	skill_md	non-exec
 code-review-protocol/SKILL.md	skill_md	non-exec
 codebase-mapping/SKILL.md	skill_md	non-exec
+coding-discipline/SKILL.md	skill_md	non-exec
 context-assembly/SKILL.md	skill_md	non-exec
 context-assembly/references/codebase-map.md	reference	non-exec
 coverage-analysis/SKILL.md	skill_md	non-exec
@@ -61,6 +62,7 @@ review-comment-triage/scripts/gh-common.sh	script_sh	exec
 review-comment-triage/scripts/reply-to-thread.py	script_py	non-exec
 root-cause-tracing/SKILL.md	skill_md	non-exec
 root-cause-tracing/references/condition-based-waiting.md	reference	non-exec
+root-cause-tracing/references/debugging-failure-patterns.md	reference	non-exec
 root-cause-tracing/references/defense-in-depth.md	reference	non-exec
 root-cause-tracing/references/failure-patterns.md	reference	non-exec
 root-cause-tracing/references/hypothesis-testing.md	reference	non-exec
@@ -92,8 +94,6 @@ supply-chain-audit/references/dependency-management-best-practices.md	reference	
 supply-chain-audit/references/license-compatibility-matrix.md	reference	non-exec
 supply-chain-audit/references/results-template.md	reference	non-exec
 supply-chain-audit/references/vulnerability-assessment-guide.md	reference	non-exec
-systematic-debugging/SKILL.md	skill_md	non-exec
-systematic-debugging/references/debugging-failure-patterns.md	reference	non-exec
 tdd-governance/SKILL.md	skill_md	non-exec
 tdd-governance/references/tdd-evidence-patterns.md	reference	non-exec
 tdd-proof/SKILL.md	skill_md	non-exec
@@ -110,4 +110,4 @@ variant-analysis/scripts/find-variant.sh	script_sh	exec
 wave-orchestration/SKILL.md	skill_md	non-exec
 wave-orchestration/references/executor-dispatch-reference.md	reference	non-exec
 worktree-preflight/SKILL.md	skill_md	non-exec
-# inventory_sha256:1357c8b0c69ebd13d2e83e9ad9a1a745147505fd4711dd1926688b35b8126332
+# inventory_sha256:307a949a34aa35fe1381dd1ad1208decf10809856fdb58de84e3fc0070b89316

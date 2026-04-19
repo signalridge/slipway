@@ -131,9 +131,9 @@ func TestContentReturnsTechniques(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
 		"skills/tdd/SKILL.md",
-		"skills/systematic-debugging/SKILL.md",
 		"skills/code-review-protocol/SKILL.md",
 		"skills/codebase-mapping/SKILL.md",
+		"skills/coding-discipline/SKILL.md",
 	}
 	for _, name := range techniques {
 		content, err := Content(name)
@@ -290,8 +290,10 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.NotContains(t, content, "{{.", "next command entry has unrendered template vars")
 	assert.Contains(t, content, "This is the query surface for governed changes.")
 	assert.Contains(t, content, "Post-action progression check (`slipway run --json`).")
+	assert.Contains(t, content, "slipway-root-cause-tracing")
 	assert.NotContains(t, content, "single-step progression command")
 	assert.NotContains(t, content, "state progression context")
+	assert.NotContains(t, content, "systematic-debugging")
 }
 
 func TestContentReturnsAgentDefinitions(t *testing.T) {
@@ -401,9 +403,9 @@ func TestTechniqueSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
 		"skills/tdd/SKILL.md",
-		"skills/systematic-debugging/SKILL.md",
 		"skills/code-review-protocol/SKILL.md",
 		"skills/codebase-mapping/SKILL.md",
+		"skills/coding-discipline/SKILL.md",
 	}
 	for _, name := range techniques {
 		content, err := Content(name)
@@ -567,6 +569,70 @@ func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) 
 		"wave-orchestration skill missing checkpoint response guidance")
 	assert.Contains(t, content, "checkpoint_type",
 		"wave-orchestration skill missing checkpoint type guidance")
+	assert.Contains(t, content, "IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION",
+		"wave-orchestration skill missing top-level IRON LAW")
+}
+
+func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/variant-analysis/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "## Reference Shelf")
+	assert.Contains(t, content, "references/methodology.md")
+	assert.Contains(t, content, "references/codeql-variant-queries.md")
+	assert.Contains(t, content, "references/semgrep-variant-rules.md")
+	assert.Contains(t, content, "references/variant-report-template.md")
+}
+
+func TestCodingDisciplineSkillKeepsFourPrinciplesAndProvenance(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/coding-discipline/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "## Provenance")
+	assert.Contains(t, content, "multica-ai/andrej-karpathy-skills")
+	assert.Contains(t, content, "## Think Before Coding")
+	assert.Contains(t, content, "## Simplicity First")
+	assert.Contains(t, content, "## Surgical Changes")
+	assert.Contains(t, content, "## Goal-Driven Execution")
+	assert.Contains(t, content, "`plan-authoring`")
+	assert.Contains(t, content, "`tdd-proof`")
+	assert.Contains(t, content, "`goal-verification`")
+	assert.Contains(t, content, "`independent-review`")
+}
+
+func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
+	t.Parallel()
+
+	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+	assert.Contains(t, planAudit, "`coding-discipline`")
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+	for _, name := range []string{
+		"skills/wave-orchestration/SKILL.md.tmpl",
+		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+	} {
+		content, err := Render(name, data)
+		require.NoError(t, err, "failed to render %s", name)
+		assert.Contains(t, content, "`coding-discipline`", "%s must reference coding-discipline", name)
+	}
+}
+
+func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/root-cause-tracing/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "Capture the exact symptom")
+	assert.Contains(t, content, "Compare with a working case")
+	assert.Contains(t, content, "write the failing regression test")
+	assert.Contains(t, content, "references/debugging-failure-patterns.md")
 }
 
 func TestPromptSurfaceTemplateContracts(t *testing.T) {

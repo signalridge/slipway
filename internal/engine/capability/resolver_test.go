@@ -41,17 +41,29 @@ func TestResolveAttachesIntakeSupportOnIntakeHost(t *testing.T) {
 	assert.NotEmpty(t, res.Supports[0].Reason)
 }
 
-func TestResolveCapsSupportsAtThree(t *testing.T) {
+func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 	t.Parallel()
-	// Signals that match several skills' triggers at once.
 	reg := DefaultRegistry()
-	res := Resolve(reg, Signals{
-		Host:         "goal-verification",
-		Command:      "validate",
-		ChangedFiles: []string{"docs/plans/2026-04-11-foo.md"},
-		Blockers:     []string{"stale_verification_evidence"},
-	})
-	assert.LessOrEqual(t, len(res.Supports), 3)
+	res := Resolve(reg, Signals{Host: "goal-verification"})
+
+	require.Len(t, res.Supports, 3)
+	assert.Equal(t, []Attachment{
+		{
+			SkillID: "coverage-analysis",
+			Kind:    AttachmentChecklist,
+			Reason:  "Use when a change needs coverage evaluation. Triggers on validate command, goal-verification host, or coverage-related user text.",
+		},
+		{
+			SkillID: "fresh-verification-evidence",
+			Kind:    AttachmentChecklist,
+			Reason:  "Use when a change is approaching a verify/closeout gate. Triggers on goal-verification, final-closeout, or any completion-adjacent step.",
+		},
+		{
+			SkillID: "performance-profiling",
+			Kind:    AttachmentChecklist,
+			Reason:  "Use when a change is suspected to affect performance. Triggers on validate command, goal-verification host, or perf-related user text.",
+		},
+	}, res.Supports)
 }
 
 func TestResolveNoMatchReturnsEmpty(t *testing.T) {

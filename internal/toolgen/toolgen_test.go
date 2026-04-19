@@ -141,31 +141,29 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 }
 
-func TestGovernanceSkillExportsCoverRuntimeRegistry(t *testing.T) {
+func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
 	t.Parallel()
 
 	exported := map[string]struct{}{}
 	for _, name := range GovernanceSkillNames {
 		exported[name] = struct{}{}
 	}
+	for _, name := range standaloneGovernanceNames {
+		exported[name] = struct{}{}
+	}
 	for _, name := range TemplatedGovernanceSkillNames {
 		exported[name] = struct{}{}
 	}
 
-	for _, name := range []string{
-		"intake-clarification",
-		"research-orchestration",
-		"plan-audit",
-		"wave-orchestration",
-		"tdd-governance",
-		"spec-compliance-review",
-		"code-quality-review",
-		"goal-verification",
-		"final-closeout",
-	} {
+	for _, name := range workflowGovernanceNames {
 		_, ok := exported[name]
-		assert.Truef(t, ok, "runtime governance skill %q is not exported by toolgen", name)
+		assert.Truef(t, ok, "workflow governance host %q is not exported by toolgen", name)
 	}
+	for _, name := range extraExportedGovernanceNames {
+		_, ok := exported[name]
+		assert.Truef(t, ok, "extra exported governance surface %q is not exported by toolgen", name)
+	}
+	assert.Len(t, exported, len(governanceSurfaceDescriptors), "governance export union drifted from descriptor table")
 }
 
 func TestDetectExistingTools(t *testing.T) {

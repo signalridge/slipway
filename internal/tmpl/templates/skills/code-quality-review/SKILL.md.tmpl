@@ -18,6 +18,13 @@ spec compliance. This is Stage 2 of the governed review host sequence; it
 extends, rather than replaces, the spec-alignment checks from Stage 1.
 Mitigates: cross-artifact inconsistency and code quality gaps.
 
+## Technique Overlay: `coding-discipline`
+Use `coding-discipline` as the quality-review posture for this host:
+- think before coding: question complexity before accepting it as necessary
+- simplicity first: prefer simpler code paths over speculative abstraction
+- surgical changes: flag avoidable churn, copy-paste drift, and unrelated cleanup
+- goal-driven execution: keep the review verdict here while the shared coding posture lives in `coding-discipline`
+
 ## When This Runs
 After spec-compliance-review passes. This is Stage 2 of the two-stage review protocol.
 `slipway next` returns `next_skill: code-quality-review` after spec-compliance-review verification passes.

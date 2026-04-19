@@ -4,13 +4,11 @@ domain: verification
 function: run mutation testing to score the test suite, not the implementation
 tier: T1
 primary_attachment: tool-recipe
-summary: "Use when test strength is in doubt. Triggers on validate command, goal-verification host, or user text naming mutation testing."
+summary: "Use when test strength is in doubt. Triggers on validate command or user text naming mutation testing."
 size_rationale: "Warn-band accepted: tool-selection and survivor-triage rules are kept inline to avoid fragmented mutation verdicts."
 trigger_signals:
   - command: validate
     reason: "validate command invoked; mutation testing may apply"
-  - host: goal-verification
-    reason: "Verification host active; mutation testing is a verification booster"
   - user_text_matches: ["mutation testing", "mutmut", "stryker", "pitest"]
     reason: "User text names a mutation testing tool"
 evidence_contract: artifact
@@ -19,10 +17,6 @@ hydrate_references:
     reason: "Make mutation runs finish in bounded time"
   - name: configuration.md
     reason: "Pick the right mutators and exclusions for the target"
-bindings:
-  - type: host-embedded
-    target: goal-verification
-    attachment: checklist
 ---
 
 # Mutation Testing

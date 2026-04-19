@@ -48,22 +48,28 @@ incompatible stories, branch competing hypotheses and disprove them in
 parallel rather than guessing.
 
 ## Procedure
-1. Reproduce the failure deterministically; record the minimal trigger.
+1. Capture the exact symptom and reproduce the failure deterministically;
+   record the minimal trigger.
 2. Trace backwards from the observed symptom to the first invariant that was
-   violated. Cite file:line and transcript.
+   violated or the first divergence from known-good behavior. Cite file:line
+   and transcript. Compare with a working case when that narrows the boundary.
 3. If two hypotheses explain the same symptom, list both with a predicted
    observation that distinguishes them.
 4. Run the distinguishing observation; eliminate the losing hypothesis in
    writing before continuing.
-5. Only after the root cause is documented, propose a fix. The fix must cite
-   the documented root cause as its justification.
+5. Only after the root cause is documented, write the failing regression test
+   and propose the smallest fix that addresses that cause.
+6. Re-run the original reproduction and nearby regression tests before
+   declaring the fix complete.
 
 ## Checklist
+- [ ] Exact symptom and minimal trigger recorded.
 - [ ] Minimal reproduction recorded.
 - [ ] First violated invariant cited with file:line.
 - [ ] If hypotheses branched, the distinguishing observation is recorded.
 - [ ] Losing hypothesis is explicitly eliminated in writing.
 - [ ] Fix proposal references the documented root cause.
+- [ ] Original reproduction and regression tests were rerun after the fix.
 
 ## Anti-patterns
 | Rationalization | Counter-rule |
@@ -71,3 +77,7 @@ parallel rather than guessing.
 | "I can see the fix from the stack trace" | Stack traces show symptoms, not causes. |
 | "It's flaky; just retry" | Flaky means under-specified; document the race. |
 | "Two fixes both make it green" | One of them is masking; pick by the trace, not the outcome. |
+| "Let me refactor first, then debug" | Debug the code as-is, then refactor after the cause is proven. |
+
+## Reference Shelf
+For deeper failure-mode guidance, read `references/debugging-failure-patterns.md`.

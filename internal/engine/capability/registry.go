@@ -218,7 +218,9 @@ func validateSkill(sk Skill) error {
 		return fmt.Errorf("empty summary")
 	}
 	if len(sk.Bindings) == 0 {
-		return fmt.Errorf("no bindings declared")
+		if _, ok := ExplicitFocusBackingIDs()[sk.ID]; !ok {
+			return fmt.Errorf("no bindings declared")
+		}
 	}
 	for i, b := range sk.Bindings {
 		if !validBindingType(b.Type) {

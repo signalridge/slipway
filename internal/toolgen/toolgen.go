@@ -210,6 +210,53 @@ var commandRegistryMap = func() map[string]CommandDef {
 	return m
 }()
 
+type governanceRenderMode string
+
+const (
+	governanceRenderStatic     governanceRenderMode = "static"
+	governanceRenderTemplated  governanceRenderMode = "templated"
+	governanceRenderStandalone governanceRenderMode = "standalone"
+)
+
+type governanceSurfaceDescriptor struct {
+	ID              string
+	RenderMode      governanceRenderMode
+	WorkflowOwned   bool
+	ExportOnlyExtra bool
+}
+
+// governanceSurfaceDescriptors is the single toolgen-owned source of truth
+// for exported governance surfaces. It keeps workflow-governance ownership
+// distinct from extra exported helpers while preserving render-mode details.
+var governanceSurfaceDescriptors = []governanceSurfaceDescriptor{
+	{ID: "intake-clarification", RenderMode: governanceRenderStatic, WorkflowOwned: true},
+	{ID: "research-orchestration", RenderMode: governanceRenderStatic, WorkflowOwned: true},
+	{ID: "plan-audit", RenderMode: governanceRenderStatic, WorkflowOwned: true},
+	{ID: "tdd-governance", RenderMode: governanceRenderStatic, ExportOnlyExtra: true},
+	{ID: "worktree-preflight", RenderMode: governanceRenderStandalone, ExportOnlyExtra: true},
+	{ID: "wave-orchestration", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "spec-compliance-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "code-quality-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "goal-verification", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "final-closeout", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+}
+
+func governanceSurfaceIDs(filter func(governanceSurfaceDescriptor) bool) []string {
+	out := make([]string, 0, len(governanceSurfaceDescriptors))
+	for _, desc := range governanceSurfaceDescriptors {
+		if filter(desc) {
+			out = append(out, desc.ID)
+		}
+	}
+	return out
+}
+
+func governanceSurfaceIDsByRenderMode(mode governanceRenderMode) []string {
+	return governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
+		return desc.RenderMode == mode
+	})
+}
+
 // CommandDescription returns the registry description for a command ID.
 // Returns empty string if the command is not registered.
 func CommandDescription(id string) string {
@@ -254,35 +301,30 @@ var standaloneNames = []string{}
 // techniqueNames lists the technique skills to generate.
 var techniqueNames = []string{
 	"tdd",
-	"systematic-debugging",
 	"code-review-protocol",
 	"codebase-mapping",
+	"coding-discipline",
 }
 
-// GovernanceSkillNames lists the governance skills generated for each tool (static .md).
-var GovernanceSkillNames = []string{
-	"intake-clarification",
-	"research-orchestration",
-	"plan-audit",
-	"tdd-governance",
-}
+// GovernanceSkillNames lists the static exported governance surfaces (.md).
+var GovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderStatic)
 
-// standaloneGovernanceNames lists non-registry standalone skills still generated
-// for adapter guidance. These are not governance-registry skills but provide
-// useful procedural guidance for agents (e.g. worktree setup).
-var standaloneGovernanceNames = []string{
-	"worktree-preflight",
-}
+// workflowGovernanceNames lists the workflow-state-owned governance hosts.
+var workflowGovernanceNames = governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
+	return desc.WorkflowOwned
+})
 
-// TemplatedGovernanceSkillNames lists governance skills rendered from .md.tmpl.
-// These support template partials via {{ template "partial-name" . }}.
-var TemplatedGovernanceSkillNames = []string{
-	"wave-orchestration",
-	"spec-compliance-review",
-	"code-quality-review",
-	"goal-verification",
-	"final-closeout",
-}
+// extraExportedGovernanceNames lists exported helpers that are intentionally
+// outside the workflow-governance registry.
+var extraExportedGovernanceNames = governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
+	return desc.ExportOnlyExtra
+})
+
+// standaloneGovernanceNames lists standalone exported governance helpers.
+var standaloneGovernanceNames = governanceSurfaceIDsByRenderMode(governanceRenderStandalone)
+
+// TemplatedGovernanceSkillNames lists governance surfaces rendered from .md.tmpl.
+var TemplatedGovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderTemplated)
 
 // catalogSkillIDs returns Go-registry skill IDs sorted for deterministic
 // generation and cleanup.

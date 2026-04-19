@@ -7,12 +7,23 @@ tool: "{{.ToolID}}"
 
 # Wave Orchestration
 
+```
+IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION
+```
+
 ## Purpose
 Execute implementation tasks in dependency-ordered waves with conflict
 detection. This is the governed execution host skill; overlays such as
 `tdd-proof` can attach procedure detail without changing the routed execution
 surface.
 Mitigates: uncontrolled parallel execution drift.
+
+## Technique Overlay: `coding-discipline`
+Use `coding-discipline` as the execution posture for this host:
+- think before coding: state assumptions and blockers before dispatching work
+- simplicity first: prefer the smallest task slice that satisfies the acceptance criteria
+- surgical changes: avoid drive-by refactors while a wave is in flight
+- goal-driven execution: keep posture here, and use `tdd-proof` / `root-cause-tracing` for detailed procedure
 
 ## Workflow Outline
 1. Read the governed task bundle, resume/checkpoint state, and durable mapping

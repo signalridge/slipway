@@ -19,6 +19,13 @@ attached `spec-trace` checklist supplies the line-level traceability contract
 used during the review.
 Mitigates: implementation divergence from spec.
 
+## Technique Overlay: `coding-discipline`
+Use `coding-discipline` as the review posture for this host:
+- think before coding: challenge assumptions before accepting claimed alignment
+- simplicity first: flag overbuilt implementations that exceed approved scope
+- surgical changes: distinguish true requirement work from drive-by edits
+- goal-driven execution: keep the spec verdict here while the shared discipline stays in `coding-discipline`
+
 ## When This Runs
 After wave execution. `slipway next` returns `next_skill: spec-compliance-review`.
 This is Stage 1 of the two-stage review protocol. Must pass before code-quality-review runs.

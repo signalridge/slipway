@@ -79,16 +79,16 @@ Otherwise, execute the skill directly in the current context.
 ## Subagent Role: Implementer
 - Input scope: one task or one wave unit, not the entire project.
 - Required output contract: `changed_files`, `test_summary`, `evidence_ref`.
-- Methodology references: `slipway-tdd` for implementation and `slipway-systematic-debugging` for failures.
+- Method references: `slipway-tdd` for implementation and `slipway-root-cause-tracing` for failures.
 
 ## Context Budget
 - Include only active skill, blockers, and directly touched artifacts.
 - Exclude full logs; reference git-runtime evidence paths instead of pasting them inline.
 - Refresh threshold: after each skill execution and before each new step.
 
-## Technique Skill References
+## Skill References
 - `slipway-tdd`: enforce RED->GREEN->REFACTOR during wave execution.
-- `slipway-systematic-debugging`: isolate root cause when skill execution fails.
+- `slipway-root-cause-tracing`: isolate root cause when skill execution fails.
 
 ## DO NOT SKIP
 1. Pre-action status check (`slipway next --json`).
