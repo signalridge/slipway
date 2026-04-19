@@ -1,6 +1,7 @@
 ---
+skill_id: final-closeout
 name: final-closeout
-description: "Final verification refresh before ship approval, ensuring nothing is stale"
+description: "Use when refreshing final verification before ship approval. Triggers on goal-verification pass state or any ship-gate freshness recheck."
 ---
 
 # Final Closeout
@@ -13,36 +14,14 @@ Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
 Final verification refresh before ship approval, ensuring nothing is stale.
+This is the governed ship-gate host skill; it confirms that earlier review and
+verification evidence is still fresh enough to support a ship decision.
 Mitigates: stale final verification before governed ship decision.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph FinalCloseout {
-  rankdir=LR;
-  node [shape=box];
-  start [label="goal-verification passed"];
-  read [label="Read context\n+ verification index"];
-  fresh [shape=diamond, label="All verification\nfresh?"];
-  tests [shape=diamond, label="Full test\nsuite pass?"];
-  assure [shape=diamond, label="Assurance\ncomplete?"];
-  stale [label="Refresh stale\nverification"];
-  fix [label="Fix failures"];
-  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
-  done [label="slipway next\n→ G_ship"];
-
-  start -> read;
-  read -> fresh;
-  fresh -> stale [label="no"];
-  stale -> read [label="re-check"];
-  fresh -> tests [label="yes"];
-  tests -> fix [label="no"];
-  fix -> tests [label="rerun"];
-  tests -> assure [label="yes"];
-  assure -> stale [label="incomplete"];
-  assure -> gate [label="yes"];
-  gate -> done;
-}
-```
+## Workflow Outline
+1. Re-read the verification index and closeout prerequisites for the current run.
+2. Re-run the proving commands and confirm freshness, completeness, and assurance.
+3. Write the closeout verdict and wait for approval before the ship gate.
 
 ## When This Runs
 Only when governed closeout refresh is required. `slipway next` returns `next_skill: final-closeout`.
@@ -71,15 +50,8 @@ Verify ALL of the following before producing closeout verification:
 
 Each unchecked item is a BLOCKER. No partial credit. No "close enough."
 
-### 3. Verification-Before-Completion Protocol (HARD RULE)
-Before ANY closeout claim, you MUST follow this exact sequence:
-1. **Identify** the verification command (e.g., `go test ./...`, `npm test`)
-2. **Run** the command fresh and complete — not from memory or cache
-3. **Read** the full output — do not truncate or summarize prematurely
-4. **Compare** the output against closeout criteria (all tests pass, no blockers, verification fresh)
-5. **State** the claim WITH evidence: "Closeout ready because [command] produced [output showing N/N pass]"
-
-{{template "banned-language"}}
+### 3. Verification Doctrine (HARD RULE)
+{{template "verification-doctrine"}}
 
 ### 4. Assurance Artifact Verification (standard/strict preset)
 On light preset, skip this section — assurance.md is optional.

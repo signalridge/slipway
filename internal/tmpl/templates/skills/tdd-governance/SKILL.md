@@ -1,6 +1,7 @@
 ---
+skill_id: tdd-governance
 name: tdd-governance
-description: "Enforce test-driven development discipline during wave execution for guardrail-domain changes"
+description: "Use when verifying TDD discipline for guardrail-domain wave execution. Triggers on guardrail-domain execution or before wave verification is frozen."
 ---
 
 # TDD Governance
@@ -12,37 +13,16 @@ IRON LAW: NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Enforce test-driven development discipline during wave execution for guardrail-domain changes.
+Enforce test-driven development discipline during wave execution for
+guardrail-domain changes. This is the guardrail execution host skill;
+`tdd-proof` attaches the RED/GREEN/REFACTOR procedure that this host verifies
+for each task.
 Mitigates: guardrail-domain tasks executed without test-driven proof.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph TDDGovernance {
-  rankdir=LR;
-  node [shape=box];
-  start [label="Wave task complete"];
-  read [label="Read git history"];
-  chk [shape=diamond, label="Test-first\nevidence?"];
-  qual [shape=diamond, label="Test quality\npasses?"];
-  cov [shape=diamond, label="Coverage\nadequate?"];
-  fail [label="Verdict: FAIL\nrecord blocker"];
-  pass [label="Verdict: PASS"];
-  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
-  next [label="slipway next"];
-
-  start -> read;
-  read -> chk;
-  chk -> fail [label="no test commit\nbefore impl"];
-  chk -> qual [label="yes"];
-  qual -> fail [label="stubs/no assertions"];
-  qual -> cov [label="yes"];
-  cov -> fail [label="critical path\nuncovered"];
-  cov -> pass [label="yes"];
-  pass -> gate;
-  gate -> next;
-  fail -> start [label="remediate"];
-}
-```
+## Workflow Outline
+1. Read the current wave state and collect task-level TDD evidence.
+2. Verify RED, GREEN, REFACTOR, coverage, and regression proof for each task.
+3. Write a verdict, surface blockers, and wait for approval before advancing.
 
 ## When This Runs
 During wave execution phase for guardrail-domain governed changes. Validates that tasks follow TDD protocol before wave orchestration verification is frozen.
@@ -51,14 +31,17 @@ During wave execution phase for guardrail-domain governed changes. Validates tha
 
 ### 1. Read Context
 Run `slipway next --json` and read the task plan and wave execution state.
+Treat the attached `tdd-proof` procedure as the source for what counts as valid
+RED, GREEN, REFACTOR, and EVIDENCE proof for each task.
 
 ### 2. TDD Compliance Checklist (MANDATORY)
 For EACH task in the current wave, verify ALL of the following:
 
 - [ ] **Test-First Verification**: Git history shows test file commit BEFORE implementation commit for this task
-- [ ] **Red Phase Evidence**: The test was observed to FAIL before implementation (not written to pass)
-- [ ] **Green Phase Evidence**: Implementation is the MINIMUM change to make the test pass
-- [ ] **Refactor Phase Clean**: Any refactoring was done with all tests green
+- [ ] **RED Evidence**: The failing test was observed before implementation, the exact failure output was captured, and no production change was authored in the RED step
+- [ ] **GREEN Evidence**: The MINIMUM production change turned RED into GREEN, and the GREEN command plus run version were recorded
+- [ ] **REFACTOR Evidence**: Structure was improved without changing behaviour, and the full target was re-run green after refactor
+- [ ] **EVIDENCE Record**: Verification notes capture RED/GREEN/REFACTOR timestamps, commands, and run versions task-by-task
 - [ ] **No Stub Tests**: Every test has meaningful assertions (not `assert.True(true)` or empty bodies)
 - [ ] **Coverage Gate**: New/changed code has corresponding test coverage
 - [ ] **Critical Path Coverage**: Auth, data, external contracts have explicit test proof
@@ -132,29 +115,13 @@ After confirmation: `slipway next`
 ## DO NOT SKIP
 1. Test-first verification for EACH task (not a sample).
 2. Git history verification (not implementer claims).
-3. Coverage gate for critical paths.
-4. Test quality assessment (not just "tests exist").
-5. Verification record written after compliance check.
+3. RED/GREEN/REFACTOR evidence language must match the attached `tdd-proof` procedure.
+4. Coverage gate for critical paths.
+5. Test quality assessment (not just "tests exist").
+6. Verification record written after compliance check.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "Tests can be added after" | Test-first is the point of TDD governance. After is not TDD. |
-| "The code is too simple to test" | Simple code gets simple tests. Complexity is not the gate. |
-| "Tests pass so TDD was followed" | Passing tests do not prove test-first discipline. Check git history. |
-| "Refactoring doesn't need tests" | Refactoring needs existing test coverage to be verified green. |
-| "Time pressure justifies skipping" | TDD governance exists specifically to resist time pressure. |
-| "One commit with test+impl is fine" | Same-commit is not test-first evidence. Separate commits required. |
-| "The test is trivial but it exists" | Trivial tests with no meaningful assertions are stubs, not tests. |
-| "Coverage tools say 80%, that's enough" | Coverage percentage doesn't prove test-first. Check commit order. |
-| "Integration tests cover this unit" | Unit behavior needs unit tests. Integration is not a substitute. |
-| "I'll fix the test after the PR" | Tests are not post-merge tasks. Fix before verification is frozen. |
-
-## Failure Handling
-- Tasks failing TDD check must be remediated before wave verification is frozen.
-- If TDD compliance cannot be verified from git history, require explicit attestation with interim commit evidence from the implementer.
-- If attestation is disputed, mark task as `blocked` and surface to user.
-- Multiple TDD failures in a wave suggest the executor is not following the TDD technique skill — surface this pattern.
+See `references/tdd-evidence-patterns.md` for recurring rationalizations,
+attestation edge cases, and reminder examples for RED/GREEN/REFACTOR evidence.
 
 ## Hard Gate Enforcement
 DO NOT advance past TDD governance until the user has explicitly confirmed the compliance summary. Even if all tasks pass, the user must approve because they may have domain knowledge about test adequacy that automated checks cannot detect.

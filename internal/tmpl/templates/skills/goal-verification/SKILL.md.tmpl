@@ -1,6 +1,7 @@
 ---
+skill_id: goal-verification
 name: goal-verification
-description: "Verify that acceptance criteria are met and all claimed outcomes have evidence"
+description: "Use when verifying acceptance criteria with fresh evidence before completion claims. Triggers on post-review completion checks or whenever completion is being asserted."
 ---
 
 # Goal Verification
@@ -13,28 +14,14 @@ Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
 Verify that acceptance criteria are met and all claimed outcomes have evidence.
+This is the governed verification host skill that blocks completion claims
+until the current run has concrete proof for each accepted outcome.
 Mitigates: false completion claims.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph GoalVerification {
-  rankdir=LR;
-  node [shape=box];
-  S7 [label="S3_REVIEW passed"];
-  S8 [label="S4_VERIFY"];
-  chk [shape=diamond, label="3-level checks pass?"];
-  fix [label="fix root cause"];
-  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
-  done [label="DONE via slipway done"];
-
-  S7 -> S8;
-  S8 -> chk;
-  chk -> fix [label="no"];
-  fix -> S8 [label="re-verify"];
-  chk -> gate [label="yes"];
-  gate -> done;
-}
-```
+## Workflow Outline
+1. Enumerate every acceptance criterion that the current run must prove.
+2. Verify each criterion at the Exists, Substantive, and Wired levels.
+3. Aggregate blockers, write verification, and wait for approval before done.
 
 ## When This Runs
 After review passes. `slipway next` returns `next_skill: goal-verification`.
@@ -81,15 +68,8 @@ Additionally:
 - Run high-risk checks for active guardrail domains
 - Verify with fresh test execution (not cached results)
 
-### 2a. Verification-Before-Completion Protocol (HARD RULE)
-Before ANY completion claim, you MUST follow this exact sequence:
-1. **Identify** the verification command that proves the claim
-2. **Run** the command fresh and complete (not from memory or cache)
-3. **Read** the full output — do not truncate or summarize prematurely
-4. **Compare** the output against the specific acceptance criterion
-5. **State** the claim WITH the evidence: "Criterion X is met because [command] produced [output]"
-
-{{template "banned-language"}}
+### 2a. Verification Doctrine (HARD RULE)
+{{template "verification-doctrine"}}
 
 ### 2b. Stub Detection (Auto-Scan)
 Run the following scans against ALL target_files from the task plan. Any match is a BLOCKER.

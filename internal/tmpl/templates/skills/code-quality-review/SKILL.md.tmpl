@@ -1,6 +1,7 @@
 ---
+skill_id: code-quality-review
 name: code-quality-review
-description: "Review implementation for engineering quality, consistency, and safety beyond spec compliance"
+description: "Use when reviewing engineering quality, consistency, and safety beyond spec compliance. Triggers on Stage 2 review after spec-compliance-review passes, or whenever a second-stage review is required."
 ---
 
 # Code Quality Review
@@ -12,7 +13,9 @@ IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Review implementation for engineering quality, consistency, and safety beyond spec compliance.
+Review implementation for engineering quality, consistency, and safety beyond
+spec compliance. This is Stage 2 of the governed review host sequence; it
+extends, rather than replaces, the spec-alignment checks from Stage 1.
 Mitigates: cross-artifact inconsistency and code quality gaps.
 
 ## When This Runs

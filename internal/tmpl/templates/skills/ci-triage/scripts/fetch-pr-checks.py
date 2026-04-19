@@ -9,7 +9,9 @@ If --pr is not specified, uses the PR for the current branch.
 Output: JSON to stdout with structured check data.
 
 Lifted from ``getsentry/iterate-pr/scripts/fetch_pr_checks.py`` (Wave-3
-PR-2). Narrowings vs upstream:
+PR-2). This helper stays Python in the consolidation wave because log
+snippet extraction is regex-heavy and easier to keep readable there.
+Narrowings vs upstream:
 
   - Shebang narrowed from PEP 723 ``requires-python = ">=3.9"`` to a
     plain shebang; Slipway's shared Python contract targets 3.8+.

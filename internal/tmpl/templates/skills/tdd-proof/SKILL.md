@@ -35,8 +35,8 @@ IRON LAW: NO GUARDRAIL CHANGE WITHOUT A FAILING TEST FIRST
 
 ## Purpose
 Force a documented RED → GREEN → REFACTOR progression for any guardrail-domain
-work. The procedure is prompt-level; it does not replace the existing
-`tdd-governance` host.
+work. This is the host-attached procedure overlay for `tdd-governance` and
+`wave-orchestration`; it does not replace the existing governance host.
 
 ## Procedure
 1. **RED** — Write the failing test and record its exact failure output.
@@ -46,7 +46,8 @@ work. The procedure is prompt-level; it does not replace the existing
 3. **REFACTOR** — Improve structure without changing behaviour. Re-run the
    full test target; a fresh GREEN run is required.
 4. **EVIDENCE** — Write the verdict record with RED + GREEN + REFACTOR
-   timestamps, commands, and run versions.
+   timestamps, commands, and run versions so `tdd-governance` can verify the
+   same evidence contract task-by-task.
 
 ## Guardrails
 - Do not skip RED, even for "obvious" fixes.

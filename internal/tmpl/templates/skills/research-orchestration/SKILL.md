@@ -1,6 +1,7 @@
 ---
+skill_id: research-orchestration
 name: research-orchestration
-description: "Ensure discovery has sufficient breadth across architecture, patterns, risks, and test strategy"
+description: "Use when governed discovery needs architecture, pattern, risk, and test-strategy coverage before planning. Triggers on discovery-required changes or unresolved technical unknowns during intake."
 ---
 
 # Research Orchestration
@@ -12,8 +13,10 @@ IRON LAW: NO SCOPE CONFIRMATION WITHOUT STRUCTURED RESEARCH
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Ensure governed discovery has sufficient breadth across architecture, patterns, risks,
-and test strategy before plan audit begins.
+Ensure governed discovery has sufficient breadth across architecture, patterns,
+risks, and test strategy before plan audit begins. This is the governed
+research host skill; `codebase-mapping` remains the reusable technique that
+supplies durable structural context.
 Mitigates: insufficient discovery breadth before plan audit.
 
 ## When This Runs

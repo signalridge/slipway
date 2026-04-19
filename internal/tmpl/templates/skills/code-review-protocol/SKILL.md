@@ -1,6 +1,7 @@
 ---
+skill_id: code-review-protocol
 name: slipway-code-review-protocol
-description: "Run consistent, evidence-based code reviews with line-level verification of changed code"
+description: "Use when running consistent, evidence-based code reviews with line-level verification. Triggers on review workflows or whenever changed code needs a grounded findings pass."
 ---
 
 # Code Review Protocol
@@ -12,29 +13,15 @@ IRON LAW: NO APPROVAL WITHOUT LINE-LEVEL VERIFICATION OF CHANGED CODE
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Run consistent, evidence-based reviews that prioritize correctness, safety, and traceable findings. Reviews produce actionable output, not opinions.
+Run consistent, evidence-based reviews that prioritize correctness, safety, and
+traceable findings. This is a technique skill used by review hosts; it does not
+replace Slipway's routed review surfaces. Reviews produce actionable output,
+not opinions.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph CodeReview {
-  rankdir=LR;
-  node [shape=box];
-  scope [label="1. Confirm scope\nfiles + requirements"];
-  correct [label="2. Correctness\nlogic, branches, contracts"];
-  quality [label="3. Quality\nreadability, duplication"];
-  safety [label="4. Safety\nauth, data, irreversible"];
-  tests [label="5. Test coverage\nrisk + edge cases"];
-  summary [label="6. Findings summary\nseverity + remediation"];
-  decide [shape=diamond, label="Critical\nissues?"];
-  approve [label="Approve"];
-  block [label="Block\nrequire fixes"];
-
-  scope -> correct -> quality -> safety -> tests -> summary;
-  summary -> decide;
-  decide -> block [label="yes"];
-  decide -> approve [label="no"];
-}
-```
+## Workflow Outline
+1. Confirm scope and requirement mapping before reading code.
+2. Review correctness first, then quality, safety, and test coverage.
+3. Summarize findings by severity with concrete remediation.
 
 ## Detailed Process
 

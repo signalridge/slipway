@@ -92,39 +92,39 @@ func TestFinalCloseoutTemplateKeepsAssuranceReferenceConditional(t *testing.T) {
 	assert.NotContains(t, content, "\n  - \"closeout:assurance_complete=pass\"\n")
 }
 
-func TestCoreGovernanceSkillsIncludeGraphvizWorkflow(t *testing.T) {
+func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 
-	// Static governance skills with Graphviz
+	// Static governance skills should now use short workflow outlines.
 	for _, name := range []string{
 		"skills/plan-audit/SKILL.md",
 	} {
 		content, err := Content(name)
 		require.NoError(t, err, "failed to load %s", name)
-		assert.Contains(t, content, "## Workflow Graph (Graphviz DOT)", "%s missing Graphviz workflow section", name)
-		assert.Contains(t, content, "```dot", "%s missing DOT code block", name)
-		assert.Contains(t, content, "digraph", "%s missing Graphviz digraph definition", name)
+		assert.Contains(t, content, "## Workflow Outline", "%s missing workflow outline section", name)
+		assert.NotContains(t, content, "## Workflow Graph (Graphviz DOT)", "%s should not carry Graphviz workflow section", name)
+		assert.NotContains(t, content, "```dot", "%s should not carry DOT code block", name)
 	}
 
-	// Templated governance skills with Graphviz
+	// Templated governance skills should also use outlines.
 	for _, name := range []string{
 		"skills/goal-verification/SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
-		assert.Contains(t, content, "## Workflow Graph (Graphviz DOT)", "%s missing Graphviz workflow section", name)
-		assert.Contains(t, content, "```dot", "%s missing DOT code block", name)
-		assert.Contains(t, content, "digraph", "%s missing Graphviz digraph definition", name)
+		assert.Contains(t, content, "## Workflow Outline", "%s missing workflow outline section", name)
+		assert.NotContains(t, content, "## Workflow Graph (Graphviz DOT)", "%s should not carry Graphviz workflow section", name)
+		assert.NotContains(t, content, "```dot", "%s should not carry DOT code block", name)
 	}
 
-	// Templated governance skills with Graphviz (wave-orchestration)
+	// Wave orchestration should likewise avoid inline DOT.
 	data = map[string]string{"ToolID": "claude", "Trigger": "/slipway:wave-orchestration"}
 	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", data)
 	require.NoError(t, err, "failed to render wave-orchestration/SKILL.md.tmpl")
-	assert.Contains(t, content, "## Workflow Graph (Graphviz DOT)")
-	assert.Contains(t, content, "```dot")
-	assert.Contains(t, content, "digraph")
+	assert.Contains(t, content, "## Workflow Outline")
+	assert.NotContains(t, content, "## Workflow Graph (Graphviz DOT)")
+	assert.NotContains(t, content, "```dot")
 }
 
 func TestContentReturnsTechniques(t *testing.T) {
@@ -346,7 +346,10 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 		require.Len(t, parts, 3, "%s missing frontmatter delimiters", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name in frontmatter", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id in frontmatter", name)
 		assert.Contains(t, fm, "description:", "%s missing description in frontmatter", name)
+		assert.Contains(t, fm, "Use when ", "%s description must be trigger-oriented", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		for _, field := range routingFields {
 			assert.NotContains(t, fm, field, "%s frontmatter contains routing field %s", name, field)
 		}
@@ -365,7 +368,10 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 		require.Len(t, parts, 3, "%s missing frontmatter delimiters", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name in frontmatter", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id in frontmatter", name)
 		assert.Contains(t, fm, "description:", "%s missing description in frontmatter", name)
+		assert.Contains(t, fm, "Use when ", "%s description must be trigger-oriented", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		for _, field := range routingFields {
 			assert.NotContains(t, fm, field, "%s frontmatter contains routing field %s", name, field)
 		}
@@ -381,7 +387,10 @@ func TestGovernanceTemplatedSkillFrontmatterMinimal(t *testing.T) {
 	require.Len(t, parts, 3, "missing frontmatter delimiters")
 	fm := parts[1]
 	assert.Contains(t, fm, "name:", "missing name in frontmatter")
+	assert.Contains(t, fm, "skill_id:", "missing skill_id in frontmatter")
 	assert.Contains(t, fm, "description:", "missing description in frontmatter")
+	assert.Contains(t, fm, "Use when ", "description must be trigger-oriented")
+	assert.Contains(t, fm, "Triggers on", "description must describe trigger contract")
 	assert.Contains(t, fm, "tool:", "missing tool in frontmatter")
 	for _, field := range []string{"required_levels:", "state:", "type:", "mitigation_target:", "run_summary_bound:"} {
 		assert.NotContains(t, fm, field, "frontmatter contains routing field %s", field)
@@ -403,7 +412,10 @@ func TestTechniqueSkillFrontmatterMinimal(t *testing.T) {
 		require.Len(t, parts, 3, "%s missing frontmatter delimiters", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name in frontmatter", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id in frontmatter", name)
 		assert.Contains(t, fm, "description:", "%s missing description in frontmatter", name)
+		assert.Contains(t, fm, "Use when ", "%s description must be trigger-oriented", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		assert.NotContains(t, fm, "type:", "%s frontmatter contains type field", name)
 	}
 }
@@ -416,7 +428,10 @@ func TestStandaloneSkillFrontmatterMinimal(t *testing.T) {
 	require.Len(t, parts, 3, "skills/worktree-preflight/SKILL.md missing frontmatter delimiters")
 	fm := parts[1]
 	assert.Contains(t, fm, "name:", "skills/worktree-preflight/SKILL.md missing name in frontmatter")
+	assert.Contains(t, fm, "skill_id:", "skills/worktree-preflight/SKILL.md missing skill_id in frontmatter")
 	assert.Contains(t, fm, "description:", "skills/worktree-preflight/SKILL.md missing description in frontmatter")
+	assert.Contains(t, fm, "Use when ", "skills/worktree-preflight/SKILL.md description must be trigger-oriented")
+	assert.Contains(t, fm, "Triggers on", "skills/worktree-preflight/SKILL.md description must describe trigger contract")
 }
 
 func TestEntrySurfaceTemplatesAvoidPlanOnlyVocabulary(t *testing.T) {
@@ -488,7 +503,7 @@ func TestPartialsAreAvailableInRender(t *testing.T) {
 
 func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	t.Parallel()
-	// Verify banned-language partial renders in goal-verification.
+	// Verify shared verification doctrine renders in goal-verification.
 	data := map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:goal-verification",
@@ -498,12 +513,16 @@ func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, content, `"should work"`, "banned-language partial should render into goal-verification")
 	assert.Contains(t, content, "opinions, not evidence", "banned-language partial content missing")
+	assert.Contains(t, content, "Treat stale or missing verification as a blocker",
+		"verification-doctrine partial should render into goal-verification")
 
-	// Verify the same partial renders identically in final-closeout.
+	// Verify the same doctrine renders identically in final-closeout.
 	data["Trigger"] = "/slipway:final-closeout"
 	content2, err := Render("skills/final-closeout/SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, content2, `"should work"`, "banned-language partial should render into final-closeout")
+	assert.Contains(t, content2, "Treat stale or missing verification as a blocker",
+		"verification-doctrine partial should render into final-closeout")
 }
 
 func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {

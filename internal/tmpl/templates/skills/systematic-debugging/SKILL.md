@@ -1,6 +1,7 @@
 ---
+skill_id: systematic-debugging
 name: slipway-systematic-debugging
-description: "Identify root cause through controlled hypothesis testing instead of speculative edits"
+description: "Use when root cause must be proven before fixing a bug. Triggers on repair/debugging work or whenever speculative edits are tempting."
 ---
 
 # Systematic Debugging
@@ -12,45 +13,17 @@ IRON LAW: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Identify root cause through controlled hypothesis testing instead of speculative edits. The goal is to understand WHY the bug exists, then fix the proven cause — never to guess and patch.
+Identify root cause through controlled hypothesis testing instead of speculative
+edits. This is a debugging technique skill: it complements routed repair hosts
+such as `root-cause-tracing`, but does not replace them. The goal is to
+understand WHY the bug exists, then fix the proven cause, never to guess and
+patch.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph SystematicDebugging {
-  rankdir=TB;
-  node [shape=box];
-  symptom [label="Phase 1: CAPTURE\nExact symptom"];
-  repro [shape=diamond, label="Reproducible?"];
-  stabilize [label="Stabilize reproduction\n(inputs, timing, env)"];
-  narrow [label="Phase 2: NARROW\nBisect component boundary"];
-  pattern [label="Find working example\nCompare with failing case"];
-  hypothesis [label="Phase 3: HYPOTHESIZE\nOne concrete hypothesis"];
-  test_h [shape=diamond, label="Hypothesis\nconfirmed?"];
-  next_h [label="Next hypothesis\n(ranked by evidence)"];
-  fix [label="Phase 4: FIX\nSmallest change for\nproven cause"];
-  verify [shape=diamond, label="Original repro\npasses?"];
-  regress [shape=diamond, label="Regressions?"];
-  done [label="Commit fix + test"];
-  escalate [shape=octagon, label="3+ failed fixes\nQuestion architecture"];
-
-  symptom -> repro;
-  repro -> stabilize [label="no"];
-  stabilize -> repro;
-  repro -> narrow [label="yes"];
-  narrow -> pattern;
-  pattern -> hypothesis;
-  hypothesis -> test_h;
-  test_h -> next_h [label="no"];
-  next_h -> hypothesis;
-  test_h -> fix [label="yes"];
-  fix -> verify;
-  verify -> escalate [label="3+ failures"];
-  verify -> fix [label="no"];
-  verify -> regress [label="yes"];
-  regress -> fix [label="yes"];
-  regress -> done [label="no"];
-}
-```
+## Workflow Outline
+1. CAPTURE the exact symptom and make the failure reproducible.
+2. NARROW the boundary, compare a working case, and rank hypotheses.
+3. HYPOTHESIZE one cause at a time, then FIX only the proven cause.
+4. VERIFY with the original repro and regression tests before declaring done.
 
 ## Detailed Process
 
@@ -105,7 +78,8 @@ After fixing the root cause, consider adding validation at multiple layers:
 - Assertion at the boundary where the bug manifested
 - Test that specifically prevents regression of this bug class
 
-This is NOT instead of root cause fixing — it is IN ADDITION to the root cause fix.
+This is NOT instead of root cause fixing. It is an extra guard once the cause
+has been proven.
 
 ## Mandatory Checklist
 - [ ] Symptom captured with exact error/command/environment
@@ -125,27 +99,9 @@ This is NOT instead of root cause fixing — it is IN ADDITION to the root cause
 4. Write a regression test for the bug. Always.
 5. Run regression tests after the fix. Always.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "I know the cause without reproducing" | Reproduce first; confidence is not evidence. |
-| "Let's try random fixes quickly" | Random edits increase noise and delay root cause. |
-| "It passed once, we're done" | Repeat to confirm stability and avoid false green. |
-| "Logs are enough, no instrumentation needed" | Add targeted probes for ambiguous paths. |
-| "Regression tests are unnecessary" | Validate neighboring behavior after every fix. |
-| "I'll fix it and see if it helps" | That's guessing, not debugging. Prove the cause first. |
-| "The stack trace says line 42, so the bug is on line 42" | The symptom is on line 42. The cause may be elsewhere. Trace backward. |
-| "It's probably a race condition" | "Probably" is not a hypothesis. State the specific race and design a probe. |
-| "This fix is safe enough to try" | Safe fixes still mask root causes. Understand before changing. |
-| "The bug is too complex for systematic approach" | Complex bugs need MORE discipline, not less. Break into smaller investigations. |
-| "Let me refactor first, then debug" | Refactoring changes the code. Debug the code AS-IS, then refactor after fix. |
-
-## Failure Mode Handling
-1. **Non-deterministic symptom**: Collect timing and input variance across 5+ runs. Look for race conditions, uninitialized state, or external dependency timing.
-2. **Multiple plausible causes**: Rank by evidence strength. Test the highest-evidence hypothesis first. Do not test all at once.
-3. **Invasive fix needed**: Split into smaller validated checkpoints. Each checkpoint should improve the situation measurably.
-4. **Cannot reproduce locally**: Check environment differences (versions, config, data). Create a minimal reproduction case that isolates the failing behavior.
-5. **Fix works but feels wrong**: If the fix is a workaround rather than a root cause fix, document it as tech debt and create a follow-up task.
+See `references/debugging-failure-patterns.md` for common rationalizations,
+non-deterministic symptom handling, and escalation patterns. Keep the inline
+skill focused on the core CAPTURE → NARROW → HYPOTHESIZE → FIX loop.
 
 ## Step Declaration
 Declare current phase (CAPTURE/NARROW/HYPOTHESIZE/FIX) and expected output before executing each step.

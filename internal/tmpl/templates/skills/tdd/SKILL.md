@@ -1,6 +1,7 @@
 ---
+skill_id: tdd
 name: slipway-tdd
-description: "Enforce test-driven development with strict RED/GREEN/REFACTOR cycle discipline"
+description: "Use when executing RED/GREEN/REFACTOR with strict test-first discipline. Triggers on code changes or whenever implementation would otherwise run ahead of proof."
 ---
 
 # Test-Driven Development
@@ -13,47 +14,16 @@ Violating the letter of this rule is violating the spirit of this rule.
 "Keep as reference, write tests first" → You'll adapt it. That's testing after. Delete means delete.
 
 ## Purpose
-Apply a strict RED → GREEN → REFACTOR loop so implementation never gets ahead of verification. This is not a suggestion — it is the required development discipline for all code changes.
+Apply a strict RED → GREEN → REFACTOR loop so implementation never gets ahead
+of verification. This is a technique skill used by execution hosts; it does
+not replace governance gates such as `tdd-governance`. It is not a suggestion
+for code changes.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph TDD {
-  rankdir=LR;
-  node [shape=box];
-  start [label="Behavior slice\nidentified"];
-  red [label="RED\nWrite failing test"];
-  confirm_red [shape=diamond, label="Test fails?"];
-  fix_test [label="Fix test\n(not production code)"];
-  green [label="GREEN\nSmallest impl change"];
-  confirm_green [shape=diamond, label="Test passes?"];
-  debug [label="Debug impl\n(not test)"];
-  regress [shape=diamond, label="Regressions?"];
-  fix_regress [label="Fix regression\n(keep new test green)"];
-  refactor [label="REFACTOR\nClean up"];
-  confirm_refactor [shape=diamond, label="All tests\nstill green?"];
-  revert [label="Revert refactor\nback to GREEN"];
-  commit [label="Commit"];
-  next [label="Next behavior slice"];
-
-  start -> red;
-  red -> confirm_red;
-  confirm_red -> fix_test [label="no (test passes\nor errors)"];
-  fix_test -> confirm_red;
-  confirm_red -> green [label="yes"];
-  green -> confirm_green;
-  confirm_green -> debug [label="no"];
-  debug -> confirm_green;
-  confirm_green -> regress [label="yes"];
-  regress -> fix_regress [label="yes"];
-  fix_regress -> regress;
-  regress -> refactor [label="no"];
-  refactor -> confirm_refactor;
-  confirm_refactor -> revert [label="no"];
-  revert -> refactor;
-  confirm_refactor -> commit [label="yes"];
-  commit -> next;
-}
-```
+## Workflow Outline
+1. RED: write one failing test and make the failure clean.
+2. GREEN: make the smallest implementation change that turns RED into GREEN.
+3. REFACTOR: improve structure only while the full relevant test set stays green.
+4. Repeat one behavior slice at a time.
 
 ## Detailed Process
 

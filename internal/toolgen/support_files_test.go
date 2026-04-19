@@ -113,6 +113,23 @@ func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "python cache artifacts must not be copied into generated trees")
 }
 
+func TestEmitSupportFilesCopiesSharedGitHubHelpers(t *testing.T) {
+	t.Parallel()
+
+	srcFS := fstest.MapFS{
+		"skills/_shared/scripts/gh-common.sh":                           &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\nexit 0\n")},
+		"skills/review-comment-triage/SKILL.md":                         &fstest.MapFile{Data: []byte("# review-comment-triage\n")},
+		"skills/review-comment-triage/scripts/fetch-review-requests.sh": &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\n. ./gh-common.sh\n")},
+	}
+
+	dst := t.TempDir()
+	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "review-comment-triage", dst, true))
+
+	info, err := os.Stat(filepath.Join(dst, "scripts", "gh-common.sh"))
+	require.NoError(t, err)
+	assert.NotZerof(t, info.Mode().Perm()&0o111, "shared helper must stay executable after emission")
+}
+
 // TestTemplateShellScriptsAreExecutable guards the checked-in template source
 // tree itself. Generated trees already normalize `*.sh` to 0755, but operators
 // and local tests may invoke template-side helpers directly during development.

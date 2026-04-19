@@ -61,5 +61,6 @@ without further clarification. Absorbed from the `writing-plans`,
 - Optional backwards-compat shims for features never shipped.
 
 ## Failure handling
-- Missing scope → bounce to `scope-clarification`, do not author tasks.
+- Missing scope → bounce to `scope-clarification` (the
+  `intake-clarification` posture/checklist overlay), do not author tasks.
 - Guardrail domain without test plan → flag blocker `guardrail_missing_tdd`.

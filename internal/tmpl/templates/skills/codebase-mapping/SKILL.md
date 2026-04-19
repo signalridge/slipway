@@ -1,12 +1,16 @@
 ---
+skill_id: codebase-mapping
 name: codebase-mapping
-description: "Systematically map repository architecture, dependency graphs, and module boundaries"
+description: "Use when mapping repository architecture, dependency graphs, and module boundaries before planning. Triggers on brownfield discovery or whenever durable structural context is missing."
 ---
 
 # Codebase Mapping
 
 ## Purpose
-Systematically map repository architecture, dependency graphs, key abstractions, and module boundaries before planning. Provides essential structural context for research, scope confirmation, and plan audit.
+Systematically map repository architecture, dependency graphs, key
+abstractions, and module boundaries before planning. This is a technique skill:
+it produces durable context for research, scope confirmation, and plan audit,
+but it does not own a governed route.
 
 ## When This Runs
 Advisory hint during discovery or governed spec bundling within `S1_PLAN`. This is a technique skill — it does not produce governance evidence and missing output does not block any gate.

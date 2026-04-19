@@ -1,6 +1,7 @@
 ---
+skill_id: spec-compliance-review
 name: spec-compliance-review
-description: "Verify bidirectional alignment between specification artifacts and implementation"
+description: "Use when verifying bidirectional alignment between specification artifacts and implementation. Triggers on post-execution review or whenever spec-to-code traceability is under review."
 ---
 
 # Spec Compliance Review
@@ -12,7 +13,10 @@ IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Verify bidirectional alignment between specification artifacts and implementation.
+Verify bidirectional alignment between specification artifacts and
+implementation. This is Stage 1 of the governed review host sequence, and the
+attached `spec-trace` checklist supplies the line-level traceability contract
+used during the review.
 Mitigates: implementation divergence from spec.
 
 ## When This Runs
@@ -32,7 +36,9 @@ CRITICAL: **Do Not Trust Any Prior Report.** You MUST read actual code and artif
 
 ### 1. Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Apply the shared requirements checklist from `checklist-quality.md` before judging artifact completeness or spec drift.
+Apply the shared requirements checklist from `checklist-quality.md` before
+judging artifact completeness or spec drift. Use the attached `spec-trace`
+checklist to enumerate the forward and reverse trace edges you must verify.
 
 ### 2. Forward Alignment (Spec -> Code)
 Verify every requirement in the spec is implemented:

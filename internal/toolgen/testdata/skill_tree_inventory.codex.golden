@@ -1,4 +1,5 @@
 ci-triage/SKILL.md	skill_md	non-exec
+ci-triage/references/fetch-pr-checks-shell-evaluation.md	reference	non-exec
 ci-triage/scripts/fetch-pr-checks.py	script_py	non-exec
 code-quality-review/SKILL.md	skill_md	non-exec
 code-review-protocol/SKILL.md	skill_md	non-exec
@@ -41,6 +42,7 @@ performance-profiling/references/distributed-tracing-playbook.md	reference	non-e
 performance-profiling/references/profiling-recipes.md	reference	non-exec
 performance-profiling/scripts/repo-performance-scan.py	script_py	non-exec
 plan-audit/SKILL.md	skill_md	non-exec
+plan-audit/references/audit-smells.md	reference	non-exec
 plan-authoring/SKILL.md	skill_md	non-exec
 plan-authoring/references/plan-document-review-prompt.md	reference	non-exec
 property-testing/SKILL.md	skill_md	non-exec
@@ -54,7 +56,8 @@ property-testing/references/strategies.md	reference	non-exec
 research-orchestration/SKILL.md	skill_md	non-exec
 review-comment-triage/SKILL.md	skill_md	non-exec
 review-comment-triage/scripts/fetch-pr-feedback.py	script_py	non-exec
-review-comment-triage/scripts/fetch-review-requests.py	script_py	non-exec
+review-comment-triage/scripts/fetch-review-requests.sh	script_sh	exec
+review-comment-triage/scripts/gh-common.sh	script_sh	exec
 review-comment-triage/scripts/reply-to-thread.py	script_py	non-exec
 root-cause-tracing/SKILL.md	skill_md	non-exec
 root-cause-tracing/references/condition-based-waiting.md	reference	non-exec
@@ -90,7 +93,9 @@ supply-chain-audit/references/license-compatibility-matrix.md	reference	non-exec
 supply-chain-audit/references/results-template.md	reference	non-exec
 supply-chain-audit/references/vulnerability-assessment-guide.md	reference	non-exec
 systematic-debugging/SKILL.md	skill_md	non-exec
+systematic-debugging/references/debugging-failure-patterns.md	reference	non-exec
 tdd-governance/SKILL.md	skill_md	non-exec
+tdd-governance/references/tdd-evidence-patterns.md	reference	non-exec
 tdd-proof/SKILL.md	skill_md	non-exec
 tdd-proof/references/testing-anti-patterns.md	reference	non-exec
 tdd/SKILL.md	skill_md	non-exec
@@ -103,5 +108,6 @@ variant-analysis/references/semgrep-variant-rules.md	reference	non-exec
 variant-analysis/references/variant-report-template.md	reference	non-exec
 variant-analysis/scripts/find-variant.sh	script_sh	exec
 wave-orchestration/SKILL.md	skill_md	non-exec
+wave-orchestration/references/executor-dispatch-reference.md	reference	non-exec
 worktree-preflight/SKILL.md	skill_md	non-exec
-# inventory_sha256:60e281dec50327b8e05b12bba765d6d4c129ff3a636fd08471605d8cf8262116
+# inventory_sha256:1357c8b0c69ebd13d2e83e9ad9a1a745147505fd4711dd1926688b35b8126332

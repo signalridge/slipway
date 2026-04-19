@@ -58,4 +58,7 @@ failure wastes time and normalizes flakes. Classify every red run, then act.
   extract failure log snippets. Read-only. Requires the `gh` CLI on
   `PATH` plus `GH_TOKEN` (or `GITHUB_TOKEN`, or a prior `gh auth
   login`); the helper fails fast with a credential-error message when
-  credentials are missing or rejected.
+  credentials are missing or rejected. It intentionally stays Python in this
+  wave because failure-snippet extraction is still shorter and safer there
+  than in shell. See `references/fetch-pr-checks-shell-evaluation.md` for the
+  keep-Python decision record and revisit criteria.

@@ -57,14 +57,18 @@ cosmetic-only fixes produce surprise blockers on the next round.
 
 ## Scripts
 All helpers require the `gh` CLI on `PATH` plus `GH_TOKEN` (or
-`GITHUB_TOKEN`, or a prior `gh auth login`); each fails fast with a
-credential-error message when credentials are missing or rejected.
+`GITHUB_TOKEN`, or a prior `gh auth login`); shell helpers also require `jq`.
+Each fails fast with a credential-error message when credentials are missing or
+rejected.
 
 - `scripts/fetch-pr-feedback.py` — fetch and LOGAF-categorize review
   comments / threads for a PR. Read-only.
-- `scripts/fetch-review-requests.py` — list open review requests for a
-  user across team memberships. Read-only.
+- `scripts/fetch-review-requests.sh` — list open review requests for a
+  user across team memberships. Read-only. Migrated to shell in this wave and
+  sources the shared `scripts/gh-common.sh` preflight.
 - `scripts/reply-to-thread.py` — reply to a PR review thread. **Write
   side effect.** Defaults to dry-run: without `--confirm` it prints the
   intended GraphQL mutation to stderr and exits non-zero. Only supply
-  `--confirm` once the reply body and thread id have been reviewed.
+  `--confirm` once the reply body and thread id have been reviewed. It
+  intentionally stays Python because the GraphQL body construction and confirm
+  safety contract are easier to audit there.

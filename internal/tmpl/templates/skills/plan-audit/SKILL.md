@@ -1,6 +1,7 @@
 ---
+skill_id: plan-audit
 name: plan-audit
-description: "Validate that the governed artifact bundle is ready for execution"
+description: "Use when validating that the governed artifact bundle is ready for execution. Triggers on post-authoring audit or whenever plan artifacts change materially."
 ---
 
 # Plan Audit
@@ -12,29 +13,14 @@ IRON LAW: NO EXECUTION WITHOUT A VERIFIED, COMPLETE PLAN
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Validate that the governed artifact bundle is ready for execution.
+Validate that the governed artifact bundle is ready for execution. This is the
+execution-readiness host skill that gates entry into governed implementation.
 Mitigates: stale or incomplete plan bundle.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph PlanAudit {
-  rankdir=LR;
-  node [shape=box];
-  S4 [label="S1_PLAN bundle ready"];
-  S5 [label="S1_PLAN audit"];
-  block [shape=diamond, label="artifact/checklist blockers?"];
-  fix [label="return to artifact updates"];
-  gate [shape=octagon, label="HARD-GATE\nuser confirmation"];
-  S6 [label="S2_EXECUTE"];
-
-  S4 -> S5;
-  S5 -> block;
-  block -> fix [label="yes"];
-  fix -> S4 [label="refresh artifacts"];
-  block -> gate [label="no"];
-  gate -> S6 [label="slipway next"];
-}
-```
+## Workflow Outline
+1. Read the governed bundle and any durable codebase-map context.
+2. Audit the artifact set, task dimensions, and requirement coverage.
+3. Write verification, surface blockers or warnings, then wait for approval.
 
 ## When This Runs
 Before wave execution begins. `slipway next` returns `next_skill: plan-audit`.
@@ -118,20 +104,9 @@ After confirmation: `slipway next`
 2. Stop on audit blockers.
 3. Re-run when artifacts change.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "Plan looks fine manually" | Evidence-backed audit is mandatory. |
-| "Proceed despite missing artifacts" | Run is blocked until plan audit passes. |
-| "Old audit result is still valid" | Recheck freshness after artifact updates. |
-| "Tasks are clear enough" | Each task must have explicit acceptance criteria. |
-| "Verification will happen during implementation" | Plan audit still requires testable acceptance criteria and evidence paths before execution. |
-| "The task is self-evident" | Self-evident tasks still need observable verification. Implicit = unverifiable. |
-
-## Failure Handling
-- If artifacts are missing or stale, set verdict to "fail" with specific blockers.
-- Route back to artifact creation phase to fix issues.
-- Re-run plan-audit only after artifact refresh verification is available.
+See `references/audit-smells.md` for recurring audit rationalizations and
+blocker patterns. Keep the inline host focused on artifact checks, not the full
+smell catalog.
 
 ## Hard Gate Enforcement
 DO NOT advance past plan audit until the user has explicitly confirmed the audit results. Presenting findings is not the same as receiving approval. Wait for the user to approve before calling `slipway next`.

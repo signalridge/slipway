@@ -32,7 +32,9 @@ IRON LAW: EVERY SPEC LINE MAPS TO CODE; EVERY CODE CHANGE MAPS TO SPEC
 ## Purpose
 Verify that the implementation mirrors the approved plan in both directions.
 Spec-to-code proves every promise was kept; code-to-spec proves no unapproved
-scope crept in. Either direction alone is insufficient.
+scope crept in. Either direction alone is insufficient. This is the attached
+checklist/report-schema skill used by `spec-compliance-review`; it supplies the
+trace edges that the host review must cite.
 
 ## Report schema
 ```yaml

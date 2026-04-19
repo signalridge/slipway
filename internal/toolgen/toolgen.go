@@ -1005,11 +1005,73 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 				return err
 			}
 		}
+		if err := emitSharedSkillSupportFromFS(srcFS, skillID, sub, dstDir, refresh); err != nil {
+			return fmt.Errorf("copy shared %s for %q: %w", sub, skillID, err)
+		}
 		if err := copyTemplateSubtreeFromFS(srcFS, path.Join("skills", skillID, sub), dstDir, refresh); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
 		}
 	}
 	return nil
+}
+
+func emitSharedSkillSupportFromFS(srcFS fs.FS, skillID, sub, dstDir string, refresh bool) error {
+	if sub != "scripts" {
+		return nil
+	}
+	usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
+	if err != nil {
+		return err
+	}
+	if !usesSharedHelper {
+		return nil
+	}
+	return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", sub), dstDir, refresh)
+}
+
+func skillUsesSharedScriptHelper(srcFS fs.FS, skillID string) (bool, error) {
+	scriptsDir := path.Join("skills", skillID, "scripts")
+	info, err := fs.Stat(srcFS, scriptsDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("expected directory at %q", scriptsDir)
+	}
+
+	sharedHelperReferenced := errors.New("shared helper referenced")
+	err = fs.WalkDir(srcFS, scriptsDir, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			if shouldSkipSupportArtifact(path.Base(p), true) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if shouldSkipSupportArtifact(path.Base(p), false) || path.Ext(p) != ".sh" {
+			return nil
+		}
+		content, err := fs.ReadFile(srcFS, p)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(content), "gh-common.sh") {
+			return sharedHelperReferenced
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, sharedHelperReferenced) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
 }
 
 func removePathIfExists(name string) error {

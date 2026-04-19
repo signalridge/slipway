@@ -1,6 +1,7 @@
 ---
+skill_id: worktree-preflight
 name: worktree-preflight
-description: "Establish and verify the dedicated worktree binding required before governed execution"
+description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on discovery-required execution before wave work starts."
 ---
 
 # Worktree Preflight
@@ -12,24 +13,15 @@ IRON LAW: NO DISCOVERY-REQUIRED GOVERNED EXECUTION WITHOUT A DEDICATED WORKTREE 
 Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
-Establish and verify the dedicated worktree binding required before governed execution begins.
+Establish and verify the dedicated worktree binding required before governed
+execution begins. This is a standalone governance preflight skill that must
+pass before discovery-required execution leaves the source workspace.
 Mitigates: worktree isolation and baseline drift before governed execution.
 
-## Workflow Graph (Graphviz DOT)
-```dot
-digraph WorktreePreflight {
-  rankdir=LR;
-  node [shape=box];
-  S2_entry [label="S2_EXECUTE entry"];
-  create [label="create or verify dedicated worktree"];
-  baseline [label="run baseline verification"];
-  evidence [label="write worktree-preflight verification"];
-  gate [shape=octagon, label="HARD-GATE\nslipway next"];
-  S2_wave [label="S2_EXECUTE wave"];
-
-  S2_entry -> create -> baseline -> evidence -> gate -> S2_wave;
-}
-```
+## Workflow Outline
+1. Create or verify the dedicated worktree and intended branch.
+2. Run a fresh baseline verification command in that worktree.
+3. Write verification references, return to the source workspace, and advance.
 
 ## When This Runs
 Only for discovery-required governed changes at `S2_EXECUTE` preflight. `slipway next --json` returns `next_skill: worktree-preflight`.

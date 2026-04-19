@@ -1,0 +1,13 @@
+{{define "verification-doctrine"}}Before ANY completion claim, you MUST follow this exact sequence:
+1. **Identify** the command that proves the claim.
+2. **Run** the command fresh against the current change state.
+3. **Read** the full output before summarizing it.
+4. **Compare** the output against the specific criterion or closeout gate.
+5. **State** the claim in evidence form: claim + command + concrete output.
+
+{{template "banned-language"}}
+
+- Treat stale or missing verification as a blocker, not a TODO.
+- Bind each claim to the current `run_version`, not to a previous run.
+- If the command output is ambiguous, rerun or narrow the scope before claiming success.
+{{end}}

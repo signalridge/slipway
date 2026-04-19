@@ -1112,7 +1112,10 @@ func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
 		require.Len(t, parts, 3, "%s missing frontmatter", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
 		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		for _, field := range routingFields {
 			assert.NotContains(t, fm, field, "%s frontmatter has routing field %s", name, field)
 		}
@@ -1127,7 +1130,10 @@ func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
 		require.Len(t, parts, 3, "%s missing frontmatter", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
 		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		// wave-orchestration is tool-aware; the 4 converted governance skills
 		// use Render for partial support but are tool-independent.
 		if name == "wave-orchestration" {
@@ -1152,7 +1158,10 @@ func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testi
 		require.Len(t, parts, 3, "%s missing frontmatter", name)
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
 		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
 		for _, field := range []string{"state:", "type:", "required_levels:", "mitigation_target:", "run_summary_bound:"} {
 			assert.NotContains(t, fm, field, "%s frontmatter has retired field %s", name, field)
 		}
@@ -2021,17 +2030,17 @@ func TestOnlyExternalPolluter(t *testing.T) {
 
 	t.Run("fetch-review-requests rejects invalid credentials", func(t *testing.T) {
 		t.Parallel()
-		pythonPath, err := execLookPath("python3")
+		bashPath, err := execLookPath("bash")
 		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
+			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.py")
+		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
 		out, cerr := runCommandEnv(
 			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			pythonPath, script, "--teams", "none-such-slipway-test",
+			bashPath, script, "--teams", "none-such-slipway-test",
 		)
 		require.Error(t, cerr, "invalid credentials must exit non-zero")
 		assert.True(t,
@@ -2040,6 +2049,21 @@ func TestOnlyExternalPolluter(t *testing.T) {
 				strings.Contains(out, "not authenticated") ||
 				strings.Contains(out, "gh auth"),
 			"fetch-review-requests must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-review-requests avoids bash4-only syntax", func(t *testing.T) {
+		t.Parallel()
+		script := filepath.Join(root, "review-comment-triage", "scripts", "fetch-review-requests.sh")
+		raw, err := os.ReadFile(script)
+		require.NoError(t, err)
+
+		content := string(raw)
+		assert.NotContains(t, content, "mapfile ",
+			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
+		assert.NotContains(t, content, "readarray ",
+			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
+		assert.NotContains(t, content, ",,}",
+			"fetch-review-requests must avoid Bash 4 lowercase expansion")
 	})
 
 	t.Run("reply-to-thread defaults to dry-run", func(t *testing.T) {

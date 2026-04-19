@@ -1,6 +1,7 @@
 ---
+skill_id: intake-clarification
 name: intake-clarification
-description: "Clarify user intent, define scope boundaries, and confirm acceptance signals before planning"
+description: "Use when clarifying user intent, scope boundaries, and acceptance signals before planning. Triggers on governed intake or any change that cannot be planned from the initial request alone."
 ---
 
 # Intake Clarification
@@ -10,7 +11,10 @@ IRON LAW: NO PLANNING WITHOUT CLEAR INTENT
 ```
 
 ## Purpose
-Clarify user intent, define scope boundaries, and produce an approved summary before planning begins.
+Clarify user intent, define scope boundaries, and produce an approved summary
+before planning begins. This is the governed intake host skill;
+`scope-clarification` attaches the posture/checklist overlay that sharpens the
+questions and boundary checks.
 Mitigates: scope ambiguity, intent drift, over-scoping.
 
 ## When This Runs
@@ -21,6 +25,11 @@ All governed changes at S0_INTAKE/clarify or S0_INTAKE/research. `slipway next` 
 ### 1. Read Context
 Run `slipway next --json` to get the current change state and intent.md content.
 Read the intent.md artifact in the governed bundle.
+
+Carry the attached `scope-clarification` posture while reading:
+- surface the unspoken assumption before the next question
+- prefer one well-targeted question over scattered batches
+- do not move to planning until the approved summary names both what is in and what is out
 
 ### 2. Assess Complexity
 Check the `## Complexity Assessment` section in intent.md:
@@ -38,9 +47,10 @@ For each clarification round:
 5. Repeat until all required sections have substantive content
 
 **Required sections for advancement:**
-- `## In Scope` — concrete items included
-- `## Out of Scope` — explicit exclusions
-- `## Acceptance Signals` — verifiable completion criteria
+- `## In Scope` — concrete, code-level items included (files, APIs, commands, or user-visible surfaces)
+- `## Out of Scope` — at least one explicit exclusion
+- `## Acceptance Signals` — at least one verifiable completion criterion
+- `## Open Questions` — only unresolved technical unknowns that truly require research
 
 **Abbreviation signals** — if the user says any of:
 - "just testing", "trivial change", "quick fix", "that's it", "good enough"
@@ -58,7 +68,8 @@ Once scope is clear:
    - Key scope boundaries
    - Primary acceptance signal
 2. Present the summary to the user
-3. <HARD-GATE>Wait for explicit user confirmation before writing the approved summary.</HARD-GATE>
+3. Confirm the summary names at least one explicit out-of-scope item and keeps any unresolved technical unknowns under `## Open Questions`.
+4. <HARD-GATE>Wait for explicit user confirmation before writing the approved summary.</HARD-GATE>
 
 ### 6. Write Verification
 ```yaml
@@ -78,7 +89,8 @@ After confirmation: `slipway next`
 ## DO NOT SKIP
 1. At least one clarification question (even for trivial changes).
 2. User confirmation of the approved summary.
-3. Writing verification evidence.
+3. Concrete `In Scope` / `Out of Scope` boundaries before planning.
+4. Writing verification evidence.
 
 ## Rationalization Red Flags
 | Rationalization | Counter-rule |
