@@ -188,7 +188,7 @@ func (c frozenToolContract) resolvePath(root, codexHome, relPath string) string 
 
 func (c frozenToolContract) commandContentMarker(id string) string {
 	if c.CommandStyle == "global" {
-		return "# slipway-" + id
+		return "surface: \"adapter\""
 	}
 	return c.commandTrigger(id)
 }

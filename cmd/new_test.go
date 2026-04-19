@@ -1424,11 +1424,11 @@ func initTestWorkspace(t *testing.T, root string) {
 	seedTestToolAdapter(t, root)
 }
 
-// seedTestToolAdapter writes a minimal claude adapter marker so that
+// seedTestToolAdapter writes a minimal claude adapter sentinel so that
 // toolgen.ResolveWorkspaceTool resolves successfully in test workspaces.
 func seedTestToolAdapter(t *testing.T, root string) {
 	t.Helper()
-	markerPath := filepath.Join(root, ".claude", "skills", "slipway", "next", "SKILL.md")
+	markerPath := filepath.Join(root, ".claude", "slipway", ".adapter-generated")
 	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
 	require.NoError(t, os.WriteFile(markerPath, []byte("test marker"), 0o644))
 }

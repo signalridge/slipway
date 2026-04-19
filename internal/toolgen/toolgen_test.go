@@ -179,19 +179,15 @@ func TestDetectExistingTools(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
 	assert.Empty(t, DetectExistingTools(root), "bare .claude/ should not trigger detection")
 
-	// Create slipway marker skill for claude.
+	// Create slipway sentinel for claude.
 	claudeCfg := toolRegistry["claude"]
-	markerPath := filepath.Join(root, SkillPath(claudeCfg, "next"))
-	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
-	require.NoError(t, os.WriteFile(markerPath, []byte("marker"), 0o644))
+	writeGeneratedAdapterMarker(t, root, claudeCfg)
 	detected := DetectExistingTools(root)
 	assert.Equal(t, []string{"claude"}, detected)
 
-	// Add slipway marker for cursor.
+	// Add slipway sentinel for cursor.
 	cursorCfg := toolRegistry["cursor"]
-	cursorMarker := filepath.Join(root, SkillPath(cursorCfg, "next"))
-	require.NoError(t, os.MkdirAll(filepath.Dir(cursorMarker), 0o755))
-	require.NoError(t, os.WriteFile(cursorMarker, []byte("marker"), 0o644))
+	writeGeneratedAdapterMarker(t, root, cursorCfg)
 	detected = DetectExistingTools(root)
 	assert.Equal(t, []string{"claude", "cursor"}, detected)
 }
@@ -264,12 +260,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 	for _, toolID := range []string{"claude", "cursor", "codex", "gemini", "opencode"} {
 		cfg := toolRegistry[toolID]
 
-		// Adapter skills (all rendered from templates)
-		for _, id := range adapterSkillIDs {
-			path := filepath.Join(root, cfg.SkillsDir, "slipway", id, "SKILL.md")
-			_, err := os.Stat(path)
-			assert.NoError(t, err, "%s: missing adapter skill %s", toolID, id)
-		}
+		// Sentinel marker
+		sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+		_, err := os.Stat(sentinelPath)
+		assert.NoError(t, err, "%s: missing adapter sentinel", toolID)
 
 		// Governance skills (static) + standalone governance guidance skills
 		allStaticGov := append([]string{}, GovernanceSkillNames...)
@@ -503,7 +497,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 			s := string(content)
 			assert.Contains(t, s, commandDescriptions[id], "%s/%s missing registry description", cfg.ID, id)
 			if cfg.PromptsStyle == "global" {
-				assert.Contains(t, s, "slipway-"+id, "%s/%s missing prompt command name", cfg.ID, id)
+				assert.Contains(t, s, "slipway "+id, "%s/%s missing prompt command reference", cfg.ID, id)
 			} else {
 				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
 			}
@@ -565,7 +559,7 @@ func splitLines(s string) []string {
 func writeGeneratedAdapterMarker(t *testing.T, root string, cfg ToolConfig) {
 	t.Helper()
 
-	markerPath := filepath.Join(root, SkillPath(cfg, "next"))
+	markerPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
 	require.NoError(t, os.WriteFile(markerPath, []byte("marker"), 0o644))
 }
@@ -600,8 +594,7 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 	re := regexp.MustCompile("`slipway ([a-z][a-z-]*)`")
 
 	cfg := toolRegistry["claude"]
-	allSkillIDs := append([]string(nil), adapterSkillIDs...)
-	allSkillIDs = append(allSkillIDs, GovernanceSkillNames...)
+	allSkillIDs := append([]string(nil), GovernanceSkillNames...)
 	allSkillIDs = append(allSkillIDs, standaloneGovernanceNames...)
 	allSkillIDs = append(allSkillIDs, TemplatedGovernanceSkillNames...)
 	allSkillIDs = append(allSkillIDs, techniqueNames...)
@@ -632,27 +625,21 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude"}, false))
 
-	skillPath := filepath.Join(root, ".claude", "skills", "slipway/new/SKILL.md")
 	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
-	firstSkill, err := os.ReadFile(skillPath)
-	require.NoError(t, err)
 	firstCommand, err := os.ReadFile(commandPath)
 	require.NoError(t, err)
 
 	// Non-refresh generation should keep existing files unchanged.
-	require.NoError(t, os.WriteFile(skillPath, []byte("custom"), 0o644))
+	require.NoError(t, os.WriteFile(commandPath, []byte("custom"), 0o644))
 	require.NoError(t, Generate(root, []string{"claude"}, false))
-	secondSkill, err := os.ReadFile(skillPath)
+	secondCommand, err := os.ReadFile(commandPath)
 	require.NoError(t, err)
-	assert.Equal(t, "custom", string(secondSkill))
+	assert.Equal(t, "custom", string(secondCommand))
 
 	// Refresh should deterministically regenerate content.
 	require.NoError(t, Generate(root, []string{"claude"}, true))
-	refreshedSkill, err := os.ReadFile(skillPath)
-	require.NoError(t, err)
 	refreshedCommand, err := os.ReadFile(commandPath)
 	require.NoError(t, err)
-	assert.Equal(t, string(firstSkill), string(refreshedSkill))
 	assert.Equal(t, string(firstCommand), string(refreshedCommand))
 }
 
@@ -682,8 +669,6 @@ func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
 	_, err = os.Stat(stalePrompt)
 	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync codex prompt")
 
-	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "validate-requirements", "SKILL.md"))
-	assert.NoError(t, err, "current validate-requirements skill should remain present")
 	_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "validate-requirements.md"))
 	assert.NoError(t, err, "current validate-requirements command entry should remain present")
 	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway-validate-requirements.md"))
@@ -1035,8 +1020,8 @@ func TestCodexGlobalPrompts(t *testing.T) {
 	assert.Contains(t, s, "argument-hint:")
 	// Check $ARGUMENTS usage.
 	assert.Contains(t, s, "$ARGUMENTS")
-	// Check it references the right skill.
-	assert.Contains(t, s, "slipway-new")
+	// Check it contains the body partial content.
+	assert.Contains(t, s, "slipway new")
 
 	// Verify all command IDs have prompt files.
 	for _, id := range commandIDs() {
@@ -1159,18 +1144,6 @@ func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testi
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
-	for _, name := range adapterSkillIDs {
-		path := filepath.Join(root, ".claude", "skills", "slipway", name, "SKILL.md")
-		content, err := os.ReadFile(path)
-		require.NoError(t, err, "failed to read %s", name)
-		parts := splitFrontmatter(string(content))
-		require.Len(t, parts, 3, "%s missing frontmatter", name)
-		fm := parts[1]
-		assert.Contains(t, fm, "name:", "%s missing name", name)
-		assert.Contains(t, fm, "description:", "%s missing description", name)
-		assert.Contains(t, fm, "tool:", "%s missing tool", name)
-	}
-
 	for _, name := range standaloneNames {
 		path := filepath.Join(root, ".claude", "skills", "slipway", name, "SKILL.md")
 		content, err := os.ReadFile(path)
@@ -1191,7 +1164,7 @@ func TestDoneSkillDocumentsAllReadyAcrossActiveExecutions(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
-	content, err := os.ReadFile(filepath.Join(root, ".claude", "skills", "slipway", "done", "SKILL.md"))
+	content, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "done.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "`--all-ready` archives every active change that is currently done-ready.")
 }

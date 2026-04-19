@@ -1,12 +1,4 @@
----
-name: slipway-repair
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "repair"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-repair-body" -}}
 # Repair
 
 Diagnose and fix workspace state inconsistencies.
@@ -21,3 +13,4 @@ slipway repair
 - Applies deterministic fixes where possible.
 - Reports what was found and fixed.
 - Show repair summary to user.
+{{- end -}}

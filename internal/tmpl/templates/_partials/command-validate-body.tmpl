@@ -1,12 +1,4 @@
----
-name: slipway-validate
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "validate"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-validate-body" -}}
 # Validate
 
 Check evidence and gate readiness for the current state without advancing.
@@ -21,3 +13,8 @@ slipway validate
 - Reports pass/fail status and specific blockers.
 - Does not modify state — read-only diagnostic.
 - Show validation summary to user with actionable remediation steps.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

@@ -1,12 +1,4 @@
----
-name: slipway-validate-requirements
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "validate-requirements"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-validate-requirements-body" -}}
 # Validate Requirements
 
 Validate the governed `requirements.md` contract for the active change without mutating any state.
@@ -24,3 +16,4 @@ slipway validate-requirements --json
 ## Flags
 - `--json`: JSON output
 - `--change <slug>`: target a specific change (defaults to active change)
+{{- end -}}

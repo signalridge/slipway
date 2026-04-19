@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/toolgen"
 )
@@ -145,6 +146,15 @@ func asCLIError(err error) *CLIError {
 	var typed *CLIError
 	if errors.As(err, &typed) {
 		return typed
+	}
+	var initUsage *bootstrap.InitUsageError
+	if errors.As(err, &initUsage) {
+		return newInvalidUsageError(
+			initUsage.ErrorCode,
+			initUsage.Message,
+			initUsage.Remediation,
+			initUsage.Details,
+		)
 	}
 	var toolAmbiguity *toolgen.ToolAmbiguityError
 	if errors.As(err, &toolAmbiguity) {

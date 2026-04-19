@@ -35,7 +35,7 @@ surfaces and config-driven agent coordination.
 - `CLI`: Cobra command contract in `cmd/*.go`
 - `REG`: registry contract in `internal/toolgen/toolgen.go`
 - `ROOT`: grouped root help rendering in `cmd/root.go`
-- `GEN`: generated command entries, prompts, and adapter skill templates
+- `GEN`: generated command prompt surfaces (inline body partials)
 - `DOC`: user-facing docs such as [README.md](/Users/yixianlu/ghq/github.com/signalridge/slipway/README.md) and workflow guides
 
 For surfaced adapter-visible commands, `CLI + REG` is authoritative and `ROOT +
@@ -84,11 +84,11 @@ Notes:
 
 - `codebase-map` stays registry-tier `diagnostics`, but root help renders it
   under `Discovery` because it is the main durable discovery entrypoint for
-  brownfield work. It remains CLI-only today: no generated adapter skill or
-  command entry is emitted for it.
+  brownfield work. It remains CLI-only today: no generated command prompt
+  surface is emitted for it.
 - `stats` and `health` remain surfaced diagnostics commands with
   registry-backed descriptions, but they are also CLI-only today and do not
-  generate adapter skills or command entries.
+  generate command prompt surfaces.
 - `init` stays adapter-visible `situational`, but root help renders it under
   `Setup` because it is workspace bootstrap rather than day-to-day governed
   execution.

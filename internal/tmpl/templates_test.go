@@ -1,8 +1,14 @@
 package tmpl
 
 import (
+	"fmt"
+	"io/fs"
+	"path"
+	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -194,30 +200,19 @@ func TestContentReturnsArtifactTemplates(t *testing.T) {
 	}
 }
 
-func TestRenderAdapterSkillTemplates(t *testing.T) {
+func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 	t.Parallel()
 	templates := []string{
-		"skills/init/SKILL.md.tmpl",
-		"skills/new/SKILL.md.tmpl",
-		"skills/next/SKILL.md.tmpl",
-		"skills/status/SKILL.md.tmpl",
-		"skills/done/SKILL.md.tmpl",
-		"skills/cancel/SKILL.md.tmpl",
-		"skills/preset/SKILL.md.tmpl",
-		"skills/review/SKILL.md.tmpl",
-		"skills/run/SKILL.md.tmpl",
-		"skills/validate/SKILL.md.tmpl",
-		"skills/validate-requirements/SKILL.md.tmpl",
-		"skills/pivot/SKILL.md.tmpl",
-		"skills/abort/SKILL.md.tmpl",
-		"skills/repair/SKILL.md.tmpl",
-		"skills/checkpoint/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/final-closeout/SKILL.md.tmpl",
+		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
 	}
 	data := map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:do",
-		"Description": "Example adapter skill description",
+		"Description": "Example governance skill description",
 	}
 	for _, name := range templates {
 		content, err := Render(name, data)
@@ -226,29 +221,19 @@ func TestRenderAdapterSkillTemplates(t *testing.T) {
 	}
 }
 
-func TestAdapterSkillTemplateFrontmatterIncludesDescription(t *testing.T) {
+func TestTemplatedGovernanceSkillFrontmatterIncludesDescription(t *testing.T) {
 	t.Parallel()
 	templates := []string{
-		"skills/init/SKILL.md.tmpl",
-		"skills/new/SKILL.md.tmpl",
-		"skills/next/SKILL.md.tmpl",
-		"skills/status/SKILL.md.tmpl",
-		"skills/done/SKILL.md.tmpl",
-		"skills/cancel/SKILL.md.tmpl",
-		"skills/preset/SKILL.md.tmpl",
-		"skills/review/SKILL.md.tmpl",
-		"skills/run/SKILL.md.tmpl",
-		"skills/validate/SKILL.md.tmpl",
-		"skills/validate-requirements/SKILL.md.tmpl",
-		"skills/pivot/SKILL.md.tmpl",
-		"skills/abort/SKILL.md.tmpl",
-		"skills/repair/SKILL.md.tmpl",
-		"skills/checkpoint/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/final-closeout/SKILL.md.tmpl",
+		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/wave-orchestration/SKILL.md.tmpl",
 	}
 	data := map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:do",
-		"Description": "Example adapter skill description",
+		"Description": "Example governance skill description",
 	}
 	for _, name := range templates {
 		content, err := Render(name, data)
@@ -258,23 +243,23 @@ func TestAdapterSkillTemplateFrontmatterIncludesDescription(t *testing.T) {
 		fm := parts[1]
 		assert.Contains(t, fm, "name:", "%s missing name in frontmatter", name)
 		assert.Contains(t, fm, "description:", "%s missing description in frontmatter", name)
-		assert.Contains(t, fm, "tool:", "%s missing tool in frontmatter", name)
 	}
 }
 
 func TestRenderCommandEntryTemplate(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
-		"CommandID":   "status",
-		"ToolID":      "cursor",
-		"Trigger":     "/slipway-status",
-		"Description": "Show lifecycle status and blockers",
-		"SkillPath":   ".cursor/skills/slipway/status/SKILL.md",
-		"Arguments":   "--json",
+		"CommandID":    "status",
+		"ToolID":       "cursor",
+		"Trigger":      "/slipway-status",
+		"Description":  "Show lifecycle status and blockers",
+		"BodyTemplate": "command-status-body",
+		"Arguments":    "--json",
 	}
 	content, err := Render("commands/command-entry.md.tmpl", data)
 	require.NoError(t, err, "failed to render command-entry.md.tmpl")
 	assert.NotContains(t, content, "{{.", "command-entry has unrendered template vars")
+	assert.Contains(t, content, "# Status", "command-entry should include body partial content")
 }
 
 func TestRenderSessionStartHookTemplate(t *testing.T) {
@@ -290,16 +275,19 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	assert.NotContains(t, content, "--preview")
 }
 
-func TestRenderNextSkillTemplateUsesQueryOnlyContract(t *testing.T) {
+func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
-		"ToolID":  "claude",
-		"Trigger": "/slipway:next",
+		"CommandID":    "next",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:next",
+		"Description":  "Query next governance step",
+		"BodyTemplate": "command-next-body",
+		"Arguments":    "--json",
 	}
-	content, err := Render("skills/next/SKILL.md.tmpl", data)
-	require.NoError(t, err, "failed to render skills/next/SKILL.md.tmpl")
-	assert.NotContains(t, content, "{{.", "next skill template has unrendered template vars")
-	assert.Contains(t, content, "query-only next-skill context")
+	content, err := Render("commands/command-entry.md.tmpl", data)
+	require.NoError(t, err, "failed to render command-entry.md.tmpl for next")
+	assert.NotContains(t, content, "{{.", "next command entry has unrendered template vars")
 	assert.Contains(t, content, "This is the query surface for governed changes.")
 	assert.Contains(t, content, "Post-action progression check (`slipway run --json`).")
 	assert.NotContains(t, content, "single-step progression command")
@@ -434,15 +422,18 @@ func TestStandaloneSkillFrontmatterMinimal(t *testing.T) {
 func TestEntrySurfaceTemplatesAvoidPlanOnlyVocabulary(t *testing.T) {
 	t.Parallel()
 
-	newSkill, err := Render("skills/new/SKILL.md.tmpl", map[string]string{
-		"ToolID":      "claude",
-		"Trigger":     "/slipway:new",
-		"Description": "Create a governed change with intake-first workflow",
+	newCmd, err := Render("commands/command-entry.md.tmpl", map[string]string{
+		"CommandID":    "new",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:new",
+		"Description":  "Create a governed change with intake-first workflow",
+		"BodyTemplate": "command-new-body",
+		"Arguments":    "--json",
 	})
 	require.NoError(t, err)
 
 	for name, content := range map[string]string{
-		"new": newSkill,
+		"new": newCmd,
 	} {
 		assert.NotContains(t, content, "plan-only", "%s template reintroduced retired plan-only wording", name)
 	}
@@ -515,27 +506,30 @@ func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	assert.Contains(t, content2, `"should work"`, "banned-language partial should render into final-closeout")
 }
 
-func TestRunSkillContainsLoopBehavioralBlocks(t *testing.T) {
+func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
-		"ToolID":      "claude",
-		"Trigger":     "/slipway:run",
-		"Description": "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
+		"CommandID":    "run",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:run",
+		"Description":  "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
+		"BodyTemplate": "command-run-body",
+		"Arguments":    "--json",
 	}
-	content, err := Render("skills/run/SKILL.md.tmpl", data)
+	content, err := Render("commands/command-entry.md.tmpl", data)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "context_budget.health",
-		"run skill missing context self-monitoring block")
+		"run command missing context self-monitoring block")
 
 	assert.Contains(t, content, "fresh reviewer agent",
-		"run skill missing fresh-reviewer pause mandate")
+		"run command missing fresh-reviewer pause mandate")
 
 	assert.Contains(t, content, "Subagent Continuation Rule (HARD RULE)",
-		"run skill missing subagent continuation hard rule")
+		"run command missing subagent continuation hard rule")
 
 	assert.Contains(t, content, "three consecutive skills fail",
-		"run skill missing 3-consecutive-failure exit rule")
+		"run command missing 3-consecutive-failure exit rule")
 
 	assert.Contains(t, content, "user_response_payload",
 		"run skill missing checkpoint response handoff guidance")
@@ -554,6 +548,138 @@ func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) 
 		"wave-orchestration skill missing checkpoint response guidance")
 	assert.Contains(t, content, "checkpoint_type",
 		"wave-orchestration skill missing checkpoint type guidance")
+}
+
+func TestPromptSurfaceTemplateContracts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("wrapper renders prompt body", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "status", "command-status-body", "cursor")
+		assert.NotContains(t, content, "{{.", "wrapper render must not leak template variables")
+		assert.Contains(t, content, "# Status")
+	})
+
+	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
+		partials := promptSurfaceBodyTemplates(t)
+		require.Len(t, partials, 15)
+
+		for _, bodyTemplate := range partials {
+			commandID := strings.TrimSuffix(strings.TrimPrefix(bodyTemplate, "command-"), "-body")
+			t.Run(commandID, func(t *testing.T) {
+				content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", commandID, bodyTemplate, "claude")
+				assert.NotContains(t, content, "{{.", "%s must render through the generic wrapper", bodyTemplate)
+				assert.Contains(t, content, `surface: "adapter"`)
+			})
+		}
+	})
+
+	t.Run("include helper renders", func(t *testing.T) {
+		templateFS := fstest.MapFS{
+			"templates/main.tmpl":           &fstest.MapFile{Data: []byte(`before {{ include "demo" . }} after`)},
+			"templates/_partials/demo.tmpl": &fstest.MapFile{Data: []byte(`{{ define "demo" }}HELLO {{ .Value }}{{ end }}`)},
+		}
+		content, err := renderFS(templateFS, "main.tmpl", map[string]string{"Value": "world"})
+		require.NoError(t, err)
+		assert.Equal(t, "before HELLO world after", content)
+	})
+
+	t.Run("include helper nil guard fails closed", func(t *testing.T) {
+		var tmplSet *template.Template
+		var includeStack []string
+		include := newIncludeFunc(&tmplSet, &includeStack)
+
+		_, err := include("demo", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "template set not initialized")
+	})
+
+	t.Run("include helper missing template fails", func(t *testing.T) {
+		templateFS := fstest.MapFS{
+			"templates/main.tmpl": &fstest.MapFile{Data: []byte(`{{ include "missing" . }}`)},
+		}
+		_, err := renderFS(templateFS, "main.tmpl", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `include "missing": template not found`)
+	})
+
+	t.Run("include helper cycle fails", func(t *testing.T) {
+		templateFS := fstest.MapFS{
+			"templates/main.tmpl":        &fstest.MapFile{Data: []byte(`{{ include "alpha" . }}`)},
+			"templates/_partials/a.tmpl": &fstest.MapFile{Data: []byte(`{{ define "alpha" }}{{ include "beta" . }}{{ end }}`)},
+			"templates/_partials/b.tmpl": &fstest.MapFile{Data: []byte(`{{ define "beta" }}{{ include "alpha" . }}{{ end }}`)},
+		}
+		_, err := renderFS(templateFS, "main.tmpl", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cyclic include detected")
+	})
+
+	t.Run("include helper depth fails", func(t *testing.T) {
+		templateFS := fstest.MapFS{
+			"templates/main.tmpl": &fstest.MapFile{Data: []byte(`{{ include "node-00" . }}`)},
+		}
+		for i := 0; i <= maxIncludeDepth; i++ {
+			name := fmt.Sprintf("node-%02d", i)
+			body := "leaf"
+			if i < maxIncludeDepth {
+				body = fmt.Sprintf(`{{ include "node-%02d" . }}`, i+1)
+			}
+			templateFS[path.Join("templates", "_partials", name+".tmpl")] = &fstest.MapFile{
+				Data: []byte(fmt.Sprintf(`{{ define %q }}%s{{ end }}`, name, body)),
+			}
+		}
+		_, err := renderFS(templateFS, "main.tmpl", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "nesting depth")
+	})
+
+	t.Run("next dispatch content preserved", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "next", "command-next-body", "claude")
+		assert.Contains(t, content, "Tool-Specific Dispatch (Claude Code)")
+		assert.Contains(t, content, "`slipway run --json`")
+	})
+
+	t.Run("codex transport preserved", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.codex-prompt.md.tmpl", "new", "command-new-body", "codex")
+		assert.Contains(t, content, `argument-hint: "--json"`)
+		assert.Contains(t, content, "$ARGUMENTS")
+		assert.Contains(t, content, "slipway new")
+	})
+}
+
+func renderPromptSurfaceForTest(t *testing.T, templateName, commandID, bodyTemplate, toolID string) string {
+	t.Helper()
+
+	content, err := Render(templateName, map[string]any{
+		"CommandID":    commandID,
+		"ToolID":       toolID,
+		"Trigger":      "/slipway:" + commandID,
+		"Class":        "query",
+		"Tier":         "core",
+		"Surface":      "adapter",
+		"Description":  "test description",
+		"BodyTemplate": bodyTemplate,
+		"Arguments":    "--json",
+	})
+	require.NoError(t, err)
+	return content
+}
+
+func promptSurfaceBodyTemplates(t *testing.T) []string {
+	t.Helper()
+
+	entries, err := fs.ReadDir(TemplateFS(), "_partials")
+	require.NoError(t, err)
+
+	var partials []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "command-") || !strings.HasSuffix(name, "-body.tmpl") {
+			continue
+		}
+		partials = append(partials, strings.TrimSuffix(name, ".tmpl"))
+	}
+	slices.Sort(partials)
+	return partials
 }
 
 func TestContentNotFound(t *testing.T) {

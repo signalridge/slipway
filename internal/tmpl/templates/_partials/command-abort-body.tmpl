@@ -1,12 +1,4 @@
----
-name: slipway-abort
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "abort"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-abort-body" -}}
 # Abort
 
 Abort only the active execution session. Unlike `cancel`, this does not archive or terminally close the change.
@@ -30,3 +22,4 @@ slipway abort --json
 ## Flags
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
+{{- end -}}

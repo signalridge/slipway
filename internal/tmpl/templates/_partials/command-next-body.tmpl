@@ -1,11 +1,4 @@
----
-name: slipway-next
-type: orchestration
-tool: "{{.ToolID}}"
-trigger: "{{.Trigger}}"
-description: "Use when you need the next governed step, evidence validation, and query-only next-skill context."
----
-
+{{- define "command-next-body" -}}
 # Slipway Next-Step Query
 
 Inspect the next actionable governance skill for the active change without
@@ -123,3 +116,8 @@ Otherwise, execute the skill directly in the current context.
 
 ## Step Declaration
 Declare current step and expected output before executing each workflow step.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

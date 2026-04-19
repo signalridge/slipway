@@ -1,12 +1,4 @@
----
-name: slipway-done
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "done"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-done-body" -}}
 # Done
 
 Finalize a done-ready change: check G_ship gate, archive runtime state, and clean up.
@@ -24,3 +16,8 @@ slipway done --all-ready
 - CLI checks G_ship gate before archiving.
 - If gate fails, show blockers and suggest remediation.
 - Show archived change summary to user.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

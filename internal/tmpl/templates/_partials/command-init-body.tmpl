@@ -1,11 +1,4 @@
----
-name: slipway-init
-description: "{{.Description}}"
-tool: "{{.ToolID}}"
-command_id: "init"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-init-body" -}}
 # slipway-init
 
 - Trigger: {{.Trigger}}
@@ -18,3 +11,4 @@ slipway init --tools all
 
 This command is setup-only and executes the CLI directly.
 No skill routing is required.
+{{- end -}}

@@ -1,12 +1,4 @@
----
-name: slipway-review
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "review"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-review-body" -}}
 # Review
 
 Trigger artifact and implementation review for the active governed change.
@@ -20,3 +12,8 @@ slipway review
 - Evaluates artifact completeness and implementation quality.
 - Produces review findings with required/optional layers.
 - Show review summary to user with pass/fail per layer.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

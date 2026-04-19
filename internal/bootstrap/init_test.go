@@ -59,16 +59,17 @@ func TestInitWorkspaceRefreshWithoutToolsAutoDetects(t *testing.T) {
 
 	// Initial generation with explicit tools.
 	require.NoError(t, InitWorkspace(root, []string{"claude"}, false))
-	skillPath := filepath.Join(root, ".claude", "skills", "slipway", "new", "SKILL.md")
-	_, err := os.Stat(skillPath)
-	require.NoError(t, err, "initial generation should create skill")
+	sentinelPath := filepath.Join(root, ".claude", "slipway", ".adapter-generated")
+	_, err := os.Stat(sentinelPath)
+	require.NoError(t, err, "initial generation should create sentinel")
 
-	// Tamper with a file to verify refresh overwrites it.
-	require.NoError(t, os.WriteFile(skillPath, []byte("tampered"), 0o644))
+	// Tamper with a command entry to verify refresh overwrites it.
+	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+	require.NoError(t, os.WriteFile(commandPath, []byte("tampered"), 0o644))
 
 	// Refresh without --tools: should auto-detect .claude/ and refresh.
 	require.NoError(t, InitWorkspace(root, nil, true))
-	content, err := os.ReadFile(skillPath)
+	content, err := os.ReadFile(commandPath)
 	require.NoError(t, err)
 	assert.NotEqual(t, "tampered", string(content), "refresh should have regenerated the file")
 }
@@ -77,10 +78,10 @@ func TestInitWorkspaceRefreshWithoutToolsCleanWorkspace(t *testing.T) {
 	t.Parallel()
 	root := initGitRepo(t)
 
-	// Refresh without --tools in a clean workspace: should no-op gracefully.
-	require.NoError(t, InitWorkspace(root, nil, true))
-	_, err := os.Stat(filepath.Join(root, ".claude"))
-	assert.True(t, os.IsNotExist(err), "no adapters should be created in clean workspace")
+	// Refresh without --tools in a clean workspace: fail-closed (no sentinel).
+	err := InitWorkspace(root, nil, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no sentinelized adapters detected")
 }
 
 func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
@@ -98,7 +99,7 @@ func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
 	loaded, err := model.LoadConfig(state.ConfigPath(root))
 	require.NoError(t, err)
 	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
-	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "new", "SKILL.md"))
+	_, err = os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
 	require.NoError(t, err)
 
 	require.NoError(t, InitWorkspace(root, []string{"claude", "codex"}, true))
@@ -214,7 +215,7 @@ func TestInitWorkspaceToolsAllAndNone(t *testing.T) {
 	t.Parallel()
 	rootAll := initGitRepo(t)
 	require.NoError(t, InitWorkspace(rootAll, []string{"claude", "cursor", "codex", "opencode"}, false))
-	_, err := os.Stat(filepath.Join(rootAll, ".claude", "skills", "slipway", "new", "SKILL.md"))
+	_, err := os.Stat(filepath.Join(rootAll, ".claude", "slipway", ".adapter-generated"))
 	require.NoError(t, err)
 
 	rootNone := initGitRepo(t)

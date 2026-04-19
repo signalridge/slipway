@@ -1,12 +1,4 @@
----
-name: slipway-run
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "run"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-run-body" -}}
 # Run
 
 Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome.
@@ -61,3 +53,4 @@ After any checkpoint pause, user intervention, or governed review handoff, a fre
 - `--resume-response "<response>"`: resume an active checkpoint with explicit response text
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
+{{- end -}}

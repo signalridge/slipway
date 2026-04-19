@@ -15,7 +15,8 @@ import (
 	"github.com/signalridge/slipway/internal/toolgen"
 )
 
-func InitWorkspace(root string, tools []string, refresh bool) error {
+func InitWorkspace(root string, tools []string, refresh bool, toolsSpecified ...bool) error {
+	explicitTools := len(toolsSpecified) > 0 && toolsSpecified[0]
 	if err := requireGitRepository(root); err != nil {
 		return err
 	}
@@ -48,10 +49,46 @@ func InitWorkspace(root string, tools []string, refresh bool) error {
 		return err
 	}
 
-	// When --refresh is set and no --tools specified, auto-detect existing
-	// adapter directories so the user doesn't need to re-specify tools.
-	if len(tools) == 0 && refresh {
-		tools = toolgen.DetectExistingTools(workspaceRoot)
+	// When --refresh is set and --tools was not explicitly provided, auto-detect
+	// existing sentinelized adapters.
+	if len(tools) == 0 && refresh && !explicitTools {
+		detectedTools := toolgen.DetectExistingTools(workspaceRoot)
+		if len(detectedTools) == 0 {
+			return newInitUsageError(
+				"init_refresh_no_sentinelized_tools",
+				"no sentinelized adapters detected; rerun with --tools <tool> --refresh or --tools all --refresh",
+				"Rerun with `slipway init --tools <tool> --refresh` or `slipway init --tools all --refresh`.",
+				map[string]any{
+					"tool":           "",
+					"refresh":        refresh,
+					"workspace_root": workspaceRoot,
+					"detected_tools": []string{},
+				},
+			)
+		}
+		tools = detectedTools
+	}
+
+	// Non-refresh: check for pre-sentinel dirty tree.
+	if !refresh && len(tools) > 0 {
+		for _, toolID := range tools {
+			cfg, ok := toolgen.LookupTool(toolID)
+			if !ok {
+				continue
+			}
+			if toolgen.HasWorkspaceLocalSurfaces(workspaceRoot, cfg) && !toolgen.HasSentinel(workspaceRoot, cfg) {
+				return newInitUsageError(
+					"init_missing_sentinel_existing_tree",
+					fmt.Sprintf("workspace has existing Slipway surfaces for %s without a sentinel; rerun with --tools %s --refresh", toolID, toolID),
+					fmt.Sprintf("Rerun with `slipway init --tools %s --refresh` to regenerate the workspace-local adapter tree.", toolID),
+					map[string]any{
+						"tool":           toolID,
+						"refresh":        refresh,
+						"workspace_root": workspaceRoot,
+					},
+				)
+			}
+		}
 	}
 
 	if len(tools) == 0 {

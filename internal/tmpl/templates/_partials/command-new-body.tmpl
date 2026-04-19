@@ -1,11 +1,4 @@
----
-name: slipway-new
-type: orchestration
-tool: "{{.ToolID}}"
-trigger: "{{.Trigger}}"
-description: "Use when a user asks to start governed work. Creates a change at S0_INTAKE."
----
-
+{{- define "command-new-body" -}}
 # Create Governed Change
 
 Use `slipway new` when the user describes work that should be tracked as a
@@ -53,3 +46,4 @@ sections, abbreviated clarification).
 - Do not ask the user to manually choose internal routing labels.
 - Do not recreate advisory auto-classification inside governed entry.
 - Do not skip intake — all changes start at S0_INTAKE, not S1_PLAN.
+{{- end -}}

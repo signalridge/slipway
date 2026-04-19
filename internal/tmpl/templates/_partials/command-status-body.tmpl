@@ -1,12 +1,4 @@
----
-name: slipway-status
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "status"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-status-body" -}}
 # Status
 
 Show lifecycle status, evidence progress, and blockers for the active change.
@@ -23,3 +15,4 @@ slipway status --json
 - If no active change: suggest `slipway new`.
 - If multiple active changes: show the summary and suggest `slipway status --change <slug>`.
 - Suggest `slipway repair` only for actual state-integrity problems.
+{{- end -}}

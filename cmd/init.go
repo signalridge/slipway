@@ -25,12 +25,13 @@ func makeInitCmd() *cobra.Command {
 				return err
 			}
 
+			toolsSpecified := cmd.Flags().Changed("tools")
 			selectedTools, err := toolgen.ResolveTools(opts.tools)
 			if err != nil {
 				return err
 			}
 
-			if err := bootstrap.InitWorkspace(root, selectedTools, opts.refresh); err != nil {
+			if err := bootstrap.InitWorkspace(root, selectedTools, opts.refresh, toolsSpecified); err != nil {
 				return err
 			}
 

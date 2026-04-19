@@ -1,12 +1,4 @@
----
-name: slipway-cancel
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "cancel"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-cancel-body" -}}
 # Cancel
 
 Cancel the active change and archive its terminal state.
@@ -20,3 +12,8 @@ slipway cancel
 - Terminates the active change regardless of current state.
 - Archives terminal state for audit trail.
 - Show cancellation summary to user.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

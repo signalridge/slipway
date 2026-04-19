@@ -1,11 +1,4 @@
----
-name: slipway-preset
-type: orchestration
-tool: "{{.ToolID}}"
-trigger: "{{.Trigger}}"
-description: "{{.Description}}"
----
-
+{{- define "command-preset-body" -}}
 # Confirm Or Override Workflow Preset
 
 Use `slipway preset` when a governed change is waiting for preset confirmation
@@ -36,3 +29,8 @@ slipway preset <light|standard|strict> --json
 - Do not ask the user to edit `change.yaml` manually.
 - Do not assume `light` bypasses discovery, review, or guardrail protections.
 - Do not use this command when there is no active governed change.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

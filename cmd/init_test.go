@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,10 +32,8 @@ func TestInitCommandToolsAll(t *testing.T) {
 		cmd.SetArgs([]string{"--tools", "all", "--refresh"})
 		require.NoError(t, cmd.Execute())
 
-		// Adapter skills in tool dirs (namespace: slipway/<id>/)
-		_, err := os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "new", "SKILL.md"))
-		require.NoError(t, err)
-		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "next", "SKILL.md"))
+		// Adapter sentinel
+		_, err := os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
 		require.NoError(t, err)
 
 		// Command entries in tool dirs (cursor: flat path, others: nested)
@@ -46,9 +46,7 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway", "tdd", "SKILL.md"))
 		require.NoError(t, err)
 
-		// Init command skill exists
-		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "init", "SKILL.md"))
-		require.NoError(t, err)
+		// Init command entry exists
 		_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "init.md"))
 		require.NoError(t, err)
 
@@ -120,4 +118,296 @@ func TestInitCommandFromLinkedWorktreeMakesCurrentWorkspaceUsable(t *testing.T) 
 		require.NoError(t, err)
 		assert.Equal(t, expectedRoot, resolvedRoot)
 	})
+}
+
+func TestInitCommandRefreshWithoutSentinelizedToolsReturnsStructuredError(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		expectedRoot, err := state.NormalizePath(root)
+		require.NoError(t, err)
+
+		stdout, stderr, err := runRootCommand([]string{"init", "--refresh"})
+		require.Error(t, err)
+		assert.Empty(t, stdout)
+
+		payload := decodeJSONMap(t, stderr)
+		assert.Equal(t, string(categoryInvalidUsage), payload["category"])
+		assert.Equal(t, "init_refresh_no_sentinelized_tools", payload["error_code"])
+		assert.Equal(t, float64(exitCodeInvalidUsage), payload["exit_code"])
+
+		details, ok := payload["details"].(map[string]any)
+		require.True(t, ok, "details must be present")
+		assert.Equal(t, "", details["tool"])
+		assert.Equal(t, true, details["refresh"])
+		assert.Equal(t, expectedRoot, details["workspace_root"])
+
+		rawDetected, ok := details["detected_tools"].([]any)
+		require.True(t, ok, "detected_tools must be a JSON array")
+		assert.Len(t, rawDetected, 0)
+		assert.Contains(t, payload["remediation"], "slipway init --tools <tool> --refresh")
+	})
+}
+
+func TestInitCommandExplicitToolWithoutSentinelReturnsStructuredError(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		expectedRoot, err := state.NormalizePath(root)
+		require.NoError(t, err)
+
+		commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(commandPath), 0o755))
+		require.NoError(t, os.WriteFile(commandPath, []byte("legacy command"), 0o644))
+
+		stdout, stderr, err := runRootCommand([]string{"init", "--tools", "claude"})
+		require.Error(t, err)
+		assert.Empty(t, stdout)
+
+		payload := decodeJSONMap(t, stderr)
+		assert.Equal(t, string(categoryInvalidUsage), payload["category"])
+		assert.Equal(t, "init_missing_sentinel_existing_tree", payload["error_code"])
+		assert.Equal(t, float64(exitCodeInvalidUsage), payload["exit_code"])
+
+		details, ok := payload["details"].(map[string]any)
+		require.True(t, ok, "details must be present")
+		assert.Equal(t, "claude", details["tool"])
+		assert.Equal(t, false, details["refresh"])
+		assert.Equal(t, expectedRoot, details["workspace_root"])
+		assert.NotContains(t, details, "detected_tools")
+		assert.Contains(t, payload["remediation"], "slipway init --tools claude --refresh")
+	})
+}
+
+func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
+	t.Run("generated marker path", func(t *testing.T) {
+		for _, cfg := range toolgen.Registry() {
+			assert.Equal(t,
+				filepath.Join(toolgen.ToolRootPath(cfg), "slipway", ".adapter-generated"),
+				toolgen.GeneratedAdapterMarkerPath(cfg),
+				"%s marker path drifted from tool root contract",
+				cfg.ID,
+			)
+		}
+	})
+
+	t.Run("detect existing tools", func(t *testing.T) {
+		root := t.TempDir()
+		assert.Empty(t, toolgen.DetectExistingTools(root))
+
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
+		assert.Empty(t, toolgen.DetectExistingTools(root), "bare tool roots must not count as generated adapters")
+
+		writeGeneratedAdapterMarkerForTest(t, root, "claude")
+		writeGeneratedAdapterMarkerForTest(t, root, "cursor")
+		assert.Equal(t, []string{"claude", "cursor"}, toolgen.DetectExistingTools(root))
+	})
+
+	t.Run("resolve workspace tool", func(t *testing.T) {
+		root := t.TempDir()
+		writeGeneratedAdapterMarkerForTest(t, root, "claude")
+		writeGeneratedAdapterMarkerForTest(t, root, "codex")
+
+		t.Setenv("SLIPWAY_TOOL", "codex")
+		cfg, err := toolgen.ResolveWorkspaceTool(root)
+		require.NoError(t, err)
+		assert.Equal(t, "codex", cfg.ID)
+
+		t.Setenv("SLIPWAY_TOOL", "")
+		_, err = toolgen.ResolveWorkspaceTool(root)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "multiple adapters detected")
+
+		dirtyRoot := t.TempDir()
+		dirtyCommandPath := filepath.Join(dirtyRoot, ".gemini", "commands", "slipway", "new.toml")
+		require.NoError(t, os.MkdirAll(filepath.Dir(dirtyCommandPath), 0o755))
+		require.NoError(t, os.WriteFile(dirtyCommandPath, []byte("legacy command"), 0o644))
+
+		t.Setenv("SLIPWAY_TOOL", "gemini")
+		_, err = toolgen.ResolveWorkspaceTool(dirtyRoot)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "run `slipway init --tools gemini --refresh`")
+	})
+
+	t.Run("refresh auto-detects sentinelized adapters", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			cmdPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+
+			_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(cmdPath, []byte("tampered"), 0o644))
+
+			_, _, err = runRootCommand([]string{"init", "--refresh"})
+			require.NoError(t, err)
+
+			content, readErr := os.ReadFile(cmdPath)
+			require.NoError(t, readErr)
+			assert.NotEqual(t, "tampered", string(content))
+		})
+	})
+
+	t.Run("refresh without sentinel requires explicit tools", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			_, stderr, err := runRootCommand([]string{"init", "--refresh"})
+			require.Error(t, err)
+
+			payload := decodeJSONMap(t, stderr)
+			assert.Equal(t, "init_refresh_no_sentinelized_tools", payload["error_code"])
+			assert.Contains(t, payload["remediation"], "slipway init --tools <tool> --refresh")
+		})
+	})
+
+	t.Run("explicit tools none does not auto-detect", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			cmdPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+
+			_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(cmdPath, []byte("tampered"), 0o644))
+
+			_, _, err = runRootCommand([]string{"init", "--tools", "none", "--refresh"})
+			require.NoError(t, err)
+
+			content, readErr := os.ReadFile(cmdPath)
+			require.NoError(t, readErr)
+			assert.Equal(t, "tampered", string(content), "--tools none must not refresh detected adapters")
+
+			_, err = os.Stat(filepath.Join(root, ".cursor", "slipway", ".adapter-generated"))
+			assert.True(t, os.IsNotExist(err), "explicit none must not generate other adapters")
+		})
+	})
+
+	t.Run("clean tree no sentinel explicit tool succeeds", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
+			require.NoError(t, err)
+
+			_, statErr := os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
+			require.NoError(t, statErr)
+		})
+	})
+
+	t.Run("explicit tool without refresh rejects missing-sentinel existing tree", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+			require.NoError(t, os.MkdirAll(filepath.Dir(commandPath), 0o755))
+			require.NoError(t, os.WriteFile(commandPath, []byte("legacy command"), 0o644))
+
+			_, stderr, err := runRootCommand([]string{"init", "--tools", "claude"})
+			require.Error(t, err)
+
+			payload := decodeJSONMap(t, stderr)
+			assert.Equal(t, "init_missing_sentinel_existing_tree", payload["error_code"])
+			assert.Contains(t, payload["remediation"], "slipway init --tools claude --refresh")
+		})
+	})
+
+	t.Run("codex global prompts do not count as workspace-local existing tree", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			codexHome := t.TempDir()
+			t.Setenv("CODEX_HOME", codexHome)
+
+			stalePrompt := filepath.Join(codexHome, "prompts", "slipway-new.md")
+			require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
+			require.NoError(t, os.WriteFile(stalePrompt, []byte("stale global prompt"), 0o644))
+
+			_, _, err := runRootCommand([]string{"init", "--tools", "codex"})
+			require.NoError(t, err)
+
+			_, statErr := os.Stat(filepath.Join(root, ".codex", "slipway", ".adapter-generated"))
+			require.NoError(t, statErr)
+		})
+	})
+
+	t.Run("codex stale prompt files prune only after successful rewrite", func(t *testing.T) {
+		root := t.TempDir()
+		codexHome := t.TempDir()
+		t.Setenv("CODEX_HOME", codexHome)
+
+		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
+
+		stalePrompt := filepath.Join(codexHome, "prompts", "slipway-stale.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
+		require.NoError(t, os.WriteFile(stalePrompt, []byte("stale prompt"), 0o644))
+
+		blockedSkillDir := filepath.Join(root, ".codex", "skills", "slipway", "intake-clarification")
+		require.NoError(t, os.RemoveAll(blockedSkillDir))
+		require.NoError(t, os.WriteFile(blockedSkillDir, []byte("blocked"), 0o644))
+
+		err := toolgen.Generate(root, []string{"codex"}, true)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(stalePrompt)
+		require.NoError(t, statErr, "failed codex refresh must not prune stale prompts before rewrite succeeds")
+
+		require.NoError(t, os.Remove(blockedSkillDir))
+		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
+
+		_, statErr = os.Stat(stalePrompt)
+		assert.True(t, os.IsNotExist(statErr), "successful codex refresh must prune stale prompts")
+	})
+
+	t.Run("typed cli error for fail-closed init", func(t *testing.T) {
+		root := t.TempDir()
+		withWorkspace(t, root, func() {
+			expectedRoot, err := state.NormalizePath(root)
+			require.NoError(t, err)
+
+			_, stderr, err := runRootCommand([]string{"init", "--refresh"})
+			require.Error(t, err)
+			payload := decodeJSONMap(t, stderr)
+			assert.Equal(t, string(categoryInvalidUsage), payload["category"])
+			assert.Equal(t, "init_refresh_no_sentinelized_tools", payload["error_code"])
+			details, ok := payload["details"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, expectedRoot, details["workspace_root"])
+
+			commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+			require.NoError(t, os.MkdirAll(filepath.Dir(commandPath), 0o755))
+			require.NoError(t, os.WriteFile(commandPath, []byte("legacy command"), 0o644))
+
+			_, stderr, err = runRootCommand([]string{"init", "--tools", "claude"})
+			require.Error(t, err)
+			payload = decodeJSONMap(t, stderr)
+			assert.Equal(t, string(categoryInvalidUsage), payload["category"])
+			assert.Equal(t, "init_missing_sentinel_existing_tree", payload["error_code"])
+		})
+	})
+
+	t.Run("refresh failure leaves no trusted command prompt surface", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
+
+		sentinelPath := filepath.Join(root, ".claude", "slipway", ".adapter-generated")
+		commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+		require.FileExists(t, sentinelPath)
+		require.FileExists(t, commandPath)
+
+		blockedSkillDir := filepath.Join(root, ".claude", "skills", "slipway", "intake-clarification")
+		require.NoError(t, os.RemoveAll(blockedSkillDir))
+		require.NoError(t, os.WriteFile(blockedSkillDir, []byte("blocked"), 0o644))
+
+		err := toolgen.Generate(root, []string{"claude"}, true)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(sentinelPath)
+		assert.True(t, os.IsNotExist(statErr), "failed refresh must leave the sentinel absent")
+		_, statErr = os.Stat(commandPath)
+		assert.True(t, os.IsNotExist(statErr), "failed refresh must not leave previously trusted command prompts in place")
+	})
+}
+
+func writeGeneratedAdapterMarkerForTest(t *testing.T, root, toolID string) {
+	t.Helper()
+
+	cfg, ok := toolgen.LookupTool(toolID)
+	require.True(t, ok, "tool %q must exist", toolID)
+
+	markerPath := filepath.Join(root, toolgen.GeneratedAdapterMarkerPath(cfg))
+	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
+	require.NoError(t, os.WriteFile(markerPath, []byte("generated\n"), 0o644))
 }

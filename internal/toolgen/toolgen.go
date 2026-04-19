@@ -141,57 +141,57 @@ const (
 )
 
 type CommandDef struct {
-	ID              string
-	Class           CommandClass
-	Description     string
-	Arguments       string
-	Prerequisites   []string
-	Tier            string // "core" | "situational" | "diagnostics"
-	HasAdapterSkill bool   // true = generates skills/<id>/SKILL.md; false reserved for future CLI-only adapters
+	ID               string
+	Class            CommandClass
+	Description      string
+	Arguments        string
+	Prerequisites    []string
+	Tier             string // "core" | "situational" | "diagnostics"
+	HasPromptSurface bool   // true = generates inline command prompt surface; false for CLI-only commands
 }
 
 // commandRegistry is the single source of truth for adapter command metadata.
 // Entry order is for readability; commandIDs() returns IDs sorted alphabetically.
 var commandRegistry = []CommandDef{
 	// Core (5)
-	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasAdapterSkill: true,
+	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasPromptSurface: true,
 		Arguments:     `"<description>" [--preset light|standard|strict] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
-	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasAdapterSkill: true,
+	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--context-guard] [--change <slug>]"},
-	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasAdapterSkill: true,
+	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
-	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasAdapterSkill: true,
+	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
-	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasAdapterSkill: true,
+	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
 	// Situational (9)
-	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasAdapterSkill: true,
+	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
-	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasAdapterSkill: true,
+	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
-	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasAdapterSkill: true,
+	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--change <slug>]"},
-	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasAdapterSkill: true,
+	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
-	{ID: "validate-requirements", Class: CommandClassQuery, Description: "Validate requirements.md contract for the active change", Tier: "situational", HasAdapterSkill: true,
+	{ID: "validate-requirements", Class: CommandClassQuery, Description: "Validate requirements.md contract for the active change", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
-	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasAdapterSkill: true,
+	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasPromptSurface: true,
 		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]"},
-	{ID: "preset", Class: CommandClassMutation, Description: "Confirm or override the active change workflow preset", Tier: "situational", HasAdapterSkill: true,
+	{ID: "preset", Class: CommandClassMutation, Description: "Confirm or override the active change workflow preset", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "<light|standard|strict> [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change should already exist, or pass `--change <slug>`."}},
-	{ID: "pivot", Class: CommandClassMutation, Description: "Reroute or rescope an active change", Tier: "situational", HasAdapterSkill: true,
+	{ID: "pivot", Class: CommandClassMutation, Description: "Reroute or rescope an active change", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--reroute|--rescope] [--json] [--change <slug>]"},
-	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasAdapterSkill: true,
+	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
-	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasAdapterSkill: true,
+	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	// Diagnostics (3) — CLI-only, no adapter skill templates
+	// Diagnostics (3) — CLI-only, no generated prompt surfaces
 	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
@@ -230,22 +230,22 @@ func CommandClassification(id string) string {
 	return ""
 }
 
-// adapterSkillIDs returns IDs of commands that have adapter skills.
+// promptSurfaceIDs returns IDs of commands that have generated prompt surfaces.
 // It is derived from commandRegistry to keep the generated surfaces in sync.
-var adapterSkillIDs = func() []string {
+var promptSurfaceIDs = func() []string {
 	out := make([]string, 0, len(commandRegistry))
 	for _, def := range commandRegistry {
-		if def.HasAdapterSkill {
+		if def.HasPromptSurface {
 			out = append(out, def.ID)
 		}
 	}
 	return out
 }()
 
-// commandIDs returns the adapter skill IDs that have user-facing command entries (sorted).
+// commandIDs returns the prompt surface IDs that have user-facing command entries (sorted).
 func commandIDs() []string {
-	out := make([]string, len(adapterSkillIDs))
-	copy(out, adapterSkillIDs)
+	out := make([]string, len(promptSurfaceIDs))
+	copy(out, promptSurfaceIDs)
 	slices.Sort(out)
 	return out
 }
@@ -354,7 +354,7 @@ func ResolveWorkspaceTool(root string) (ToolConfig, error) {
 			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: unknown tool adapter", override)
 		}
 		if !hasGeneratedAdapter(root, cfg) {
-			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: adapter not generated in workspace; run `slipway init --tools %s`", override, override)
+			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: adapter not generated in workspace; %s", override, workspaceAdapterRemediation(root, cfg))
 		}
 		return cfg, nil
 	}
@@ -375,7 +375,44 @@ func ResolveWorkspaceTool(root string) (ToolConfig, error) {
 		}
 		return ToolConfig{}, &ToolAmbiguityError{DetectedAdapters: ids}
 	}
-	return ToolConfig{}, fmt.Errorf("no generated tool adapter found in workspace; run `slipway init --tools <tool>`")
+	return ToolConfig{}, missingWorkspaceAdapterError(root)
+}
+
+// LookupTool returns the ToolConfig for a given tool ID.
+func LookupTool(id string) (ToolConfig, bool) {
+	cfg, ok := toolRegistry[id]
+	return cfg, ok
+}
+
+// HasSentinel returns true if the dedicated adapter sentinel exists for the tool.
+func HasSentinel(root string, cfg ToolConfig) bool {
+	return hasGeneratedAdapter(root, cfg)
+}
+
+// HasWorkspaceLocalSurfaces returns true if workspace-local Slipway-generated
+// surfaces exist for the given tool (skill dirs under the tool root).
+func HasWorkspaceLocalSurfaces(root string, cfg ToolConfig) bool {
+	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
+	if _, err := os.Stat(skillsRoot); err == nil {
+		return true
+	}
+	if cfg.CommandsDir != "" {
+		var cmdDir string
+		switch cfg.CommandStyle {
+		case "flat":
+			cmdDir = filepath.Join(root, cfg.CommandsDir)
+		default:
+			cmdDir = filepath.Join(root, cfg.CommandsDir, "slipway")
+		}
+		if entries, err := os.ReadDir(cmdDir); err == nil {
+			for _, e := range entries {
+				if strings.HasPrefix(e.Name(), "slipway") || cfg.CommandStyle != "flat" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // ResolveTools parses tool selection string into a list of tool IDs.
@@ -416,14 +453,12 @@ func ResolveTools(selection string) ([]string, error) {
 // adapter surfaces and returns the list of tool IDs found. Used by init --refresh
 // when --tools is not explicitly provided.
 //
-// Detection checks for slipway-specific marker paths (e.g. skills/slipway/next/SKILL.md)
-// rather than just top-level directories, so workspaces that happen to have a .claude/ or
-// .codex/ directory for other reasons are not mistakenly treated as slipway-managed.
+// Detection checks for the dedicated .adapter-generated sentinel rather than
+// skill marker paths, so pre-sentinel workspaces are not auto-detected.
 func DetectExistingTools(root string) []string {
 	var found []string
 	for _, cfg := range Registry() {
-		// Check for a slipway skill marker that only exists if Generate() ran for this tool.
-		marker := filepath.Join(root, SkillPath(cfg, "next"))
+		marker := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 		if _, err := os.Stat(marker); err == nil {
 			found = append(found, cfg.ID)
 		}
@@ -432,7 +467,7 @@ func DetectExistingTools(root string) []string {
 	return found
 }
 
-// Generate creates tool adapter skills and commands for the given tools.
+// Generate creates tool prompt surfaces and commands for the given tools.
 func Generate(root string, tools []string, refresh bool) error {
 	for _, tool := range tools {
 		cfg, ok := toolRegistry[tool]
@@ -444,6 +479,19 @@ func Generate(root string, tools []string, refresh bool) error {
 		}
 	}
 	return nil
+}
+
+// ToolRootPath returns the single builtin adapter root from cfg.AutoDetectPath.
+func ToolRootPath(cfg ToolConfig) string {
+	if len(cfg.AutoDetectPath) == 0 {
+		return ""
+	}
+	return cfg.AutoDetectPath[0]
+}
+
+// GeneratedAdapterMarkerPath returns the workspace-local sentinel path for a tool.
+func GeneratedAdapterMarkerPath(cfg ToolConfig) string {
+	return filepath.Join(ToolRootPath(cfg), "slipway", ".adapter-generated")
 }
 
 // SkillPath returns the relative path to a skill's SKILL.md for the given tool config.
@@ -472,24 +520,21 @@ func AgentPath(cfg ToolConfig, agentName string) string {
 }
 
 func generateForTool(root string, cfg ToolConfig, refresh bool) error {
+	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+
 	if refresh {
+		// Remove existing sentinel before the mutating pass.
+		_ = os.Remove(sentinelPath)
+
+		// Purge direct command prompt surfaces before rewrite (project-local only).
+		if cfg.CommandsDir != "" {
+			if err := purgeCommandPromptSurfaces(root, cfg); err != nil {
+				return err
+			}
+		}
+
 		if err := cleanupStaleGeneratedArtifacts(root, cfg); err != nil {
 			return err
-		}
-	}
-
-	// Adapter skills (rendered from .tmpl templates)
-	for _, id := range adapterSkillIDs {
-		content, err := renderAdapterSkill(cfg, id)
-		if err != nil {
-			return fmt.Errorf("render adapter skill %q for %s: %w", id, cfg.ID, err)
-		}
-		path := filepath.Join(root, SkillPath(cfg, id))
-		if err := writeDeterministic(path, content, refresh); err != nil {
-			return err
-		}
-		if err := emitSkillSupportFiles(root, cfg, id, refresh); err != nil {
-			return fmt.Errorf("emit support files for adapter skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
 
@@ -513,7 +558,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 
 	// Templated governance skills (tool-aware .md.tmpl)
 	for _, name := range TemplatedGovernanceSkillNames {
-		content, err := renderAdapterSkill(cfg, name)
+		content, err := renderTemplatedGovernanceSkill(cfg, name)
 		if err != nil {
 			return fmt.Errorf("render templated governance skill %q for %s: %w", name, cfg.ID, err)
 		}
@@ -553,8 +598,8 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err != nil {
 			return fmt.Errorf("load standalone %q: %w", name, err)
 		}
-		path := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(path, content, refresh); err != nil {
+		p := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(p, content, refresh); err != nil {
 			return err
 		}
 		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
@@ -568,8 +613,8 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err != nil {
 			return fmt.Errorf("load technique %q: %w", name, err)
 		}
-		path := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(path, content, refresh); err != nil {
+		p := filepath.Join(root, SkillPath(cfg, name))
+		if err := writeDeterministic(p, content, refresh); err != nil {
 			return err
 		}
 		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
@@ -577,7 +622,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		}
 	}
 
-	// Command entry files (routing stubs for all adapter commands).
+	// Command prompt surfaces (inline command prompts for all adapter commands).
 	// Skip when CommandsDir is empty (Codex uses global prompts instead).
 	if cfg.CommandsDir != "" {
 		ext := ".md"
@@ -587,16 +632,16 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		for _, id := range commandIDs() {
 			content, err := renderCommandEntry(cfg, id)
 			if err != nil {
-				return fmt.Errorf("render command entry %q for %s: %w", id, cfg.ID, err)
+				return fmt.Errorf("render command prompt %q for %s: %w", id, cfg.ID, err)
 			}
-			var path string
+			var p string
 			switch cfg.CommandStyle {
 			case "flat":
-				path = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
+				p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
 			default: // "nested"
-				path = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
+				p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
 			}
-			if err := writeDeterministic(path, content, refresh); err != nil {
+			if err := writeDeterministic(p, content, refresh); err != nil {
 				return err
 			}
 		}
@@ -610,8 +655,8 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			if err != nil {
 				return fmt.Errorf("load agent %q: %w", name, err)
 			}
-			path := filepath.Join(root, AgentPath(cfg, name))
-			if err := writeDeterministic(path, content, refresh); err != nil {
+			p := filepath.Join(root, AgentPath(cfg, name))
+			if err := writeDeterministic(p, content, refresh); err != nil {
 				return err
 			}
 		}
@@ -628,6 +673,14 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err := generateCodexPrompts(cfg, refresh); err != nil {
 			return err
 		}
+		if refresh {
+			// Codex prompts are host-global, so stale slipway-* entries are pruned
+			// only after the current expected prompt set has been written
+			// successfully.
+			if err := cleanupStaleGlobalPrompts(cfg); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Session-start hook helper (hook-capable runtimes).
@@ -636,8 +689,8 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		if err != nil {
 			return fmt.Errorf("render session hook for %s: %w", cfg.ID, err)
 		}
-		path := filepath.Join(root, cfg.SessionHook)
-		if err := writeDeterministic(path, content, refresh); err != nil {
+		p := filepath.Join(root, cfg.SessionHook)
+		if err := writeDeterministic(p, content, refresh); err != nil {
 			return err
 		}
 	}
@@ -655,6 +708,37 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	if err := writeDeterministic(manifestPath, manifest, refresh); err != nil {
 		return err
 	}
+
+	// Write sentinel last — a missing sentinel means the tree is invalid.
+	if err := writeDeterministic(sentinelPath, "generated\n", true); err != nil {
+		return err
+	}
+	return nil
+}
+
+// purgeCommandPromptSurfaces removes all expected command prompt files for
+// project-local adapters before rewrite. This ensures a failed refresh
+// cannot leave previously trusted prompt surfaces in place.
+func purgeCommandPromptSurfaces(root string, cfg ToolConfig) error {
+	if cfg.CommandsDir == "" {
+		return nil
+	}
+	ext := ".md"
+	if cfg.CommandFormat == "toml" {
+		ext = ".toml"
+	}
+	for _, id := range commandIDs() {
+		var p string
+		switch cfg.CommandStyle {
+		case "flat":
+			p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
+		default:
+			p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
+		}
+		if err := removePathIfExists(p); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -668,9 +752,6 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
 	if err := cleanupStaleAgentFiles(root, cfg); err != nil {
 		return err
 	}
-	if err := cleanupStaleGlobalPrompts(cfg); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -678,7 +759,6 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 	skillsRoot := filepath.Join(root, cfg.SkillsDir, "slipway")
 	expected := map[string]struct{}{}
 	for _, names := range [][]string{
-		adapterSkillIDs,
 		GovernanceSkillNames,
 		standaloneGovernanceNames,
 		TemplatedGovernanceSkillNames,
@@ -1006,8 +1086,8 @@ func trimCatalogSection(section string) string {
 	return strings.Trim(section, "\n")
 }
 
-// renderAdapterSkill renders an adapter SKILL.md from a .tmpl template.
-func renderAdapterSkill(cfg ToolConfig, id string) (string, error) {
+// renderTemplatedGovernanceSkill renders a templated governance SKILL.md from a .tmpl template.
+func renderTemplatedGovernanceSkill(cfg ToolConfig, id string) (string, error) {
 	data := map[string]string{
 		"ToolID":      cfg.ID,
 		"Trigger":     commandTrigger(cfg, id),
@@ -1016,7 +1096,7 @@ func renderAdapterSkill(cfg ToolConfig, id string) (string, error) {
 	return tmpl.Render(path.Join("skills", id, "SKILL.md.tmpl"), data)
 }
 
-// renderCommandEntry renders a command routing entry from the appropriate template.
+// renderCommandEntry renders an inline command prompt from the appropriate template.
 func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 	tier := "situational"
 	if def, ok := commandRegistryMap[id]; ok {
@@ -1028,7 +1108,7 @@ func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 		"Trigger":       commandTrigger(cfg, id),
 		"Class":         CommandClassification(id),
 		"Description":   commandDescriptions[id],
-		"SkillPath":     SkillPath(cfg, id),
+		"BodyTemplate":  "command-" + id + "-body",
 		"Arguments":     commandArguments(id),
 		"Prerequisites": commandPrerequisites(id),
 		"Tier":          tier,
@@ -1232,11 +1312,37 @@ func commandArguments(id string) string {
 }
 
 func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
-	path := filepath.Join(root, SkillPath(cfg, "next"))
-	if _, err := os.Stat(path); err == nil {
+	p := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+	if _, err := os.Stat(p); err == nil {
 		return true
 	}
 	return false
+}
+
+func workspaceAdapterRemediation(root string, cfg ToolConfig) string {
+	if HasWorkspaceLocalSurfaces(root, cfg) && !hasGeneratedAdapter(root, cfg) {
+		return fmt.Sprintf("run `slipway init --tools %s --refresh`", cfg.ID)
+	}
+	return fmt.Sprintf("run `slipway init --tools %s`", cfg.ID)
+}
+
+func missingWorkspaceAdapterError(root string) error {
+	dirtyTools := make([]string, 0, len(toolRegistry))
+	for _, cfg := range Registry() {
+		if HasWorkspaceLocalSurfaces(root, cfg) && !hasGeneratedAdapter(root, cfg) {
+			dirtyTools = append(dirtyTools, cfg.ID)
+		}
+	}
+	slices.Sort(dirtyTools)
+	switch len(dirtyTools) {
+	case 0:
+		return fmt.Errorf("no generated tool adapter found in workspace; run `slipway init --tools <tool>`")
+	case 1:
+		toolID := dirtyTools[0]
+		return fmt.Errorf("no generated tool adapter found in workspace; workspace has existing Slipway surfaces for %s without a sentinel; run `slipway init --tools %s --refresh`", toolID, toolID)
+	default:
+		return fmt.Errorf("no generated tool adapter found in workspace; workspace has existing Slipway surfaces without sentinels for [%s]; rerun with `slipway init --tools <tool> --refresh`", strings.Join(dirtyTools, ", "))
+	}
 }
 
 // codexAgentSandboxMode returns the sandbox_mode for a Codex agent TOML file.
@@ -1464,7 +1570,7 @@ func generateCodexPrompts(cfg ToolConfig, refresh bool) error {
 			"Trigger":       commandTrigger(cfg, id),
 			"Class":         CommandClassification(id),
 			"Description":   commandDescriptions[id],
-			"SkillPath":     SkillPath(cfg, id),
+			"BodyTemplate":  "command-" + id + "-body",
 			"Arguments":     commandArguments(id),
 			"Prerequisites": commandPrerequisites(id),
 			"Tier":          tier,

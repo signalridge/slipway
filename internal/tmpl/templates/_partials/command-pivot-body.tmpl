@@ -1,12 +1,4 @@
----
-name: slipway-pivot
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "pivot"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-pivot-body" -}}
 # Pivot
 
 Reroute (refresh the current discovery decision) or rescope (return to discovery) an active change.
@@ -24,3 +16,8 @@ slipway pivot --rescope
 ## Contract
 - Show pivot summary with before/after state.
 - Confirm pivot action with user before executing.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

@@ -1,12 +1,4 @@
----
-name: slipway-checkpoint
-description: "{{.Description}}"
-type: command
-tool: "{{.ToolID}}"
-command_id: "checkpoint"
-trigger: "{{.Trigger}}"
----
-
+{{- define "command-checkpoint-body" -}}
 # Checkpoint
 
 Pause wave execution and request user input for a specific task.
@@ -33,3 +25,5 @@ slipway checkpoint --task-id <task_id> [--type <type>] [--allowed-responses <res
 - `--type <type>`: Checkpoint type — `human_verify` (default), `decision`, `human_action`
 - `--allowed-responses <responses>`: Comma-separated allowed response values (required for `type=decision`)
 - `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

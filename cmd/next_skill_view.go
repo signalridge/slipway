@@ -15,7 +15,11 @@ import (
 )
 
 func resolveWorkspaceSkillPaths(root, skillName, agentHint string) (promptPath, agentDefinitionPath, resolvedToolID string, err error) {
-	cfg, err := toolgen.ResolveWorkspaceTool(invocationWorkspaceRoot(root))
+	wsRoot := root
+	if len(toolgen.DetectExistingTools(wsRoot)) == 0 {
+		wsRoot = invocationWorkspaceRoot(root)
+	}
+	cfg, err := toolgen.ResolveWorkspaceTool(wsRoot)
 	if err != nil {
 		return "", "", "", err
 	}
