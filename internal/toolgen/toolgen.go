@@ -166,7 +166,7 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Situational (8)
+	// Situational (9)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
@@ -295,8 +295,45 @@ func commandIDs() []string {
 	return out
 }
 
+const workflowSkillID = "workflow"
+
+const workflowEntryPublicName = "slipway"
+
 // standaloneNames lists standalone skills (not governance, not technique) to generate.
-var standaloneNames = []string{}
+var standaloneNames = []string{workflowSkillID}
+
+var workflowLifecycleCommandIDs = []string{"new", "status", "next", "run", "done"}
+
+var workflowSupportingCommandIDs = []string{
+	"review",
+	"validate",
+	"repair",
+	"init",
+	"cancel",
+	"checkpoint",
+	"preset",
+	"pivot",
+	"abort",
+}
+
+var workflowDiagnosticCommandIDs = []string{"stats", "health", "codebase-map"}
+
+type workflowSkillData struct {
+	ToolID              string
+	PublicName          string
+	CatalogManifestPath string
+	CommandsDir         string
+	LifecycleCommands   []commandEntry
+	SupportingCommands  []commandEntry
+	DiagnosticCommands  []commandEntry
+}
+
+type commandEntry struct {
+	Name          string
+	Description   string
+	Arguments     string
+	Prerequisites []string
+}
 
 // techniqueNames lists the technique skills to generate.
 var techniqueNames = []string{
@@ -341,6 +378,15 @@ var commandDescriptions = func() map[string]string {
 	return m
 }()
 
+type commandRenderData struct {
+	ID            string
+	Class         CommandClass
+	Tier          string
+	Description   string
+	Arguments     string
+	Prerequisites []string
+}
+
 func commandPrerequisites(id string) []string {
 	if def, ok := commandRegistryMap[id]; ok && len(def.Prerequisites) > 0 {
 		return def.Prerequisites
@@ -350,6 +396,96 @@ func commandPrerequisites(id string) []string {
 		"`.slipway.yaml` must exist (run `slipway init` first)",
 		"an active change must exist, or pass `--change <slug>` when supported.",
 	}
+}
+
+func buildCommandRenderData(id string) (commandRenderData, error) {
+	def, ok := commandRegistryMap[id]
+	if !ok {
+		return commandRenderData{}, fmt.Errorf("command %q missing from command registry", id)
+	}
+	return commandRenderData{
+		ID:            id,
+		Class:         def.Class,
+		Tier:          def.Tier,
+		Description:   commandDescriptions[id],
+		Arguments:     commandArguments(id),
+		Prerequisites: commandPrerequisites(id),
+	}, nil
+}
+
+func buildWorkflowCommandEntries(ids []string, expectedTier string) ([]commandEntry, error) {
+	out := make([]commandEntry, 0, len(ids))
+	for _, id := range ids {
+		meta, err := buildCommandRenderData(id)
+		if err != nil {
+			return nil, err
+		}
+		if meta.Tier != expectedTier {
+			return nil, fmt.Errorf("workflow command %q expected tier %q, got %q", id, expectedTier, meta.Tier)
+		}
+		out = append(out, commandEntry{
+			Name:          meta.ID,
+			Description:   meta.Description,
+			Arguments:     meta.Arguments,
+			Prerequisites: meta.Prerequisites,
+		})
+	}
+	return out, nil
+}
+
+func validateWorkflowCommandCoverage(groups ...[]string) error {
+	grouped := make(map[string]struct{}, len(commandRegistry))
+	for _, ids := range groups {
+		for _, id := range ids {
+			if _, exists := grouped[id]; exists {
+				return fmt.Errorf("workflow command %q declared more than once", id)
+			}
+			grouped[id] = struct{}{}
+		}
+	}
+
+	for _, def := range commandRegistry {
+		if _, ok := grouped[def.ID]; !ok {
+			return fmt.Errorf("workflow command groups missing registry command %q", def.ID)
+		}
+	}
+	if len(grouped) != len(commandRegistry) {
+		return fmt.Errorf("workflow command groups cover %d commands, want %d", len(grouped), len(commandRegistry))
+	}
+	return nil
+}
+
+func buildWorkflowSkillData(cfg ToolConfig) (workflowSkillData, error) {
+	if err := validateWorkflowCommandCoverage(
+		workflowLifecycleCommandIDs,
+		workflowSupportingCommandIDs,
+		workflowDiagnosticCommandIDs,
+	); err != nil {
+		return workflowSkillData{}, err
+	}
+
+	lifecycle, err := buildWorkflowCommandEntries(workflowLifecycleCommandIDs, "core")
+	if err != nil {
+		return workflowSkillData{}, err
+	}
+	supporting, err := buildWorkflowCommandEntries(workflowSupportingCommandIDs, "situational")
+	if err != nil {
+		return workflowSkillData{}, err
+	}
+	diagnostics, err := buildWorkflowCommandEntries(workflowDiagnosticCommandIDs, "diagnostics")
+	if err != nil {
+		return workflowSkillData{}, err
+	}
+
+	return workflowSkillData{
+		ToolID:              cfg.ID,
+		PublicName:          adapterSkillName("workflow"),
+		CatalogManifestPath: filepath.ToSlash(CatalogManifestPath(cfg)),
+		CommandsDir:         filepath.ToSlash(cfg.CommandsDir),
+		LifecycleCommands:   lifecycle,
+		SupportingCommands:  supporting,
+		DiagnosticCommands:  diagnostics,
+	}, nil
 }
 
 // Registry returns all tool configs sorted by ID.
@@ -540,7 +676,11 @@ func GeneratedAdapterMarkerPath(cfg ToolConfig) string {
 }
 
 func adapterSkillName(id string) string {
-	return "slipway-" + id
+	trimmedID := strings.TrimSpace(id)
+	if trimmedID == workflowSkillID {
+		return workflowEntryPublicName
+	}
+	return "slipway-" + trimmedID
 }
 
 func AdapterSkillName(id string) string {
@@ -659,6 +799,34 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 
 	// Standalone skills (static content, not governance, not technique)
 	for _, name := range standaloneNames {
+		if name == "workflow" {
+			content, err := renderStandaloneWorkflowSkill(cfg)
+			if err != nil {
+				return fmt.Errorf("render standalone %q for %s: %w", name, cfg.ID, err)
+			}
+			skillPath := filepath.Join(root, SkillPath(cfg, name))
+			if err := writeDeterministic(skillPath, content, refresh); err != nil {
+				return err
+			}
+			if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+				return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
+			}
+			refContent, err := renderStandaloneWorkflowCommandReference(cfg)
+			if err != nil {
+				return fmt.Errorf("render standalone workflow reference for %s: %w", cfg.ID, err)
+			}
+			refPath := filepath.Join(
+				root,
+				filepath.Dir(SkillPath(cfg, name)),
+				"references",
+				"command-reference.md",
+			)
+			if err := writeDeterministic(refPath, refContent, refresh); err != nil {
+				return err
+			}
+			continue
+		}
+
 		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load standalone %q: %w", name, err)
@@ -1332,22 +1500,42 @@ func renderTemplatedGovernanceSkill(cfg ToolConfig, id string) (string, error) {
 	return renderSourceManagedSkill(raw, id)
 }
 
+func renderStandaloneWorkflowSkill(cfg ToolConfig) (string, error) {
+	data, err := buildWorkflowSkillData(cfg)
+	if err != nil {
+		return "", err
+	}
+	raw, err := tmpl.Render(sourceSkillTemplatePath("workflow", "SKILL.md.tmpl"), data)
+	if err != nil {
+		return "", err
+	}
+	return renderSourceManagedSkill(raw, "workflow")
+}
+
+func renderStandaloneWorkflowCommandReference(cfg ToolConfig) (string, error) {
+	data, err := buildWorkflowSkillData(cfg)
+	if err != nil {
+		return "", err
+	}
+	return tmpl.Render(sourceSkillTemplatePath("workflow", "command-reference.md.tmpl"), data)
+}
+
 // renderCommandEntry renders an inline command prompt from the appropriate template.
 func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
-	tier := "situational"
-	if def, ok := commandRegistryMap[id]; ok {
-		tier = def.Tier
+	meta, err := buildCommandRenderData(id)
+	if err != nil {
+		return "", err
 	}
 	data := map[string]any{
-		"CommandID":     id,
+		"CommandID":     meta.ID,
 		"ToolID":        cfg.ID,
-		"Trigger":       commandTrigger(cfg, id),
-		"Class":         CommandClassification(id),
-		"Description":   commandDescriptions[id],
+		"Trigger":       commandTrigger(cfg, meta.ID),
+		"Class":         meta.Class,
+		"Description":   meta.Description,
 		"BodyTemplate":  "command-" + id + "-body",
-		"Arguments":     commandArguments(id),
-		"Prerequisites": commandPrerequisites(id),
-		"Tier":          tier,
+		"Arguments":     meta.Arguments,
+		"Prerequisites": meta.Prerequisites,
+		"Tier":          meta.Tier,
 		"Surface":       "adapter",
 	}
 	tmplName := "command-entry.md.tmpl"
@@ -1796,20 +1984,20 @@ func generateCodexPrompts(cfg ToolConfig, refresh bool) error {
 	}
 
 	for _, id := range commandIDs() {
-		tier := "situational"
-		if def, ok := commandRegistryMap[id]; ok {
-			tier = def.Tier
+		meta, err := buildCommandRenderData(id)
+		if err != nil {
+			return err
 		}
 		data := map[string]any{
-			"CommandID":     id,
+			"CommandID":     meta.ID,
 			"ToolID":        cfg.ID,
-			"Trigger":       commandTrigger(cfg, id),
-			"Class":         CommandClassification(id),
-			"Description":   commandDescriptions[id],
+			"Trigger":       commandTrigger(cfg, meta.ID),
+			"Class":         meta.Class,
+			"Description":   meta.Description,
 			"BodyTemplate":  "command-" + id + "-body",
-			"Arguments":     commandArguments(id),
-			"Prerequisites": commandPrerequisites(id),
-			"Tier":          tier,
+			"Arguments":     meta.Arguments,
+			"Prerequisites": meta.Prerequisites,
+			"Tier":          meta.Tier,
 			"Surface":       "adapter",
 		}
 		content, err := tmpl.Render(path.Join("commands", "command-entry.codex-prompt.md.tmpl"), data)

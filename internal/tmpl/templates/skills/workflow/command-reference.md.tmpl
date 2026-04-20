@@ -1,0 +1,48 @@
+# Slipway Workflow Command Reference
+
+This reference is generated from the shared toolgen command metadata helpers
+backed by `commandRegistry`, `commandDescriptions`, `commandArguments`, and
+`commandPrerequisites`.
+
+The rendered values come through the same helper path used by generated command
+surfaces, so helper-default prerequisites stay aligned with the CLI-facing
+surfaces instead of drifting into hand-maintained prose.
+
+The CLI remains authoritative. This document is a generated lookup aid for the
+single workflow entry skill.
+
+## Lifecycle Core
+{{- range .LifecycleCommands }}
+
+### `slipway {{ .Name }}`
+- Description: {{ .Description }}
+- Arguments: `{{ .Arguments }}`
+- Prerequisites:
+{{- range .Prerequisites }}
+  - {{ . }}
+{{- end }}
+{{- end }}
+
+## Supporting Commands
+{{- range .SupportingCommands }}
+
+### `slipway {{ .Name }}`
+- Description: {{ .Description }}
+- Arguments: `{{ .Arguments }}`
+- Prerequisites:
+{{- range .Prerequisites }}
+  - {{ . }}
+{{- end }}
+{{- end }}
+
+## Diagnostics
+{{- range .DiagnosticCommands }}
+
+### `slipway {{ .Name }}`
+- Description: {{ .Description }}
+- Arguments: `{{ .Arguments }}`
+- Prerequisites:
+{{- range .Prerequisites }}
+  - {{ . }}
+{{- end }}
+{{- end }}

@@ -279,6 +279,13 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NoError(t, err, "%s: missing templated governance skill %s", toolID, name)
 		}
 
+		// Standalone exported skills
+		for _, name := range standaloneNames {
+			path := filepath.Join(root, cfg.SkillsDir, adapterSkillName(name), "SKILL.md")
+			_, err := os.Stat(path)
+			assert.NoError(t, err, "%s: missing standalone skill %s", toolID, name)
+		}
+
 		// Command entries — per-tool path and format assertions
 		if cfg.CommandsDir != "" {
 			ext := ".md"
@@ -365,6 +372,60 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.True(t, os.IsNotExist(err), "%s: unexpected settings file generated", toolID)
 		}
 	}
+}
+
+func TestWorkflowSkillGenerationAndReference(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "codex", "cursor", "gemini", "opencode"}, true))
+
+	for _, cfg := range Registry() {
+		skillPath := filepath.Join(root, cfg.SkillsDir, "slipway", "SKILL.md")
+		content, err := os.ReadFile(skillPath)
+		require.NoError(t, err, "%s: missing workflow skill", cfg.ID)
+
+		s := string(content)
+		fm := extractAdapterFrontmatter(t, s, cfg.ID, "workflow")
+		assert.Equal(t, "slipway", fm["name"], "%s: wrong workflow public name", cfg.ID)
+		assert.Equal(t, "workflow", fm["skill_id"], "%s: wrong workflow skill_id", cfg.ID)
+		assert.NotEmpty(t, fm["description"], "%s: missing workflow description", cfg.ID)
+		assert.Equal(t, cfg.ID, fm["tool"], "%s: wrong workflow tool metadata", cfg.ID)
+		assert.Contains(t, s, "Use `slipway` as the single exported entry skill for Slipway.", "%s: missing canonical entry skill name", cfg.ID)
+		assert.Contains(t, s, "Slipway is a governance CLI for AI-assisted software delivery.", "%s: missing framework intro", cfg.ID)
+		assert.Contains(t, s, "`done-ready` means", "%s: missing done-ready semantics", cfg.ID)
+		assert.Contains(t, s, "explicit `slipway done`", "%s: missing done finalization semantics", cfg.ID)
+		assert.Contains(t, s, "`slipway new --json`", "%s: missing governed entry guidance", cfg.ID)
+		assert.Contains(t, s, "`next_skill.prompt_path`", "%s: missing governed host handoff", cfg.ID)
+		assert.Contains(t, s, "`next_skill.agent_hint`", "%s: missing agent hint handoff", cfg.ID)
+		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
+		assert.Contains(t, s, filepath.ToSlash(CatalogManifestPath(cfg)), "%s: missing catalog manifest path", cfg.ID)
+		assert.Contains(t, s, "Start with the `Triage index` and one-line `Summary`", "%s: missing compact catalog triage guidance", cfg.ID)
+
+		refPath := filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md")
+		refContent, err := os.ReadFile(refPath)
+		require.NoError(t, err, "%s: missing workflow command reference", cfg.ID)
+		ref := string(refContent)
+		assert.Contains(t, ref, "## Lifecycle Core", "%s: missing lifecycle section", cfg.ID)
+		assert.Contains(t, ref, "## Supporting Commands", "%s: missing supporting section", cfg.ID)
+		assert.Contains(t, ref, "## Diagnostics", "%s: missing diagnostics section", cfg.ID)
+		assert.Contains(t, ref, "### `slipway new`", "%s: missing new command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway run`", "%s: missing run command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway repair`", "%s: missing repair command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
+		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
+		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
+
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md.tmpl"))
+		assert.True(t, os.IsNotExist(err), "%s: raw workflow template leaked into generated tree", cfg.ID)
+
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway-new", "SKILL.md"))
+		assert.True(t, os.IsNotExist(err), "%s: unexpected per-command standalone skill generated", cfg.ID)
+	}
+
+	_, err := os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
+	assert.True(t, os.IsNotExist(err), "codex should not emit a workflow global prompt")
 }
 
 func TestRenderCatalogSkillUsesFixedTypedTemplateOrder(t *testing.T) {
@@ -476,6 +537,13 @@ func TestExtractAndStripAdapterFieldsRejectsPublicNameDrift(t *testing.T) {
 	_, _, err := extractAndStripAdapterFields(src, "demo")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "slipway-demo")
+}
+
+func TestAdapterSkillNameUsesBareEntryNameOnlyForWorkflow(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "slipway", adapterSkillName("workflow"))
+	assert.Equal(t, "slipway-demo", adapterSkillName("demo"))
 }
 
 func TestExtractAndStripAdapterFieldsRejectsMissingDescription(t *testing.T) {
@@ -1084,6 +1152,8 @@ func TestCodexGlobalPrompts(t *testing.T) {
 		_, err := os.Stat(path)
 		assert.NoError(t, err, "missing codex prompt for %s", id)
 	}
+	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
+	assert.True(t, os.IsNotExist(err), "workflow entry skill must not be emitted as a codex global prompt")
 
 	// Verify refresh protection.
 	require.NoError(t, os.WriteFile(promptPath, []byte("custom"), 0o644))
@@ -1206,7 +1276,7 @@ func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testi
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
 	for _, name := range standaloneNames {
-		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
+		path := filepath.Join(root, ".claude", "skills", adapterSkillName(name), "SKILL.md")
 		content, err := os.ReadFile(path)
 		require.NoError(t, err, "failed to read %s", name)
 		parts := splitFrontmatter(string(content))
@@ -1560,8 +1630,8 @@ func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
 }
 
 // TestRenderedSkillProseUsesCanonicalPublicNames verifies that exported-skill
-// prose references stay on the adapter-visible `slipway-<id>` form once the
-// generated tree has been canonicalized. Runtime-owned identifiers such as
+// prose references stay on the canonical adapter-visible public-name form once
+// the generated tree has been canonicalized. Runtime-owned identifiers such as
 // `skill_id`, bindings, and verification filenames are covered elsewhere.
 func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 	root := generatedSkillsRoot(t)

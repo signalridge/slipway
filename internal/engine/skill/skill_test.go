@@ -107,6 +107,9 @@ func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {
 	assert.Equal(t, model.StateS1Plan, research.State)
 	assert.Equal(t, model.PlanSubStepResearch, research.PlanSubStep)
 	assert.True(t, research.DiscoveryOnly)
+
+	_, ok := defByName["workflow"]
+	assert.False(t, ok, "standalone workflow export must not enter governance registry")
 }
 
 func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) {

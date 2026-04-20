@@ -109,5 +109,7 @@ slipway-variant-analysis/scripts/find-variant.sh	script_sh	exec
 slipway-wave-orchestration/SKILL.md	skill_md	non-exec
 slipway-wave-orchestration/references/executor-dispatch-reference.md	reference	non-exec
 slipway-worktree-preflight/SKILL.md	skill_md	non-exec
+slipway/SKILL.md	skill_md	non-exec
+slipway/references/command-reference.md	reference	non-exec
 using-slipway-catalog.md	manifest_md	non-exec
-# inventory_sha256:e357cc7f0264205ecf7f98e2791a9306e4929cae56a32fda29a96345e45dc4f0
+# inventory_sha256:6b973e3c67c6c6bd8c5086b5719dada3444bef8d326ed041ab4211fa8f5df217
