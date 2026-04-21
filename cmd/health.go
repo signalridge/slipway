@@ -489,7 +489,7 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 				Slug:       def.Name,
 				Message:    fmt.Sprintf("Governance skill %q points to unknown agent %q", def.Name, agentName),
 				Repairable: false,
-				RepairHint: "Edit `.slipway.yaml` so each governance skill points to a generated Slipway agent.",
+				RepairHint: "Edit `.slipway.yaml` so each governance skill points to a governance-mapped Slipway agent.",
 				Reasons:    []model.ReasonCode{model.NewReasonCode("agent_mapping_unknown_agent", fmt.Sprintf("%s=%s", def.Name, agentName))},
 			})
 			continue
@@ -501,7 +501,7 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 				Slug:       def.Name,
 				Message:    fmt.Sprintf("Governance skill %q points to missing agent template %q", def.Name, agentName),
 				Repairable: false,
-				RepairHint: "Restore the missing agent template in `internal/tmpl/templates/agents/` and regenerate tool adapters.",
+				RepairHint: "Restore the missing agent template in `internal/tmpl/templates/agents/`; governance mappings depend on the embedded agent model.",
 				Reasons:    []model.ReasonCode{model.NewReasonCode("agent_template_missing", fmt.Sprintf("%s=%s", def.Name, agentName))},
 			})
 			continue
@@ -522,9 +522,6 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 		if !ok {
 			continue
 		}
-		if strings.TrimSpace(cfg.AgentStyle) == "" || strings.TrimSpace(cfg.AgentsDir) == "" {
-			continue
-		}
 		activeTools = append(activeTools, cfg)
 	}
 	if len(activeTools) == 0 {
@@ -533,16 +530,7 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 
 	for _, activeTool := range activeTools {
 		for _, def := range registry {
-			agentName := strings.TrimSpace(def.AgentHint)
-			if agentName == "" {
-				continue
-			}
-
-			agentPath := toolgen.AgentPath(activeTool, agentName)
-			if strings.TrimSpace(agentPath) == "" {
-				continue
-			}
-			fullPath := filepath.Join(workspaceRoot, agentPath)
+			fullPath := filepath.Join(workspaceRoot, toolgen.SkillPath(activeTool, def.Name))
 			if _, err := os.Stat(fullPath); err == nil {
 				continue
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -550,11 +538,11 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 					Severity:   model.ReasonSeverityError,
 					Category:   "agent_contract",
 					Slug:       def.Name,
-					Message:    fmt.Sprintf("Governance skill %q points to unreadable generated agent file for %s", def.Name, activeTool.ID),
+					Message:    fmt.Sprintf("Governance skill %q points to unreadable host skill surface for %s", def.Name, activeTool.ID),
 					Repairable: false,
 					RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace, then retry.", activeTool.ID),
 					Reasons: []model.ReasonCode{
-						model.NewReasonCode("agent_generated_surface_unreadable", state.DisplayPath(workspaceRoot, fullPath)),
+						model.NewReasonCode("skill_prompt_surface_unreadable", state.DisplayPath(workspaceRoot, fullPath)),
 					},
 				})
 				continue
@@ -564,11 +552,11 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 				Severity:   model.ReasonSeverityError,
 				Category:   "agent_contract",
 				Slug:       def.Name,
-				Message:    fmt.Sprintf("Governance skill %q points to missing generated agent file for %s", def.Name, activeTool.ID),
+				Message:    fmt.Sprintf("Governance skill %q points to missing host skill surface for %s", def.Name, activeTool.ID),
 				Repairable: false,
 				RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace.", activeTool.ID),
 				Reasons: []model.ReasonCode{
-					model.NewReasonCode("agent_generated_surface_missing", state.DisplayPath(workspaceRoot, fullPath)),
+					model.NewReasonCode("skill_prompt_surface_missing", state.DisplayPath(workspaceRoot, fullPath)),
 				},
 			})
 		}

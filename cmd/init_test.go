@@ -56,21 +56,21 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-goal-verification", "SKILL.md"))
 		require.NoError(t, err)
 
-		// Agent definitions in tool dirs
-		_, err = os.Stat(filepath.Join(root, ".claude", "agents", "slipway-analyst.md"))
-		require.NoError(t, err)
-		_, err = os.Stat(filepath.Join(root, ".claude", "agents", "slipway-orchestrator.md"))
-		require.NoError(t, err)
-
-		// Cursor should NOT have agents (AgentStyle is "")
+		// Exported agent files should not be generated for any adapter.
+		_, err = os.Stat(filepath.Join(root, ".claude", "agents"))
+		assert.True(t, os.IsNotExist(err), "claude should not have exported agents")
 		_, err = os.Stat(filepath.Join(root, ".cursor", "agents"))
 		assert.True(t, os.IsNotExist(err), "cursor should not have agents")
+		_, err = os.Stat(filepath.Join(root, ".gemini", "agents"))
+		assert.True(t, os.IsNotExist(err), "gemini should not have exported agents")
+		_, err = os.Stat(filepath.Join(root, ".opencode", "agents"))
+		assert.True(t, os.IsNotExist(err), "opencode should not have exported agents")
+		_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
+		assert.True(t, os.IsNotExist(err), "codex should not have exported agents")
 
-		// Codex agents should be TOML
-		_, err = os.Stat(filepath.Join(root, ".codex", "agents", "slipway-executor.toml"))
-		require.NoError(t, err)
+		// Codex should not create the legacy managed agent config block on fresh init.
 		_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-		require.NoError(t, err)
+		assert.True(t, os.IsNotExist(err), "codex should not create legacy agent config on fresh init")
 
 		// Gemini commands should be TOML
 		_, err = os.Stat(filepath.Join(root, ".gemini", "commands", "slipway", "new.toml"))

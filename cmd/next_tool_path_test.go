@@ -37,7 +37,7 @@ func TestNextUsesCodexPathsWhenWorkspaceIsCodexOnly(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, ".codex/skills/slipway-plan-audit/SKILL.md", view.NextSkill.PromptPath)
-		assert.Equal(t, ".codex/agents/slipway-auditor.toml", view.NextSkill.AgentDefinitionPath)
+		assert.Equal(t, "codex", view.NextSkill.ResolvedToolID)
 	})
 }
 
@@ -82,7 +82,7 @@ func TestNextUsesCurrentLinkedWorktreeAdaptersForSkillPaths(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, ".codex/skills/slipway-plan-audit/SKILL.md", view.NextSkill.PromptPath)
-		assert.Equal(t, ".codex/agents/slipway-auditor.toml", view.NextSkill.AgentDefinitionPath)
+		assert.Equal(t, "codex", view.NextSkill.ResolvedToolID)
 	})
 }
 

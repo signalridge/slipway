@@ -28,7 +28,7 @@ product command matrix.
 ## Product Identity
 
 Slipway is a governance-first workflow runtime with explicit execution
-surfaces and config-driven agent coordination.
+surfaces, host-skill prompt handoff, and explicit tool resolution.
 
 ## Authority Legend
 

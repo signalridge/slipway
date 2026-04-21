@@ -21,6 +21,7 @@ Check `blockers` for guidance (e.g., "run `slipway done`").
 ### 2. Read Skill Prompt
 Read the file at `next_skill.prompt_path` (SKILL.md).
 This contains the full execution instructions for the current governance skill.
+Treat `next_skill.resolved_tool_id` as the authoritative active tool/runtime boundary.
 
 ### 3. Execute Skill
 Follow the SKILL.md instructions:
@@ -48,30 +49,32 @@ If `next` returns a new `next_skill`, go to step 2.
 If the change reaches DONE-ready state, suggest `slipway done`.
 If you need continuous execution until `run` surfaces the next skill, blocker, checkpoint, or done-ready outcome, switch to `slipway run`.
 
-## Agent Dispatch
-If `next_skill.agent_hint` is present, dispatch the recommended agent for the skill.
-Otherwise, execute the skill directly in the current context.
+## Dispatch Contract
+- `next_skill.prompt_path` is the only required prompt handoff.
+- `next_skill.resolved_tool_id` is the authoritative active tool id.
+- Do not look for retired agent fields or a second exported agent prompt file.
+- If a follow-up Slipway CLI call is needed in a multi-adapter workspace, pass `SLIPWAY_TOOL=<resolved_tool_id>`.
 {{if eq .ToolID "claude"}}
 ### Tool-Specific Dispatch (Claude Code)
-- **Spawn subagent**: Use the `Task` tool with the agent hint as `description` and task context as `prompt`.
+- **Spawn subagent**: Use the `Task` tool or host-native subagent mechanism with `prompt_path` plus task context.
 - **Pass file paths only**: Include `prompt_path`, `evidence_dir`, task plan paths. Never inline file content.
 - **One task per Task() call**: Each task executor gets its own `Task` invocation.
 - **Fresh context on retry**: Spawn a new `Task` call. Never reuse a prior Task's context.
 {{else if eq .ToolID "codex"}}
 ### Tool-Specific Dispatch (Codex)
-- **Spawn subagent**: Use `codex -q --task "<prompt>"` to dispatch a headless task executor.
+- **Spawn subagent**: Use `codex -q --task "<prompt>"` with `prompt_path` plus file-path references only.
 - **Pass file paths only**: Reference files by path in the task prompt.
 - **One task per invocation**: Each task gets its own `codex --task` call.
 - **Fresh context on retry**: New `codex --task` call. Previous context is automatically isolated.
 {{else if eq .ToolID "cursor"}}
 ### Tool-Specific Dispatch (Cursor)
-- **Spawn subagent**: Use Cursor Composer agent mode to dispatch the recommended agent.
+- **Spawn subagent**: Use Cursor Composer agent mode with `prompt_path` plus file-path references only.
 - **Pass file paths only**: Reference files by path.
 - **One task per agent session**: Each task gets its own Composer agent session.
 - **Fresh context on retry**: New Composer session. Do not continue in the same thread.
 {{else}}
 ### Tool-Specific Dispatch ({{.ToolID}})
-- **Spawn subagent**: Use the tool's agent/task dispatch mechanism.
+- **Spawn subagent**: Use the tool's native agent/task dispatch mechanism with `prompt_path`.
 - **Pass file paths only**: Reference files by path. Never inline content.
 - **One task per subagent**: Each task gets its own isolated context.
 - **Fresh context on retry**: New subagent. Never reuse prior context.

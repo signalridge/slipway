@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCLIEndToEndNextJSONReflectsConfiguredAgentOverride(t *testing.T) {
+func TestCLIEndToEndNextJSONHidesConfiguredAgentOverride(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
@@ -32,8 +32,10 @@ func TestCLIEndToEndNextJSONReflectsConfiguredAgentOverride(t *testing.T) {
 		nextSkill, ok := nextPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in next output")
 		assert.Equal(t, "research-orchestration", nextSkill["name"])
-		assert.Equal(t, "slipway-planner", nextSkill["agent_hint"])
-		assert.Contains(t, nextSkill["agent_definition_path"], "slipway-planner")
+		assert.Equal(t, ".claude/skills/slipway-research-orchestration/SKILL.md", nextSkill["prompt_path"])
+		assert.Equal(t, "claude", nextSkill["resolved_tool_id"])
+		assert.NotContains(t, nextSkill, "agent_hint")
+		assert.NotContains(t, nextSkill, "agent_definition_path")
 	})
 }
 
@@ -55,7 +57,7 @@ func TestCLIEndToEndNextJSONRejectsManualOnlyConfiguredAgentOverride(t *testing.
 	})
 }
 
-func TestCLIEndToEndNextJSONUsesCanonicalScopeConfigFromBoundWorktree(t *testing.T) {
+func TestCLIEndToEndNextJSONUsesCanonicalScopeConfigFromBoundWorktreeWithoutLeakingInternalAgent(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
@@ -102,7 +104,9 @@ func TestCLIEndToEndNextJSONUsesCanonicalScopeConfigFromBoundWorktree(t *testing
 		nextSkill, ok := nextPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in next output")
 		assert.Equal(t, "research-orchestration", nextSkill["name"])
-		assert.Equal(t, "slipway-planner", nextSkill["agent_hint"])
-		assert.Contains(t, nextSkill["agent_definition_path"], "slipway-planner")
+		assert.Equal(t, ".claude/skills/slipway-research-orchestration/SKILL.md", nextSkill["prompt_path"])
+		assert.Equal(t, "claude", nextSkill["resolved_tool_id"])
+		assert.NotContains(t, nextSkill, "agent_hint")
+		assert.NotContains(t, nextSkill, "agent_definition_path")
 	})
 }

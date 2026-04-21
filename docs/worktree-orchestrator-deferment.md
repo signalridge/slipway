@@ -11,7 +11,8 @@ deferred.
 Slipway does not currently promote worktrees, lanes, or orchestrator-managed
 parallel execution to first-class product surfaces. The supported product
 surface stops at the stabilized command model, wave-backed execution state,
-recovery diagnostics, and config-driven agent hints from Workstreams 1-5.
+recovery diagnostics, and the internal governance agent model from Workstreams
+1-5.
 
 This closes the Phase 6 exit criterion by making the boundary explicit:
 parallel execution is not a supported product feature on the current release

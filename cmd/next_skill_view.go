@@ -14,20 +14,20 @@ import (
 	"github.com/signalridge/slipway/internal/toolgen"
 )
 
-func resolveWorkspaceSkillPaths(root, skillName, agentHint string) (promptPath, agentDefinitionPath, resolvedToolID string, err error) {
+func resolveWorkspaceSkillPaths(root, skillName string) (promptPath, resolvedToolID string, err error) {
 	wsRoot := root
 	if len(toolgen.DetectExistingTools(wsRoot)) == 0 {
 		wsRoot = invocationWorkspaceRoot(root)
 	}
 	cfg, err := toolgen.ResolveWorkspaceTool(wsRoot)
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	promptPath = toolgen.SkillPath(cfg, skillName)
-	if strings.TrimSpace(agentHint) != "" {
-		agentDefinitionPath = toolgen.AgentPath(cfg, agentHint)
+	if strings.TrimSpace(cfg.ID) == "" {
+		return "", "", fmt.Errorf("resolved tool id is empty for skill %q", skillName)
 	}
-	return promptPath, agentDefinitionPath, cfg.ID, nil
+	return promptPath, cfg.ID, nil
 }
 
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
@@ -129,20 +129,17 @@ func assembleSkillView(
 	}
 
 	verificationDir := state.DisplayPath(root, filepath.Dir(state.VerificationFilePath(root, ref.Slug, nextSkillName)))
-	agentHint := skill.AgentHintForSkillInRegistry(registry, nextSkillName)
-	promptPath, agentDefPath, resolvedToolID, err := resolveWorkspaceSkillPaths(root, nextSkillName, agentHint)
+	promptPath, resolvedToolID, err := resolveWorkspaceSkillPaths(root, nextSkillName)
 	if err != nil {
 		return err
 	}
 
 	ns := &nextSkillView{
-		Name:                nextSkillName,
-		PromptPath:          promptPath,
-		VerificationDir:     verificationDir,
-		State:               nextState,
-		AgentHint:           agentHint,
-		AgentDefinitionPath: agentDefPath,
-		ResolvedToolID:      resolvedToolID,
+		Name:            nextSkillName,
+		PromptPath:      promptPath,
+		VerificationDir: verificationDir,
+		State:           nextState,
+		ResolvedToolID:  resolvedToolID,
 	}
 
 	if governedChange != nil {

@@ -70,8 +70,9 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 
 After `slipway next --json`:
 - read `next_skill.prompt_path`
-- use `next_skill.agent_hint` when dispatch guidance is present
-- use `next_skill.agent_definition_path` when an adapter-visible agent definition is present
+- treat `next_skill.resolved_tool_id` as the active tool/runtime boundary
+- do not look for retired agent fields or a second exported prompt file
+- if a follow-up Slipway CLI call is needed in a multi-adapter workspace, pass `SLIPWAY_TOOL=<resolved_tool_id>`
 - do not guess the next governed host without the CLI response
 
 ## Detailed Contract Delegation

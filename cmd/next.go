@@ -90,16 +90,14 @@ type contextBudgetBreakdown struct {
 }
 
 type nextSkillView struct {
-	Name                string             `json:"name"`
-	PromptPath          string             `json:"prompt_path"`
-	VerificationDir     string             `json:"verification_dir"`
-	State               string             `json:"state"`
-	AgentHint           string             `json:"agent_hint,omitempty"`
-	AgentDefinitionPath string             `json:"agent_definition_path,omitempty"`
-	ResolvedToolID      string             `json:"resolved_tool_id,omitempty"`
-	SkillConstraints    *skillConstraints  `json:"skill_constraints,omitempty"`
-	ReviewContext       *reviewContextView `json:"review_context,omitempty"`
-	TechniqueHints      []techniqueHint    `json:"technique_hints,omitempty"`
+	Name             string             `json:"name"`
+	PromptPath       string             `json:"prompt_path"`
+	VerificationDir  string             `json:"verification_dir"`
+	State            string             `json:"state"`
+	ResolvedToolID   string             `json:"resolved_tool_id"`
+	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
+	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
+	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
 }
 
 // skillConstraints carries per-skill metadata from the Go registry

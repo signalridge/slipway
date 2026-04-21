@@ -9,7 +9,8 @@ formalization work.
   `tmpl.AgentNames()`
 - Default governance skill mappings: `internal/engine/skill/skill.go`
 - Override surface: scope-root `.slipway.yaml` under `agents.mappings`
-- Runtime hint emitters: `next --json` via the loaded governance registry
+- Public runtime handoff: `next --json` exposes `next_skill.prompt_path` and
+  `next_skill.resolved_tool_id`, not agent identity
 - Validation surface: `slipway health` and `slipway health --doctor`
 
 The scope-root config is authoritative. Workspace-local `.slipway.yaml` files
@@ -29,10 +30,11 @@ agents:
 Rules:
 
 - Keys must be known governance skills.
-- Values must be generated agent names from the embedded template set.
+- Values must be governance agent names from the embedded template set.
 - Invalid mappings are surfaced by `health` as `agent_contract` findings.
-- `next --json` uses the loaded mapping, so `agent_hint` and
-  `agent_definition_path` reflect overrides directly.
+- `next --json` does not expose internal agent identity directly; overrides
+  affect the internal governance model and health validation, not a public
+  exported agent path.
 
 ## Default Governance Skill Mappings
 
@@ -71,8 +73,9 @@ Reconciliation note:
 
 ## Manual-Only Helpers
 
-Manual-only means the agent exists in the generated set but is not selected by
-the governance skill registry as a direct `next --json` hint.
+Manual-only means the agent remains part of the embedded governance model but
+is not selected by the governance skill registry as a direct public runtime
+handoff.
 
 - `slipway-analyst`: worktree bootstrap and baseline verification helper
 - `slipway-debugger`: failure investigation helper
@@ -83,9 +86,11 @@ the governance skill registry as a direct `next --json` hint.
 ## Validation And Generation
 
 - `slipway health` validates that mapped agent names exist in the embedded
-  template set.
+  template set and that exported host skill surfaces exist for active tools.
 - `slipway health --doctor` includes agent-contract problems in the same
   prioritized repair/recovery view as runtime-state issues.
 - `slipway init --tools ...` resolves the canonical scope root first, loads the
   authoritative config there, and mirrors the effective `.slipway.yaml` into
   the active workspace when needed.
+- `slipway init --tools ...` no longer exports adapter-visible agent files;
+  host skill prompts remain the only exported prompt surface.

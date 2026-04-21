@@ -6,7 +6,7 @@ This directory separates stable product contracts from historical planning notes
 
 - `command-contract-matrix.md`: authoritative command inventory, command tiers, and source-of-truth surfaces
 - `execution-surface-boundary.md`: boundary between `next`, `run`, `abort`, and `cancel`
-- `agent-contracts.md`: governance skill to agent mapping and override rules
+- `agent-contracts.md`: internal governance agent mapping and override rules
 
 ## Decisions
 
@@ -20,3 +20,4 @@ This directory separates stable product contracts from historical planning notes
 ## Historical Plans
 
 - `plans/`: time-scoped implementation plans retained as historical context rather than current runtime contract
+- `plans/skill-primary-migration.md`: migrate Claude Code from agent-primary to skill-primary dispatch architecture

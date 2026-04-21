@@ -1416,12 +1416,11 @@ func withWorkspace(t *testing.T, root string, fn func()) {
 	fn()
 }
 
-// initTestWorkspace wraps bootstrap.InitWorkspace and seeds a default claude
-// tool adapter so that ResolveWorkspaceTool succeeds in tests.
+// initTestWorkspace wraps bootstrap.InitWorkspace and generates a default
+// claude adapter so runtime contract tests see real host prompt surfaces.
 func initTestWorkspace(t *testing.T, root string) {
 	t.Helper()
-	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-	seedTestToolAdapter(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 }
 
 // seedTestToolAdapter writes a minimal claude adapter sentinel so that

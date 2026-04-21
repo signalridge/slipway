@@ -165,7 +165,9 @@ func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 		nextSkill, ok := runPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in run output")
 		assert.Equal(t, "research-orchestration", nextSkill["name"])
-		assert.Equal(t, "slipway-researcher", nextSkill["agent_hint"])
+		assert.Equal(t, "claude", nextSkill["resolved_tool_id"])
+		assert.NotContains(t, nextSkill, "agent_hint")
+		assert.NotContains(t, nextSkill, "agent_definition_path")
 	})
 }
 

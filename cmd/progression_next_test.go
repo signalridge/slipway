@@ -394,7 +394,7 @@ func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	assert.Contains(t, buf.String(), "Planning Note: This is a recovery-only planning state entered after post-audit machine validation failed.")
 }
 
-func TestNextIncludesAgentHint(t *testing.T) {
+func TestNextIncludesResolvedToolID(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -419,7 +419,7 @@ func TestNextIncludesAgentHint(t *testing.T) {
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, "plan-audit", view.NextSkill.Name)
-		assert.Equal(t, "slipway-auditor", view.NextSkill.AgentHint)
+		assert.Equal(t, "claude", view.NextSkill.ResolvedToolID)
 	})
 }
 
@@ -1109,7 +1109,7 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 			require.NotNil(t, hookLiteView.NextSkill)
 			assert.Equal(t, previewView.NextSkill.Name, hookLiteView.NextSkill.Name)
 			assert.Equal(t, previewView.NextSkill.State, hookLiteView.NextSkill.State)
-			assert.Equal(t, previewView.NextSkill.AgentHint, hookLiteView.NextSkill.AgentHint)
+			assert.Equal(t, previewView.NextSkill.ResolvedToolID, hookLiteView.NextSkill.ResolvedToolID)
 		}
 		assert.Nil(t, hookLiteView.ContextBudget, "hook-lite should strip heavyweight context budget output")
 		assert.Nil(t, hookLiteView.Constraints, "hook-lite should strip heavyweight constraint output")

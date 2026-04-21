@@ -707,19 +707,6 @@ func CatalogManifestPath(cfg ToolConfig) string {
 	return filepath.Join(cfg.SkillsDir, catalogManifestFileName)
 }
 
-// AgentPath returns the relative path to an agent definition for the given tool config.
-// Returns empty string for tools with no agent support (AgentStyle == "").
-func AgentPath(cfg ToolConfig, agentName string) string {
-	if cfg.AgentStyle == "" {
-		return ""
-	}
-	ext := ".md"
-	if cfg.AgentStyle == "toml" {
-		ext = ".toml"
-	}
-	return filepath.Join(cfg.AgentsDir, agentName+ext)
-}
-
 func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 
@@ -884,27 +871,6 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		}
 	}
 
-	// Agent definitions — skip when AgentStyle is empty (Cursor).
-	switch cfg.AgentStyle {
-	case "md":
-		for _, name := range tmpl.AgentNames() {
-			content, err := tmpl.Content(path.Join("agents", name+".md"))
-			if err != nil {
-				return fmt.Errorf("load agent %q: %w", name, err)
-			}
-			p := filepath.Join(root, AgentPath(cfg, name))
-			if err := writeDeterministic(p, content, refresh); err != nil {
-				return err
-			}
-		}
-	case "toml":
-		if err := generateCodexAgents(root, cfg, refresh); err != nil {
-			return err
-		}
-	default:
-		// AgentStyle == "": skip agent generation entirely (Cursor).
-	}
-
 	// Global prompts (Codex: ~/.codex/prompts/) — writes outside project root.
 	if cfg.PromptsStyle == "global" {
 		if err := generateCodexPrompts(cfg, refresh); err != nil {
@@ -989,6 +955,11 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
 	if err := cleanupStaleAgentFiles(root, cfg); err != nil {
 		return err
 	}
+	if cfg.ID == "codex" {
+		if err := cleanupManagedCodexAgentBlock(root); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1061,19 +1032,10 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
 }
 
 func cleanupStaleAgentFiles(root string, cfg ToolConfig) error {
-	if cfg.AgentStyle == "" || cfg.AgentsDir == "" {
+	if cfg.AgentsDir == "" {
 		return nil
 	}
-
-	ext := ".md"
-	if cfg.AgentStyle == "toml" {
-		ext = ".toml"
-	}
-	expected := map[string]struct{}{}
-	for _, name := range tmpl.AgentNames() {
-		expected[name+ext] = struct{}{}
-	}
-	return cleanupPrefixedEntries(filepath.Join(root, cfg.AgentsDir), "slipway-", expected)
+	return cleanupPrefixedEntries(filepath.Join(root, cfg.AgentsDir), "slipway-", nil)
 }
 
 func cleanupStaleGlobalPrompts(cfg ToolConfig) error {
@@ -1126,8 +1088,10 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) er
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		if _, ok := expected[name]; ok {
-			continue
+		if expected != nil {
+			if _, ok := expected[name]; ok {
+				continue
+			}
 		}
 		if err := os.RemoveAll(filepath.Join(dir, name)); err != nil {
 			return err
@@ -1769,196 +1733,45 @@ func missingWorkspaceAdapterError(root string) error {
 	}
 }
 
-// codexAgentSandboxMode returns the sandbox_mode for a Codex agent TOML file.
-func codexAgentSandboxMode(name string) string {
-	switch name {
-	case "slipway-reviewer", "slipway-auditor", "slipway-verifier":
-		return "read-only"
-	default:
-		return "workspace-write"
-	}
-}
-
-// parseAgentFrontmatter extracts description from agent .md template frontmatter.
-// Supports two closing forms:
-//   - "\n---\n" (standard: closing delimiter followed by body content)
-//   - "\n---" at EOF (frontmatter-only file with no trailing newline)
-//
-// The "\n---\n" form is checked first via strings.Index, so a file ending with
-// "\n---\n" (trailing newline after delimiter) is handled by the standard path,
-// not the EOF branch.
-func parseAgentFrontmatter(content string) (description string, status string, body string) {
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	if !strings.HasPrefix(content, "---\n") {
-		return "", "", content
-	}
-	rest := content[4:]
-	end := strings.Index(rest, "\n---\n")
-	if end < 0 {
-		// Closing --- at EOF with no trailing newline — frontmatter-only file.
-		if strings.HasSuffix(rest, "\n---") {
-			end = len(rest) - 4 // position before "\n---"
-			fm := rest[:end]
-			return extractDescription(fm), extractAgentStatus(fm), ""
-		}
-		return "", "", content
-	}
-	fm := rest[:end]
-	body = rest[end+5:] // skip past closing "\n---\n"
-
-	return extractDescription(fm), extractAgentStatus(fm), body
-}
-
-func extractDescription(fm string) string {
-	return extractFrontmatterValue(fm, "description")
-}
-
-func extractAgentStatus(fm string) string {
-	return extractFrontmatterValue(fm, "agent_status")
-}
-
-func extractFrontmatterValue(fm, key string) string {
-	for _, line := range strings.Split(fm, "\n") {
-		prefix := key + ":"
-		if strings.HasPrefix(line, prefix) {
-			desc := strings.TrimPrefix(line, prefix)
-			desc = strings.TrimSpace(desc)
-			desc = strings.Trim(desc, `"`)
-			return desc
-		}
-	}
-	return ""
-}
-
-func agentStatusLabel(status string) string {
-	switch strings.TrimSpace(status) {
-	case "manual_only":
-		return "manual-only helper"
-	case "governance_mapped":
-		return "governance-mapped"
-	default:
-		return ""
-	}
-}
-
-func codexAgentDescription(description, status string) string {
-	label := agentStatusLabel(status)
-	if label == "" {
-		return description
-	}
-	if strings.TrimSpace(description) == "" {
-		return label
-	}
-	return fmt.Sprintf("%s (%s)", description, label)
-}
-
-// generateCodexAgents generates .codex/agents/<name>.toml files and registers
-// them in .codex/config.toml.
-func generateCodexAgents(root string, cfg ToolConfig, refresh bool) error {
-	agentsDir := filepath.Join(root, cfg.AgentsDir)
-
-	var entries []codexAgentEntry
-
-	for _, name := range tmpl.AgentNames() {
-		content, err := tmpl.Content(path.Join("agents", name+".md"))
-		if err != nil {
-			return fmt.Errorf("load agent %q: %w", name, err)
-		}
-
-		description, status, body := parseAgentFrontmatter(content)
-		sandbox := codexAgentSandboxMode(name)
-
-		body = strings.TrimSpace(body)
-		if label := agentStatusLabel(status); label != "" {
-			body = strings.TrimSpace("Agent status: " + label + ".\n\n" + body)
-		}
-		// TOML multi-line basic strings: escape backslashes and break any
-		// triple-quote sequences that would prematurely close the string.
-		body = strings.ReplaceAll(body, `\`, `\\`)
-		body = strings.ReplaceAll(body, `"""`, `""\"`)
-
-		tomlContent := fmt.Sprintf("sandbox_mode = %q\ndeveloper_instructions = \"\"\"\n%s\n\"\"\"\n", sandbox, body)
-
-		path := filepath.Join(agentsDir, name+".toml")
-		if err := writeDeterministic(path, tomlContent, refresh); err != nil {
-			return err
-		}
-
-		entries = append(entries, codexAgentEntry{Name: name, Description: codexAgentDescription(description, status)})
-	}
-
-	return mergeCodexConfigTOML(root, entries, refresh)
-}
-
 const (
 	codexMarkerBegin = "# BEGIN slipway agents"
 	codexMarkerEnd   = "# END slipway agents"
 )
 
-type codexAgentEntry struct {
-	Name        string
-	Description string
-}
-
-// mergeCodexConfigTOML writes/updates [agents.slipway-*] sections in .codex/config.toml
-// using marker comments for idempotency.
-func mergeCodexConfigTOML(root string, entries []codexAgentEntry, refresh bool) error {
+func cleanupManagedCodexAgentBlock(root string) error {
 	configPath := filepath.Join(root, ".codex", "config.toml")
-
-	// Build the managed section.
-	var managed strings.Builder
-	managed.WriteString(codexMarkerBegin + "\n")
-	for _, e := range entries {
-		_, _ = fmt.Fprintf(&managed, "\n[agents.%s]\n", e.Name)
-		_, _ = fmt.Fprintf(&managed, "description = %q\n", e.Description)
-		_, _ = fmt.Fprintf(&managed, "config_file = %q\n", "agents/"+e.Name+".toml")
-	}
-	managed.WriteString("\n" + codexMarkerEnd + "\n")
-
 	existing, err := os.ReadFile(configPath)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
 		}
-		// File doesn't exist — create with managed section (even without refresh).
-		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(configPath, []byte(managed.String()), 0o644)
+		return err
 	}
 
 	content := string(existing)
 	beginIdx := strings.Index(content, codexMarkerBegin)
 	endIdx := strings.Index(content, codexMarkerEnd)
 
-	if beginIdx >= 0 && endIdx >= 0 {
-		if !refresh {
-			// Managed section already exists and refresh not requested — skip.
-			return nil
-		}
-		// Replace existing managed section.
-		endIdx += len(codexMarkerEnd)
-		// Include trailing newline if present.
-		if endIdx < len(content) && content[endIdx] == '\n' {
-			endIdx++
-		}
-		newContent := content[:beginIdx] + managed.String() + content[endIdx:]
-		return os.WriteFile(configPath, []byte(newContent), 0o644)
+	if beginIdx < 0 && endIdx < 0 {
+		return nil
 	}
-
-	// Partial marker — one present without the other. Warn and bail out to
-	// avoid corrupting the file with a duplicate marker block.
-	if beginIdx >= 0 || endIdx >= 0 {
+	if beginIdx < 0 || endIdx < 0 {
 		return fmt.Errorf("config.toml has incomplete slipway markers (BEGIN=%v, END=%v); fix or remove the markers manually", beginIdx >= 0, endIdx >= 0)
 	}
 
-	// No markers found — append managed section (even without refresh,
-	// since this is first-time registration into an existing file).
-	if !strings.HasSuffix(content, "\n") {
-		content += "\n"
+	endIdx += len(codexMarkerEnd)
+	if endIdx < len(content) && content[endIdx] == '\n' {
+		endIdx++
 	}
-	content += "\n" + managed.String()
-	return os.WriteFile(configPath, []byte(content), 0o644)
+	newContent := content[:beginIdx] + content[endIdx:]
+	newContent = strings.TrimLeft(newContent, "\n")
+	if strings.TrimSpace(newContent) == "" {
+		return os.WriteFile(configPath, []byte(""), 0o644)
+	}
+	if !strings.HasSuffix(newContent, "\n") {
+		newContent += "\n"
+	}
+	return os.WriteFile(configPath, []byte(newContent), 0o644)
 }
 
 // codexPromptsDir resolves the Codex global prompts directory.

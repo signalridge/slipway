@@ -107,8 +107,10 @@ func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
 	loaded, err = model.LoadConfig(state.ConfigPath(root))
 	require.NoError(t, err)
 	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
-	_, err = os.Stat(filepath.Join(root, ".codex", "agents", "slipway-executor.toml"))
+	_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-wave-orchestration", "SKILL.md"))
 	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
+	assert.True(t, os.IsNotExist(err), "codex should not recreate exported agents during refresh")
 }
 
 func TestInitWorkspaceCreatesScopedRuntimeMarkerForNestedScope(t *testing.T) {

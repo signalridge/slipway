@@ -571,11 +571,11 @@ func TestHealthCommandRejectsManualOnlyAgentMapping(t *testing.T) {
 	})
 }
 
-func TestHealthCommandReportsMissingGeneratedAgentSurface(t *testing.T) {
+func TestHealthCommandReportsMissingHostSkillSurface(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
-		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "agents", "slipway-planner.md")))
+		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "skills", "slipway-intake-clarification", "SKILL.md")))
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
@@ -592,14 +592,14 @@ func TestHealthCommandReportsMissingGeneratedAgentSurface(t *testing.T) {
 				continue
 			}
 			for _, reason := range finding.Reasons {
-				if reason.Code == "agent_generated_surface_missing" {
+				if reason.Code == "skill_prompt_surface_missing" {
 					found = true
-					assert.Contains(t, finding.Message, "missing generated agent file")
+					assert.Contains(t, finding.Message, "missing host skill surface")
 					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
 				}
 			}
 		}
-		assert.True(t, found, "expected missing generated agent surface finding")
+		assert.True(t, found, "expected missing host skill surface finding")
 	})
 }
 
@@ -628,11 +628,41 @@ func TestHealthCommandDoesNotReportToolResolutionFailureForMultiAdapterWorkspace
 	})
 }
 
-func TestHealthCommandReportsMissingGeneratedAgentSurfaceForMultiAdapterWorkspace(t *testing.T) {
+func TestHealthCommandIgnoresMissingLegacyAgentSurface(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+
+		legacyAgentPath := filepath.Join(root, ".claude", "agents", "slipway-planner.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacyAgentPath), 0o755))
+		require.NoError(t, os.WriteFile(legacyAgentPath, []byte("legacy agent"), 0o644))
+		require.NoError(t, os.Remove(legacyAgentPath))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		for _, finding := range view.Findings {
+			assert.NotContains(t, finding.Message, ".claude/agents/slipway-planner.md")
+			for _, reason := range finding.Reasons {
+				assert.NotEqual(t, "agent_generated_surface_missing", reason.Code)
+				assert.NotEqual(t, "agent_generated_surface_unreadable", reason.Code)
+				assert.NotEqual(t, ".claude/agents/slipway-planner.md", reason.Message)
+			}
+		}
+	})
+}
+
+func TestHealthCommandReportsMissingHostSkillSurfaceForMultiAdapterWorkspace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
-		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "agents", "slipway-planner.md")))
+		require.NoError(t, os.Remove(filepath.Join(root, ".claude", "skills", "slipway-intake-clarification", "SKILL.md")))
 
 		var out bytes.Buffer
 		cmd := makeHealthCmd()
@@ -649,14 +679,14 @@ func TestHealthCommandReportsMissingGeneratedAgentSurfaceForMultiAdapterWorkspac
 				continue
 			}
 			for _, reason := range finding.Reasons {
-				if reason.Code == "agent_generated_surface_missing" {
+				if reason.Code == "skill_prompt_surface_missing" {
 					found = true
-					assert.Contains(t, finding.Message, "missing generated agent file for claude")
+					assert.Contains(t, finding.Message, "missing host skill surface for claude")
 					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
 				}
 			}
 		}
-		assert.True(t, found, "expected missing generated agent surface finding in multi-adapter workspace")
+		assert.True(t, found, "expected missing host skill surface finding in multi-adapter workspace")
 	})
 }
 

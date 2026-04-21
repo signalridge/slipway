@@ -398,7 +398,8 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, s, "explicit `slipway done`", "%s: missing done finalization semantics", cfg.ID)
 		assert.Contains(t, s, "`slipway new --json`", "%s: missing governed entry guidance", cfg.ID)
 		assert.Contains(t, s, "`next_skill.prompt_path`", "%s: missing governed host handoff", cfg.ID)
-		assert.Contains(t, s, "`next_skill.agent_hint`", "%s: missing agent hint handoff", cfg.ID)
+		assert.Contains(t, s, "`next_skill.resolved_tool_id`", "%s: missing tool resolution handoff", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(CatalogManifestPath(cfg)), "%s: missing catalog manifest path", cfg.ID)
 		assert.Contains(t, s, "Start with the `Triage index` and one-line `Summary`", "%s: missing compact catalog triage guidance", cfg.ID)
@@ -798,43 +799,15 @@ func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	assert.NoError(t, err, "catalog manifest should remain at the top level of the skills dir")
 }
 
-func TestCodexAgentTOMLGeneration(t *testing.T) {
+func TestCodexGenerationOmitsLegacyAgentSurfaces(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
-	// Check TOML agent files exist.
-	for _, name := range []string{"slipway-executor", "slipway-reviewer", "slipway-verifier"} {
-		path := filepath.Join(root, ".codex", "agents", name+".toml")
-		content, err := os.ReadFile(path)
-		require.NoError(t, err, "missing codex agent %s", name)
-
-		s := string(content)
-		assert.Contains(t, s, "sandbox_mode = ", "%s: missing sandbox_mode", name)
-		assert.Contains(t, s, "developer_instructions = ", "%s: missing developer_instructions", name)
-	}
-
-	// Verify sandbox_mode per agent role.
-	executorContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-executor.toml"))
-	assert.Contains(t, string(executorContent), `sandbox_mode = "workspace-write"`)
-	assert.Contains(t, string(executorContent), "Agent status: manual-only helper.")
-
-	reviewerContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-reviewer.toml"))
-	assert.Contains(t, string(reviewerContent), `sandbox_mode = "read-only"`)
-	assert.Contains(t, string(reviewerContent), "Agent status: governance-mapped.")
-
-	verifierContent, _ := os.ReadFile(filepath.Join(root, ".codex", "agents", "slipway-verifier.toml"))
-	assert.Contains(t, string(verifierContent), `sandbox_mode = "read-only"`)
-
-	// Check config.toml registration.
-	configContent, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
-	require.NoError(t, err)
-	cs := string(configContent)
-	assert.Contains(t, cs, "[agents.slipway-executor]")
-	assert.Contains(t, cs, `config_file = "agents/slipway-executor.toml"`)
-	assert.Contains(t, cs, "manual-only helper")
-	assert.Contains(t, cs, "# BEGIN slipway agents")
-	assert.Contains(t, cs, "# END slipway agents")
+	_, err := os.Stat(filepath.Join(root, ".codex", "agents"))
+	assert.True(t, os.IsNotExist(err), "codex should not generate exported agents")
+	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "codex should not create the legacy managed agent config on fresh init")
 }
 
 func TestGeminiTOMLCommandFormat(t *testing.T) {
@@ -1036,32 +1009,29 @@ func TestGeneratedWaveOrchestrationSkillUsesDescriptionPlaceholder(t *testing.T)
 	assert.NotContains(t, string(content), "{request_description}")
 }
 
-func TestIdempotentConfigTOMLMerge(t *testing.T) {
+func TestCodexRefreshDoesNotCreateManagedConfigTOML(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
-	// First generation.
 	require.NoError(t, Generate(root, []string{"codex"}, true))
-	first, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
-	require.NoError(t, err)
+	_, err := os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "fresh generation should not create config.toml")
 
-	// Second generation (refresh).
 	require.NoError(t, Generate(root, []string{"codex"}, true))
-	second, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
-	require.NoError(t, err)
-
-	assert.Equal(t, string(first), string(second), "config.toml should be byte-identical after re-generation")
+	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "refresh should not recreate the legacy managed agent config")
 }
 
-func TestConfigTOMLPreservesUserContent(t *testing.T) {
+func TestConfigTOMLRefreshRemovesManagedBlockAndPreservesUserContent(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
-	// Create a config.toml with user content.
 	codexDir := filepath.Join(root, ".codex")
 	require.NoError(t, os.MkdirAll(codexDir, 0o755))
 	userContent := "[model]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-20250514\"\n\n"
-	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(userContent), 0o644))
+	managedBlock := "# BEGIN slipway agents\n[agents.slipway-executor]\nconfig_file = \"agents/slipway-executor.toml\"\n# END slipway agents\n"
+	fileContent := userContent + managedBlock + "\n[profiles.safe]\napproval_policy = \"never\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(fileContent), 0o644))
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
@@ -1069,11 +1039,10 @@ func TestConfigTOMLPreservesUserContent(t *testing.T) {
 	require.NoError(t, err)
 
 	s := string(result)
-	// User content should be preserved.
 	assert.Contains(t, s, `provider = "anthropic"`)
-	// Managed section should be added.
-	assert.Contains(t, s, "# BEGIN slipway agents")
-	assert.Contains(t, s, "[agents.slipway-executor]")
+	assert.Contains(t, s, `[profiles.safe]`)
+	assert.NotContains(t, s, "# BEGIN slipway agents")
+	assert.NotContains(t, s, "[agents.slipway-executor]")
 }
 
 func TestConfigTOMLPartialMarkersError(t *testing.T) {
@@ -1303,31 +1272,22 @@ func TestDoneSkillDocumentsAllReadyAcrossActiveExecutions(t *testing.T) {
 	assert.Contains(t, string(content), "`--all-ready` archives every active change that is currently done-ready.")
 }
 
-func TestGeneratedAgentsHaveNoRoutingFrontmatter(t *testing.T) {
+func TestRefreshRemovesLegacyAgentFilesButPreservesUserManagedEntries(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
-	entries, err := os.ReadDir(filepath.Join(root, ".claude", "agents"))
-	require.NoError(t, err)
+	agentsDir := filepath.Join(root, ".claude", "agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "slipway-legacy.md"), []byte("legacy"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "user-agent.md"), []byte("keep"), 0o644))
 
-	for _, e := range entries {
-		if e.IsDir() || !isAgentFile(e.Name()) {
-			continue
-		}
-		path := filepath.Join(root, ".claude", "agents", e.Name())
-		content, err := os.ReadFile(path)
-		require.NoError(t, err)
-		parts := splitFrontmatter(string(content))
-		if len(parts) < 3 {
-			continue
-		}
-		fm := parts[1]
-		assert.NotContains(t, fm, "state:", "%s frontmatter has state field", e.Name())
-		assert.NotContains(t, fm, "type:", "%s frontmatter has type field", e.Name())
-		assert.Contains(t, fm, "name:", "%s missing name", e.Name())
-		assert.Contains(t, fm, "description:", "%s missing description", e.Name())
-	}
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	_, err := os.Stat(filepath.Join(agentsDir, "slipway-legacy.md"))
+	assert.True(t, os.IsNotExist(err), "refresh should remove legacy slipway-managed agent files")
+	_, err = os.Stat(filepath.Join(agentsDir, "user-agent.md"))
+	assert.NoError(t, err, "refresh must preserve unrelated user-managed agent files")
 }
 
 func splitFrontmatter(content string) []string {

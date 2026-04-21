@@ -97,5 +97,5 @@ All routed commands support `--json` for structured output:
 - `slipway run --json` — advance to next step (the only state-mutating execution surface)
 - `slipway status --json` — check current state
 
-JSON output from `next` includes `next_skill.agent_hint` with advisory context
-for downstream AI decision-making.
+JSON output from `next` includes `next_skill.prompt_path` as the only prompt
+handoff and `next_skill.resolved_tool_id` as the authoritative active tool id.
