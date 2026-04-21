@@ -13,19 +13,9 @@ trigger_signals:
 evidence_contract: artifact
 hydrate_references:
   - name: codeql-ruleset-catalog.md
-    reason: "Pick a CodeQL query pack by threat model and language"
-  - name: codeql-language-details.md
-    reason: "Language-specific CodeQL build and analysis caveats"
-  - name: codeql-threat-models.md
-    reason: "Threat-model selection for CodeQL run scoping"
-  - name: codeql-performance-tuning.md
-    reason: "Scan-time / memory knobs for large repos"
-  - name: codeql-build-fixes.md
-    reason: "Common build failures that block the CodeQL database"
-  - name: semgrep-rulesets.md
-    reason: "Semgrep ruleset selection and risk coverage"
+    reason: "Pick a CodeQL query pack, threat model, language caveat, and build-fix path"
   - name: semgrep-scan-modes.md
-    reason: "Full / diff / supply-chain scan-mode selection"
+    reason: "Full / diff / supply-chain scan-mode and ruleset-family selection"
   - name: sarif-merge.md
     reason: "Deterministic multi-tool SARIF merge contract"
   - name: sarif-jq-queries.md
@@ -58,12 +48,12 @@ with a written rationale.
 - **Select** the SAST tool appropriate for the language(s) in scope. Default:
   CodeQL for compiled languages, Semgrep for scripting languages.
 - **Pin** the tool and ruleset version; record both in the run manifest.
-- **Scope** the scan to the diff plus its blast radius when possible.
+- **Scope** the scan to the diff plus its blast radius when possible. Threat-model choice, language/build caveats, and large-repo tuning belong in the retained CodeQL catalog reference.
 - **Run** the scan; persist the SARIF file alongside the run artifact.
 - **Triage** each SARIF result: confirmed, false-positive-with-reason,
   deferred-with-ticket. No result may be dropped silently.
 - **Augment** Semgrep with custom rules only when a built-in ruleset does not
-  cover the risk; cite the rule rationale.
+  cover the risk; cite the rule rationale and the scan mode that justified it.
 
 ## Report schema
 ```yaml

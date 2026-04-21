@@ -58,16 +58,13 @@ func incidentResponse() Skill {
 		PrimaryAttachment: AttachmentReportSchema,
 		Summary:           "Use when a production incident is suspected or active. Triggers on status or health commands or user text naming an incident.",
 		// Public status/health exposure is owned by surfaces.go, not catalog bindings.
-		Evidence: EvidenceArtifact, Bindings: []Binding{
+		Evidence: EvidenceArtifact,
+		Bindings: []Binding{
 			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "incident-response-framework.md", Reason: "Core roles, phase gates, decision authority"},
 			{Name: "incident-severity-matrix.md", Reason: "SEV1-4 triage criteria and escalation thresholds"},
-			{Name: "communication-templates.md", Reason: "Status-page and stakeholder message templates"},
-			{Name: "sla-management-guide.md", Reason: "SLA clock rules, breach thresholds, credit calculation"},
-			{Name: "rca-frameworks-guide.md", Reason: "Postmortem frameworks and action-item authoring"},
-			{Name: "regulatory-deadlines.md", Reason: "GDPR/HIPAA/PCI notification windows and wording"},
 		},
 	}
 }

@@ -15,15 +15,11 @@ trigger_signals:
 evidence_contract: artifact
 hydrate_references:
   - name: root-cause-tracing.md
-    reason: "Trace error origins back to first divergence before proposing fixes"
+    reason: "Trace error origins, named failure patterns, and debugging anti-patterns before proposing fixes"
   - name: condition-based-waiting.md
     reason: "Replace sleep/retry guards with condition-based waits in flaky tests"
-  - name: defense-in-depth.md
-    reason: "Layer validation so a single bypass does not surface as user-visible failure"
   - name: hypothesis-testing.md
-    reason: "Structure competing hypotheses and their falsification experiments"
-  - name: failure-patterns.md
-    reason: "Named failure signatures and diagnostic patterns"
+    reason: "Structure competing hypotheses, defense layers, and their falsification experiments"
 bindings:
   - type: host-embedded
     target: wave-orchestration
@@ -80,4 +76,7 @@ parallel rather than guessing.
 | "Let me refactor first, then debug" | Debug the code as-is, then refactor after the cause is proven. |
 
 ## Reference Shelf
-For deeper failure-mode guidance, read `references/debugging-failure-patterns.md`.
+For deeper failure-mode guidance, read:
+- `references/root-cause-tracing.md`
+- `references/hypothesis-testing.md`
+- `references/condition-based-waiting.md`

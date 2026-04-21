@@ -17,14 +17,6 @@ hydrate_references:
     reason: "Core roles, phase gates, decision authority"
   - name: incident-severity-matrix.md
     reason: "SEV1-4 triage criteria and escalation thresholds"
-  - name: communication-templates.md
-    reason: "Status-page and stakeholder message templates"
-  - name: sla-management-guide.md
-    reason: "SLA clock rules, breach thresholds, credit calculation"
-  - name: rca-frameworks-guide.md
-    reason: "Postmortem frameworks and action-item authoring"
-  - name: regulatory-deadlines.md
-    reason: "GDPR/HIPAA/PCI notification windows and wording"
 bindings:
   - type: export-only
     target: using-slipway-catalog

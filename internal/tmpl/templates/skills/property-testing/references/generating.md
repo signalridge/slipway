@@ -111,3 +111,12 @@ A generator is good enough when:
    from a thorough example suite.
 
 If any of these fail, the generator is still masking bugs.
+
+## Library Selection
+
+- Prefer the project-native property library when one already exists in the
+  stack; ergonomics and replay support matter more than theoretical breadth.
+- Prefer libraries with replayable seeds and shrink traces that can be checked
+  into version control.
+- If a library cannot express the generator you need without heavy filtering,
+  it is usually the wrong library for that property.

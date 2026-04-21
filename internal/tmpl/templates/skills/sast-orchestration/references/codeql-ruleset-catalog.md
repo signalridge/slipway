@@ -63,3 +63,16 @@ codeql resolve qlpacks
 # Check specific packs
 codeql resolve qlpacks | grep -E "(trailofbits|GitHubSecurityLab)"
 ```
+
+## Language, Threat, and Build Notes
+
+- Treat language selection and build recipe as part of ruleset choice.
+  Compiled-language failures usually happen while building the database, not
+  while running queries.
+- Prefer the smallest suite that still matches the threat under review.
+  Broader suites are for scheduled or high-risk passes, not every diff.
+- On large repos, narrow scope before reaching for memory/time knobs. If you
+  do tune execution, record the knob with the selected pack.
+- When a build fails, capture the exact failing step and fix that first. A
+  partial database is worse than no result because it looks authoritative while
+  silently missing code.

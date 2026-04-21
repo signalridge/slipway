@@ -45,6 +45,10 @@ If `input_context.codebase_map_dir` contains durable mapping documents, read at 
 
 Use them to verify task targets, blast radius assumptions, and test scaffolding needs. If the map is absent, continue, but call out the missing brownfield context as an advisory gap.
 
+If the approved scope is still ambiguous after reading the bundle, stop and
+return to intake clarification instead of inventing task boundaries during
+audit.
+
 ### 2. Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
 - Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`
@@ -88,6 +92,14 @@ Apply the shared requirements checklist from `checklist-quality.md` while auditi
 - requirement-to-intent traceability
 - edge cases and failure modes
 - decision alternatives, trade-offs, and concrete risks
+
+### 2d. Task-Shaping Contract
+Audit the authored tasks as execution units, not as a prose outline:
+- split by bounded outcome, not by file name alone
+- require each task to name its evidence shape (`verdict` / `artifact` / `checklist`)
+- keep rollout in reviewable batches; do not admit half-states that break the kernel between batches
+- for guardrail-domain work, require the task to name a RED test plan before execution begins
+- require non-goals to stay explicit, including at least one scope boundary and one rollout boundary
 
 ### 3. Write Verification
 ```yaml

@@ -108,3 +108,11 @@ semgrep [--pro if available] --metrics=off [SEVERITY_FLAGS] --config [RULESET] -
 Where `[SEVERITY_FLAGS]` is:
 - **Run all**: *(empty)*
 - **Important only**: `--severity MEDIUM --severity HIGH --severity CRITICAL`
+
+## Ruleset Family Mapping
+
+- `run all` mode: use the broad project baseline and expect a real triage pass.
+- `important only` mode: keep the ruleset family security-focused and record
+  any post-filter that changes result volume.
+- `supply-chain` or dependency-oriented runs should be reported as dependency
+  coverage, not as a substitute for source-code scanning.

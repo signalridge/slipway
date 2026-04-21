@@ -13,9 +13,8 @@ IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION
 
 ## Purpose
 Execute implementation tasks in dependency-ordered waves with conflict
-detection. This is the governed execution host skill; overlays such as
-`slipway-tdd-proof` can attach procedure detail without changing the routed execution
-surface.
+detection. This is the governed execution host skill and owns the parallel
+dispatch contract directly.
 Mitigates: uncontrolled parallel execution drift.
 
 ## Technique Overlay: `slipway-coding-discipline`
@@ -23,7 +22,7 @@ Use `slipway-coding-discipline` as the execution posture for this host:
 - think before coding: state assumptions and blockers before dispatching work
 - simplicity first: prefer the smallest task slice that satisfies the acceptance criteria
 - surgical changes: avoid drive-by refactors while a wave is in flight
-- goal-driven execution: keep posture here, and use `slipway-tdd-proof` / `slipway-root-cause-tracing` for detailed procedure
+- goal-driven execution: keep posture here, and use the host-owned TDD + dispatch contract plus `slipway-root-cause-tracing` for detailed procedure
 
 ## Workflow Outline
 1. Read the governed task bundle, resume/checkpoint state, and durable mapping
@@ -150,8 +149,10 @@ orchestrator is a dispatcher, not an implementer.
 - Required task inputs: task ID, acceptance criteria, changed-file scope,
   technique references, and any locked decisions.
 - Required task outputs: `changed_files`, `test_summary`, and `evidence_ref`.
+- Partitions must be disjoint, or the brief must name an explicit merge strategy.
+- Dispatch the whole wave in one batch; do not silently degrade parallel work into interleaved orchestration.
 - For `task_kind=code`, enforce TDD before implementation and run a
-  post-execution self-check before accepting the result.
+  post-execution self-check before accepting the result. That means: record RED first, make the minimum GREEN fix, then rerun after REFACTOR.
 - Detailed budget tiers and tool-specific dispatch examples live in
   `references/executor-dispatch-reference.md`.
 

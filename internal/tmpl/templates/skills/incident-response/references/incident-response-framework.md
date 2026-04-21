@@ -96,7 +96,6 @@ transcript before debugging — the postmortem will need it.
 ## Cross-references
 
 - Severity taxonomy: `incident-severity-matrix.md`.
-- Status templates and customer scripts: `communication-templates.md`.
-- SLA clocks and breach handling: `sla-management-guide.md`.
-- Postmortem methodology: `rca-frameworks-guide.md`.
-- Regulatory reporting deadlines: `regulatory-deadlines.md`.
+- This framework intentionally keeps only command roles, phase gates, and
+  cadence-critical contracts. Heavier comms / compliance playbooks stay out of
+  the default Slipway hydrate shelf.

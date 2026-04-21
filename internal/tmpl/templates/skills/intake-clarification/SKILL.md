@@ -12,9 +12,8 @@ IRON LAW: NO PLANNING WITHOUT CLEAR INTENT
 
 ## Purpose
 Clarify user intent, define scope boundaries, and produce an approved summary
-before planning begins. This is the governed intake host skill;
-`scope-clarification` attaches the posture/checklist overlay that sharpens the
-questions and boundary checks.
+before planning begins. This host owns the full posture and checklist for
+turning an underspecified request into bounded scope.
 Mitigates: scope ambiguity, intent drift, over-scoping.
 
 ## When This Runs
@@ -26,7 +25,7 @@ All governed changes at S0_INTAKE/clarify or S0_INTAKE/research. `slipway next` 
 Run `slipway next --json` to get the current change state and intent.md content.
 Read the intent.md artifact in the governed bundle.
 
-Carry the attached `scope-clarification` posture while reading:
+Carry this scope posture while reading:
 - surface the unspoken assumption before the next question
 - prefer one well-targeted question over scattered batches
 - do not move to planning until the approved summary names both what is in and what is out
@@ -51,6 +50,13 @@ For each clarification round:
 - `## Out of Scope` — at least one explicit exclusion
 - `## Acceptance Signals` — at least one verifiable completion criterion
 - `## Open Questions` — only unresolved technical unknowns that truly require research
+
+**Scope boundary checklist before planning:**
+- `## In Scope` names concrete files, commands, APIs, or user-visible surfaces
+- `## Out of Scope` names at least one exclusion the user can point back to later
+- `## Acceptance Signals` is phrased as a check, not a hope
+- `## Approved Summary` is reviewed with the user before advancement
+- unresolved technical unknowns stay under `## Open Questions`; do not hide them in prose
 
 **Abbreviation signals** — if the user says any of:
 - "just testing", "trivial change", "quick fix", "that's it", "good enough"

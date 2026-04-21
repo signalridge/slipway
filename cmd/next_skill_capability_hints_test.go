@@ -10,12 +10,10 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 )
 
-func TestAppendCatalogHintsAttachesOnIntakeHost(t *testing.T) {
+func TestAppendCatalogHintsIntakeHostDoesNotLeakRetiredScopeSkill(t *testing.T) {
 	t.Parallel()
 	hints := appendCatalogHints(nil, "intake-clarification", nil, &nextView{})
-	require.NotEmpty(t, hints)
-	assert.Equal(t, "skill:scope-clarification", hints[0].Name)
-	assert.Contains(t, hints[0].Reason, "posture")
+	assert.Empty(t, hints)
 }
 
 func TestAppendCatalogHintsAttachesOnReviewHost(t *testing.T) {
@@ -36,7 +34,7 @@ func TestAppendCatalogHintsPreservesExisting(t *testing.T) {
 	t.Parallel()
 	existing := []techniqueHint{{Name: "slipway codebase-map", Reason: "seed"}}
 	hints := appendCatalogHints(existing, "intake-clarification", nil, &nextView{})
-	require.GreaterOrEqual(t, len(hints), 2)
+	require.Len(t, hints, 1)
 	assert.Equal(t, "slipway codebase-map", hints[0].Name)
 }
 
@@ -67,8 +65,6 @@ func TestAppendCatalogHintsAttachesHydrateReferencesOnWaveHost(t *testing.T) {
 	require.NotNil(t, rootCauseHint, "expected root-cause-tracing support hint on wave-orchestration host")
 	assert.Equal(t, []string{
 		"root-cause-tracing/condition-based-waiting.md",
-		"root-cause-tracing/defense-in-depth.md",
-		"root-cause-tracing/failure-patterns.md",
 		"root-cause-tracing/hypothesis-testing.md",
 		"root-cause-tracing/root-cause-tracing.md",
 	}, rootCauseHint.HydrateReferences)

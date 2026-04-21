@@ -18,18 +18,8 @@ hydrate_references:
     reason: "comment-triggered workflow command injection"
   - name: expression-injection.md
     reason: "github.event.* interpolation injection into run blocks"
-  - name: ai-prompt-injection-via-ci.md
-    reason: "agentic action prompt-injection via CI-provided input"
-  - name: credential-escalation.md
-    reason: "GITHUB_TOKEN and secret scope escalation paths"
   - name: permissions-and-secrets.md
     reason: "least-privilege permissions and secret scoping rules"
-  - name: runner-infrastructure.md
-    reason: "self-hosted runner isolation and ephemerality gates"
-  - name: supply-chain.md
-    reason: "action pinning, reusable-workflow, and dependency surface"
-  - name: real-world-attacks.md
-    reason: "awesome-go / trivy exploit case studies and detection signals"
 bindings:
   - type: command-auto
     target: review

@@ -29,16 +29,14 @@ func TestResolveSelectsCommandPrimaryRoute_Status(t *testing.T) {
 	assert.Nil(t, res.Route)
 }
 
-func TestResolveAttachesIntakeSupportOnIntakeHost(t *testing.T) {
+func TestResolveIntakeHostDoesNotExposeRetiredScopeSkill(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 
 	res := Resolve(reg, Signals{Host: "intake-clarification"})
 	assert.Nil(t, res.Route)
-	require.NotEmpty(t, res.Supports)
-	assert.Equal(t, "scope-clarification", res.Supports[0].SkillID)
-	assert.Equal(t, AttachmentPosture, res.Supports[0].Kind)
-	assert.NotEmpty(t, res.Supports[0].Reason)
+	assert.Empty(t, res.Supports)
+	assert.Empty(t, res.HydrateReferences)
 }
 
 func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
@@ -46,7 +44,7 @@ func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 	reg := DefaultRegistry()
 	res := Resolve(reg, Signals{Host: "goal-verification"})
 
-	require.Len(t, res.Supports, 3)
+	require.Len(t, res.Supports, 2)
 	assert.Equal(t, []Attachment{
 		{
 			SkillID: "coverage-analysis",
@@ -57,11 +55,6 @@ func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 			SkillID: "fresh-verification-evidence",
 			Kind:    AttachmentChecklist,
 			Reason:  "Use when a change is approaching a verify/closeout gate. Triggers on goal-verification, final-closeout, or any completion-adjacent step.",
-		},
-		{
-			SkillID: "performance-profiling",
-			Kind:    AttachmentChecklist,
-			Reason:  "Use when a change is suspected to affect performance. Triggers on validate command, goal-verification host, or perf-related user text.",
 		},
 	}, res.Supports)
 }
@@ -174,9 +167,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			name: "intake-clarification",
 			sig:  Signals{Host: "intake-clarification"},
 			want: resolutionSnapshot{
-				supports: []supportSnapshot{
-					{skillID: "scope-clarification", kind: AttachmentPosture},
-				},
+				supports: []supportSnapshot{},
 			},
 		},
 		{
@@ -203,17 +194,12 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			sig:  Signals{Host: "wave-orchestration"},
 			want: resolutionSnapshot{
 				supports: []supportSnapshot{
-					{skillID: "parallel-executor-contract", kind: AttachmentProcedure},
 					{skillID: "root-cause-tracing", kind: AttachmentProcedure},
-					{skillID: "tdd-proof", kind: AttachmentProcedure},
 				},
 				hydrate: []string{
 					"root-cause-tracing/condition-based-waiting.md",
-					"root-cause-tracing/defense-in-depth.md",
-					"root-cause-tracing/failure-patterns.md",
 					"root-cause-tracing/hypothesis-testing.md",
 					"root-cause-tracing/root-cause-tracing.md",
-					"tdd-proof/testing-anti-patterns.md",
 				},
 			},
 		},
@@ -243,32 +229,35 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 	}
 }
 
-// TestResolvePlanAuthoringHydrateSurfacesOnPlanAuditHost locks the Wave-3 PR-3
-// host-embedded hydrate contract for plan-authoring: when `plan-audit` is the
-// active host, the skill's declared reference surfaces through the
-// support-path hydrate union.
-func TestResolvePlanAuthoringHydrateSurfacesOnPlanAuditHost(t *testing.T) {
+// TestResolvePlanAuditDoesNotSurfaceRetiredPlanAuthoringHydrate ensures the
+// absorbed authoring skill no longer leaks through the plan-audit host path.
+func TestResolvePlanAuditDoesNotSurfaceRetiredPlanAuthoringHydrate(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 	res := Resolve(reg, Signals{Host: "plan-audit"})
-	assert.Contains(t, res.HydrateReferences, "plan-authoring/plan-document-review-prompt.md",
-		"plan-authoring hydrate must surface when plan-audit host is active")
+	for _, key := range res.HydrateReferences {
+		assert.NotContains(t, key, "plan-authoring/",
+			"retired plan-authoring hydrate must not surface on plan-audit")
+	}
 }
 
-// TestResolveTddProofHydrateSurfacesOnGovernanceHosts locks the Wave-3 PR-3
-// host-embedded hydrate contract for tdd-proof on both of its host bindings
-// (`tdd-governance` and `wave-orchestration`).
-func TestResolveTddProofHydrateSurfacesOnGovernanceHosts(t *testing.T) {
+// TestResolveRetiredTddProofHydrateDoesNotLeak ensures host absorption removed
+// the old tdd-proof hydrate keys from both governance paths.
+func TestResolveRetiredTddProofHydrateDoesNotLeak(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 
 	resGovernance := Resolve(reg, Signals{Host: "tdd-governance"})
-	assert.Contains(t, resGovernance.HydrateReferences, "tdd-proof/testing-anti-patterns.md",
-		"tdd-proof hydrate must surface on tdd-governance host")
+	for _, key := range resGovernance.HydrateReferences {
+		assert.NotContains(t, key, "tdd-proof/",
+			"retired tdd-proof hydrate must not surface on tdd-governance")
+	}
 
 	resWave := Resolve(reg, Signals{Host: "wave-orchestration"})
-	assert.Contains(t, resWave.HydrateReferences, "tdd-proof/testing-anti-patterns.md",
-		"tdd-proof hydrate must surface on wave-orchestration host")
+	for _, key := range resWave.HydrateReferences {
+		assert.NotContains(t, key, "tdd-proof/",
+			"retired tdd-proof hydrate must not surface on wave-orchestration")
+	}
 }
 
 // TestResolveCiTriageNeverSurfacesHydrate enforces the Wave-3 PR-3 negative

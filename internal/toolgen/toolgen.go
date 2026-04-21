@@ -338,7 +338,6 @@ type commandEntry struct {
 // techniqueNames lists the technique skills to generate.
 var techniqueNames = []string{
 	"tdd",
-	"code-review-protocol",
 	"codebase-mapping",
 	"coding-discipline",
 }

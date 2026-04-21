@@ -13,13 +13,9 @@ trigger_signals:
 evidence_contract: artifact
 hydrate_references:
   - name: design.md
-    reason: "How to pick properties that are worth testing"
+    reason: "How to pick properties, strategy families, and review heuristics that are worth testing"
   - name: generating.md
-    reason: "Write generators that exercise the property space"
-  - name: strategies.md
-    reason: "Core property strategies (idempotence, roundtrip, oracle, invariants)"
-  - name: libraries.md
-    reason: "Choose an appropriate property-testing library"
+    reason: "Write generators, edge bias, and library choices that exercise the property space"
   - name: interpreting-failures.md
     reason: "Read shrunk counterexamples and extract real bugs"
 ---

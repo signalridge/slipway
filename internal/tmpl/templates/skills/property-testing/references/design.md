@@ -105,3 +105,11 @@ be indistinguishable from correct.
 
 A property is "done" when you can describe, in one sentence, a class of bugs it catches that examples
 would miss. If you cannot, either sharpen the property or delete it.
+
+## Review Heuristics
+
+- Reject tautologies and properties that merely restate the implementation.
+- Prefer properties that would fail if the implementation were replaced with a
+  stub or a buggy approximation.
+- If a property needs a paragraph of caveats to be true, split it into
+  narrower properties or fall back to example tests.

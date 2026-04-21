@@ -167,3 +167,12 @@ From debugging session (2025-10-03):
 - Fixed at source (getter validation)
 - Added 4 layers of defense
 - 1847 tests passed, zero pollution
+
+## Failure Signatures and Debugging Anti-Patterns
+
+- Name the failure signature before editing: "empty cwd resolves to process
+  root", "retry hides race", "shared mutable fixture leaks across tests".
+- Do not patch the symptom site first "just to get green"; that masks the
+  trace and usually creates a second bug.
+- Compare against a known-good path whenever the failing path is long or
+  stateful.

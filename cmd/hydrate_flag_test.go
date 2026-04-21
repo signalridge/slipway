@@ -283,8 +283,8 @@ func TestValidateDiagnosticsFocusStillAdvertisesHydrateReferences(t *testing.T) 
 // TestValidateFocusPropertyAdvertisesHydrateReferences locks the Wave-2 PR-3
 // hydrate contract for `validate --focus property`: the focus alias resolves
 // through surface policy to property-testing and its declared hydrate
-// references land on the view. Suggested-only skills (variant-analysis,
-// performance-profiling) must not appear on this path.
+// references land on the view. Suggested-only skills must not appear on this
+// path, and retired performance guidance must stay absent.
 func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -304,8 +304,6 @@ func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
 		for _, ref := range []string{
 			"property-testing/design.md",
 			"property-testing/generating.md",
-			"property-testing/strategies.md",
-			"property-testing/libraries.md",
 			"property-testing/interpreting-failures.md",
 		} {
 			assert.Contains(t, view.HydrateReferences, ref,

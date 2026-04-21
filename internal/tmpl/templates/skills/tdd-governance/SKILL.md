@@ -14,9 +14,9 @@ Violating the letter of this rule is violating the spirit of this rule.
 
 ## Purpose
 Enforce test-driven development discipline during wave execution for
-guardrail-domain changes. This is the guardrail execution host skill;
-`slipway-tdd-proof` attaches the RED/GREEN/REFACTOR procedure that this host verifies
-for each task.
+guardrail-domain changes. This host owns the RED/GREEN/REFACTOR/EVIDENCE
+contract directly; it no longer relies on a separate overlay skill for the
+procedure definition.
 Mitigates: guardrail-domain tasks executed without test-driven proof.
 
 ## Workflow Outline
@@ -31,8 +31,11 @@ During wave execution phase for guardrail-domain governed changes. Validates tha
 
 ### 1. Read Context
 Run `slipway next --json` and read the task plan and wave execution state.
-Treat the attached `slipway-tdd-proof` procedure as the source for what counts as valid
-RED, GREEN, REFACTOR, and EVIDENCE proof for each task.
+Treat the following as the authoritative proof contract for each task:
+- **RED**: failing test recorded before any production change
+- **GREEN**: smallest change that makes the failing test pass
+- **REFACTOR**: structure cleanup only while the target remains green
+- **EVIDENCE**: RED/GREEN/REFACTOR timestamps, commands, and run versions recorded task-by-task
 
 ### 2. TDD Compliance Checklist (MANDATORY)
 For EACH task in the current wave, verify ALL of the following:
@@ -115,7 +118,7 @@ After confirmation: `slipway next`
 ## DO NOT SKIP
 1. Test-first verification for EACH task (not a sample).
 2. Git history verification (not implementer claims).
-3. RED/GREEN/REFACTOR evidence language must match the attached `slipway-tdd-proof` procedure.
+3. RED/GREEN/REFACTOR evidence language must match the host-owned proof contract above.
 4. Coverage gate for critical paths.
 5. Test quality assessment (not just "tests exist").
 6. Verification record written after compliance check.

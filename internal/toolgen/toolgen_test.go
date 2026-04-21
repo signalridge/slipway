@@ -461,13 +461,13 @@ func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T)
 	t.Parallel()
 
 	reg := capability.DefaultRegistry()
-	skill, ok := reg.Lookup("scope-clarification")
+	skill, ok := reg.Lookup("fresh-verification-evidence")
 	require.True(t, ok)
 
 	content, err := renderCatalogSkill(skill)
 	require.NoError(t, err)
 
-	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "scope-clarification", "SKILL.md")))
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "fresh-verification-evidence", "SKILL.md")))
 	require.NoError(t, err)
 
 	// Output equals the source body with the adapter-frontmatter header
@@ -1385,13 +1385,10 @@ var hydratedSkillIDs = []string{
 	"incident-response",
 	"multi-reviewer-calibration",
 	"mutation-testing",
-	"performance-profiling",
-	"plan-authoring",
 	"property-testing",
 	"root-cause-tracing",
 	"sast-orchestration",
 	"supply-chain-audit",
-	"tdd-proof",
 	"variant-analysis",
 }
 
@@ -1972,64 +1969,6 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		assert.Errorf(t, cerr, "expected polluter detection to exit non-zero")
 		assert.Contains(t, out, "POLLUTER:", "external-test-only package should still be enumerated")
 		assert.Contains(t, out, "example.com/polluter/polluter")
-	})
-
-	t.Run("repo-performance-scan text and json", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := filepath.Join(root, "slipway-performance-profiling", "scripts", "repo-performance-scan.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		fixture := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(fixture, "package.json"),
-			[]byte(`{"dependencies":{"a":"1","b":"1"},"devDependencies":{"c":"1"}}`), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(fixture, "requirements.txt"),
-			[]byte("flask\nrequests\n# comment\n"), 0o644))
-		big := make([]byte, 10*1024)
-		require.NoError(t, os.WriteFile(filepath.Join(fixture, "bundle.js"), big, 0o644))
-
-		out, cerr := runCommand(pythonPath, script, fixture, "--large-file-threshold-kb=1")
-		require.NoErrorf(t, cerr, "repo-performance-scan text mode failed: %s", out)
-		assert.Contains(t, out, "Repo Performance Scan", "text mode must emit header")
-		assert.Contains(t, out, "bundle.js", "large-file section must list bundle.js")
-		assert.Contains(t, out, "Node: 3", "node dep count must be sum of deps+devDeps")
-		assert.Contains(t, out, "Python: 2", "python dep count must skip comments")
-
-		outJSON, cerr := runCommand(pythonPath, script, fixture,
-			"--large-file-threshold-kb=1", "--json")
-		require.NoErrorf(t, cerr, "repo-performance-scan json mode failed: %s", outJSON)
-		var parsed map[string]any
-		require.NoError(t, json.Unmarshal([]byte(outJSON), &parsed),
-			"json output must parse as an object")
-		deps, ok := parsed["dependency_counts"].(map[string]any)
-		require.True(t, ok, "dependency_counts must be present in json")
-		assert.EqualValues(t, 3, deps["node_dependencies"])
-		assert.EqualValues(t, 2, deps["python_dependencies"])
-	})
-
-	t.Run("repo-performance-scan invalid path", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := filepath.Join(root, "slipway-performance-profiling", "scripts", "repo-performance-scan.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		missing := filepath.Join(t.TempDir(), "no-such-dir")
-		out, cerr := runCommand(pythonPath, script, missing)
-		require.Errorf(t, cerr, "expected non-zero exit when path is not a directory")
-		var exitErr *exec.ExitError
-		require.ErrorAs(t, cerr, &exitErr)
-		assert.Equal(t, 2, exitErr.ExitCode(),
-			"invalid path must exit with the documented code 2")
-		assert.Contains(t, out, "path is not a directory",
-			"stderr-embedded error must cite the path contract")
 	})
 
 	t.Run("find-variant codeql python", func(t *testing.T) {

@@ -144,7 +144,15 @@ A hunt without notes is not reproducible. Keep a per-hunt tracker:
 
 ## See also
 
-For engine-specific syntax and foundational rule construction, use the
-checked-in `sast-orchestration/codeql-*.md` and
-`sast-orchestration/semgrep-*.md` references rather than duplicating
-them here.
+For engine-specific starter shapes, use `query-patterns.md`. Keep the
+anti-predicate workflow and callsite classification rules here.
+
+## Output Schema
+
+Every run should end with one row per callsite:
+- `affected`
+- `safe-with-reason`
+- `needs-followup`
+
+If a callsite is marked safe, cite the exact guard. If it needs follow-up,
+record the missing observation that prevented a verdict.

@@ -118,3 +118,10 @@ All investigators reported?
 1. New code introduced bug (Logic Error)
 2. Configuration change (Integration Failure)
 3. Database migration issue (Data Issue)
+
+## Defense-in-Depth Check
+
+When a hypothesis is confirmed, ask one more question before fixing: what
+secondary guard should have stopped the bad input, stale state, or unsafe
+transition from reaching the failure point? Record that answer so the final
+fix is not a single-point patch.

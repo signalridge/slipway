@@ -44,8 +44,8 @@ and evidence model.
 ## Goal-Driven Execution
 Keep the goal visible, then delegate detailed mechanics to the owning Slipway
 skills:
-- planning and task decomposition -> `slipway-plan-authoring`
-- guarded implementation and test-first execution -> `slipway-tdd-proof`
+- planning and task decomposition -> `slipway-plan-audit`
+- guarded implementation and test-first execution -> `slipway-tdd-governance`
 - completion and freshness proof -> `slipway-goal-verification`
 - explicit review verdict and handoff -> `slipway-independent-review`
 

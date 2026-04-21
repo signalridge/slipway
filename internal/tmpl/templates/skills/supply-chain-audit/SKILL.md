@@ -26,12 +26,8 @@ evidence_contract: verdict
 hydrate_references:
   - name: results-template.md
     reason: "Audit report schema for supply-chain findings"
-  - name: dependency-management-best-practices.md
-    reason: "Pinning, review cadence, and lockfile discipline"
   - name: vulnerability-assessment-guide.md
     reason: "CVE triage and severity assignment under time pressure"
-  - name: license-compatibility-matrix.md
-    reason: "License compatibility rules per distribution target"
 bindings:
   - type: command-auto
     target: review

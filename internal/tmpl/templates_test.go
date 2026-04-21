@@ -131,7 +131,6 @@ func TestContentReturnsTechniques(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
 		"skills/tdd/SKILL.md",
-		"skills/code-review-protocol/SKILL.md",
 		"skills/codebase-mapping/SKILL.md",
 		"skills/coding-discipline/SKILL.md",
 	}
@@ -403,7 +402,6 @@ func TestTechniqueSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
 		"skills/tdd/SKILL.md",
-		"skills/code-review-protocol/SKILL.md",
 		"skills/codebase-mapping/SKILL.md",
 		"skills/coding-discipline/SKILL.md",
 	}
@@ -581,9 +579,7 @@ func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
 
 	assert.Contains(t, content, "## Reference Shelf")
 	assert.Contains(t, content, "references/methodology.md")
-	assert.Contains(t, content, "references/codeql-variant-queries.md")
-	assert.Contains(t, content, "references/semgrep-variant-rules.md")
-	assert.Contains(t, content, "references/variant-report-template.md")
+	assert.Contains(t, content, "references/query-patterns.md")
 }
 
 func TestCodingDisciplineSkillKeepsFourPrinciplesAndProvenance(t *testing.T) {
@@ -598,8 +594,8 @@ func TestCodingDisciplineSkillKeepsFourPrinciplesAndProvenance(t *testing.T) {
 	assert.Contains(t, content, "## Simplicity First")
 	assert.Contains(t, content, "## Surgical Changes")
 	assert.Contains(t, content, "## Goal-Driven Execution")
-	assert.Contains(t, content, "`slipway-plan-authoring`")
-	assert.Contains(t, content, "`slipway-tdd-proof`")
+	assert.Contains(t, content, "`slipway-plan-audit`")
+	assert.Contains(t, content, "`slipway-tdd-governance`")
 	assert.Contains(t, content, "`slipway-goal-verification`")
 	assert.Contains(t, content, "`slipway-independent-review`")
 }
@@ -632,7 +628,8 @@ func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
 	assert.Contains(t, content, "Capture the exact symptom")
 	assert.Contains(t, content, "Compare with a working case")
 	assert.Contains(t, content, "write the failing regression test")
-	assert.Contains(t, content, "references/debugging-failure-patterns.md")
+	assert.Contains(t, content, "references/root-cause-tracing.md")
+	assert.Contains(t, content, "references/hypothesis-testing.md")
 }
 
 func TestPromptSurfaceTemplateContracts(t *testing.T) {

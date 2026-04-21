@@ -10,28 +10,14 @@ func contextAssembly() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a task needs grounded context before planning or review. Triggers on research or plan-audit hosts, unclear context, or action-scoped hydration cues.",
-		Evidence:          EvidenceArtifact,		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,
+		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "research-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "plan-audit", Attachment: AttachmentPosture},
 			{Type: BindingTechniqueHint, Target: "research-orchestration", Attachment: AttachmentProcedure},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "codebase-map.md", Reason: "Ground brownfield context before planning"},
-		},
-	}
-}
-
-func parallelExecutorContract() Skill {
-	return Skill{
-		ID:                "parallel-executor-contract",
-		Domain:            DomainExecution,
-		Function:          "bounded parallel subagent dispatch with reviewable handoff",
-		Tier:              TierT1,
-		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when dispatching subagents in parallel. Triggers on wave-orchestration host or when the plan calls for multi-agent work.",
-		Evidence:          EvidenceArtifact,		Bindings: []Binding{
-			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
-			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentChecklist},
 		},
 	}
 }
@@ -44,17 +30,16 @@ func rootCauseTracing() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
 		Summary:           "Use when a fix is being considered before the root cause is documented. Triggers on repair, wave-orchestration host, or debugging-centric user text.",
-		Evidence:          EvidenceArtifact,		Bindings: []Binding{
+		Evidence:          EvidenceArtifact,
+		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 		},
 		HydrateReferences: []HydrateReference{
-			{Name: "root-cause-tracing.md", Reason: "Trace error origins back to first divergence before proposing fixes"},
+			{Name: "root-cause-tracing.md", Reason: "Trace error origins, named failure patterns, and debugging anti-patterns before proposing fixes"},
 			{Name: "condition-based-waiting.md", Reason: "Replace sleep/retry guards with condition-based waits in flaky tests"},
-			{Name: "defense-in-depth.md", Reason: "Layer validation so a single bypass does not surface as user-visible failure"},
-			{Name: "hypothesis-testing.md", Reason: "Structure competing hypotheses and their falsification experiments"},
-			{Name: "failure-patterns.md", Reason: "Named failure signatures and diagnostic patterns"},
+			{Name: "hypothesis-testing.md", Reason: "Structure competing hypotheses, defense layers, and their falsification experiments"},
 		},
 	}
 }
@@ -67,7 +52,8 @@ func securityReview() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths.",
-		Evidence:          EvidenceVerdict,		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,
+		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
 			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
@@ -91,7 +77,8 @@ func specTrace() Skill {
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when verifying that implementation mirrors the approved plan. Triggers on spec-compliance host or validate/review commands.",
-		Evidence:          EvidenceVerdict,		Bindings: []Binding{
+		Evidence:          EvidenceVerdict,
+		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},

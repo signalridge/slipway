@@ -60,6 +60,6 @@ reduced for one full monitoring window.
 ## Cross-references
 
 - Response cadence + role contracts: `incident-response-framework.md`.
-- Templates keyed by severity: `communication-templates.md`.
-- SLA clocks and breach thresholds: `sla-management-guide.md`.
-- Regulatory windows keyed to SEV1 data incidents: `regulatory-deadlines.md`.
+- This matrix intentionally stops at severity assignment, escalation, and
+  cadence triggers; downstream communication/compliance playbooks are out of
+  the default hydrate set.

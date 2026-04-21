@@ -22,18 +22,13 @@ func TestDefaultRegistryLoadsFoundationSkills(t *testing.T) {
 		"independent-review",
 		"multi-reviewer-calibration",
 		"mutation-testing",
-		"parallel-executor-contract",
-		"performance-profiling",
-		"plan-authoring",
 		"property-testing",
 		"review-comment-triage",
 		"root-cause-tracing",
 		"sast-orchestration",
-		"scope-clarification",
 		"security-review",
 		"spec-trace",
 		"supply-chain-audit",
-		"tdd-proof",
 		"threat-modeling",
 		"variant-analysis",
 	}
@@ -43,7 +38,7 @@ func TestDefaultRegistryLoadsFoundationSkills(t *testing.T) {
 
 func TestRegistryRejectsDuplicateIDs(t *testing.T) {
 	t.Parallel()
-	sk := scopeClarification()
+	sk := contextAssembly()
 	_, err := NewRegistry(sk, sk)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate skill id")
@@ -51,7 +46,7 @@ func TestRegistryRejectsDuplicateIDs(t *testing.T) {
 
 func TestRegistryRejectsInvalidSkill(t *testing.T) {
 	t.Parallel()
-	sk := scopeClarification()
+	sk := contextAssembly()
 	sk.Tier = "T9"
 	_, err := NewRegistry(sk)
 	require.Error(t, err)
@@ -68,9 +63,9 @@ func TestDefaultSkillsAllValid(t *testing.T) {
 func TestLookupReturnsRegisteredSkill(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	sk, ok := reg.Lookup("plan-authoring")
+	sk, ok := reg.Lookup("independent-review")
 	require.True(t, ok)
-	assert.Equal(t, DomainIntake, sk.Domain)
+	assert.Equal(t, DomainReviewQuality, sk.Domain)
 	assert.Equal(t, TierT1, sk.Tier)
 }
 
@@ -87,7 +82,6 @@ func TestStatusSuggestedOnlySkillsStayOffStatusCommand(t *testing.T) {
 	reg := DefaultRegistry()
 	for _, id := range []string{
 		"supply-chain-audit",
-		"performance-profiling",
 		"ci-triage",
 		"git-recovery",
 	} {
