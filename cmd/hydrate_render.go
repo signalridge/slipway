@@ -3,12 +3,11 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/toolgen"
+	"github.com/signalridge/slipway/internal/tmpl"
 )
 
 const defaultHydrateWarnBytes = 32 * 1024
@@ -96,12 +95,11 @@ func selectHydrateKeys(available, requested []string) ([]string, error) {
 	return requested, nil
 }
 
-// hydrateReferencePath resolves a hydrate key against the generated workspace
-// tree so runtime hydrate output mirrors the files agents actually see under
-// `.codex/skills/`, `.claude/skills/`, etc. When callers pass the canonical
-// scope root, we follow the current invocation worktree if the scope root does
-// not itself carry generated adapters.
-func hydrateReferencePath(root, key string) (string, error) {
+// hydrateReferencePath resolves a hydrate key against the canonical built-in
+// skill reference set. Hydrate references are tool-agnostic, so runtime
+// rendering should not depend on adapter selection or generated workspace
+// paths.
+func hydrateReferencePath(_ string, key string) (string, error) {
 	skillID, name, ok := strings.Cut(key, "/")
 	if !ok || skillID == "" || name == "" {
 		return "", newInvalidUsageError(
@@ -119,39 +117,27 @@ func hydrateReferencePath(root, key string) (string, error) {
 			map[string]any{"key": key},
 		)
 	}
-	workspaceRoot := root
-	if len(toolgen.DetectExistingTools(workspaceRoot)) == 0 {
-		workspaceRoot = invocationWorkspaceRoot(root)
-	}
-	cfg, err := toolgen.ResolveWorkspaceTool(workspaceRoot)
-	if err != nil {
-		return "", err
-	}
-	skillDir := filepath.Dir(toolgen.SkillPath(cfg, skillID))
-	return filepath.Join(workspaceRoot, skillDir, "references", filepath.FromSlash(name)), nil
+	return path.Join("skills", skillID, "references", name), nil
 }
 
-// loadHydrateBody returns the file body for a `<skill-id>/<name>` hydrate
-// key from the generated workspace tree. Missing files surface
-// `hydrate_reference_missing` so operators see which rendered path drifted.
+// loadHydrateBody returns the file body for a `<skill-id>/<name>` hydrate key
+// from the built-in skill reference set. Missing files surface
+// `hydrate_reference_missing` so operators see which declared reference drifted.
 func loadHydrateBody(root, key string) (string, error) {
 	refPath, err := hydrateReferencePath(root, key)
 	if err != nil {
 		return "", err
 	}
-	body, err := os.ReadFile(refPath)
+	body, err := tmpl.Content(refPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", newInvalidUsageError(
-				"hydrate_reference_missing",
-				fmt.Sprintf("hydrate reference %q is declared but not present on disk at %s", key, refPath),
-				"Regenerate the workspace skill tree or remove the stale hydrate entry.",
-				map[string]any{"key": key, "path": refPath},
-			)
-		}
-		return "", err
+		return "", newInvalidUsageError(
+			"hydrate_reference_missing",
+			fmt.Sprintf("hydrate reference %q is declared but not present in Slipway's built-in reference set", key),
+			"Fix the hydrate reference declaration or remove the stale hydrate entry.",
+			map[string]any{"key": key},
+		)
 	}
-	return string(body), nil
+	return body, nil
 }
 
 // emitHydrateBlocks renders the bodies of each selected hydrate reference

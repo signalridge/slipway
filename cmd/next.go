@@ -91,10 +91,8 @@ type contextBudgetBreakdown struct {
 
 type nextSkillView struct {
 	Name             string             `json:"name"`
-	PromptPath       string             `json:"prompt_path"`
 	VerificationDir  string             `json:"verification_dir"`
 	State            string             `json:"state"`
-	ResolvedToolID   string             `json:"resolved_tool_id"`
 	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
 	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
@@ -585,7 +583,6 @@ func writeNextHuman(w io.Writer, view nextView) error {
 	if view.NextSkill != nil {
 		hydrateWriter := newFormatWriter(w)
 		writeLine("Next Skill: %s\n", view.NextSkill.Name)
-		writeLine("  Prompt: %s\n", view.NextSkill.PromptPath)
 		writeLine("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
 		writeLine("  Evidence State: %s\n", view.NextSkill.State)
 

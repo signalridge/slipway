@@ -216,23 +216,15 @@ func TestSessionStartHookSetsToolEnvForReadOnlyCommands(t *testing.T) {
 
 	logPath, binDir := installHookTestSlipwayScript(t, root, fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
-printf '%%s|%%s|%%s\n' "$PWD" "${SLIPWAY_TOOL:-}" "$*" >> "${SLIPWAY_HOOK_LOG}"
+printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 case "$*" in
   "root")
     printf '%%s\n' %q
     ;;
   "status --json")
-    if [ "${SLIPWAY_TOOL:-}" != "claude" ]; then
-      echo 'missing tool env for status' >&2
-      exit 1
-    fi
     printf '{"change":"demo"}'
     ;;
   "next --json --hook-lite")
-    if [ "${SLIPWAY_TOOL:-}" != "claude" ]; then
-      echo 'missing tool env for next' >&2
-      exit 1
-    fi
     printf '{"next_skill":{"name":"plan-audit"}}'
     ;;
 esac
@@ -254,8 +246,8 @@ esac
 	assert.Contains(t, string(out), `{"next_skill":{"name":"plan-audit"}}`)
 
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, root+"|claude|status --json")
-	assert.Contains(t, logContent, root+"|claude|next --json --hook-lite")
+	assert.Contains(t, logContent, root+"|status --json")
+	assert.Contains(t, logContent, root+"|next --json --hook-lite")
 }
 
 func TestSessionStartHookSurfacesRootFailureDiagnostic(t *testing.T) {

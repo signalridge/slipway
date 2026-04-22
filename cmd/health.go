@@ -499,9 +499,9 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 				Severity:   model.ReasonSeverityError,
 				Category:   "agent_contract",
 				Slug:       def.Name,
-				Message:    fmt.Sprintf("Governance skill %q points to missing agent template %q", def.Name, agentName),
+				Message:    fmt.Sprintf("Governance skill %q points to unavailable built-in governance agent %q", def.Name, agentName),
 				Repairable: false,
-				RepairHint: "Restore the missing agent template in `internal/tmpl/templates/agents/`; governance mappings depend on the embedded agent model.",
+				RepairHint: "Restore the missing built-in governance agent for this Slipway checkout, then rerun `slipway health`.",
 				Reasons:    []model.ReasonCode{model.NewReasonCode("agent_template_missing", fmt.Sprintf("%s=%s", def.Name, agentName))},
 			})
 			continue

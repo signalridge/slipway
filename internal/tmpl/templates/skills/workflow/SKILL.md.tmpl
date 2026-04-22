@@ -47,10 +47,9 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 - Existing CLI commands remain the only execution surface. This skill never reimplements transitions, gates, or command semantics.
 
 ## Handoff After `slipway next --json`
-- read `next_skill.prompt_path`
-- treat `next_skill.resolved_tool_id` as the active tool/runtime boundary
+- read the generated SKILL.md for `next_skill.name`
+- derive the SKILL.md path from your own tool convention using `slipway-{name}`
 - do not look for retired agent fields or a second exported prompt file
-- if a follow-up Slipway CLI call is needed in a multi-adapter workspace, pass `SLIPWAY_TOOL=<resolved_tool_id>`
 - do not guess the next governed host without the CLI response
 
 ## Delegation Surface

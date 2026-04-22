@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -11,24 +10,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	"github.com/signalridge/slipway/internal/toolgen"
 )
-
-func resolveWorkspaceSkillPaths(root, skillName string) (promptPath, resolvedToolID string, err error) {
-	wsRoot := root
-	if len(toolgen.DetectExistingTools(wsRoot)) == 0 {
-		wsRoot = invocationWorkspaceRoot(root)
-	}
-	cfg, err := toolgen.ResolveWorkspaceTool(wsRoot)
-	if err != nil {
-		return "", "", err
-	}
-	promptPath = toolgen.SkillPath(cfg, skillName)
-	if strings.TrimSpace(cfg.ID) == "" {
-		return "", "", fmt.Errorf("resolved tool id is empty for skill %q", skillName)
-	}
-	return promptPath, cfg.ID, nil
-}
 
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
 // review context, constraints, and context budget, then applies guards.
@@ -129,17 +111,11 @@ func assembleSkillView(
 	}
 
 	verificationDir := state.DisplayPath(root, filepath.Dir(state.VerificationFilePath(root, ref.Slug, nextSkillName)))
-	promptPath, resolvedToolID, err := resolveWorkspaceSkillPaths(root, nextSkillName)
-	if err != nil {
-		return err
-	}
 
 	ns := &nextSkillView{
 		Name:            nextSkillName,
-		PromptPath:      promptPath,
 		VerificationDir: verificationDir,
 		State:           nextState,
-		ResolvedToolID:  resolvedToolID,
 	}
 
 	if governedChange != nil {

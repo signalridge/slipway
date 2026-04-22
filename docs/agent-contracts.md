@@ -5,12 +5,11 @@ formalization work.
 
 ## Authority
 
-- Generated agent set: `internal/tmpl/templates/agents/*.md` and
-  `tmpl.AgentNames()`
-- Default governance skill mappings: `internal/engine/skill/skill.go`
+- Built-in governance agent set shipped with Slipway
+- Built-in default governance skill mappings shipped with Slipway
 - Override surface: scope-root `.slipway.yaml` under `agents.mappings`
-- Public runtime handoff: `next --json` exposes `next_skill.prompt_path` and
-  `next_skill.resolved_tool_id`, not agent identity
+- Public runtime handoff: `next --json` exposes `next_skill.name`, not agent
+  identity or tool-resolved prompt paths
 - Validation surface: `slipway health` and `slipway health --doctor`
 
 The scope-root config is authoritative. Workspace-local `.slipway.yaml` files
@@ -30,11 +29,13 @@ agents:
 Rules:
 
 - Keys must be known governance skills.
-- Values must be governance agent names from the embedded template set.
+- Values must be governance agent names from the built-in governance agent set.
 - Invalid mappings are surfaced by `health` as `agent_contract` findings.
 - `next --json` does not expose internal agent identity directly; overrides
   affect the internal governance model and health validation, not a public
   exported agent path.
+- Callers derive their own skill prompt path from `next_skill.name` using
+  local tool conventions such as `.claude/skills/slipway-{name}/SKILL.md`.
 
 ## Default Governance Skill Mappings
 
@@ -85,8 +86,8 @@ handoff.
 
 ## Validation And Generation
 
-- `slipway health` validates that mapped agent names exist in the embedded
-  template set and that exported host skill surfaces exist for active tools.
+- `slipway health` validates that mapped agent names exist in the built-in
+  governance agent set and that exported host skill surfaces exist for active tools.
 - `slipway health --doctor` includes agent-contract problems in the same
   prioritized repair/recovery view as runtime-state issues.
 - `slipway init --tools ...` resolves the canonical scope root first, loads the

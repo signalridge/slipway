@@ -16,7 +16,7 @@ func TestEstimateContextBudgetFallsBackWhenMarshalFails(t *testing.T) {
 
 	budget := estimateContextBudget(
 		t.TempDir(),
-		&nextSkillView{Name: "plan-audit", PromptPath: "missing"},
+		&nextSkillView{Name: "plan-audit"},
 		nextContext{WorkspaceRoot: "/tmp/workspace", ArtifactBundle: "artifacts/changes/demo"},
 	)
 	if budget == nil {

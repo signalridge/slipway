@@ -190,55 +190,6 @@ func TestDetectExistingTools(t *testing.T) {
 	assert.Equal(t, []string{"claude", "cursor"}, detected)
 }
 
-func TestResolveWorkspaceTool(t *testing.T) {
-	t.Run("env override uses generated adapter", func(t *testing.T) {
-		root := t.TempDir()
-		writeGeneratedAdapterMarker(t, root, toolRegistry["claude"])
-		writeGeneratedAdapterMarker(t, root, toolRegistry["codex"])
-		setSlipwayToolEnv(t, "codex")
-
-		cfg, err := ResolveWorkspaceTool(root)
-		require.NoError(t, err)
-		assert.Equal(t, "codex", cfg.ID)
-	})
-
-	t.Run("env override with missing adapter returns error", func(t *testing.T) {
-		root := t.TempDir()
-		writeGeneratedAdapterMarker(t, root, toolRegistry["cursor"])
-		setSlipwayToolEnv(t, "gemini")
-
-		_, err := ResolveWorkspaceTool(root)
-		assert.Error(t, err)
-	})
-
-	t.Run("single generated adapter wins", func(t *testing.T) {
-		root := t.TempDir()
-		writeGeneratedAdapterMarker(t, root, toolRegistry["gemini"])
-
-		cfg, err := ResolveWorkspaceTool(root)
-		require.NoError(t, err)
-		assert.Equal(t, "gemini", cfg.ID)
-	})
-
-	t.Run("multiple generated adapters returns ambiguity error", func(t *testing.T) {
-		root := t.TempDir()
-		writeGeneratedAdapterMarker(t, root, toolRegistry["gemini"])
-		writeGeneratedAdapterMarker(t, root, toolRegistry["codex"])
-
-		_, err := ResolveWorkspaceTool(root)
-		var ambErr *ToolAmbiguityError
-		require.ErrorAs(t, err, &ambErr)
-		assert.ElementsMatch(t, []string{"codex", "gemini"}, ambErr.DetectedAdapters)
-	})
-
-	t.Run("no generated adapters returns error", func(t *testing.T) {
-		root := t.TempDir()
-
-		_, err := ResolveWorkspaceTool(root)
-		assert.Error(t, err)
-	})
-}
-
 func TestHasGeneratedAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -397,9 +348,11 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, s, "`done-ready` means", "%s: missing done-ready semantics", cfg.ID)
 		assert.Contains(t, s, "explicit `slipway done`", "%s: missing done finalization semantics", cfg.ID)
 		assert.Contains(t, s, "`slipway new --json`", "%s: missing governed entry guidance", cfg.ID)
-		assert.Contains(t, s, "`next_skill.prompt_path`", "%s: missing governed host handoff", cfg.ID)
-		assert.Contains(t, s, "`next_skill.resolved_tool_id`", "%s: missing tool resolution handoff", cfg.ID)
+		assert.Contains(t, s, "`next_skill.name`", "%s: missing governed host handoff", cfg.ID)
+		assert.Contains(t, s, "slipway-{name}", "%s: missing caller-owned skill path contract", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.prompt_path`", "%s: stale prompt_path contract leaked", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(CatalogManifestPath(cfg)), "%s: missing catalog manifest path", cfg.ID)
 		assert.Contains(t, s, "Start with the `Triage index` and one-line `Summary`", "%s: missing compact catalog triage guidance", cfg.ID)
@@ -661,20 +614,6 @@ func writeGeneratedAdapterMarker(t *testing.T, root string, cfg ToolConfig) {
 	markerPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
 	require.NoError(t, os.WriteFile(markerPath, []byte("marker"), 0o644))
-}
-
-func setSlipwayToolEnv(t *testing.T, value string) {
-	t.Helper()
-
-	original, hadOriginal := os.LookupEnv("SLIPWAY_TOOL")
-	require.NoError(t, os.Setenv("SLIPWAY_TOOL", value))
-	t.Cleanup(func() {
-		if hadOriginal {
-			_ = os.Setenv("SLIPWAY_TOOL", original)
-			return
-		}
-		_ = os.Unsetenv("SLIPWAY_TOOL")
-	})
 }
 
 func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {

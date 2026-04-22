@@ -19,14 +19,14 @@ If `next_skill` is null, all skills are complete for the current state.
 Check `blockers` for guidance (e.g., "run `slipway done`").
 
 ### 2. Read Skill Prompt
-Read the file at `next_skill.prompt_path` (SKILL.md).
+Read the generated SKILL.md for `next_skill.name`.
 This contains the full execution instructions for the current governance skill.
-Treat `next_skill.resolved_tool_id` as the authoritative active tool/runtime boundary.
+{{if eq .ToolID "claude"}}For Claude Code, derive the path as `.claude/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "codex"}}For Codex, derive the path as `.codex/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "cursor"}}For Cursor, derive the path as `.cursor/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "gemini"}}For Gemini, derive the path as `.gemini/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "opencode"}}For OpenCode, derive the path as `.opencode/skills/slipway-{name}/SKILL.md`.{{else}}Use this tool's generated skills directory and the public `slipway-{name}` skill convention.{{end}}
 
 ### 3. Execute Skill
 Follow the SKILL.md instructions:
 - Analyze the codebase/change context as specified
-- Write evidence JSON to `next_skill.evidence_dir`
+- Write evidence JSON to `next_skill.verification_dir`
 - Follow the evidence schema defined in the skill
 
 ### 4. Present to User
@@ -50,31 +50,30 @@ If the change reaches DONE-ready state, suggest `slipway done`.
 If you need continuous execution until `run` surfaces the next skill, blocker, checkpoint, or done-ready outcome, switch to `slipway run`.
 
 ## Dispatch Contract
-- `next_skill.prompt_path` is the only required prompt handoff.
-- `next_skill.resolved_tool_id` is the authoritative active tool id.
+- `next_skill.name` is the only required governed-host handoff.
+- The caller derives its own SKILL.md path from `name` using local tool conventions.
 - Do not look for retired agent fields or a second exported agent prompt file.
-- If a follow-up Slipway CLI call is needed in a multi-adapter workspace, pass `SLIPWAY_TOOL=<resolved_tool_id>`.
 {{if eq .ToolID "claude"}}
 ### Tool-Specific Dispatch (Claude Code)
-- **Spawn subagent**: Use the `Task` tool or host-native subagent mechanism with `prompt_path` plus task context.
-- **Pass file paths only**: Include `prompt_path`, `evidence_dir`, task plan paths. Never inline file content.
+- **Spawn subagent**: Use the `Task` tool or host-native subagent mechanism with `.claude/skills/slipway-{name}/SKILL.md` plus task context.
+- **Pass file paths only**: Include the derived skill path, `verification_dir`, task plan paths. Never inline file content.
 - **One task per Task() call**: Each task executor gets its own `Task` invocation.
 - **Fresh context on retry**: Spawn a new `Task` call. Never reuse a prior Task's context.
 {{else if eq .ToolID "codex"}}
 ### Tool-Specific Dispatch (Codex)
-- **Spawn subagent**: Use `codex -q --task "<prompt>"` with `prompt_path` plus file-path references only.
+- **Spawn subagent**: Use `codex -q --task "<prompt>"` with `.codex/skills/slipway-{name}/SKILL.md` plus file-path references only.
 - **Pass file paths only**: Reference files by path in the task prompt.
 - **One task per invocation**: Each task gets its own `codex --task` call.
 - **Fresh context on retry**: New `codex --task` call. Previous context is automatically isolated.
 {{else if eq .ToolID "cursor"}}
 ### Tool-Specific Dispatch (Cursor)
-- **Spawn subagent**: Use Cursor Composer agent mode with `prompt_path` plus file-path references only.
+- **Spawn subagent**: Use Cursor Composer agent mode with `.cursor/skills/slipway-{name}/SKILL.md` plus file-path references only.
 - **Pass file paths only**: Reference files by path.
 - **One task per agent session**: Each task gets its own Composer agent session.
 - **Fresh context on retry**: New Composer session. Do not continue in the same thread.
 {{else}}
 ### Tool-Specific Dispatch ({{.ToolID}})
-- **Spawn subagent**: Use the tool's native agent/task dispatch mechanism with `prompt_path`.
+- **Spawn subagent**: Use the tool's native agent/task dispatch mechanism with the derived `slipway-{name}` skill path.
 - **Pass file paths only**: Reference files by path. Never inline content.
 - **One task per subagent**: Each task gets its own isolated context.
 - **Fresh context on retry**: New subagent. Never reuse prior context.

@@ -108,7 +108,6 @@ func TestNextTextRendersSupportHydrateOnly(t *testing.T) {
 		CurrentState:    "S2_EXECUTE",
 		NextSkill: &nextSkillView{
 			Name:            "security-review",
-			PromptPath:      ".slipway/skills/security-review/SKILL.md",
 			VerificationDir: ".slipway/changes/demo/security-review/",
 			State:           "pending",
 			TechniqueHints: []techniqueHint{

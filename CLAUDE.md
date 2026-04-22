@@ -97,5 +97,6 @@ All routed commands support `--json` for structured output:
 - `slipway run --json` — advance to next step (the only state-mutating execution surface)
 - `slipway status --json` — check current state
 
-JSON output from `next` includes `next_skill.prompt_path` as the only prompt
-handoff and `next_skill.resolved_tool_id` as the authoritative active tool id.
+JSON output from `next` includes `next_skill.name` as the governed host
+handoff. The caller derives its own SKILL.md path using local tool
+conventions such as `.claude/skills/slipway-{name}/SKILL.md`.

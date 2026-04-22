@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -160,38 +159,6 @@ func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkillStateCom
 			assertMalformedGovernanceSkillCommandFailsStateIntegrity(t, tt.command, tt.description, tt.wantMessage)
 		})
 	}
-}
-
-func TestExecuteFailureEnvelopeToolAmbiguityForNextJSON(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
-
-		slug := createGovernedRequest(t, root, "L2", "next json ambiguity contract")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
-
-		_, stderr, err := runRootCommand([]string{"next", "--json"})
-		require.Error(t, err)
-
-		var payload CLIError
-		require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
-		assert.Equal(t, categoryPrecondition, payload.Category)
-		assert.Equal(t, exitCodePrecondition, payload.ExitCode)
-		assert.Equal(t, "tool_ambiguity", payload.ErrorCode)
-		assert.Contains(t, payload.Remediation, "SLIPWAY_TOOL=<tool>")
-
-		rawDetected, ok := payload.Details["detected_adapters"].([]any)
-		require.True(t, ok, "detected_adapters must be a JSON array")
-		detected := make([]string, 0, len(rawDetected))
-		for _, item := range rawDetected {
-			detected = append(detected, item.(string))
-		}
-		assert.ElementsMatch(t, []string{"claude", "codex"}, detected)
-	})
 }
 
 func TestExecuteFailureEnvelopeGovernanceBlocked(t *testing.T) {

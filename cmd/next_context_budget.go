@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/tmpl"
 )
 
 var marshalContextBudgetInput = json.Marshal
@@ -24,14 +25,6 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 	const defaultContextWindowTokens = 200000
 	const warnRemainingPercent = 50.0
 	const stopRemainingPercent = 35.0
-
-	estimateFile := func(path string) int {
-		info, err := os.Stat(path)
-		if err != nil {
-			return 0
-		}
-		return int(info.Size()) / bytesPerToken
-	}
 
 	estimateDir := func(dir string) int {
 		total := 0
@@ -52,7 +45,24 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 		return total / bytesPerToken
 	}
 
-	promptTokens := estimateFile(filepath.Join(root, skill.PromptPath))
+	estimateSkillPromptTokens := func(skillName string) int {
+		if strings.TrimSpace(skillName) == "" {
+			return 0
+		}
+		for _, candidate := range []string{
+			"skills/" + skillName + "/SKILL.md",
+			"skills/" + skillName + "/SKILL.md.tmpl",
+		} {
+			content, exists, err := tmpl.ContentIfExists(candidate)
+			if err != nil || !exists {
+				continue
+			}
+			return len(content) / bytesPerToken
+		}
+		return 0
+	}
+
+	promptTokens := estimateSkillPromptTokens(skill.Name)
 	artifactTokens := 0
 	if strings.TrimSpace(inputContext.ArtifactBundle) != "" {
 		artifactTokens = estimateDir(resolveInputContextPath(root, inputContext.WorkspaceRoot, inputContext.ArtifactBundle))

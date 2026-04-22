@@ -1424,7 +1424,7 @@ func initTestWorkspace(t *testing.T, root string) {
 }
 
 // seedTestToolAdapter writes a minimal claude adapter sentinel so that
-// toolgen.ResolveWorkspaceTool resolves successfully in test workspaces.
+// generated adapter surfaces exist in test workspaces when init is requested.
 func seedTestToolAdapter(t *testing.T, root string) {
 	t.Helper()
 	markerPath := filepath.Join(root, ".claude", "slipway", ".adapter-generated")

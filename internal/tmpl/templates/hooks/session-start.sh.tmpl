@@ -39,7 +39,7 @@ run_slipway_readonly() {
   local output
   local status
   set +e
-  output="$(cd "${hook_cwd}" && SLIPWAY_TOOL="{{.ToolID}}" slipway "$@" 2>&1)"
+  output="$(cd "${hook_cwd}" && slipway "$@" 2>&1)"
   status=$?
   set -e
   printf '%s' "${output}"

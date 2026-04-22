@@ -273,7 +273,7 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
 	assert.Contains(t, content, "slipway next --json --hook-lite")
-	assert.Contains(t, content, `SLIPWAY_TOOL="claude" slipway`)
+	assert.Contains(t, content, `cd "${hook_cwd}" && slipway "$@"`)
 	assert.NotContains(t, content, "--preview")
 }
 

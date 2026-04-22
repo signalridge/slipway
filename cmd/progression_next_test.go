@@ -38,7 +38,6 @@ func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 		// NextSkill should point to a governance skill or indicate ready for advance
 		if view.NextSkill != nil {
 			assert.NotEmpty(t, view.NextSkill.Name)
-			assert.NotEmpty(t, view.NextSkill.PromptPath)
 		}
 	})
 }
@@ -446,7 +445,6 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
 		assert.Empty(t, view.NextSkill.TechniqueHints)
-		assert.NotEmpty(t, view.NextSkill.ResolvedToolID)
 	})
 }
 
@@ -508,7 +506,7 @@ func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	assert.Contains(t, buf.String(), "Planning Note: This is a recovery-only planning state entered after post-audit machine validation failed.")
 }
 
-func TestNextIncludesResolvedToolID(t *testing.T) {
+func TestNextReturnsSkillNameWithoutToolSpecificRuntimeFields(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -533,7 +531,6 @@ func TestNextIncludesResolvedToolID(t *testing.T) {
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, "plan-audit", view.NextSkill.Name)
-		assert.Equal(t, "claude", view.NextSkill.ResolvedToolID)
 	})
 }
 
@@ -1223,7 +1220,6 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 			require.NotNil(t, hookLiteView.NextSkill)
 			assert.Equal(t, previewView.NextSkill.Name, hookLiteView.NextSkill.Name)
 			assert.Equal(t, previewView.NextSkill.State, hookLiteView.NextSkill.State)
-			assert.Equal(t, previewView.NextSkill.ResolvedToolID, hookLiteView.NextSkill.ResolvedToolID)
 		}
 		assert.Nil(t, hookLiteView.ContextBudget, "hook-lite should strip heavyweight context budget output")
 		assert.Nil(t, hookLiteView.Constraints, "hook-lite should strip heavyweight constraint output")

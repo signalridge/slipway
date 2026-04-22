@@ -201,32 +201,6 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		assert.Equal(t, []string{"claude", "cursor"}, toolgen.DetectExistingTools(root))
 	})
 
-	t.Run("resolve workspace tool", func(t *testing.T) {
-		root := t.TempDir()
-		writeGeneratedAdapterMarkerForTest(t, root, "claude")
-		writeGeneratedAdapterMarkerForTest(t, root, "codex")
-
-		t.Setenv("SLIPWAY_TOOL", "codex")
-		cfg, err := toolgen.ResolveWorkspaceTool(root)
-		require.NoError(t, err)
-		assert.Equal(t, "codex", cfg.ID)
-
-		t.Setenv("SLIPWAY_TOOL", "")
-		_, err = toolgen.ResolveWorkspaceTool(root)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "multiple adapters detected")
-
-		dirtyRoot := t.TempDir()
-		dirtyCommandPath := filepath.Join(dirtyRoot, ".gemini", "commands", "slipway", "new.toml")
-		require.NoError(t, os.MkdirAll(filepath.Dir(dirtyCommandPath), 0o755))
-		require.NoError(t, os.WriteFile(dirtyCommandPath, []byte("legacy command"), 0o644))
-
-		t.Setenv("SLIPWAY_TOOL", "gemini")
-		_, err = toolgen.ResolveWorkspaceTool(dirtyRoot)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "run `slipway init --tools gemini --refresh`")
-	})
-
 	t.Run("refresh auto-detects sentinelized adapters", func(t *testing.T) {
 		root := t.TempDir()
 		withWorkspace(t, root, func() {

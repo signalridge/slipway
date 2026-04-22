@@ -505,54 +505,6 @@ func Registry() []ToolConfig {
 	return out
 }
 
-// ToolAmbiguityError is returned when multiple generated adapters exist and
-// no SLIPWAY_TOOL override disambiguates the selection.
-type ToolAmbiguityError struct {
-	DetectedAdapters []string
-}
-
-func (e *ToolAmbiguityError) Error() string {
-	return fmt.Sprintf("tool_ambiguity: multiple adapters detected [%s]; set SLIPWAY_TOOL=<tool> to disambiguate (e.g. SLIPWAY_TOOL=codex slipway next --json)",
-		strings.Join(e.DetectedAdapters, ", "))
-}
-
-// ResolveWorkspaceTool selects the matching generated tool adapter for the
-// current workspace. Selection order:
-// 1. SLIPWAY_TOOL env override, when that adapter exists in the workspace
-// 2. exactly one generated adapter in the workspace
-// 3. fail closed with ToolAmbiguityError when multiple adapters exist
-// 4. fail closed when no generated adapter exists
-func ResolveWorkspaceTool(root string) (ToolConfig, error) {
-	if override := strings.ToLower(strings.TrimSpace(os.Getenv("SLIPWAY_TOOL"))); override != "" {
-		cfg, ok := toolRegistry[override]
-		if !ok {
-			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: unknown tool adapter", override)
-		}
-		if !hasGeneratedAdapter(root, cfg) {
-			return ToolConfig{}, fmt.Errorf("SLIPWAY_TOOL=%q: adapter not generated in workspace; %s", override, workspaceAdapterRemediation(root, cfg))
-		}
-		return cfg, nil
-	}
-
-	generated := make([]ToolConfig, 0, len(toolRegistry))
-	for _, cfg := range Registry() {
-		if hasGeneratedAdapter(root, cfg) {
-			generated = append(generated, cfg)
-		}
-	}
-	if len(generated) == 1 {
-		return generated[0], nil
-	}
-	if len(generated) > 1 {
-		ids := make([]string, 0, len(generated))
-		for _, cfg := range generated {
-			ids = append(ids, cfg.ID)
-		}
-		return ToolConfig{}, &ToolAmbiguityError{DetectedAdapters: ids}
-	}
-	return ToolConfig{}, missingWorkspaceAdapterError(root)
-}
-
 // LookupTool returns the ToolConfig for a given tool ID.
 func LookupTool(id string) (ToolConfig, bool) {
 	cfg, ok := toolRegistry[id]

@@ -4,31 +4,25 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
-	"github.com/signalridge/slipway/internal/toolgen"
+	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var generatedHydrateWorkspaceEnvMu sync.Mutex
 
 // TestEmitHydrateBlocksRendersDelimiter locks the `===== SLIPWAY HYDRATE:
 // <skill-id>/<name> =====` delimiter contract and ensures each selected
 // reference's body is rendered verbatim.
 func TestEmitHydrateBlocksRendersDelimiter(t *testing.T) {
-	root := generatedHydrateWorkspace(t)
 	keys := []string{
 		"security-review/authentication.md",
 		"security-review/injection.md",
 	}
 	var buf bytes.Buffer
-	if err := emitHydrateBlocks(root, &buf, keys); err != nil {
+	if err := emitHydrateBlocks("", &buf, keys); err != nil {
 		t.Fatalf("emitHydrateBlocks: %v", err)
 	}
 	out := buf.String()
@@ -47,33 +41,11 @@ func TestEmitHydrateBlocksRendersDelimiter(t *testing.T) {
 	}
 }
 
-func TestEmitHydrateBlocksUsesInvocationWorkspaceRoot(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initGitRepoForWorktreeTests(t, root)
-
-		worktreeRoot := filepath.Join(t.TempDir(), "linked-worktree")
-		runGit(t, root, "worktree", "add", worktreeRoot, "-b", "feat/hydrate-worktree", "HEAD")
-
-		previousWD, err := os.Getwd()
-		require.NoError(t, err)
-		require.NoError(t, os.Chdir(worktreeRoot))
-		defer func() {
-			_ = os.Chdir(previousWD)
-		}()
-
-		require.NoError(t, bootstrap.InitWorkspace(worktreeRoot, []string{"codex"}, false))
-
-		_, err = os.Stat(filepath.Join(root, ".codex"))
-		assert.True(t, os.IsNotExist(err), "main scope should not need codex adapters for hydrate rendering")
-		_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "skills", "slipway-security-review", "references", "authentication.md"))
-		require.NoError(t, err)
-
-		var buf bytes.Buffer
-		err = emitHydrateBlocks(root, &buf, []string{"security-review/authentication.md"})
-		require.NoError(t, err)
-		assert.Contains(t, buf.String(), "===== SLIPWAY HYDRATE: security-review/authentication.md =====")
-	})
+func TestEmitHydrateBlocksDoesNotRequireGeneratedWorkspaceTree(t *testing.T) {
+	var buf bytes.Buffer
+	err := emitHydrateBlocks(t.TempDir(), &buf, []string{"security-review/authentication.md"})
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "===== SLIPWAY HYDRATE: security-review/authentication.md =====")
 }
 
 // TestEmitHydrateBlocksEmptyIsNoOp ensures the helper stays silent when no
@@ -117,9 +89,8 @@ func TestEmitHydrateBlocksRejectsUnsafeKey(t *testing.T) {
 // registry entry pointing at a non-existent file surfaces a structured
 // `hydrate_reference_missing` error rather than a vague FS error.
 func TestEmitHydrateBlocksMissingReferenceFailsDeterministically(t *testing.T) {
-	root := generatedHydrateWorkspace(t)
 	var buf bytes.Buffer
-	err := emitHydrateBlocks(root, &buf, []string{"security-review/this-file-does-not-exist.md"})
+	err := emitHydrateBlocks("", &buf, []string{"security-review/this-file-does-not-exist.md"})
 	if err == nil {
 		t.Fatal("expected error for missing reference file")
 	}
@@ -130,13 +101,15 @@ func TestEmitHydrateBlocksMissingReferenceFailsDeterministically(t *testing.T) {
 	if cliErr.ErrorCode != "hydrate_reference_missing" {
 		t.Fatalf("unexpected error code %q", cliErr.ErrorCode)
 	}
+	assert.Contains(t, cliErr.Message, "built-in reference set")
+	assert.Contains(t, cliErr.Remediation, "Fix the hydrate reference declaration")
+	assert.Equal(t, map[string]any{"key": "security-review/this-file-does-not-exist.md"}, cliErr.Details)
 }
 
 // TestEmitHydrateBlocksOverWarnThresholdContinuesRendering keeps the advisory
 // warning contract honest: large hydrate selections should still render, but
 // they must surface a stable warning line ahead of the delimiter blocks.
 func TestEmitHydrateBlocksOverWarnThresholdContinuesRendering(t *testing.T) {
-	root := generatedHydrateWorkspace(t)
 	prev := hydrateWarnBytes
 	hydrateWarnBytes = 32
 	t.Cleanup(func() { hydrateWarnBytes = prev })
@@ -145,7 +118,7 @@ func TestEmitHydrateBlocksOverWarnThresholdContinuesRendering(t *testing.T) {
 	// band. Use two keys so the output proves rendering still continues.
 	keys := []string{"security-review/authentication.md", "security-review/injection.md"}
 	var buf bytes.Buffer
-	if err := emitHydrateBlocks(root, &buf, keys); err != nil {
+	if err := emitHydrateBlocks("", &buf, keys); err != nil {
 		t.Fatalf("emitHydrateBlocks: %v", err)
 	}
 	out := buf.String()
@@ -395,15 +368,11 @@ func TestLoadHydrateBodyRejectsMalformedKey(t *testing.T) {
 	}
 }
 
-func TestLoadHydrateBodyReadsGeneratedWorkspaceTree(t *testing.T) {
-	root := generatedHydrateWorkspace(t)
-	refPath := filepath.Join(root, ".codex", "skills", "slipway-security-review", "references", "authentication.md")
-	want := "# Workspace Override\n\nOnly the generated workspace tree should be read here.\n"
-	if err := os.WriteFile(refPath, []byte(want), 0o644); err != nil {
-		t.Fatalf("override generated hydrate file: %v", err)
-	}
+func TestLoadHydrateBodyReadsEmbeddedSkillTemplate(t *testing.T) {
+	want, err := tmpl.Content("skills/security-review/references/authentication.md")
+	require.NoError(t, err)
 
-	got, err := loadHydrateBody(root, "security-review/authentication.md")
+	got, err := loadHydrateBody("", "security-review/authentication.md")
 	if err != nil {
 		t.Fatalf("loadHydrateBody: %v", err)
 	}
@@ -412,41 +381,16 @@ func TestLoadHydrateBodyReadsGeneratedWorkspaceTree(t *testing.T) {
 	}
 }
 
-func TestLoadHydrateBodyFailsWhenGeneratedReferenceDriftsMissing(t *testing.T) {
-	root := generatedHydrateWorkspace(t)
-	refPath := filepath.Join(root, ".codex", "skills", "slipway-security-review", "references", "authentication.md")
-	if err := os.Remove(refPath); err != nil {
-		t.Fatalf("remove generated hydrate file: %v", err)
-	}
-
-	_, err := loadHydrateBody(root, "security-review/authentication.md")
+func TestLoadHydrateBodyFailsWhenEmbeddedReferenceIsMissing(t *testing.T) {
+	_, err := loadHydrateBody("", "security-review/this-file-does-not-exist.md")
 	if err == nil {
-		t.Fatal("expected error after deleting generated hydrate file")
+		t.Fatal("expected error for missing embedded hydrate file")
 	}
 	cliErr := asCLIError(err)
 	if cliErr == nil || cliErr.ErrorCode != "hydrate_reference_missing" {
 		t.Fatalf("expected hydrate_reference_missing, got %v", err)
 	}
-}
-
-func generatedHydrateWorkspace(t *testing.T) string {
-	t.Helper()
-	generatedHydrateWorkspaceEnvMu.Lock()
-	t.Cleanup(generatedHydrateWorkspaceEnvMu.Unlock)
-
-	root := t.TempDir()
-	codexHome := t.TempDir()
-	previousCodeXHome, hadCodeXHome := os.LookupEnv("CODEX_HOME")
-	require.NoError(t, os.Setenv("CODEX_HOME", codexHome))
-	t.Cleanup(func() {
-		if hadCodeXHome {
-			require.NoError(t, os.Setenv("CODEX_HOME", previousCodeXHome))
-			return
-		}
-		require.NoError(t, os.Unsetenv("CODEX_HOME"))
-	})
-	if err := toolgen.Generate(root, []string{"codex"}, true); err != nil {
-		t.Fatalf("generate codex skill tree: %v", err)
-	}
-	return root
+	assert.Contains(t, cliErr.Message, "built-in reference set")
+	assert.NotContains(t, cliErr.Message, "skills/security-review/references")
+	assert.Equal(t, map[string]any{"key": "security-review/this-file-does-not-exist.md"}, cliErr.Details)
 }
