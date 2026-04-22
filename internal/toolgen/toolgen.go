@@ -232,7 +232,7 @@ var governanceSurfaceDescriptors = []governanceSurfaceDescriptor{
 	{ID: "intake-clarification", RenderMode: governanceRenderStatic, WorkflowOwned: true},
 	{ID: "research-orchestration", RenderMode: governanceRenderStatic, WorkflowOwned: true},
 	{ID: "plan-audit", RenderMode: governanceRenderStatic, WorkflowOwned: true},
-	{ID: "tdd-governance", RenderMode: governanceRenderStatic, ExportOnlyExtra: true},
+	{ID: "tdd-governance", RenderMode: governanceRenderTemplated, ExportOnlyExtra: true},
 	{ID: "worktree-preflight", RenderMode: governanceRenderStandalone, ExportOnlyExtra: true},
 	{ID: "wave-orchestration", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "spec-compliance-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},

@@ -10,83 +10,69 @@ description: "Use when verifying bidirectional alignment between specification a
 IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
 ```
 
-Violating the letter of this rule is violating the spirit of this rule.
-
 ## Purpose
 Verify bidirectional alignment between specification artifacts and
-implementation. This is Stage 1 of the governed review host sequence, and the
-attached `spec-trace` checklist supplies the line-level traceability contract
-used during the review.
-Mitigates: implementation divergence from spec.
+implementation. This is Stage 1 of the governed review sequence. The attached
+`slipway-spec-trace` checklist defines the trace matrix you must produce.
 
-## Technique Overlay: `slipway-coding-discipline`
-Use `slipway-coding-discipline` as the review posture for this host:
-- think before coding: challenge assumptions before accepting claimed alignment
-- simplicity first: flag overbuilt implementations that exceed approved scope
-- surgical changes: distinguish true requirement work from drive-by edits
-- goal-driven execution: keep the spec verdict here while the shared discipline stays in `slipway-coding-discipline`
+## Workflow Outline
+1. Read the artifacts, code, and execution summary yourself.
+2. Check forward alignment, reverse alignment, intent drift, and decision fidelity.
+3. Write verification, surface blockers, and wait for approval.
 
 ## When This Runs
 After wave execution. `slipway next` returns `next_skill: spec-compliance-review`.
 This is Stage 1 of the two-stage review protocol. Must pass before code-quality-review runs.
 
-## Process
+## Review Contract
+Do not trust prior summaries. Read artifacts, code, and tests yourself before
+claiming alignment.
 
-### 0. Independent Verification Mandate (HARD RULE)
-CRITICAL: **Do Not Trust Any Prior Report.** You MUST read actual code and artifacts yourself, line by line, before making any pass/fail claim.
+- Do NOT rely on implementer or orchestrator summaries
+- Do NOT trust claimed test results without rerunning or reading raw output
+- Do NOT trust "all criteria met" assertions without your own verification
+- Read actual implementation files, not only changed-file lists
 
-- Do NOT rely on summaries from the implementer or orchestrator
-- Do NOT trust test result claims — run tests yourself or read the raw output
-- Do NOT trust "all criteria met" assertions — verify each criterion independently
-- If the implementer says "X is implemented", find X in the code and verify it does what the spec says
-- Read the actual implementation files, not just the changed-files list
-
-### 1. Read Context
+## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Apply the shared requirements checklist from `checklist-quality.md` before
-judging artifact completeness or spec drift. Use the attached `spec-trace`
-checklist to enumerate the forward and reverse trace edges you must verify.
+Apply the shared requirements checklist from `checklist-quality.md`. Use the
+attached `spec-trace` checklist to enumerate the forward and reverse trace
+edges you must verify.
+Use `slipway-coding-discipline` as a posture check when judging whether the
+implemented change stayed simple, surgical, and goal-driven.
 
-### 2. Forward Alignment (Spec -> Code)
-Verify every requirement in the spec is implemented:
-- Each spec requirement maps to concrete implementation
-- Acceptance criteria are satisfied by tests
-- No spec requirements are silently dropped or deferred without explicit tracking
+## Required Checks
+### Forward Alignment (Spec -> Code)
+- each spec requirement maps to concrete implementation
+- acceptance criteria are satisfied by tests
+- no spec requirement is silently dropped or deferred without explicit tracking
 
-### 3. Reverse Alignment (Code -> Spec)
-Verify implementation is accurately described by spec:
-- No undocumented features or behaviors
-- No implementation details that contradict spec
-- Changed files are covered by relevant spec sections
+### Reverse Alignment (Code -> Spec)
+- no undocumented features or behaviors
+- no implementation detail that contradicts the approved artifacts
+- changed files are covered by relevant spec sections
 
-### 4. Intent Drift Detection
-- Compare original proposal intent with final implementation
-- Flag any semantic drift between what was proposed and what was built
-- Check that scope changes are properly documented
+### Intent Drift Detection
+- compare original proposal intent with the final implementation
+- flag semantic drift between what was proposed and what was built
+- check that scope changes are documented
 
-### 4b. Decision Fidelity Check
+### Decision Fidelity Check
 If `skill_constraints.locked_decisions` is present:
-1. Extract each locked decision from decision.md
-2. For each locked decision, verify the implementation honors it:
-   - The decision's constraint is reflected in the code
-   - No workaround or reinterpretation that violates the decision's intent
-   - If the decision was about architecture/approach, verify the chosen approach matches
-3. Flag violations as BLOCKERS with reference format: `"decision_fidelity:violated:<decision_summary>"`
+1. extract each locked decision from `decision.md`
+2. verify the implementation honors it without workaround or reinterpretation
+3. flag violations as `decision_fidelity:violated:<decision_summary>`
 
-Decision fidelity violations are spec compliance failures — they indicate the implementation diverged from user-approved scope.
+### Stub Detection
+Block zero-value or hardcoded production responses, TODO/FIXME/HACK in claimed
+complete code, assertion-free tests, handlers that only log, placeholder API
+responses, and imports unused in the claimed integration path.
 
-### 4a. Stub Detection
-Flag any of these patterns as spec compliance BLOCKERS:
-- Functions that return zero values, empty strings, or hardcoded responses without real logic
-- TODO/FIXME/HACK comments in code claimed as complete
-- Tests with no meaningful assertions (empty test bodies, `assert.True(true)`)
-- Event handlers that only log without performing the specified action
-- API endpoints that return static/placeholder responses
-- Imports declared but unused in the integration path
+## Review Layers
+- `layer:CORRECTNESS=pass|fail`: logic errors, missing branches, broken contracts against spec
+- `layer:SAFETY=pass|fail`: auth/data handling, irreversible operations, external contracts
 
-### 5. Write Verification
-Verification requires `run_version` matching `verification/execution-summary.yaml`.
-
+## Write Verification
 ```yaml
 # Write to: artifacts/changes/{slug}/verification/spec-compliance-review.yaml
 verdict: pass
@@ -101,64 +87,21 @@ notes: |
   Gaps (artifact_to_code): <spec requirements not implemented in code>
 ```
 
-The `notes` field SHOULD include gap analysis for all reviews. Empty gaps indicate full bidirectional alignment. Non-empty gaps are informational when verdict is pass (minor gaps) or blockers when verdict is fail.
+The `notes` field SHOULD include gap analysis. Empty gaps indicate full
+bidirectional alignment.
 
-### 6. Present and Advance
+## Present and Advance
 Show review findings. {{template "hard-gate"}}
 
 After confirmation: proceed to code-quality-review.
 
-## Review Layers
-Execute these review layers in order:
-1. **Correctness**: logic errors, missing branches, broken contracts against spec
-2. **Safety**: auth/data handling, irreversible operations, external contracts
-
-Report layer outcomes in `references` using format: `layer:LAYER_NAME=pass|fail`
-
-## Subagent Role: Reviewer
-- Focus: spec-to-code and code-to-spec alignment only.
-- Output: explicit blocker mapping to artifact/file references.
-
-## Mandatory Checklist
-Before writing verification, verify ALL of the following:
-
-- [ ] **Forward Alignment**: Every spec requirement maps to concrete implementation (no silently dropped requirements)
-- [ ] **Reverse Alignment**: Every implementation feature is described in spec (no undocumented code)
-- [ ] **Intent Drift**: Original proposal intent matches final implementation (no semantic drift)
-- [ ] **Stub Detection**: No zero-value returns, TODO/FIXME in complete code, or assertion-free tests
-- [ ] **Decision Fidelity**: All locked decisions (from `skill_constraints.locked_decisions`) are honored in implementation
-- [ ] **Acceptance Criteria**: Each acceptance criterion is satisfied by at least one test
-- [ ] **Scope Changes**: Any scope changes during implementation are documented
-- [ ] **Correctness Layer**: No logic errors, missing branches, or broken contracts
-- [ ] **Safety Layer**: Auth/data handling and irreversible operations are correct
-
-Each unchecked item must be explicitly addressed (pass or finding with file:line reference).
-
 ## DO NOT SKIP
 1. Independent review for governed levels.
 2. Both forward and reverse alignment checks.
-3. Intent drift detection.
-4. Decision fidelity check (when locked decisions present).
-5. Verification record written after review.
+3. Decision fidelity check when locked decisions exist.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "Self-review is fine" | Self-review is not permitted for governed review skills. Use a fresh reviewer agent. |
-| "Spec is close enough" | Any spec-code divergence must be flagged as a blocker. |
-| "Intent drift is minor" | Two consecutive intent-drift failures trigger pivot guidance. |
-| "Tests pass so spec is met" | Passing tests do not guarantee spec coverage. |
-| "Reverse alignment is optional" | Undocumented code is a compliance gap. |
-
-## Failure Handling
-- On review blocker, route back to S6 fix/re-run loop and require fresh review verification.
-- Two consecutive intent-drift failures must raise pivot guidance.
-- If review findings are insufficient, rerun with a fresh reviewer agent.
-
-## Hard Gate Enforcement
-DO NOT advance past spec compliance review until the user has explicitly approved the review findings. Review completion is not approval. The user must confirm that all findings are acceptable before proceeding to code-quality-review.
-
-**Anti-pattern**: "No blockers found, so the review passes automatically." — A clean review still requires user sign-off.
-
-## Step Declaration
-Declare current step and expected output before executing each workflow step.
+## Block If
+- A spec requirement lacks implementation or an accepted skip justification.
+- Code behavior is undocumented or contradicts the approved artifacts.
+- Locked decisions are violated.
+- Claimed-complete work is still stubbed, placeholder-only, or assertion-free.

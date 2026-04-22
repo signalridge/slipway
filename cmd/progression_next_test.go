@@ -376,6 +376,120 @@ func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	})
 }
 
+func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "goal verification hint contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte("# Intent")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte("# Requirements")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte("# Decision")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - wave: 1\n  - target_files: [\"cmd/next.go\"]\n  - task_kind: verification\n")))
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+
+		var buf bytes.Buffer
+		cmd := makeNextCmd()
+		cmd.SetOut(&buf)
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+		require.Len(t, view.NextSkill.TechniqueHints, 1)
+		assert.Equal(t, "skill:coverage-analysis", view.NextSkill.TechniqueHints[0].Name)
+		for _, hint := range view.NextSkill.TechniqueHints {
+			assert.NotEqual(t, "skill:fresh-verification-evidence", hint.Name)
+		}
+	})
+}
+
+func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "final closeout run hint contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.QualityMode = model.QualityModeFull
+		require.NoError(t, state.SaveChange(root, change))
+
+		markChangeReadyForDone(t, root, &change)
+		writeAssuranceMD(t, root, slug, validAssuranceContent())
+		// Refresh the summary after bundle mutations so full-closeout readiness
+		// uses the latest evidence window.
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		var buf bytes.Buffer
+		cmd := makeRunCmd()
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
+		assert.Empty(t, view.NextSkill.TechniqueHints)
+		assert.NotEmpty(t, view.NextSkill.ResolvedToolID)
+	})
+}
+
+func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "final closeout hint contract")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	change.QualityMode = model.QualityModeFull
+	require.NoError(t, state.SaveChange(root, change))
+
+	view := &nextView{
+		CurrentState: change.CurrentState,
+		InputContext: nextContext{},
+	}
+	err = assembleSkillView(
+		root,
+		view,
+		changeRef{Slug: slug},
+		progression.AdvanceSummary{Action: "query", FromState: model.StateS4Verify},
+		&change,
+		nil,
+		map[string]model.VerificationRecord{
+			progression.SkillGoalVerification: {
+				Verdict:   model.VerificationVerdictPass,
+				Blockers:  []model.ReasonCode{},
+				Timestamp: time.Now().UTC(),
+			},
+		},
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
+	assert.Empty(t, view.NextSkill.TechniqueHints)
+}
+
 func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	t.Parallel()
 

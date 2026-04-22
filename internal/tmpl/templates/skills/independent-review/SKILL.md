@@ -33,16 +33,11 @@ IRON LAW: REVIEW WITH FRESH CONTEXT, EXIT WITH A VERDICT
 ```
 
 ## Purpose
-Perform code review as an independent reader. Load context fresh; do not reuse
-the author's narration. Exit with an explicit verdict and reviewer-handoff
-record that the author can act on without re-asking.
+Perform code review as an independent reader. The attached procedure,
+checklist, and verdict schema are the base contract. Do not reuse the author's
+narration as your source of truth.
 
-## Anti-patterns
-- "LGTM" with no traversal evidence.
-- Blockers without reproducible observations.
-- Nits buried in prose so the author misses them.
-
-## Diff-scoped review (absorbed from differential-review)
+## Diff-scoped review
 
 When a concrete diff target is in scope (pull request, commit range, or
 changed-only selection), apply the diff-scoped rules below in addition to the
@@ -51,14 +46,9 @@ fresh-context discipline above. When no diff context is present (`review
 review contract stands on its own.
 
 ### Classify every finding
-- **new** — finding is introduced by the diff under review. Blocking by
-  default; promote to verdict=fail unless the author already ships a
-  compensating control in the same diff.
-- **pre-existing** — finding existed before the diff and is unchanged.
-  Report but do not block the diff on it. Track as a separate ticket.
-- **worsened** — finding existed before the diff, but the diff broadens its
-  blast radius, weakens a mitigation, or removes a compensating control.
-  Treat as blocking: the diff moved the needle in the wrong direction.
+- **new** — finding is introduced by the diff under review. Blocking by default.
+- **pre-existing** — finding existed before the diff and is unchanged. Report it, but do not block on it.
+- **worsened** — finding existed before the diff, but the diff broadens its blast radius or weakens a mitigation. Treat it as blocking.
 
 ### Diff-scoped blocker policy
 - Only **new** and **worsened** findings participate in the verdict.
@@ -67,8 +57,8 @@ review contract stands on its own.
   inspection until git blame proves the removal is safe.
 - Access-control removals (e.g. guard downgraded, validation deleted) are
   blocking until the diff author demonstrates an equivalent replacement.
-- Report all three categories in the verdict record so the author sees
-  ambient pre-existing risk without the verdict inflating from it.
+- Report all three categories so ambient pre-existing risk stays visible
+  without inflating the verdict.
 
 ### Evidence contract
 Diff-scoped review preserves the `verdict` evidence contract. Emit the same

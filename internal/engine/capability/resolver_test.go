@@ -44,19 +44,28 @@ func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 	reg := DefaultRegistry()
 	res := Resolve(reg, Signals{Host: "goal-verification"})
 
-	require.Len(t, res.Supports, 2)
+	require.Len(t, res.Supports, 1)
 	assert.Equal(t, []Attachment{
 		{
 			SkillID: "coverage-analysis",
 			Kind:    AttachmentChecklist,
 			Reason:  "Use when a change needs coverage evaluation. Triggers on validate command, goal-verification host, or coverage-related user text.",
 		},
-		{
-			SkillID: "fresh-verification-evidence",
-			Kind:    AttachmentChecklist,
-			Reason:  "Use when a change is approaching a verify/closeout gate. Triggers on goal-verification, final-closeout, or any completion-adjacent step.",
-		},
 	}, res.Supports)
+}
+
+func TestResolveVerifyHostsDoNotExposeRetiredFreshEvidenceSupport(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+
+	for _, host := range []string{"final-closeout", "tdd-governance"} {
+		host := host
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+			res := Resolve(reg, Signals{Host: host})
+			assert.Empty(t, res.Supports)
+		})
+	}
 }
 
 func TestResolveNoMatchReturnsEmpty(t *testing.T) {

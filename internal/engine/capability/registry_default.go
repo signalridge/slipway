@@ -5,7 +5,6 @@ package capability
 func defaultSkills() []Skill {
 	return []Skill{
 		// B1 foundation set
-		freshVerificationEvidence(),
 		independentReview(),
 		// B2 scale foundation
 		contextAssembly(),
@@ -28,24 +27,6 @@ func defaultSkills() []Skill {
 		reviewCommentTriage(),
 		gitRecovery(),
 		incidentResponse(),
-	}
-}
-
-func freshVerificationEvidence() Skill {
-	return Skill{
-		ID:                "fresh-verification-evidence",
-		Domain:            DomainExecution,
-		Function:          "block completion claims without fresh commands and fresh proof",
-		Tier:              TierT1,
-		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when a change is approaching a verify/closeout gate. Triggers on goal-verification, final-closeout, or any completion-adjacent step.",
-		Evidence:          EvidenceVerdict,
-		Bindings: []Binding{
-			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
-			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentReportSchema},
-			{Type: BindingHostEmbedded, Target: "final-closeout", Attachment: AttachmentChecklist},
-			{Type: BindingHostEmbedded, Target: "tdd-governance", Attachment: AttachmentChecklist},
-		},
 	}
 }
 

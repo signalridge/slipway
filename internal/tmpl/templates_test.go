@@ -20,7 +20,6 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 	staticSkills := []string{
 		"skills/research-orchestration/SKILL.md",
 		"skills/plan-audit/SKILL.md",
-		"skills/tdd-governance/SKILL.md",
 	}
 	for _, name := range staticSkills {
 		content, err := Content(name)
@@ -32,6 +31,7 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 	}
 	// Templated governance skills (loaded via Render)
 	templatedSkills := []string{
+		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
 		"skills/goal-verification/SKILL.md.tmpl",
@@ -206,6 +206,7 @@ func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 		"skills/final-closeout/SKILL.md.tmpl",
 		"skills/goal-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
 	}
 	data := map[string]string{
@@ -217,6 +218,7 @@ func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
 		assert.NotContains(t, content, "{{.", "%s has unrendered template vars", name)
+		assert.NotContains(t, content, "{{template", "%s has unrendered template directives", name)
 	}
 }
 
@@ -227,6 +229,7 @@ func TestTemplatedGovernanceSkillFrontmatterIncludesDescription(t *testing.T) {
 		"skills/final-closeout/SKILL.md.tmpl",
 		"skills/goal-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
 	}
 	data := map[string]string{
@@ -332,7 +335,6 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 	staticSkills := []string{
 		"skills/worktree-preflight/SKILL.md",
 		"skills/plan-audit/SKILL.md",
-		"skills/tdd-governance/SKILL.md",
 		"skills/research-orchestration/SKILL.md",
 	}
 	routingFields := []string{
@@ -358,6 +360,7 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 	// Templated governance skills (converted from static)
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range []string{
+		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
 		"skills/goal-verification/SKILL.md.tmpl",

@@ -10,131 +10,95 @@ description: "Use when verifying acceptance criteria with fresh evidence before 
 IRON LAW: NO COMPLETION CLAIMS WITHOUT FRESH 3-LEVEL VERIFICATION
 ```
 
-Violating the letter of this rule is violating the spirit of this rule.
-
 ## Purpose
-Verify that acceptance criteria are met and all claimed outcomes have evidence.
-This is the governed verification host skill that blocks completion claims
-until the current run has concrete proof for each accepted outcome.
-Mitigates: false completion claims.
+Verify that acceptance criteria are met and that every completion claim has
+fresh, concrete proof from the current run.
 
 ## Workflow Outline
-1. Enumerate every acceptance criterion that the current run must prove.
-2. Verify each criterion at the Exists, Substantive, and Wired levels.
-3. Aggregate blockers, write verification, and wait for approval before done.
+1. Enumerate every acceptance criterion that must be proven.
+2. Verify each criterion at Exists, Substantive, and Wired levels.
+3. Aggregate blockers, write verification, and wait for approval.
 
 ## When This Runs
 After review passes. `slipway next` returns `next_skill: goal-verification`.
 
-## Process
+## Read Context
+Run `slipway next --json` and read the acceptance criteria from the original
+change description and governed artifacts.
 
-### 1. Read Context
-Run `slipway next --json` and read the acceptance criteria from the original change description.
+## Extract Acceptance Criteria
+Enumerate every acceptance criterion as a discrete item and assign a stable ID
+(`AC-1`, `AC-2`, ...). This list is the verification scope.
 
-### 2. Extract Acceptance Criteria
-Read the original change description and governed artifacts to enumerate every acceptance criterion as a discrete item. Assign each criterion a stable ID (e.g., `AC-1`, `AC-2`, ...). This list is the verification scope — nothing outside it is verified, nothing inside it is skipped.
+## Verify Each Criterion (3-Level Check)
+For each criterion, record a verdict with concrete proof at all three levels:
+- **Exists**: the claimed file, function, endpoint, test, or artifact is present
+- **Substantive**: the implementation is real, not a TODO, placeholder, empty body, or hardcoded stub
+- **Wired**: the implementation is integrated, reachable from the correct entry point, and exercised by a real path or test
 
-### 3. Verify Each Criterion (3-Level Check)
-For **each** criterion, verify at three levels and record a per-criterion verdict:
-
-**Level 1 — Exists**: The claimed output (file, function, endpoint, test) physically exists.
-- Check method: `grep -r "ComponentName" src/` or `ls path/to/file`
-- Pass: file/function/class is found at expected location
-- Fail: not found → blocker
-
-**Level 2 — Substantive**: The output is not a stub, placeholder, or TODO. It contains real logic that addresses the criterion.
-- Check method: Read the actual file. Count lines of real logic. Search for TODO/FIXME/HACK/placeholder patterns.
-- Pass: ≥1 meaningful code path that addresses the criterion
-- Fail: empty body, hardcoded returns, TODO comments → blocker
-
-**Level 3 — Wired**: The output is integrated into the system — called from the right place, imported correctly, reachable from entry points, and tested.
-- Check method: `grep -r "import.*Component" src/` or trace call chain from entry point. Run integration path.
-- Pass: component is imported, called, and reachable from at least one entry point; test exercises the integration
-- Fail: orphan code, unused import, no test coverage of integration path → blocker
-
-Record each criterion result as:
+Record each result as:
 ```json
 { "id": "AC-1", "description": "<criterion text>", "verdict": "pass|fail|blocked", "evidence": "<concrete proof>" }
 ```
 
-### 4. Aggregate Verdict
-- **pass**: ALL criteria have `verdict: pass`
-- **fail**: ANY criterion has `verdict: fail` or `verdict: blocked`
-- Populate `blockers[]` with the IDs of failed/blocked criteria
-
-Additionally:
-- Validate pass outcomes map to concrete evidence references
-- Check for unresolved blockers
-- Run high-risk checks for active guardrail domains
-- Verify with fresh test execution (not cached results)
-- If the change claims a performance improvement or regression fix, require a baseline plus candidate measurement in the same environment before passing the criterion
-
-### 2a. Verification Doctrine (HARD RULE)
+## Fresh Evidence Contract
 {{template "verification-doctrine"}}
 
-### 2b. Stub Detection (Auto-Scan)
-Run the following scans against ALL target_files from the task plan. Any match is a BLOCKER.
+Apply all of the following before marking any criterion `pass`:
+{{template "fresh-evidence-checklist"}}
 
-**Automated grep patterns** (run these, do not skip):
+Minimum record:
+{{template "fresh-evidence-minimum-record"}}
+
+## Stub And Placeholder Scan
+Run the following scans against all claimed target files. Any real hit is a blocker.
+
 ```bash
-# Stub/placeholder patterns
 grep -rn 'TODO\|FIXME\|HACK\|XXX\|PLACEHOLDER\|NotImplemented\|not implemented' <target_files>
-# Go: panic stubs, empty returns
 grep -rn 'panic(".*implement\|panic(".*todo\|return nil, nil' <target_files>
-# Go: zero-value returns in non-trivial functions
 grep -rn 'return ""$\|return 0$\|return false$' <target_files>
-# Empty function/method bodies (opening brace with only closing brace)
 grep -Pzo '\{\s*\n\s*\}' <target_files>
 ```
 
-**Manual inspection** — also flag as BLOCKERS:
-- Functions that return zero values, empty strings, or hardcoded responses
-- Tests that assert nothing meaningful (no assertions, or only `assert.True(true)`)
-- Imports that are declared but not used in the claimed integration path
-- Commented-out code blocks that replace real implementation
+Also block:
+- zero-value or hardcoded production responses
+- assertion-free tests
+- imports unused in the claimed integration path
+- commented-out code replacing real implementation
 
-### 5. Write Verification
+## Aggregate Verdict
+- `pass`: every criterion passes at Exists, Substantive, and Wired levels
+- `fail`: any criterion is `fail` or `blocked`
+- Populate `blockers[]` with failed criterion IDs
+- Run guardrail high-risk checks when applicable
+- Use fresh test execution, not cached output
+- For performance or regression claims, require baseline and candidate measurements from the same environment
+
+## Write Verification
 ```yaml
 # Write to: artifacts/changes/{slug}/verification/goal-verification.yaml
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
 run_version: 1
-references: []
+references:
+  - "fresh:command_ref=<path or transcript ref>"
 notes: |
   Criteria:
     AC-1: <criterion text> — pass — <concrete proof>
 ```
 
-### 6. Present and Advance
+## Present and Advance
 Show verification summary. {{template "hard-gate"}}
 
 After confirmation: `slipway next`
 
 ## DO NOT SKIP
-1. Fresh verification record (not cached from previous runs).
-2. Evidence-backed claims only (no "should work" or "probably passes").
-3. Guardrail domain high-risk checks when applicable.
+1. Fresh verification record, not cached evidence.
+2. Evidence-backed claims only.
+3. Guardrail high-risk checks when applicable.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "Tests pass so we're done" | Passing tests do not guarantee all acceptance criteria met. |
-| "Should work now" | Run the verification. Confidence is not evidence. |
-| "Most criteria are met" | All acceptance criteria must be verified. |
-| "Guardrail checks are overkill" | High-risk domains require explicit safety verification. |
-| "Verification file missing is okay" | Required verification is mandatory for ship. |
-| "The code exists so it works" | Existence (Level 1) is not integration (Level 3). Verify all three levels. |
-| "Stubs will be filled in later" | Stubs are incomplete code. Incomplete code blocks verification. |
-
-## Hard Gate Enforcement
-DO NOT advance past goal verification until the user has explicitly confirmed the verification summary. Passing all three verification levels is necessary but not sufficient — the user must approve before calling `slipway next`.
-
-**Anti-pattern**: "All criteria verified at all three levels, advancing automatically." — Verification checks existence, substance, and wiring, but cannot assess whether the user's actual intent was met. Only the user can confirm that.
-
-## Failure Handling
-- Stale or missing verification: keep ship gate blocked until refreshed.
-- If verification fails, fix root cause and re-verify (do not patch verification).
-
-## Step Declaration
-Declare current step and expected output before executing each workflow step.
+## Block If
+- A criterion lacks fresh evidence.
+- The implementation is stubbed, placeholder-only, or unwired.
+- Guardrail-domain proof or performance proof is missing for a claimed outcome.

@@ -13,53 +13,14 @@ IRON LAW: THIS SKILL ROUTES INTO THE CLI; IT DOES NOT REPLACE THE CLI
 
 ## Purpose
 Use `{{.PublicName}}` as the single exported entry skill for Slipway. It tells
-an AI how to enter governed work correctly, how to continue an active change,
-when to read governed host skills, and when to consult catalog or technique
-skills.
+an AI how to enter governed work, how to continue an active change, and when to
+hand off to a more specific command surface, governed host, or catalog skill.
 
 Slipway is a governance CLI for AI-assisted software delivery. A governed
-change is the unit of work. The lifecycle moves through intake, plan, execute,
-review, and verify. `done-ready` means the change has satisfied the workflow
-gates and can be finalized; `done` happens only after explicit `slipway done`.
-
-## When to Use
-- first contact with a Slipway-enabled repository
-- deciding whether a governed change already exists
-- deciding between `status`, `new`, `next`, `run`, and `done`
-- needing to understand which Slipway skill class should own the next step
-- needing the outbound catalog manifest or governed host handoff path
-
-## When NOT to Use
-- `slipway next --json` already returned a governed host: switch to `next_skill.prompt_path`
-- catalog triage is already the task: read `{{.CatalogManifestPath}}`
-- a technique skill is already the right posture overlay: use that technique skill directly
-- detailed per-command contract review is needed: read `references/command-reference.md`
-
-## Intent Classification at Entry
-When starting governed work and you can classify intent directly, enter through
-`slipway new --json`.
-
-Provide these fields when known:
-- `guardrail_domain`: sensitive-domain classification for the change itself
-- `complexity`: `trivial`, `simple`, `complex`, or `critical`
-- `needs_discovery`: `true` when the scope or codebase still needs investigation
-
-If these fields are omitted, the CLI applies conservative fallback defaults.
-
-## Skill Taxonomy
-- governance skills: runtime-selected hosts for the current workflow state
-- catalog skills: outbound work-skill catalog referenced by manifest
-- technique skills: posture/procedure overlays, not lifecycle authorities
-- standalone skills: exported helpers such as this workflow entry skill
-
-## Runtime Authority Boundaries
-- `ResolveNextSkill` selects governed host skills. This skill does not guess or override that selection.
-- `commandRegistry` owns command descriptions, arguments, prerequisites, and surface metadata.
-- `using-slipway-catalog.md` is outbound only. It helps the AI triage catalog skills; the kernel does not read it back.
-- existing CLI commands remain the only execution surface. This skill never reimplements transitions, gates, or command semantics.
+change is the unit of work. `done-ready` means the change has satisfied the
+workflow gates and can be finalized; `done` happens only after explicit `slipway done`.
 
 ## Primary Route Table
-
 | Situation | Command |
 |---|---|
 | Unsure whether a governed change already exists | `slipway status --json` |
@@ -68,19 +29,34 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 | Active change and you want the CLI to advance to the next governed step | `slipway run --json` |
 | The change is already `done-ready` and should be finalized | `slipway done` |
 
-After `slipway next --json`:
+## Entry Rules
+When starting governed work and you can classify intent directly, enter through
+`slipway new --json`.
+
+Provide these fields when known:
+- `guardrail_domain`
+- `complexity`: `trivial`, `simple`, `complex`, or `critical`
+- `needs_discovery`
+
+If these fields are omitted, the CLI applies conservative fallback defaults.
+
+## Runtime Authority Boundaries
+- `ResolveNextSkill` selects governed host skills. This skill does not guess or override that selection.
+- `commandRegistry` owns command descriptions, arguments, prerequisites, and surface metadata.
+- `using-slipway-catalog.md` is outbound only. It helps the AI triage catalog skills; the kernel does not read it back.
+- Existing CLI commands remain the only execution surface. This skill never reimplements transitions, gates, or command semantics.
+
+## Handoff After `slipway next --json`
 - read `next_skill.prompt_path`
 - treat `next_skill.resolved_tool_id` as the active tool/runtime boundary
 - do not look for retired agent fields or a second exported prompt file
 - if a follow-up Slipway CLI call is needed in a multi-adapter workspace, pass `SLIPWAY_TOOL=<resolved_tool_id>`
 - do not guess the next governed host without the CLI response
 
-## Detailed Contract Delegation
-The concise summary stays here. Detailed command contracts live in
-`references/command-reference.md`.
-
-For commands that ship generated command surfaces, prefer the generated command
-surface over re-explaining the command inline.
+## Delegation Surface
+Detailed command contracts live in `references/command-reference.md`. For
+commands that ship generated command surfaces, prefer those surfaces over
+re-explaining the command inline here.
 
 {{if eq .ToolID "codex"}}For Codex, command surfaces remain global prompt files under
 `~/.codex/prompts/slipway-<command>.md`.{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
@@ -92,35 +68,12 @@ their detailed arguments and prerequisites.
 
 ## Catalog and Host Handoff
 - when catalog triage is needed, read `{{.CatalogManifestPath}}`
-- Start with the `Triage index` and one-line `Summary`; those are the compact dispatcher
+- Start with the `Triage index` and one-line `Summary`; those are the dispatcher
 - use the catalog when no governed host already owns the next step and a reusable posture, procedure, checklist, or tool recipe would help
 - once a specific catalog skill is clearly the right tool, leave this entry skill and load that catalog skill directly
 - when governed execution is needed, read the host returned by `slipway next --json`
 - use technique skills as overlays for posture and procedure, not as progression authorities
 - once a more specific host, command surface, or catalog skill clearly owns the task, leave this entry skill and follow that more specific surface
-
-## Command Summary
-
-### Lifecycle Core
-| Command | Description |
-|---|---|
-{{- range .LifecycleCommands }}
-| `{{ .Name }}` | {{ .Description }} |
-{{- end }}
-
-### Supporting Commands
-| Command | Description |
-|---|---|
-{{- range .SupportingCommands }}
-| `{{ .Name }}` | {{ .Description }} |
-{{- end }}
-
-### Diagnostics
-| Command | Description |
-|---|---|
-{{- range .DiagnosticCommands }}
-| `{{ .Name }}` | {{ .Description }} |
-{{- end }}
 
 ## Hard Rules
 - do not bypass lifecycle gates

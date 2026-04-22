@@ -24,6 +24,25 @@ func TestAppendCatalogHintsAttachesOnReviewHost(t *testing.T) {
 	assert.Contains(t, hints[0].Reason, "procedure")
 }
 
+func TestAppendCatalogHintsGoalVerificationDropsRetiredFreshEvidence(t *testing.T) {
+	t.Parallel()
+	hints := appendCatalogHints(nil, "goal-verification", nil, &nextView{})
+	require.Len(t, hints, 1)
+	assert.Equal(t, "skill:coverage-analysis", hints[0].Name)
+}
+
+func TestAppendCatalogHintsVerifyHostsDoNotEmitRetiredFreshEvidence(t *testing.T) {
+	t.Parallel()
+	for _, host := range []string{"final-closeout", "tdd-governance"} {
+		host := host
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+			hints := appendCatalogHints(nil, host, nil, &nextView{})
+			assert.Empty(t, hints)
+		})
+	}
+}
+
 func TestAppendCatalogHintsEmptyWhenNoMatch(t *testing.T) {
 	t.Parallel()
 	hints := appendCatalogHints(nil, "", nil, &nextView{})

@@ -461,13 +461,13 @@ func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T)
 	t.Parallel()
 
 	reg := capability.DefaultRegistry()
-	skill, ok := reg.Lookup("fresh-verification-evidence")
+	skill, ok := reg.Lookup("context-assembly")
 	require.True(t, ok)
 
 	content, err := renderCatalogSkill(skill)
 	require.NoError(t, err)
 
-	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "fresh-verification-evidence", "SKILL.md")))
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "context-assembly", "SKILL.md")))
 	require.NoError(t, err)
 
 	// Output equals the source body with the adapter-frontmatter header
@@ -1557,6 +1557,19 @@ func TestTypedPartsRendered(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	path := filepath.Join(root, "slipway-tdd-governance", "SKILL.md")
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
+	assert.Contains(t, body, "reproducible command or transcript reference")
+	assert.NotContains(t, body, "{{template", "rendered tdd-governance must not leak raw template directives")
 }
 
 // TestSecurityReviewReferenceOverlaysPresent asserts that the rendered

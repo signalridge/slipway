@@ -8,7 +8,6 @@ slipway-context-assembly/SKILL.md	skill_md	non-exec
 slipway-context-assembly/references/codebase-map.md	reference	non-exec
 slipway-coverage-analysis/SKILL.md	skill_md	non-exec
 slipway-final-closeout/SKILL.md	skill_md	non-exec
-slipway-fresh-verification-evidence/SKILL.md	skill_md	non-exec
 slipway-gha-security-review/SKILL.md	skill_md	non-exec
 slipway-gha-security-review/references/comment-triggered-commands.md	reference	non-exec
 slipway-gha-security-review/references/expression-injection.md	reference	non-exec
@@ -76,4 +75,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 using-slipway-catalog.md	manifest_md	non-exec
-# inventory_sha256:5755ae4b4682cbf923c2e70414c3a8ba9a19548ab5fee7e2f7e2ff619f55af44
+# inventory_sha256:97a904157a76cfe2d68845ea5707c545687898b7cf17165896bb90bc812dc5b9

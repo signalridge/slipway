@@ -30,11 +30,9 @@ IRON LAW: EVERY SPEC LINE MAPS TO CODE; EVERY CODE CHANGE MAPS TO SPEC
 ```
 
 ## Purpose
-Verify that the implementation mirrors the approved plan in both directions.
-Spec-to-code proves every promise was kept; code-to-spec proves no unapproved
-scope crept in. Either direction alone is insufficient. This is the attached
-checklist/report-schema skill used by `spec-compliance-review`; it supplies the
-trace edges that the host review must cite.
+Verify the approved plan in both directions: plan line to code, and diff hunk
+back to plan line. `spec-compliance-review` uses this as its attached trace
+contract, and `review` / `validate --focus spec-trace` keep it public.
 
 ## Report schema
 ```yaml
@@ -55,4 +53,4 @@ code_to_spec:
 ## Anti-patterns
 - "Plan was followed" without per-item citations.
 - Diff hunks accepted as "refactor" without a plan line to cite.
-- Verdict `pass` when at least one spec item is skipped without justification.
+- Verdict `pass` when a skipped spec item has no justification.

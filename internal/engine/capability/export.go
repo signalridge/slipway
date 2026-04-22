@@ -22,11 +22,9 @@ func BuildCatalogManifest(reg *Registry) string {
 	}
 	var b strings.Builder
 	b.WriteString("# Using the Slipway Catalog\n\n")
-	b.WriteString("This manifest is generated from the Go-owned catalog registry. ")
-	b.WriteString("Do not edit by hand — run `slipway init` (or the toolgen regenerate hook) to refresh it.\n\n")
+	b.WriteString("Generated from the Go-owned catalog registry. Refresh with `slipway init`.\n\n")
 	b.WriteString(fmt.Sprintf("Registered skills: %d\n\n", reg.Len()))
-	b.WriteString("Triage by reading the one-line `summary` under each skill — ")
-	b.WriteString("the `Use when … / Triggers on …` phrasing is the dispatcher.\n\n")
+	b.WriteString("Start with the triage index. The one-line `Summary` is the dispatcher.\n\n")
 
 	b.WriteString("## Triage index\n\n")
 	b.WriteString("| Skill | Tier | Domain | Primary attachment | Routed bindings |\n")
@@ -55,19 +53,15 @@ func BuildCatalogManifest(reg *Registry) string {
 
 func writeSkillSection(b *strings.Builder, sk Skill) {
 	fmt.Fprintf(b, "### `%s` (%s)\n\n", adapterSkillPublicName(sk.ID), string(sk.Tier))
-	fmt.Fprintf(b, "- Function: %s\n", sk.Function)
-	fmt.Fprintf(b, "- Primary attachment: %s\n", string(sk.PrimaryAttachment))
-	fmt.Fprintf(b, "- Evidence contract: %s\n", string(sk.Evidence))
+	fmt.Fprintf(b, "- %s / %s / %s. %s\n",
+		string(sk.Domain),
+		string(sk.PrimaryAttachment),
+		string(sk.Evidence),
+		sk.Function,
+	)
 	fmt.Fprintf(b, "- Summary: %s\n", sk.Summary)
 	if len(sk.Bindings) > 0 {
-		b.WriteString("- Bindings:\n")
-		for _, binding := range sortBindings(sk.Bindings) {
-			fmt.Fprintf(b, "  - `%s` -> `%s` (%s)\n",
-				string(binding.Type),
-				binding.Target,
-				string(binding.Attachment),
-			)
-		}
+		fmt.Fprintf(b, "- Bindings: %s\n", formatBindingDetails(sk.Bindings))
 	}
 	b.WriteString("\n")
 }
@@ -91,6 +85,22 @@ func formatBindingTargets(bindings []Binding) string {
 		parts = append(parts, fmt.Sprintf("%s→%s", string(b.Type), b.Target))
 	}
 	slices.Sort(parts)
+	return strings.Join(parts, ", ")
+}
+
+func formatBindingDetails(bindings []Binding) string {
+	if len(bindings) == 0 {
+		return "-"
+	}
+	parts := make([]string, 0, len(bindings))
+	for _, binding := range sortBindings(bindings) {
+		parts = append(parts, fmt.Sprintf(
+			"`%s` -> `%s` (%s)",
+			string(binding.Type),
+			binding.Target,
+			string(binding.Attachment),
+		))
+	}
 	return strings.Join(parts, ", ")
 }
 
