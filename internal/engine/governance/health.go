@@ -52,6 +52,9 @@ func CollectGovernanceHealthWithSnapshot(root string, change model.Change, snap 
 		healthy = false
 	}
 
+	check = checkPolicyPacks(root, change)
+	checks = append(checks, check)
+
 	// 2. signal_freshness
 	check = SignalFreshnessCheck(snap)
 	checks = append(checks, check)
@@ -84,6 +87,58 @@ func CollectGovernanceHealthWithSnapshot(root string, change model.Change, snap 
 		Slug:    slug,
 		Checks:  checks,
 		Healthy: healthy,
+	}
+}
+
+func checkPolicyPacks(root string, change model.Change) GovernanceHealthCheck {
+	cfgPath, err := state.ConfigPathForChange(root, change)
+	if err != nil {
+		return GovernanceHealthCheck{
+			Name:    "policy_packs",
+			Status:  "WARN",
+			Message: fmt.Sprintf("skipped policy pack checks: resolve .slipway.yaml path error: %v", err),
+		}
+	}
+	cfg, err := model.LoadConfig(cfgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return GovernanceHealthCheck{Name: "policy_packs", Status: "OK", Message: "no policy packs configured"}
+		}
+		return GovernanceHealthCheck{
+			Name:    "policy_packs",
+			Status:  "WARN",
+			Message: fmt.Sprintf("skipped policy pack checks because .slipway.yaml is invalid: %v", err),
+		}
+	}
+	if len(cfg.Governance.PolicyPacks) == 0 {
+		return GovernanceHealthCheck{Name: "policy_packs", Status: "OK", Message: "no policy packs configured"}
+	}
+
+	var warnings []string
+	for _, pack := range cfg.Governance.PolicyPacks {
+		if pack.Mode != "" && pack.Mode != model.ControlModeAdvisory {
+			warnings = append(warnings, fmt.Sprintf("policy pack %q is not advisory", pack.Name))
+			continue
+		}
+		packPath := strings.TrimSpace(pack.Path)
+		if !filepath.IsAbs(packPath) {
+			packPath = filepath.Join(filepath.Dir(cfgPath), packPath)
+		}
+		if _, err := LoadAdvisoryPolicyPack(pack.Name, packPath); err != nil {
+			warnings = append(warnings, err.Error())
+		}
+	}
+	if len(warnings) > 0 {
+		return GovernanceHealthCheck{
+			Name:    "policy_packs",
+			Status:  "WARN",
+			Message: "advisory policy pack warnings: " + strings.Join(warnings, "; "),
+		}
+	}
+	return GovernanceHealthCheck{
+		Name:    "policy_packs",
+		Status:  "OK",
+		Message: fmt.Sprintf("%d advisory policy pack(s) parsed", len(cfg.Governance.PolicyPacks)),
 	}
 }
 

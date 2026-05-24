@@ -62,6 +62,7 @@ var helpGroups = []commandGroup{
 		Title:       "Diagnostics",
 		Description: "Repo-local observability and integrity checks.",
 		Commands: []groupedCommand{
+			{Name: "learn", Description: desc("learn")},
 			{Name: "stats", Description: desc("stats")},
 			{Name: "health", Description: desc("health")},
 		},
@@ -141,6 +142,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeNextCmd())
 	cmd.AddCommand(makeRunCmd())
 	cmd.AddCommand(makeStatusCmd())
+	cmd.AddCommand(makeLearnCmd())
 	cmd.AddCommand(makeStatsCmd())
 	cmd.AddCommand(makeHealthCmd())
 	cmd.AddCommand(makeRootPathCmd())

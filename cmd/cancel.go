@@ -70,17 +70,25 @@ func makeCancelCmd() *cobra.Command {
 					return err
 				}
 
+				beforeChange := change
 				change.Status = model.ChangeStatusCancelled
-				details := map[string]string{
-					"interrupt_pids":    strings.TrimSpace(fmt.Sprintf("%v", interrupted)),
-					"force_killed_pids": strings.TrimSpace(fmt.Sprintf("%v", forceKilled)),
-				}
 				if strings.TrimSpace(preemptionEvidenceRef) != "" {
 					key := fmt.Sprintf("cancel_preemption_%d", time.Now().UTC().UnixNano())
 					change.EvidenceRefs[key] = preemptionEvidenceRef
-					details["preemption_evidence_ref"] = preemptionEvidenceRef
 				}
 				if err := state.SaveChange(root, change); err != nil {
+					return err
+				}
+				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+					Command:     "cancel",
+					EventType:   "cancel.marked",
+					Action:      "archived",
+					Reason:      "operator_cancelled_change",
+					Result:      string(model.ChangeStatusCancelled),
+					BeforeState: beforeChange.CurrentState,
+					AfterState:  change.CurrentState,
+					Diagnostics: lifecyclePIDDiagnostics(interrupted, forceKilled),
+				}); err != nil {
 					return err
 				}
 

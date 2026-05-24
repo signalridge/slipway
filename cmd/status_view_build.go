@@ -41,6 +41,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 			PlanSubStep:               change.PlanSubStep,
 			PlanningNote:              planningNote(change.CurrentState, change.PlanSubStep),
 			QualityMode:               profile.QualityMode,
+			WorkflowProfile:           profile.WorkflowProfile,
 			NeedsDiscovery:            profile.NeedsDiscovery,
 			WorkflowPreset:            presetFields.WorkflowPreset,
 			SuggestedWorkflowPreset:   presetFields.SuggestedWorkflowPreset,
@@ -104,6 +105,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	)
 	profile := buildChangeProfileView(change)
 	view.QualityMode = profile.QualityMode
+	view.WorkflowProfile = profile.WorkflowProfile
 	view.WorkflowPreset = presetFields.WorkflowPreset
 	view.SuggestedWorkflowPreset = presetFields.SuggestedWorkflowPreset
 	view.EffectiveWorkflowPreset = presetFields.EffectiveWorkflowPreset
@@ -128,6 +130,12 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
+	timeline, timelineErr := buildStatusTimeline(root, change, 20)
+	if timelineErr != nil {
+		view.Diagnostics = append(view.Diagnostics, "lifecycle_event_log_unreadable: "+timelineErr.Error())
+	} else {
+		view.Timeline = timeline
+	}
 	view.Narrative = buildStatusNarrative(view)
 	return view, nil
 }
@@ -241,6 +249,39 @@ func governedSourceStateFile(root string, change model.Change) string {
 		return state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
 	}
 	return filepath.Join("artifacts", "changes", change.Slug, "change.yaml")
+}
+
+func buildStatusTimeline(root string, change model.Change, limit int) ([]statusTimelineEvent, error) {
+	events, err := state.ReadLifecycleEvents(root, change)
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil
+	}
+	if limit > 0 && len(events) > limit {
+		events = events[len(events)-limit:]
+	}
+	timeline := make([]statusTimelineEvent, 0, len(events))
+	for _, event := range events {
+		entry := statusTimelineEvent{
+			EventID:   event.EventID,
+			Command:   event.Command,
+			EventType: event.EventType,
+			Result:    event.Result,
+			FromState: event.BeforeState,
+			ToState:   event.AfterState,
+			GateID:    event.GateID,
+			ControlID: event.ControlID,
+			SkillID:   event.SkillID,
+			Blockers:  append([]model.ReasonCode(nil), event.Blockers...),
+		}
+		if !event.OccurredAt.IsZero() {
+			entry.OccurredAt = event.OccurredAt.UTC().Format(time.RFC3339)
+		}
+		timeline = append(timeline, entry)
+	}
+	return timeline, nil
 }
 
 func buildStatusNarrative(view statusView) string {

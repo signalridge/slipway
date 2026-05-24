@@ -702,6 +702,32 @@ func TestNewCommandUsesCoreSchemaForSimpleChange(t *testing.T) {
 	})
 }
 
+func TestNewCommandMetaProfileDefaultsToExpandedSchema(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
+		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--profile", "meta", "change slipway generated governance surface"})
+		require.NoError(t, cmd.Execute())
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.WorkflowProfileMeta, change.WorkflowProfile)
+		assert.Equal(t, model.ArtifactSchemaExpanded, change.ArtifactSchema)
+	})
+}
+
 func TestNewCommandSafeDegradeKeepsPendingPresetInJSONMode(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1421,15 +1447,6 @@ func withWorkspace(t *testing.T, root string, fn func()) {
 func initTestWorkspace(t *testing.T, root string) {
 	t.Helper()
 	require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
-}
-
-// seedTestToolAdapter writes a minimal claude adapter sentinel so that
-// generated adapter surfaces exist in test workspaces when init is requested.
-func seedTestToolAdapter(t *testing.T, root string) {
-	t.Helper()
-	markerPath := filepath.Join(root, ".claude", "slipway", ".adapter-generated")
-	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
-	require.NoError(t, os.WriteFile(markerPath, []byte("test marker"), 0o644))
 }
 
 // ensureTestGitRepo initializes a bare-minimum git repo if one doesn't exist.

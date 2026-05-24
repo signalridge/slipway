@@ -135,6 +135,20 @@ func TestEvaluateRequiredSkillsForChange_RequiresExplicitPlanSubStep(t *testing.
 	assert.NotContains(t, blockersWithExplicitSubStep, "required_skill_missing:research-orchestration")
 }
 
+func TestEvaluateRequiredSkillsForChange_DocsProfileSkipsCodeQualityReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("docs-review")
+	change.CurrentState = model.StateS3Review
+	change.WorkflowProfile = model.WorkflowProfileDocs
+
+	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_missing:spec-compliance-review")
+	assert.NotContains(t, blockers, "required_skill_missing:code-quality-review")
+}
+
 func TestExtractHighRiskChecks_FromReferences(t *testing.T) {
 	t.Parallel()
 	passingSkills := map[string]model.VerificationRecord{

@@ -12,6 +12,7 @@ type PlanGateResult struct {
 	NextPlanAuditIterations  int
 	LastCheckerFeedback      string
 	ClearLastCheckerFeedback bool
+	Stalled                  bool
 }
 
 func blockedAdvanceSummary(fromState model.WorkflowState, blockers []model.ReasonCode) AdvanceSummary {
@@ -39,12 +40,11 @@ func saveChangeAndReturn(root string, change model.Change, summary AdvanceSummar
 	return summary, nil
 }
 
-func saveBlockedChange(root string, change model.Change, fromState model.WorkflowState, blockers []model.ReasonCode) (AdvanceSummary, error) {
-	return saveChangeAndReturn(root, change, blockedAdvanceSummary(fromState, blockers))
-}
-
 type AdvanceOptions struct {
 	SkipAutoPass bool
+	// Command names the mutating surface that requested advancement. It is
+	// recorded in lifecycle trace events only; it does not affect progression.
+	Command string
 	// QuickMode disables advisory controls (clarification, research,
 	// independent_review, worktree_isolation) for this invocation, keeping
 	// only fail-closed guardrail protections.

@@ -36,12 +36,14 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 
 	// Check skill evidence for intake-clarification
 	nextSkillName, evidenceState := ResolveNextSkill(*change)
+	var passingSkills map[string]model.VerificationRecord
 	if nextSkillName != "" {
 		executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, *change)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		_, skillBlockers, err := EvaluateRequiredSkillsForChange(
+		var skillBlockers []string
+		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChange(
 			root,
 			*change,
 			model.WorkflowState(evidenceState),
@@ -90,14 +92,16 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 			return AdvanceSummary{}, err
 		}
 		return AdvanceSummary{
-			Action:      "advanced",
-			FromState:   fromState,
-			ToState:     fromState,
-			FromSubStep: fromSub,
-			ToSubStep:   string(model.IntakeSubStepResearch),
-			Reason:      "open_questions_detected",
-			Signals:     map[string]bool{"open_questions_detected": true},
-			Message:     "Advanced to S0_INTAKE/research for open questions.",
+			Action:        "advanced",
+			FromState:     fromState,
+			ToState:       fromState,
+			FromSubStep:   fromSub,
+			ToSubStep:     string(model.IntakeSubStepResearch),
+			Reason:        "open_questions_detected",
+			Signals:       map[string]bool{"open_questions_detected": true},
+			SideEffects:   skillEvidenceSideEffects(passingSkills),
+			SkillEvidence: skillEvidenceTraceFromPassing(root, *change, passingSkills),
+			Message:       "Advanced to S0_INTAKE/research for open questions.",
 		}, nil
 	}
 
@@ -106,13 +110,15 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
-		Action:      "advanced",
-		FromState:   fromState,
-		ToState:     fromState,
-		FromSubStep: fromSub,
-		ToSubStep:   string(model.IntakeSubStepConfirm),
-		Reason:      "clarification_complete",
-		Message:     "Advanced to S0_INTAKE/confirm.",
+		Action:        "advanced",
+		FromState:     fromState,
+		ToState:       fromState,
+		FromSubStep:   fromSub,
+		ToSubStep:     string(model.IntakeSubStepConfirm),
+		Reason:        "clarification_complete",
+		SideEffects:   skillEvidenceSideEffects(passingSkills),
+		SkillEvidence: skillEvidenceTraceFromPassing(root, *change, passingSkills),
+		Message:       "Advanced to S0_INTAKE/confirm.",
 	}, nil
 }
 
@@ -125,12 +131,14 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 
 	// Check skill evidence
 	nextSkillName, evidenceState := ResolveNextSkill(*change)
+	var passingSkills map[string]model.VerificationRecord
 	if nextSkillName != "" {
 		executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, *change)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		_, skillBlockers, err := EvaluateRequiredSkillsForChange(
+		var skillBlockers []string
+		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChange(
 			root,
 			*change,
 			model.WorkflowState(evidenceState),
@@ -153,14 +161,16 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 			return AdvanceSummary{}, err
 		}
 		return AdvanceSummary{
-			Action:      "advanced",
-			FromState:   fromState,
-			ToState:     fromState,
-			FromSubStep: fromSub,
-			ToSubStep:   string(model.IntakeSubStepClarify),
-			Reason:      "open_questions_remaining",
-			Signals:     map[string]bool{"open_questions_detected": true},
-			Message:     "Returned to S0_INTAKE/clarify with remaining questions.",
+			Action:        "advanced",
+			FromState:     fromState,
+			ToState:       fromState,
+			FromSubStep:   fromSub,
+			ToSubStep:     string(model.IntakeSubStepClarify),
+			Reason:        "open_questions_remaining",
+			Signals:       map[string]bool{"open_questions_detected": true},
+			SideEffects:   skillEvidenceSideEffects(passingSkills),
+			SkillEvidence: skillEvidenceTraceFromPassing(root, *change, passingSkills),
+			Message:       "Returned to S0_INTAKE/clarify with remaining questions.",
 		}, nil
 	}
 
@@ -169,13 +179,15 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
-		Action:      "advanced",
-		FromState:   fromState,
-		ToState:     fromState,
-		FromSubStep: fromSub,
-		ToSubStep:   string(model.IntakeSubStepConfirm),
-		Reason:      "research_resolved",
-		Message:     "Advanced to S0_INTAKE/confirm.",
+		Action:        "advanced",
+		FromState:     fromState,
+		ToState:       fromState,
+		FromSubStep:   fromSub,
+		ToSubStep:     string(model.IntakeSubStepConfirm),
+		Reason:        "research_resolved",
+		SideEffects:   skillEvidenceSideEffects(passingSkills),
+		SkillEvidence: skillEvidenceTraceFromPassing(root, *change, passingSkills),
+		Message:       "Advanced to S0_INTAKE/confirm.",
 	}, nil
 }
 

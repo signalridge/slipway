@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -30,6 +31,7 @@ func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeRe
 	view.ExecutionMode = governedExecutionMode
 	profile := buildChangeProfileView(change)
 	view.QualityMode = profile.QualityMode
+	view.WorkflowProfile = profile.WorkflowProfile
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.InputContext.Slug = change.Slug
 	if paths, err := state.ResolveChangePaths(root, change); err == nil {
@@ -37,8 +39,13 @@ func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeRe
 		view.InputContext.ArtifactBundle = state.DisplayPath(root, paths.GovernedBundleDir)
 		view.InputContext.CodebaseMapDir = state.DisplayPath(paths.WorkspaceRoot, paths.CodebaseMapDir)
 		view.InputContext.CodebaseMapDocs = artifact.CodebaseMapDisplayDocs(paths.WorkspaceRoot, paths.CodebaseMapDir)
+		view.InputContext.HandoffContext = buildHandoffContext(root, change, paths)
 	} else {
 		return nil, nil, err
+	}
+	if !change.ProjectContext.IsZero() {
+		projectContext := change.ProjectContext
+		view.InputContext.ProjectContext = &projectContext
 	}
 	if !change.ContextDependencies.IsEmpty() {
 		deps := change.ContextDependencies
@@ -56,6 +63,156 @@ func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeRe
 	return &change, &execCtx, nil
 }
 
+func buildHandoffContext(root string, change model.Change, paths state.ResolvedChangePaths) *handoffContextView {
+	changeAuthority := state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
+	configPath, err := state.ConfigPathForChange(root, change)
+	if err != nil {
+		configPath = ""
+	}
+	lifecycleLog, err := state.LifecycleEventLogPath(root, change)
+	if err != nil {
+		lifecycleLog = ""
+	}
+	requiredReads := []string{changeAuthority}
+	readRefs := []handoffReadRef{{
+		Kind:   "authority",
+		Path:   changeAuthority,
+		Reason: "current change lifecycle/runtime authority",
+	}}
+	if paths.CodebaseMapDir != "" {
+		displayPath := state.DisplayPath(root, paths.CodebaseMapDir)
+		requiredReads = append(requiredReads, displayPath)
+		readRefs = append(readRefs, handoffReadRef{
+			Kind:   "artifact",
+			Path:   displayPath,
+			Reason: "durable codebase map for bounded repository context",
+		})
+	}
+	if configPath != "" {
+		displayPath := state.DisplayPath(root, configPath)
+		requiredReads = append(requiredReads, displayPath)
+		readRefs = append(readRefs, handoffReadRef{
+			Kind:   "config",
+			Path:   displayPath,
+			Reason: "project-local governance and handoff configuration",
+		})
+	}
+	eventLog := displayOptionalPath(root, lifecycleLog)
+	if eventLog != "" {
+		readRefs = append(readRefs, handoffReadRef{
+			Kind:   "trace",
+			Path:   eventLog,
+			Reason: "append-only lifecycle audit trace for this change",
+		})
+	}
+	policyPacks, policyRefs, policyReads := buildPolicyPackHandoff(root, configPath)
+	readRefs = append(readRefs, policyRefs...)
+	requiredReads = append(requiredReads, policyReads...)
+	return &handoffContextView{
+		WorkflowProfile:   string(change.EffectiveWorkflowProfile()),
+		ContextPolicy:     "bounded_references_only",
+		Trace:             buildHandoffTrace(change, eventLog),
+		ContextBudget:     &handoffBudgetHintView{Mode: "compact", MaxInlineBytes: 12000},
+		ReadRefs:          readRefs,
+		PolicyPacks:       policyPacks,
+		Risk:              buildHandoffRisk(change, nil),
+		ChangeAuthority:   changeAuthority,
+		LifecycleEventLog: eventLog,
+		ConfigPath:        displayOptionalPath(root, configPath),
+		RequiredReads:     requiredReads,
+	}
+}
+
+func buildPolicyPackHandoff(root, configPath string) ([]handoffPolicyPack, []handoffReadRef, []string) {
+	if strings.TrimSpace(configPath) == "" {
+		return nil, nil, nil
+	}
+	cfg, err := model.LoadConfig(configPath)
+	if err != nil || len(cfg.Governance.PolicyPacks) == 0 {
+		return nil, nil, nil
+	}
+
+	packs := make([]handoffPolicyPack, 0, len(cfg.Governance.PolicyPacks))
+	refs := make([]handoffReadRef, 0, len(cfg.Governance.PolicyPacks))
+	reads := make([]string, 0, len(cfg.Governance.PolicyPacks))
+	for _, pack := range cfg.Governance.PolicyPacks {
+		packPath := strings.TrimSpace(pack.Path)
+		if packPath == "" {
+			continue
+		}
+		if !filepath.IsAbs(packPath) {
+			packPath = filepath.Join(filepath.Dir(configPath), packPath)
+		}
+		displayPath := state.DisplayPath(root, packPath)
+		mode := string(pack.Mode)
+		if mode == "" {
+			mode = string(model.ControlModeAdvisory)
+		}
+		view := handoffPolicyPack{
+			Name: strings.TrimSpace(pack.Name),
+			Path: displayPath,
+			Mode: mode,
+		}
+		if parsed, loadErr := governance.LoadAdvisoryPolicyPack(pack.Name, packPath); loadErr == nil {
+			view.SchemaVersion = parsed.SchemaVersion
+			view.AdvisoryRules = append([]string(nil), parsed.AdvisoryRules...)
+			view.ArtifactRequirements = append([]string(nil), parsed.ArtifactRequirements...)
+			view.RecommendedReviewers = append([]string(nil), parsed.RecommendedReviewers...)
+			view.Terminology = append([]string(nil), parsed.Terminology...)
+		}
+		packs = append(packs, view)
+		reads = append(reads, displayPath)
+		refs = append(refs, handoffReadRef{
+			Kind:   "policy_pack",
+			Path:   displayPath,
+			Reason: "project-local advisory governance policy pack",
+		})
+	}
+	return packs, refs, reads
+}
+
+func buildHandoffTrace(change model.Change, eventLog string) *handoffTraceView {
+	return &handoffTraceView{
+		CorrelationID: "next-" + strings.ToLower(strings.TrimSpace(change.Slug)) + "-" + strings.ToLower(string(change.CurrentState)),
+		EventLog:      eventLog,
+	}
+}
+
+func buildHandoffRisk(change model.Change, controls []string) *handoffRiskView {
+	risk := &handoffRiskView{
+		GuardrailDomain: strings.TrimSpace(change.GuardrailDomain),
+		WorkflowProfile: string(change.EffectiveWorkflowProfile()),
+		Controls:        append([]string(nil), controls...),
+		Hints:           workflowProfileRiskHints(change.EffectiveWorkflowProfile()),
+	}
+	if risk.GuardrailDomain == "" && len(risk.Controls) == 0 && len(risk.Hints) == 0 {
+		return nil
+	}
+	return risk
+}
+
+func workflowProfileRiskHints(profile model.WorkflowProfile) []string {
+	switch profile.Effective() {
+	case model.WorkflowProfileDocs:
+		return []string{"docs profile emphasizes artifact consistency; sensitive-domain controls still override profile shortcuts"}
+	case model.WorkflowProfileResearch:
+		return []string{"research profile emphasizes discovery evidence and does not imply implementation approval"}
+	case model.WorkflowProfileConfig:
+		return []string{"config profile emphasizes rollback, safety, and supply-chain context"}
+	case model.WorkflowProfileMeta:
+		return []string{"meta profile changes Slipway governance surfaces; preserve schema and generated surface compatibility"}
+	default:
+		return nil
+	}
+}
+
+func displayOptionalPath(root, target string) string {
+	if strings.TrimSpace(target) == "" {
+		return ""
+	}
+	return state.DisplayPath(root, target)
+}
+
 func applyReadinessToNextContext(view *nextView, readiness progression.GovernanceReadiness) {
 	if view == nil {
 		return
@@ -69,6 +226,10 @@ func applyReadinessToNextContext(view *nextView, readiness progression.Governanc
 		}
 	}
 
+	if view.InputContext.HandoffContext != nil {
+		view.InputContext.HandoffContext.Risk = buildHandoffRiskForReadiness(view.InputContext.HandoffContext.Risk, readiness.ActiveControls)
+	}
+
 	if readiness.ArtifactProjection == nil || len(readiness.ArtifactProjection.Nodes) == 0 {
 		return
 	}
@@ -77,6 +238,25 @@ func applyReadinessToNextContext(view *nextView, readiness progression.Governanc
 		artifactID := strings.TrimSuffix(node.Name, filepath.Ext(node.Name))
 		view.InputContext.ArtifactStatus[artifactID] = node.State
 	}
+}
+
+func buildHandoffRiskForReadiness(existing *handoffRiskView, controls []model.ControlActivation) *handoffRiskView {
+	controlIDs := make([]string, 0, len(controls))
+	for _, control := range controls {
+		if !control.Active || strings.TrimSpace(string(control.ControlID)) == "" {
+			continue
+		}
+		controlIDs = append(controlIDs, string(control.ControlID))
+	}
+	slices.Sort(controlIDs)
+	if existing == nil {
+		if len(controlIDs) == 0 {
+			return nil
+		}
+		return &handoffRiskView{Controls: controlIDs}
+	}
+	existing.Controls = controlIDs
+	return existing
 }
 
 // buildResumeCheckpoint handles active checkpoint validation and wave execution

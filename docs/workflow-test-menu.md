@@ -65,6 +65,7 @@ Commands:
 go run . init --tools none
 go run . status --json
 go run . health --json
+go run . learn --preview --json
 go run . stats --json
 go run . codebase-map
 ```
@@ -77,7 +78,9 @@ What to observe:
    change.
 3. `health --json` should show repo-local findings before `codebase-map`, then
    become cleaner after the map is generated.
-4. `stats --json` should report codebase-map freshness.
+4. `learn --preview --json` should return read-only proposals and `auto_apply:
+   false`.
+5. `stats --json` should report codebase-map freshness.
 
 Good companion test:
 

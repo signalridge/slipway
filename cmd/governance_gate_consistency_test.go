@@ -3,7 +3,6 @@ package cmd
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -393,10 +392,7 @@ func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
 	writeAuthReviewGovernedBundle(t, root, slug)
 
 	nextResp := runNextViewForChange(t, root, slug)
-	// domain-review is advisory by default (Wave 1), so it no longer
-	// produces a governance_action_required blocker.
-	blockerSpecs := strings.Join(model.ReasonSpecs(nextResp.Blockers), "\n")
-	assert.NotContains(t, blockerSpecs, "governance_action_required:domain-review")
+	requireBlockerContains(t, nextResp.Blockers, "governance_action_required:domain-review")
 }
 
 func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {

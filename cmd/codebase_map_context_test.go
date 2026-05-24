@@ -64,6 +64,97 @@ func TestBuildNextContextFallsBackToProjectRootWithoutWorktreeBinding(t *testing
 	assert.Equal(t, "artifacts/codebase", view.InputContext.CodebaseMapDir)
 }
 
+func TestBuildNextContextIncludesBoundedHandoffContext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("docs-handoff")
+	change.Description = "document operator runbook"
+	change.WorkflowProfile = model.WorkflowProfileDocs
+	change.ProjectContext = model.ProjectContext{
+		TechStack: "Go",
+		TestCmd:   "go test ./...",
+	}
+	require.NoError(t, state.SaveChange(root, change))
+
+	var view nextView
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+
+	require.NotNil(t, view.InputContext.ProjectContext)
+	assert.Equal(t, "Go", view.InputContext.ProjectContext.TechStack)
+	require.NotNil(t, view.InputContext.HandoffContext)
+	assert.Equal(t, "docs", view.InputContext.HandoffContext.WorkflowProfile)
+	assert.Equal(t, "bounded_references_only", view.InputContext.HandoffContext.ContextPolicy)
+	assert.Equal(t, "artifacts/changes/docs-handoff/change.yaml", view.InputContext.HandoffContext.ChangeAuthority)
+	assert.Contains(t, view.InputContext.HandoffContext.LifecycleEventLog, "events/lifecycle.jsonl")
+	assert.Contains(t, view.InputContext.HandoffContext.RequiredReads, ".slipway.yaml")
+	require.NotNil(t, view.InputContext.HandoffContext.Trace)
+	assert.Contains(t, view.InputContext.HandoffContext.Trace.CorrelationID, "next-docs-handoff")
+	require.NotNil(t, view.InputContext.HandoffContext.ContextBudget)
+	assert.Equal(t, "compact", view.InputContext.HandoffContext.ContextBudget.Mode)
+	assert.NotEmpty(t, view.InputContext.HandoffContext.ReadRefs)
+	require.NotNil(t, view.InputContext.HandoffContext.Risk)
+	assert.Contains(t, view.InputContext.HandoffContext.Risk.Hints[0], "docs profile")
+}
+
+func TestBuildNextContextIncludesAdvisoryPolicyPackHandoff(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slipway", "policies"), 0o755))
+	require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(`governance:
+  policy_packs:
+    - name: platform
+      path: .slipway/policies/platform.yaml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway", "policies", "platform.yaml"), []byte(`version: 1
+advisory_rules:
+  - preserve operator runbook links
+artifact_requirements:
+  - runbook.md must describe rollback
+recommended_reviewers:
+  - platform
+terminology:
+  SLA: service level agreement
+`), 0o644))
+
+	change := model.NewChange("policy-pack-handoff")
+	require.NoError(t, state.SaveChange(root, change))
+
+	var view nextView
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+
+	require.NotNil(t, view.InputContext.HandoffContext)
+	require.Len(t, view.InputContext.HandoffContext.PolicyPacks, 1)
+	pack := view.InputContext.HandoffContext.PolicyPacks[0]
+	assert.Equal(t, "platform", pack.Name)
+	assert.Equal(t, "advisory", pack.Mode)
+	assert.Equal(t, "1", pack.SchemaVersion)
+	assert.Contains(t, pack.Path, ".slipway/policies/platform.yaml")
+	assert.Contains(t, pack.AdvisoryRules, "preserve operator runbook links")
+	assert.Contains(t, pack.ArtifactRequirements, "runbook.md must describe rollback")
+	assert.Contains(t, pack.RecommendedReviewers, "platform")
+	assert.Contains(t, pack.Terminology, "SLA=service level agreement")
+	assert.Contains(t, view.InputContext.HandoffContext.RequiredReads, "artifacts/changes/policy-pack-handoff/change.yaml")
+	assert.Contains(t, view.InputContext.HandoffContext.RequiredReads, ".slipway/policies/platform.yaml")
+
+	foundRef := false
+	for _, ref := range view.InputContext.HandoffContext.ReadRefs {
+		if ref.Kind == "policy_pack" && strings.Contains(ref.Path, ".slipway/policies/platform.yaml") {
+			foundRef = true
+		}
+	}
+	assert.True(t, foundRef, "expected policy_pack read ref")
+}
+
 func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

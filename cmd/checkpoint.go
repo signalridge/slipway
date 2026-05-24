@@ -158,10 +158,27 @@ func makeCheckpointCmd() *cobra.Command {
 					)
 				}
 
+				beforeChange := change
 				change.ActiveCheckpoint = &cp
 				change.ActiveCheckpoint.PausedWaveIndex = pausedWaveIndex
 				change.ActiveCheckpoint.PausedAt = time.Now().UTC()
 				if err := state.SaveChange(root, change); err != nil {
+					return err
+				}
+				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+					Command:     "checkpoint",
+					EventType:   "checkpoint.opened",
+					Action:      "opened",
+					Reason:      checkpointType,
+					Result:      "pending_response",
+					BeforeState: beforeChange.CurrentState,
+					AfterState:  change.CurrentState,
+					Diagnostics: []string{
+						fmt.Sprintf("task_id=%s", taskID),
+						fmt.Sprintf("wave_index=%d", pausedWaveIndex),
+						fmt.Sprintf("checkpoint_type=%s", checkpointType),
+					},
+				}); err != nil {
 					return err
 				}
 

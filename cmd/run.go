@@ -50,8 +50,21 @@ func makeRunCmd() *cobra.Command {
 					return err
 				}
 				if !change.InterruptedExecutionAt.IsZero() {
+					beforeChange := change
 					change.InterruptedExecutionAt = time.Time{}
 					if err := state.SaveChange(root, change); err != nil {
+						return err
+					}
+					if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+						Command:       "run",
+						EventType:     "resume.succeeded",
+						Action:        "resumed",
+						Reason:        "interrupted_execution_cleared",
+						Result:        "success",
+						BeforeState:   beforeChange.CurrentState,
+						AfterState:    change.CurrentState,
+						ClearedFields: []string{"interrupted_execution_at"},
+					}); err != nil {
 						return err
 					}
 				}

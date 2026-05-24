@@ -25,6 +25,7 @@ func EvaluateRequiredSkillsForChange(
 		root,
 		change.Slug,
 		change.NeedsDiscovery,
+		change.EffectiveWorkflowProfile(),
 		workflowState,
 		latestRunSummaryVersion,
 		closeoutRequired,
@@ -46,6 +47,7 @@ func evaluateRequiredSkills(
 	root string,
 	slug string,
 	needsDiscovery bool,
+	workflowProfile model.WorkflowProfile,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
 	closeoutRequired bool,
@@ -63,6 +65,7 @@ func evaluateRequiredSkills(
 		closeoutRequired,
 		planSubSteps...,
 	)
+	required = skill.FilterRequiredSkillsForWorkflowProfile(required, workflowProfile)
 	// Read authoritative verification files before the empty-required-skills
 	// early return so malformed evidence still fails closed with explicit
 	// integrity reporting.

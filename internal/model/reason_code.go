@@ -100,6 +100,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Plan audit did not pass",
 	},
+	"plan_audit_stalled": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan audit feedback did not improve",
+	},
 	"required_skill_blockers_present": {
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill still reports blockers",

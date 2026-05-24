@@ -143,6 +143,22 @@ func makePresetCmd() *cobra.Command {
 						return scaffoldErr
 					}
 				}
+				if _, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+					Command:       "preset",
+					EventType:     "preset.changed",
+					Action:        "confirmed",
+					Reason:        fmt.Sprintf("%s->%s", origPreset, change.WorkflowPreset),
+					Result:        "ok",
+					BeforeState:   change.CurrentState,
+					AfterState:    change.CurrentState,
+					BeforeSubStep: string(change.PlanSubStep),
+					AfterSubStep:  string(change.PlanSubStep),
+					SideEffects: []state.LifecycleSideEffect{
+						{Kind: "workflow_preset_confirmed", Detail: string(change.WorkflowPreset)},
+					},
+				}); err != nil {
+					return err
+				}
 
 				jsonFlag, _ := cmd.Flags().GetBool("json")
 				if jsonFlag {

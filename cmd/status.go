@@ -18,6 +18,7 @@ type statusView struct {
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
 	Slug                      string                      `json:"slug,omitempty"`
 	QualityMode               string                      `json:"quality_mode,omitempty"`
+	WorkflowProfile           string                      `json:"workflow_profile,omitempty"`
 	WorkflowPreset            string                      `json:"workflow_preset,omitempty"`
 	SuggestedWorkflowPreset   string                      `json:"suggested_workflow_preset,omitempty"`
 	EffectiveWorkflowPreset   string                      `json:"effective_workflow_preset,omitempty"`
@@ -47,11 +48,26 @@ type statusView struct {
 	EvidencePointers          statusEvidencePointers      `json:"evidence_pointers,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
 	SourceStateFile           string                      `json:"source_state_file,omitempty"`
+	Timeline                  []statusTimelineEvent       `json:"timeline,omitempty"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	// Governance (derived from governance_snapshot.yaml)
 	GovernanceSignals *governanceSignalView   `json:"governance_signals,omitempty"`
 	ActiveControls    []governanceControlView `json:"active_controls,omitempty"`
 	RequiredActions   []governanceActionView  `json:"required_actions,omitempty"`
+}
+
+type statusTimelineEvent struct {
+	EventID    string              `json:"event_id"`
+	OccurredAt string              `json:"occurred_at"`
+	Command    string              `json:"command,omitempty"`
+	EventType  string              `json:"event_type"`
+	Result     string              `json:"result,omitempty"`
+	FromState  model.WorkflowState `json:"from_state,omitempty"`
+	ToState    model.WorkflowState `json:"to_state,omitempty"`
+	GateID     string              `json:"gate_id,omitempty"`
+	ControlID  string              `json:"control_id,omitempty"`
+	SkillID    string              `json:"skill_id,omitempty"`
+	Blockers   []model.ReasonCode  `json:"blockers,omitempty"`
 }
 
 type governanceSignalView struct {
@@ -212,10 +228,10 @@ func makeStatusCmd() *cobra.Command {
 			if route.multiChange {
 				return printMultiChangeSummary(cmd, active, outputFormat)
 			}
-				if route.diagnostics != nil {
-					// Diagnostics mode is not a routed command context. When no
-					// active change exists, only preserve an explicit --focus value.
-					route.diagnostics.Mode = explicitFocus
+			if route.diagnostics != nil {
+				// Diagnostics mode is not a routed command context. When no
+				// active change exists, only preserve an explicit --focus value.
+				route.diagnostics.Mode = explicitFocus
 				if explicitFocus != "" {
 					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 					if hydrate {

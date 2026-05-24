@@ -150,6 +150,37 @@ func TestCheckGateWithIteration_MissingEvidence(t *testing.T) {
 	}
 }
 
+func TestCheckGateWithIterationDetectsStalledFeedback(t *testing.T) {
+	t.Parallel()
+	change := model.Change{
+		Slug: "stalled-plan-audit",
+	}
+	passingSkills := map[string]model.VerificationRecord{}
+
+	first := CheckGateWithIteration("/tmp/nonexistent", change, passingSkills, 3)
+	sideEffects, err := ApplyPlanGateResult(&change, first)
+	if err != nil {
+		t.Fatalf("apply first result: %v", err)
+	}
+	if len(sideEffects) == 0 {
+		t.Fatal("expected side effects after first failed audit")
+	}
+
+	second := CheckGateWithIteration("/tmp/nonexistent", change, passingSkills, 3)
+	if !second.Stalled {
+		t.Fatal("expected second unchanged failed audit to be marked stalled")
+	}
+	if !hasAdvanceReasonCode(second.Blockers, "plan_audit_stalled") {
+		t.Fatalf("expected plan_audit_stalled blocker, got %v", second.Blockers)
+	}
+	if !hasAdvanceReasonCode(second.Blockers, "plan_checker_loop_terminated") {
+		t.Fatalf("expected loop termination blocker, got %v", second.Blockers)
+	}
+	if !hasAdvanceReasonDetail(second.Blockers, "plan_audit_iteration", "2/3") {
+		t.Fatalf("expected second iteration detail, got %v", second.Blockers)
+	}
+}
+
 func TestAdvanceGoverned_BlocksWhenBundleMissing(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -171,6 +202,81 @@ func TestAdvanceGoverned_BlocksWhenBundleMissing(t *testing.T) {
 	}
 	if len(summary.Blockers) == 0 {
 		t.Fatalf("expected missing bundle blockers, got %+v", summary)
+	}
+}
+
+func TestAdvanceGovernedWritesLifecycleEvent(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("advance-event-log")
+	change.CurrentState = model.StateS0Intake
+	change.IntakeSubStep = model.IntakeSubStepClarify
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ComplexityLevel = "simple"
+	change.WorkflowPreset = model.WorkflowPresetLight
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intent := "# Intent\n\n## Summary\nTest\n\n## In Scope\nAdd logging\n\n## Out of Scope\nNothing\n\n## Acceptance Signals\nTests pass\n"
+	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+		t.Fatalf("write intent.md: %v", err)
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  change.CreatedAt,
+		RunVersion: 0,
+	})
+
+	summary, err := AdvanceGoverned(root, change.Slug, AdvanceOptions{Command: "run"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Action != "advanced" {
+		t.Fatalf("expected advanced, got %+v", summary)
+	}
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	events, err := state.ReadLifecycleEvents(root, reloaded)
+	if err != nil {
+		t.Fatalf("read lifecycle events: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected transition and skill evidence lifecycle events, got %d: %+v", len(events), events)
+	}
+	event := events[0]
+	if event.EventType != "state.transitioned" {
+		t.Fatalf("expected state.transitioned event, got %q", event.EventType)
+	}
+	if event.Command != "run" {
+		t.Fatalf("expected run command, got %q", event.Command)
+	}
+	if event.BeforeState != model.StateS0Intake || event.AfterState != model.StateS0Intake {
+		t.Fatalf("expected S0 substep transition, got before=%s after=%s", event.BeforeState, event.AfterState)
+	}
+	if event.BeforeSubStep != string(model.IntakeSubStepClarify) || event.AfterSubStep != string(model.IntakeSubStepConfirm) {
+		t.Fatalf("unexpected substeps: before=%q after=%q", event.BeforeSubStep, event.AfterSubStep)
+	}
+	evidenceEvent := events[1]
+	if evidenceEvent.EventType != "skill.evidence_recorded" {
+		t.Fatalf("expected skill.evidence_recorded event, got %q", evidenceEvent.EventType)
+	}
+	if evidenceEvent.SkillID != SkillIntakeClarification {
+		t.Fatalf("expected intake skill evidence event, got %q", evidenceEvent.SkillID)
+	}
+	if evidenceEvent.EvidenceRefs[SkillIntakeClarification] == "" {
+		t.Fatalf("expected evidence ref for %s, got %+v", SkillIntakeClarification, evidenceEvent.EvidenceRefs)
 	}
 }
 

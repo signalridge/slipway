@@ -75,6 +75,7 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 			Blocking: true,
 		})
 	}
+	gaps = append(gaps, evaluateRequirementDeltaStructure(reqContent)...)
 
 	// Scan decision artifact for DEC-* IDs.
 	decContent := readArtifactContent(resolve("decision.md"))
@@ -280,6 +281,74 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	return summary
 }
 
+func evaluateRequirementDeltaStructure(reqContent string) []model.TraceabilityGap {
+	if strings.TrimSpace(reqContent) == "" {
+		return nil
+	}
+	deltaHeadings := []struct {
+		kind    string
+		heading string
+	}{
+		{kind: "added", heading: "## ADDED Requirements"},
+		{kind: "modified", heading: "## MODIFIED Requirements"},
+		{kind: "removed", heading: "## REMOVED Requirements"},
+	}
+	var gaps []model.TraceabilityGap
+	for _, section := range deltaHeadings {
+		if !markdownSectionExists(reqContent, section.heading) {
+			continue
+		}
+		body := extractMarkdownSectionBody(reqContent, section.heading)
+		if strings.TrimSpace(body) == "" {
+			gaps = append(gaps, model.TraceabilityGap{
+				ID:       "requirements-delta-" + section.kind + "-empty",
+				Type:     "requirement",
+				Issue:    fmt.Sprintf("%s section is empty", section.heading),
+				Blocking: true,
+			})
+			continue
+		}
+		blocks := artifact.ParseRequirementBlocks(body)
+		if len(blocks) > 0 {
+			continue
+		}
+		gaps = append(gaps, model.TraceabilityGap{
+			ID:       "requirements-delta-" + section.kind + "-no-blocks",
+			Type:     "requirement",
+			Issue:    fmt.Sprintf("%s section has no Requirement blocks (expected ### Requirement: <Name>)", section.heading),
+			Blocking: true,
+		})
+	}
+	gaps = append(gaps, evaluateStructuredSupportSection(reqContent, "## NON-GOALS", "non-goals", nil)...)
+	gaps = append(gaps, evaluateStructuredSupportSection(reqContent, "## DECISIONS", "decisions", decisionIDPattern)...)
+	gaps = append(gaps, evaluateStructuredSupportSection(reqContent, "## ROLLBACK", "rollback", nil)...)
+	return gaps
+}
+
+func evaluateStructuredSupportSection(content, heading, kind string, requiredPattern *regexp.Regexp) []model.TraceabilityGap {
+	if !markdownSectionExists(content, heading) {
+		return nil
+	}
+	body := extractMarkdownSectionBody(content, heading)
+	if strings.TrimSpace(body) == "" {
+		return []model.TraceabilityGap{{
+			ID:       "requirements-delta-" + kind + "-empty",
+			Type:     "requirement",
+			Issue:    fmt.Sprintf("%s section is empty", heading),
+			Blocking: true,
+		}}
+	}
+	if requiredPattern != nil && len(extractIDs(body, requiredPattern)) == 0 {
+		return []model.TraceabilityGap{{
+			ID:       "requirements-delta-" + kind + "-missing-ids",
+			Type:     "requirement",
+			Issue:    fmt.Sprintf("%s section has no stable decision IDs", heading),
+			Blocking: true,
+		}}
+	}
+	return nil
+}
+
 // extractRequirementBlocks splits the requirements file content into per-REQ-ID blocks.
 func extractRequirementBlocks(content string, reqIDs []string) map[string]string {
 	return extractBlocksByID(content, reqIDs, "REQ-")
@@ -440,6 +509,19 @@ func extractMarkdownSectionBody(content, heading string) string {
 	return strings.TrimSpace(strings.Join(body, "\n"))
 }
 
+func markdownSectionExists(content, heading string) bool {
+	if strings.TrimSpace(content) == "" {
+		return false
+	}
+	target := strings.ToLower(strings.TrimSpace(heading))
+	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		if strings.ToLower(strings.TrimSpace(line)) == target {
+			return true
+		}
+	}
+	return false
+}
+
 func requirementRef(id string) string {
 	return normalizeRequirementRef("REQ-" + strings.TrimSpace(id))
 }
@@ -510,6 +592,9 @@ func isAuditGapEligibleForLightPreset(gap model.TraceabilityGap) bool {
 	case "requirements-no-blocks", "requirements-stable-ids":
 		return false
 	default:
+		if strings.HasPrefix(gap.ID, "requirements-delta-") {
+			return false
+		}
 		return true
 	}
 }

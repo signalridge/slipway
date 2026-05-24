@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/signalridge/slipway/internal/engine/action"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/gate"
@@ -17,7 +19,7 @@ import (
 
 const planAuditLastCheckerFeedbackKey = "plan_audit.last_checker_feedback"
 
-func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary, error) {
+func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary AdvanceSummary, err error) {
 	var options AdvanceOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -26,6 +28,22 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 	if err != nil {
 		return AdvanceSummary{}, err
 	}
+	beforeChange := change
+	defer func() {
+		if err != nil || strings.TrimSpace(summary.Action) == "" || summary.Action == "query" {
+			return
+		}
+		afterChange := change
+		if reloaded, loadErr := state.LoadChange(root, slug); loadErr == nil {
+			afterChange = reloaded
+		}
+		if eventErr := recordAdvanceLifecycleEvent(root, beforeChange, afterChange, summary, options.Command); eventErr != nil {
+			summary.SideEffects = append(summary.SideEffects, SideEffect{
+				Kind:   "lifecycle_event_write_failed",
+				Detail: eventErr.Error(),
+			})
+		}
+	}()
 
 	// Quick mode: inject advisory-control disablement in-memory (not persisted).
 	if options.QuickMode {
@@ -141,7 +159,9 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 		if len(skillBlockers) > 0 {
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(skillBlockers)), nil
 		}
+		preTransitionSideEffects = append(preTransitionSideEffects, skillEvidenceSideEffects(passingSkills)...)
 	}
+	preTransitionSkillEvidence := skillEvidenceTraceFromPassing(root, change, passingSkills)
 
 	// 5. Worktree validation (at S2_EXECUTE when NeedsDiscovery and worktree unbound)
 	isWorktreeGateState := fromState == model.StateS2Execute
@@ -181,6 +201,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 		if summary, applied, err := attemptAutoPassSequence(root, change, fromState, toState); err != nil {
 			return AdvanceSummary{}, err
 		} else if applied {
+			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
 			return summary, nil
 		}
 	}
@@ -206,7 +228,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 			return AdvanceSummary{}, err
 		}
 		if scopeResult.Status == model.GateStatusBlocked {
-			return saveBlockedChange(root, change, fromState, scopeResult.ReasonCodes)
+			summary := blockedAdvanceSummary(fromState, scopeResult.ReasonCodes)
+			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+			return saveChangeAndReturn(root, change, summary)
 		}
 	}
 
@@ -223,6 +248,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 			summary.ToSubStep = string(change.PlanSubStep)
 			summary.Reason = "plan_audit_feedback_recorded"
 			summary.SideEffects = sideEffects
+			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
 			return saveChangeAndReturn(root, change, summary)
 		}
 		preTransitionSideEffects = append(preTransitionSideEffects, sideEffects...)
@@ -234,7 +261,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 			return AdvanceSummary{}, err
 		}
 		if shipResult.Status == model.GateStatusBlocked {
-			return saveBlockedChange(root, change, fromState, shipResult.ReasonCodes)
+			summary := blockedAdvanceSummary(fromState, shipResult.ReasonCodes)
+			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+			return saveChangeAndReturn(root, change, summary)
 		}
 	}
 
@@ -259,6 +289,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 			if err := state.SaveChange(root, change); err != nil {
 				return AdvanceSummary{}, err
 			}
+			sideEffects = append(append([]SideEffect(nil), preTransitionSideEffects...), sideEffects...)
 			return AdvanceSummary{
 				Action:      "advanced",
 				FromState:   fromState,
@@ -267,7 +298,11 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 				ToSubStep:   string(nextSub),
 				Reason:      "plan_substep_progression",
 				SideEffects: sideEffects,
-				Message:     fmt.Sprintf("Advanced to S1_PLAN/%s.", nextSub),
+				SkillEvidence: append(
+					[]SkillEvidenceTrace(nil),
+					preTransitionSkillEvidence...,
+				),
+				Message: fmt.Sprintf("Advanced to S1_PLAN/%s.", nextSub),
 			}, nil
 		}
 		// Exiting S1_PLAN: audit clean path runs post-audit machine validation
@@ -285,6 +320,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 				summary.ToSubStep = string(model.PlanSubStepValidate)
 				summary.RecoveryOnly = true
 				summary.Reason = "plan_validation_failed"
+				summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+				summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
 				return summary, nil
 			}
 		}
@@ -293,7 +330,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 
 	// D1: Block S4_VERIFY→DONE in `next`; only `slipway done` finalizes.
 	if toState == model.StateDone {
-		return saveChangeAndReturn(root, change, doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize."))
+		summary := doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize.")
+		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+		summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+		return saveChangeAndReturn(root, change, summary)
 	}
 
 	sideEffects := append([]SideEffect(nil), preTransitionSideEffects...)
@@ -338,6 +378,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (AdvanceSummary,
 		FromSubStep:   fromSub,
 		Reason:        "state_progression",
 		SideEffects:   sideEffects,
+		SkillEvidence: append([]SkillEvidenceTrace(nil), preTransitionSkillEvidence...),
 		ClearedFields: cleared,
 		Message:       fmt.Sprintf("Advanced to %s.", toState),
 	}, nil
@@ -406,12 +447,16 @@ func CheckGateWithIteration(root string, change model.Change, passingSkills map[
 	if strings.TrimSpace(feedback) == "" {
 		feedback = strings.Join(model.ReasonSpecs(result.ReasonCodes), "; ")
 	}
+	stalled := iteration > 1 && strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]) == feedback
 
 	blockers := append([]model.ReasonCode(nil), result.ReasonCodes...)
 	blockers = append(blockers, model.NewReasonCode("plan_audit_iteration", fmt.Sprintf("%d/%d", iteration, maxIterations)))
 	blockers = append(blockers, model.NewReasonCode("plan_checker_feedback_required", "rerun_plan_audit_with_blocker_feedback"))
 
-	if iteration >= maxIterations {
+	if stalled {
+		blockers = append(blockers, model.NewReasonCode("plan_audit_stalled", "checker feedback did not change from the previous failed audit"))
+	}
+	if stalled || iteration >= maxIterations {
 		blockers = append(blockers, model.NewReasonCode("plan_audit_budget_exhausted", "consider `slipway pivot --kind rescope` or manual intervention"))
 		blockers = append(blockers, model.NewReasonCode("plan_checker_loop_terminated", ""))
 	}
@@ -421,7 +466,292 @@ func CheckGateWithIteration(root string, change model.Change, passingSkills map[
 		Blockers:                blockers,
 		NextPlanAuditIterations: iteration,
 		LastCheckerFeedback:     feedback,
+		Stalled:                 stalled,
 	}
+}
+
+func recordAdvanceLifecycleEvent(root string, before, after model.Change, summary AdvanceSummary, command string) error {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "advance"
+	}
+	correlationID := "corr-" + uuid.NewString()
+	event := state.LifecycleEvent{
+		CorrelationID: correlationID,
+		Command:       command,
+		ActorKind:     "cli",
+		EventType:     advanceLifecycleEventType(summary),
+		Action:        summary.Action,
+		Reason:        summary.Reason,
+		Result:        summary.Action,
+		GateID:        advanceGateID(before, summary),
+		SkillID:       firstBlockerDetail(summary.Blockers, "required_skill_missing"),
+		ControlID:     firstGovernanceActionControl(summary.Blockers),
+		BeforeState:   before.CurrentState,
+		AfterState:    after.CurrentState,
+		BeforeSubStep: advanceSummaryBeforeSubStep(before, summary),
+		AfterSubStep:  advanceSummaryAfterSubStep(after, summary),
+		Blockers:      append([]model.ReasonCode(nil), summary.Blockers...),
+		EvidenceRefs:  lifecycleEvidenceRefs(after.EvidenceRefs),
+		SideEffects:   lifecycleSideEffects(summary.SideEffects),
+		ClearedFields: append([]string(nil), summary.ClearedFields...),
+	}
+	if _, err := state.AppendLifecycleEvent(root, after, event); err != nil {
+		return err
+	}
+	for _, derived := range derivedAdvanceLifecycleEvents(root, after, event, summary) {
+		if _, err := state.AppendLifecycleEvent(root, after, derived); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func advanceLifecycleEventType(summary AdvanceSummary) string {
+	switch summary.Action {
+	case "advanced":
+		if len(summary.AutoPassedStates) > 0 {
+			return "auto_pass.applied"
+		}
+		return "state.transitioned"
+	case "blocked":
+		return "gate.evaluated"
+	case "done_ready":
+		if len(summary.AutoPassedStates) > 0 {
+			return "auto_pass.applied"
+		}
+		return "done.ready"
+	default:
+		return "advance." + summary.Action
+	}
+}
+
+func advanceGateID(before model.Change, summary AdvanceSummary) string {
+	if summary.Action != "blocked" && summary.Action != "done_ready" {
+		return ""
+	}
+	switch before.CurrentState {
+	case model.StateS1Plan:
+		substep := before.PlanSubStep
+		if summary.FromSubStep != "" {
+			substep = model.PlanSubStep(summary.FromSubStep)
+		}
+		switch substep {
+		case model.PlanSubStepResearch:
+			return string(gate.GateScope)
+		case model.PlanSubStepAudit, model.PlanSubStepValidate:
+			return string(gate.GatePlan)
+		default:
+			return string(gate.GatePlan)
+		}
+	case model.StateS4Verify:
+		return string(gate.GateShip)
+	default:
+		return ""
+	}
+}
+
+func derivedAdvanceLifecycleEvents(root string, change model.Change, base state.LifecycleEvent, summary AdvanceSummary) []state.LifecycleEvent {
+	var derived []state.LifecycleEvent
+	for _, blocker := range base.Blockers {
+		switch blocker.Code {
+		case "governance_action_required":
+			controlID := governanceActionControl(blocker)
+			if controlID == "" {
+				continue
+			}
+			derived = append(derived, lifecycleDerivedEvent(base, "control.triggered", controlID, ""))
+		case "required_skill_missing":
+			skillID := strings.TrimSpace(blocker.Detail)
+			if skillID == "" {
+				continue
+			}
+			derived = append(derived, lifecycleDerivedEvent(base, "skill.presented", "", skillID))
+		}
+	}
+	for _, evidence := range summary.SkillEvidence {
+		skillID := strings.TrimSpace(evidence.SkillName)
+		if skillID == "" {
+			continue
+		}
+		event := lifecycleDerivedEvent(base, "skill.evidence_recorded", "", skillID)
+		event.Result = "recorded"
+		event.Reason = "verification_evidence_consumed"
+		event.EvidenceRefs = map[string]string{
+			skillID: skillEvidenceRef(root, change, evidence),
+		}
+		event.Diagnostics = skillEvidenceDiagnostics(evidence)
+		derived = append(derived, event)
+	}
+	return derived
+}
+
+func lifecycleDerivedEvent(base state.LifecycleEvent, eventType, controlID, skillID string) state.LifecycleEvent {
+	base.EventID = ""
+	base.EventType = eventType
+	base.ControlID = controlID
+	base.SkillID = skillID
+	base.Blockers = nil
+	return base
+}
+
+func advanceSummaryBeforeSubStep(before model.Change, summary AdvanceSummary) string {
+	if strings.TrimSpace(summary.FromSubStep) != "" {
+		return summary.FromSubStep
+	}
+	switch before.CurrentState {
+	case model.StateS0Intake:
+		return string(before.IntakeSubStep)
+	case model.StateS1Plan:
+		return string(before.PlanSubStep)
+	default:
+		return ""
+	}
+}
+
+func advanceSummaryAfterSubStep(after model.Change, summary AdvanceSummary) string {
+	if strings.TrimSpace(summary.ToSubStep) != "" {
+		return summary.ToSubStep
+	}
+	switch after.CurrentState {
+	case model.StateS0Intake:
+		return string(after.IntakeSubStep)
+	case model.StateS1Plan:
+		return string(after.PlanSubStep)
+	default:
+		return ""
+	}
+}
+
+func lifecycleSideEffects(sideEffects []SideEffect) []state.LifecycleSideEffect {
+	if len(sideEffects) == 0 {
+		return nil
+	}
+	out := make([]state.LifecycleSideEffect, 0, len(sideEffects))
+	for _, sideEffect := range sideEffects {
+		out = append(out, state.LifecycleSideEffect{
+			Kind:   sideEffect.Kind,
+			Detail: sideEffect.Detail,
+		})
+	}
+	return out
+}
+
+func lifecycleEvidenceRefs(refs map[string]string) map[string]string {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(refs))
+	for key, value := range refs {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func skillEvidenceTraceFromPassing(root string, change model.Change, passingSkills map[string]model.VerificationRecord) []SkillEvidenceTrace {
+	if len(passingSkills) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(passingSkills))
+	for skillName := range passingSkills {
+		if strings.TrimSpace(skillName) != "" {
+			names = append(names, skillName)
+		}
+	}
+	slices.Sort(names)
+	traces := make([]SkillEvidenceTrace, 0, len(names))
+	for _, skillName := range names {
+		record := passingSkills[skillName]
+		trace := SkillEvidenceTrace{
+			SkillName:   skillName,
+			RunVersion:  record.RunVersion,
+			Timestamp:   record.Timestamp,
+			References:  append([]string(nil), record.References...),
+			EvidenceRef: state.DisplayPath(root, state.VerificationFilePath(root, change.Slug, skillName)),
+		}
+		traces = append(traces, trace)
+	}
+	return traces
+}
+
+func skillEvidenceSideEffects(passingSkills map[string]model.VerificationRecord) []SideEffect {
+	if len(passingSkills) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(passingSkills))
+	for skillName := range passingSkills {
+		if strings.TrimSpace(skillName) != "" {
+			names = append(names, skillName)
+		}
+	}
+	slices.Sort(names)
+	sideEffects := make([]SideEffect, 0, len(names))
+	for _, skillName := range names {
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   "skill_evidence_recorded",
+			Detail: skillName,
+		})
+	}
+	return sideEffects
+}
+
+func skillEvidenceRef(root string, change model.Change, evidence SkillEvidenceTrace) string {
+	if strings.TrimSpace(evidence.EvidenceRef) != "" {
+		return evidence.EvidenceRef
+	}
+	return state.DisplayPath(root, state.VerificationFilePath(root, change.Slug, evidence.SkillName))
+}
+
+func skillEvidenceDiagnostics(evidence SkillEvidenceTrace) []string {
+	diagnostics := []string{fmt.Sprintf("run_version=%d", evidence.RunVersion)}
+	if !evidence.Timestamp.IsZero() {
+		diagnostics = append(diagnostics, "timestamp="+evidence.Timestamp.UTC().Format(time.RFC3339))
+	}
+	for _, ref := range evidence.References {
+		ref = strings.TrimSpace(ref)
+		if ref != "" {
+			diagnostics = append(diagnostics, "reference="+ref)
+		}
+	}
+	return diagnostics
+}
+
+func firstBlockerDetail(blockers []model.ReasonCode, code string) string {
+	for _, blocker := range blockers {
+		if blocker.Code == code {
+			return strings.TrimSpace(blocker.Detail)
+		}
+	}
+	return ""
+}
+
+func firstGovernanceActionControl(blockers []model.ReasonCode) string {
+	for _, blocker := range blockers {
+		if blocker.Code != "governance_action_required" {
+			continue
+		}
+		if controlID := governanceActionControl(blocker); controlID != "" {
+			return controlID
+		}
+	}
+	return ""
+}
+
+func governanceActionControl(blocker model.ReasonCode) string {
+	detail := strings.TrimSpace(blocker.Detail)
+	if detail == "" {
+		return ""
+	}
+	controlID, _, _ := strings.Cut(detail, ":")
+	return strings.TrimSpace(controlID)
 }
 
 // ApplyPlanGateResult persists the explicit mutation contract returned by

@@ -34,6 +34,26 @@ plan_substep: bundle
 	require.NoError(t, change.Validate())
 }
 
+func TestChangeValidateRejectsInvalidWorkflowProfile(t *testing.T) {
+	t.Parallel()
+
+	change := NewChange("invalid-profile")
+	change.WorkflowProfile = WorkflowProfile("slides")
+
+	err := change.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid workflow_profile")
+}
+
+func TestWorkflowProfileMetaIsValidAndDefaultsExpandedArtifacts(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, WorkflowProfileMeta.IsValid())
+	assert.True(t, WorkflowProfileMeta.RequiresCodeQualityReview())
+	assert.Equal(t, ArtifactSchemaExpanded, DefaultArtifactSchemaForWorkflowProfile(WorkflowProfileMeta, false, ArtifactSchemaCore))
+	assert.Equal(t, ArtifactSchemaCore, DefaultArtifactSchemaForWorkflowProfile(WorkflowProfileDocs, false, ArtifactSchemaExpanded))
+}
+
 func TestControlActivationValidateRequiresTriggeredBy(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +327,42 @@ func TestConfigGovernanceRoundTrip(t *testing.T) {
 	assert.Equal(t, WorkflowPresetLight, cfg2.Governance.DefaultPreset)
 	assert.Equal(t, WorkflowPresetStandard, cfg2.Governance.MinPreset)
 	assert.Equal(t, ControlModeAdvisory, cfg2.Governance.Controls[ControlIndependentReview])
+}
+
+func TestConfigGovernancePolicyPacksAreAdvisoryOnly(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`
+governance:
+  policy_packs:
+    - name: platform
+      path: .slipway/policies/platform.yaml
+`)
+
+	cfg, err := ParseConfigYAML(raw)
+	require.NoError(t, err)
+	require.Len(t, cfg.Governance.PolicyPacks, 1)
+	assert.Equal(t, "platform", cfg.Governance.PolicyPacks[0].Name)
+	assert.Equal(t, ControlModeAdvisory, cfg.Governance.PolicyPacks[0].Mode)
+
+	out, err := cfg.ToYAML()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "policy_packs:")
+	assert.Contains(t, string(out), "mode: advisory")
+}
+
+func TestConfigGovernancePolicyPacksRejectBlockingMode(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`
+governance:
+  policy_packs:
+    - name: platform
+      path: .slipway/policies/platform.yaml
+      mode: blocking
+`)
+
+	_, err := ParseConfigYAML(raw)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mode must be advisory")
 }
 
 func TestConfigGovernanceEmptyNotSerialized(t *testing.T) {

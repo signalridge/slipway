@@ -179,8 +179,21 @@ func makeDoneCmd() *cobra.Command {
 				if shipBlocked {
 					return shipGateBlockedError(change, shipEval)
 				}
+				beforeChange := change
 				markChangeDone(&change)
 
+				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+					Command:     "done",
+					EventType:   "done.marked",
+					Action:      "archived",
+					Reason:      "operator_finalized_done_ready",
+					Result:      string(model.ChangeStatusDone),
+					GateID:      string(gate.GateShip),
+					BeforeState: beforeChange.CurrentState,
+					AfterState:  change.CurrentState,
+				}); err != nil {
+					return err
+				}
 				if _, err := state.ArchiveChange(root, change, model.ChangeStatusDone); err != nil {
 					return err
 				}
@@ -319,8 +332,21 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 			append([]model.ReasonCode(nil), shipEval.ReasonCodes...),
 		)
 	}
+	beforeChange := change
 	markChangeDone(&change)
 
+	if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+		Command:     "done",
+		EventType:   "done.marked",
+		Action:      "archived",
+		Reason:      "operator_finalized_done_ready",
+		Result:      string(model.ChangeStatusDone),
+		GateID:      string(gate.GateShip),
+		BeforeState: beforeChange.CurrentState,
+		AfterState:  change.CurrentState,
+	}); err != nil {
+		return newDoneBulkFailed(slug, "lifecycle_event_write_failed", err.Error())
+	}
 	if _, err := state.ArchiveChange(root, change, model.ChangeStatusDone); err != nil {
 		return newDoneBulkFailed(slug, "archive_failed", err.Error())
 	}

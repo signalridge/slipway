@@ -32,6 +32,7 @@ type ConfigAgents struct {
 type ConfigGovernance struct {
 	DefaultPreset WorkflowPreset `yaml:"default_preset,omitempty" json:"default_preset,omitempty"`
 	MinPreset     WorkflowPreset `yaml:"min_preset,omitempty" json:"min_preset,omitempty"`
+	PolicyPacks   []PolicyPack   `yaml:"policy_packs,omitempty" json:"policy_packs,omitempty"`
 	// Controls maps control IDs to their mode override (blocking/advisory).
 	// Controls not listed here use their built-in default mode.
 	Controls map[ControlID]ControlMode `yaml:"controls,omitempty" json:"controls,omitempty"`
@@ -39,6 +40,15 @@ type ConfigGovernance struct {
 	DisabledControls []ControlID `yaml:"disabled_controls,omitempty" json:"disabled_controls,omitempty"`
 	// Thresholds overrides the blast-radius activation thresholds for controls.
 	Thresholds ConfigGovernanceThresholds `yaml:"thresholds,omitempty" json:"thresholds,omitempty"`
+}
+
+// PolicyPack registers an external advisory governance pack. Policy packs are
+// intentionally read-only/advisory in this schema; built-in guardrail domains
+// remain the fail-closed enforcement surface.
+type PolicyPack struct {
+	Name string      `yaml:"name" json:"name"`
+	Path string      `yaml:"path" json:"path"`
+	Mode ControlMode `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
 // ConfigGovernanceThresholds allows project-level override of the blast-radius
@@ -159,6 +169,11 @@ func (c *Config) Normalize() {
 	if c.Agents.Mappings == nil {
 		c.Agents.Mappings = map[string]string{}
 	}
+	for i := range c.Governance.PolicyPacks {
+		if c.Governance.PolicyPacks[i].Mode == "" {
+			c.Governance.PolicyPacks[i].Mode = ControlModeAdvisory
+		}
+	}
 }
 
 func (c Config) Validate() error {
@@ -179,6 +194,17 @@ func (c Config) Validate() error {
 	for _, id := range c.Governance.DisabledControls {
 		if !id.IsValid() {
 			return fmt.Errorf("governance.disabled_controls: unknown control_id %q", id)
+		}
+	}
+	for i, pack := range c.Governance.PolicyPacks {
+		if strings.TrimSpace(pack.Name) == "" {
+			return fmt.Errorf("governance.policy_packs[%d].name is required", i)
+		}
+		if strings.TrimSpace(pack.Path) == "" {
+			return fmt.Errorf("governance.policy_packs[%d].path is required", i)
+		}
+		if pack.Mode != "" && pack.Mode != ControlModeAdvisory {
+			return fmt.Errorf("governance.policy_packs[%d].mode must be advisory", i)
 		}
 	}
 	if p := c.Governance.DefaultPreset; p != "" && !p.IsValid() {
@@ -277,6 +303,7 @@ func (c Config) ToYAML() ([]byte, error) {
 	appendMappingEntry(root, "execution", executionNode)
 
 	hasGovernance := cfg.Governance.DefaultPreset != "" || cfg.Governance.MinPreset != "" ||
+		len(cfg.Governance.PolicyPacks) > 0 ||
 		len(cfg.Governance.Controls) > 0 || len(cfg.Governance.DisabledControls) > 0 ||
 		cfg.Governance.Thresholds.IndependentReviewBlastRadius != "" ||
 		cfg.Governance.Thresholds.WorktreeBlastRadius != ""

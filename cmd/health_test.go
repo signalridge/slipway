@@ -46,6 +46,38 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 	})
 }
 
+func TestHealthCommandReportsMalformedLifecycleEventLog(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		change := model.NewChange("malformed-events")
+		require.NoError(t, state.SaveChange(root, change))
+		eventPath, err := state.LifecycleEventLogPath(root, change)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(eventPath), 0o755))
+		require.NoError(t, os.WriteFile(eventPath, []byte("{not-json\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeHealthCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category == "lifecycle_event_log" && finding.Slug == change.Slug {
+				found = true
+				assert.False(t, finding.Repairable)
+				assert.Contains(t, finding.Reasons[0].Code, "lifecycle_event_log_unreadable")
+			}
+		}
+		assert.True(t, found, "expected malformed lifecycle event log finding")
+	})
+}
+
 func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

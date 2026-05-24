@@ -61,6 +61,7 @@ surfaces.
 | `repair` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `checkpoint` | mutation | surfaced / situational | `CLI + REG` | `ROOT + GEN + DOC` | green |
 | `init` | mutation | surfaced / situational, shown under Setup in root help | `CLI + REG` | `ROOT + GEN + DOC` | green |
+| `learn` | query | surfaced / diagnostics, CLI-only | `CLI + REG` | `ROOT + DOC` | green |
 | `stats` | query | surfaced / diagnostics, CLI-only | `CLI + REG` | `ROOT + DOC` | green |
 | `health` | query | surfaced / diagnostics, CLI-only | `CLI + REG` | `ROOT + DOC` | green |
 | `codebase-map` | mutation | surfaced / diagnostics, CLI-only, shown under Discovery in root help | `CLI + REG` | `ROOT + DOC` | green |
@@ -76,7 +77,7 @@ authority layer. Current group membership is intentional:
 | `Core lifecycle` | `new`, `preset`, `next`, `run`, `status`, `done` |
 | `Discovery` | `codebase-map` |
 | `Situational` | `review`, `validate`, `pivot`, `abort`, `cancel`, `repair`, `checkpoint` |
-| `Diagnostics` | `stats`, `health` |
+| `Diagnostics` | `learn`, `stats`, `health` |
 | `Setup` | `init` |
 
 Notes:
@@ -85,7 +86,7 @@ Notes:
   under `Discovery` because it is the main durable discovery entrypoint for
   brownfield work. It remains CLI-only today: no generated command prompt
   surface is emitted for it.
-- `stats` and `health` remain surfaced diagnostics commands with
+- `learn`, `stats`, and `health` remain surfaced diagnostics commands with
   registry-backed descriptions, but they are also CLI-only today and do not
   generate command prompt surfaces.
 - `init` stays adapter-visible `situational`, but root help renders it under

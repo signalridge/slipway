@@ -26,10 +26,18 @@ classification defaults and reports that degradation in command output.
 Creation refinements:
 
 - `slipway new --preset <light|standard|strict>`: choose the governance preset during creation
+- `slipway new --profile <code|docs|research|config|meta>`: choose the workflow shape separately from preset strictness
 - `slipway new --from-doc <path>`: seed governed work from an existing document
 - `slipway new --discuss`: persist unresolved gray areas into context before execution
 - `slipway new --full`: require refreshed final-closeout evidence before ship
 - `slipway new --trivial`: force complexity=trivial for lightweight changes
+
+Workflow profile is not a second preset. Presets decide how strict the gates
+are; profile decides which workflow-specific checks apply. `code` is the
+default. `docs` and `research` still require spec-compliance and goal
+verification, but they do not require the code-quality-review stage. `config`
+and `meta` keep code-quality review active and default to expanded artifacts
+because they usually affect rollback, generated surfaces, or governance schema.
 
 ## Governed progression
 
@@ -58,6 +66,7 @@ execution surface (`run`) to manage the lifecycle.
 
 ### Diagnostics and observability
 
+- `slipway learn --preview`: aggregate lifecycle evidence into read-only governance improvement proposals
 - `slipway stats`: **repo-wide** governance freshness and workflow statistics
 - `slipway health`: **repo-local** integrity and repairability findings, with optional governance diagnostics
   - Use `--doctor` to synthesize a prioritized repair/recovery plan without mutating state
@@ -145,18 +154,57 @@ go test ./... -race -count=1
 
 ## Authority model
 
-Slipway now splits governed state by concern instead of treating one file as the source of all post-execution truth.
+Slipway keeps a single current-state authority and separates that from frozen
+evidence and append-only trace records.
 
 | Surface | Role |
 | --- | --- |
-| `artifacts/changes/<slug>/change.yaml` | Lifecycle and routing authority only: slug, workflow position, worktree binding, preset, checkpoint |
-| `artifacts/changes/<slug>/runtime-state.yaml` | Non-lifecycle runtime projection: artifact state, non-task evidence refs, auto-pass history, review intent-drift history |
+| `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority: slug, workflow position, worktree binding, preset, checkpoint, artifact state, evidence refs, auto-pass history, and review intent-drift history |
+| `artifacts/changes/<slug>/events/lifecycle.jsonl` | Append-only lifecycle trace for mutating lifecycle outcomes; audit data only, never a second state authority |
 | `artifacts/changes/<slug>/verification/execution-summary.yaml` | Frozen execution outcome authority |
 | `artifacts/changes/<slug>/verification/*.yaml` | Skill verification authority |
 | `artifacts/changes/<slug>/{intent,requirements,decision,tasks,assurance}.md` | Intent and contract authority |
 | Computed governance readiness | Read-only command projection used by `status`, `validate`, `next`, `review`, `done`, and `stats`; never persisted as authority |
 
-`status`, `validate`, and `next` are read-only surfaces. They recompute readiness and projection in-process and do not rewrite `change.yaml` or artifact runtime state during inspection.
+`runtime-state.yaml` is a legacy sidecar name only. Current Slipway versions
+load it for migration/repair compatibility and then fold recognized runtime
+fields into `change.yaml`.
+
+`status`, `validate`, and `next` are read-only surfaces. They recompute
+readiness and projection in-process and do not rewrite `change.yaml` or append
+lifecycle trace records during inspection.
+
+`learn --preview` is also read-only. It aggregates `change.yaml` telemetry and
+`events/lifecycle.jsonl` traces into deterministic proposals, but it never
+applies policy, prompt, skill, or template changes automatically.
+
+Lifecycle traces include mutating state/gate outcomes plus derived audit
+events such as `skill.presented`, `control.triggered`, and
+`skill.evidence_recorded`. The derived events make handoffs and consumed
+verification evidence visible without turning the trace into state authority.
+
+The learning surface reports deterministic aggregates such as plan-audit
+stall/budget signals, plan-audit iteration distribution, control and evidence
+missing frequencies, checkpoint resolution rate, interruption resume success
+rate, and guardrail-domain frequency. Proposals remain manual-review only and
+carry a date-stamped `proposal_id`.
+
+## Skill surfaces
+
+Slipway has two related but distinct skill layers:
+
+- The governance skill registry is the runtime handoff surface. These skills
+  are eligible to appear in `next --json` as `next_skill.name` and are the only
+  skills that progression logic treats as state-machine evidence.
+- The embedded skill template library under `internal/tmpl/templates/skills/`
+  contains support and specialist guidance such as SAST orchestration, threat
+  modeling, mutation testing, CI triage, and security review. These templates
+  can be exported for host tools, but they do not become progression states just
+  because they exist.
+
+`worktree-preflight` is an exported governance-adjacent handoff used by the
+worktree gate. It is surfaced by progression when needed, but its validation is
+owned by the worktree gate rather than by generic governance skill evidence.
 
 ## Repository layout
 
@@ -182,12 +230,18 @@ Slipway now splits governed state by concern instead of treating one file as the
 - `internal/fsutil/`: atomic file writes and advisory file locking
 - `internal/stringutil/`: HTML comment stripping, unique-sorted helpers
 - `internal/writeutil/`: best-effort user-facing process output helpers
-- `artifacts/changes/`: governed change bundles (`change.yaml`, `runtime-state.yaml`, bundle artifacts, verification evidence)
+- `artifacts/changes/`: governed change bundles (`change.yaml`, lifecycle events, bundle artifacts, verification evidence)
 - `artifacts/codebase/`: durable repo-scoped brownfield maps
 
 ## Notes
 
 - Repo config lives in `.slipway.yaml`
+- Advisory organization policy packs can be registered under
+  `governance.policy_packs`; they are proposal/context inputs only and cannot
+  override built-in fail-closed guardrail domains. `next --json` includes
+  bounded advisory policy-pack summaries and read refs for configured packs,
+  including advisory rules, artifact requirements, recommended reviewers, and
+  terminology when present.
 - Human-readable artifacts live under `artifacts/`
 - Shared runtime control/cache lives under `$(git rev-parse --git-common-dir)/slipway/`
 - Commands anchor to the canonical main repo scope by default; explicit nested slipway scopes are registered separately in git metadata

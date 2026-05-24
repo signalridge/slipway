@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -20,10 +19,6 @@ import (
 // would require a global lock for the resolution step, defeating per-change isolation.
 func withChangeStateLock(root string, changeSlug string, commandName string, run func() error) error {
 	return withChangeStateLockConfigured(root, changeSlug, commandName, loadConfigAtRoot, run)
-}
-
-func withBestEffortChangeStateLock(root string, changeSlug string, commandName string, run func() error) error {
-	return withChangeStateLockConfigured(root, changeSlug, commandName, loadBestEffortStateLockConfigAtRoot, run)
 }
 
 func withChangeStateLockConfigured(
@@ -64,23 +59,6 @@ func withChangeStateLockConfigured(
 	defer releaseHeldLock(held)
 
 	return run()
-}
-
-func loadBestEffortStateLockConfigAtRoot(root string) (model.Config, error) {
-	cfgPath := state.ConfigPath(root)
-	raw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return model.DefaultConfig(), nil
-		}
-		return model.Config{}, err
-	}
-
-	cfg, err := model.ParseConfigYAML(raw)
-	if err != nil {
-		return model.DefaultConfig(), nil
-	}
-	return cfg, nil
 }
 
 // withChangeCreateLock acquires the global change-creation lock.

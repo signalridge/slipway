@@ -81,7 +81,11 @@ func assembleSkillView(
 	if autoSkipEvidence {
 		if nextSkillName == progression.SkillSpecComplianceReview && evidenceMap != nil {
 			if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
-				nextSkillName = progression.SkillCodeQualityReview
+				if governedChange != nil && !governedChange.EffectiveWorkflowProfile().RequiresCodeQualityReview() {
+					nextSkillName = ""
+				} else {
+					nextSkillName = progression.SkillCodeQualityReview
+				}
 			}
 		}
 
@@ -89,6 +93,15 @@ func assembleSkillView(
 			if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
 				nextSkillName = progression.SkillFinalCloseout
 			}
+		}
+	}
+
+	if nextSkillName == progression.SkillSpecComplianceReview &&
+		governedChange != nil &&
+		!governedChange.EffectiveWorkflowProfile().RequiresCodeQualityReview() &&
+		evidenceMap != nil {
+		if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
+			nextSkillName = ""
 		}
 	}
 
@@ -131,6 +144,7 @@ func assembleSkillView(
 	// kernel's host selection. Never changes the next skill chosen by
 	// ResolveNextSkill; only enriches TechniqueHints.
 	ns.TechniqueHints = appendCatalogHints(ns.TechniqueHints, nextSkillName, governedChange, view)
+	ns.TechniqueHints = appendWorkflowProfileTechniqueHints(ns.TechniqueHints, nextSkillName, governedChange)
 
 	if nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview {
 		var guardrailDomain string
@@ -191,6 +205,7 @@ func buildRequiredSkillEvidence(
 		presetPolicy.CloseoutRefreshRequired,
 		planSubSteps...,
 	)
+	required = skill.FilterRequiredSkillsForWorkflowProfile(required, change.EffectiveWorkflowProfile())
 	evidence := make([]skillEvidenceEntry, 0, len(required))
 	if precomputedPassingSkills != nil {
 		for _, skillName := range required {
@@ -272,6 +287,35 @@ func appendCatalogHints(
 			Reason:            fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
 			HydrateReferences: normalizeHydrateKeys(capability.HydrateReferenceKeysForSkill(reg, support.SkillID)),
 		})
+	}
+	return existing
+}
+
+func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill string, governedChange *model.Change) []techniqueHint {
+	if governedChange == nil {
+		return existing
+	}
+	reg := capability.DefaultRegistry()
+	addHint := func(skillID, reason string) {
+		existing = append(existing, techniqueHint{
+			Name:              "skill:" + skillID,
+			Reason:            reason,
+			HydrateReferences: normalizeHydrateKeys(capability.HydrateReferenceKeysForSkill(reg, skillID)),
+		})
+	}
+	switch governedChange.EffectiveWorkflowProfile() {
+	case model.WorkflowProfileDocs:
+		if hostSkill == progression.SkillSpecComplianceReview || hostSkill == progression.SkillGoalVerification {
+			addHint("spec-trace", "[workflow-profile:docs] verify rendered docs, links, and requirement references instead of code-only quality signals")
+		}
+	case model.WorkflowProfileResearch:
+		if hostSkill == progression.SkillResearchOrchestration || hostSkill == progression.SkillGoalVerification {
+			addHint("codebase-mapping", "[workflow-profile:research] keep discovery evidence bounded and cite only the artifacts needed for the research answer")
+		}
+	case model.WorkflowProfileConfig:
+		addHint("supply-chain-audit", "[workflow-profile:config] inspect dependency, build, and rollback implications before treating config changes as low risk")
+	case model.WorkflowProfileMeta:
+		addHint("spec-trace", "[workflow-profile:meta] preserve generated-surface and schema compatibility for Slipway governance changes")
 	}
 	return existing
 }

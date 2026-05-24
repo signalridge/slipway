@@ -153,6 +153,23 @@ func RequiredSkillsForStateWithRegistry(
 	return required
 }
 
+func FilterRequiredSkillsForWorkflowProfile(required []string, profile model.WorkflowProfile) []string {
+	if profile.RequiresCodeQualityReview() {
+		return required
+	}
+	filtered := make([]string, 0, len(required))
+	for _, skillName := range required {
+		if skillName == "code-quality-review" {
+			continue
+		}
+		filtered = append(filtered, skillName)
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
 func governanceDefinitionByName(registry []Definition) map[string]Definition {
 	out := map[string]Definition{}
 	for _, def := range registry {

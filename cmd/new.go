@@ -26,6 +26,7 @@ type createOutput struct {
 	Slug                             string                `json:"slug"`
 	Description                      string                `json:"description"`
 	QualityMode                      string                `json:"quality_mode,omitempty"`
+	WorkflowProfile                  string                `json:"workflow_profile,omitempty"`
 	WorkflowPreset                   string                `json:"workflow_preset,omitempty"`
 	SuggestedWorkflowPreset          string                `json:"suggested_workflow_preset,omitempty"`
 	PresetConfirmationPending        bool                  `json:"preset_confirmation_pending,omitempty"`
@@ -64,6 +65,7 @@ type stdinClassificationInput struct {
 	GuardrailDomain *string `json:"guardrail_domain,omitempty"`
 	NeedsDiscovery  *bool   `json:"needs_discovery,omitempty"`
 	Complexity      *string `json:"complexity,omitempty"`
+	WorkflowProfile *string `json:"workflow_profile,omitempty"`
 
 	TechStack   *string  `json:"tech_stack,omitempty"`
 	Conventions *string  `json:"conventions,omitempty"`
@@ -127,6 +129,7 @@ func makeNewCmd() *cobra.Command {
 	var full bool
 	var trivial bool
 	var fromDoc string
+	var workflowProfile string
 
 	cmd := &cobra.Command{
 		Use:   "new [description]",
@@ -256,7 +259,18 @@ Use --full to require refreshed final-closeout evidence before ship.`,
 				}
 			}
 
-			return runNewCommand(cmd, description, qualityMode, workflowPreset, trivial, fromDoc)
+			profileValue := workflowProfile
+			if strings.TrimSpace(profileValue) == "" {
+				if si := stdinInputFromContext(cmd); si != nil && si.WorkflowProfile != nil {
+					profileValue = *si.WorkflowProfile
+				}
+			}
+			parsedWorkflowProfile, err := parseWorkflowProfile(profileValue)
+			if err != nil {
+				return err
+			}
+
+			return runNewCommand(cmd, description, qualityMode, parsedWorkflowProfile, workflowPreset, trivial, fromDoc)
 		},
 	}
 
@@ -265,6 +279,7 @@ Use --full to require refreshed final-closeout evidence before ship.`,
 	cmd.Flags().BoolVar(&full, "full", false, "Require refreshed final-closeout evidence before ship")
 	cmd.Flags().BoolVar(&trivial, "trivial", false, "Force complexity=trivial, minimize intake depth")
 	cmd.Flags().StringVar(&fromDoc, "from-doc", "", "Seed intake from a document path (PRD, RFC, etc.)")
+	cmd.Flags().StringVar(&workflowProfile, "profile", "", "Workflow profile: code|docs|research|config|meta")
 	cmd.Flags().Bool("json", false, "JSON output")
 	return cmd
 }
@@ -273,11 +288,12 @@ func runNewCommand(
 	cmd *cobra.Command,
 	description string,
 	qualityMode model.QualityMode,
+	workflowProfile model.WorkflowProfile,
 	workflowPreset model.WorkflowPreset,
 	trivial bool,
 	fromDoc string,
 ) error {
-	return createDirectGovernedChange(cmd, description, qualityMode, workflowPreset, trivial, fromDoc)
+	return createDirectGovernedChange(cmd, description, qualityMode, workflowProfile, workflowPreset, trivial, fromDoc)
 }
 
 // createDirectGovernedChange is the governed change creation path for `new`.
@@ -285,6 +301,7 @@ func createDirectGovernedChange(
 	cmd *cobra.Command,
 	description string,
 	qualityMode model.QualityMode,
+	workflowProfile model.WorkflowProfile,
 	workflowPreset model.WorkflowPreset,
 	trivial bool,
 	fromDoc string,
@@ -356,6 +373,7 @@ func createDirectGovernedChange(
 	if trivial {
 		setup.ComplexityLevel = "trivial"
 	}
+	setup.ArtifactSchema = model.DefaultArtifactSchemaForWorkflowProfile(workflowProfile, setup.NeedsDiscovery, setup.ArtifactSchema)
 
 	// Hard cut: JSON callers own project context explicitly. Do not auto-infer
 	// repo context on machine-facing surfaces. Auto-detection remains only for
@@ -388,6 +406,7 @@ func createDirectGovernedChange(
 		change.GuardrailDomain = setup.GuardrailDomain
 		change.ArtifactSchema = setup.ArtifactSchema
 		change.QualityMode = qualityMode
+		change.WorkflowProfile = workflowProfile
 		if si := stdinInputFromContext(cmd); si != nil {
 			change.ProjectContext = projectCtx
 			change.CallerDisabledCtrls, err = parseCallerDisabledControls(si.DisabledControls)
@@ -497,6 +516,20 @@ func createDirectGovernedChange(
 				return err
 			}
 		}
+		if _, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+			Command:      "new",
+			EventType:    "change.created",
+			Action:       "created",
+			Result:       "ok",
+			AfterState:   change.CurrentState,
+			AfterSubStep: string(change.IntakeSubStep),
+			SideEffects: []state.LifecycleSideEffect{
+				{Kind: "change_authority_written", Detail: "change.yaml"},
+				{Kind: "artifact_scaffolded", Detail: string(change.ArtifactSchema)},
+			},
+		}); err != nil {
+			return err
+		}
 
 		var ctxOut *projectContextOutput
 		if !projectCtx.IsZero() {
@@ -516,6 +549,7 @@ func createDirectGovernedChange(
 				Slug:                             slug,
 				Description:                      description,
 				QualityMode:                      string(qualityMode),
+				WorkflowProfile:                  string(change.EffectiveWorkflowProfile()),
 				WorkflowPreset:                   string(change.WorkflowPreset),
 				SuggestedWorkflowPreset:          string(change.SuggestedWorkflowPreset),
 				PresetConfirmationPending:        change.WorkflowPresetConfirmationPending(),
@@ -749,6 +783,23 @@ func parseCallerControlModes(raw map[string]string) (map[model.ControlID]model.C
 		modes[id] = mode
 	}
 	return modes, nil
+}
+
+func parseWorkflowProfile(raw string) (model.WorkflowProfile, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	profile := model.WorkflowProfile(trimmed)
+	if !profile.IsValid() {
+		return "", newInvalidUsageError(
+			"invalid_workflow_profile",
+			fmt.Sprintf("invalid workflow profile %q", trimmed),
+			"Use one of: code, docs, research, config, meta.",
+			nil,
+		)
+	}
+	return profile, nil
 }
 
 func parseSignalLevelOverride(raw *string, field string) (model.SignalLevel, error) {

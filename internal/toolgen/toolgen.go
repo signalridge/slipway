@@ -155,7 +155,7 @@ type CommandDef struct {
 var commandRegistry = []CommandDef{
 	// Core (5)
 	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasPromptSurface: true,
-		Arguments:     `"<description>" [--preset light|standard|strict] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
+		Arguments:     `"<description>" [--preset light|standard|strict] [--profile code|docs|research|config|meta] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--context-guard] [--change <slug>]"},
@@ -189,7 +189,10 @@ var commandRegistry = []CommandDef{
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	// Diagnostics (3) — CLI-only, no generated prompt surfaces
+	// Diagnostics (4) — CLI-only, no generated prompt surfaces
+	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics",
+		Arguments:     "[--preview] [--json]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
@@ -316,7 +319,7 @@ var workflowSupportingCommandIDs = []string{
 	"abort",
 }
 
-var workflowDiagnosticCommandIDs = []string{"stats", "health", "codebase-map"}
+var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "codebase-map"}
 
 type workflowSkillData struct {
 	ToolID              string
@@ -1656,32 +1659,6 @@ func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
 		return true
 	}
 	return false
-}
-
-func workspaceAdapterRemediation(root string, cfg ToolConfig) string {
-	if HasWorkspaceLocalSurfaces(root, cfg) && !hasGeneratedAdapter(root, cfg) {
-		return fmt.Sprintf("run `slipway init --tools %s --refresh`", cfg.ID)
-	}
-	return fmt.Sprintf("run `slipway init --tools %s`", cfg.ID)
-}
-
-func missingWorkspaceAdapterError(root string) error {
-	dirtyTools := make([]string, 0, len(toolRegistry))
-	for _, cfg := range Registry() {
-		if HasWorkspaceLocalSurfaces(root, cfg) && !hasGeneratedAdapter(root, cfg) {
-			dirtyTools = append(dirtyTools, cfg.ID)
-		}
-	}
-	slices.Sort(dirtyTools)
-	switch len(dirtyTools) {
-	case 0:
-		return fmt.Errorf("no generated tool adapter found in workspace; run `slipway init --tools <tool>`")
-	case 1:
-		toolID := dirtyTools[0]
-		return fmt.Errorf("no generated tool adapter found in workspace; workspace has existing Slipway surfaces for %s without a sentinel; run `slipway init --tools %s --refresh`", toolID, toolID)
-	default:
-		return fmt.Errorf("no generated tool adapter found in workspace; workspace has existing Slipway surfaces without sentinels for [%s]; rerun with `slipway init --tools <tool> --refresh`", strings.Join(dirtyTools, ", "))
-	}
 }
 
 const (

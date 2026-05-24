@@ -22,6 +22,14 @@ func resolveTestArtifact(bundleDir, slug string) string {
 	return artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md")
 }
 
+func traceabilityGapIDs(gaps []model.TraceabilityGap) []string {
+	ids := make([]string, 0, len(gaps))
+	for _, gap := range gaps {
+		ids = append(ids, gap.ID)
+	}
+	return ids
+}
+
 func TestTraceabilityCoherentBundle(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -74,6 +82,53 @@ pass
 	})
 	assert.Contains(t, result.Message, "decisions")
 	assert.Contains(t, result.Message, "assurance")
+}
+
+func TestTraceabilityStructuredDeltaSupportSections(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "structured-delta"
+
+	writeFile(t, filepath.Join(dir, "intent.md"), `# Intent
+INT-001: Original intent
+`)
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+## ADDED Requirements
+### Requirement: A
+REQ-001: Must do X. Traces to INT-001.
+## NON-GOALS
+- Do not change auth policy.
+## DECISIONS
+- DEC-001: Keep the current API shape for REQ-001.
+## ROLLBACK
+- Revert the config change.
+`)
+
+	result := EvaluateTraceability(TraceabilityInput{BundleDir: dir, Slug: slug})
+	for _, gap := range result.Gaps {
+		assert.NotContains(t, gap.ID, "requirements-delta-non-goals")
+		assert.NotContains(t, gap.ID, "requirements-delta-decisions")
+		assert.NotContains(t, gap.ID, "requirements-delta-rollback")
+	}
+}
+
+func TestTraceabilityStructuredDeltaSupportSectionsMustBePopulated(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "structured-delta-empty"
+
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+## ADDED Requirements
+### Requirement: A
+REQ-001: Must do X.
+## DECISIONS
+- Keep current behavior without stable id.
+## ROLLBACK
+`)
+
+	result := EvaluateTraceability(TraceabilityInput{BundleDir: dir, Slug: slug})
+	assert.Contains(t, traceabilityGapIDs(result.Gaps), "requirements-delta-decisions-missing-ids")
+	assert.Contains(t, traceabilityGapIDs(result.Gaps), "requirements-delta-rollback-empty")
 }
 
 func TestTraceabilitySuccessMessageOmitsOptionalArtifactsWhenAbsent(t *testing.T) {
@@ -271,6 +326,32 @@ REQ-002: Must do Y. Traces to INT-001.
 	}
 	assert.Contains(t, issues, "requirement has no covering task")
 	assert.Contains(t, gapIDs, "REQ-002")
+}
+
+func TestTraceabilityRequirementDeltaSectionsMustContainBlocks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "delta-structure"
+
+	writeFile(t, filepath.Join(dir, "intent.md"), `# Intent
+INT-001: Original intent
+`)
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+## ADDED Requirements
+REQ-001: Must do X. Traces to INT-001.
+`)
+
+	result := EvaluateTraceability(TraceabilityInput{
+		BundleDir: dir,
+		Slug:      slug,
+	})
+
+	assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+	var gapIDs []string
+	for _, g := range result.Gaps {
+		gapIDs = append(gapIDs, g.ID)
+	}
+	assert.Contains(t, gapIDs, "requirements-delta-added-no-blocks")
 }
 
 func TestTraceabilityCoreSchemaDowngradesMissingIntentReferenceToWarning(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 type nextView struct {
 	Slug                      string                       `json:"slug"`
 	QualityMode               string                       `json:"quality_mode,omitempty"`
+	WorkflowProfile           string                       `json:"workflow_profile,omitempty"`
 	WorkflowPreset            string                       `json:"workflow_preset,omitempty"`
 	SuggestedWorkflowPreset   string                       `json:"suggested_workflow_preset,omitempty"`
 	EffectiveWorkflowPreset   string                       `json:"effective_workflow_preset,omitempty"`
@@ -126,6 +127,8 @@ type nextContext struct {
 	ArtifactBundle         string                     `json:"artifact_bundle,omitempty"`
 	CodebaseMapDir         string                     `json:"codebase_map_dir,omitempty"`
 	CodebaseMapDocs        map[string]string          `json:"codebase_map_docs,omitempty"`
+	ProjectContext         *model.ProjectContext      `json:"project_context,omitempty"`
+	HandoffContext         *handoffContextView        `json:"handoff_context,omitempty"`
 	ContextDependencies    *model.ContextDependencies `json:"context_dependencies,omitempty"`
 	SelectedPriorContext   []selectedPriorContextView `json:"selected_prior_context,omitempty"`
 	UnresolvedDependencies []unresolvedDependencyView `json:"unresolved_dependencies,omitempty"`
@@ -133,6 +136,54 @@ type nextContext struct {
 	GateStatus             map[string]string          `json:"gate_status,omitempty"`
 	ArtifactStatus         map[string]string          `json:"artifact_status,omitempty"`
 	WavePlan               *wavePlanView              `json:"wave_plan,omitempty"`
+}
+
+type handoffContextView struct {
+	WorkflowProfile   string                 `json:"workflow_profile"`
+	ContextPolicy     string                 `json:"context_policy"`
+	Trace             *handoffTraceView      `json:"trace,omitempty"`
+	ContextBudget     *handoffBudgetHintView `json:"context_budget,omitempty"`
+	ReadRefs          []handoffReadRef       `json:"read_refs,omitempty"`
+	PolicyPacks       []handoffPolicyPack    `json:"policy_packs,omitempty"`
+	Risk              *handoffRiskView       `json:"risk,omitempty"`
+	ChangeAuthority   string                 `json:"change_authority"`
+	LifecycleEventLog string                 `json:"lifecycle_event_log,omitempty"`
+	ConfigPath        string                 `json:"config_path,omitempty"`
+	RequiredReads     []string               `json:"required_reads,omitempty"`
+}
+
+type handoffTraceView struct {
+	CorrelationID string `json:"correlation_id"`
+	EventLog      string `json:"event_log,omitempty"`
+}
+
+type handoffBudgetHintView struct {
+	Mode           string `json:"mode"`
+	MaxInlineBytes int    `json:"max_inline_bytes"`
+}
+
+type handoffReadRef struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
+type handoffPolicyPack struct {
+	Name                 string   `json:"name"`
+	Path                 string   `json:"path"`
+	Mode                 string   `json:"mode"`
+	SchemaVersion        string   `json:"schema_version,omitempty"`
+	AdvisoryRules        []string `json:"advisory_rules,omitempty"`
+	ArtifactRequirements []string `json:"artifact_requirements,omitempty"`
+	RecommendedReviewers []string `json:"recommended_reviewers,omitempty"`
+	Terminology          []string `json:"terminology,omitempty"`
+}
+
+type handoffRiskView struct {
+	GuardrailDomain string   `json:"guardrail_domain,omitempty"`
+	Controls        []string `json:"controls,omitempty"`
+	WorkflowProfile string   `json:"workflow_profile,omitempty"`
+	Hints           []string `json:"hints,omitempty"`
 }
 
 type wavePlanView struct {
@@ -345,8 +396,24 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 		return nil
 	}
 
+	beforeChange := *change
+	checkpoint := *change.ActiveCheckpoint
 	change.ActiveCheckpoint = nil
 	if err := state.SaveChange(root, *change); err != nil {
+		return err
+	}
+	if err := appendCLILifecycleEvent(root, *change, state.LifecycleEvent{
+		Command:       "run",
+		EventType:     "checkpoint.resolved",
+		Action:        "resolved",
+		Reason:        checkpoint.CheckpointType,
+		Result:        "response_recorded",
+		BeforeState:   beforeChange.CurrentState,
+		AfterState:    change.CurrentState,
+		Diagnostics:   []string{"task_id=" + checkpoint.PausedTaskID},
+		SideEffects:   []state.LifecycleSideEffect{{Kind: "active_checkpoint_cleared"}},
+		ClearedFields: []string{"active_checkpoint"},
+	}); err != nil {
 		return err
 	}
 	view.consumeActiveCheckpoint = false
@@ -365,7 +432,12 @@ func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool,
 	if skipAutoPass || quickMode {
 		opts = append(opts, progression.AdvanceOptions{
 			SkipAutoPass: skipAutoPass,
+			Command:      "run",
 			QuickMode:    quickMode,
+		})
+	} else {
+		opts = append(opts, progression.AdvanceOptions{
+			Command: "run",
 		})
 	}
 	advanced, err := tryAdvance(root, ref, opts...)

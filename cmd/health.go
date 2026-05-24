@@ -112,6 +112,7 @@ func makeHealthCmd() *cobra.Command {
 				}
 				view.Findings = normalizeHealthFindings(root, report.Findings)
 				view.Findings = append(view.Findings, agentContractHealthFindings(root)...)
+				view.Findings = append(view.Findings, lifecycleEventHealthFindings(root)...)
 				slices.SortFunc(view.Findings, func(a, b state.HealthFinding) int {
 					if a.Category != b.Category {
 						return strings.Compare(a.Category, b.Category)
@@ -562,6 +563,71 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 		}
 	}
 	return findings
+}
+
+func lifecycleEventHealthFindings(root string) []state.HealthFinding {
+	var findings []state.HealthFinding
+	changes, issues, err := state.ListChangesBestEffortWithIssues(root)
+	if err != nil {
+		return []state.HealthFinding{{
+			Severity:   model.ReasonSeverityError,
+			Category:   "lifecycle_event_log",
+			Message:    "Unable to list active changes for lifecycle event health",
+			Repairable: false,
+			RepairHint: "Inspect the repository state, then rerun `slipway health`.",
+			Reasons:    []model.ReasonCode{model.NewReasonCode("lifecycle_event_scan_failed", err.Error())},
+		}}
+	}
+	for _, issue := range issues {
+		findings = append(findings, state.HealthFinding{
+			Severity:   model.ReasonSeverityWarning,
+			Category:   "lifecycle_event_log",
+			Slug:       issue.Slug,
+			Message:    "Skipped lifecycle event health because change authority is unreadable",
+			Repairable: false,
+			RepairHint: "Fix or replace change.yaml before lifecycle event health can inspect this bundle.",
+			Reasons:    []model.ReasonCode{model.NewReasonCode("lifecycle_event_scan_skipped", issue.Err.Error())},
+		})
+	}
+	for _, change := range changes {
+		if _, err := state.ReadLifecycleEvents(root, change); err != nil {
+			findings = append(findings, unreadableLifecycleEventFinding(change.Slug, err))
+		}
+	}
+	archivedSlugs, err := state.ListArchivedChangeSlugs(root)
+	if err != nil {
+		findings = append(findings, state.HealthFinding{
+			Severity:   model.ReasonSeverityWarning,
+			Category:   "lifecycle_event_log",
+			Message:    "Unable to list archived changes for lifecycle event health",
+			Repairable: false,
+			RepairHint: "Inspect the archived change directory, then rerun `slipway health`.",
+			Reasons:    []model.ReasonCode{model.NewReasonCode("archived_lifecycle_event_scan_failed", err.Error())},
+		})
+		return findings
+	}
+	for _, slug := range archivedSlugs {
+		change, err := state.LoadArchivedChange(root, slug)
+		if err != nil {
+			continue
+		}
+		if _, err := state.ReadLifecycleEvents(root, change); err != nil {
+			findings = append(findings, unreadableLifecycleEventFinding(slug, err))
+		}
+	}
+	return findings
+}
+
+func unreadableLifecycleEventFinding(slug string, err error) state.HealthFinding {
+	return state.HealthFinding{
+		Severity:   model.ReasonSeverityError,
+		Category:   "lifecycle_event_log",
+		Slug:       slug,
+		Message:    "Lifecycle event log is unreadable",
+		Repairable: false,
+		RepairHint: "Inspect events/lifecycle.jsonl and preserve audit evidence before replacing malformed lines.",
+		Reasons:    []model.ReasonCode{model.NewReasonCode("lifecycle_event_log_unreadable", err.Error())},
+	}
 }
 
 func buildDoctorView(

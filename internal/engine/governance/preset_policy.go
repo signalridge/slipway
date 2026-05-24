@@ -3,6 +3,7 @@ package governance
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/control"
 	"github.com/signalridge/slipway/internal/model"
@@ -138,6 +139,7 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 	if change.CallerWorktreeBlastRadius.IsValid() {
 		overrides.WorktreeBlastRadius = change.CallerWorktreeBlastRadius
 	}
+	applyFailClosedGuardrailOverrides(change, overrides)
 
 	if len(overrides.ModeOverrides) == 0 &&
 		len(overrides.DisabledControls) == 0 &&
@@ -146,4 +148,43 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 		return nil
 	}
 	return overrides
+}
+
+func applyFailClosedGuardrailOverrides(change model.Change, overrides *control.ControlOverrides) {
+	if overrides == nil || strings.TrimSpace(change.GuardrailDomain) == "" {
+		return
+	}
+	failClosed := map[model.ControlID]struct{}{
+		model.ControlDomainReview: {},
+	}
+	if guardrailDomainRequiresRollback(change.GuardrailDomain) {
+		failClosed[model.ControlRollbackRequired] = struct{}{}
+	}
+	for id := range failClosed {
+		overrides.ModeOverrides[id] = model.ControlModeBlocking
+	}
+	overrides.DisabledControls = removeControls(overrides.DisabledControls, failClosed)
+}
+
+func guardrailDomainRequiresRollback(domain string) bool {
+	switch strings.TrimSpace(domain) {
+	case model.GuardrailDomainSchemaDataMigration, model.GuardrailDomainIrreversibleOps:
+		return true
+	default:
+		return false
+	}
+}
+
+func removeControls(values []model.ControlID, blocked map[model.ControlID]struct{}) []model.ControlID {
+	if len(values) == 0 || len(blocked) == 0 {
+		return values
+	}
+	out := values[:0]
+	for _, value := range values {
+		if _, found := blocked[value]; found {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
 }

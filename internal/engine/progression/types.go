@@ -4,6 +4,7 @@ package progression
 
 import (
 	"errors"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 )
@@ -12,6 +13,16 @@ import (
 type SideEffect struct {
 	Kind   string `json:"kind"`
 	Detail string `json:"detail,omitempty"`
+}
+
+// SkillEvidenceTrace records verified skill evidence consumed by a mutating
+// progression step. The event log writes this as skill.evidence_recorded.
+type SkillEvidenceTrace struct {
+	SkillName   string    `json:"skill_name"`
+	RunVersion  int       `json:"run_version"`
+	Timestamp   time.Time `json:"timestamp,omitempty"`
+	References  []string  `json:"references,omitempty"`
+	EvidenceRef string    `json:"evidence_ref,omitempty"`
 }
 
 // AdvanceSummary captures what happened during a state advance attempt.
@@ -28,6 +39,7 @@ type AdvanceSummary struct {
 	RecoveryOnly     bool                    `json:"recovery_only,omitempty"`
 	Signals          map[string]bool         `json:"signals,omitempty"`
 	SideEffects      []SideEffect            `json:"side_effects,omitempty"`
+	SkillEvidence    []SkillEvidenceTrace    `json:"skill_evidence,omitempty"`
 	ClearedFields    []string                `json:"cleared_fields,omitempty"`
 	Message          string                  `json:"message"`
 	Blockers         []model.ReasonCode      `json:"blockers,omitempty"`

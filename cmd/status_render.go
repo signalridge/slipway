@@ -71,7 +71,11 @@ func renderStatusText(view statusView) string {
 		return builder.String()
 	}
 	if view.QualityMode != "" {
-		writeLine("Quality: %s | Discovery Required: %t\n", view.QualityMode, view.NeedsDiscovery)
+		workflowProfile := strings.TrimSpace(view.WorkflowProfile)
+		if workflowProfile == "" {
+			workflowProfile = string(model.WorkflowProfileCode)
+		}
+		writeLine("Quality: %s | Profile: %s | Discovery Required: %t\n", view.QualityMode, workflowProfile, view.NeedsDiscovery)
 	}
 	for _, line := range renderWorkflowPresetLines(workflowPresetView{
 		WorkflowPreset:            view.WorkflowPreset,
@@ -92,6 +96,9 @@ func renderStatusText(view statusView) string {
 	}
 	if view.Narrative != "" {
 		writeLine("Narrative: %s\n", view.Narrative)
+	}
+	if len(view.Timeline) > 0 {
+		writeLine("Timeline: %d events (latest shown)\n", len(view.Timeline))
 	}
 
 	if view.Progress != nil {

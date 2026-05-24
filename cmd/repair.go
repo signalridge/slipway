@@ -202,6 +202,22 @@ func makeRepairCmd() *cobra.Command {
 
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
+				if repairSummaryHasLifecycleActivity(summary) {
+					for _, ch := range activeChanges {
+						if err := appendCLILifecycleEvent(root, ch, state.LifecycleEvent{
+							Command:     "repair",
+							EventType:   "repair.applied",
+							Action:      "inspected",
+							Reason:      effectiveMode,
+							Result:      "completed",
+							BeforeState: ch.CurrentState,
+							AfterState:  ch.CurrentState,
+							Diagnostics: lifecycleRepairDiagnostics(summary),
+						}); err != nil {
+							return err
+						}
+					}
+				}
 				if jsonOutput {
 					return encodeJSONResponse(cmd, summary)
 				}

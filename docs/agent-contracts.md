@@ -10,10 +10,29 @@ formalization work.
 - Override surface: scope-root `.slipway.yaml` under `agents.mappings`
 - Public runtime handoff: `next --json` exposes `next_skill.name`, not agent
   identity or tool-resolved prompt paths
+- Bounded context handoff: `next --json` exposes project metadata and durable
+  read references under `input_context`, not expanded artifact bodies
 - Validation surface: `slipway health` and `slipway health --doctor`
 
 The scope-root config is authoritative. Workspace-local `.slipway.yaml` files
 inside sibling worktrees are visibility mirrors, not a second source of truth.
+
+## Skill Layer Boundaries
+
+Slipway deliberately separates the runtime governance skill registry from the
+larger embedded template library:
+
+- Runtime governance skills are the only skills that progression may surface
+  through `next --json` as `next_skill.name`, and the only skills whose
+  verification records can satisfy state-machine evidence gates.
+- Exported support templates under `internal/tmpl/templates/skills/` provide
+  specialist procedures for hosts. They can be invoked by users or suggested by
+  command surfaces, but their existence does not add workflow states or bypass
+  governance gates.
+- `worktree-preflight` is an exported governance-adjacent handoff. Progression
+  can surface it when a dedicated worktree must be established, but the
+  corresponding authority is the worktree validation gate, not a generic skill
+  verdict.
 
 ## Override Example
 
@@ -37,6 +56,34 @@ Rules:
 - Callers derive their own skill prompt path from `next_skill.name` using
   local tool conventions such as `.claude/skills/slipway-{name}/SKILL.md`.
 
+## Runtime Handoff Context
+
+`next --json` includes bounded handoff metadata under
+`input_context.handoff_context`:
+
+- `workflow_profile`: effective workflow shape (`code`, `docs`, `research`,
+  `config`, or `meta`)
+- `context_policy`: currently `bounded_references_only`
+- `trace`: read-only correlation ID plus append-only lifecycle trace path
+- `context_budget`: compact-mode inline budget hint
+- `read_refs`: typed artifact/config/trace paths with reasons
+- `policy_packs`: bounded summaries of configured advisory policy packs
+- `risk`: guardrail domain, active controls, and profile-specific risk hints
+- `change_authority`: the canonical `change.yaml` path
+- `lifecycle_event_log`: append-only audit trace path
+- `config_path`: canonical `.slipway.yaml` path
+- `required_reads`: small set of durable paths the host should read before
+  executing the next skill
+
+Project metadata supplied at creation is exposed as
+`input_context.project_context`. Hosts may inject it into prompts, but the
+state machine does not infer missing project metadata on JSON surfaces.
+
+Policy pack summaries are advisory-only handoff context. They may surface
+project-local advisory rules, artifact requirements, recommended reviewers, and
+terminology, but they do not create blocking controls and cannot weaken built-in
+fail-closed guardrail domains.
+
 ## Default Governance Skill Mappings
 
 | Governance skill | Default agent | Activation condition |
@@ -47,7 +94,7 @@ Rules:
 | `wave-orchestration` | `slipway-orchestrator` | `S2_EXECUTE` requires governed wave execution |
 | `tdd-governance` | `slipway-orchestrator` | `S2_EXECUTE` task is in a guardrail domain that requires TDD-governed orchestration |
 | `spec-compliance-review` | `slipway-reviewer` | `S3_REVIEW` stage 1 review is due |
-| `code-quality-review` | `slipway-reviewer` | `S3_REVIEW` stage 2 review is due after spec compliance passes |
+| `code-quality-review` | `slipway-reviewer` | `S3_REVIEW` stage 2 review is due after spec compliance passes for profiles that require code review |
 | `goal-verification` | `slipway-verifier` | `S4_VERIFY` requires goal-backward verification |
 | `final-closeout` | `slipway-closer` | optional closeout refresh is requested or required before ship |
 

@@ -94,8 +94,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 17 commands (5 core + 9 situational + 3 diagnostics).
-	assert.Len(t, commandRegistry, 17)
+	// Verify registry has 18 commands (5 core + 9 situational + 4 diagnostics).
+	assert.Len(t, commandRegistry, 18)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -129,8 +129,8 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 	assert.Equal(t, 5, core, "expected 5 core commands")
 	assert.Equal(t, 9, sit, "expected 9 situational commands")
-	assert.Equal(t, 3, diag, "expected 3 diagnostics commands")
-	assert.Equal(t, 5, query, "expected 5 query commands")
+	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
+	assert.Equal(t, 6, query, "expected 6 query commands")
 	assert.Equal(t, 12, mutation, "expected 12 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
@@ -1310,10 +1310,6 @@ func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command 
 		}
 	}
 	assert.True(t, found, "expected %s to register hook command %q", settingsPath, command)
-}
-
-func isAgentFile(name string) bool {
-	return len(name) > 3 && name[len(name)-3:] == ".md"
 }
 
 // hydratedSkillIDs lists the PR-1 slice of skills required to ship a

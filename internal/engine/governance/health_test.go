@@ -67,6 +67,69 @@ func TestCollectGovernanceHealthNoSnapshot(t *testing.T) {
 	assert.Contains(t, names, "signal_control_coherence")
 }
 
+func TestCollectGovernanceHealthChecksAdvisoryPolicyPacks(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "policy-pack-ok"
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slipway", "policies"), 0o755))
+	require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(`governance:
+  policy_packs:
+    - name: platform
+      path: .slipway/policies/platform.yaml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway", "policies", "platform.yaml"), []byte(`version: 1
+name: platform
+advisory_rules:
+  - require rollback notes for config changes
+`), 0o644))
+
+	report := CollectGovernanceHealth(root, model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepBundle,
+	})
+
+	check := governanceHealthCheckByName(t, report, "policy_packs")
+	assert.Equal(t, "OK", check.Status)
+	assert.Contains(t, check.Message, "advisory policy pack")
+}
+
+func TestCollectGovernanceHealthWarnsOnPolicyPackBlockingFields(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slipway", "policies"), 0o755))
+	require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(`governance:
+  policy_packs:
+    - name: platform
+      path: .slipway/policies/platform.yaml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway", "policies", "platform.yaml"), []byte(`version: 1
+blocking_controls:
+  - domain-review
+`), 0o644))
+
+	report := CollectGovernanceHealth(root, model.Change{
+		Slug:         "policy-pack-warn",
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepBundle,
+	})
+
+	check := governanceHealthCheckByName(t, report, "policy_packs")
+	assert.Equal(t, "WARN", check.Status)
+	assert.Contains(t, check.Message, "unsupported blocking fields")
+}
+
+func governanceHealthCheckByName(t *testing.T, report GovernanceHealthReport, name string) GovernanceHealthCheck {
+	t.Helper()
+	for _, check := range report.Checks {
+		if check.Name == name {
+			return check
+		}
+	}
+	require.Failf(t, "missing governance health check", "name=%s", name)
+	return GovernanceHealthCheck{}
+}
+
 func TestCollectGovernanceHealthFailsOnUnknownControlOverrideIDs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

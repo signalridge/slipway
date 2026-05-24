@@ -27,9 +27,10 @@ type Change struct {
 	GuardrailDomain string `yaml:"guardrail_domain,omitempty" json:"guardrail_domain,omitempty"` // Authoritative guardrail domain
 
 	// Profile
-	QualityMode             QualityMode    `yaml:"quality_mode,omitempty" json:"quality_mode,omitempty"`
-	WorkflowPreset          WorkflowPreset `yaml:"workflow_preset,omitempty" json:"workflow_preset,omitempty"`
-	SuggestedWorkflowPreset WorkflowPreset `yaml:"suggested_workflow_preset,omitempty" json:"suggested_workflow_preset,omitempty"`
+	QualityMode             QualityMode     `yaml:"quality_mode,omitempty" json:"quality_mode,omitempty"`
+	WorkflowProfile         WorkflowProfile `yaml:"workflow_profile,omitempty" json:"workflow_profile,omitempty"`
+	WorkflowPreset          WorkflowPreset  `yaml:"workflow_preset,omitempty" json:"workflow_preset,omitempty"`
+	SuggestedWorkflowPreset WorkflowPreset  `yaml:"suggested_workflow_preset,omitempty" json:"suggested_workflow_preset,omitempty"`
 
 	// Worktree
 	WorktreePath   string `yaml:"worktree_path,omitempty" json:"worktree_path,omitempty"`
@@ -139,6 +140,9 @@ func (c Change) Validate() error {
 	if c.QualityMode != "" && !c.QualityMode.IsValid() {
 		return fmt.Errorf("invalid quality_mode: %q", c.QualityMode)
 	}
+	if !c.WorkflowProfile.IsValid() {
+		return fmt.Errorf("invalid workflow_profile: %q", c.WorkflowProfile)
+	}
 	if c.WorkflowPreset != "" && !c.WorkflowPreset.IsValid() {
 		return fmt.Errorf("invalid workflow_preset: %q", c.WorkflowPreset)
 	}
@@ -194,6 +198,10 @@ func (c Change) Validate() error {
 		return fmt.Errorf("review_intent_drift_failures must be >= 0")
 	}
 	return nil
+}
+
+func (c Change) EffectiveWorkflowProfile() WorkflowProfile {
+	return c.WorkflowProfile.Effective()
 }
 
 func (c Change) MarshalYAML() (interface{}, error) {
