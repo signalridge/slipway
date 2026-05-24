@@ -169,7 +169,9 @@ func TestNewCommandFromDocSeedsRequirementsAndTasks(t *testing.T) {
 		tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
 		require.NoError(t, err)
 		assert.Contains(t, string(tasksRaw), "t-01")
+		assert.Contains(t, string(tasksRaw), "Pending verification objective")
 		assert.NotContains(t, string(tasksRaw), "Define implementation tasks")
+		assert.NotContains(t, string(tasksRaw), "Add tests for the implementation")
 	})
 }
 
@@ -1096,7 +1098,7 @@ func TestNextAfterNewUsesDirectSetupState(t *testing.T) {
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
-		next.SetArgs([]string{"--json"})
+		next.SetArgs([]string{"--json", "--diagnostics"})
 		require.NoError(t, next.Execute())
 
 		var view nextView
@@ -1132,7 +1134,7 @@ func TestNextAfterNewWithoutPresetBlocksOnPresetConfirmation(t *testing.T) {
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
-		next.SetArgs([]string{"--json"})
+		next.SetArgs([]string{"--json", "--diagnostics"})
 		require.NoError(t, next.Execute())
 
 		var view nextView
@@ -1245,7 +1247,7 @@ auth_authz
 		var buf bytes.Buffer
 		next := makeNextCmd()
 		next.SetOut(&buf)
-		next.SetArgs([]string{"--json"})
+		next.SetArgs([]string{"--json", "--diagnostics"})
 		require.NoError(t, next.Execute())
 
 		after, err := os.ReadFile(state.BundleChangeFilePath(root, slug))

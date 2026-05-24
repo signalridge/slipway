@@ -100,7 +100,7 @@ func TestSkillConstraintsPopulatedInNextOutput(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -150,7 +150,7 @@ Low risk.
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -161,6 +161,19 @@ Low risk.
 
 		require.NotNil(t, view.NextSkill.SkillConstraints.LockedDecisions)
 		assert.Contains(t, view.NextSkill.SkillConstraints.LockedDecisions[0], "Selected Approach:")
+
+		var handoffOut bytes.Buffer
+		handoffCmd := makeNextCmd()
+		handoffCmd.SetArgs([]string{"--json"})
+		handoffCmd.SetOut(&handoffOut)
+		require.NoError(t, handoffCmd.Execute())
+
+		var handoff nextHandoffView
+		require.NoError(t, json.Unmarshal(handoffOut.Bytes(), &handoff))
+		require.NotNil(t, handoff.NextSkill)
+		require.NotNil(t, handoff.NextSkill.SkillConstraints)
+		require.NotEmpty(t, handoff.NextSkill.SkillConstraints.LockedDecisions)
+		assert.Contains(t, handoff.NextSkill.SkillConstraints.LockedDecisions[0], "Selected Approach:")
 	})
 }
 
@@ -180,7 +193,7 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 

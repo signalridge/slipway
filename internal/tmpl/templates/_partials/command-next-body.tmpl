@@ -1,125 +1,31 @@
 {{- define "command-next-body" -}}
-# Slipway Next-Step Query
+# Slipway Next
 
-Inspect the next actionable governance skill for the active change without
-advancing lifecycle state.
-This is the query surface for governed changes.
+Query the next governed host without advancing lifecycle state.
 
-## Prerequisites
-1. Active change exists (`slipway status --json` shows a change).
-2. Current status has been queried and blockers are resolved.
-
-## Workflow
-
-### 1. Get Instructions
 ```bash
 slipway next --json
 ```
-If `next_skill` is null, all skills are complete for the current state.
-Check `blockers` for guidance (e.g., "run `slipway done`").
 
-### 2. Read Skill Prompt
-Read the generated SKILL.md for `next_skill.name`.
-This contains the full execution instructions for the current governance skill.
-{{if eq .ToolID "claude"}}For Claude Code, derive the path as `.claude/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "codex"}}For Codex, derive the path as `.codex/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "cursor"}}For Cursor, derive the path as `.cursor/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "gemini"}}For Gemini, derive the path as `.gemini/skills/slipway-{name}/SKILL.md`.{{else if eq .ToolID "opencode"}}For OpenCode, derive the path as `.opencode/skills/slipway-{name}/SKILL.md`.{{else}}Use this tool's generated skills directory and the public `slipway-{name}` skill convention.{{end}}
+## Contract
+- `next_skill.name` is the authoritative governed-host handoff.
+- Derive the skill path from the local tool convention: `slipway-{name}/SKILL.md`.
+- Treat `next_skill.skill_constraints` and `next_skill.technique_hints` as action metadata for that host.
+- Use only paths returned under `input_context`.
+- Write evidence to `next_skill.verification_dir`.
+- If `blockers` is non-empty, resolve the blockers before executing the skill.
+- Do not infer or guess a governed host without `slipway next --json`.
 
-### 3. Execute Skill
-Follow the SKILL.md instructions:
-- Analyze the codebase/change context as specified
-- Write evidence JSON to `next_skill.verification_dir`
-- Follow the evidence schema defined in the skill
+## Execute
+If `next_skill` is present:
+1. Read the generated `SKILL.md` for `next_skill.name`.
+2. Follow that skill's evidence contract.
+3. Run `slipway run --json` when evidence is ready.
 
-### 4. Present to User
-Show:
-- What was analyzed/done
-- Key findings and decisions
-- Proposed next step
-
-`slipway next` is intentionally query-only.
-If state progression is needed, use `slipway run`.
-
-### 5. Advance
-```bash
-slipway run --json
-```
-CLI validates evidence, checks gates, advances state, and returns next instructions.
-
-### 6. Repeat
-If `next` returns a new `next_skill`, go to step 2.
-If the change reaches DONE-ready state, suggest `slipway done`.
-If you need continuous execution until `run` surfaces the next skill, blocker, checkpoint, or done-ready outcome, switch to `slipway run`.
-
-## Dispatch Contract
-- `next_skill.name` is the only required governed-host handoff.
-- The caller derives its own SKILL.md path from `name` using local tool conventions.
-- Do not look for retired agent fields or a second exported agent prompt file.
-{{if eq .ToolID "claude"}}
-### Tool-Specific Dispatch (Claude Code)
-- **Spawn subagent**: Use the `Task` tool or host-native subagent mechanism with `.claude/skills/slipway-{name}/SKILL.md` plus task context.
-- **Pass file paths only**: Include the derived skill path, `verification_dir`, task plan paths. Never inline file content.
-- **One task per Task() call**: Each task executor gets its own `Task` invocation.
-- **Fresh context on retry**: Spawn a new `Task` call. Never reuse a prior Task's context.
-{{else if eq .ToolID "codex"}}
-### Tool-Specific Dispatch (Codex)
-- **Spawn subagent**: Use `codex -q --task "<prompt>"` with `.codex/skills/slipway-{name}/SKILL.md` plus file-path references only.
-- **Pass file paths only**: Reference files by path in the task prompt.
-- **One task per invocation**: Each task gets its own `codex --task` call.
-- **Fresh context on retry**: New `codex --task` call. Previous context is automatically isolated.
-{{else if eq .ToolID "cursor"}}
-### Tool-Specific Dispatch (Cursor)
-- **Spawn subagent**: Use Cursor Composer agent mode with `.cursor/skills/slipway-{name}/SKILL.md` plus file-path references only.
-- **Pass file paths only**: Reference files by path.
-- **One task per agent session**: Each task gets its own Composer agent session.
-- **Fresh context on retry**: New Composer session. Do not continue in the same thread.
-{{else}}
-### Tool-Specific Dispatch ({{.ToolID}})
-- **Spawn subagent**: Use the tool's native agent/task dispatch mechanism with the derived `slipway-{name}` skill path.
-- **Pass file paths only**: Reference files by path. Never inline content.
-- **One task per subagent**: Each task gets its own isolated context.
-- **Fresh context on retry**: New subagent. Never reuse prior context.
-{{end}}
-## Subagent Role: Implementer
-- Input scope: one task or one wave unit, not the entire project.
-- Required output contract: `changed_files`, `test_summary`, `evidence_ref`.
-- Method references: `slipway-tdd` for implementation and `slipway-root-cause-tracing` for failures.
-
-## Context Budget
-- Include only active skill, blockers, and directly touched artifacts.
-- Exclude full logs; reference git-runtime evidence paths instead of pasting them inline.
-- Refresh threshold: after each skill execution and before each new step.
-
-## Skill References
-- `slipway-tdd`: enforce RED->GREEN->REFACTOR during wave execution.
-- `slipway-root-cause-tracing`: isolate root cause when skill execution fails.
-
-## DO NOT SKIP
-1. Pre-action status check (`slipway next --json`).
-2. Blocker resolution before execution.
-3. Post-action progression check (`slipway run --json`).
-4. Use `slipway run` instead of looping `slipway next` when continuous governed execution is required.
-
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "Run `next` repeatedly" | Always check instructions between each invocation. |
-| "Blockers will clear automatically" | Resolve blockers explicitly before execution. |
-| "Skip the skill, just advance" | Every skill step must execute and produce evidence. |
-| "One large context is fine" | Keep per-task context scoped and disposable. |
-| "I know the next skill" | `slipway next --json` output is authoritative. |
-| "Skip the pause, keep going" | Hard gates exist for a reason. |
-| "Evidence looks close enough" | Validation must pass before advance. |
-| "I should build my own loop around next" | Use `slipway run` for continuous governed execution. |
-| "User already approved the plan" | Each state transition may require fresh confirmation. |
-
-## Failure Mode Handling
-1. If skill execution fails, capture blocker text and rerun only after targeted remediation.
-2. If stale evidence appears repeatedly, reconcile dependencies and re-review changed scope.
-3. If `next` returns errors, show error details and suggest remediation.
-
-## Step Declaration
-Declare current step and expected output before executing each workflow step.
+If `next_skill` is null, inspect `blockers` for the terminal or remediation action.
 
 ## Flags
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
+- `--diagnostics`: include governance/readiness diagnostic fields
 {{- end -}}

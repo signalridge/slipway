@@ -37,10 +37,12 @@ func TestSessionStartHookFindsNearestParentScope(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
+	assert.Contains(t, string(out), "session_handoff_present: false")
 	logContent := readHookLog(t, logPath)
 	assert.Contains(t, logContent, nested+"|root")
-	assert.Contains(t, logContent, nested+"|status --json")
-	assert.Contains(t, logContent, nested+"|next --json --hook-lite")
+	assert.Contains(t, logContent, nested+"|next --json")
+	assert.NotContains(t, logContent, "status --json")
+	assert.NotContains(t, logContent, "--hook-lite")
 	assert.NotContains(t, logContent, "--preview")
 }
 
@@ -66,6 +68,8 @@ func TestSessionStartHookReadsScopeScopedHandoff(t *testing.T) {
 	scopedHandoff := filepath.Join(root, ".git", "slipway", "scopes", "services", "billing", "runtime", "handoff.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(scopedHandoff), 0o755))
 	require.NoError(t, os.WriteFile(scopedHandoff, []byte("SCOPED HANDOFF"), 0o644))
+	canonicalScopedHandoff, err := filepath.EvalSymlinks(scopedHandoff)
+	require.NoError(t, err)
 
 	logPath, binDir := installHookTestSlipway(t, scopeRoot)
 	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
@@ -81,7 +85,9 @@ func TestSessionStartHookReadsScopeScopedHandoff(t *testing.T) {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
-	assert.Contains(t, string(out), "SCOPED HANDOFF")
+	assert.Contains(t, string(out), "session_handoff_path: "+canonicalScopedHandoff)
+	assert.Contains(t, string(out), "session_handoff_present: true")
+	assert.NotContains(t, string(out), "SCOPED HANDOFF")
 	assert.NotContains(t, string(out), "GLOBAL HANDOFF")
 }
 
@@ -126,9 +132,9 @@ func TestSessionStartHookUsesCanonicalScopeRootForMarkerOnlyBoundWorktree(t *tes
 
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, nested+"|status --json")
-	assert.NotContains(t, logContent, scopeRoot+"|status --json")
-	assert.NotContains(t, logContent, root+"|status --json")
+	assert.Contains(t, logContent, nested+"|next --json")
+	assert.NotContains(t, logContent, scopeRoot+"|next --json")
+	assert.NotContains(t, logContent, root+"|next --json")
 }
 
 func TestSessionStartHookIgnoresStaleNestedScopeMarkerWithoutConfig(t *testing.T) {
@@ -161,12 +167,12 @@ func TestSessionStartHookIgnoresStaleNestedScopeMarkerWithoutConfig(t *testing.T
 
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, nested+"|status --json")
-	assert.NotContains(t, logContent, root+"|status --json")
-	assert.NotContains(t, logContent, scopeRoot+"|status --json")
+	assert.Contains(t, logContent, nested+"|next --json")
+	assert.NotContains(t, logContent, root+"|next --json")
+	assert.NotContains(t, logContent, scopeRoot+"|next --json")
 }
 
-func TestSessionStartHookSurfacesStatusFailureDiagnostic(t *testing.T) {
+func TestSessionStartHookSurfacesNextFailureDiagnostic(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -181,13 +187,10 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	  "root")
 	    printf '%%s\n' %q
 	    ;;
-	  "status --json")
-    echo 'status contract broke' >&2
+	  "next --json")
+    echo 'next contract broke' >&2
     exit 1
     ;;
-	  "next --json --hook-lite")
-	    printf '{"next_skill":null}'
-	    ;;
 	esac
 	`, root))
 	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
@@ -203,7 +206,7 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
-	assert.Contains(t, string(out), "hook_diagnostic: slipway status --json failed: status contract broke")
+	assert.Contains(t, string(out), "hook_diagnostic: slipway next --json failed: next contract broke")
 }
 
 func TestSessionStartHookSetsToolEnvForReadOnlyCommands(t *testing.T) {
@@ -221,10 +224,7 @@ case "$*" in
   "root")
     printf '%%s\n' %q
     ;;
-  "status --json")
-    printf '{"change":"demo"}'
-    ;;
-  "next --json --hook-lite")
+  "next --json")
     printf '{"next_skill":{"name":"plan-audit"}}'
     ;;
 esac
@@ -242,12 +242,14 @@ esac
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
+	assert.LessOrEqual(t, len(out), 768, "session-start payload must stay compact")
 	assert.NotContains(t, string(out), "hook_diagnostic:")
 	assert.Contains(t, string(out), `{"next_skill":{"name":"plan-audit"}}`)
 
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, root+"|status --json")
-	assert.Contains(t, logContent, root+"|next --json --hook-lite")
+	assert.Contains(t, logContent, root+"|next --json")
+	assert.NotContains(t, logContent, "status --json")
+	assert.NotContains(t, logContent, "--hook-lite")
 }
 
 func TestSessionStartHookSurfacesRootFailureDiagnostic(t *testing.T) {
@@ -290,12 +292,9 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	  "root")
 	    printf '%%s\n' %q
 	    ;;
-	  "status --json")
-    printf '{"change":"demo"}'
-    ;;
-	  "next --json --hook-lite")
-	    printf '{"next_skill":null}'
-	    ;;
+		  "next --json")
+		    printf '{"next_skill":null}'
+		    ;;
 	esac
 	`, canonicalRoot)
 	return installHookTestSlipwayScript(t, canonicalRoot, script)

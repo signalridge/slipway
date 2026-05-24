@@ -271,8 +271,11 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	}
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
+	assert.LessOrEqual(t, len([]byte(content)), 4500, "session-start hook template must stay compact")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
-	assert.Contains(t, content, "slipway next --json --hook-lite")
+	assert.Contains(t, content, "slipway next --json")
+	assert.NotContains(t, content, "--hook-lite")
+	assert.NotContains(t, content, "slipway status --json")
 	assert.Contains(t, content, `cd "${hook_cwd}" && slipway "$@"`)
 	assert.NotContains(t, content, "--preview")
 }
@@ -289,13 +292,15 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	}
 	content, err := Render("commands/command-entry.md.tmpl", data)
 	require.NoError(t, err, "failed to render command-entry.md.tmpl for next")
+	assert.LessOrEqual(t, len([]byte(content)), 3000, "generated slipway-next prompt must stay handoff-sized")
 	assert.NotContains(t, content, "{{.", "next command entry has unrendered template vars")
-	assert.Contains(t, content, "This is the query surface for governed changes.")
-	assert.Contains(t, content, "Post-action progression check (`slipway run --json`).")
-	assert.Contains(t, content, "slipway-root-cause-tracing")
+	assert.Contains(t, content, "Query the next governed host without advancing lifecycle state.")
+	assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
+	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
 	assert.NotContains(t, content, "single-step progression command")
 	assert.NotContains(t, content, "state progression context")
 	assert.NotContains(t, content, "systematic-debugging")
+	assert.NotContains(t, content, "Rationalization Red Flags")
 }
 
 func TestContentReturnsAgentDefinitions(t *testing.T) {
@@ -540,9 +545,12 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	}
 	content, err := Render("commands/command-entry.md.tmpl", data)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len([]byte(content)), 6500, "generated slipway-run prompt must stay compact")
 
-	assert.Contains(t, content, "context_budget.health",
-		"run command missing context self-monitoring block")
+	assert.NotContains(t, content, "context_budget.health",
+		"run command must not reference status fields that do not exist")
+	assert.Contains(t, content, "context_budget.guard_action",
+		"run command missing returned-view context guard guidance")
 
 	assert.Contains(t, content, "fresh reviewer agent",
 		"run command missing fresh-reviewer pause mandate")
@@ -555,6 +563,26 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 
 	assert.Contains(t, content, "user_response_payload",
 		"run skill missing checkpoint response handoff guidance")
+}
+
+func TestTemplateFSExcludesTransientPythonArtifacts(t *testing.T) {
+	t.Parallel()
+
+	err := fs.WalkDir(TemplateFS(), ".", func(path string, d fs.DirEntry, err error) error {
+		require.NoError(t, err)
+		name := d.Name()
+		if d.IsDir() {
+			assert.NotEqual(t, "__pycache__", name, "template FS must not embed python cache directory %s", path)
+			return nil
+		}
+		assert.False(t,
+			strings.HasSuffix(name, ".pyc") || strings.HasSuffix(name, ".pyo"),
+			"template FS must not embed transient python bytecode %s",
+			path,
+		)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) {
@@ -719,8 +747,9 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 
 	t.Run("next dispatch content preserved", func(t *testing.T) {
 		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "next", "command-next-body", "claude")
-		assert.Contains(t, content, "Tool-Specific Dispatch (Claude Code)")
+		assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
 		assert.Contains(t, content, "`slipway run --json`")
+		assert.NotContains(t, content, "Tool-Specific Dispatch")
 	})
 
 	t.Run("codex transport preserved", func(t *testing.T) {

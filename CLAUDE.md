@@ -92,11 +92,16 @@ All routed commands support `--json` for structured output:
 - `slipway review --json` — review current change
 - `slipway validate --json` — validate governance state
 - `slipway repair --json` — repair local integrity issues
-- `slipway next --json` — query next step (read-only, does not advance state)
+- `slipway next --json` — query next step as a handoff-only JSON surface (read-only, does not advance state)
 - `slipway next --json --no-auto-pass` — query next step, reporting `auto_pass_eligible` instead of auto-passing
-- `slipway run --json` — advance to next step (the only state-mutating execution surface)
+- `slipway next --json --diagnostics` — include governance/readiness diagnostics in the next-step view
+- `slipway run --json` — advance to next step and return the handoff-only JSON surface (the only state-mutating execution surface)
+- `slipway run --json --diagnostics` — include transition traces and governance/readiness diagnostics in the returned run view
 - `slipway status --json` — check current state
 
 JSON output from `next` includes `next_skill.name` as the governed host
 handoff. The caller derives its own SKILL.md path using local tool
-conventions such as `.claude/skills/slipway-{name}/SKILL.md`.
+conventions such as `.claude/skills/slipway-{name}/SKILL.md`. Default `next`
+JSON is intentionally compact; use `--diagnostics` for gate status, artifact
+status, skill evidence, context-budget details, wave plans, and transition
+traces.

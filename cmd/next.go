@@ -222,7 +222,7 @@ func makeNextCmd() *cobra.Command {
 	var contextGuard bool
 	var noAutoPass bool
 	var quickMode bool
-	var hookLite bool
+	var diagnostics bool
 	var changeSlug string
 
 	cmd := &cobra.Command{
@@ -241,12 +241,12 @@ func makeNextCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
-				if hookLite {
-					view, err := buildLightweightNextView(root, ref)
+				if jsonOutput && !diagnostics && !contextGuard {
+					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass, quickMode)
 					if err != nil {
 						return err
 					}
-					return encodeJSONResponse(cmd, view)
+					return encodeJSONResponse(cmd, buildNextHandoffView(view))
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
@@ -260,6 +260,12 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				if jsonOutput {
+					if diagnostics {
+						return encodeJSONResponse(cmd, view)
+					}
+					return encodeJSONResponse(cmd, buildNextHandoffView(view))
+				}
+				if diagnostics {
 					return encodeJSONResponse(cmd, view)
 				}
 				return writeNextHuman(cmd.OutOrStdout(), view)
@@ -271,8 +277,7 @@ func makeNextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format")
 	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
 	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
-	cmd.Flags().BoolVar(&hookLite, "hook-lite", false, "")
-	_ = cmd.Flags().MarkHidden("hook-lite")
+	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
@@ -542,42 +547,6 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 	view.Blockers = []model.ReasonCode{model.NewReasonCode("preset_confirmation_required", "")}
 	view.NextSkill = nil
 	return true, nil
-}
-
-// buildLightweightNextView preserves the ordinary preview semantics for hook
-// callers, then strips heavyweight output sections that session-start does not
-// need.
-func buildLightweightNextView(root string, ref changeRef) (nextView, error) {
-	change, err := state.LoadChange(root, ref.Slug)
-	if err != nil {
-		return nextView{}, err
-	}
-
-	view, err := buildNextView(root, ref, "", true, false, false)
-	if err != nil {
-		return nextView{}, err
-	}
-
-	view.InputContext = nextContext{
-		WorkspaceRoot: root,
-		Description:   change.Description,
-		Slug:          change.Slug,
-	}
-	view.ContextBudget = nil
-	view.Constraints = nil
-	view.GovernanceSignals = nil
-	view.ActiveControls = nil
-	view.RequiredActions = nil
-	view.SkillEvidence = nil
-	view.AutoPassEligible = nil
-	view.ArtifactAmendments = nil
-	view.AutoTransitions = nil
-	if view.NextSkill != nil {
-		view.NextSkill.SkillConstraints = nil
-		view.NextSkill.ReviewContext = nil
-		view.NextSkill.TechniqueHints = nil
-	}
-	return view, nil
 }
 
 func writeNextHuman(w io.Writer, view nextView) error {

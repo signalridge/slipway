@@ -31,11 +31,11 @@ slipway run --resume-response "<response>" --json
 - The change is done-ready or done.
 
 ## Context Self-Monitoring (SHOULD)
-During long-running execution, periodically check context health:
-- After every 3 tasks executed, run `slipway status --json` and inspect `context_budget.health`
-- If health is `degrading` or `poor`, pause and spawn a fresh subagent before continuing
-- If `guard_action` is `warn`, trim non-essential context
-- If `guard_action` is `stop`, cease execution immediately and write handoff state
+During long-running execution, inspect the JSON returned by `slipway run --json`
+or `slipway next --json`:
+- If `warnings` mention context pressure, trim non-essential context before continuing.
+- If `context_budget.guard_action` is present and equals `warn`, trim non-essential context.
+- If `context_budget.guard_action` is present and equals `stop`, stop execution and write handoff state before spawning a fresh subagent.
 
 ## Fresh Reviewer Pause Rule
 When `run` reaches a governed review skill (`spec-compliance-review`, `code-quality-review`, or `final-closeout`), stop and hand off to a fresh reviewer agent. Do not let the same long-running execution context review its own prior implementation work.
@@ -53,4 +53,5 @@ After any checkpoint pause, user intervention, or governed review handoff, a fre
 - `--resume-response "<response>"`: resume an active checkpoint with explicit response text
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
+- `--diagnostics`: include governance/readiness diagnostic fields
 {{- end -}}

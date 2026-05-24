@@ -22,8 +22,8 @@ All governed changes at S0_INTAKE/clarify or S0_INTAKE/research. `slipway next` 
 ## Process
 
 ### 1. Read Context
-Run `slipway next --json` to get the current change state and intent.md content.
-Read the intent.md artifact in the governed bundle.
+Use `slipway next --json` for the current state and governed bundle path, then
+read `intent.md`.
 
 Carry this scope posture while reading:
 - surface the unspoken assumption before the next question
@@ -98,14 +98,6 @@ After confirmation: `slipway next`
 3. Concrete `In Scope` / `Out of Scope` boundaries before planning.
 4. Writing verification evidence.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "The description is clear enough" | Clear to you is not clear to the system. Verify with the user. |
-| "This is too simple for clarification" | Even trivial changes need one confirmation. Named anti-pattern. |
-| "I'll figure out scope during planning" | Scope must be defined before planning. Intent drift starts here. |
-| "The user will correct me later" | Later corrections are expensive. Clarify now. |
-
 ## Scope Boundary Precision Rules
 Scope items must be CONCRETE:
 - BAD: "Improve error handling" (vague)
@@ -117,6 +109,3 @@ Scope items must be CONCRETE:
 - If intent.md is missing or empty: create scaffold from description, then clarify.
 - If user provides contradictory scope: note contradiction, ask for resolution.
 - If user abandons clarification: do not advance. Keep state at S0_INTAKE/clarify.
-
-## Step Declaration
-Declare current step and expected output before executing each workflow step.

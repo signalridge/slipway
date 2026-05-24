@@ -12,6 +12,27 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
+type assembleSkillViewOptions struct {
+	IncludeSkillEvidence bool
+	IncludeReviewContext bool
+	IncludeContextBudget bool
+	IncludeAgentContext  bool
+}
+
+var fullSkillViewOptions = assembleSkillViewOptions{
+	IncludeSkillEvidence: true,
+	IncludeReviewContext: true,
+	IncludeContextBudget: true,
+	IncludeAgentContext:  true,
+}
+
+var handoffSkillViewOptions = assembleSkillViewOptions{
+	IncludeSkillEvidence: false,
+	IncludeReviewContext: false,
+	IncludeContextBudget: false,
+	IncludeAgentContext:  false,
+}
+
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
 // review context, constraints, and context budget, then applies guards.
 // governedChange is the already-loaded executable change from buildNextContextByMode.
@@ -27,6 +48,30 @@ func assembleSkillView(
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
 	autoSkipEvidence bool,
+) error {
+	return assembleSkillViewWithOptions(
+		root,
+		view,
+		ref,
+		advanced,
+		governedChange,
+		execCtx,
+		precomputedPassingSkills,
+		autoSkipEvidence,
+		fullSkillViewOptions,
+	)
+}
+
+func assembleSkillViewWithOptions(
+	root string,
+	view *nextView,
+	ref changeRef,
+	advanced progression.AdvanceSummary,
+	governedChange *model.Change,
+	execCtx *executionContext,
+	precomputedPassingSkills map[string]model.VerificationRecord,
+	autoSkipEvidence bool,
+	options assembleSkillViewOptions,
 ) error {
 	// Build a synthetic Change for skill resolution when no governed change exists.
 	resolveChange := model.Change{CurrentState: view.CurrentState}
@@ -70,7 +115,7 @@ func assembleSkillView(
 		}
 	}
 
-	if evidenceMap != nil {
+	if options.IncludeSkillEvidence && evidenceMap != nil {
 		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills)
 		if err != nil {
 			return wrapRequiredSkillsEvaluationError("evaluate required skill evidence", ref.Slug, err)
@@ -146,7 +191,7 @@ func assembleSkillView(
 	ns.TechniqueHints = appendCatalogHints(ns.TechniqueHints, nextSkillName, governedChange, view)
 	ns.TechniqueHints = appendWorkflowProfileTechniqueHints(ns.TechniqueHints, nextSkillName, governedChange)
 
-	if nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview {
+	if options.IncludeReviewContext && (nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview) {
 		var guardrailDomain string
 		if governedChange != nil {
 			guardrailDomain = governedChange.GuardrailDomain
@@ -159,8 +204,12 @@ func assembleSkillView(
 	}
 
 	view.NextSkill = ns
-	view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)
-	view.Constraints = deriveAgentConstraints(registry, nextSkillName)
+	if options.IncludeContextBudget {
+		view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)
+	}
+	if options.IncludeAgentContext {
+		view.Constraints = deriveAgentConstraints(registry, nextSkillName)
+	}
 
 	if advanced.Action == "blocked" {
 		view.Blockers = appendReasonCodes(view.Blockers, advanced.Blockers)

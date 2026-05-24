@@ -10,8 +10,6 @@ description: "Use when governed execution requires a dedicated worktree and base
 IRON LAW: NO DISCOVERY-REQUIRED GOVERNED EXECUTION WITHOUT A DEDICATED WORKTREE AND A VERIFIED BASELINE
 ```
 
-Violating the letter of this rule is violating the spirit of this rule.
-
 ## Purpose
 Establish and verify the dedicated worktree binding required before governed
 execution begins. This is a standalone governance preflight skill that must
@@ -80,18 +78,7 @@ The runtime will validate the worktree binding and persist `worktree_path` and `
 2. Run a fresh baseline verification command before writing `pass` verification.
 3. Record absolute worktree path and exact branch name in the verification references.
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "I'll just use the main checkout" | Discovery-required governed work requires dedicated isolation. |
-| "Baseline passed earlier" | `S2` needs fresh verification now. |
-| "The path is obvious" | The runtime only trusts explicit worktree references. |
-| "I'll write the verification later" | No verification means no transition out of preflight. |
-
 ## Failure Handling
 - If no dedicated worktree exists yet, create one and rerun the preflight.
 - If the baseline command fails, set verdict to `fail` with the failed command or failing subsystem as a blocker.
 - If branch/path metadata changes, emit fresh verification before calling `slipway next`.
-
-## Step Declaration
-Declare current step and expected output before executing each workflow step.

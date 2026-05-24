@@ -11,7 +11,15 @@ import (
 	"text/template"
 )
 
-//go:embed all:templates
+//go:embed templates/_partials/*.tmpl
+//go:embed templates/agents/*.md
+//go:embed templates/artifacts/*.md
+//go:embed templates/commands/*.tmpl
+//go:embed templates/hooks/*.tmpl
+//go:embed templates/skills/*.md
+//go:embed templates/skills/*/*.md templates/skills/*/*.tmpl
+//go:embed templates/skills/*/references/*.md
+//go:embed templates/skills/*/scripts/*.py templates/skills/*/scripts/*.sh
 var embeddedTemplates embed.FS
 
 // TemplateFS returns a read-only view of the embedded templates rooted at

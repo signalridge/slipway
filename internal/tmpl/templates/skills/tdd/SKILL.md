@@ -10,9 +10,6 @@ description: "Use when executing RED/GREEN/REFACTOR with strict test-first disci
 IRON LAW: NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
-Violating the letter of this rule is violating the spirit of this rule.
-"Keep as reference, write tests first" → You'll adapt it. That's testing after. Delete means delete.
-
 ## Purpose
 Apply a strict RED → GREEN → REFACTOR loop so implementation never gets ahead
 of verification. This is a technique skill used by execution hosts; it does
@@ -86,27 +83,9 @@ A test IS acceptable when:
 4. Never batch multiple behavior slices into one cycle.
 5. Never modify the test during GREEN phase (that's moving the goalpost).
 
-## Rationalization Red Flags
-| Rationalization | Counter-rule |
-|---|---|
-| "It's obvious, test later" | If behavior matters, test first. Obvious code still needs proof. |
-| "I changed one line so no test needed" | Small changes can still regress behavior. One line = one test. |
-| "The failure is noisy, I can ignore it" | Stabilize or narrow the test, then keep RED visible. |
-| "I'll refactor now and test later" | Refactor only while GREEN is confirmed. |
-| "End-to-end test covers this anyway" | Keep fast focused tests for local proof. E2E is not a substitute. |
-| "I already wrote the code, let me just add tests" | Delete the code. Write the test. Rewrite the code. This is not negotiable. |
-| "This is just a small helper function" | Small helpers get small tests. Size doesn't exempt from TDD. |
-| "The test is trivial, not worth writing" | Trivial tests take 30 seconds. Debugging untested trivial code takes 30 minutes. |
-| "I need to see the code shape first" | Write the test to discover the shape. The test IS the design tool. |
-| "TDD is too slow for this task" | TDD prevents rework. Rework is slower than TDD. Always. |
-| "I'll keep the existing code and write tests around it" | If existing code wasn't test-driven, refactor under test or rewrite. Don't wrap bad code with tests. |
-
 ## Failure Mode Handling
 1. **Flaky tests**: Isolate deterministic preconditions before proceeding. Do not ignore flakiness.
 2. **Unclear minimum fix**: Reduce scope to a smaller failing assertion. The smallest test reveals the smallest fix.
 3. **Refactor regressions**: Revert to last GREEN state immediately. Try a different approach. Do not debug forward.
 4. **Test infrastructure missing**: Create a minimal test helper or fixture as a separate RED-GREEN cycle before the main task.
 5. **Cannot write test first**: This means you don't understand the behavior yet. Research first, then write the test. If you still can't: the task needs to be broken down further.
-
-## Step Declaration
-Declare current step (RED/GREEN/REFACTOR) and expected output before executing each phase.

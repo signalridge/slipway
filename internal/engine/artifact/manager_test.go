@@ -396,7 +396,8 @@ func TestScaffoldGovernedBundleSeedsDecisionDraft(t *testing.T) {
 	require.NoError(t, err)
 	content := string(raw)
 
-	require.Contains(t, content, "Approach A")
+	require.Contains(t, content, "Pending investigation")
+	require.NotContains(t, content, "Approach A")
 	require.NotContains(t, content, "| | | | |")
 }
 
@@ -417,16 +418,20 @@ func TestScaffoldGovernedBundleSeedsDecisionSectionBodies(t *testing.T) {
 	rollback := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Rollout and Rollback"), "\n"))
 	risk := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Risk"), "\n"))
 
-	assert.Contains(t, selected, "session timeout policy")
+	assert.Contains(t, selected, "Pending investigation")
+	assert.NotContains(t, selected, "session timeout policy")
 	assert.NotContains(t, selected, "Describe the chosen approach")
 
-	assert.Contains(t, interfaces, "session timeout policy")
+	assert.Contains(t, interfaces, "Pending investigation")
+	assert.NotContains(t, interfaces, "session timeout policy")
 	assert.NotContains(t, interfaces, "Pending — detail after approach is confirmed.")
 
-	assert.Contains(t, rollback, "session timeout policy")
+	assert.Contains(t, rollback, "Pending investigation")
+	assert.NotContains(t, rollback, "session timeout policy")
 	assert.NotContains(t, rollback, "Pending — define after interfaces are finalized.")
 
-	assert.Contains(t, risk, "session timeout policy")
+	assert.Contains(t, risk, "Pending investigation")
+	assert.NotContains(t, risk, "session timeout policy")
 	assert.NotContains(t, risk, "Pending — assess after approach is confirmed.")
 }
 
@@ -442,7 +447,9 @@ func TestScaffoldGovernedBundleSeedsTasksDraft(t *testing.T) {
 	content := string(raw)
 
 	require.Contains(t, content, "t-01")
+	require.Contains(t, content, "Pending task objective")
 	require.NotContains(t, content, "Define implementation tasks")
+	require.NotContains(t, content, "Add tests for the implementation")
 }
 
 func TestScaffoldGovernedBundleSeedsResearchDraft(t *testing.T) {
@@ -457,7 +464,8 @@ func TestScaffoldGovernedBundleSeedsResearchDraft(t *testing.T) {
 	require.NoError(t, err)
 	content := string(raw)
 
-	require.Contains(t, content, "Approach A")
+	require.Contains(t, content, "Pending investigation")
+	require.NotContains(t, content, "Approach A")
 	require.Contains(t, content, "## Alternatives Considered")
 }
 
@@ -480,7 +488,32 @@ func TestScaffoldGovernedBundleSeedsResearchSectionBodies(t *testing.T) {
 	assert.NotContains(t, content, "Unresolved technical questions to investigate.")
 	assert.NotContains(t, content, "Assumptions to validate during planning.")
 	assert.NotContains(t, content, "Docs, specs, code paths, and external references that constrain this work.")
-	assert.Contains(t, content, "session timeout policy")
+	assert.NotContains(t, content, "session timeout policy")
+}
+
+func TestScaffoldGovernedBundleMarkdownSizeBudget(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("add-session-timeout-policy")
+	change.NeedsDiscovery = true
+
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+
+	base := filepath.Join(root, "artifacts", "changes", change.Slug)
+	entries, err := os.ReadDir(base)
+	require.NoError(t, err)
+
+	total := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(base, entry.Name()))
+		require.NoError(t, err)
+		total += len(raw)
+	}
+
+	assert.LessOrEqual(t, total, 15000, "fresh artifact bundle scaffold must stay structural, not analytical")
 }
 
 func TestSeedRequirementsContainsGuardrailDomain(t *testing.T) {
@@ -529,7 +562,7 @@ func TestSeedRequirementsUsesConservativeFallbackForNounPhraseAndDoesNotInventIn
 	assert.NotContains(t, result, "Traces to INT-001.")
 }
 
-func TestSeedTasksContainsTestTask(t *testing.T) {
+func TestSeedTasksContainsOnlyStructuralPlaceholder(t *testing.T) {
 	t.Parallel()
 	data := templateData{
 		Slug:           "my-change",
@@ -537,8 +570,10 @@ func TestSeedTasksContainsTestTask(t *testing.T) {
 	}
 	result := seedTasks(data)
 	assert.Contains(t, result, "t-01")
-	assert.Contains(t, result, "t-02")
-	assert.Contains(t, result, "task_kind: test")
+	assert.Contains(t, result, "Pending task objective")
+	assert.Contains(t, result, "task_kind: investigation")
+	assert.NotContains(t, result, "t-02")
+	assert.NotContains(t, result, "task_kind: test")
 }
 
 func TestCapitalizeFirstHandlesUnicodePrefix(t *testing.T) {

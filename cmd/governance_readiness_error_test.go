@@ -205,7 +205,7 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	})
 }
 
-func TestNextProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
+func TestNextDiagnosticsProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -225,7 +225,7 @@ func TestNextProjectionFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()

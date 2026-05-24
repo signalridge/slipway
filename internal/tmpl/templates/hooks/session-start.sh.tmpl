@@ -3,8 +3,7 @@ set -euo pipefail
 
 # Slipway session-start hook helper for {{.ToolID}}.
 # This hook is intentionally read-only:
-# - status provides active change and lifecycle health
-# - next provides next skill context (query-only, no state advancement)
+# - next provides a compact handoff (query-only, no state advancement)
 
 if ! command -v slipway >/dev/null 2>&1; then
   exit 0
@@ -46,18 +45,11 @@ run_slipway_readonly() {
   return "${status}"
 }
 
-status_json=""
-if status_output="$(run_slipway_readonly status --json)"; then
-  status_json="${status_output}"
-else
-  diagnostics+=("hook_diagnostic: slipway status --json failed: $(normalize_hook_message "${status_output}")")
-fi
-
 next_json=""
-if next_output="$(run_slipway_readonly next --json --hook-lite)"; then
+if next_output="$(run_slipway_readonly next --json)"; then
   next_json="${next_output}"
 else
-  diagnostics+=("hook_diagnostic: slipway next --json --hook-lite failed: $(normalize_hook_message "${next_output}")")
+  diagnostics+=("hook_diagnostic: slipway next --json failed: $(normalize_hook_message "${next_output}")")
 fi
 
 diagnostics_text=""
@@ -65,7 +57,6 @@ if [ "${#diagnostics[@]}" -gt 0 ]; then
   diagnostics_text="$(printf '%s\n' "${diagnostics[@]}")"
 fi
 
-handoff=""
 handoff_path=""
 git_common_dir="$(git -C "${project_root}" rev-parse --git-common-dir 2>/dev/null || true)"
 if [ -n "${git_common_dir}" ]; then
@@ -73,6 +64,7 @@ if [ -n "${git_common_dir}" ]; then
   if [ "${git_common_dir}" = "${git_common_dir#/}" ]; then
     git_common_dir="${project_root}/${git_common_dir}"
   fi
+  git_common_dir="$(cd "${git_common_dir}" 2>/dev/null && pwd -P || printf '%s\n' "${git_common_dir}")"
   canonical_project_root="$(cd "${project_root}" 2>/dev/null && pwd -P || printf '%s\n' "${project_root}")"
   repo_root="$(git -C "${project_root}" rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "${repo_root}" ]; then
@@ -92,21 +84,23 @@ if [ -n "${git_common_dir}" ]; then
     handoff_path="${git_common_dir%/}/slipway/runtime/handoff.md"
   fi
 fi
-if [ -f "${handoff_path}" ]; then
-  handoff="$(cat "${handoff_path}")"
+handoff_summary=""
+if [ -n "${handoff_path}" ]; then
+  handoff_present="false"
+  if [ -f "${handoff_path}" ]; then
+    handoff_present="true"
+  fi
+  handoff_summary="$(printf 'session_handoff_present: %s\nsession_handoff_path: %s' "${handoff_present}" "${handoff_path}")"
 fi
 
-if [ -z "${status_json}" ] && [ -z "${next_json}" ] && [ -z "${handoff}" ] && [ -z "${diagnostics_text}" ]; then
+if [ -z "${next_json}" ] && [ -z "${handoff_summary}" ] && [ -z "${diagnostics_text}" ]; then
   exit 0
 fi
 
 cat <<EOF
 <slipway-session-start tool="{{.ToolID}}">
-${status_json}
 ${next_json}
 ${diagnostics_text}
-${handoff:+<session-handoff>
-${handoff}
-</session-handoff>}
+${handoff_summary}
 </slipway-session-start>
 EOF

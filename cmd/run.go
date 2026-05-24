@@ -16,6 +16,7 @@ func makeRunCmd() *cobra.Command {
 		resume         bool
 		resumeResponse string
 		quickMode      bool
+		diagnostics    bool
 		changeSlug     string
 	)
 
@@ -69,6 +70,12 @@ func makeRunCmd() *cobra.Command {
 					}
 				}
 				if jsonOutput {
+					if diagnostics {
+						return encodeJSONResponse(cmd, view)
+					}
+					return encodeJSONResponse(cmd, buildNextHandoffView(view))
+				}
+				if diagnostics {
 					return encodeJSONResponse(cmd, view)
 				}
 				return writeNextHuman(cmd.OutOrStdout(), view)
@@ -80,6 +87,7 @@ func makeRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave when no active checkpoint exists")
 	cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused checkpoint")
 	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
+	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }

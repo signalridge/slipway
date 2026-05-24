@@ -56,7 +56,7 @@ func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -124,7 +124,7 @@ func TestNextPreviewIgnoresUnreadableGovernanceSnapshot(t *testing.T) {
 		))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -155,7 +155,7 @@ func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -289,7 +289,7 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -332,7 +332,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -362,7 +362,7 @@ func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -401,7 +401,7 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -413,6 +413,20 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 		for _, hint := range view.NextSkill.TechniqueHints {
 			assert.NotEqual(t, "skill:fresh-verification-evidence", hint.Name)
 		}
+
+		var handoffBuf bytes.Buffer
+		handoffCmd := makeNextCmd()
+		handoffCmd.SetOut(&handoffBuf)
+		handoffCmd.SetArgs([]string{"--json", "--change", slug})
+		require.NoError(t, handoffCmd.Execute())
+
+		var handoff nextHandoffView
+		require.NoError(t, json.Unmarshal(handoffBuf.Bytes(), &handoff))
+		require.NotNil(t, handoff.NextSkill)
+		require.Len(t, handoff.NextSkill.TechniqueHints, 1)
+		assert.Equal(t, "skill:coverage-analysis", handoff.NextSkill.TechniqueHints[0].Name)
+		require.NotNil(t, handoff.NextSkill.SkillConstraints)
+		assert.Nil(t, handoff.NextSkill.SkillConstraints.LockedDecisions)
 	})
 }
 
@@ -437,7 +451,7 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 		cmd := makeRunCmd()
 		cmd.SetOut(&buf)
 		cmd.SetErr(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -550,7 +564,7 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -599,7 +613,7 @@ func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 		var buf bytes.Buffer
 		cmd := makeNextCmd()
 		cmd.SetOut(&buf)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view nextView
@@ -1035,7 +1049,7 @@ REQ-001: The system must authenticate requests.
 `), 0o644))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1061,7 +1075,7 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 		writeAssuranceMD(t, root, slug, "## Scope Summary\nIncomplete\n")
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1169,12 +1183,12 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
 }
 
-func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
+func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "hook-lite done ready contract")
+		slug := createGovernedRequest(t, root, "L2", "handoff-only done ready contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1193,38 +1207,80 @@ func TestNextHookLitePreservesPreviewSemantics(t *testing.T) {
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-		previewCmd := makeNextCmd()
-		previewCmd.SetArgs([]string{"--json"})
-		var previewBuf bytes.Buffer
-		previewCmd.SetOut(&previewBuf)
-		require.NoError(t, previewCmd.Execute())
+		diagnosticsCmd := makeNextCmd()
+		diagnosticsCmd.SetArgs([]string{"--json", "--diagnostics"})
+		var diagnosticsBuf bytes.Buffer
+		diagnosticsCmd.SetOut(&diagnosticsBuf)
+		require.NoError(t, diagnosticsCmd.Execute())
 
-		var previewView nextView
-		require.NoError(t, json.Unmarshal(previewBuf.Bytes(), &previewView))
+		var diagnosticsView nextView
+		require.NoError(t, json.Unmarshal(diagnosticsBuf.Bytes(), &diagnosticsView))
 
-		hookLiteCmd := makeNextCmd()
-		hookLiteCmd.SetArgs([]string{"--json", "--hook-lite"})
-		var hookLiteBuf bytes.Buffer
-		hookLiteCmd.SetOut(&hookLiteBuf)
-		require.NoError(t, hookLiteCmd.Execute())
+		handoffCmd := makeNextCmd()
+		handoffCmd.SetArgs([]string{"--json"})
+		var handoffBuf bytes.Buffer
+		handoffCmd.SetOut(&handoffBuf)
+		require.NoError(t, handoffCmd.Execute())
 
-		var hookLiteView nextView
-		require.NoError(t, json.Unmarshal(hookLiteBuf.Bytes(), &hookLiteView))
+		var handoffView nextHandoffView
+		require.NoError(t, json.Unmarshal(handoffBuf.Bytes(), &handoffView))
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(handoffBuf.Bytes(), &raw))
 
-		assert.Equal(t, previewView.CurrentState, hookLiteView.CurrentState)
-		assert.Equal(t, previewView.Blockers, hookLiteView.Blockers)
-		assert.Equal(t, previewView.Advanced, hookLiteView.Advanced)
-		if previewView.NextSkill == nil {
-			assert.Nil(t, hookLiteView.NextSkill)
+		assert.Equal(t, diagnosticsView.CurrentState, handoffView.CurrentState)
+		assert.Equal(t, diagnosticsView.Blockers, handoffView.Blockers)
+		if diagnosticsView.NextSkill == nil {
+			assert.Nil(t, handoffView.NextSkill)
 		} else {
-			require.NotNil(t, hookLiteView.NextSkill)
-			assert.Equal(t, previewView.NextSkill.Name, hookLiteView.NextSkill.Name)
-			assert.Equal(t, previewView.NextSkill.State, hookLiteView.NextSkill.State)
+			require.NotNil(t, handoffView.NextSkill)
+			assert.Equal(t, diagnosticsView.NextSkill.Name, handoffView.NextSkill.Name)
+			assert.Equal(t, diagnosticsView.NextSkill.State, handoffView.NextSkill.State)
 		}
-		assert.Nil(t, hookLiteView.ContextBudget, "hook-lite should strip heavyweight context budget output")
-		assert.Nil(t, hookLiteView.Constraints, "hook-lite should strip heavyweight constraint output")
-		assert.Equal(t, previewView.InputContext.WorkspaceRoot, hookLiteView.InputContext.WorkspaceRoot)
-		assert.Equal(t, change.Description, hookLiteView.InputContext.Description)
+		assert.Equal(t, diagnosticsView.InputContext.WorkspaceRoot, handoffView.InputContext.WorkspaceRoot)
+		assert.NotContains(t, raw, "context_budget")
+		assert.NotContains(t, raw, "constraints")
+		assert.NotContains(t, raw, "governance_signals")
+		assert.NotContains(t, raw, "active_controls")
+		assert.NotContains(t, raw, "required_actions")
+		input, ok := raw["input_context"].(map[string]any)
+		require.True(t, ok)
+		assert.NotContains(t, input, "handoff_context")
+		assert.NotContains(t, input, "gate_status")
+		assert.NotContains(t, input, "artifact_status")
+	})
+}
+
+func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "handoff source stays narrow")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, "", true, false, false)
+		require.NoError(t, err)
+
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
+		assert.NotNil(t, view.NextSkill.SkillConstraints)
+		assert.NotEmpty(t, view.NextSkill.TechniqueHints)
+		assert.Nil(t, view.NextSkill.ReviewContext)
+		assert.Nil(t, view.ContextBudget)
+		assert.Nil(t, view.Constraints)
+		assert.Nil(t, view.GovernanceSignals)
+		assert.Empty(t, view.ActiveControls)
+		assert.Empty(t, view.RequiredActions)
+		assert.Empty(t, view.SkillEvidence)
+		assert.Empty(t, view.ArtifactAmendments)
+		assert.Nil(t, view.InputContext.HandoffContext)
+		assert.Nil(t, view.InputContext.GateStatus)
+		assert.Nil(t, view.InputContext.ArtifactStatus)
+		assert.Nil(t, view.InputContext.WavePlan)
 	})
 }
 
@@ -1246,7 +1302,7 @@ func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeRunCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		cmd.SetErr(&buf)
@@ -1531,7 +1587,7 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 		require.NoError(t, err)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		cmd.SetErr(&buf)
@@ -1564,7 +1620,7 @@ func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummary
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		cmd.SetErr(&buf)
@@ -1828,7 +1884,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1878,7 +1934,7 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 `)))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -1962,7 +2018,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		require.NoError(t, err)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2028,7 +2084,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 `)))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2108,7 +2164,7 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2288,7 +2344,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -2407,7 +2463,7 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 		require.Equal(t, model.StateS1Plan, changeBefore.CurrentState)
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2483,7 +2539,7 @@ func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testi
 		require.NoError(t, os.WriteFile(intentPath, []byte("# Intent\nAmended content\n"), 0o644))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2514,7 +2570,7 @@ func TestRunIncludesTransitionTrace(t *testing.T) {
 		require.Equal(t, model.StateS1Plan, changeBefore.CurrentState)
 
 		cmd := makeRunCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
@@ -2547,7 +2603,7 @@ func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())

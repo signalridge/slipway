@@ -294,10 +294,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		manifestPath := filepath.Join(root, CatalogManifestPath(cfg))
 		manifestBytes, err := os.ReadFile(manifestPath)
 		assert.NoError(t, err, "%s: missing catalog manifest", toolID)
-		assert.Contains(t, string(manifestBytes), "# Using the Slipway Catalog",
+		assert.Contains(t, string(manifestBytes), "# Slipway Catalog",
 			"%s: manifest missing header", toolID)
-		assert.Contains(t, string(manifestBytes), "## Triage index",
-			"%s: manifest missing triage index", toolID)
+		assert.Contains(t, string(manifestBytes), "## Index",
+			"%s: manifest missing dispatcher index", toolID)
 
 		if cfg.SessionHook != "" {
 			hookPath := filepath.Join(root, cfg.SessionHook)
@@ -355,7 +355,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(CatalogManifestPath(cfg)), "%s: missing catalog manifest path", cfg.ID)
-		assert.Contains(t, s, "Start with the `Triage index` and one-line `Summary`", "%s: missing compact catalog triage guidance", cfg.ID)
+		assert.Contains(t, s, "use the `Skill` / `Use when` table as the dispatcher", "%s: missing compact catalog triage guidance", cfg.ID)
 
 		refPath := filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md")
 		refContent, err := os.ReadFile(refPath)
@@ -849,8 +849,8 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	require.NoError(t, err)
 	normalizedNextEntry := strings.Join(strings.Fields(nextEntry), " ")
 	assert.Contains(t, normalizedNextEntry, "without advancing lifecycle state")
-	assert.Contains(t, nextEntry, "`slipway next` is intentionally query-only")
-	assert.Contains(t, nextEntry, "use `slipway run`")
+	assert.Contains(t, nextEntry, "`next_skill.name` is the authoritative governed-host handoff")
+	assert.Contains(t, nextEntry, "Run `slipway run --json` when evidence is ready")
 
 	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
 	require.NoError(t, err)

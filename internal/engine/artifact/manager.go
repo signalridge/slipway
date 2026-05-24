@@ -299,88 +299,36 @@ func seedRequirements(data templateData) string {
 
 // seedDecision generates a first-pass decision section from available context.
 func seedDecision(data templateData) string {
-	var b strings.Builder
-	b.WriteString("### Approach A: Direct implementation\n")
-	fmt.Fprintf(&b, "Implement %s with minimal structural changes.\n", strings.ToLower(data.InitialRequest))
-	b.WriteString("- Pros: Straightforward, low risk\n")
-	b.WriteString("- Cons: May not address future extensibility\n\n")
-	b.WriteString("### Approach B: Refactor-first\n")
-	b.WriteString("Restructure affected code before implementing the change.\n")
-	b.WriteString("- Pros: Improved maintainability\n")
-	b.WriteString("- Cons: Larger scope, higher risk\n\n")
-	b.WriteString("### Selected Direction\n")
-	b.WriteString("Approach A. Confirm or replace this after research and user selection.\n")
-	return b.String()
+	return "Pending investigation. Replace with concrete alternatives, tradeoffs, and the selected direction after research or code inspection.\n"
 }
 
 func seedDecisionApproach(data templateData) string {
-	if strings.TrimSpace(data.InitialRequest) == "" {
-		return "Start with the least disruptive implementation path that satisfies the request, and only widen scope if code inspection proves the current boundaries cannot support it safely. Confirm or replace this after research and user selection."
-	}
-	return fmt.Sprintf(
-		"Start with the direct implementation path for %s. Revisit that choice only if code inspection shows the current boundaries cannot support the change safely. Confirm or replace this after research and user selection.",
-		strings.ToLower(data.InitialRequest),
-	)
+	return "Pending investigation. Record the selected approach only after the alternatives have concrete evidence."
 }
 
 func seedDecisionInterfaces(data templateData) string {
-	if strings.TrimSpace(data.InitialRequest) == "" {
-		return "Limit interface and data-flow changes to the components directly involved in this work, and keep existing external contracts stable unless requirements prove a contract update is necessary. Confirm or replace this after interface review."
-	}
-	return fmt.Sprintf(
-		"Limit interface and data-flow changes to the components directly involved in %s. Keep existing external contracts stable unless requirements or code inspection prove a contract update is necessary. Confirm or replace this after interface review.",
-		strings.ToLower(data.InitialRequest),
-	)
+	return "Pending investigation. Name changed interfaces and data flows, or write \"none\" after inspection."
 }
 
 func seedDecisionRollback(data templateData) string {
-	if strings.TrimSpace(data.InitialRequest) == "" {
-		return "Rollback by restoring the previous behavior and rerunning the normal verification flow before resuming ship readiness. Confirm or replace this after rollout planning."
-	}
-	return fmt.Sprintf(
-		"Rollback by restoring the previous behavior around %s and rerunning the normal verification flow before resuming ship readiness. Confirm or replace this after rollout planning.",
-		strings.ToLower(data.InitialRequest),
-	)
+	return "Pending investigation. Write the concrete rollback path and verification command after implementation scope is known."
 }
 
 func seedDecisionRisk(data templateData) string {
-	if strings.TrimSpace(data.InitialRequest) == "" {
-		return "Primary risk is hidden coupling in the existing implementation. Mitigate with focused code inspection and regression coverage before broad structural changes. Confirm or replace this after risk review."
-	}
-	return fmt.Sprintf(
-		"Primary risk for %s is hidden coupling in the existing implementation. Mitigate with focused code inspection and regression coverage before broad structural changes. Confirm or replace this after risk review.",
-		strings.ToLower(data.InitialRequest),
-	)
+	return "Pending investigation. List concrete risks only after inspecting the affected code and contracts."
 }
 
 // seedResearch generates a first-pass research section.
 func seedResearch(data templateData) string {
-	var b strings.Builder
-	b.WriteString("### Approach A: Direct implementation\n")
-	fmt.Fprintf(&b, "Implement %s within the current structure and verify the existing contracts still hold.\n\n", strings.ToLower(data.InitialRequest))
-	b.WriteString("### Approach B: Refactor-first\n")
-	fmt.Fprintf(&b, "Extract only the seams needed to support %s before changing behavior.\n\n", strings.ToLower(data.InitialRequest))
-	b.WriteString("### Selected Direction\n")
-	b.WriteString("Start with Approach A unless code inspection shows the current boundaries cannot support the change safely.\n")
-	return b.String()
+	return "Pending investigation. Replace with concrete alternatives, supporting evidence, and the selected direction.\n"
 }
 
 func seedResearchUnknowns(data templateData) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "- Which existing interfaces, state transitions, or artifacts are touched by %s?\n", strings.ToLower(data.InitialRequest))
-	b.WriteString("- What verification coverage already exists, and which new checks are required to prove the change is safe?\n")
-	return b.String()
+	return "- Pending investigation. List unknowns that must be resolved before planning.\n"
 }
 
 func seedResearchAssumptions(data templateData) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "- Assume the current external behavior around %s remains the baseline unless code or docs prove a contract change is required.\n", strings.ToLower(data.InitialRequest))
-	if strings.TrimSpace(data.ProjectConventions) != "" {
-		fmt.Fprintf(&b, "- Assume the implementation should continue following these project conventions: %s.\n", strings.TrimSpace(data.ProjectConventions))
-	} else {
-		b.WriteString("- Assume the implementation can stay within the existing project conventions and workflow until deeper investigation proves otherwise.\n")
-	}
-	return b.String()
+	return "- Pending investigation. List assumptions only after identifying the evidence that supports them.\n"
 }
 
 func seedResearchReferences(data templateData) string {
@@ -398,19 +346,13 @@ func seedResearchReferences(data templateData) string {
 // seedTasks generates a first-pass task list from the change description.
 func seedTasks(data templateData) string {
 	var b strings.Builder
-	reqRefs := seededRequirementRefs(data, 0)
-	fmt.Fprintf(&b, "- [ ] `t-01` Implement %s\n", strings.ToLower(data.InitialRequest))
+	reqRefs := strings.Join(seededRequirementRefs(data, 0), ", ")
+	b.WriteString("- [ ] `t-01` Pending task objective\n")
 	b.WriteString("  - wave: 1\n")
 	b.WriteString("  - depends_on: []\n")
 	b.WriteString("  - target_files: []\n")
-	b.WriteString("  - task_kind: code\n")
-	b.WriteString("  - covers: [REQ-001]\n\n")
-	b.WriteString("- [ ] `t-02` Add tests for the implementation\n")
-	b.WriteString("  - wave: 2\n")
-	b.WriteString("  - depends_on: [t-01]\n")
-	b.WriteString("  - target_files: []\n")
-	b.WriteString("  - task_kind: test\n")
-	fmt.Fprintf(&b, "  - covers: [%s]\n", strings.Join(reqRefs, ", "))
+	b.WriteString("  - task_kind: investigation\n")
+	fmt.Fprintf(&b, "  - covers: [%s]\n\n", reqRefs)
 	return b.String()
 }
 
@@ -462,11 +404,11 @@ func seedTasksFromDoc(data templateData, docs DocSections) string {
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "- [ ] `t-%02d` Add tests for the implementation\n", taskNum)
+	fmt.Fprintf(&b, "- [ ] `t-%02d` Pending verification objective\n", taskNum)
 	b.WriteString("  - wave: 2\n")
 	fmt.Fprintf(&b, "  - depends_on: [%s]\n", strings.Join(codeTaskIDs, ", "))
 	b.WriteString("  - target_files: []\n")
-	b.WriteString("  - task_kind: test\n")
+	b.WriteString("  - task_kind: verification\n")
 	fmt.Fprintf(&b, "  - covers: [%s]\n", strings.Join(reqRefs, ", "))
 	return b.String()
 }
@@ -1008,6 +950,13 @@ func LooksLikeTemplatePlaceholder(text string) bool {
 		"pending — define after",
 		"pending — assess after",
 		"pending investigation",
+		"pending task objective",
+		"replace with concrete",
+		"record the selected approach only after",
+		"name changed interfaces and data flows",
+		"write the concrete rollback path",
+		"list concrete risks only",
+		"list assumptions only after",
 	}
 	for _, phrase := range placeholderPhrases {
 		if strings.Contains(lower, phrase) {

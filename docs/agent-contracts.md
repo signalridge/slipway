@@ -10,8 +10,9 @@ formalization work.
 - Override surface: scope-root `.slipway.yaml` under `agents.mappings`
 - Public runtime handoff: `next --json` exposes `next_skill.name`, not agent
   identity or tool-resolved prompt paths
-- Bounded context handoff: `next --json` exposes project metadata and durable
-  read references under `input_context`, not expanded artifact bodies
+- Default context handoff: `next --json` exposes only the paths and state
+  needed to continue the next governed host; diagnostic governance detail
+  belongs to `next --json --diagnostics`, `validate`, `status`, or `health`
 - Validation surface: `slipway health` and `slipway health --doctor`
 
 The scope-root config is authoritative. Workspace-local `.slipway.yaml` files
@@ -58,28 +59,36 @@ Rules:
 
 ## Runtime Handoff Context
 
-`next --json` includes bounded handoff metadata under
-`input_context.handoff_context`:
+`next --json` is a handoff-only surface. Its default JSON answers:
 
-- `workflow_profile`: effective workflow shape (`code`, `docs`, `research`,
-  `config`, or `meta`)
-- `context_policy`: currently `bounded_references_only`
-- `trace`: read-only correlation ID plus append-only lifecycle trace path
-- `context_budget`: compact-mode inline budget hint
-- `read_refs`: typed artifact/config/trace paths with reasons
-- `policy_packs`: bounded summaries of configured advisory policy packs
-- `risk`: guardrail domain, active controls, and profile-specific risk hints
-- `change_authority`: the canonical `change.yaml` path
-- `lifecycle_event_log`: append-only audit trace path
-- `config_path`: canonical `.slipway.yaml` path
-- `required_reads`: small set of durable paths the host should read before
-  executing the next skill
+- which change is active: `slug`, `phase`, `current_state`, and lifecycle mode
+- which governed host owns the next step: `next_skill.name`
+- where evidence belongs: `next_skill.verification_dir`
+- short action metadata for that host: `next_skill.skill_constraints` and
+  `next_skill.technique_hints`
+- which durable paths may be read: `input_context.workspace_root`,
+  `input_context.artifact_bundle`, `input_context.codebase_map_dir`, and
+  `input_context.codebase_map_docs`
+- whether execution is blocked or requires confirmation:
+  `blockers`, `warnings`, and `confirmation_required`
 
-Project metadata supplied at creation is exposed as
-`input_context.project_context`. Hosts may inject it into prompts, but the
-state machine does not infer missing project metadata on JSON surfaces.
+The default handoff deliberately does not include governance forecasts,
+gate status, artifact DAG state, active controls, skill-evidence diagnostics,
+review-layer matrices, policy-pack summaries, read-reference shelves, or
+context-budget breakdowns. Those fields are diagnostic, not routing contract.
 
-Policy pack summaries are advisory-only handoff context. They may surface
+Use `slipway next --json --diagnostics` or `slipway run --json --diagnostics`
+when a caller explicitly needs the full readiness/governance view. The
+diagnostic surface may include `input_context.handoff_context`,
+`input_context.gate_status`, `input_context.artifact_status`,
+`input_context.wave_plan`, `governance_signals`, `active_controls`,
+`skill_evidence`, `artifact_amendments`, and `context_budget`.
+
+Project metadata supplied at creation is part of the diagnostic handoff
+context. Hosts may inject it into prompts, but the state machine does not infer
+missing project metadata on JSON surfaces.
+
+Policy pack summaries are advisory-only diagnostic context. They may surface
 project-local advisory rules, artifact requirements, recommended reviewers, and
 terminology, but they do not create blocking controls and cannot weaken built-in
 fail-closed guardrail domains.
