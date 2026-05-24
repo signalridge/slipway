@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"path/filepath"
+
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -14,6 +16,7 @@ type nextHandoffView struct {
 	CurrentState     model.WorkflowState     `json:"current_state"`
 	LifecycleStatus  string                  `json:"lifecycle_status,omitempty"`
 	NextSkill        *nextSkillHandoff       `json:"next_skill"`
+	ContextBudget    *contextBudgetHandoff   `json:"context_budget,omitempty"`
 	InputContext     nextHandoffContext      `json:"input_context"`
 	AutoPassEligible []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
 	Blockers         []model.ReasonCode      `json:"blockers"`
@@ -29,9 +32,15 @@ type nextSkillHandoff struct {
 	TechniqueHints   []techniqueHint   `json:"technique_hints,omitempty"`
 }
 
+type contextBudgetHandoff struct {
+	GuardAction      string  `json:"guard_action"`
+	RemainingPercent float64 `json:"remaining_percent"`
+}
+
 type nextHandoffContext struct {
 	WorkspaceRoot    string            `json:"workspace_root"`
 	ArtifactBundle   string            `json:"artifact_bundle,omitempty"`
+	ChangeAuthority  string            `json:"change_authority,omitempty"`
 	CodebaseMapDir   string            `json:"codebase_map_dir,omitempty"`
 	CodebaseMapDocs  map[string]string `json:"codebase_map_docs,omitempty"`
 	ResumeCheckpoint *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
@@ -146,6 +155,9 @@ func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef, r
 	view.InputContext.ArtifactBundle = state.DisplayPath(root, paths.GovernedBundleDir)
 	view.InputContext.CodebaseMapDir = state.DisplayPath(paths.WorkspaceRoot, paths.CodebaseMapDir)
 	view.InputContext.CodebaseMapDocs = artifact.CodebaseMapDisplayDocs(paths.WorkspaceRoot, paths.CodebaseMapDir)
+	view.InputContext.HandoffContext = &handoffContextView{
+		ChangeAuthority: state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml")),
+	}
 
 	execCtx, err := loadExecutionContext(root, change)
 	if err != nil {
@@ -168,6 +180,11 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			TechniqueHints:   cloneTechniqueHints(view.NextSkill.TechniqueHints),
 		}
 	}
+	budget := buildContextBudgetHandoff(view.ContextBudget)
+	changeAuthority := ""
+	if budget != nil && budget.GuardAction == "stop" && view.InputContext.HandoffContext != nil {
+		changeAuthority = view.InputContext.HandoffContext.ChangeAuthority
+	}
 	return nextHandoffView{
 		Slug:            view.Slug,
 		Phase:           view.Phase,
@@ -175,9 +192,11 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		CurrentState:    view.CurrentState,
 		LifecycleStatus: view.LifecycleStatus,
 		NextSkill:       nextSkill,
+		ContextBudget:   budget,
 		InputContext: nextHandoffContext{
 			WorkspaceRoot:    view.InputContext.WorkspaceRoot,
 			ArtifactBundle:   view.InputContext.ArtifactBundle,
+			ChangeAuthority:  changeAuthority,
 			CodebaseMapDir:   view.InputContext.CodebaseMapDir,
 			CodebaseMapDocs:  view.InputContext.CodebaseMapDocs,
 			ResumeCheckpoint: view.InputContext.ResumeCheckpoint,
@@ -186,6 +205,21 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		Blockers:         view.Blockers,
 		Warnings:         view.Warnings,
 		Confirmation:     view.Confirmation,
+	}
+}
+
+func buildContextBudgetHandoff(budget *contextBudget) *contextBudgetHandoff {
+	if budget == nil {
+		return nil
+	}
+	switch budget.GuardAction {
+	case "warn", "stop":
+		return &contextBudgetHandoff{
+			GuardAction:      budget.GuardAction,
+			RemainingPercent: budget.RemainingPercent,
+		}
+	default:
+		return nil
 	}
 }
 

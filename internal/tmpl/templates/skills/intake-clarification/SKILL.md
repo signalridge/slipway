@@ -12,12 +12,8 @@ IRON LAW: NO PLANNING WITHOUT CLEAR INTENT
 
 ## Purpose
 Clarify user intent, define scope boundaries, and produce an approved summary
-before planning begins. This host owns the full posture and checklist for
-turning an underspecified request into bounded scope.
-Mitigates: scope ambiguity, intent drift, over-scoping.
-
-## When This Runs
-All governed changes at S0_INTAKE/clarify or S0_INTAKE/research. `slipway next` returns `next_skill: intake-clarification`.
+before planning begins. Mitigates scope ambiguity, intent drift, and
+over-scoping.
 
 ## Process
 
@@ -31,11 +27,11 @@ Carry this scope posture while reading:
 - do not move to planning until the approved summary names both what is in and what is out
 
 ### 2. Assess Complexity
-Check the `## Complexity Assessment` section in intent.md:
-- **trivial**: Ask 1-2 quick confirmation questions, then proceed to confirmation
-- **simple**: Ask 2-3 clarification questions focused on scope and acceptance
-- **complex**: Ask 3-5 questions covering scope, constraints, dependencies, and risks
-- **critical**: Ask 5+ questions, ensure guardrail domains are acknowledged, verify constraints
+Use `## Complexity Assessment` to set question depth:
+- **trivial**: 1-2 quick confirmation questions
+- **simple**: 2-3 scope and acceptance questions
+- **complex**: 3-5 scope, constraints, dependency, and risk questions
+- **critical**: 5+ questions plus guardrail-domain and constraint checks
 
 ### 3. Clarification Loop (one question at a time)
 For each clarification round:
@@ -45,22 +41,16 @@ For each clarification round:
 4. Update intent.md with the user's response in the appropriate section
 5. Repeat until all required sections have substantive content
 
-**Required sections for advancement:**
-- `## In Scope` — concrete, code-level items included (files, APIs, commands, or user-visible surfaces)
-- `## Out of Scope` — at least one explicit exclusion
-- `## Acceptance Signals` — at least one verifiable completion criterion
-- `## Open Questions` — only unresolved technical unknowns that truly require research
+**Required advancement sections:**
+- `## In Scope`: concrete files, APIs, commands, or user-visible surfaces
+- `## Out of Scope`: at least one explicit exclusion
+- `## Acceptance Signals`: at least one verifiable check, not a hope
+- `## Open Questions`: only technical unknowns that truly require research
+- `## Approved Summary`: reviewed with the user before advancement
 
-**Scope boundary checklist before planning:**
-- `## In Scope` names concrete files, commands, APIs, or user-visible surfaces
-- `## Out of Scope` names at least one exclusion the user can point back to later
-- `## Acceptance Signals` is phrased as a check, not a hope
-- `## Approved Summary` is reviewed with the user before advancement
-- unresolved technical unknowns stay under `## Open Questions`; do not hide them in prose
-
-**Abbreviation signals** — if the user says any of:
-- "just testing", "trivial change", "quick fix", "that's it", "good enough"
-→ Accept current scope, fill minimal sections, and move to confirmation.
+If the user says "just testing", "trivial change", "quick fix", "that's it",
+or "good enough", accept current scope, fill minimal sections, and move to
+confirmation.
 
 ### 4. Research Route (if needed)
 If `## Open Questions` contains technical unknowns that cannot be resolved via clarification:
@@ -70,11 +60,11 @@ If `## Open Questions` contains technical unknowns that cannot be resolved via c
 ### 5. Confirmation
 Once scope is clear:
 1. Write a concise summary in `## Approved Summary` that captures:
-   - What the change does (1-2 sentences)
-   - Key scope boundaries
-   - Primary acceptance signal
+   - what the change does
+   - key scope boundaries
+   - primary acceptance signal
 2. Present the summary to the user
-3. Confirm the summary names at least one explicit out-of-scope item and keeps any unresolved technical unknowns under `## Open Questions`.
+3. Confirm it names at least one out-of-scope item and keeps unresolved technical unknowns under `## Open Questions`.
 4. <HARD-GATE>Wait for explicit user confirmation before writing the approved summary.</HARD-GATE>
 
 ### 6. Write Verification
@@ -99,11 +89,11 @@ After confirmation: `slipway next`
 4. Writing verification evidence.
 
 ## Scope Boundary Precision Rules
-Scope items must be CONCRETE:
-- BAD: "Improve error handling" (vague)
-- GOOD: "Add typed errors in `internal/engine/` (6 files), replace `fmt.Errorf`"
-- BAD: "Authentication improvements" (unbounded)
-- GOOD: "Add JWT refresh in `internal/auth/token.go`, update login flow"
+Scope items must be concrete:
+- Bad: "Improve error handling"
+- Good: "Add typed errors in `internal/engine/` (6 files), replace `fmt.Errorf`"
+- Bad: "Authentication improvements"
+- Good: "Add JWT refresh in `internal/auth/token.go`, update login flow"
 
 ## Failure Handling
 - If intent.md is missing or empty: create scaffold from description, then clarify.

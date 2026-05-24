@@ -22,7 +22,7 @@ func printStatusView(cmd *cobra.Command, root string, view statusView, format st
 	}
 	switch format {
 	case "json":
-		return encodeJSONResponse(cmd, view)
+		return encodeJSONResponse(cmd, buildStatusJSONResponse(view))
 	case "yaml":
 		return yaml.NewEncoder(cmd.OutOrStdout()).Encode(view)
 	default:

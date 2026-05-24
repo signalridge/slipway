@@ -31,6 +31,13 @@ func TestAppendCatalogHintsGoalVerificationDropsRetiredFreshEvidence(t *testing.
 	assert.Equal(t, "skill:coverage-analysis", hints[0].Name)
 }
 
+func TestSupportHintNameUsesCatalogPathForCatalogOnlySkills(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "skill:security-review", supportHintName("security-review"))
+	assert.Equal(t, "catalog:slipway/references/catalog/supply-chain-audit.md", supportHintName("supply-chain-audit"))
+}
+
 func TestAppendCatalogHintsVerifyHostsDoNotEmitRetiredFreshEvidence(t *testing.T) {
 	t.Parallel()
 	for _, host := range []string{"final-closeout", "tdd-governance"} {

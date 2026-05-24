@@ -18,4 +18,4 @@
 - Tasks failing TDD check must be remediated before wave verification is frozen.
 - If TDD compliance cannot be verified from git history, require explicit attestation with interim commit evidence from the implementer.
 - If attestation is disputed, mark the task as `blocked` and surface it to the user.
-- Multiple TDD failures in a wave suggest the executor is not following the `slipway-tdd` technique skill. Surface that pattern explicitly.
+- Multiple TDD failures in a wave suggest the executor is not following the TDD discipline required by `slipway-tdd-governance`. Surface that pattern explicitly.

@@ -1270,18 +1270,178 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		assert.NotNil(t, view.NextSkill.SkillConstraints)
 		assert.NotEmpty(t, view.NextSkill.TechniqueHints)
 		assert.Nil(t, view.NextSkill.ReviewContext)
-		assert.Nil(t, view.ContextBudget)
+		require.NotNil(t, view.ContextBudget)
+		assert.Equal(t, "ok", view.ContextBudget.GuardAction)
 		assert.Nil(t, view.Constraints)
 		assert.Nil(t, view.GovernanceSignals)
 		assert.Empty(t, view.ActiveControls)
 		assert.Empty(t, view.RequiredActions)
 		assert.Empty(t, view.SkillEvidence)
 		assert.Empty(t, view.ArtifactAmendments)
-		assert.Nil(t, view.InputContext.HandoffContext)
+		require.NotNil(t, view.InputContext.HandoffContext)
+		assert.NotEmpty(t, view.InputContext.HandoffContext.ChangeAuthority)
+		assert.Empty(t, view.InputContext.HandoffContext.PolicyPacks)
+		assert.Empty(t, view.InputContext.HandoffContext.ReadRefs)
 		assert.Nil(t, view.InputContext.GateStatus)
 		assert.Nil(t, view.InputContext.ArtifactStatus)
 		assert.Nil(t, view.InputContext.WavePlan)
 	})
+}
+
+func TestNextHandoffViewOmitsHealthyBudget(t *testing.T) {
+	t.Parallel()
+
+	view := nextView{
+		Slug:            "budget-ok",
+		Phase:           model.PhasePlanning,
+		ExecutionMode:   governedExecutionMode,
+		CurrentState:    model.StateS1Plan,
+		LifecycleStatus: string(model.ChangeStatusActive),
+		InputContext: nextContext{
+			WorkspaceRoot:  "/repo",
+			ArtifactBundle: "artifacts/changes/budget-ok",
+		},
+		ContextBudget: &contextBudget{
+			GuardAction:      "ok",
+			RemainingPercent: 80.0,
+			Breakdown: contextBudgetBreakdown{
+				SkillPrompt:     1,
+				ArtifactContext: 2,
+				StateContext:    3,
+			},
+		},
+		Blockers:     []model.ReasonCode{},
+		Confirmation: true,
+	}
+
+	handoff := buildNextHandoffView(view)
+	assert.Nil(t, handoff.ContextBudget)
+	raw, err := json.Marshal(handoff)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "context_budget")
+	assert.NotContains(t, string(raw), "breakdown")
+}
+
+func TestNextHandoffViewOutputsMinimalWarnBudget(t *testing.T) {
+	t.Parallel()
+
+	view := nextView{
+		Slug:            "budget-warn",
+		Phase:           model.PhasePlanning,
+		ExecutionMode:   governedExecutionMode,
+		CurrentState:    model.StateS1Plan,
+		LifecycleStatus: string(model.ChangeStatusActive),
+		InputContext: nextContext{
+			WorkspaceRoot:  "/repo",
+			ArtifactBundle: "artifacts/changes/budget-warn",
+		},
+		ContextBudget: &contextBudget{
+			EstimatedTokens:      100,
+			AssumedContextWindow: 200,
+			UtilizationPercent:   50,
+			RemainingPercent:     42.3,
+			Health:               "degrading",
+			QualityCurve:         "degrading",
+			GuardAction:          "warn",
+			Thresholds: contextBudgetThresholds{
+				WarnBelowRemainingPercent: 50,
+				StopBelowRemainingPercent: 35,
+			},
+			Breakdown: contextBudgetBreakdown{
+				SkillPrompt:     1,
+				ArtifactContext: 2,
+				StateContext:    3,
+			},
+		},
+		Blockers:     []model.ReasonCode{},
+		Confirmation: true,
+	}
+
+	handoff := buildNextHandoffView(view)
+	require.NotNil(t, handoff.ContextBudget)
+	assert.Equal(t, "warn", handoff.ContextBudget.GuardAction)
+	assert.Equal(t, 42.3, handoff.ContextBudget.RemainingPercent)
+	raw, err := json.Marshal(handoff)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	budget, ok := payload["context_budget"].(map[string]any)
+	require.True(t, ok)
+	assert.Len(t, budget, 2)
+	assert.Contains(t, budget, "guard_action")
+	assert.Contains(t, budget, "remaining_percent")
+}
+
+func TestNextHandoffViewStopBudgetKeepsRecoveryPathsWithoutDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	view := nextView{
+		Slug:            "budget-stop",
+		Phase:           model.PhaseBuilding,
+		ExecutionMode:   governedExecutionMode,
+		CurrentState:    model.StateS2Execute,
+		LifecycleStatus: string(model.ChangeStatusActive),
+		NextSkill: &nextSkillView{
+			Name:            progression.SkillWaveOrchestration,
+			VerificationDir: "artifacts/changes/budget-stop/verification/wave-orchestration",
+			State:           string(model.StateS2Execute),
+		},
+		InputContext: nextContext{
+			WorkspaceRoot:  "/repo",
+			ArtifactBundle: "artifacts/changes/budget-stop",
+			HandoffContext: &handoffContextView{
+				ChangeAuthority: "artifacts/changes/budget-stop/change.yaml",
+				PolicyPacks: []handoffPolicyPack{{
+					Name:          "local",
+					Path:          ".slipway/policy.yaml",
+					AdvisoryRules: []string{"keep out of default handoff"},
+				}},
+			},
+			GateStatus:     map[string]string{"review": "blocked"},
+			ArtifactStatus: map[string]string{"tasks.md": "missing"},
+		},
+		ContextBudget: &contextBudget{
+			RemainingPercent: 0,
+			GuardAction:      "stop",
+			Breakdown: contextBudgetBreakdown{
+				SkillPrompt:     1,
+				ArtifactContext: 2,
+				StateContext:    3,
+			},
+		},
+		GovernanceSignals: &governanceSignalView{BlastRadius: "high"},
+		ActiveControls: []governanceControlView{{
+			ControlID: "domain-review",
+			Mode:      "blocking",
+			Scope:     "change",
+		}},
+		RequiredActions: []governanceActionView{{
+			ControlID:   "domain-review",
+			Description: "record domain review evidence",
+		}},
+		SkillEvidence: []skillEvidenceEntry{{SkillName: "wave-orchestration"}},
+		Blockers:      []model.ReasonCode{},
+		Confirmation:  true,
+	}
+
+	handoff := buildNextHandoffView(view)
+	require.NotNil(t, handoff.ContextBudget)
+	assert.Equal(t, "stop", handoff.ContextBudget.GuardAction)
+	assert.Equal(t, "artifacts/changes/budget-stop/change.yaml", handoff.InputContext.ChangeAuthority)
+
+	raw, err := json.Marshal(handoff)
+	require.NoError(t, err)
+	s := string(raw)
+	assert.NotContains(t, s, "handoff_context")
+	assert.NotContains(t, s, "policy_packs")
+	assert.NotContains(t, s, "advisory_rules")
+	assert.NotContains(t, s, "gate_status")
+	assert.NotContains(t, s, "artifact_status")
+	assert.NotContains(t, s, "governance_signals")
+	assert.NotContains(t, s, "active_controls")
+	assert.NotContains(t, s, "required_actions")
+	assert.NotContains(t, s, "skill_evidence")
+	assert.NotContains(t, s, "breakdown")
 }
 
 func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {

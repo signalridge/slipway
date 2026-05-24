@@ -183,7 +183,7 @@ func applyContextBudgetGuard(view *nextView) {
 		))
 	case "stop":
 		view.Warnings = append(view.Warnings, fmt.Sprintf(
-			"context window remaining %.1f%% <= %.1f%% stop threshold; consider pausing and resuming with a fresh context",
+			"context window remaining %.1f%% <= %.1f%% stop threshold; write handoff and resume in fresh context",
 			view.ContextBudget.RemainingPercent,
 			view.ContextBudget.Thresholds.StopBelowRemainingPercent,
 		))

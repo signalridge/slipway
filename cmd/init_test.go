@@ -42,9 +42,11 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway", "next.md"))
 		require.NoError(t, err)
 
-		// Technique skills in tool dirs
-		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-tdd", "SKILL.md"))
+		// Host-visible technique skills in tool dirs
+		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-codebase-mapping", "SKILL.md"))
 		require.NoError(t, err)
+		_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-tdd", "SKILL.md"))
+		assert.True(t, os.IsNotExist(err), "tdd should not be exported as a host auto-trigger skill")
 
 		// Init command entry exists
 		_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "init.md"))

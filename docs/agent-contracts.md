@@ -59,7 +59,8 @@ Rules:
 
 ## Runtime Handoff Context
 
-`next --json` is a handoff-only surface. Its default JSON answers:
+`next --json` and `run --json` are handoff-only surfaces. Their default JSON
+answers:
 
 - which change is active: `slug`, `phase`, `current_state`, and lifecycle mode
 - which governed host owns the next step: `next_skill.name`
@@ -72,10 +73,63 @@ Rules:
 - whether execution is blocked or requires confirmation:
   `blockers`, `warnings`, and `confirmation_required`
 
-The default handoff deliberately does not include governance forecasts,
-gate status, artifact DAG state, active controls, skill-evidence diagnostics,
-review-layer matrices, policy-pack summaries, read-reference shelves, or
-context-budget breakdowns. Those fields are diagnostic, not routing contract.
+Default JSON is an action/status contract, not a context dump. The default
+handoff deliberately does not include governance forecasts, gate status,
+artifact DAG state, active controls, skill-evidence diagnostics, review-layer
+matrices, policy-pack summaries, read-reference shelves, or context-budget
+breakdowns. Those fields are diagnostic, not routing contract.
+
+Default handoff fields are classified as:
+
+```text
+always_inline:
+  slug
+  phase
+  current_state
+  lifecycle_status
+  next_skill.name
+  next_skill.verification_dir
+  blockers
+  warnings
+  confirmation_required
+  input_context.workspace_root
+  input_context.artifact_bundle
+
+conditional_inline:
+  next_skill.skill_constraints
+  next_skill.technique_hints
+  input_context.resume_checkpoint
+  context_budget only when guard_action is warn/stop
+  governance_summary only when status has governance blockers/actions
+
+reference_only:
+  change_authority
+  artifact_bundle
+  codebase_map_dir
+  codebase_map_docs
+  policy_pack paths
+  lifecycle_event_log
+
+diagnostic_only:
+  governance_signals
+  active_controls
+  required_actions
+  skill_evidence
+  artifact_status
+  gate_status
+  full context_budget breakdown
+  handoff_context.policy_packs prose
+  advisory_rules
+  artifact_requirements
+  recommended_reviewers
+  terminology
+```
+
+Context budget is self-regulating on default handoffs. When the budget guard is
+`ok`, no `context_budget` field is emitted. When it is `warn` or `stop`, the
+default JSON emits only `guard_action` and `remaining_percent` plus the warning
+needed to recover. Full token estimates, thresholds, and breakdowns remain
+diagnostic-only.
 
 Use `slipway next --json --diagnostics` or `slipway run --json --diagnostics`
 when a caller explicitly needs the full readiness/governance view. The
@@ -92,6 +146,14 @@ Policy pack summaries are advisory-only diagnostic context. They may surface
 project-local advisory rules, artifact requirements, recommended reviewers, and
 terminology, but they do not create blocking controls and cannot weaken built-in
 fail-closed guardrail domains.
+
+`status --json` is also a default status contract. It reports lifecycle state,
+blockers, progress, and next actions, but it does not inline the raw governance
+diagnostic triplet `governance_signals`, `active_controls`, and
+`required_actions`. When governance controls create blockers or required
+actions, status emits a compact `governance_summary` with blocked controls,
+required action text, and authority references. Complete governance diagnostics
+belong to `slipway health --governance --json --change <slug>`.
 
 ## Default Governance Skill Mappings
 

@@ -12,8 +12,7 @@ IRON LAW: NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 
 ## Purpose
 Enforce RED, GREEN, REFACTOR, and evidence discipline during guardrail-domain
-wave execution. This host blocks wave proof from freezing on ceremonial or
-after-the-fact tests.
+wave execution. Block ceremonial or after-the-fact test proof.
 
 ## Workflow Outline
 1. Read the wave state and collect task-level TDD evidence.
@@ -30,7 +29,7 @@ Treat the following as the authoritative proof contract for each task:
 - **RED**: failing test recorded before any production change
 - **GREEN**: smallest change that makes the failing test pass
 - **REFACTOR**: structure cleanup only while the target remains green
-- **EVIDENCE**: RED/GREEN/REFACTOR timestamps, commands, and run versions recorded task-by-task
+- **EVIDENCE**: task-level timestamps, commands, and run versions
 
 ## TDD Compliance Checklist
 For EACH task in the current wave, verify ALL of the following:
@@ -47,7 +46,7 @@ For EACH task in the current wave, verify ALL of the following:
 Each unchecked item is a blocker.
 
 ## Git History Verification Protocol
-Use this concrete method:
+Use:
 
 ```bash
 git log --oneline --name-only -- <target_files>
@@ -55,18 +54,18 @@ git log --format="%H %ai" --diff-filter=AM -- <test_file>
 git log --format="%H %ai" --diff-filter=AM -- <impl_file>
 ```
 
-If test and implementation are in the same commit, that is not automatic
-test-first proof. The implementer must show earlier evidence or the task fails.
+Same-commit test and implementation is not automatic test-first proof. Require
+earlier evidence or fail the task.
 
 ## Test Quality Assessment
 Tests must be meaningful, not ceremonial:
-- assert specific behavior, not only "no error"
-- cover the happy path and at least one edge case
-- use concrete values, not only type checks
-- fail if the implementation is removed or stubbed
+- assert behavior, not only "no error"
+- cover happy path and at least one edge case
+- use concrete values
+- fail if implementation is removed or stubbed
 
-Block empty tests, `assert.True(true)`, type-only checks, mocking the thing
-under test, or commented-out assertions.
+Block empty tests, `assert.True(true)`, type-only checks, mocking the unit under
+test, or commented-out assertions.
 
 ## Fresh Evidence Contract
 Apply the same freshness rules used by verify/closeout hosts:

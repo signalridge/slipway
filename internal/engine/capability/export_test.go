@@ -34,8 +34,8 @@ func TestBuildCatalogManifest_IncludesEverySkill(t *testing.T) {
 func TestBuildCatalogManifest_RendersShortDispatcherIndex(t *testing.T) {
 	reg := DefaultRegistry()
 	manifest := BuildCatalogManifest(reg)
-	if len([]byte(manifest)) > 6000 {
-		t.Fatalf("catalog manifest too large: got %d bytes, want <= 6000", len([]byte(manifest)))
+	if len([]byte(manifest)) > 12000 {
+		t.Fatalf("catalog manifest too large: got %d bytes, want <= 12000", len([]byte(manifest)))
 	}
 	if !strings.Contains(manifest, "# Slipway Catalog") {
 		t.Fatal("manifest missing short catalog header")
@@ -43,14 +43,14 @@ func TestBuildCatalogManifest_RendersShortDispatcherIndex(t *testing.T) {
 	if !strings.Contains(manifest, "Use only when no governed host already owns the step.") {
 		t.Fatal("manifest missing usage boundary")
 	}
-	if !strings.Contains(manifest, "| Skill | Use when |") {
+	if !strings.Contains(manifest, "| Skill | Catalog artifact | Tier | Bindings | Evidence | Hydrate refs | Use when |") {
 		t.Fatal("manifest missing dispatcher table")
 	}
 	if strings.Contains(manifest, "## Domain:") {
 		t.Fatal("manifest should not expand domain sections")
 	}
-	if strings.Contains(manifest, "Bindings:") || strings.Contains(manifest, "Routed bindings") {
-		t.Fatal("manifest should not expose binding implementation details")
+	if !strings.Contains(manifest, "references/catalog/") {
+		t.Fatal("manifest missing catalog artifact paths")
 	}
 }
 

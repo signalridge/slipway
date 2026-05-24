@@ -49,6 +49,10 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 ## Handoff After `slipway next --json`
 - read the generated SKILL.md for `next_skill.name`
 - derive the SKILL.md path from your own tool convention using `slipway-{name}`
+- treat the default JSON as an action contract; do not expect diagnostic context fields
+- `context_budget` appears only when the guard action is `warn` or `stop`
+- if governance controls, policy prose, or full readiness details are needed, run `slipway health --governance --json --change <slug>` or rerun `next/run` with `--diagnostics`
+- read policy packs by path; do not expect inline policy-pack prose in default JSON
 - do not look for retired agent fields or a second exported prompt file
 - do not guess the next governed host without the CLI response
 
@@ -67,9 +71,9 @@ their detailed arguments and prerequisites.
 
 ## Catalog and Host Handoff
 - when catalog triage is needed, read `{{.CatalogManifestPath}}`
-- use the `Skill` / `Use when` table as the dispatcher
+- use the catalog table as the dispatcher, then follow the listed catalog artifact path
 - use the catalog when no governed host already owns the next step and a reusable posture, procedure, checklist, or tool recipe would help
-- once a specific catalog skill is clearly the right tool, leave this entry skill and load that catalog skill directly
+- once a specific catalog skill is clearly the right tool, leave this entry skill and load the host skill path or catalog artifact path listed in the manifest
 - when governed execution is needed, read the host returned by `slipway next --json`
 - use technique skills as overlays for posture and procedure, not as progression authorities
 - once a more specific host, command surface, or catalog skill clearly owns the task, leave this entry skill and follow that more specific surface

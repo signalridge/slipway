@@ -11,19 +11,16 @@ IRON LAW: NO EXECUTION WITHOUT A VERIFIED, COMPLETE PLAN
 ```
 
 ## Purpose
-Validate that the governed artifact bundle is ready for execution. This host
-owns the execution-readiness gate before governed implementation begins.
+Validate that the governed artifact bundle is ready for execution. This host is
+the execution-readiness gate before implementation.
 
 ## Workflow Outline
-1. Read the governed bundle and durable codebase-map context.
-2. Audit artifacts, dimensions, and task shape.
-3. Write verification, surface blockers or warnings, and wait for approval.
-
-## When This Runs
-Before wave execution begins. `slipway next` returns `next_skill: plan-audit`.
+Read the bundle and codebase-map context, audit artifacts/dimensions/task
+shape, then write verification and wait for approval.
 
 ## Read Context
-Run `slipway next --json` and locate the governed change bundle.
+Run `slipway next --json`, locate the governed change bundle, and read the
+durable codebase map when present.
 
 If `input_context.codebase_map_dir` contains durable mapping documents, read at least:
 - `ARCHITECTURE.md`
@@ -31,17 +28,13 @@ If `input_context.codebase_map_dir` contains durable mapping documents, read at 
 - `TESTING.md`
 - `CONCERNS.md`
 
-Use them to verify task targets, blast radius assumptions, and test scaffolding
-needs. If the map is absent, continue, but call out the missing brownfield
-context as an advisory gap.
-
-If the approved scope is still ambiguous after reading the bundle, stop and
-return to intake clarification instead of inventing task boundaries during
-audit.
+Use them to verify task targets, blast radius, and test scaffolding. If the map
+is absent, continue and record the missing brownfield context as an advisory
+gap. If scope remains ambiguous after reading the bundle, stop and return to
+intake clarification.
 
 Use `slipway-coding-discipline` as the execution-shape bar: plans should stay
-simple, goal-scoped, and sliced for surgical implementation rather than broad
-"touch everything" waves.
+simple, goal-scoped, and sliced for surgical implementation.
 
 ## Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
@@ -50,53 +43,44 @@ Verify the **required artifact set** exists and is structurally valid:
 - Required on standard/strict effective preset: `assurance.md`
 - If `research.md` is present in the artifact bundle, include it in validation
 
-Each artifact must be checked for:
-- Existence and non-empty content
-- Structural validity (required sections present)
-- Tasks have clear acceptance criteria
-- No stale references to outdated code
-- Stale propagation graph is clean
+Each artifact must be non-empty, structurally valid, free of stale code
+references, and consistent with the stale-propagation graph. Tasks must have
+clear acceptance criteria.
 
 If `research.md` is present, also verify that:
 - `## Alternatives Considered` is consistent with the selected approach in `decision.md`
 - `## Canonical References` points to real docs/specs/code paths where possible
 - `## Unknowns` and `## Assumptions` have been addressed or remain consistent with the plan
 
-Any missing artifact from the required set is a blocker.
-
-### Plan Size Advisory
-A single wave SHOULD contain no more than 5 tasks. Oversized waves are a
-warning, not a blocker, but they should be called out explicitly.
+Any missing required artifact is a blocker. A single wave SHOULD contain no
+more than 5 tasks; oversized waves are warnings, not blockers.
 
 ## Dimension Checklist (8D)
-The plan audit MUST explicitly check all eight dimensions:
-1. **Coverage (Nyquist Check)**: every requirement in `requirements.md` SHOULD have at least one task in `tasks.md` listing the same `REQ-*` ID in `covers`. On **standard/strict**, uncovered requirements are blockers. On **light**, they are warnings.
-2. **Completeness**: each task has objective, explicit `wave`, dependencies, and expected outputs.
-3. **Dependency Integrity**: `depends_on` references valid tasks, contains no cycles, and only points to earlier waves.
-4. **Key Links**: each task links to concrete `target_files` or evidence targets.
-5. **Scope Control**: task targets stay within declared scope boundaries.
+Explicitly check all eight dimensions and record blocker/warning IDs by
+dimension:
+1. **Coverage (Nyquist Check)**: every `REQ-*` SHOULD be covered by at least one task. Standard/strict uncovered requirements block; light uncovered requirements warn.
+2. **Completeness**: each task has objective, `wave`, dependencies, and expected outputs.
+3. **Dependency Integrity**: `depends_on` references valid earlier-wave tasks and has no cycles.
+4. **Key Links**: each task names concrete `target_files` or evidence targets.
+5. **Scope Control**: task targets stay inside declared scope.
 6. **Context Compliance**: task metadata supports context-safe execution (`task_kind` where present).
-7. **Test Coverage Mapping**: each task's acceptance criteria can be verified by an automated test; new test scaffolding must appear as an explicit dependency.
-8. **Alternatives Considered**: when `decision.md` is required or present, it MUST contain at least 2 approaches with tradeoffs and a marked selection.
+7. **Test Coverage Mapping**: acceptance criteria map to automated checks; new scaffolding is an explicit dependency.
+8. **Alternatives Considered**: required/present `decision.md` names at least 2 approaches, tradeoffs, and the selected approach.
 
-On standard/strict preset, any failed dimension is a blocker.
-On light preset, dimension #1 (coverage) failures are advisory warnings; all other dimension failures remain blockers.
-Record blocker and warning IDs by dimension.
+On standard/strict, any failed dimension blocks. On light, only dimension #1
+coverage failures downgrade to warnings.
 
 ## Sidecars
-Apply the shared requirements checklist from `checklist-quality.md` while
-auditing the bundle:
-- specificity and measurability
-- requirement-to-intent traceability
-- edge cases and failure modes
-- decision alternatives, trade-offs, and concrete risks
+Apply `checklist-quality.md`: specificity, measurability, requirement-to-intent
+traceability, edge cases, failure modes, alternatives, tradeoffs, and concrete
+risks.
 
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
 - require each task to name its evidence shape (`verdict` / `artifact` / `checklist`)
 - keep rollout in reviewable batches; do not admit half-states that break the kernel between batches
-- for guardrail-domain work, require the task to name a RED test plan before execution begins
-- keep non-goals explicit, including at least one scope boundary and one rollout boundary
+- for guardrail-domain work, require a RED test plan before execution
+- keep non-goals explicit, including scope and rollout boundaries
 
 ## Write Verification
 ```yaml

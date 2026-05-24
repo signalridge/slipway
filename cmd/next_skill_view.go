@@ -10,6 +10,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/toolgen"
 )
 
 type assembleSkillViewOptions struct {
@@ -29,7 +30,7 @@ var fullSkillViewOptions = assembleSkillViewOptions{
 var handoffSkillViewOptions = assembleSkillViewOptions{
 	IncludeSkillEvidence: false,
 	IncludeReviewContext: false,
-	IncludeContextBudget: false,
+	IncludeContextBudget: true,
 	IncludeAgentContext:  false,
 }
 
@@ -332,12 +333,19 @@ func appendCatalogHints(
 	resolution := capability.Resolve(reg, sig)
 	for _, support := range resolution.Supports {
 		existing = append(existing, techniqueHint{
-			Name:              fmt.Sprintf("skill:%s", support.SkillID),
+			Name:              supportHintName(support.SkillID),
 			Reason:            fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
 			HydrateReferences: normalizeHydrateKeys(capability.HydrateReferenceKeysForSkill(reg, support.SkillID)),
 		})
 	}
 	return existing
+}
+
+func supportHintName(skillID string) string {
+	if toolgen.ShouldExportAsHostSkill(skillID) {
+		return "skill:" + skillID
+	}
+	return "catalog:" + toolgen.CatalogArtifactHintPath(skillID)
 }
 
 func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill string, governedChange *model.Change) []techniqueHint {
@@ -347,7 +355,7 @@ func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill str
 	reg := capability.DefaultRegistry()
 	addHint := func(skillID, reason string) {
 		existing = append(existing, techniqueHint{
-			Name:              "skill:" + skillID,
+			Name:              supportHintName(skillID),
 			Reason:            reason,
 			HydrateReferences: normalizeHydrateKeys(capability.HydrateReferenceKeysForSkill(reg, skillID)),
 		})

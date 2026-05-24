@@ -7,10 +7,9 @@ description: "Use when mapping repository architecture, dependency graphs, and m
 # Codebase Mapping
 
 ## Purpose
-Systematically map repository architecture, dependency graphs, key
-abstractions, and module boundaries before planning. This is a technique skill:
-it produces durable context for research, scope confirmation, and plan audit,
-but it does not own a governed route.
+Map repository architecture, dependency graphs, key abstractions, and module
+boundaries before planning. This technique produces durable context for
+research, scope confirmation, and plan audit; it does not own a governed route.
 
 ## When This Runs
 Advisory hint during discovery or governed spec bundling within `S1_PLAN`. This is a technique skill — it does not produce governance evidence and missing output does not block any gate.
@@ -29,7 +28,8 @@ Write a durable brownfield map under `artifacts/codebase/` using this fixed docu
 - `TESTING.md`
 - `CONCERNS.md`
 
-These documents are advisory, but they are the canonical reusable output of the technique skill. Downstream skills consume them by path instead of relying on transient chat context.
+These documents are advisory but canonical. Downstream skills consume them by
+path instead of relying on transient chat context.
 
 ## Process
 
@@ -38,12 +38,8 @@ Extract `input_context.codebase_map_dir` and `input_context.codebase_map_docs`.
 Create the map directory if needed.
 
 ### 2. Repository Structure Scan
-Map the top-level directory structure and identify:
-- Source code directories and their purposes
-- Configuration files and build system
-- Test directories and test infrastructure
-- Documentation locations
-- Generated vs. handwritten code (important for scope decisions)
+Map top-level directories, build/config files, tests, docs, and
+generated-vs-handwritten boundaries.
 
 ### 3. Module Boundary Analysis
 For each major module/package:
@@ -53,35 +49,24 @@ For each major module/package:
 - Shared utilities and entry points
 
 ### 4. Dependency Graph
-Build a dependency map:
-- **Internal module dependencies**: Which modules depend on which (directional)
-- **External dependencies**: Third-party libraries and their roles
-- **Circular dependency detection**: Any A→B→A cycles
-- **Layering violations**: Lower layers importing higher layers
-- **Coupling hotspots**: Modules with high fan-in (many dependents) or fan-out (many dependencies)
+Build a dependency map covering internal directionality, external libraries,
+cycles, layering violations, and high fan-in/fan-out hotspots.
 
 ### 5. Key Abstractions
 Identify core domain concepts:
-- **Primary data types**: Main structs/classes and their relationships
-- **Interface contracts**: Abstractions and their implementations
-- **State management patterns**: How state flows through the system
-- **Error handling conventions**: Error types, propagation patterns, recovery mechanisms
-- **Concurrency patterns**: Locks, channels, async patterns (if relevant)
+- primary data types and relationships
+- interface contracts and implementations
+- state flow, error handling, and concurrency patterns
 
 ### 6. Change Impact Analysis
 For the current change scope:
-- **Blast radius**: Which modules/files will be directly affected?
-- **Transitive impact**: Which modules depend on affected modules?
-- **Test impact**: Which tests cover the affected code?
-- **Integration points**: Where does affected code interact with external systems?
+- direct blast radius and transitive dependents
+- tests covering affected code
+- integration points with external systems
 
 ### 7. Pattern Inventory
 Document existing patterns that the change should follow:
-- **Naming conventions**: How are similar entities named? (e.g., `FooManager`, `BarService`)
-- **File organization**: Where do similar features live? (e.g., `cmd/` for CLI, `internal/` for private)
-- **Error handling**: How do existing modules handle and propagate errors?
-- **Testing patterns**: How are existing tests structured? (table-driven, subtests, fixtures)
-- **Configuration patterns**: How is config loaded and injected?
+- naming, file organization, error handling, tests, and configuration
 
 ### 8. Structured Output
 Write the findings into the durable document set.
@@ -110,11 +95,11 @@ artifacts/codebase/CONCERNS.md
 ```
 
 ## Efficiency Guidelines
-- Start broad (repository structure), then narrow to change-relevant areas
-- Do NOT read entire files — use symbol overview tools or grep for specific patterns
-- Limit dependency graph to 2 levels deep from the change scope
-- Stop mapping when you have enough context for scope/planning decisions
-- Total mapping should take < 15% of available context budget
+- Start broad, then narrow to change-relevant areas.
+- Do NOT read entire files; use symbol overview tools or targeted grep.
+- Limit dependency graph to 2 levels from the change scope.
+- Stop when there is enough context for scope/planning decisions.
+- Keep mapping under 15% of available context budget.
 
 ## Relationship to Governance
 Advisory only. Referenced in `technique_hints` during `S1_PLAN` discovery and bundle substeps but does NOT produce governance evidence. Missing codebase mapping SHALL NOT block any gate.

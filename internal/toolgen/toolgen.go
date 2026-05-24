@@ -158,9 +158,9 @@ var commandRegistry = []CommandDef{
 		Arguments:     `"<description>" [--preset light|standard|strict] [--profile code|docs|research|config|meta] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--context-guard] [--change <slug>]"},
+		Arguments: "[--json] [--diagnostics] [--context-guard] [--change <slug>]"},
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
+		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
@@ -343,6 +343,62 @@ var techniqueNames = []string{
 	"tdd",
 	"codebase-mapping",
 	"coding-discipline",
+}
+
+var hostSkillExportAllowlist = map[string]struct{}{
+	workflowSkillID: {},
+	"slipway":       {},
+
+	"intake-clarification":   {},
+	"research-orchestration": {},
+	"plan-audit":             {},
+	"worktree-preflight":     {},
+	"wave-orchestration":     {},
+	"tdd-governance":         {},
+	"spec-compliance-review": {},
+	"code-quality-review":    {},
+	"goal-verification":      {},
+	"final-closeout":         {},
+
+	"independent-review": {},
+	"context-assembly":   {},
+	"root-cause-tracing": {},
+	"security-review":    {},
+	"spec-trace":         {},
+	"coverage-analysis":  {},
+	"coding-discipline":  {},
+	"git-recovery":       {},
+	"codebase-mapping":   {},
+
+	"ci-triage":         {},
+	"incident-response": {},
+}
+
+var retiredGeneratedSkillDirNames = []string{
+	"slipway-sync",
+}
+
+func shouldExportAsHostSkill(id string) bool {
+	_, ok := hostSkillExportAllowlist[strings.TrimSpace(id)]
+	return ok
+}
+
+func ShouldExportAsHostSkill(id string) bool {
+	return shouldExportAsHostSkill(id)
+}
+
+func shouldEmitCatalogArtifact(id string) bool {
+	_, ok := capability.DefaultRegistry().Lookup(strings.TrimSpace(id))
+	return ok
+}
+
+func CatalogArtifactHintPath(skillID string) string {
+	return path.Join(
+		adapterSkillName(workflowSkillID),
+		"references",
+		"catalog",
+		strings.TrimSpace(skillID)+".md",
+	)
 }
 
 // GovernanceSkillNames lists the static exported governance surfaces (.md).
@@ -661,8 +717,30 @@ func CatalogManifestPath(cfg ToolConfig) string {
 	return filepath.Join(cfg.SkillsDir, catalogManifestFileName)
 }
 
+func CatalogArtifactPath(cfg ToolConfig, skillID string) string {
+	return filepath.Join(
+		cfg.SkillsDir,
+		adapterSkillName(workflowSkillID),
+		"references",
+		"catalog",
+		strings.TrimSpace(skillID)+".md",
+	)
+}
+
+func catalogSupportRootPath(cfg ToolConfig, skillID string) string {
+	return filepath.Join(
+		cfg.SkillsDir,
+		adapterSkillName(workflowSkillID),
+		"references",
+		"catalog",
+		strings.TrimSpace(skillID),
+	)
+}
+
 func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+	_, sentinelErr := os.Stat(sentinelPath)
+	hadGeneratedAdapter := sentinelErr == nil
 
 	if refresh {
 		// Remove existing sentinel before the mutating pass.
@@ -675,7 +753,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			}
 		}
 
-		if err := cleanupStaleGeneratedArtifacts(root, cfg); err != nil {
+		if err := cleanupStaleGeneratedArtifacts(root, cfg, hadGeneratedAdapter); err != nil {
 			return err
 		}
 	}
@@ -724,6 +802,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		sk, ok := reg.Lookup(id)
 		if !ok {
 			return fmt.Errorf("catalog skill %q missing from registry lookup", id)
+		}
+		if !shouldExportAsHostSkill(id) {
+			continue
 		}
 		content, err := renderCatalogSkill(sk)
 		if err != nil {
@@ -781,8 +862,15 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		}
 	}
 
+	if err := emitCatalogArtifacts(root, cfg, reg, refresh); err != nil {
+		return err
+	}
+
 	// Technique skills (static content)
 	for _, name := range techniqueNames {
+		if !shouldExportAsHostSkill(name) {
+			continue
+		}
 		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load technique %q: %w", name, err)
@@ -860,7 +948,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	// Outbound catalog manifest (read by external agents; not consumed by
 	// the Slipway kernel). Regenerated deterministically from the Go-owned
 	// capability registry so every adapter sees the same triage index.
-	manifest := capability.BuildCatalogManifest(capability.DefaultRegistry())
+	manifest := capability.BuildCatalogManifestWithPaths(reg, func(id string) string {
+		return filepath.ToSlash(CatalogArtifactPath(cfg, id))
+	})
 	manifestPath := filepath.Join(root, CatalogManifestPath(cfg))
 	if err := writeDeterministic(manifestPath, manifest, refresh); err != nil {
 		return err
@@ -899,8 +989,8 @@ func purgeCommandPromptSurfaces(root string, cfg ToolConfig) error {
 	return nil
 }
 
-func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
-	if err := cleanupStaleSkillDirs(root, cfg); err != nil {
+func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
+	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter); err != nil {
 		return err
 	}
 	if err := cleanupStaleCommandEntries(root, cfg); err != nil {
@@ -917,7 +1007,10 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig) error {
 	return nil
 }
 
-func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
+func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
+	if !hadGeneratedAdapter {
+		return nil
+	}
 	skillsRoot := filepath.Join(root, cfg.SkillsDir)
 	if err := removePathIfExists(filepath.Join(skillsRoot, "slipway")); err != nil {
 		return err
@@ -928,15 +1021,23 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 		GovernanceSkillNames,
 		standaloneGovernanceNames,
 		TemplatedGovernanceSkillNames,
-		catalogSkillIDs,
 		standaloneNames,
 		techniqueNames,
 	} {
 		for _, name := range names {
+			if !shouldExportAsHostSkill(name) {
+				continue
+			}
+			expected[exportedSkillDirName(name)] = struct{}{}
+		}
+	}
+	for _, name := range catalogSkillIDs {
+		if shouldExportAsHostSkill(name) {
 			expected[exportedSkillDirName(name)] = struct{}{}
 		}
 	}
 	expected[catalogManifestFileName] = struct{}{}
+	managed := generatedSkillDirNameSet()
 
 	entries, err := os.ReadDir(skillsRoot)
 	if err != nil {
@@ -950,13 +1051,33 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig) error {
 		if _, ok := expected[name]; ok {
 			continue
 		}
-		if name == catalogManifestFileName || strings.HasPrefix(name, "slipway-") {
+		if _, ok := managed[name]; ok {
 			if err := os.RemoveAll(filepath.Join(skillsRoot, name)); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func generatedSkillDirNameSet() map[string]struct{} {
+	managed := map[string]struct{}{}
+	for _, names := range [][]string{
+		GovernanceSkillNames,
+		standaloneGovernanceNames,
+		TemplatedGovernanceSkillNames,
+		standaloneNames,
+		techniqueNames,
+		catalogSkillIDs,
+	} {
+		for _, name := range names {
+			managed[exportedSkillDirName(name)] = struct{}{}
+		}
+	}
+	for _, name := range retiredGeneratedSkillDirNames {
+		managed[strings.TrimSpace(name)] = struct{}{}
+	}
+	return managed
 }
 
 func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
@@ -1106,6 +1227,110 @@ func renderCatalogSkill(sk capability.Skill) (string, error) {
 		return base, nil
 	}
 	return strings.Join(out, "\n\n") + "\n", nil
+}
+
+func emitCatalogArtifacts(root string, cfg ToolConfig, reg *capability.Registry, refresh bool) error {
+	catalogRoot := filepath.Join(
+		root,
+		cfg.SkillsDir,
+		adapterSkillName(workflowSkillID),
+		"references",
+		"catalog",
+	)
+	if refresh {
+		if err := removePathIfExists(catalogRoot); err != nil {
+			return err
+		}
+	}
+	for _, id := range catalogSkillIDs {
+		if !shouldEmitCatalogArtifact(id) {
+			continue
+		}
+		sk, ok := reg.Lookup(id)
+		if !ok {
+			return fmt.Errorf("catalog artifact %q missing from registry lookup", id)
+		}
+		content, err := renderCatalogArtifact(cfg, sk)
+		if err != nil {
+			return fmt.Errorf("render catalog artifact %q for %s: %w", id, cfg.ID, err)
+		}
+		if err := writeDeterministic(filepath.Join(root, CatalogArtifactPath(cfg, id)), content, refresh); err != nil {
+			return err
+		}
+		if err := emitCatalogSupportFiles(root, cfg, id, refresh); err != nil {
+			return fmt.Errorf("emit catalog support files for %q (%s): %w", id, cfg.ID, err)
+		}
+	}
+	return nil
+}
+
+func emitCatalogSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
+	dstBase := filepath.Join(root, catalogSupportRootPath(cfg, skillID))
+	return emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstBase, refresh)
+}
+
+func renderCatalogArtifact(cfg ToolConfig, sk capability.Skill) (string, error) {
+	instructions, err := renderCatalogSkill(sk)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	publicName := adapterSkillName(sk.ID)
+	b.WriteString("# " + publicName + "\n\n")
+	b.WriteString(sk.Summary + "\n\n")
+	b.WriteString("## Catalog Contract\n\n")
+	b.WriteString(fmt.Sprintf("- Catalog artifact: `%s`\n", filepath.ToSlash(CatalogArtifactPath(cfg, sk.ID))))
+	if shouldExportAsHostSkill(sk.ID) {
+		b.WriteString(fmt.Sprintf("- Host skill path: `%s`\n", filepath.ToSlash(SkillPath(cfg, sk.ID))))
+	} else {
+		b.WriteString("- Host skill path: catalog-only; no adapter auto-trigger SKILL.md is emitted.\n")
+	}
+	b.WriteString(fmt.Sprintf("- Support root: `%s`\n", filepath.ToSlash(catalogSupportRootPath(cfg, sk.ID))))
+	b.WriteString(fmt.Sprintf("- Tier: `%s`\n", sk.Tier))
+	b.WriteString(fmt.Sprintf("- Evidence contract: `%s`\n", sk.Evidence))
+	b.WriteString(fmt.Sprintf("- Primary attachment: `%s`\n", sk.PrimaryAttachment))
+	b.WriteString("\n## Bindings\n\n")
+	if len(sk.Bindings) == 0 {
+		b.WriteString("- none\n")
+	} else {
+		for _, binding := range sk.Bindings {
+			b.WriteString(fmt.Sprintf(
+				"- `%s` -> `%s` (`%s`)\n",
+				binding.Type,
+				binding.Target,
+				binding.Attachment,
+			))
+		}
+	}
+	b.WriteString("\n## Hydrate References\n\n")
+	if len(sk.HydrateReferences) == 0 {
+		b.WriteString("- none\n")
+	} else {
+		for _, ref := range sk.HydrateReferences {
+			b.WriteString(fmt.Sprintf(
+				"- `%s/%s`: `%s` - %s\n",
+				sk.ID,
+				ref.Name,
+				filepath.ToSlash(filepath.Join(catalogSupportRootPath(cfg, sk.ID), "references", ref.Name)),
+				ref.Reason,
+			))
+		}
+	}
+	b.WriteString("\n## Use When\n\n")
+	b.WriteString(sk.Function + "\n")
+	b.WriteString("\n## Full Instructions\n\n")
+	b.WriteString(stripSkillFrontmatter(instructions))
+	b.WriteString("\n")
+	return b.String(), nil
+}
+
+func stripSkillFrontmatter(raw string) string {
+	_, tail, err := splitSkillFrontmatter(raw)
+	if err != nil {
+		return strings.TrimSpace(raw)
+	}
+	tail = strings.TrimPrefix(tail, "\n---")
+	return strings.TrimSpace(tail)
 }
 
 func renderSourceManagedSkill(raw, id string) (string, error) {

@@ -74,7 +74,7 @@ func TestPlanAuditTemplateDoesNotReintroduceLightPresetVerificationBlocker(t *te
 	content, err := Content("skills/plan-audit/SKILL.md")
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "On light preset, dimension #1 (coverage) failures are advisory warnings; all other dimension failures remain blockers.")
+	assert.Contains(t, content, "On light, only dimension #1")
 	assert.NotContains(t, content, "Every task needs explicit per-task verification fields before execution begins.")
 }
 
@@ -296,6 +296,9 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.NotContains(t, content, "{{.", "next command entry has unrendered template vars")
 	assert.Contains(t, content, "Query the next governed host without advancing lifecycle state.")
 	assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
+	assert.Contains(t, content, "Treat the default JSON as an action contract")
+	assert.Contains(t, content, "`context_budget` appears only when `guard_action` is `warn` or `stop`")
+	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
 	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
 	assert.NotContains(t, content, "single-step progression command")
 	assert.NotContains(t, content, "state progression context")
@@ -551,6 +554,10 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"run command must not reference status fields that do not exist")
 	assert.Contains(t, content, "context_budget.guard_action",
 		"run command missing returned-view context guard guidance")
+	assert.Contains(t, content, "Use `slipway run --json --diagnostics` only for full readiness fields",
+		"run command missing diagnostics boundary guidance")
+	assert.Contains(t, content, "slipway health --governance --json --change <slug>",
+		"run command missing governance health handoff")
 
 	assert.Contains(t, content, "fresh reviewer agent",
 		"run command missing fresh-reviewer pause mandate")
@@ -563,6 +570,24 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 
 	assert.Contains(t, content, "user_response_payload",
 		"run skill missing checkpoint response handoff guidance")
+}
+
+func TestStatusCommandEntryUsesGovernanceSummaryContract(t *testing.T) {
+	t.Parallel()
+	data := map[string]string{
+		"CommandID":    "status",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:status",
+		"Description":  "Show lifecycle status, blockers, and next actions",
+		"BodyTemplate": "command-status-body",
+		"Arguments":    "--json",
+	}
+	content, err := Render("commands/command-entry.md.tmpl", data)
+	require.NoError(t, err)
+	assert.Contains(t, content, "Treat `status --json` as a lifecycle/status contract")
+	assert.Contains(t, content, "`governance_summary`")
+	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
+	assert.NotContains(t, content, "consume full governance controls from `status --json`")
 }
 
 func TestTemplateFSExcludesTransientPythonArtifacts(t *testing.T) {

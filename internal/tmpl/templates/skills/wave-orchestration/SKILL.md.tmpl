@@ -16,12 +16,8 @@ Execute implementation tasks in dependency order, detect conflicts early, and
 keep wave results reviewable. This host owns the execution dispatch contract.
 
 ## Workflow Outline
-1. Read the governed task bundle and checkpoint state.
-2. Group tasks into dependency-ordered waves and execute one wave at a time.
-3. Spot-check results, write verification, and wait for approval.
-
-## When This Runs
-After plan audit passes. `slipway next` returns `next_skill: wave-orchestration`.
+Read task/checkpoint state, group dependency-ordered waves, execute one wave at
+a time, spot-check results, write verification, and wait for approval.
 
 ## Read Context
 Run `slipway next --json` and read the task plan from the governed change bundle.
@@ -32,54 +28,38 @@ If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
 - `TESTING.md`
 - `CONCERNS.md`
 
-Use these documents to keep task execution aligned with directory conventions,
-existing test infrastructure, and known risk hotspots.
+Use them to align execution with directory conventions, test infrastructure,
+and known risk hotspots.
 
-If `input_context.resume_checkpoint` is present, prior tasks have already run.
-Skip `completed_task_ids` only when `freshness` is `fresh`; if it is `stale`,
-rerun everything. Use `checkpoint_type` to distinguish a user-decision pause
-from execution recovery. If `user_response_payload` is present, treat it as the
-authoritative response for the paused task and carry it into the evidence.
+If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
+when `freshness` is `fresh`; stale checkpoints require rerunning everything.
+Carry `checkpoint_type` and any `user_response_payload` into evidence.
 
 Apply `slipway-coding-discipline` while splitting work: keep task scopes
 minimal, prefer simple changes, and reject executor plans that broaden beyond
 the governed objective.
 
 ## Discover and Group Waves
-Parse the task plan into dependency-ordered waves:
-1. Read `tasks.md` from the governed artifact bundle.
-2. Extract task entries and `depends_on` relationships.
-3. Group tasks into waves: wave 1 has no unsatisfied dependencies, later waves depend only on earlier waves.
-4. Validate: every task belongs to exactly one wave; circular dependencies are blockers.
+Parse `tasks.md`, extract task entries and `depends_on`, group tasks into
+waves, and validate that every task belongs to exactly one wave. Wave 1 has no
+unsatisfied dependencies; later waves depend only on earlier waves. Cycles are
+blockers.
 
-Report the wave plan before execution:
-```text
-## Execution Plan
-
-**{description}** - {total_tasks} tasks across {wave_count} waves
-
-| Wave | Tasks | What it builds |
-|------|-------|----------------|
-| 1    | T1, T2 | {from task objectives, 3-8 words} |
-| 2    | T3     | ... |
-```
+Report the wave plan before execution: description, total tasks, wave count,
+and one row per wave with task IDs plus a 3-8 word build summary.
 
 ## Execute Waves
-Execute each wave in sequence. Within a wave: dispatch tasks in parallel.
-
-For each wave:
-1. Describe what is being built **before** spawning.
-2. Dispatch executor subagents using the contract below.
-3. Wait for all executors in the wave to complete.
-4. Spot-check the first 2 files from each task's `changed_files` and check blocker evidence.
-5. Report wave completion and what it enables for the next wave.
-6. After any checkpoint pause, continue with a **fresh** subagent context.
+Execute waves in sequence. Within a wave, dispatch tasks in parallel when the
+tool supports it. For each wave: describe the build goal before spawning, wait
+for all executors, spot-check the first 2 files from each task's
+`changed_files`, check blocker evidence, report what the wave enables next, and
+after any checkpoint pause continue with a **fresh** subagent context.
 
 ## Dispatch Contract
-- Use one isolated executor context per task when the tool supports it; otherwise execute tasks inline sequentially.
-- Pass file paths only. The executor reads source files in its own context.
-- Required task inputs: task ID, acceptance criteria, changed-file scope, technique references, and locked decisions.
-- Required task outputs: `changed_files`, `test_summary`, and `evidence_ref`.
+- Use one isolated executor context per task when supported; otherwise execute sequentially.
+- Pass file paths only; executors read source files in their own context.
+- Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
+- Outputs: `changed_files`, `test_summary`, and `evidence_ref`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
 - For `task_kind=code`, enforce RED, then GREEN, then REFACTOR before accepting the result.
 - Detailed dispatch examples live in `references/executor-dispatch-reference.md`.
@@ -88,7 +68,7 @@ For each wave:
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
 - Auto-fix only issues directly blocking the current task and directly caused by the current task's change.
 - After 3 auto-fix attempts on one task, stop and surface the blocker.
-- Architectural change needed: stop, write a blocker record, and wait for user direction.
+- Architectural change needed: stop, write a blocker, and wait for user direction.
 - Spec or artifact blockers must use `spec:<artifact_id>` references.
 
 ## Write Verification

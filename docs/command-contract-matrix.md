@@ -191,3 +191,76 @@ emit the list of public aliases with their human-readable summaries.
 Discovery flags are registered only on the surfaces that own them: using
 `review --list-views` or `status --list-focuses` fails at parse time as an
 unknown flag, mirroring wrong-surface `--focus` / `--view` handling.
+
+## Default JSON Shape
+
+Slipway's default command JSON is intentionally compact:
+
+- `next --json` and `run --json` return the next governed action contract.
+  They inline only the active change identity, lifecycle state, `next_skill`
+  name and evidence directory, bounded `input_context` paths, blockers,
+  warnings, and confirmation status.
+- `next --json --diagnostics` and `run --json --diagnostics` return the full
+  readiness view for troubleshooting. Diagnostic fields such as
+  `handoff_context`, `governance_signals`, `active_controls`,
+  `required_actions`, `skill_evidence`, `artifact_status`, `gate_status`,
+  policy-pack prose, and full `context_budget` breakdowns belong there.
+- `context_budget` is absent from default `next`/`run` JSON while the guard is
+  `ok`. Default JSON emits only `{ guard_action, remaining_percent }` when the
+  guard is `warn` or `stop`.
+- `status --json` is a lifecycle/status contract. It does not inline raw
+  `governance_signals`, `active_controls`, or `required_actions`; when those
+  controls matter to the current status it emits `governance_summary` instead.
+- `health --governance --json --change <slug>` is the complete governance
+  diagnostic authority. Callers that need raw controls, detected signals, or
+  required action details should use health rather than expanding status.
+
+The field classes for these contracts are:
+
+```text
+always_inline:
+  slug
+  phase
+  current_state
+  lifecycle_status
+  next_skill.name
+  next_skill.verification_dir
+  blockers
+  warnings
+  confirmation_required
+  input_context.workspace_root
+  input_context.artifact_bundle
+
+conditional_inline:
+  next_skill.skill_constraints
+  next_skill.technique_hints
+  input_context.resume_checkpoint
+  context_budget only when guard_action is warn/stop
+  governance_summary only when status has governance blockers/actions
+
+reference_only:
+  change_authority
+  artifact_bundle
+  codebase_map_dir
+  codebase_map_docs
+  policy_pack paths
+  lifecycle_event_log
+
+diagnostic_only:
+  governance_signals
+  active_controls
+  required_actions
+  skill_evidence
+  artifact_status
+  gate_status
+  full context_budget breakdown
+  handoff_context.policy_packs prose
+  advisory_rules
+  artifact_requirements
+  recommended_reviewers
+  terminology
+```
+
+No `compact`, `full`, or hydrate-style JSON mode is part of this contract.
+Default JSON stays small; diagnostics stay available through the existing
+diagnostic exits.

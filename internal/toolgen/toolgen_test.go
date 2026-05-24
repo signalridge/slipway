@@ -166,6 +166,90 @@ func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
 	assert.Len(t, exported, len(governanceSurfaceDescriptors), "governance export union drifted from descriptor table")
 }
 
+func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	entries, err := os.ReadDir(skillsRoot)
+	require.NoError(t, err)
+
+	var got []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(skillsRoot, entry.Name(), "SKILL.md")); err == nil {
+			got = append(got, entry.Name())
+		}
+	}
+
+	expectedSet := map[string]struct{}{}
+	for _, names := range [][]string{
+		GovernanceSkillNames,
+		standaloneGovernanceNames,
+		TemplatedGovernanceSkillNames,
+		standaloneNames,
+		techniqueNames,
+		catalogSkillIDs,
+	} {
+		for _, name := range names {
+			if shouldExportAsHostSkill(name) {
+				expectedSet[exportedSkillDirName(name)] = struct{}{}
+			}
+		}
+	}
+	var expected []string
+	for name := range expectedSet {
+		expected = append(expected, name)
+	}
+	assert.ElementsMatch(t, expected, got)
+	assert.Len(t, got, 22, "host skill count should stay within the slim exported surface target")
+}
+
+func TestCatalogOnlySkillsEmitCatalogArtifactsAndSupportFiles(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	for _, id := range []string{"threat-modeling", "sast-orchestration", "review-comment-triage"} {
+		_, err := os.Stat(filepath.Join(root, SkillPath(cfg, id)))
+		assert.True(t, os.IsNotExist(err), "%s should not be emitted as a host SKILL.md", id)
+
+		artifactPath := filepath.Join(root, CatalogArtifactPath(cfg, id))
+		content, err := os.ReadFile(artifactPath)
+		require.NoError(t, err, "missing catalog artifact for %s", id)
+		assert.Contains(t, string(content), "## Full Instructions", "%s catalog artifact should preserve instructions", id)
+	}
+
+	_, err := os.Stat(filepath.Join(root, catalogSupportRootPath(cfg, "sast-orchestration"), "references", "sarif-merge.md"))
+	assert.NoError(t, err, "catalog-only references should be copied under deterministic catalog support paths")
+	_, err = os.Stat(filepath.Join(root, catalogSupportRootPath(cfg, "review-comment-triage"), "scripts", "fetch-review-requests.sh"))
+	assert.NoError(t, err, "catalog-only scripts should be copied under deterministic catalog support paths")
+}
+
+func TestResolveNextSkillOutputsMapToExportedHostSkills(t *testing.T) {
+	t.Parallel()
+
+	for _, id := range []string{
+		"intake-clarification",
+		"research-orchestration",
+		"worktree-preflight",
+		"plan-audit",
+		"wave-orchestration",
+		"spec-compliance-review",
+		"code-quality-review",
+		"goal-verification",
+		"final-closeout",
+		"tdd-governance",
+	} {
+		assert.Truef(t, shouldExportAsHostSkill(id), "next-skill output %q must map to an exported host skill", id)
+	}
+}
+
 func TestDetectExistingTools(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -265,28 +349,46 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		for _, name := range techniqueNames {
 			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
 			_, err := os.Stat(path)
-			assert.NoError(t, err, "%s: missing technique %s", toolID, name)
+			if shouldExportAsHostSkill(name) {
+				assert.NoError(t, err, "%s: missing technique %s", toolID, name)
+			} else {
+				assert.True(t, os.IsNotExist(err), "%s: unexpected host technique %s", toolID, name)
+			}
 		}
 
-		// Catalog skills (registry-owned). Every exported catalog skill
-		// must carry the adapter-visible frontmatter contract (`name`,
-		// `description`).
+		// Catalog skills (registry-owned). Host-exported catalog skills carry
+		// adapter-visible SKILL.md frontmatter; catalog-only skills are emitted
+		// under the workflow reference tree instead.
 		reg := capability.DefaultRegistry()
 		for _, id := range catalogSkillIDs {
 			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway-"+id)
 			skillPath := filepath.Join(skillDir, "SKILL.md")
-			body, err := os.ReadFile(skillPath)
-			assert.NoError(t, err, "%s: missing catalog skill %s", toolID, id)
+			if shouldExportAsHostSkill(id) {
+				body, err := os.ReadFile(skillPath)
+				assert.NoError(t, err, "%s: missing catalog host skill %s", toolID, id)
 
-			fm := extractAdapterFrontmatter(t, string(body), toolID, id)
-			assert.Equal(t, "slipway-"+id, fm["name"],
-				"%s: catalog skill %s: wrong name", toolID, id)
-			assert.NotEmpty(t, fm["description"],
-				"%s: catalog skill %s: empty description", toolID, id)
+				fm := extractAdapterFrontmatter(t, string(body), toolID, id)
+				assert.Equal(t, "slipway-"+id, fm["name"],
+					"%s: catalog skill %s: wrong name", toolID, id)
+				assert.NotEmpty(t, fm["description"],
+					"%s: catalog skill %s: empty description", toolID, id)
+				sk, ok := reg.Lookup(id)
+				if assert.Truef(t, ok, "%s: catalog skill %s missing from registry", toolID, id) {
+					assert.Equal(t, sk.Summary, fm["description"],
+						"%s: catalog skill %s: description drifted from registry summary", toolID, id)
+				}
+			} else {
+				_, err := os.Stat(skillPath)
+				assert.True(t, os.IsNotExist(err), "%s: unexpected catalog-only host skill %s", toolID, id)
+			}
+			artifactPath := filepath.Join(root, CatalogArtifactPath(cfg, id))
+			artifactBytes, err := os.ReadFile(artifactPath)
+			assert.NoError(t, err, "%s: missing catalog artifact %s", toolID, id)
 			sk, ok := reg.Lookup(id)
 			if assert.Truef(t, ok, "%s: catalog skill %s missing from registry", toolID, id) {
-				assert.Equal(t, sk.Summary, fm["description"],
-					"%s: catalog skill %s: description drifted from registry summary", toolID, id)
+				artifact := string(artifactBytes)
+				assert.Contains(t, artifact, string(sk.Tier), "%s: catalog artifact %s missing tier", toolID, id)
+				assert.Contains(t, artifact, string(sk.Evidence), "%s: catalog artifact %s missing evidence contract", toolID, id)
 			}
 		}
 
@@ -298,6 +400,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			"%s: manifest missing header", toolID)
 		assert.Contains(t, string(manifestBytes), "## Index",
 			"%s: manifest missing dispatcher index", toolID)
+		for _, id := range catalogSkillIDs {
+			assert.Contains(t, string(manifestBytes), filepath.ToSlash(CatalogArtifactPath(cfg, id)),
+				"%s: manifest missing catalog path for %s", toolID, id)
+		}
 
 		if cfg.SessionHook != "" {
 			hookPath := filepath.Join(root, cfg.SessionHook)
@@ -355,7 +461,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(CatalogManifestPath(cfg)), "%s: missing catalog manifest path", cfg.ID)
-		assert.Contains(t, s, "use the `Skill` / `Use when` table as the dispatcher", "%s: missing compact catalog triage guidance", cfg.ID)
+		assert.Contains(t, s, "follow the listed catalog artifact path", "%s: missing catalog artifact triage guidance", cfg.ID)
 
 		refPath := filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md")
 		refContent, err := os.ReadFile(refPath)
@@ -720,22 +826,42 @@ func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
 	staleSkillDir := filepath.Join(root, ".claude", "skills", "slipway-sync")
+	prefixedUserOwnedDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
+	prefixedUserOwnedFile := filepath.Join(prefixedUserOwnedDir, "SKILL.md")
 	unrelatedDir := filepath.Join(root, ".claude", "skills", "user-owned")
 	unrelatedFile := filepath.Join(unrelatedDir, "SKILL.md")
 
 	require.NoError(t, os.MkdirAll(staleSkillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("stale sync skill"), 0o644))
+	require.NoError(t, os.MkdirAll(prefixedUserOwnedDir, 0o755))
+	require.NoError(t, os.WriteFile(prefixedUserOwnedFile, []byte("keep prefixed user skill"), 0o644))
 	require.NoError(t, os.MkdirAll(unrelatedDir, 0o755))
 	require.NoError(t, os.WriteFile(unrelatedFile, []byte("keep me"), 0o644))
 
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
 	_, err := os.Stat(staleSkillDir)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired top-level slipway-* skills")
+	assert.True(t, os.IsNotExist(err), "refresh should remove retired generated skill dirs")
+	_, err = os.Stat(prefixedUserOwnedFile)
+	assert.NoError(t, err, "refresh must not delete unknown user-managed slipway-* skill dirs")
 	_, err = os.Stat(unrelatedFile)
 	assert.NoError(t, err, "refresh must not delete unrelated user-managed entries under skills dir")
 	_, err = os.Stat(filepath.Join(root, ".claude", "skills", catalogManifestFileName))
 	assert.NoError(t, err, "catalog manifest should remain at the top level of the skills dir")
+}
+
+func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	userOwnedSlipwayDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
+	require.NoError(t, os.MkdirAll(userOwnedSlipwayDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(userOwnedSlipwayDir, "SKILL.md"), []byte("keep me"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	_, err := os.Stat(filepath.Join(userOwnedSlipwayDir, "SKILL.md"))
+	assert.NoError(t, err, "refresh without a generated adapter marker must not prune user-owned slipway-* skill dirs")
 }
 
 func TestCodexGenerationOmitsLegacyAgentSurfaces(t *testing.T) {
@@ -951,7 +1077,7 @@ func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
 	assert.Contains(t, string(codexAbort), `class: "mutation"`)
 }
 
-func TestGeneratedWaveOrchestrationSkillUsesDescriptionPlaceholder(t *testing.T) {
+func TestGeneratedWaveOrchestrationSkillUsesWavePlanSummaryGuidance(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -961,7 +1087,7 @@ func TestGeneratedWaveOrchestrationSkillUsesDescriptionPlaceholder(t *testing.T)
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 
-	assert.Contains(t, string(content), "{description}")
+	assert.Contains(t, string(content), "description, total tasks, wave count")
 	assert.NotContains(t, string(content), "{request_description}")
 }
 
@@ -1498,6 +1624,9 @@ func TestTypedPartsRendered(t *testing.T) {
 		t.Run(tc.skill, func(t *testing.T) {
 			t.Parallel()
 			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
+			if !shouldExportAsHostSkill(tc.skill) {
+				path = filepath.Join(root, "slipway", "references", "catalog", tc.skill+".md")
+			}
 			raw, err := os.ReadFile(path)
 			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
 			body := string(raw)
@@ -1584,15 +1713,6 @@ func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 				"research-orchestration, plan-audit, and wave-orchestration SHOULD consume",
 			},
 		},
-		{
-			skill: "tdd",
-			mustContain: []string{
-				"`slipway-tdd-governance`",
-			},
-			mustOmit: []string{
-				"`tdd-governance`",
-			},
-		},
 	}
 
 	for _, tc := range cases {
@@ -1622,6 +1742,13 @@ func generatedSkillsRoot(t *testing.T) string {
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 	cfg := toolRegistry["codex"]
 	return filepath.Join(root, cfg.SkillsDir)
+}
+
+func generatedScriptPath(skillsRoot, skillID, name string) string {
+	if shouldExportAsHostSkill(skillID) {
+		return filepath.Join(skillsRoot, "slipway-"+skillID, "scripts", name)
+	}
+	return filepath.Join(skillsRoot, "slipway", "references", "catalog", skillID, "scripts", name)
 }
 
 // TestScriptExecutableBit asserts every rendered scripts/*.sh file has an
@@ -1713,7 +1840,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if _, err := execLookPath("jq"); err != nil {
 			t.Skipf("jq unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-sast-orchestration", "scripts", "merge-sarif.sh")
+		script := generatedScriptPath(root, "sast-orchestration", "merge-sarif.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1759,7 +1886,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if _, err := execLookPath("jq"); err != nil {
 			t.Skipf("jq unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-sast-orchestration", "scripts", "merge-sarif.sh")
+		script := generatedScriptPath(root, "sast-orchestration", "merge-sarif.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1810,7 +1937,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-gha-security-review", "scripts", "pin-actions.sh")
+		script := generatedScriptPath(root, "gha-security-review", "pin-actions.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1860,7 +1987,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := generatedScriptPath(root, "root-cause-tracing", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1884,7 +2011,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 			t.Skipf("go unavailable: %v", err)
 		}
 
-		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := generatedScriptPath(root, "root-cause-tracing", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1905,7 +2032,7 @@ func TestScriptFixtureContracts(t *testing.T) {
 			t.Skipf("go unavailable: %v", err)
 		}
 
-		script := filepath.Join(root, "slipway-root-cause-tracing", "scripts", "find-polluter-go.sh")
+		script := generatedScriptPath(root, "root-cause-tracing", "find-polluter-go.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1942,7 +2069,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
+		script := generatedScriptPath(root, "variant-analysis", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1973,7 +2100,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
+		script := generatedScriptPath(root, "variant-analysis", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -1997,7 +2124,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
+		script := generatedScriptPath(root, "variant-analysis", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2016,7 +2143,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-variant-analysis", "scripts", "find-variant.sh")
+		script := generatedScriptPath(root, "variant-analysis", "find-variant.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2039,7 +2166,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-ci-triage", "scripts", "fetch-pr-checks.py")
+		script := generatedScriptPath(root, "ci-triage", "fetch-pr-checks.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2062,7 +2189,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-pr-feedback.py")
+		script := generatedScriptPath(root, "review-comment-triage", "fetch-pr-feedback.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2085,7 +2212,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("bash unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-review-requests.sh")
+		script := generatedScriptPath(root, "review-comment-triage", "fetch-review-requests.sh")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2104,7 +2231,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 
 	t.Run("fetch-review-requests avoids bash4-only syntax", func(t *testing.T) {
 		t.Parallel()
-		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "fetch-review-requests.sh")
+		script := generatedScriptPath(root, "review-comment-triage", "fetch-review-requests.sh")
 		raw, err := os.ReadFile(script)
 		require.NoError(t, err)
 
@@ -2123,7 +2250,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "reply-to-thread.py")
+		script := generatedScriptPath(root, "review-comment-triage", "reply-to-thread.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
@@ -2150,7 +2277,7 @@ func TestOnlyExternalPolluter(t *testing.T) {
 		if err != nil {
 			t.Skipf("python3 unavailable: %v", err)
 		}
-		script := filepath.Join(root, "slipway-review-comment-triage", "scripts", "reply-to-thread.py")
+		script := generatedScriptPath(root, "review-comment-triage", "reply-to-thread.py")
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
