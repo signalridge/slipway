@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -67,4 +69,36 @@ func TestBuildLearnViewAggregatesLifecycleSignalsIntoPreviewProposals(t *testing
 	assert.Equal(t, 1.0, view.Proposals[0].Metrics["plan_audit_stall_rate"])
 	assert.NotEmpty(t, view.Proposals[0].RecommendedAction)
 	assert.NotEmpty(t, view.Proposals[0].Risk)
+}
+
+func TestLearnPreviewCommandReturnsReadOnlyPreviewFlags(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		cmd := makeLearnCmd()
+		cmd.SetArgs([]string{"--preview", "--json"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+
+		require.NoError(t, cmd.Execute())
+
+		var view learnView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		assert.True(t, view.Preview)
+		assert.False(t, view.AutoApply)
+	})
+}
+
+func TestLearnApplyPathIsUnsupported(t *testing.T) {
+	cmd := makeLearnCmd()
+	cmd.SetArgs([]string{"--preview=false"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "learn_apply_unsupported", cliErr.ErrorCode)
+	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
 }

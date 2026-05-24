@@ -842,6 +842,23 @@ func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
 	assert.NotContains(t, initEntry, "an active change must exist")
 }
 
+func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
+	t.Parallel()
+
+	nextEntry, err := renderCommandEntry(toolRegistry["claude"], "next")
+	require.NoError(t, err)
+	normalizedNextEntry := strings.Join(strings.Fields(nextEntry), " ")
+	assert.Contains(t, normalizedNextEntry, "without advancing lifecycle state")
+	assert.Contains(t, nextEntry, "`slipway next` is intentionally query-only")
+	assert.Contains(t, nextEntry, "use `slipway run`")
+
+	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
+	require.NoError(t, err)
+	assert.Contains(t, runEntry, "Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome")
+	assert.Contains(t, runEntry, "`run` owns continuous governed execution")
+	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
+}
+
 func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	t.Parallel()
 

@@ -42,22 +42,13 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 		)
 	}
 
-	// Pivot reset: recompute discovery, guardrail, and schema using direct model fields.
-	if kindEnum == gate.PivotKindRescope {
-		// Rescope forces discovery re-entry; preserve GuardrailDomain.
-		change.NeedsDiscovery = true
-	} else {
-		// Reroute preserves the existing guardrail domain and forces
-		// discovery re-entry with conservative complexity.
-		change.NeedsDiscovery = true
-	}
+	// Reroute and rescope both preserve GuardrailDomain while forcing discovery
+	// re-entry for conservative re-planning.
+	change.NeedsDiscovery = true
 	change.ArtifactSchema = progression.ResolveFrozenArtifactSchema(change.ArtifactSchema, cfg.Defaults.ArtifactSchema, change.NeedsDiscovery)
 
 	// Pivot reset: clear execution residue.
-	change.EvidenceRefs = map[string]string{}
-	change.ActiveCheckpoint = nil
-	change.PlanAuditIterations = 0
-	change.ReviewIntentDriftFailures = 0
+	change.ResetPivotExecutionResidue()
 	if err := state.RelocateGovernedBundle(root, changeBeforePivot, change); err != nil {
 		return pivotView{}, err
 	}
@@ -68,14 +59,10 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 		if err := clearApprovedSummaryForRescope(root, change); err != nil {
 			return pivotView{}, err
 		}
-		change.CurrentState = model.StateS0Intake
-		change.IntakeSubStep = model.IntakeEntrySubStep()
-		change.PlanSubStep = model.PlanSubStepNone
+		change.EnterIntake()
 	} else {
 		// Reroute returns to S1_PLAN.
-		change.CurrentState = model.StateS1Plan
-		change.IntakeSubStep = model.IntakeSubStepNone
-		change.PlanSubStep = model.PlanEntrySubStep(change.NeedsDiscovery)
+		change.EnterPlanning(change.NeedsDiscovery)
 	}
 	if err := state.SaveChange(root, change); err != nil {
 		return pivotView{}, err

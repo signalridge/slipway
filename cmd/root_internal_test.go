@@ -60,3 +60,28 @@ func TestRepairRootFromWDExplainsMissingRepairMarkers(t *testing.T) {
 		assert.Contains(t, err.Error(), "no slipway repair markers")
 	})
 }
+
+func TestRootCommandDoesNotExposeDeferredWorktreeLaneOrOrchestratorCommands(t *testing.T) {
+	t.Parallel()
+
+	reserved := map[string]struct{}{
+		"lane":         {},
+		"orchestrator": {},
+		"worktree":     {},
+	}
+	rootCmd := newRootCmd()
+	for _, child := range rootCmd.Commands() {
+		_, found := reserved[child.Name()]
+		assert.Falsef(t, found, "deferred command %q must update deferment docs and command matrix before becoming public", child.Name())
+	}
+
+	deferment, err := os.ReadFile(filepath.Join("..", "docs", "worktree-orchestrator-deferment.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(deferment), "No first-class `worktree`, `lane`, or parallel execution commands")
+
+	matrix, err := os.ReadFile(filepath.Join("..", "docs", "command-contract-matrix.md"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(matrix), "| `worktree` |")
+	assert.NotContains(t, string(matrix), "| `lane` |")
+	assert.NotContains(t, string(matrix), "| `orchestrator` |")
+}

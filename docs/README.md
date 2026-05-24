@@ -20,4 +20,5 @@ This directory separates stable product contracts from historical planning notes
 ## Historical Plans
 
 - `plans/`: time-scoped implementation plans retained as historical context rather than current runtime contract
+- `plans/2026-05-24-governance-kernel-runtime-framework.md`: boundary hardening plan for current command contracts and targeted change-authority write helpers
 - `plans/skill-primary-migration.md`: migrate Claude Code from agent-primary to skill-primary dispatch architecture

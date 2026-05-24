@@ -87,7 +87,7 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 	openQuestions := hasOpenQuestions(intentContent)
 	fromSub := string(change.IntakeSubStep)
 	if openQuestions {
-		change.IntakeSubStep = model.IntakeSubStepResearch
+		change.AdvanceIntakeSubStep(model.IntakeSubStepResearch)
 		if err := state.SaveChange(root, *change); err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -105,7 +105,7 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 		}, nil
 	}
 
-	change.IntakeSubStep = model.IntakeSubStepConfirm
+	change.AdvanceIntakeSubStep(model.IntakeSubStepConfirm)
 	if err := state.SaveChange(root, *change); err != nil {
 		return AdvanceSummary{}, err
 	}
@@ -156,7 +156,7 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 	// If still has open questions, go back to clarify
 	fromSub := string(change.IntakeSubStep)
 	if hasOpenQuestions(intentContent) {
-		change.IntakeSubStep = model.IntakeSubStepClarify
+		change.AdvanceIntakeSubStep(model.IntakeSubStepClarify)
 		if err := state.SaveChange(root, *change); err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -174,7 +174,7 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 		}, nil
 	}
 
-	change.IntakeSubStep = model.IntakeSubStepConfirm
+	change.AdvanceIntakeSubStep(model.IntakeSubStepConfirm)
 	if err := state.SaveChange(root, *change); err != nil {
 		return AdvanceSummary{}, err
 	}
@@ -206,15 +206,10 @@ func advanceIntakeConfirm(root string, change *model.Change, fromState model.Wor
 
 	// Transition to S1_PLAN
 	fromSub := string(change.IntakeSubStep)
-	change.CurrentState = model.StateS1Plan
-	change.IntakeSubStep = model.IntakeSubStepNone
-	change.PlanSubStep = model.PlanEntrySubStep(change.NeedsDiscovery)
-	var cleared []string
-	cleared = append(cleared, "intake_substep")
-	if change.LastAutoPassedStates != nil {
+	cleared := change.EnterPlanning(change.NeedsDiscovery)
+	if change.ClearAutoPassHistory() {
 		cleared = append(cleared, "last_auto_passed_states")
 	}
-	change.LastAutoPassedStates = nil
 	if err := state.SaveChange(root, *change); err != nil {
 		return AdvanceSummary{}, err
 	}

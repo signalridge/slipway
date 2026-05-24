@@ -275,7 +275,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		nextSub := computeNextPlanSubStep(change.PlanSubStep)
 		if nextSub != model.PlanSubStepNone {
 			// Advance substep within S1_PLAN.
-			change.PlanSubStep = nextSub
+			change.AdvancePlanSubStep(nextSub)
 			var sideEffects []SideEffect
 			if nextSub == model.PlanSubStepBundle {
 				if err := ensureGovernedBundleScaffolded(root, &change); err != nil {
@@ -311,7 +311,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		if change.PlanSubStep == model.PlanSubStepAudit {
 			planResult := ValidatePlanningReadiness(root, change)
 			if len(planResult.Blockers) > 0 {
-				change.PlanSubStep = model.PlanSubStepValidate
+				change.AdvancePlanSubStep(model.PlanSubStepValidate)
 				if err := state.SaveChange(root, change); err != nil {
 					return AdvanceSummary{}, err
 				}
@@ -352,20 +352,9 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		fromSub = string(change.PlanSubStep)
 	}
 
-	var cleared []string
-	change.CurrentState = toState
-	// Clear substeps when leaving their parent state.
-	if toState != model.StateS1Plan && change.PlanSubStep != model.PlanSubStepNone {
-		cleared = append(cleared, "plan_substep")
-		change.PlanSubStep = model.PlanSubStepNone
-	}
-	if toState != model.StateS0Intake && change.IntakeSubStep != model.IntakeSubStepNone {
-		cleared = append(cleared, "intake_substep")
-		change.IntakeSubStep = model.IntakeSubStepNone
-	}
-	if change.LastAutoPassedStates != nil {
+	cleared := change.TransitionTo(toState)
+	if change.ClearAutoPassHistory() {
 		cleared = append(cleared, "last_auto_passed_states")
-		change.LastAutoPassedStates = nil
 	}
 	if err := state.SaveChange(root, change); err != nil {
 		return AdvanceSummary{}, err
@@ -763,20 +752,15 @@ func ApplyPlanGateResult(change *model.Change, result PlanGateResult) ([]SideEff
 	change.Normalize()
 
 	sideEffects := make([]SideEffect, 0, 2)
-	if change.PlanAuditIterations != result.NextPlanAuditIterations {
-		change.PlanAuditIterations = result.NextPlanAuditIterations
+	if change.RecordPlanAuditIterations(result.NextPlanAuditIterations) {
 		sideEffects = append(sideEffects, SideEffect{
 			Kind:   "updated_plan_audit_iterations",
 			Detail: fmt.Sprintf("%d", result.NextPlanAuditIterations),
 		})
 	}
 
-	if change.EvidenceRefs == nil {
-		change.EvidenceRefs = map[string]string{}
-	}
 	if result.ClearLastCheckerFeedback {
-		if _, ok := change.EvidenceRefs[planAuditLastCheckerFeedbackKey]; ok {
-			delete(change.EvidenceRefs, planAuditLastCheckerFeedbackKey)
+		if change.ClearEvidenceRef(planAuditLastCheckerFeedbackKey) {
 			sideEffects = append(sideEffects, SideEffect{
 				Kind:   "cleared_plan_checker_feedback",
 				Detail: planAuditLastCheckerFeedbackKey,
@@ -789,8 +773,7 @@ func ApplyPlanGateResult(change *model.Change, result PlanGateResult) ([]SideEff
 	if feedback == "" {
 		return sideEffects, nil
 	}
-	if existing := strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]); existing != feedback {
-		change.EvidenceRefs[planAuditLastCheckerFeedbackKey] = feedback
+	if change.RecordEvidenceRef(planAuditLastCheckerFeedbackKey, feedback) {
 		sideEffects = append(sideEffects, SideEffect{
 			Kind:   "recorded_plan_checker_feedback",
 			Detail: planAuditLastCheckerFeedbackKey,

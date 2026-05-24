@@ -2423,6 +2423,37 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 	})
 }
 
+func TestNextPreviewDoesNotAppendLifecycleEvents(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "preview should not append lifecycle events")
+
+		changeBefore, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		eventLogPath, err := state.LifecycleEventLogPath(root, changeBefore)
+		require.NoError(t, err)
+		beforeRaw, beforeErr := os.ReadFile(eventLogPath)
+		if beforeErr != nil && !os.IsNotExist(beforeErr) {
+			require.NoError(t, beforeErr)
+		}
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		afterRaw, afterErr := os.ReadFile(eventLogPath)
+		if os.IsNotExist(beforeErr) {
+			assert.True(t, os.IsNotExist(afterErr), "next query must not create lifecycle event log")
+			return
+		}
+		require.NoError(t, afterErr)
+		assert.Equal(t, string(beforeRaw), string(afterRaw), "next query must not append lifecycle events")
+	})
+}
+
 func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
