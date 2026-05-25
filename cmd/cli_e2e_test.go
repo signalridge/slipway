@@ -101,7 +101,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		assert.Equal(t, "S0_INTAKE", validatePayload["current_state"])
 		requirementsContract, ok := validatePayload["requirements_contract"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "valid", requirementsContract["status"])
+		assert.Equal(t, "missing", requirementsContract["status"])
 
 		stdout, stderr, err = runRootCommand([]string{"next", "--json"})
 		require.NoError(t, err)

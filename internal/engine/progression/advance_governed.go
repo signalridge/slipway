@@ -15,6 +15,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/stringutil"
 )
 
 const planAuditLastCheckerFeedbackKey = "plan_audit.last_checker_feedback"
@@ -403,7 +404,38 @@ func ensureGovernedBundleScaffolded(root string, change *model.Change) error {
 	if err != nil {
 		return err
 	}
-	return artifact.ScaffoldGovernedBundleForChangeWithPreset(root, *change, policy.EffectivePreset, resolution.Schema)
+	projectCtx := change.ProjectContext
+	if projectCtx.IsZero() {
+		projectCtx = InferProjectContext(root)
+	}
+	docs, err := docSectionsFromIntent(root, *change)
+	if err != nil {
+		return fmt.Errorf("extracting doc sections from intent: %w", err)
+	}
+	if docs.Scope != "" || docs.Constraints != "" || docs.Acceptance != "" {
+		return artifact.ScaffoldGovernedBundleForChangeWithContextAndDocs(root, *change, policy.EffectivePreset, projectCtx, docs, resolution.Schema)
+	}
+	return artifact.ScaffoldGovernedBundleForChangeWithContext(root, *change, policy.EffectivePreset, projectCtx, resolution.Schema)
+}
+
+func docSectionsFromIntent(root string, change model.Change) (artifact.DocSections, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return artifact.DocSections{}, err
+	}
+	intentPath := filepath.Join(paths.GovernedBundleDir, "intent.md")
+	data, err := os.ReadFile(intentPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return artifact.DocSections{}, nil
+		}
+		return artifact.DocSections{}, err
+	}
+	return artifact.DocSections{
+		Scope:       stringutil.LastMarkdownSectionContent(string(data), "## In Scope"),
+		Constraints: stringutil.LastMarkdownSectionContent(string(data), "## Constraints"),
+		Acceptance:  stringutil.LastMarkdownSectionContent(string(data), "## Acceptance Signals"),
+	}, nil
 }
 
 // ComputeNextGovernedState determines the next workflow state for a governed change.

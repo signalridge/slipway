@@ -39,6 +39,86 @@ func TestAdvance_NoChangeFile(t *testing.T) {
 	}
 }
 
+func TestEnsureGovernedBundleScaffoldedSeedsFromConfirmedIntent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("ci-release-maintenance")
+	change.Description = "add CI release and maintenance workflow support"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ProjectContext = model.ProjectContext{
+		TechStack: "Go, GitHub Actions",
+		TestCmd:   "go test ./...",
+		BuildCmd:  "go build ./...",
+		Languages: []string{"Go"},
+	}
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		t.Fatalf("bundle dir: %v", err)
+	}
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intent := `# Intent
+
+## Summary
+Add CI, release, and maintenance automation.
+
+## In Scope
+- add GitHub Actions CI workflow coverage
+- add release-please and GoReleaser release automation
+
+## Out of Scope
+- configure real publishing secrets
+
+## Constraints
+- keep CLI runtime behavior unchanged
+
+## Acceptance Signals
+- go test ./...
+- go build ./...
+
+## Approved Summary
+Confirmed scope.
+`
+	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+		t.Fatalf("write intent: %v", err)
+	}
+
+	if err := ensureGovernedBundleScaffolded(root, &change); err != nil {
+		t.Fatalf("ensure bundle scaffolded: %v", err)
+	}
+
+	requirementsRaw, err := os.ReadFile(filepath.Join(bundleDir, "requirements.md"))
+	if err != nil {
+		t.Fatalf("read requirements: %v", err)
+	}
+	requirements := strings.ToLower(string(requirementsRaw))
+	if !strings.Contains(requirements, "github actions ci workflow coverage") {
+		t.Fatalf("requirements not seeded from intent scope:\n%s", string(requirementsRaw))
+	}
+	if !strings.Contains(string(requirementsRaw), "Tech Stack: Go, GitHub Actions") {
+		t.Fatalf("requirements did not preserve project context:\n%s", string(requirementsRaw))
+	}
+
+	decisionRaw, err := os.ReadFile(filepath.Join(bundleDir, "decision.md"))
+	if err != nil {
+		t.Fatalf("read decision: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(string(decisionRaw)), "keep cli runtime behavior unchanged") {
+		t.Fatalf("decision not seeded from intent constraints:\n%s", string(decisionRaw))
+	}
+
+	tasksRaw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
+	if err != nil {
+		t.Fatalf("read tasks: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(string(tasksRaw)), "release-please and goreleaser release automation") {
+		t.Fatalf("tasks not seeded from intent scope:\n%s", string(tasksRaw))
+	}
+}
+
 func TestAdvance_DispatchS1Plan(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

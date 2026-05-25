@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPresetCommandConfirmsPendingPresetAndScaffoldsBundle(t *testing.T) {
+func TestPresetCommandConfirmsPendingPresetAndDefersBundleDuringIntake(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -40,13 +40,13 @@ func TestPresetCommandConfirmsPendingPresetAndScaffoldsBundle(t *testing.T) {
 		assert.False(t, change.WorkflowPresetConfirmationPending())
 		assert.Equal(t, "strict", payload["workflow_preset"])
 		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
-		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
-		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
-		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "assurance.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "assurance.md"))
 	})
 }
 
-func TestPresetCommandPendingFromDocSeedsArtifactsFromIntentSections(t *testing.T) {
+func TestPresetCommandPendingFromDocDefersDownstreamArtifactsDuringIntake(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -78,18 +78,14 @@ func TestPresetCommandPendingFromDocSeedsArtifactsFromIntentSections(t *testing.
 		cmd.SetArgs([]string{"strict"})
 		require.NoError(t, cmd.Execute())
 
-		requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		intentRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
 		require.NoError(t, err)
-		assert.Contains(t, string(requirementsRaw), "15 minutes")
-		assert.Contains(t, string(requirementsRaw), "preserve mfa enforcement")
+		assert.Contains(t, string(intentRaw), "15 minutes")
+		assert.Contains(t, strings.ToLower(string(intentRaw)), "preserve mfa enforcement")
 
-		decisionRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "decision.md"))
-		require.NoError(t, err)
-		assert.Contains(t, string(decisionRaw), "keep existing middleware contract")
-
-		tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
-		require.NoError(t, err)
-		assert.Contains(t, string(tasksRaw), "15 minutes")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "decision.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
 	})
 }
 
@@ -126,13 +122,14 @@ func TestPresetCommandPendingFromLongDocRetainsAcceptanceSections(t *testing.T) 
 		cmd.SetArgs([]string{"strict"})
 		require.NoError(t, cmd.Execute())
 
-		tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
+		intentRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
 		require.NoError(t, err)
-		assert.Contains(t, strings.ToLower(string(tasksRaw)), "verify idle sessions expire after 15 minutes")
+		assert.Contains(t, strings.ToLower(string(intentRaw)), "verify idle sessions expire after 15 minutes")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
 	})
 }
 
-func TestPresetCommandPrefersCanonicalIntentSectionsOverSourceDocument(t *testing.T) {
+func TestPresetCommandDoesNotOverwriteCanonicalIntentSections(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -165,10 +162,10 @@ func TestPresetCommandPrefersCanonicalIntentSectionsOverSourceDocument(t *testin
 		cmd.SetArgs([]string{"strict"})
 		require.NoError(t, cmd.Execute())
 
-		requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		intentRaw, err = os.ReadFile(intentPath)
 		require.NoError(t, err)
-		assert.Contains(t, string(requirementsRaw), "30 minutes")
-		assert.NotContains(t, string(requirementsRaw), "15 minutes")
+		assert.Contains(t, string(intentRaw), "## In Scope\n- expire idle sessions after 30 minutes")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
 	})
 }
 

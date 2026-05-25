@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/intake"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -470,39 +469,14 @@ func createDirectGovernedChange(
 		if err := state.SaveChange(root, change); err != nil {
 			return err
 		}
-		if change.WorkflowPreset.IsValid() {
-			// Preset confirmed (auto or explicit): scaffold the full bundle.
-			resolution := progression.ResolveChangeSchemaDiagnostics(change)
-			if len(resolution.Blockers) > 0 {
-				return fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
+		// S0_INTAKE owns intent clarification. Defer downstream governed
+		// artifacts until S1_PLAN/bundle so they can be seeded from the
+		// confirmed intent instead of from empty template placeholders.
+		if err := artifact.ScaffoldIntentForChangeWithContext(root, change, projectCtx); err != nil {
+			if change.WorkflowPreset.IsValid() {
+				return restoreNewPresetAfterScaffoldFailure(root, &change, err)
 			}
-			policy, err := governance.ResolvePresetPolicy(root, change)
-			if err != nil {
-				return err
-			}
-			// If --from-doc content is available, extract sections and pass
-			// them into scaffolding so seeded artifacts are enriched.
-			var scaffoldErr error
-			if fromDocContent != "" {
-				docs := artifact.DocSections{
-					Scope:       extractedFromDoc.Scope,
-					Constraints: extractedFromDoc.Constraints,
-					Acceptance:  extractedFromDoc.Acceptance,
-				}
-				scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, policy.EffectivePreset, projectCtx, docs, resolution.Schema)
-			} else {
-				scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, policy.EffectivePreset, projectCtx, resolution.Schema)
-			}
-			if scaffoldErr != nil {
-				return restoreNewPresetAfterScaffoldFailure(root, &change, scaffoldErr)
-			}
-		} else {
-			// Preset pending: scaffold only intent.md so S0_INTAKE has
-			// its primary artifact. The full bundle will be created when
-			// preset is confirmed via `slipway preset`.
-			if err := artifact.ScaffoldIntentForChangeWithContext(root, change, projectCtx); err != nil {
-				return err
-			}
+			return err
 		}
 
 		// Post-scaffold: apply --from-doc content to intent.md

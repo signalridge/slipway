@@ -141,7 +141,7 @@ func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T
 	})
 }
 
-func TestNewCommandFromDocSeedsRequirementsAndTasks(t *testing.T) {
+func TestNewCommandFromDocSeedsIntentAndDefersRequirementsAndTasks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -162,20 +162,18 @@ func TestNewCommandFromDocSeedsRequirementsAndTasks(t *testing.T) {
 
 		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
 
-		requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		intentRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
 		require.NoError(t, err)
-		assert.Contains(t, string(requirementsRaw), "15 minutes")
+		intent := string(intentRaw)
+		assert.Contains(t, intent, "## In Scope\n- expire idle sessions after 15 minutes")
+		assert.Contains(t, intent, "## Constraints\n- keep existing middleware contract")
 
-		tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
-		require.NoError(t, err)
-		assert.Contains(t, string(tasksRaw), "t-01")
-		assert.Contains(t, string(tasksRaw), "Pending verification objective")
-		assert.NotContains(t, string(tasksRaw), "Define implementation tasks")
-		assert.NotContains(t, string(tasksRaw), "Add tests for the implementation")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
 	})
 }
 
-func TestNewCommandFromDocAcceptanceOnlySeedsTasks(t *testing.T) {
+func TestNewCommandFromDocAcceptanceOnlySeedsIntentAndDefersTasks(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -194,10 +192,11 @@ func TestNewCommandFromDocAcceptanceOnlySeedsTasks(t *testing.T) {
 
 		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
 
-		tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
+		intentRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
 		require.NoError(t, err)
-		assert.Contains(t, string(tasksRaw), "15 minutes")
-		assert.Contains(t, string(tasksRaw), "middleware contract")
+		assert.Contains(t, string(intentRaw), "15 minutes")
+		assert.Contains(t, string(intentRaw), "middleware contract")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "tasks.md"))
 	})
 }
 
@@ -261,11 +260,11 @@ This draft mentions ## In Scope in prose before the actual section.
 
 		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
 
-		requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
+		intentRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
 		require.NoError(t, err)
-		assert.Contains(t, string(requirementsRaw), "15 minutes")
-		assert.Contains(t, strings.ToLower(string(requirementsRaw)), "preserve mfa enforcement")
-		assert.NotContains(t, string(requirementsRaw), "The system MUST session timeout.")
+		assert.Contains(t, string(intentRaw), "## In Scope\n- expire idle sessions after 15 minutes")
+		assert.Contains(t, strings.ToLower(string(intentRaw)), "preserve mfa enforcement")
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
 	})
 }
 
@@ -606,7 +605,7 @@ func TestNewJSONWithoutClassifierReportsSafeDegradeDefaults(t *testing.T) {
 	})
 }
 
-func TestPresetUsesPersistedProjectContextFromNewJSONInput(t *testing.T) {
+func TestPresetKeepsPersistedProjectContextFromNewJSONInput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -647,15 +646,14 @@ func TestPresetUsesPersistedProjectContextFromNewJSONInput(t *testing.T) {
 		presetCmd.SetArgs([]string{"light"})
 		require.NoError(t, presetCmd.Execute())
 
-		requirementsPath := filepath.Join(root, "artifacts", "changes", slug, "requirements.md")
-		raw, err := os.ReadFile(requirementsPath)
+		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		content := string(raw)
-		assert.Contains(t, content, "TypeScript, Next.js")
-		assert.Contains(t, content, "Prefer route handlers over bespoke API wrappers")
-		assert.Contains(t, content, "pnpm test")
-		assert.Contains(t, content, "pnpm build")
-		assert.NotContains(t, content, "go test ./...")
+		assert.Equal(t, "TypeScript, Next.js", change.ProjectContext.TechStack)
+		assert.Equal(t, "Prefer route handlers over bespoke API wrappers", change.ProjectContext.Conventions)
+		assert.Equal(t, "pnpm test", change.ProjectContext.TestCmd)
+		assert.Equal(t, "pnpm build", change.ProjectContext.BuildCmd)
+		assert.Equal(t, []string{"ts", "tsx"}, change.ProjectContext.Languages)
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "requirements.md"))
 	})
 }
 
@@ -933,7 +931,7 @@ func TestNewCommandWithoutPresetDoesNotAutoConfirmWhenMinPresetConfigured(t *tes
 	})
 }
 
-func TestNewCommandExplicitLightScaffoldsAssuranceWhenMinPresetUpgradesEffectivePreset(t *testing.T) {
+func TestNewCommandExplicitLightDefersAssuranceWhenMinPresetUpgradesEffectivePreset(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -949,8 +947,9 @@ func TestNewCommandExplicitLightScaffoldsAssuranceWhenMinPresetUpgradesEffective
 		require.NoError(t, cmd.Execute())
 
 		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
-		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "assurance.md"),
-			"scaffold must honor effective preset, not just confirmed light preset")
+		assert.FileExists(t, filepath.Join(root, "artifacts", "changes", slug, "intent.md"))
+		assert.NoFileExists(t, filepath.Join(root, "artifacts", "changes", slug, "assurance.md"),
+			"assurance.md must be deferred until S1_PLAN/bundle can scaffold from confirmed intent")
 	})
 }
 

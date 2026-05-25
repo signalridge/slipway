@@ -96,45 +96,48 @@ func makePresetCmd() *cobra.Command {
 					return err
 				}
 
-				// Scaffold the governed bundle on first confirmation or if a
-				// previous scaffold attempt failed (bundle incomplete). This
-				// ensures recovery: if scaffold failed after preset was saved,
-				// re-running `slipway preset` will retry the scaffold.
+				// During S0_INTAKE, preset confirmation must not materialize
+				// downstream artifacts from empty templates. Keep only intent.md;
+				// S1_PLAN/bundle scaffolds the full bundle from confirmed intent.
 				if needsScaffold {
-					resolution := progression.ResolveChangeSchemaDiagnostics(change)
-					if len(resolution.Blockers) > 0 {
-						err := fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
-						if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
-							return errors.Join(err, restoreErr)
-						}
-						return err
-					}
-					policy, err := governance.ResolvePresetPolicy(root, change)
-					if err != nil {
-						if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
-							return errors.Join(err, restoreErr)
-						}
-						return err
-					}
 					projectCtx := change.ProjectContext
 					if projectCtx.IsZero() {
 						// Fallback for legacy/pure-TTY changes that did not persist
 						// a caller-supplied or creation-time scaffold context.
 						projectCtx = progression.InferProjectContext(root)
 					}
-					docs, err := docSectionsFromIntent(root, change)
-					if err != nil {
-						err = fmt.Errorf("extracting doc sections from intent: %w", err)
-						if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
-							return errors.Join(err, restoreErr)
-						}
-						return err
-					}
 					var scaffoldErr error
-					if docs.Scope != "" || docs.Constraints != "" || docs.Acceptance != "" {
-						scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, policy.EffectivePreset, projectCtx, docs, resolution.Schema)
+					if change.CurrentState == model.StateS0Intake {
+						scaffoldErr = artifact.ScaffoldIntentForChangeWithContext(root, change, projectCtx)
 					} else {
-						scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, policy.EffectivePreset, projectCtx, resolution.Schema)
+						resolution := progression.ResolveChangeSchemaDiagnostics(change)
+						if len(resolution.Blockers) > 0 {
+							err := fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
+							if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
+								return errors.Join(err, restoreErr)
+							}
+							return err
+						}
+						policy, err := governance.ResolvePresetPolicy(root, change)
+						if err != nil {
+							if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
+								return errors.Join(err, restoreErr)
+							}
+							return err
+						}
+						docs, err := docSectionsFromIntent(root, change)
+						if err != nil {
+							err = fmt.Errorf("extracting doc sections from intent: %w", err)
+							if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
+								return errors.Join(err, restoreErr)
+							}
+							return err
+						}
+						if docs.Scope != "" || docs.Constraints != "" || docs.Acceptance != "" {
+							scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, policy.EffectivePreset, projectCtx, docs, resolution.Schema)
+						} else {
+							scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, policy.EffectivePreset, projectCtx, resolution.Schema)
+						}
 					}
 					if scaffoldErr != nil {
 						if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
