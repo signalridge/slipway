@@ -1,0 +1,11 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T13:30:09Z"
+run_version: 0
+references:
+  - "user_confirmation:2026-05-25 discussion clarified that catalog should be flattened to workflow references, not preserved as an agent-facing route layer"
+notes: |
+  Scope is confirmed: delete the generated catalog entrypoint and catalog
+  route/support tree, preserve a workflow-owned skill index under
+  slipway/references, and keep executable procedure authority in real
+  slipway-<name>/SKILL.md directories.

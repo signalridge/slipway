@@ -1,0 +1,17 @@
+{
+  "task_id": "t-01",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "internal/engine/capability/export.go",
+    "internal/toolgen/toolgen.go"
+  ],
+  "target_files": [
+    "internal/engine/capability/export.go",
+    "internal/toolgen/toolgen.go"
+  ],
+  "evidence_ref": "artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml",
+  "blockers": [],
+  "captured_at": "2026-05-25T14:04:29Z"
+}

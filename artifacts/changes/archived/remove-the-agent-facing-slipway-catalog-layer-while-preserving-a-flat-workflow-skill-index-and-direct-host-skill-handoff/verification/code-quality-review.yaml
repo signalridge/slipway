@@ -1,0 +1,36 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:06:57Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - "independent-review=pass"
+  - "test:go test -timeout=3m ./cmd"
+  - "test:go test -timeout=3m ./internal/engine/capability"
+  - "test:go test -timeout=3m ./internal/toolgen"
+notes: |
+  Gaps (code_to_artifact): none.
+  Gaps (artifact_to_code): none.
+
+  Independent review verdict: pass.
+
+  Findings: none blocking.
+
+  Quality review:
+  - Generator changes stay inside `internal/toolgen` and use existing path,
+    deterministic-write, refresh-cleanup, registry-filtering, and support-file
+    emission patterns.
+  - Capability export changes preserve deterministic ordering and convert the
+    outward document from catalog routing to an informational direct-host skill
+    index.
+  - Runtime hint changes filter non-exported skills before emitting technique
+    hints, so default handoff no longer advertises non-loadable catalog paths.
+  - Tests cover the removed top-level catalog manifest, removed workflow
+    catalog route/support tree, direct host skill paths in the index, workflow
+    wording, hint labels, refresh cleanup, and generated inventory shape.
+
+  Safety and contract review:
+  - No auth, credential, PII, financial, migration, irreversible-operation, or
+    external network behavior is changed.
+  - The external agent-facing generated skill contract changes intentionally,
+    and regression tests now protect the new skill-index/direct-handoff layout.

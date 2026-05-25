@@ -19,7 +19,7 @@ hydrate_references:
     reason: "SEV1-4 triage criteria and escalation thresholds"
 bindings:
   - type: export-only
-    target: using-slipway-catalog
+    target: skill-index
     attachment: report-schema
 ---
 

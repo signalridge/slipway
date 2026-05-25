@@ -1,0 +1,18 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T13:32:32Z"
+run_version: 0
+references:
+  - "research:artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/research.md"
+  - "architecture:artifacts/codebase/ARCHITECTURE.md"
+  - "testing:artifacts/codebase/TESTING.md"
+  - "concerns:artifacts/codebase/CONCERNS.md"
+  - "source:internal/toolgen/toolgen.go"
+  - "source:internal/engine/capability/export.go"
+  - "source:internal/tmpl/templates/skills/workflow/SKILL.md.tmpl"
+  - "source:cmd/next_skill_view.go"
+notes: |
+  Research covered architecture, patterns, risks, test strategy, and
+  alternatives. The selected direction removes the generated agent-facing
+  catalog layer, preserves a workflow-owned skill index under references, and
+  routes executable authority directly to exported host skill SKILL.md files.

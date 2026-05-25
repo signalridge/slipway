@@ -5,61 +5,64 @@ import (
 	"testing"
 )
 
-func TestBuildCatalogManifest_NilRegistry(t *testing.T) {
-	if got := BuildCatalogManifest(nil); got != "" {
-		t.Fatalf("expected empty manifest for nil registry, got %q", got)
+func TestBuildSkillIndex_NilRegistry(t *testing.T) {
+	if got := BuildSkillIndex(nil); got != "" {
+		t.Fatalf("expected empty index for nil registry, got %q", got)
 	}
 }
 
-func TestBuildCatalogManifest_Deterministic(t *testing.T) {
+func TestBuildSkillIndex_Deterministic(t *testing.T) {
 	reg := DefaultRegistry()
-	a := BuildCatalogManifest(reg)
-	b := BuildCatalogManifest(reg)
+	a := BuildSkillIndex(reg)
+	b := BuildSkillIndex(reg)
 	if a != b {
-		t.Fatal("manifest is non-deterministic across calls")
+		t.Fatal("skill index is non-deterministic across calls")
 	}
 }
 
-func TestBuildCatalogManifest_IncludesEverySkill(t *testing.T) {
+func TestBuildSkillIndex_IncludesEverySkillInRegistry(t *testing.T) {
 	reg := DefaultRegistry()
-	manifest := BuildCatalogManifest(reg)
+	index := BuildSkillIndex(reg)
 	for _, id := range reg.IDs() {
 		publicName := adapterSkillPublicName(id)
-		if !strings.Contains(manifest, "`"+publicName+"`") {
-			t.Errorf("manifest missing public skill %q", publicName)
+		if !strings.Contains(index, "`"+publicName+"`") {
+			t.Errorf("skill index missing public skill %q", publicName)
 		}
 	}
 }
 
-func TestBuildCatalogManifest_RendersShortDispatcherIndex(t *testing.T) {
+func TestBuildSkillIndex_RendersShortInformationalIndex(t *testing.T) {
 	reg := DefaultRegistry()
-	manifest := BuildCatalogManifest(reg)
-	if len([]byte(manifest)) > 12000 {
-		t.Fatalf("catalog manifest too large: got %d bytes, want <= 12000", len([]byte(manifest)))
+	index := BuildSkillIndex(reg)
+	if len([]byte(index)) > 12000 {
+		t.Fatalf("skill index too large: got %d bytes, want <= 12000", len([]byte(index)))
 	}
-	if !strings.Contains(manifest, "# Slipway Catalog") {
-		t.Fatal("manifest missing short catalog header")
+	if !strings.Contains(index, "# Slipway Skill Index") {
+		t.Fatal("skill index missing header")
 	}
-	if !strings.Contains(manifest, "Use only when no governed host already owns the step.") {
-		t.Fatal("manifest missing usage boundary")
+	if !strings.Contains(index, "Informational index only.") {
+		t.Fatal("skill index missing usage boundary")
 	}
-	if !strings.Contains(manifest, "| Skill | Catalog artifact | Tier | Bindings | Evidence | Hydrate refs | Use when |") {
-		t.Fatal("manifest missing dispatcher table")
+	if !strings.Contains(index, "| Skill | Host skill path | Tier | Bindings | Evidence | Hydrate refs | Use when |") {
+		t.Fatal("skill index missing table")
 	}
-	if strings.Contains(manifest, "## Domain:") {
-		t.Fatal("manifest should not expand domain sections")
+	if strings.Contains(index, "## Domain:") {
+		t.Fatal("skill index should not expand domain sections")
 	}
-	if !strings.Contains(manifest, "references/catalog/") {
-		t.Fatal("manifest missing catalog artifact paths")
+	if strings.Contains(index, "references/catalog/") {
+		t.Fatal("skill index must not expose catalog artifact paths")
+	}
+	if !strings.Contains(index, "slipway-security-review/SKILL.md") {
+		t.Fatal("skill index missing direct host skill path")
 	}
 }
 
-func TestBuildCatalogManifest_UsesCanonicalPublicSkillLabels(t *testing.T) {
+func TestBuildSkillIndex_UsesCanonicalPublicSkillLabels(t *testing.T) {
 	reg := DefaultRegistry()
-	manifest := BuildCatalogManifest(reg)
+	index := BuildSkillIndex(reg)
 	for _, sk := range reg.All() {
 		publicName := adapterSkillPublicName(sk.ID)
-		if !strings.Contains(manifest, "| `"+publicName+"` |") {
+		if !strings.Contains(index, "| `"+publicName+"` |") {
 			t.Errorf("dispatcher index missing public skill label %q", publicName)
 		}
 	}

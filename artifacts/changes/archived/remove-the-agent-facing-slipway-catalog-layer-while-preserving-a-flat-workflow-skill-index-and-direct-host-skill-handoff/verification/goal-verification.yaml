@@ -1,0 +1,68 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:10:27Z"
+run_version: 1
+references:
+  - "high_risk_check:external_api_contracts.safety_baseline=pass"
+  - "fresh:command=go test -timeout=20m ./... -count=1"
+  - "fresh:command=go build ./..."
+  - "fresh:command=git diff --check"
+  - "fresh:command=rg retired catalog paths over generated contract files"
+  - "fresh:command=rg stub/placeholder scans over changed target files"
+  - "artifact:requirements.md"
+  - "artifact:verification/execution-summary.yaml"
+  - "artifact:verification/spec-compliance-review.yaml"
+  - "artifact:verification/code-quality-review.yaml"
+notes: |
+  Criteria:
+    AC-1: Generated adapter output must not include top-level `using-slipway-catalog.md`.
+      Verdict: pass.
+      Exists: `retiredCatalogManifestFileName` is only used as a refresh-cleanup target.
+      Substantive: generation now writes `SkillIndexPath(cfg)` under the workflow skill instead of `CatalogManifestPath(cfg)`.
+      Wired: `internal/toolgen/toolgen_test.go` asserts no retired top-level manifest remains after refresh; `go test -timeout=20m ./... -count=1` passed.
+
+    AC-2: Generated adapter output must not include `slipway/references/catalog/**`.
+      Verdict: pass.
+      Exists: route-card/support emission functions for workflow catalog artifacts were removed.
+      Substantive: non-exported registry skills no longer create host files or workflow catalog route/support files.
+      Wired: toolgen tests assert no catalog route files/support roots and the generated Codex inventory contains `slipway/references/skill-index.md` without retired catalog paths.
+
+    AC-3: Generated workflow references must preserve `slipway/references/skill-index.md`.
+      Verdict: pass.
+      Exists: `SkillIndexPath(cfg)` returns the workflow references path.
+      Substantive: `BuildSkillIndexWithPaths` renders a deterministic informational index with direct host skill paths.
+      Wired: generation writes the index through `writeDeterministic`, and tests assert the file/header/table/direct paths.
+
+    AC-4: Workflow handoff must route from `next_skill.name` to real host skill paths, not catalog artifact paths.
+      Verdict: pass.
+      Exists: workflow template now names `.codex/skills/slipway-<name>/SKILL.md`.
+      Substantive: `cmd/next_skill_view.go` filters non-exported support hints and emits only `skill:<id>` labels.
+      Wired: `cmd/next_skill_capability_hints_test.go` and full Go tests pass.
+
+    AC-5: Procedure/checklist/overlay/script support must remain under real exported skills only.
+      Verdict: pass.
+      Exists: exported skills still call `emitSkillSupportFiles`; non-exported support script tests materialize source fixtures directly for test execution.
+      Substantive: no workflow catalog support-copy path remains in generation.
+      Wired: script behavior tests pass without regenerated workflow catalog support paths.
+
+    AC-6: Refresh must remove stale retired catalog artifacts.
+      Verdict: pass.
+      Exists: refresh cleanup removes the retired top-level manifest and rebuilds the workflow skill directory.
+      Substantive: regression coverage now seeds both retired top-level and retired workflow catalog route/support files.
+      Wired: `go test -timeout=3m ./internal/toolgen` and full suite passed.
+
+    AC-7: External generated-skill contract change must be protected by tests and build verification.
+      Verdict: pass.
+      Exists: capability, toolgen, next-skill hint, and golden inventory checks were updated.
+      Substantive: tests fail on old catalog paths and assert the new informational skill-index/direct-handoff contract.
+      Wired: fresh `go test -timeout=20m ./... -count=1`, `go build ./...`, and `git diff --check` passed.
+
+  Fresh command output:
+  - `go test -timeout=20m ./... -count=1`: passed; slowest package `cmd` completed in 130.789s.
+  - `go build ./...`: passed.
+  - `git diff --check`: passed with no whitespace errors.
+  - retired-path scan over generated contract files: no emitted `slipway/references/catalog`, `references/catalog/`, or `catalog:` labels remain; the only `using-slipway-catalog.md` hit is the cleanup constant.
+  - stub scan: no empty-block hits; TODO hits are expected fixture assertions in `internal/toolgen/toolgen_test.go`; zero-value return hits are existing guard/fallback paths, not placeholder implementation.
+
+  Guardrail baseline:
+  - `external_api_contracts.safety_baseline=pass`: the external agent-facing generated contract is intentionally changed and protected by focused and full regression tests; no runtime lifecycle state, command syntax, or JSON field contract changed.

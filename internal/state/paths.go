@@ -52,7 +52,7 @@ func ResolveChangePaths(root string, change model.Change) (ResolvedChangePaths, 
 		GovernanceEvidenceDir: filepath.Join(evidenceDir, "governance"),
 		RunEvidenceDir:        filepath.Join(evidenceDir, "runs"),
 		GovernedBundleDir:     filepath.Join(workspaceRoot, "artifacts", "changes", slug),
-		GovernedBundleArchive: filepath.Join(projectRoot, "artifacts", "changes", "archived", slug),
+		GovernedBundleArchive: filepath.Join(workspaceRoot, "artifacts", "changes", "archived", slug),
 	}, nil
 }
 

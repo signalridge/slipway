@@ -24,7 +24,11 @@ var removeDirAll = os.RemoveAll
 // Authority: bundle archive (artifacts/changes/archived/{slug}/change.yaml) is
 // the single authority.
 func LoadArchivedChange(root, slug string) (model.Change, error) {
-	return loadChangeCandidate(BundleArchivedChangeFilePath(root, slug))
+	paths, err := candidateArchivedBundlePaths(root, slug)
+	if err != nil {
+		return model.Change{}, err
+	}
+	return loadChangeFromCandidates(root, paths)
 }
 
 // ValidateDoneArchivePreconditions checks if a change can be archived as done.
@@ -105,7 +109,8 @@ func ArchiveChange(
 	if err := moveDirIfExists(srcArtifacts, paths.GovernedBundleArchive); err != nil {
 		return model.Change{}, err
 	}
-	if err := fsutil.WriteFileAtomic(BundleArchivedChangeFilePath(root, change.Slug), b, 0o644); err != nil {
+	archivedChangePath := filepath.Join(paths.GovernedBundleArchive, "change.yaml")
+	if err := fsutil.WriteFileAtomic(archivedChangePath, b, 0o644); err != nil {
 		if rollbackErr := moveDirIfExists(paths.GovernedBundleArchive, srcArtifacts); rollbackErr != nil {
 			return model.Change{}, wrapRollbackError(err, rollbackErr)
 		}
@@ -114,7 +119,7 @@ func ArchiveChange(
 		}
 		return model.Change{}, err
 	}
-	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, change.Slug); err != nil {
+	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, change.Slug, paths.GovernedBundleArchive); err != nil {
 		if rollbackErr := moveDirIfExists(paths.GovernedBundleArchive, srcArtifacts); rollbackErr != nil {
 			return model.Change{}, wrapRollbackError(err, rollbackErr)
 		}
@@ -296,7 +301,11 @@ func scrubChangeRuntimeEvidenceRefs(change *model.Change) {
 // Archived execution summaries must not retain machine-local runtime paths, but
 // archive-safe relative refs or inline text should survive.
 func scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug string) error {
-	path := filepath.Join(archivedVerificationDir(root, slug), ExecutionSummaryFileName)
+	return scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, filepath.Join(ArchivedBundlesDir(root), slug))
+}
+
+func scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir string) error {
+	path := filepath.Join(archiveDir, "verification", ExecutionSummaryFileName)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

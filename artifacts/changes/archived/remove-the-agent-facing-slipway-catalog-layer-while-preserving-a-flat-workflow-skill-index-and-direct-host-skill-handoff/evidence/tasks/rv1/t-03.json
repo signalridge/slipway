@@ -1,0 +1,25 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "cmd/next_skill_view.go",
+    "internal/engine/capability/registry_b3.go",
+    "internal/engine/capability/registry_b5.go",
+    "internal/tmpl/templates/skills/incident-response/SKILL.md",
+    "internal/tmpl/templates/skills/threat-modeling/SKILL.md",
+    "internal/tmpl/templates/skills/workflow/SKILL.md.tmpl"
+  ],
+  "target_files": [
+    "cmd/next_skill_view.go",
+    "internal/engine/capability/registry_b3.go",
+    "internal/engine/capability/registry_b5.go",
+    "internal/tmpl/templates/skills/incident-response/SKILL.md",
+    "internal/tmpl/templates/skills/threat-modeling/SKILL.md",
+    "internal/tmpl/templates/skills/workflow/SKILL.md.tmpl"
+  ],
+  "evidence_ref": "artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml",
+  "blockers": [],
+  "captured_at": "2026-05-25T14:04:29Z"
+}

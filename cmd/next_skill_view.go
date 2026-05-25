@@ -321,7 +321,7 @@ func buildRequiredSkillEvidence(
 }
 
 // appendCatalogHints runs the capability resolver against the current host
-// and returns technique-hint entries derived from its support attachments.
+// and returns technique-hint entries derived from exported support attachments.
 // The resolver is read-only with respect to kernel progression.
 func appendCatalogHints(
 	existing []techniqueHint,
@@ -342,6 +342,9 @@ func appendCatalogHints(
 	reg := capability.DefaultRegistry()
 	resolution := capability.Resolve(reg, sig)
 	for _, support := range resolution.Supports {
+		if !toolgen.ShouldExportAsHostSkill(support.SkillID) {
+			continue
+		}
 		existing = append(existing, techniqueHint{
 			Name:              supportHintName(support.SkillID),
 			Reason:            fmt.Sprintf("[%s] %s", support.Kind, support.Reason),
@@ -352,10 +355,7 @@ func appendCatalogHints(
 }
 
 func supportHintName(skillID string) string {
-	if toolgen.ShouldExportAsHostSkill(skillID) {
-		return "skill:" + skillID
-	}
-	return "catalog:" + toolgen.CatalogArtifactHintPath(skillID)
+	return "skill:" + skillID
 }
 
 func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill string, governedChange *model.Change) []techniqueHint {
@@ -364,6 +364,9 @@ func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill str
 	}
 	reg := capability.DefaultRegistry()
 	addHint := func(skillID, reason string) {
+		if !toolgen.ShouldExportAsHostSkill(skillID) {
+			return
+		}
 		existing = append(existing, techniqueHint{
 			Name:              supportHintName(skillID),
 			Reason:            reason,

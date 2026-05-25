@@ -1,0 +1,27 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:04:29Z"
+run_version: 1
+references:
+  - "diff:internal/toolgen/toolgen.go"
+  - "diff:internal/engine/capability/export.go"
+  - "diff:internal/tmpl/templates/skills/workflow/SKILL.md.tmpl"
+  - "diff:cmd/next_skill_view.go"
+  - "diff:internal/toolgen/toolgen_test.go"
+  - "diff:internal/engine/capability/export_test.go"
+  - "diff:cmd/next_skill_capability_hints_test.go"
+  - "golden:internal/toolgen/testdata/skill_tree_inventory.codex.golden"
+  - "test:go test -timeout=3m ./internal/toolgen"
+  - "test:go test -timeout=3m ./cmd"
+  - "test:go test -timeout=20m ./... -count=1"
+  - "build:go build ./..."
+notes: |
+  Executed all planned waves. The generator now writes
+  slipway/references/skill-index.md instead of a top-level
+  using-slipway-catalog.md file, no longer emits slipway/references/catalog
+  route cards or support copies, removes the retired top-level manifest during
+  refresh, and routes hints/workflow guidance through real exported host skill
+  paths. Tests and golden inventory were updated to reject the retired catalog
+  layout, including explicit refresh coverage for retired workflow catalog
+  route/support files, and to preserve script behavior tests without
+  reintroducing generated catalog support paths.

@@ -14,7 +14,7 @@ IRON LAW: THIS SKILL ROUTES INTO THE CLI; IT DOES NOT REPLACE THE CLI
 ## Purpose
 Use `{{.PublicName}}` as the single exported entry skill for Slipway. It tells
 an AI how to enter governed work, how to continue an active change, and when to
-hand off to a more specific command surface, governed host, or catalog skill.
+hand off to a more specific command surface or governed host skill.
 
 Slipway is a governance CLI for AI-assisted software delivery. A governed
 change is the unit of work. `done-ready` means the change has satisfied the
@@ -43,7 +43,7 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 ## Runtime Authority Boundaries
 - `ResolveNextSkill` selects governed host skills. This skill does not guess or override that selection.
 - `commandRegistry` owns command descriptions, arguments, prerequisites, and surface metadata.
-- `using-slipway-catalog.md` is outbound only. It helps the AI triage catalog skills; the kernel does not read it back.
+- `references/skill-index.md` is informational only. It helps inspect exported host skills; the kernel does not read it back.
 - Existing CLI commands remain the only execution surface. This skill never reimplements transitions, gates, or command semantics.
 
 ## Handoff After `slipway next --json`
@@ -69,14 +69,13 @@ CLI-only diagnostics such as `learn`, `stats`, `health`, and `codebase-map` do n
 separate command prompt surfaces; use the generated workflow reference file for
 their detailed arguments and prerequisites.
 
-## Catalog and Host Handoff
-- when catalog triage is needed, read `{{.CatalogManifestPath}}`
-- use the catalog table as the dispatcher, then follow the listed catalog artifact path
-- use the catalog when no governed host already owns the next step and a reusable posture, procedure, checklist, or tool recipe would help
-- once a specific catalog skill is clearly the right tool, leave this entry skill and load the host skill path or catalog artifact path listed in the manifest
+## Skill Index and Host Handoff
+- when exported skill navigation is needed, read `{{.SkillIndexPath}}`
+- use the index as reference only; it is not progression authority
 - when governed execution is needed, read the host returned by `slipway next --json`
+- derive the host skill path from `next_skill.name` using `.codex/skills/slipway-<name>/SKILL.md` or the equivalent local tool convention
 - use technique skills as overlays for posture and procedure, not as progression authorities
-- once a more specific host, command surface, or catalog skill clearly owns the task, leave this entry skill and follow that more specific surface
+- once a more specific host, command surface, or technique skill clearly owns the task, leave this entry skill and follow that more specific surface
 
 ## Hard Rules
 - do not bypass lifecycle gates

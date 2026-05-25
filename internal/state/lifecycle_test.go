@@ -80,14 +80,53 @@ func TestArchiveChangeCancelledUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug, "change.yaml"))
+	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "change.yaml"))
 	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
+	require.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug))
 	require.NoError(t, err)
-	expectedArchivePath, normErr := NormalizePath(filepath.Join(root, "artifacts", "changes", "archived", slug, "intent.md"))
+	expectedArchivePath, normErr := NormalizePath(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "intent.md"))
 	require.NoError(t, normErr)
 	assert.Equal(t, expectedArchivePath, archived.Artifacts["intent"].Path)
+}
+
+func TestLoadArchivedChangeFindsBoundWorktreeArchive(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeRepoLayout(t)
+	slug := "bound-worktree-done"
+	worktreeRoot := addGitWorktree(t, root, "bound-worktree-done")
+
+	change := model.NewChange(slug)
+	change.WorktreePath = worktreeRoot
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateDone
+	bundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", slug)
+	change.Artifacts = map[string]model.ArtifactState{
+		"intent": {ID: "intent", Path: filepath.Join(bundleDir, "intent.md"), State: model.ArtifactLifecycleDraft},
+	}
+	require.NoError(t, SaveChange(root, change))
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n"), 0o644))
+
+	archived, err := ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+	assert.Equal(t, model.ChangeStatusDone, archived.Status)
+
+	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug, "change.yaml"))
+	require.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "change.yaml"))
+	require.NoError(t, err)
+
+	loaded, err := LoadArchivedChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.ChangeStatusDone, loaded.Status)
+	assert.Equal(t, worktreeRoot, loaded.WorktreePath)
 }
 
 func TestArchiveChangeCancelledAllowsUnboundL3BeforeWorktreeBinding(t *testing.T) {
@@ -272,9 +311,9 @@ func TestArchiveChangeFallsBackWhenBundleMoveCrossesFilesystems(t *testing.T) {
 	_, err := ArchiveChange(root, change, model.ChangeStatusCancelled)
 	require.NoError(t, err)
 
-	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug, "verification", "plan-audit.yaml"))
+	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "verification", "plan-audit.yaml"))
 	require.NoError(t, err)
-	target, err := os.Readlink(filepath.Join(root, "artifacts", "changes", "archived", slug, "verification", "latest.yaml"))
+	target, err := os.Readlink(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "verification", "latest.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, "plan-audit.yaml", target)
 	_, err = os.Stat(bundleDir)
@@ -318,7 +357,7 @@ func TestArchiveChangeCrossFilesystemFailureDoesNotLeaveArchivedCopyVisible(t *t
 	_, err = ArchiveChange(root, change, model.ChangeStatusCancelled)
 	require.Error(t, err)
 
-	_, statErr := os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
+	_, statErr := os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug))
 	assert.ErrorIs(t, statErr, os.ErrNotExist, "failed cross-filesystem archive must not leave a visible archived copy behind")
 	_, statErr = os.Stat(bundleDir)
 	require.NoError(t, statErr, "source bundle should remain in place when archive-forward fails")

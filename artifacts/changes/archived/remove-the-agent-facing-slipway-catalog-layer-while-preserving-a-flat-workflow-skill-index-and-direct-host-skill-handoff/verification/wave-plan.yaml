@@ -1,0 +1,55 @@
+version: 1
+generated_at: 2026-05-25T13:35:14.155675748Z
+tasks_plan_hash: a3ae13eab11d7a62458ce20556a5c27dcb54299054125cb1dcdf02b6dcea4abd
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Replace the generated catalog manifest with a workflow-owned skill index.
+          target_files:
+            - internal/engine/capability/export.go
+            - internal/toolgen/toolgen.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: Remove agent-facing catalog route-card/support emission and stale cleanup gaps.
+          depends_on:
+            - t-01
+          target_files:
+            - internal/toolgen/toolgen.go
+          task_kind: code
+        - task_id: t-03
+          objective: Update workflow skill wording and next-skill hint labels for direct host handoff.
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/next_skill_view.go
+            - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Update regression tests and golden inventory for the new generated layout.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - cmd/next_skill_capability_hints_test.go
+            - internal/engine/capability/export_test.go
+            - internal/toolgen/testdata/skill_tree_inventory.codex.golden
+            - internal/toolgen/toolgen_test.go
+          task_kind: code
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: Verify generated contract and Go suite.
+          depends_on:
+            - t-04
+          target_files:
+            - cmd
+            - internal/engine/capability
+            - internal/toolgen
+          task_kind: verification

@@ -1,0 +1,75 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-25T14:04:29Z
+overall_verdict: pass
+tasks_plan_hash: 35569d5fa2534aae68182773e0e94e3e247c18297485d47341dc4dedd1198787
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/capability/export.go
+        - internal/toolgen/toolgen.go
+      target_files:
+        - internal/engine/capability/export.go
+        - internal/toolgen/toolgen.go
+      evidence_ref: artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T14:04:29Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/toolgen/toolgen.go
+      target_files:
+        - internal/toolgen/toolgen.go
+      evidence_ref: artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T14:04:29Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/next_skill_view.go
+        - internal/engine/capability/registry_b3.go
+        - internal/engine/capability/registry_b5.go
+        - internal/tmpl/templates/skills/incident-response/SKILL.md
+        - internal/tmpl/templates/skills/threat-modeling/SKILL.md
+        - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+      target_files:
+        - cmd/next_skill_view.go
+        - internal/engine/capability/registry_b3.go
+        - internal/engine/capability/registry_b5.go
+        - internal/tmpl/templates/skills/incident-response/SKILL.md
+        - internal/tmpl/templates/skills/threat-modeling/SKILL.md
+        - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+      evidence_ref: artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T14:04:29Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/next_skill_capability_hints_test.go
+        - internal/engine/capability/export_test.go
+        - internal/toolgen/testdata/skill_tree_inventory.codex.golden
+        - internal/toolgen/toolgen_test.go
+      target_files:
+        - cmd/next_skill_capability_hints_test.go
+        - internal/engine/capability/export_test.go
+        - internal/toolgen/testdata/skill_tree_inventory.codex.golden
+        - internal/toolgen/toolgen_test.go
+      evidence_ref: artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T14:04:29Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - cmd
+        - internal/engine/capability
+        - internal/toolgen
+      evidence_ref: artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T14:04:29Z

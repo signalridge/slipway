@@ -172,6 +172,17 @@ func bundleCandidatesForRoots(workspaceRoots []string, slug string) []bundleCand
 	return paths
 }
 
+func archivedBundleCandidatesForRoots(workspaceRoots []string, slug string) []bundleCandidate {
+	paths := make([]bundleCandidate, 0, len(workspaceRoots))
+	for _, workspaceRoot := range workspaceRoots {
+		paths = append(paths, bundleCandidate{
+			WorkspaceRoot: workspaceRoot,
+			Path:          BundleArchivedChangeFilePath(workspaceRoot, slug),
+		})
+	}
+	return paths
+}
+
 func candidateBundlePaths(root, slug string) ([]bundleCandidate, error) {
 	// Priority is deterministic: the caller's resolved scope/workspace first,
 	// then sibling worktree scope roots. Visibility checks still reject stale
@@ -181,6 +192,14 @@ func candidateBundlePaths(root, slug string) ([]bundleCandidate, error) {
 		return nil, err
 	}
 	return bundleCandidatesForRoots(roots, slug), nil
+}
+
+func candidateArchivedBundlePaths(root, slug string) ([]bundleCandidate, error) {
+	roots, err := candidateWorkspaceRoots(root)
+	if err != nil {
+		return nil, err
+	}
+	return archivedBundleCandidatesForRoots(roots, slug), nil
 }
 
 type activeChangeDiscovery struct {

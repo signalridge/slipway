@@ -16,10 +16,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// catalogManifestFileName is the outbound `using-slipway-catalog.md`
-// document that describes the Go-owned capability registry to external
-// agents. It sits at the top level of `<SkillsDir>/`.
-const catalogManifestFileName = "using-slipway-catalog.md"
+// skillIndexFileName is the workflow-owned informational index that describes
+// exported host skills to external agents.
+const skillIndexFileName = "skill-index.md"
+
+const retiredCatalogManifestFileName = "using-slipway-catalog.md"
 
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
 type ToolConfig struct {
@@ -322,13 +323,13 @@ var workflowSupportingCommandIDs = []string{
 var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "codebase-map"}
 
 type workflowSkillData struct {
-	ToolID              string
-	PublicName          string
-	CatalogManifestPath string
-	CommandsDir         string
-	LifecycleCommands   []commandEntry
-	SupportingCommands  []commandEntry
-	DiagnosticCommands  []commandEntry
+	ToolID             string
+	PublicName         string
+	SkillIndexPath     string
+	CommandsDir        string
+	LifecycleCommands  []commandEntry
+	SupportingCommands []commandEntry
+	DiagnosticCommands []commandEntry
 }
 
 type commandEntry struct {
@@ -387,20 +388,6 @@ func ShouldExportAsHostSkill(id string) bool {
 	return shouldExportAsHostSkill(id)
 }
 
-func shouldEmitCatalogArtifact(id string) bool {
-	_, ok := capability.DefaultRegistry().Lookup(strings.TrimSpace(id))
-	return ok
-}
-
-func CatalogArtifactHintPath(skillID string) string {
-	return path.Join(
-		adapterSkillName(workflowSkillID),
-		"references",
-		"catalog",
-		strings.TrimSpace(skillID)+".md",
-	)
-}
-
 // GovernanceSkillNames lists the static exported governance surfaces (.md).
 var GovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderStatic)
 
@@ -426,6 +413,19 @@ var TemplatedGovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceR
 var catalogSkillIDs = func() []string {
 	return capability.DefaultRegistry().IDs()
 }()
+
+func exportedCapabilityRegistry(reg *capability.Registry) (*capability.Registry, error) {
+	if reg == nil {
+		return capability.NewRegistry()
+	}
+	skills := make([]capability.Skill, 0, reg.Len())
+	for _, sk := range reg.All() {
+		if shouldExportAsHostSkill(sk.ID) {
+			skills = append(skills, sk)
+		}
+	}
+	return capability.NewRegistry(skills...)
+}
 
 // commandDescriptions returns the description for a command from the registry.
 var commandDescriptions = func() map[string]string {
@@ -536,13 +536,13 @@ func buildWorkflowSkillData(cfg ToolConfig) (workflowSkillData, error) {
 	}
 
 	return workflowSkillData{
-		ToolID:              cfg.ID,
-		PublicName:          adapterSkillName("workflow"),
-		CatalogManifestPath: filepath.ToSlash(CatalogManifestPath(cfg)),
-		CommandsDir:         filepath.ToSlash(cfg.CommandsDir),
-		LifecycleCommands:   lifecycle,
-		SupportingCommands:  supporting,
-		DiagnosticCommands:  diagnostics,
+		ToolID:             cfg.ID,
+		PublicName:         adapterSkillName("workflow"),
+		SkillIndexPath:     filepath.ToSlash(SkillIndexPath(cfg)),
+		CommandsDir:        filepath.ToSlash(cfg.CommandsDir),
+		LifecycleCommands:  lifecycle,
+		SupportingCommands: supporting,
+		DiagnosticCommands: diagnostics,
 	}, nil
 }
 
@@ -582,7 +582,7 @@ func HasWorkspaceLocalSurfaces(root string, cfg ToolConfig) bool {
 	if entries, err := os.ReadDir(skillsRoot); err == nil {
 		for _, entry := range entries {
 			name := entry.Name()
-			if strings.HasPrefix(name, "slipway-") || name == catalogManifestFileName {
+			if strings.HasPrefix(name, "slipway-") || name == retiredCatalogManifestFileName {
 				return true
 			}
 		}
@@ -710,30 +710,14 @@ func SkillPath(cfg ToolConfig, skillName string) string {
 	return filepath.Join(cfg.SkillsDir, exportedSkillDirName(skillName), "SKILL.md")
 }
 
-// CatalogManifestPath returns the relative path to the generated
-// `using-slipway-catalog.md` outbound manifest for the given tool config.
-// External agents read this file to triage catalog skills by description.
-func CatalogManifestPath(cfg ToolConfig) string {
-	return filepath.Join(cfg.SkillsDir, catalogManifestFileName)
-}
-
-func CatalogArtifactPath(cfg ToolConfig, skillID string) string {
+// SkillIndexPath returns the relative path to the generated workflow-owned
+// informational skill index for the given tool config.
+func SkillIndexPath(cfg ToolConfig) string {
 	return filepath.Join(
 		cfg.SkillsDir,
 		adapterSkillName(workflowSkillID),
 		"references",
-		"catalog",
-		strings.TrimSpace(skillID)+".md",
-	)
-}
-
-func catalogSupportRootPath(cfg ToolConfig, skillID string) string {
-	return filepath.Join(
-		cfg.SkillsDir,
-		adapterSkillName(workflowSkillID),
-		"references",
-		"catalog",
-		strings.TrimSpace(skillID),
+		skillIndexFileName,
 	)
 }
 
@@ -862,10 +846,6 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		}
 	}
 
-	if err := emitCatalogArtifacts(root, cfg, reg, refresh); err != nil {
-		return err
-	}
-
 	// Technique skills (static content)
 	for _, name := range techniqueNames {
 		if !shouldExportAsHostSkill(name) {
@@ -945,14 +925,18 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		}
 	}
 
-	// Outbound catalog manifest (read by external agents; not consumed by
-	// the Slipway kernel). Regenerated deterministically from the Go-owned
-	// capability registry so every adapter sees the same triage index.
-	manifest := capability.BuildCatalogManifestWithPaths(reg, func(id string) string {
-		return filepath.ToSlash(CatalogArtifactPath(cfg, id))
+	// Workflow skill index (read by external agents; not consumed by the
+	// Slipway kernel). Regenerated deterministically from the Go-owned
+	// capability registry so every adapter sees direct host skill paths.
+	exportedReg, err := exportedCapabilityRegistry(reg)
+	if err != nil {
+		return err
+	}
+	index := capability.BuildSkillIndexWithPaths(exportedReg, func(id string) string {
+		return filepath.ToSlash(SkillPath(cfg, id))
 	})
-	manifestPath := filepath.Join(root, CatalogManifestPath(cfg))
-	if err := writeDeterministic(manifestPath, manifest, refresh); err != nil {
+	indexPath := filepath.Join(root, SkillIndexPath(cfg))
+	if err := writeDeterministic(indexPath, index, refresh); err != nil {
 		return err
 	}
 
@@ -991,6 +975,9 @@ func purgeCommandPromptSurfaces(root string, cfg ToolConfig) error {
 
 func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
 	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter); err != nil {
+		return err
+	}
+	if err := cleanupRetiredSkillRootFiles(root, cfg, hadGeneratedAdapter); err != nil {
 		return err
 	}
 	if err := cleanupStaleCommandEntries(root, cfg); err != nil {
@@ -1036,7 +1023,6 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 			expected[exportedSkillDirName(name)] = struct{}{}
 		}
 	}
-	expected[catalogManifestFileName] = struct{}{}
 	managed := generatedSkillDirNameSet()
 
 	entries, err := os.ReadDir(skillsRoot)
@@ -1058,6 +1044,14 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 		}
 	}
 	return nil
+}
+
+func cleanupRetiredSkillRootFiles(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
+	if !hadGeneratedAdapter {
+		return nil
+	}
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	return removePathIfExists(filepath.Join(skillsRoot, retiredCatalogManifestFileName))
 }
 
 func generatedSkillDirNameSet() map[string]struct{} {
@@ -1227,108 +1221,6 @@ func renderCatalogSkill(sk capability.Skill) (string, error) {
 		return base, nil
 	}
 	return strings.Join(out, "\n\n") + "\n", nil
-}
-
-func emitCatalogArtifacts(root string, cfg ToolConfig, reg *capability.Registry, refresh bool) error {
-	catalogRoot := filepath.Join(
-		root,
-		cfg.SkillsDir,
-		adapterSkillName(workflowSkillID),
-		"references",
-		"catalog",
-	)
-	if refresh {
-		if err := removePathIfExists(catalogRoot); err != nil {
-			return err
-		}
-	}
-	for _, id := range catalogSkillIDs {
-		if !shouldEmitCatalogArtifact(id) {
-			continue
-		}
-		sk, ok := reg.Lookup(id)
-		if !ok {
-			return fmt.Errorf("catalog artifact %q missing from registry lookup", id)
-		}
-		content, err := renderCatalogArtifact(cfg, sk)
-		if err != nil {
-			return fmt.Errorf("render catalog artifact %q for %s: %w", id, cfg.ID, err)
-		}
-		if err := writeDeterministic(filepath.Join(root, CatalogArtifactPath(cfg, id)), content, refresh); err != nil {
-			return err
-		}
-		if err := emitCatalogSupportFiles(root, cfg, id, refresh); err != nil {
-			return fmt.Errorf("emit catalog support files for %q (%s): %w", id, cfg.ID, err)
-		}
-	}
-	return nil
-}
-
-func emitCatalogSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
-	dstBase := filepath.Join(root, catalogSupportRootPath(cfg, skillID))
-	return emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstBase, refresh)
-}
-
-func renderCatalogArtifact(cfg ToolConfig, sk capability.Skill) (string, error) {
-	var b strings.Builder
-	publicName := adapterSkillName(sk.ID)
-	b.WriteString("# " + publicName + "\n\n")
-	b.WriteString(sk.Summary + "\n\n")
-	b.WriteString("## Catalog Contract\n\n")
-	b.WriteString(fmt.Sprintf("- Catalog artifact: `%s`\n", filepath.ToSlash(CatalogArtifactPath(cfg, sk.ID))))
-	if shouldExportAsHostSkill(sk.ID) {
-		b.WriteString(fmt.Sprintf("- Host skill path: `%s`\n", filepath.ToSlash(SkillPath(cfg, sk.ID))))
-	} else {
-		b.WriteString("- Host skill path: catalog-only; no adapter auto-trigger SKILL.md is emitted.\n")
-	}
-	b.WriteString(fmt.Sprintf("- Support root: `%s`\n", filepath.ToSlash(catalogSupportRootPath(cfg, sk.ID))))
-	b.WriteString(fmt.Sprintf("- Tier: `%s`\n", sk.Tier))
-	b.WriteString(fmt.Sprintf("- Evidence contract: `%s`\n", sk.Evidence))
-	b.WriteString(fmt.Sprintf("- Primary attachment: `%s`\n", sk.PrimaryAttachment))
-	b.WriteString("\n## Bindings\n\n")
-	if len(sk.Bindings) == 0 {
-		b.WriteString("- none\n")
-	} else {
-		for _, binding := range sk.Bindings {
-			b.WriteString(fmt.Sprintf(
-				"- `%s` -> `%s` (`%s`)\n",
-				binding.Type,
-				binding.Target,
-				binding.Attachment,
-			))
-		}
-	}
-	b.WriteString("\n## Hydrate References\n\n")
-	if len(sk.HydrateReferences) == 0 {
-		b.WriteString("- none\n")
-	} else {
-		for _, ref := range sk.HydrateReferences {
-			b.WriteString(fmt.Sprintf(
-				"- `%s/%s`: `%s` - %s\n",
-				sk.ID,
-				ref.Name,
-				filepath.ToSlash(filepath.Join(catalogSupportRootPath(cfg, sk.ID), "references", ref.Name)),
-				ref.Reason,
-			))
-		}
-	}
-	b.WriteString("\n## Use When\n\n")
-	b.WriteString(sk.Function + "\n")
-	b.WriteString("\n## Instruction Authority\n\n")
-	if shouldExportAsHostSkill(sk.ID) {
-		b.WriteString(fmt.Sprintf(
-			"- Load `%s` for full procedure, checklist, and evidence details.\n",
-			filepath.ToSlash(SkillPath(cfg, sk.ID)),
-		))
-	} else {
-		b.WriteString("- This catalog artifact is a thin routing record, not a procedure copy.\n")
-		b.WriteString(fmt.Sprintf(
-			"- Source procedure template: `%s`.\n",
-			filepath.ToSlash(sourceSkillTemplatePath(sk.ID, "SKILL.md")),
-		))
-		b.WriteString("- Hydrate listed support files when the route needs detailed references or scripts.\n")
-	}
-	return b.String(), nil
 }
 
 func renderSourceManagedSkill(raw, id string) (string, error) {

@@ -1,0 +1,63 @@
+slug: remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff
+description: Remove the agent-facing Slipway catalog layer while preserving a flat workflow skill index and direct host skill handoff.
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T13:29:18.873603Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff
+worktree_branch: feat/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff
+artifact_schema: expanded
+project_context:
+    tech_stack: Go CLI, generated Codex skills
+    test_cmd: go test -timeout=20m ./... -count=1
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/assurance.md
+        version: 1
+        state: frozen
+        content_hash: 01c02971df4ad794c4146f3911d8b2eeeac1137bd8adb01cbf66e6ef6375c33f
+        updated_at: 2026-05-25T14:11:45.350709901Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/decision.md
+        version: 1
+        state: frozen
+        content_hash: bab916aa76d4ac7f34afd5a905bfa681fa583258afb4ccd4968e3a7f6079ef30
+        updated_at: 2026-05-25T14:01:28.355785801Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/intent.md
+        version: 1
+        state: frozen
+        content_hash: 01e1e74b3eafa4f3db20b487b5fce3cecaaa684b38e54d3c26ca696d0fa8b1e4
+        updated_at: 2026-05-25T13:31:45.783047453Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/requirements.md
+        version: 1
+        state: frozen
+        content_hash: a00b9c4c4744c52a208ef450084c20f6b103878aa94b4b69772100613e520623
+        updated_at: 2026-05-25T13:34:42.25570671Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/research.md
+        version: 1
+        state: frozen
+        content_hash: c96294e1209baa0b89d0927ba148b4fea6b5e21ceedabf1b83a6d7244646a173
+        updated_at: 2026-05-25T13:37:12.815106074Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/tasks.md
+        version: 1
+        state: frozen
+        content_hash: de01994d697d3574a612fca9582c7801722f407c75af267b2e65cf1955d04298
+        updated_at: 2026-05-25T13:54:56.764707153Z

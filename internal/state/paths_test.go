@@ -51,7 +51,7 @@ func TestGovernedBundleDirFallsBackToProjectRootWithoutWorktree(t *testing.T) {
 	assert.Equal(t, filepath.Join(expectedRoot, "artifacts", "changes", change.Slug), bundleDir)
 }
 
-func TestResolveChangePathsUsesRepoScopedCodebaseMapAndArtifactArchive(t *testing.T) {
+func TestResolveChangePathsUsesRepoScopedCodebaseMapAndUnboundArtifactArchive(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	change := model.NewChange("repo-scoped-context")
@@ -79,6 +79,7 @@ func TestResolveChangePathsPrefersBoundWorktreeEvenWithoutDiscovery(t *testing.T
 	require.NoError(t, normErr)
 	assert.Equal(t, expectedWorktree, paths.WorkspaceRoot)
 	assert.Equal(t, filepath.Join(expectedWorktree, "artifacts", "changes", change.Slug), paths.GovernedBundleDir)
+	assert.Equal(t, filepath.Join(expectedWorktree, "artifacts", "changes", "archived", change.Slug), paths.GovernedBundleArchive)
 }
 
 func TestResolveChangePathsUsesScopeRelativePathInsideBoundWorktree(t *testing.T) {
@@ -100,6 +101,7 @@ func TestResolveChangePathsUsesScopeRelativePathInsideBoundWorktree(t *testing.T
 	require.NoError(t, normErr)
 	assert.Equal(t, expectedWorkspace, paths.WorkspaceRoot)
 	assert.Equal(t, filepath.Join(expectedWorkspace, "artifacts", "changes", change.Slug), paths.GovernedBundleDir)
+	assert.Equal(t, filepath.Join(expectedWorkspace, "artifacts", "changes", "archived", change.Slug), paths.GovernedBundleArchive)
 }
 
 func TestDisplayPathReturnsProjectRelativePath(t *testing.T) {

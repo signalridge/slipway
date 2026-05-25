@@ -1,0 +1,34 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:04:29Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:R3=pass"
+  - "layer:IR1=pass"
+  - "layer:IR3=pass"
+  - "req:REQ-001=pass"
+  - "req:REQ-002=pass"
+  - "req:REQ-003=pass"
+  - "req:REQ-004=pass"
+  - "req:REQ-005=pass"
+  - "req:REQ-006=pass"
+  - "test:go test -timeout=3m ./internal/toolgen"
+notes: |
+  Gaps (code_to_artifact): none.
+  Gaps (artifact_to_code): none.
+
+  Forward alignment:
+  - REQ-001/REQ-004 are implemented by removing top-level catalog manifest generation, removing workflow catalog route-card/support emission, and asserting generated trees contain no `using-slipway-catalog.md` or `slipway/references/catalog/**`.
+  - REQ-002/REQ-003 are implemented by `SkillIndexPath`, `BuildSkillIndexWithPaths`, workflow template wording, and `next_skill` hint labels that point at exported host skill paths.
+  - REQ-005 is covered by refresh cleanup and a regression test that seeds retired top-level and workflow catalog artifacts before refresh.
+  - REQ-006 is covered by focused capability, toolgen, and next-skill hint tests plus the generated inventory golden.
+
+  Reverse alignment:
+  - Changed generator, template, capability-export, registry binding, hint, test, and golden files map to the approved catalog-removal and skill-index requirements.
+  - No lifecycle state transition, gate semantic, or CLI JSON field contract change was introduced.
+
+  Decision fidelity:
+  - The selected workflow-owned skill index with direct host paths is honored.
+  - The index is informational only and does not become a progression authority.
+  - Real `slipway-<name>/SKILL.md` files remain the procedure authority for exported skills.

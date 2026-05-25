@@ -60,7 +60,7 @@ func incidentResponse() Skill {
 		// Public status/health exposure is owned by surfaces.go, not catalog bindings.
 		Evidence: EvidenceArtifact,
 		Bindings: []Binding{
-			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
+			{Type: BindingExportOnly, Target: "skill-index", Attachment: AttachmentReportSchema},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "incident-response-framework.md", Reason: "Core roles, phase gates, decision authority"},

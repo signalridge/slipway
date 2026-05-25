@@ -14,7 +14,7 @@ func threatModeling() Skill {
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentProcedure},
-			{Type: BindingExportOnly, Target: "using-slipway-catalog", Attachment: AttachmentReportSchema},
+			{Type: BindingExportOnly, Target: "skill-index", Attachment: AttachmentReportSchema},
 		},
 	}
 }

@@ -1,0 +1,20 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:04:29Z"
+run_version: 0
+references:
+  - "validate:go run . validate --json"
+  - "requirements:artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/requirements.md"
+  - "decision:artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/decision.md"
+  - "tasks:artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/tasks.md"
+  - "research:artifacts/changes/remove-the-agent-facing-slipway-catalog-layer-while-preserving-a-flat-workflow-skill-index-and-direct-host-skill-handoff/research.md"
+notes: |
+  Plan audit passed after refreshing the decision artifact wording to match the
+  implemented `BuildSkillIndexWithPaths` renderer and adding explicit refresh
+  regression coverage for retired workflow catalog route/support files.
+
+  8D review: coverage maps every REQ to tasks; tasks have waves, earlier-wave
+  dependencies, concrete targets, evidence shape, and acceptance; scope stays
+  inside generated skill surfaces; test mapping includes focused and broad
+  verification; alternatives and selected approach are recorded in decision.md
+  and research.md.

@@ -1,0 +1,31 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T14:11:49Z"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:go test -timeout=20m ./... -count=1"
+  - "closeout:build=pass:go build ./..."
+  - "closeout:reviewer_independence=pass"
+  - "closeout:guardrail_baseline=pass"
+  - "closeout:assurance_complete=pass"
+  - "closeout:g_ship=approved"
+notes: |
+  Final closeout check passed.
+
+  Verification index:
+  - plan-audit: pass, run_version 0.
+  - wave-orchestration: pass, run_version 1.
+  - spec-compliance-review: pass, run_version 1.
+  - code-quality-review: pass, run_version 1.
+  - goal-verification: pass, run_version 1.
+
+  Freshness and commands:
+  - `go test -timeout=20m ./... -count=1` passed after the final implementation change.
+  - `go build ./...` passed.
+  - `git diff --check` passed.
+  - `go run . validate --json` reported `G_ship=approved`, `evidence_freshness=fresh`, and no blockers before closeout evidence was written.
+
+  Assurance:
+  - `assurance.md` contains scope summary, verification verdict, evidence index, residual risk, rollback readiness, and archive decision.
+  - Guardrail baseline is covered by `high_risk_check:external_api_contracts.safety_baseline=pass` in goal-verification evidence.

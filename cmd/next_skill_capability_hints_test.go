@@ -31,11 +31,11 @@ func TestAppendCatalogHintsGoalVerificationDropsRetiredFreshEvidence(t *testing.
 	assert.Equal(t, "skill:coverage-analysis", hints[0].Name)
 }
 
-func TestSupportHintNameUsesCatalogPathForCatalogOnlySkills(t *testing.T) {
+func TestSupportHintNameUsesExportedSkillPrefix(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "skill:security-review", supportHintName("security-review"))
-	assert.Equal(t, "catalog:slipway/references/catalog/supply-chain-audit.md", supportHintName("supply-chain-audit"))
+	assert.Equal(t, "skill:ci-triage", supportHintName("ci-triage"))
 }
 
 func TestAppendCatalogHintsVerifyHostsDoNotEmitRetiredFreshEvidence(t *testing.T) {

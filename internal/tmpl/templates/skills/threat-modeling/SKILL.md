@@ -20,7 +20,7 @@ bindings:
     target: validate
     attachment: procedure
   - type: export-only
-    target: using-slipway-catalog
+    target: skill-index
     attachment: report-schema
 ---
 

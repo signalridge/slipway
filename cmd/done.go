@@ -304,6 +304,10 @@ func makeDoneCmd() *cobra.Command {
 				if len(archived.RemediationSources) > 0 {
 					archiveKind = "remediation"
 				}
+				archivePaths, err := state.ResolveChangePaths(root, archived)
+				if err != nil {
+					return err
+				}
 				view := doneView{
 					Slug:                    active.Slug,
 					ExecutionMode:           governedExecutionMode,
@@ -314,7 +318,7 @@ func makeDoneCmd() *cobra.Command {
 					NeedsDiscovery:          profile.NeedsDiscovery,
 					Status:                  string(model.ChangeStatusDone),
 					Archived:                true,
-					ArchivePath:             state.DisplayPath(root, filepath.Join(state.ArchivedBundlesDir(root), active.Slug)),
+					ArchivePath:             state.DisplayPath(root, archivePaths.GovernedBundleArchive),
 					ArchiveKind:             archiveKind,
 					RemediationSources:      archived.RemediationSources,
 				}
