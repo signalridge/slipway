@@ -20,6 +20,7 @@ import (
 
 const ExecutionSummaryFileName = "execution-summary.yaml"
 const StaleExecutionEvidenceBlockerToken = "stale_execution_evidence"
+const StalePlanningEvidenceBlockerToken = "stale_planning_evidence"
 
 type ExecutionSummaryLoadError struct {
 	Path string
@@ -245,7 +246,11 @@ func collectExecutionSummaryIssues(root string, change model.Change, summary *mo
 	blockers := make([]string, 0, len(summary.OpenBlockers)+1)
 	blockers = append(blockers, model.ReasonSpecs(summary.OpenBlockers)...)
 	if ExecutionSummaryFreshness(root, change, summary) == ctxpack.EvidenceFreshnessStale {
-		blockers = append(blockers, StaleExecutionEvidenceBlockerToken)
+		if planningInputsChangedAfterExecution(root, change, summary) {
+			blockers = append(blockers, StalePlanningEvidenceBlockerToken)
+		} else {
+			blockers = append(blockers, StaleExecutionEvidenceBlockerToken)
+		}
 	}
 	return stringutil.UniqueSorted(blockers)
 }
@@ -296,7 +301,6 @@ func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *
 		filepath.Join(bundleDir, "requirements.md"),
 		filepath.Join(bundleDir, "research.md"),
 		filepath.Join(bundleDir, "decision.md"),
-		filepath.Join(bundleDir, "assurance.md"),
 	} {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -323,6 +327,42 @@ func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *
 		}
 	}
 	return latest
+}
+
+func planningInputsChangedAfterExecution(root string, change model.Change, summary *model.ExecutionSummary) bool {
+	if !ExecutionSummaryReady(summary) || strings.TrimSpace(root) == "" || strings.TrimSpace(change.Slug) == "" {
+		return false
+	}
+	bundleDir, err := GovernedBundleDir(root, change)
+	if err != nil {
+		return false
+	}
+	latestEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
+	if captured := summary.CapturedAt.UTC(); captured.After(latestEvidenceAt) {
+		latestEvidenceAt = captured
+	}
+
+	for _, path := range []string{
+		filepath.Join(bundleDir, "intent.md"),
+		filepath.Join(bundleDir, "requirements.md"),
+		filepath.Join(bundleDir, "research.md"),
+		filepath.Join(bundleDir, "decision.md"),
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().UTC().After(latestEvidenceAt) {
+			return true
+		}
+	}
+
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	if strings.TrimSpace(summary.TasksPlanHash) != "" {
+		return isTasksPlanFreshnessRelevant(tasksPath, summary)
+	}
+	info, err := os.Stat(tasksPath)
+	return err == nil && info.ModTime().UTC().After(latestEvidenceAt)
 }
 
 func collectTaskEvidenceFreshnessInputs(

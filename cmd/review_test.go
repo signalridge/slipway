@@ -630,7 +630,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		var view reviewView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "fail", view.Verdict)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_execution_evidence")
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 		require.NotEmpty(t, view.Waves, "review should still surface wave status on blocked paths when wave execution data is available")
 		assert.Equal(t, "pass", view.Waves[0].Verdict)
 	})

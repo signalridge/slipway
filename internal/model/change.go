@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -40,6 +41,7 @@ type Change struct {
 	ArtifactSchema                     ArtifactSchemaName        `yaml:"artifact_schema,omitempty" json:"artifact_schema,omitempty"`
 	CustomArtifacts                    []ArtifactDefinition      `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	ContextDependencies                ContextDependencies       `yaml:"context_dependencies,omitempty" json:"context_dependencies,omitempty"` // Execution-context metadata: drives prior-context selection and next input assembly, not consumed by progression/governance/gate logic.
+	RemediationSources                 []ArchiveReference        `yaml:"remediation_sources,omitempty" json:"remediation_sources,omitempty"`
 	ProjectContext                     ProjectContext            `yaml:"project_context,omitempty" json:"project_context,omitempty"`
 	CallerDisabledCtrls                []ControlID               `yaml:"caller_disabled_controls,omitempty" json:"caller_disabled_controls,omitempty"`
 	CallerControlModes                 map[ControlID]ControlMode `yaml:"caller_control_modes,omitempty" json:"caller_control_modes,omitempty"`
@@ -57,6 +59,12 @@ type Change struct {
 	EvidenceRefs              map[string]string        `yaml:"evidence_refs,omitempty" json:"evidence_refs,omitempty"`
 	ReviewIntentDriftFailures int                      `yaml:"review_intent_drift_failures,omitempty" json:"review_intent_drift_failures,omitempty"`
 	InterruptedExecutionAt    time.Time                `yaml:"interrupted_execution_at,omitempty" json:"interrupted_execution_at,omitempty"`
+}
+
+type ArchiveReference struct {
+	Slug     string `yaml:"slug,omitempty" json:"slug,omitempty"`
+	Path     string `yaml:"path,omitempty" json:"path,omitempty"`
+	Relation string `yaml:"relation,omitempty" json:"relation,omitempty"`
 }
 
 // Phase returns the user-facing phase for this change.
@@ -104,9 +112,44 @@ func (c *Change) Normalize() {
 		c.PlanSubStep = PlanEntrySubStep(c.NeedsDiscovery)
 	}
 	c.ContextDependencies.Normalize()
+	c.RemediationSources = normalizeArchiveReferences(c.RemediationSources)
 	if !c.InterruptedExecutionAt.IsZero() {
 		c.InterruptedExecutionAt = c.InterruptedExecutionAt.Round(0).UTC()
 	}
+}
+
+func normalizeArchiveReferences(refs []ArchiveReference) []ArchiveReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	normalized := make([]ArchiveReference, 0, len(refs))
+	seen := map[string]struct{}{}
+	for _, ref := range refs {
+		ref.Slug = strings.TrimSpace(ref.Slug)
+		ref.Path = strings.TrimSpace(ref.Path)
+		ref.Relation = strings.TrimSpace(ref.Relation)
+		if ref.Slug == "" {
+			continue
+		}
+		if ref.Relation == "" {
+			ref.Relation = "remediates"
+		}
+		if _, ok := seen[ref.Slug]; ok {
+			continue
+		}
+		seen[ref.Slug] = struct{}{}
+		normalized = append(normalized, ref)
+	}
+	slices.SortFunc(normalized, func(a, b ArchiveReference) int {
+		if a.Slug < b.Slug {
+			return -1
+		}
+		if a.Slug > b.Slug {
+			return 1
+		}
+		return 0
+	})
+	return normalized
 }
 
 func (c Change) Validate() error {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,15 +20,18 @@ import (
 )
 
 type doneView struct {
-	Slug                    string   `json:"slug"`
-	ExecutionMode           string   `json:"execution_mode"`
-	QualityMode             string   `json:"quality_mode,omitempty"`
-	WorkflowPreset          string   `json:"workflow_preset,omitempty"`
-	EffectiveWorkflowPreset string   `json:"effective_workflow_preset,omitempty"`
-	PresetUpgradeReasons    []string `json:"preset_upgrade_reasons,omitempty"`
-	NeedsDiscovery          bool     `json:"needs_discovery,omitempty"`
-	Status                  string   `json:"status"`
-	Archived                bool     `json:"archived"`
+	Slug                    string                   `json:"slug"`
+	ExecutionMode           string                   `json:"execution_mode"`
+	QualityMode             string                   `json:"quality_mode,omitempty"`
+	WorkflowPreset          string                   `json:"workflow_preset,omitempty"`
+	EffectiveWorkflowPreset string                   `json:"effective_workflow_preset,omitempty"`
+	PresetUpgradeReasons    []string                 `json:"preset_upgrade_reasons,omitempty"`
+	NeedsDiscovery          bool                     `json:"needs_discovery,omitempty"`
+	Status                  string                   `json:"status"`
+	Archived                bool                     `json:"archived"`
+	ArchivePath             string                   `json:"archive_path,omitempty"`
+	ArchiveKind             string                   `json:"archive_kind,omitempty"`
+	RemediationSources      []model.ArchiveReference `json:"remediation_sources,omitempty"`
 }
 
 type doneBulkItem struct {
@@ -79,6 +83,95 @@ func newDoneBulkFailed(slug, reason, errorDetail string) doneBulkItem {
 func markChangeDone(change *model.Change) {
 	change.Status = model.ChangeStatusDone
 	change.CurrentState = model.StateDone
+}
+
+func detectRemediationSources(root string, change model.Change) []model.ArchiveReference {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return nil
+	}
+	refs := []model.ArchiveReference{}
+	_ = filepath.WalkDir(paths.GovernedBundleDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return nil
+		}
+		name := entry.Name()
+		if !(strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")) {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		refs = append(refs, archiveReferencesFromText(string(data))...)
+		return nil
+	})
+	return mergeArchiveReferences(nil, existingArchiveReferences(root, refs))
+}
+
+func archiveReferencesFromText(text string) []model.ArchiveReference {
+	const marker = "artifacts/changes/archived/"
+	refs := []model.ArchiveReference{}
+	for {
+		idx := strings.Index(text, marker)
+		if idx < 0 {
+			break
+		}
+		rest := text[idx+len(marker):]
+		slug := leadingArchiveSlug(rest)
+		if slug != "" {
+			refs = append(refs, model.ArchiveReference{
+				Slug:     slug,
+				Path:     marker + slug,
+				Relation: "remediates",
+			})
+		}
+		if len(rest) == 0 {
+			break
+		}
+		text = rest
+	}
+	return refs
+}
+
+func leadingArchiveSlug(text string) string {
+	text = strings.TrimLeft(text, "`'\"<([")
+	end := len(text)
+	for i, r := range text {
+		if r == '/' || r == '\\' || r == '`' || r == '\'' || r == '"' || r == '<' || r == ')' || r == ']' || r == ' ' || r == '\n' || r == '\t' {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(text[:end])
+}
+
+func mergeArchiveReferences(existing, detected []model.ArchiveReference) []model.ArchiveReference {
+	if len(existing) == 0 && len(detected) == 0 {
+		return nil
+	}
+	combined := append(append([]model.ArchiveReference{}, existing...), detected...)
+	change := model.Change{RemediationSources: combined}
+	change.Normalize()
+	return change.RemediationSources
+}
+
+func existingArchiveReferences(root string, refs []model.ArchiveReference) []model.ArchiveReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	filtered := make([]model.ArchiveReference, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Path == "" {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(ref.Path)))
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		filtered = append(filtered, ref)
+	}
+	return filtered
 }
 
 func sortDoneBulkItems(items []doneBulkItem) {
@@ -181,6 +274,10 @@ func makeDoneCmd() *cobra.Command {
 				}
 				beforeChange := change
 				markChangeDone(&change)
+				change.RemediationSources = mergeArchiveReferences(
+					change.RemediationSources,
+					detectRemediationSources(root, change),
+				)
 
 				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
 					Command:     "done",
@@ -194,13 +291,18 @@ func makeDoneCmd() *cobra.Command {
 				}); err != nil {
 					return err
 				}
-				if _, err := state.ArchiveChange(root, change, model.ChangeStatusDone); err != nil {
+				archived, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
+				if err != nil {
 					return err
 				}
 				profile := buildChangeProfileView(change)
 				presetFields, err := buildWorkflowPresetView(root, change)
 				if err != nil {
 					return err
+				}
+				archiveKind := "terminal"
+				if len(archived.RemediationSources) > 0 {
+					archiveKind = "remediation"
 				}
 				view := doneView{
 					Slug:                    active.Slug,
@@ -212,6 +314,9 @@ func makeDoneCmd() *cobra.Command {
 					NeedsDiscovery:          profile.NeedsDiscovery,
 					Status:                  string(model.ChangeStatusDone),
 					Archived:                true,
+					ArchivePath:             state.DisplayPath(root, filepath.Join(state.ArchivedBundlesDir(root), active.Slug)),
+					ArchiveKind:             archiveKind,
+					RemediationSources:      archived.RemediationSources,
 				}
 
 				return encodeJSONResponse(cmd, view)

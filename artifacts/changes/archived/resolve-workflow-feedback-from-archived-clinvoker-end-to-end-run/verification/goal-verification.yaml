@@ -1,0 +1,29 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T12:03:00Z"
+run_version: 1
+references:
+  - "high_risk_check:external_api_contracts.safety_baseline=pass"
+  - "command:git diff --check"
+  - "command:go test -timeout=20m ./... -count=1"
+  - "command:go build ./..."
+  - "command:go test ./cmd -run TestDoneReportsAndPersistsRemediationSources -count=1"
+  - "command:rg TODO/FIXME/HACK/XXX/PLACEHOLDER/NotImplemented/stub patterns over changed target files"
+  - "artifact:.worktrees/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/requirements.md"
+  - "artifact:.worktrees/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/execution-summary.yaml"
+  - "artifact:artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md"
+notes: |
+  Criteria:
+    AC-1 / REQ-001 early worktree binding: pass. Exists in internal/state/worktree.go via EnsureDefaultWorktreeForChange and DefaultWorktreeBinding, is wired from cmd/new.go before intent scaffolding, and is exercised by TestNewDiscoveryChangeBindsDefaultWorktreeBeforeIntentArtifact.
+    AC-2 / REQ-002 codebase-map baseline population: pass. Exists in internal/engine/artifact/codebase_map.go via EnsureCodebaseMapDocs population helpers, is wired through slipway codebase-map, and is exercised by TestCodebaseMapCommandCreatesDurableDocSet plus the CLI e2e diagnostics/codebase-map flow.
+    AC-3 / REQ-003 remediation archive relationship: pass. Exists in internal/model/change.go and cmd/done.go, is wired into done --json/archive persistence, filters detected references to existing archived bundles, and is exercised by TestDoneReportsAndPersistsRemediationSources including placeholder and missing-archive references.
+    AC-4 / REQ-004 targeted stale-evidence classification: pass. Exists in internal/state/execution_summary.go and internal/model/reason_code.go, is wired into review/validate/status/done blockers, and is exercised by focused execution-summary, review, validate, status, and done tests.
+    AC-5 / REQ-005 thin root catalog artifacts: pass. Exists in internal/toolgen/toolgen.go, is wired into generated Codex/Claude catalog artifacts, and is exercised by the catalog/toolgen tests including TestTypedPartsRendered after the thin-catalog contract update.
+    AC-6 / REQ-006 archived feedback disposition closure: pass. The target workflow-feedback.md records fixed dispositions and evidence pointers for the actionable rows; the verification scan found no remaining unresolved actionable marker outside the current change scope language.
+    AC-7 / REQ-007 governed workflow verification: pass for the current S4 verification window and post-archive detector correction. Required S0-S3 skill evidence exists, execution-summary.yaml records all seven tasks as pass for run_version 1, the change archived as remediation, and fresh commands git diff --check, go test -timeout=20m ./... -count=1, and go build ./... completed successfully.
+
+  Stub/placeholder scan:
+    The scan over changed target files found no production placeholder blocker. Hits were expected assertions that generated variant-analysis scaffolds contain TODO(source/sink/sanitizer), plus normal Go optional-missing return paths such as LoadOptionalExecutionSummary and parser helpers returning nil when no optional data is present.
+
+  Guardrail:
+    This change has guardrail_domain external_api_contracts because it adds JSON fields/reason-code surface. The safety baseline passes: changes are additive for new/done JSON output, keep existing command semantics, filter placeholder archive references out of persisted remediation_sources, and focused contract tests cover the new fields and reason-code behavior.

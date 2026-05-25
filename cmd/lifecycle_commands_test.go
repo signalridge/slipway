@@ -66,6 +66,51 @@ func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
 	})
 }
 
+func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		source := model.NewChange("source-archived-workflow")
+		source.Description = "source archived workflow"
+		require.NoError(t, state.SaveChange(root, source))
+		_, err := state.ArchiveChange(root, source, model.ChangeStatusDone)
+		require.NoError(t, err)
+
+		slug := createGovernedRequest(t, root, "L2", "fix archived workflow feedback")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		markChangeReadyForDone(t, root, &change)
+
+		intentPath := filepath.Join(root, "artifacts", "changes", slug, "intent.md")
+		require.NoError(t, os.WriteFile(intentPath, []byte(strings.Join([]string{
+			"Remediates artifacts/changes/archived/source-archived-workflow/workflow-feedback.md",
+			"Ignores placeholder artifacts/changes/archived/<source-slug> examples",
+			"Ignores missing artifacts/changes/archived/missing-archived-workflow references",
+			"",
+		}, "\n")), 0o644))
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		var out bytes.Buffer
+		doneCmd := makeDoneCmd()
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, "remediation", view.ArchiveKind)
+		require.Len(t, view.RemediationSources, 1)
+		assert.Equal(t, "source-archived-workflow", view.RemediationSources[0].Slug)
+
+		archived, err := state.LoadArchivedChange(root, slug)
+		require.NoError(t, err)
+		require.Len(t, archived.RemediationSources, 1)
+		assert.Equal(t, "source-archived-workflow", archived.RemediationSources[0].Slug)
+	})
+}
+
 func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -253,7 +298,7 @@ func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
 		assert.Contains(t, cliErr.Message, "session_isolation_warning")
-		assert.Contains(t, cliErr.Message, "stale_execution_evidence")
+		assert.NotContains(t, cliErr.Message, "stale_execution_evidence")
 
 		_, loadErr := state.LoadChange(root, slug)
 		require.NoError(t, loadErr)

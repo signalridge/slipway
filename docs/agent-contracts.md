@@ -30,8 +30,10 @@ larger embedded template library:
   specialist procedures for hosts. They can be invoked by users or suggested by
   command surfaces, but their existence does not add workflow states or bypass
   governance gates.
-- `worktree-preflight` is an exported governance-adjacent handoff. Progression
-  can surface it when a dedicated worktree must be established, but the
+- Discovery-required changes bind a default `.worktrees/<slug>` worktree during
+  `slipway new` when Git has a usable HEAD, before governed bundle artifacts are
+  scaffolded. `worktree-preflight` remains an exported governance-adjacent
+  handoff for missing, invalid, or operator-supplied worktree bindings; the
   corresponding authority is the worktree validation gate, not a generic skill
   verdict.
 

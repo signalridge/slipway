@@ -66,6 +66,120 @@ func PersistScopeWorktreeMetadata(change *model.Change, worktreePath, worktreeBr
 	return nil
 }
 
+type DefaultWorktreeBinding struct {
+	Path          string
+	Branch        string
+	Created       bool
+	SkippedReason string
+}
+
+func DefaultWorktreePath(root, slug string) string {
+	return filepath.Join(root, ".worktrees", slug)
+}
+
+func DefaultWorktreeBranch(slug string) string {
+	return "feat/" + slug
+}
+
+func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultWorktreeBinding, error) {
+	if change == nil {
+		return DefaultWorktreeBinding{}, fmt.Errorf("change is required")
+	}
+	if strings.TrimSpace(change.WorktreePath) != "" {
+		return DefaultWorktreeBinding{
+			Path:   change.WorktreePath,
+			Branch: change.WorktreeBranch,
+		}, nil
+	}
+	if !change.NeedsDiscovery {
+		return DefaultWorktreeBinding{SkippedReason: "discovery_not_required"}, nil
+	}
+
+	repoRoot, err := gitWorkspaceRoot(root)
+	if err != nil {
+		if gitCommandReportsNotRepository(err) {
+			return DefaultWorktreeBinding{SkippedReason: "not_git_repository"}, nil
+		}
+		return DefaultWorktreeBinding{}, err
+	}
+	if !gitHasHead(repoRoot) {
+		return DefaultWorktreeBinding{SkippedReason: "git_head_missing"}, nil
+	}
+
+	path := DefaultWorktreePath(repoRoot, change.Slug)
+	branch := DefaultWorktreeBranch(change.Slug)
+	normalizedPath, err := NormalizePath(path)
+	if err != nil {
+		return DefaultWorktreeBinding{}, fmt.Errorf("normalize default worktree path: %w", err)
+	}
+
+	registered, err := listGitWorktrees(repoRoot)
+	if err != nil {
+		return DefaultWorktreeBinding{}, err
+	}
+	if _, ok := registered[normalizedPath]; ok {
+		if err := PersistScopeWorktreeMetadata(change, normalizedPath, branch); err != nil {
+			return DefaultWorktreeBinding{}, err
+		}
+		validation, err := ValidateChangeWorktree(repoRoot, *change)
+		if err != nil {
+			return DefaultWorktreeBinding{}, err
+		}
+		if len(validation.Blockers) > 0 {
+			return DefaultWorktreeBinding{}, fmt.Errorf("default worktree validation failed: %s", strings.Join(model.ReasonSpecs(validation.Blockers), ", "))
+		}
+		return DefaultWorktreeBinding{Path: normalizedPath, Branch: branch}, nil
+	}
+
+	if entries, readErr := os.ReadDir(normalizedPath); readErr == nil && len(entries) > 0 {
+		return DefaultWorktreeBinding{}, fmt.Errorf("default worktree path exists and is not empty: %s", normalizedPath)
+	} else if readErr != nil && !os.IsNotExist(readErr) {
+		return DefaultWorktreeBinding{}, readErr
+	}
+	if err := os.MkdirAll(filepath.Dir(normalizedPath), 0o755); err != nil {
+		return DefaultWorktreeBinding{}, err
+	}
+
+	args := []string{"-C", repoRoot, "worktree", "add"}
+	if gitBranchExists(repoRoot, branch) {
+		args = append(args, normalizedPath, branch)
+	} else {
+		baseRef := strings.TrimSpace(change.BaseRef)
+		if baseRef == "" {
+			baseRef = "HEAD"
+		}
+		args = append(args, "-b", branch, normalizedPath, baseRef)
+	}
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return DefaultWorktreeBinding{}, fmt.Errorf("git worktree add failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	invalidateWorktreeListCache(repoRoot)
+
+	if err := PersistScopeWorktreeMetadata(change, normalizedPath, branch); err != nil {
+		return DefaultWorktreeBinding{}, err
+	}
+	return DefaultWorktreeBinding{
+		Path:    normalizedPath,
+		Branch:  branch,
+		Created: true,
+	}, nil
+}
+
+func gitBranchExists(repoRoot, branch string) bool {
+	if strings.TrimSpace(branch) == "" {
+		return false
+	}
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return cmd.Run() == nil
+}
+
+func gitHasHead(repoRoot string) bool {
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD")
+	return cmd.Run() == nil
+}
+
 func ValidateChangeWorktree(root string, change model.Change) (model.WorktreeValidationResult, error) {
 	result := model.WorktreeValidationResult{}
 	worktreePath := strings.TrimSpace(change.WorktreePath)
@@ -246,6 +360,16 @@ func listGitWorktreesCachedWithLister(repoRoot string, lister func(string) (map[
 	}
 	worktreeListCache.mu.Unlock()
 	return cloneWorktreeSet(worktrees), nil
+}
+
+func invalidateWorktreeListCache(repoRoot string) {
+	normalizedRoot, err := NormalizePath(repoRoot)
+	if err != nil {
+		normalizedRoot = filepath.Clean(repoRoot)
+	}
+	worktreeListCache.mu.Lock()
+	delete(worktreeListCache.entries, normalizedRoot)
+	worktreeListCache.mu.Unlock()
 }
 
 func listGitWorktreesUncached(repoRoot string) (map[string]struct{}, error) {

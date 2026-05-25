@@ -1,0 +1,23 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T12:03:00Z"
+run_version: 1
+references:
+  - "git diff --check"
+  - "go test ./internal/state ./cmd -run 'TestExecutionSummaryIssuesClassifyPlanningArtifactDrift|TestExecutionSummaryIssuesIgnoreAssuranceOnlyEdits|TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable|TestReviewFailsWhenExecutionEvidenceIsStale|TestValidateBlocksWhenExecutionEvidenceIsStale|TestRenderStatusTextExplainsStaleExecutionEvidenceRemediation|TestDoneRejectsExecutionSummaryBlockersBeforeArchive' -count=1"
+  - "go test ./internal/toolgen -run 'TestCatalogOnlySkillsEmitCatalogArtifactsAndSupportFiles|TestGeneratedToolArtifactsAreDeterministic|TestGeneratedAdapterSurfacesStayInSyncWithRegistry' -count=1"
+  - "go test ./internal/toolgen -run 'TestTypedPartsRendered|TestCatalogOnlySkillsEmitCatalogArtifactsAndSupportFiles' -count=1"
+  - "go test ./cmd -run TestDoneReportsAndPersistsRemediationSources -count=1"
+  - "go test -timeout=20m ./... -count=1 (worktree baseline)"
+  - "go test -timeout=20m ./... -count=1"
+  - "go build ./..."
+notes: |
+  Code quality review passed. Changes stay inside existing ownership boundaries:
+  state owns worktree/evidence freshness, artifact owns codebase-map population,
+  model/done own archive metadata, and toolgen owns catalog artifact shape.
+  Focused tests, full tests, build, and diff whitespace checks passed. The
+  post-review toolgen test adjustment keeps thin catalog artifacts aligned with
+  the new instruction-authority contract rather than expecting copied procedure
+  bodies in root catalog files. The remediation-source detector now filters
+  candidate archive references to real archived bundle directories, with focused
+  coverage for placeholder and missing-archive references.

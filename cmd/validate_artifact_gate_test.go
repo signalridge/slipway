@@ -489,6 +489,6 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 
 	view, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_execution_evidence")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 	assert.False(t, view.CanAdvance)
 }

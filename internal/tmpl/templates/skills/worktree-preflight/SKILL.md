@@ -1,7 +1,7 @@
 ---
 skill_id: worktree-preflight
 name: slipway-worktree-preflight
-description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on discovery-required execution before wave work starts."
+description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on missing, invalid, or operator-supplied worktree bindings after automatic early binding is unavailable."
 ---
 
 # Worktree Preflight
@@ -11,23 +11,30 @@ IRON LAW: NO DISCOVERY-REQUIRED GOVERNED EXECUTION WITHOUT A DEDICATED WORKTREE 
 ```
 
 ## Purpose
-Establish and verify the dedicated worktree binding required before governed
-execution begins. This is a standalone governance preflight skill that must
-pass before discovery-required execution leaves the source workspace.
+Verify or repair the dedicated worktree binding required before governed
+execution begins. `slipway new` creates the default `.worktrees/<slug>` binding
+early when Git has a usable HEAD; this standalone governance preflight handles
+the remaining cases where binding is missing, invalid, or operator-supplied.
 Mitigates: worktree isolation and baseline drift before governed execution.
 
 ## Workflow Outline
-1. Create or verify the dedicated worktree and intended branch.
+1. Verify the dedicated worktree and intended branch, creating it only if the
+   runtime did not already bind the default worktree.
 2. Run a fresh baseline verification command in that worktree.
 3. Write verification references, return to the source workspace, and advance.
 
 ## When This Runs
-Only for discovery-required governed changes at `S2_EXECUTE` preflight. `slipway next --json` returns `next_skill: worktree-preflight`.
+For discovery-required governed changes, the normal path is early automatic
+binding during `slipway new`. If `slipway next --json` later returns
+`next_skill: worktree-preflight`, treat that as a repair/preflight path for a
+missing or invalid binding before wave execution.
 
 ## Process
 
 ### 1. Establish a Dedicated Worktree
-Create or verify a dedicated git worktree for this change.
+Verify the dedicated git worktree for this change. If the runtime did not create
+one, create it using the repo-local default unless project policy or the
+operator explicitly chooses another path.
 
 Requirements:
 - the worktree path MUST differ from the current repository root
@@ -36,9 +43,9 @@ Requirements:
 - the branch SHOULD include the change slug for traceability
 
 Default path policy: when no operator-supplied path or project policy says
-otherwise, prefer a repo-local ignored path such as `.worktrees/<slug>` under
-the source checkout. Sibling or external worktree paths are valid only when
-chosen explicitly by the operator or local project policy.
+otherwise, use the repo-local ignored path `.worktrees/<slug>` under the source
+checkout and branch `feat/<slug>`. Sibling or external worktree paths are valid
+only when chosen explicitly by the operator or local project policy.
 
 ### 2. Verify a Clean Baseline
 Run the project's baseline verification command inside that dedicated worktree before implementation begins.
@@ -84,6 +91,8 @@ The runtime will validate the worktree binding and persist `worktree_path` and `
 3. Record absolute worktree path and exact branch name in the verification references.
 
 ## Failure Handling
-- If no dedicated worktree exists yet, create one and rerun the preflight.
+- If no dedicated worktree exists yet, create `.worktrees/<slug>` on
+  `feat/<slug>` unless an explicit operator/project override says otherwise,
+  then rerun the preflight.
 - If the baseline command fails, set verdict to `fail` with the failed command or failing subsystem as a blocker.
 - If branch/path metadata changes, emit fresh verification before calling `slipway next`.

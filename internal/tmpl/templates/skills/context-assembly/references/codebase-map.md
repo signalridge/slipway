@@ -44,11 +44,13 @@ extra top-level files expecting downstream consumers to discover them.
 ## Assembly procedure (method-first)
 
 1. Restate the intake question in one sentence before reading anything.
-2. Invoke `slipway codebase-map` if the artifact directory is missing or
-   stale. The command is idempotent; reruns update existing files without
-   destroying hand-authored content outside the fixed file set.
-3. Fill each document with file:line citations or command transcripts. The
-   artifact is a reviewable handoff, not free-form notes.
+2. Invoke `slipway codebase-map` if the artifact directory is missing,
+   scaffold-only, or stale. The command is idempotent; reruns populate missing
+   or scaffold-only files with deterministic baseline repository facts and do
+   not overwrite hand-authored substantive content.
+3. Refine each baseline document with file:line citations or command
+   transcripts when the task needs stronger evidence. The artifact is a
+   reviewable handoff, not free-form notes.
 4. Mark every assumption as assumption, not finding, until it is
    re-derived from code.
 5. End with a one-screen summary covering: intent, affected seams,
@@ -82,7 +84,7 @@ skill.
 
 | Symptom | Remediation |
 |---------|-------------|
-| Doc exists but contains only the scaffold | Treat as missing; fill with citations before handoff. |
+| Doc exists but contains only the scaffold | Run `slipway codebase-map`; if it remains scaffold-only, treat it as missing and fill with citations before handoff. |
 | Citations reference files that no longer exist | Rerun on the affected scope; annotate historical files as removed. |
 | Two docs disagree (e.g., `STRUCTURE.md` names an entry point that `ARCHITECTURE.md` ignores) | The inconsistency itself is a finding; surface it in `CONCERNS.md` rather than silently picking one. |
 | Command fails with workspace-uninitialized error | Run `slipway init` first; the command assumes workspace state. |

@@ -38,6 +38,10 @@ type createOutput struct {
 	GuardrailDomain                  string                `json:"guardrail_domain,omitempty"`
 	ArtifactSchema                   string                `json:"artifact_schema"`
 	WorkflowCreated                  bool                  `json:"workflow_created"`
+	WorktreePath                     string                `json:"worktree_path,omitempty"`
+	WorktreeBranch                   string                `json:"worktree_branch,omitempty"`
+	WorktreeCreated                  bool                  `json:"worktree_created,omitempty"`
+	WorktreeSkippedReason            string                `json:"worktree_skipped_reason,omitempty"`
 	ProjectContext                   *projectContextOutput `json:"project_context,omitempty"`
 	IntentInferenceDegraded          bool                  `json:"intent_inference_degraded,omitempty"`
 	IntentInferenceDegradationReason string                `json:"intent_inference_degradation_reason,omitempty"`
@@ -466,6 +470,10 @@ func createDirectGovernedChange(
 			}
 		}
 
+		worktreeBinding, err := state.EnsureDefaultWorktreeForChange(root, &change)
+		if err != nil {
+			return err
+		}
 		if err := state.SaveChange(root, change); err != nil {
 			return err
 		}
@@ -535,6 +543,10 @@ func createDirectGovernedChange(
 				GuardrailDomain:                  change.GuardrailDomain,
 				ArtifactSchema:                   string(change.ArtifactSchema),
 				WorkflowCreated:                  true,
+				WorktreePath:                     change.WorktreePath,
+				WorktreeBranch:                   change.WorktreeBranch,
+				WorktreeCreated:                  worktreeBinding.Created,
+				WorktreeSkippedReason:            worktreeBinding.SkippedReason,
 				ProjectContext:                   ctxOut,
 				IntentInferenceDegraded:          inferenceResult.Degraded,
 				IntentInferenceDegradationReason: inferenceResult.DegradeReason,
@@ -555,6 +567,9 @@ func createDirectGovernedChange(
 			writer.Writef("AI suggestion: %s\n", change.SuggestedWorkflowPreset)
 		} else {
 			writer.Writeln("next: slipway next")
+		}
+		if change.WorktreePath != "" {
+			writer.Writef("worktree: %s  branch=%s\n", state.DisplayPath(root, change.WorktreePath), change.WorktreeBranch)
 		}
 		return writer.Err()
 	})

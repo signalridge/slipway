@@ -1,0 +1,118 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-25T11:42:12Z
+overall_verdict: pass
+tasks_plan_hash: 967fc46e51a9c9fc16d239014024942722e1554500ad14a5c1569744ef315185
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+    - t-07
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/new.go
+        - cmd/new_test.go
+        - docs/agent-contracts.md
+        - internal/state/worktree.go
+        - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+      target_files:
+        - cmd/new.go
+        - cmd/new_test.go
+        - internal/state/worktree.go
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: ad9f86e052c8e4d775d8cf7de1acfe9885ffb24863aab57d0e385cee9c9d2466
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/cli_e2e_test.go
+        - cmd/codebase_map_command_test.go
+        - docs/workflow-test-menu.md
+        - internal/engine/artifact/codebase_map.go
+        - internal/tmpl/templates/skills/context-assembly/references/codebase-map.md
+      target_files:
+        - cmd/cli_e2e_test.go
+        - cmd/codebase_map_command_test.go
+        - docs/workflow-test-menu.md
+        - internal/engine/artifact/codebase_map.go
+        - internal/tmpl/templates/skills/context-assembly/references/codebase-map.md
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: f74bac8fde33c91fdef2b32cf75a5f70f2903b14a1621126896b2e9197deeb08
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/done.go
+        - cmd/lifecycle_commands_test.go
+        - internal/model/change.go
+      target_files:
+        - cmd/done.go
+        - cmd/lifecycle_commands_test.go
+        - internal/model/change.go
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: 76a3ff408c0e8d6f20caf552fc32309bd83685714cf11b05617ed896be7ce287
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/lifecycle_commands_test.go
+        - cmd/review_test.go
+        - cmd/status_render_test.go
+        - cmd/validate_artifact_gate_test.go
+        - internal/model/reason_code.go
+        - internal/state/execution_summary.go
+        - internal/state/execution_summary_test.go
+      target_files:
+        - cmd/lifecycle_commands_test.go
+        - cmd/review_test.go
+        - cmd/status_render_test.go
+        - cmd/validate_artifact_gate_test.go
+        - internal/model/reason_code.go
+        - internal/state/execution_summary.go
+        - internal/state/execution_summary_test.go
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: bfeef948842d0c0710d08ef2cad5bdf9d22740505b7479f11f7a8922d889a2ce
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/toolgen/toolgen.go
+        - internal/toolgen/toolgen_test.go
+      target_files:
+        - internal/toolgen/toolgen.go
+        - internal/toolgen/toolgen_test.go
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: daf461ef2537a83c198873f4764260839b24db614a3eaf7b1d04ab80af9427f7
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+      target_files:
+        - artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: 6db7f83877ca2fcba5bf04af94d14fb2a337719ed3abb193eb128af7f0009bfe
+      captured_at: 2026-05-25T11:42:12Z
+    - task_id: t-07
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/goal-verification.yaml
+      target_files:
+        - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/goal-verification.yaml
+      evidence_ref: artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      evidence_input_hash: 4caed442f12cff977702427b8605ec4090811597b109113dd7ff8c82d47b650b
+      captured_at: 2026-05-25T11:42:12Z

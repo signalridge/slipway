@@ -114,6 +114,49 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 	})
 }
 
+func TestNewDiscoveryChangeBindsDefaultWorktreeBeforeIntentArtifact(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "auth_authz",
+				NeedsDiscovery:  true,
+				Complexity:      "critical",
+			},
+		}
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--json", "update auth middleware timeout strategy"})
+		require.NoError(t, cmd.Execute())
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		require.True(t, payload.WorktreeCreated)
+		require.NotEmpty(t, payload.WorktreePath)
+		assert.Equal(t, state.DefaultWorktreeBranch(payload.Slug), payload.WorktreeBranch)
+
+		change, err := state.LoadChange(root, payload.Slug)
+		require.NoError(t, err)
+		assert.Equal(t, payload.WorktreePath, change.WorktreePath)
+		assert.Equal(t, payload.WorktreeBranch, change.WorktreeBranch)
+
+		rootIntent := filepath.Join(root, "artifacts", "changes", payload.Slug, "intent.md")
+		_, err = os.Stat(rootIntent)
+		assert.True(t, os.IsNotExist(err), "new must not create canonical intent artifact in the root workspace after early worktree binding")
+
+		worktreeIntent := filepath.Join(payload.WorktreePath, "artifacts", "changes", payload.Slug, "intent.md")
+		_, err = os.Stat(worktreeIntent)
+		require.NoError(t, err)
+	})
+}
+
 func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1465,16 +1508,25 @@ func ensureTestGitRepo(t *testing.T, root string) {
 func singleChangeSlug(t *testing.T, dir string) string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
 	var dirs []os.DirEntry
-	for _, e := range entries {
-		if e.IsDir() {
-			if e.Name() == "archived" {
-				continue
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				if e.Name() == "archived" {
+					continue
+				}
+				dirs = append(dirs, e)
 			}
-			dirs = append(dirs, e)
 		}
 	}
+	if len(dirs) == 0 && filepath.Base(dir) == "changes" && filepath.Base(filepath.Dir(dir)) == "artifacts" {
+		root := filepath.Dir(filepath.Dir(dir))
+		changes, loadErr := state.ListChanges(root)
+		require.NoError(t, loadErr)
+		require.Len(t, changes, 1)
+		return changes[0].Slug
+	}
+	require.NoError(t, err)
 	require.Len(t, dirs, 1)
 	return dirs[0].Name()
 }

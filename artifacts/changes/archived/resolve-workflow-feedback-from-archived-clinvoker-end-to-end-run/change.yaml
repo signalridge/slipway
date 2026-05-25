@@ -1,0 +1,70 @@
+slug: resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run
+description: resolve workflow feedback from archived clinvoker end-to-end run
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T10:57:40.417697Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run
+worktree_branch: feat/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run
+artifact_schema: expanded
+remediation_sources:
+    - slug: fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run
+      path: artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run
+      relation: remediates
+    - slug: reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow
+      path: artifacts/changes/archived/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow
+      relation: remediates
+project_context:
+    tech_stack: Go CLI
+    test_cmd: go test -timeout=20m ./... -count=1
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        version: 1
+        state: frozen
+        content_hash: 7956f36a2def41ccf10777d6060dda0b622eab7cb6126b14744f858fec364b9d
+        updated_at: 2026-05-25T11:58:21.474614603Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/decision.md
+        version: 1
+        state: frozen
+        content_hash: d59f68396c833abb9950002852cbaf39ac73751040673d620d1d7fab2adb30ce
+        updated_at: 2026-05-25T11:35:38.828327239Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/intent.md
+        version: 1
+        state: frozen
+        content_hash: be98b87367d87a5075ae48583a5c9acb43db2afad72483e6b43c4d864ac734f8
+        updated_at: 2026-05-25T11:33:19.825737074Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 28a2580d397053c6fb397d492c85171055367190c7fb7ea15bdf8943c88e6ca4
+        updated_at: 2026-05-25T11:35:38.826970367Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/research.md
+        version: 1
+        state: frozen
+        content_hash: 8656b551d404e8262cc3713267accc7d3d617a73619e21180b72f7bb54676f8f
+        updated_at: 2026-05-25T11:34:21.856572045Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/tasks.md
+        version: 1
+        state: frozen
+        content_hash: f651750b0f03613d2f6614a204f09c52b2ec43fecc996f84bb76a0887708bfd1
+        updated_at: 2026-05-25T11:45:25.719464424Z

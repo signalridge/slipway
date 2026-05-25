@@ -1270,10 +1270,6 @@ func emitCatalogSupportFiles(root string, cfg ToolConfig, skillID string, refres
 }
 
 func renderCatalogArtifact(cfg ToolConfig, sk capability.Skill) (string, error) {
-	instructions, err := renderCatalogSkill(sk)
-	if err != nil {
-		return "", err
-	}
 	var b strings.Builder
 	publicName := adapterSkillName(sk.ID)
 	b.WriteString("# " + publicName + "\n\n")
@@ -1318,19 +1314,21 @@ func renderCatalogArtifact(cfg ToolConfig, sk capability.Skill) (string, error) 
 	}
 	b.WriteString("\n## Use When\n\n")
 	b.WriteString(sk.Function + "\n")
-	b.WriteString("\n## Full Instructions\n\n")
-	b.WriteString(stripSkillFrontmatter(instructions))
-	b.WriteString("\n")
-	return b.String(), nil
-}
-
-func stripSkillFrontmatter(raw string) string {
-	_, tail, err := splitSkillFrontmatter(raw)
-	if err != nil {
-		return strings.TrimSpace(raw)
+	b.WriteString("\n## Instruction Authority\n\n")
+	if shouldExportAsHostSkill(sk.ID) {
+		b.WriteString(fmt.Sprintf(
+			"- Load `%s` for full procedure, checklist, and evidence details.\n",
+			filepath.ToSlash(SkillPath(cfg, sk.ID)),
+		))
+	} else {
+		b.WriteString("- This catalog artifact is a thin routing record, not a procedure copy.\n")
+		b.WriteString(fmt.Sprintf(
+			"- Source procedure template: `%s`.\n",
+			filepath.ToSlash(sourceSkillTemplatePath(sk.ID, "SKILL.md")),
+		))
+		b.WriteString("- Hydrate listed support files when the route needs detailed references or scripts.\n")
 	}
-	tail = strings.TrimPrefix(tail, "\n---")
-	return strings.TrimSpace(tail)
+	return b.String(), nil
 }
 
 func renderSourceManagedSkill(raw, id string) (string, error) {

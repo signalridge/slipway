@@ -112,7 +112,7 @@ func TestRenderStatusTextExplainsStaleExecutionEvidenceRemediation(t *testing.T)
 		EvidenceFreshness: "stale",
 		Blockers:          model.ReasonCodesFromSpecs([]string{state.StaleExecutionEvidenceBlockerToken}),
 	})
-	assert.Contains(t, rendered, "stale_execution_evidence: Execution evidence is stale; rerun wave-orchestration to refresh execution-summary.yaml")
+	assert.Contains(t, rendered, "stale_execution_evidence: Execution evidence is stale; rerun wave-orchestration for affected tasks")
 }
 
 func TestRenderStatusTextShowsPlanningSubStepAndRecoveryNote(t *testing.T) {

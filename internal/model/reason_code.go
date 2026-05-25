@@ -126,7 +126,11 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
-		Message:  "Execution evidence is stale; rerun wave-orchestration to refresh execution-summary.yaml",
+		Message:  "Execution evidence is stale; rerun wave-orchestration for affected tasks",
+	},
+	"stale_planning_evidence": {
+		Severity: ReasonSeverityError,
+		Message:  "Planning artifacts changed after execution evidence; rerun affected planning gates before refreshing execution evidence",
 	},
 	"tasks_checklist_invalid_format": {
 		Severity: ReasonSeverityError,

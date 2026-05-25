@@ -1,0 +1,79 @@
+version: 1
+generated_at: 2026-05-25T11:36:14.645545452Z
+tasks_plan_hash: 967fc46e51a9c9fc16d239014024942722e1554500ad14a5c1569744ef315185
+total_tasks: 7
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Bind discovery changes to a default repo-local worktree before intent artifact scaffolding.
+          target_files:
+            - cmd/new.go
+            - cmd/new_test.go
+            - internal/state/worktree.go
+          task_kind: code
+        - task_id: t-02
+          objective: Populate missing or scaffold-only codebase-map docs with deterministic baseline repository facts.
+          target_files:
+            - cmd/cli_e2e_test.go
+            - cmd/codebase_map_command_test.go
+            - docs/workflow-test-menu.md
+            - internal/engine/artifact/codebase_map.go
+            - internal/tmpl/templates/skills/context-assembly/references/codebase-map.md
+          task_kind: code
+        - task_id: t-03
+          objective: Persist and report archived remediation source relationships.
+          target_files:
+            - cmd/done.go
+            - cmd/lifecycle_commands_test.go
+            - internal/model/change.go
+          task_kind: code
+        - task_id: t-05
+          objective: Thin generated root catalog artifacts to metadata and instruction-authority pointers.
+          target_files:
+            - internal/toolgen/toolgen.go
+            - internal/toolgen/toolgen_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-04
+          objective: Add targeted stale-evidence classification and keep assurance-only edits out of execution freshness.
+          depends_on:
+            - t-03
+          target_files:
+            - cmd/lifecycle_commands_test.go
+            - cmd/review_test.go
+            - cmd/status_render_test.go
+            - cmd/validate_artifact_gate_test.go
+            - internal/model/reason_code.go
+            - internal/state/execution_summary.go
+            - internal/state/execution_summary_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-06
+          objective: Update archived workflow feedback dispositions with concrete evidence pointers.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+            - t-05
+          target_files:
+            - artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+          task_kind: doc
+    - wave_index: 4
+      tasks:
+        - task_id: t-07
+          objective: Complete focused, full, and build verification.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+            - t-05
+            - t-06
+          target_files:
+            - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+            - artifacts/changes/resolve-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/goal-verification.yaml
+          task_kind: verification

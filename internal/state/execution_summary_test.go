@@ -481,3 +481,75 @@ func TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable(t *te
 	require.NoError(t, err)
 	assert.Contains(t, ctx.Issues, StaleExecutionEvidenceBlockerToken)
 }
+
+func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("planning-drift")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n"), 0o644))
+
+	capturedAt := time.Now().UTC().Add(-time.Second)
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: capturedAt,
+		}},
+	}
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, summary))
+	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "intent.md"), time.Now().UTC(), time.Now().UTC()))
+
+	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
+	require.NoError(t, err)
+	assert.Contains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, ctx.Issues, StaleExecutionEvidenceBlockerToken)
+}
+
+func TestExecutionSummaryIssuesIgnoreAssuranceOnlyEdits(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("assurance-only")
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte("# Assurance\n"), 0o644))
+
+	capturedAt := time.Now().UTC().Add(-time.Second)
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindVerification,
+			CapturedAt: capturedAt,
+		}},
+	}
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, summary))
+	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "assurance.md"), time.Now().UTC(), time.Now().UTC()))
+
+	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
+	require.NoError(t, err)
+	assert.NotContains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, ctx.Issues, StaleExecutionEvidenceBlockerToken)
+}

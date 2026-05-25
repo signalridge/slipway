@@ -77,10 +77,12 @@ What to observe:
 2. `status --json` should return diagnostics mode when there is no active
    change.
 3. `health --json` should show repo-local findings before `codebase-map`, then
-   become cleaner after the map is generated.
+   become cleaner after the map generates deterministic baseline repository
+   facts.
 4. `learn --preview --json` should return read-only proposals and `auto_apply:
    false`.
-5. `stats --json` should report codebase-map freshness.
+5. `stats --json` should report fresh codebase-map context after baseline
+   generation.
 
 Good companion test:
 

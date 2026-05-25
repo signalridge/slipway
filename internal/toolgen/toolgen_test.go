@@ -222,7 +222,8 @@ func TestCatalogOnlySkillsEmitCatalogArtifactsAndSupportFiles(t *testing.T) {
 		artifactPath := filepath.Join(root, CatalogArtifactPath(cfg, id))
 		content, err := os.ReadFile(artifactPath)
 		require.NoError(t, err, "missing catalog artifact for %s", id)
-		assert.Contains(t, string(content), "## Full Instructions", "%s catalog artifact should preserve instructions", id)
+		assert.NotContains(t, string(content), "## Full Instructions", "%s catalog artifact should stay thin", id)
+		assert.Contains(t, string(content), "## Instruction Authority", "%s catalog artifact should point at its authority", id)
 	}
 
 	_, err := os.Stat(filepath.Join(root, catalogSupportRootPath(cfg, "sast-orchestration"), "references", "sarif-merge.md"))
@@ -1624,12 +1625,18 @@ func TestTypedPartsRendered(t *testing.T) {
 		t.Run(tc.skill, func(t *testing.T) {
 			t.Parallel()
 			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
+			var body string
 			if !shouldExportAsHostSkill(tc.skill) {
-				path = filepath.Join(root, "slipway", "references", "catalog", tc.skill+".md")
+				skill, ok := capability.DefaultRegistry().Lookup(tc.skill)
+				require.True(t, ok, "missing catalog skill %s", tc.skill)
+				rendered, err := renderCatalogSkill(skill)
+				require.NoError(t, err)
+				body = rendered
+			} else {
+				raw, err := os.ReadFile(path)
+				require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
+				body = string(raw)
 			}
-			raw, err := os.ReadFile(path)
-			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
-			body := string(raw)
 			for _, h := range tc.headings {
 				count := strings.Count(body, "\n"+h+"\n")
 				assert.Equalf(t, 1, count,
