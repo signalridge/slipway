@@ -1,0 +1,38 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T08:45:34Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - "review:independent=pass"
+  - "security:container_supply_chain=pass"
+  - "evidence:actionlint=pass"
+  - "evidence:goreleaser_check=pass"
+  - "evidence:go_build=pass"
+  - "evidence:just_lint=pass"
+  - "evidence:nix_build=pass"
+notes: |
+  Bottom line: pass after post-review supply-chain hardening; no blocking code-quality, test-quality, safety, or cross-artifact gaps remain.
+
+  Review scope:
+  - Changed Go code was reviewed for release metadata behavior and governed worktree-preflight ordering.
+  - Workflow, release, Docker, Nix, lint, docs, Dependabot, and governed artifact changes were reviewed against the approved Approach C scope.
+  - Security review included container/Docker and supply-chain surfaces.
+
+  Findings:
+  - Initial review found mutable and high-risk supply-chain surfaces in new security/release automation: Trivy Action on `master`, Trivy container scan through a Docker socket with `latest`, broad Docker build context, unpinned Docker base images, and mutable `latest` container publication.
+  - These were fixed before this pass: Trivy Action is pinned by commit SHA, release image scanning uses the pinned action instead of a Docker-socket container run, Docker build context is bounded with `.dockerignore` and narrow `COPY`, base images are digest-pinned, and GoReleaser publishes versioned container tags only.
+
+  Verification checked after hardening:
+  - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`: pass.
+  - `goreleaser check`: pass.
+  - `go build ./...`: pass.
+  - `go test ./cmd -run TestRootVersionFlagPrintsReleaseMetadata -count=1`: pass.
+  - `just lint`: pass (`go vet ./...`, `golangci-lint run --timeout 5m`, `0 issues`).
+  - `nix build .#slipway --no-link`: pass.
+
+  Gaps (code_to_artifact): none blocking. Post-review hardening is reflected in `tasks.md`, `assurance.md`, task evidence, wave evidence, and the refreshed execution summary.
+  Gaps (artifact_to_code): none blocking. The approved full distribution surfaces are present and adapted to Slipway names/paths.
+
+  Residual risk:
+  - Local Docker image execution was not verified because the local Docker API path was unavailable (`~/.orbstack/run/docker.sock`). Dockerfile structure and GoReleaser config were reviewed, and release Docker/SBOM/signing execution remains gated to tag/manual GitHub Actions context.

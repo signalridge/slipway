@@ -1,0 +1,28 @@
+{
+  "task_id": "t-04",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    ".github/dependabot.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/flake-lock-update.yaml",
+    ".github/workflows/nix.yaml",
+    ".github/workflows/pr-title.yaml",
+    ".github/workflows/security.yaml"
+  ],
+  "target_files": [
+    ".github/dependabot.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/flake-lock-update.yaml",
+    ".github/workflows/nix.yaml",
+    ".github/workflows/pr-title.yaml",
+    ".github/workflows/security.yaml"
+  ],
+  "evidence_ref": "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md",
+  "blockers": [],
+  "captured_at": "2026-05-25T09:02:06Z",
+  "input_hash": "cdbd47bfc5880400cd1946747bf7cc727e473916200f31467f02087949bf3963"
+}

@@ -1,0 +1,20 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    ".release-please-manifest.json",
+    "CHANGELOG.md",
+    "release-please-config.json"
+  ],
+  "target_files": [
+    ".release-please-manifest.json",
+    "CHANGELOG.md",
+    "release-please-config.json"
+  ],
+  "evidence_ref": "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md",
+  "blockers": [],
+  "captured_at": "2026-05-25T09:02:06Z",
+  "input_hash": "c4d0130d81a9af76ff73d1438aed41cda1364d91032a57f4a15178a4876bc1b4"
+}

@@ -1,0 +1,16 @@
+{
+  "task_id": "t-07",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [
+    "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md"
+  ],
+  "target_files": [
+    "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md"
+  ],
+  "evidence_ref": "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md",
+  "blockers": [],
+  "captured_at": "2026-05-25T09:02:06Z",
+  "input_hash": "e1ed5826fe0f119759b36b7d683d7df37781746d250442b1fecbda6a89c2124c"
+}

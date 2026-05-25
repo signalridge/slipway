@@ -1,0 +1,45 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T09:03:47Z"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:23/23"
+  - "closeout:reviewer_independence=pass"
+  - "closeout:assurance_complete=pass"
+  - "closeout:guardrail_baseline=pass"
+  - "closeout:workflow_validation=pass"
+notes: |
+  Final closeout verdict: pass.
+
+  Current run:
+  - Current run_version is 1.
+  - `go run . validate --json` after refreshing task/wave timestamps reported `evidence_freshness: fresh`.
+  - Before this closeout record, the only remaining ship blocker was missing `final-closeout` evidence.
+
+  Required verification index:
+  - `wave-orchestration`: pass, run_version 1, timestamp 2026-05-25T09:02:06Z.
+  - `spec-compliance-review`: pass, run_version 1, references include `layer:R0=pass` and `layer:IR1=pass`.
+  - `code-quality-review`: pass, run_version 1, references include `layer:QUALITY=pass`, independent review, and container supply-chain review.
+  - `goal-verification`: pass, run_version 1, timestamp 2026-05-25T09:02:56Z.
+
+  Fresh closeout commands:
+  - `go test -timeout=20m ./... -count=1`: pass. Root package plus 22 tested packages passed; `internal/writeutil` had no test files. Slowest package was `github.com/signalridge/slipway/cmd` at 720.749s.
+  - `go build ./...`: pass.
+  - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`: pass.
+  - `goreleaser check`: pass, `1 configuration file(s) validated`.
+  - `just lint`: pass, `go vet ./...` and `golangci-lint run --timeout 5m`, `0 issues`.
+  - `nix flake check --no-build`: pass with expected dirty-tree, app-meta, and incompatible-system warnings.
+  - `jq empty release-please-config.json .release-please-manifest.json`: pass.
+  - `go run . --version`: pass, printed `slipway dev`, `commit: unknown`, `built: unknown`.
+
+  Assurance check:
+  - `assurance.md` contains scope summary, verification verdict, evidence index, requirement coverage, residual risks/exceptions, rollback readiness, and archive decision.
+  - External release publication remains intentionally unexecuted locally; release/GHCR/package-manager/docs publication paths are gated to tag/manual GitHub Actions context and documented secrets/settings.
+
+  Guardrail baseline:
+  - No sensitive guardrail domain is active for this change.
+  - Security-relevant distribution surfaces were still rechecked: Docker base images are digest-pinned, `.dockerignore` bounds context, Trivy Action is pinned by commit SHA, Docker-socket scanning was removed, and mutable `latest` container publication was removed.
+
+  Residual exception:
+  - Local Docker image execution was not run because the local Docker API path was unavailable. This is recorded in assurance and code-quality review; structural Docker/GoReleaser checks passed, and live publication remains external-gated.

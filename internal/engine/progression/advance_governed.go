@@ -123,6 +123,12 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		}
 	}
 
+	if blockers, err := applyPendingWorktreePreflight(root, &change, fromState); err != nil {
+		return AdvanceSummary{}, err
+	} else if len(blockers) > 0 {
+		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
+	}
+
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
 		return AdvanceSummary{}, err
@@ -372,6 +378,37 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		ClearedFields: cleared,
 		Message:       fmt.Sprintf("Advanced to %s.", toState),
 	}, nil
+}
+
+func applyPendingWorktreePreflight(root string, change *model.Change, fromState model.WorkflowState) ([]string, error) {
+	if change == nil {
+		return nil, nil
+	}
+	if fromState != model.StateS2Execute || !change.NeedsDiscovery || strings.TrimSpace(change.WorktreePath) != "" {
+		return nil, nil
+	}
+
+	before := *change
+	derivation, err := DeriveWorktreeBlockers(root, *change, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(derivation.Blockers) > 0 {
+		return derivation.Blockers, nil
+	}
+	if err := ApplyWorktreeMetadata(change, derivation); err != nil {
+		return []string{"worktree_metadata_persist_failed:" + err.Error()}, nil
+	}
+	if change.WorktreePath == before.WorktreePath && change.WorktreeBranch == before.WorktreeBranch {
+		return nil, nil
+	}
+	if err := state.RelocateGovernedBundle(root, before, *change); err != nil {
+		return nil, err
+	}
+	if err := state.SaveChange(root, *change); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 // planSubStepOrder defines the linear progression of S1_PLAN substeps.

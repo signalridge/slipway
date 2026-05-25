@@ -1,0 +1,31 @@
+{
+  "task_id": "t-02",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    ".dockerignore",
+    ".golangci.yaml",
+    ".markdownlint.yaml",
+    ".yamllint.yaml",
+    "Dockerfile",
+    "flake.lock",
+    "flake.nix",
+    "justfile",
+    "mkdocs.yml"
+  ],
+  "target_files": [
+    ".dockerignore",
+    ".golangci.yaml",
+    ".markdownlint.yaml",
+    ".yamllint.yaml",
+    "Dockerfile",
+    "flake.nix",
+    "justfile",
+    "mkdocs.yml"
+  ],
+  "evidence_ref": "artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md",
+  "blockers": [],
+  "captured_at": "2026-05-25T09:02:06Z",
+  "input_hash": "103e19b0817def858dfedaf0ae2c1d36bd8059d4674390c892f8bc2bc2f6399f"
+}

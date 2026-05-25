@@ -78,6 +78,12 @@ var helpGroups = []commandGroup{
 
 var rootCmd = newRootCmd()
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 // Execute runs the root command.
 func Execute() error {
 	// Capture Cobra's built-in helpFunc before overriding, so subcommands can
@@ -130,9 +136,11 @@ func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "slipway",
 		Short:         "Slipway change-governance workflow CLI",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	cmd.SetVersionTemplate(fmt.Sprintf("slipway %s\n  commit: %s\n  built:  %s\n", version, commit, date))
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	cmd.AddCommand(makeInitCmd())

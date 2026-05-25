@@ -1,0 +1,67 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T09:02:56Z"
+run_version: 1
+references:
+  - "fresh:go_test_full=pass"
+  - "fresh:go_build=pass"
+  - "fresh:actionlint=pass"
+  - "fresh:goreleaser_check=pass"
+  - "fresh:just_lint=pass"
+  - "fresh:nix_flake_check=pass"
+  - "fresh:stub_scan=pass"
+  - "fresh:coverage_change_surface=pass"
+notes: |
+  Acceptance criteria:
+    AC-1: Preserve Clinvoker parity analysis and governed workflow feedback.
+      Verdict: pass.
+      Exists: `research.md`, `decision.md`, README release/maintenance docs, and `workflow-feedback.md` are present.
+      Substantive: `workflow-feedback.md` contains concrete friction entries from the governed run; README identifies `clinvoker` only as the comparison source.
+      Wired: `rg -n "clinvoker|clinvk" ...` found only the intentional README reference, while executable configs use Slipway names.
+
+    AC-2: CI covers Go tests, vet, lint/static analysis, race tests, and builds using `go.mod`.
+      Verdict: pass.
+      Exists: `.github/workflows/ci.yml` is present.
+      Substantive: CI has multi-OS `go test -timeout=20m ./... -count=1`, race tests, `go vet`, golangci-lint, module hygiene, release-smoke build, and cross-compilation.
+      Wired: `actionlint .github/workflows/*.yml .github/workflows/*.yaml` passed; `go test -timeout=20m ./... -count=1` passed with `cmd` at 720.749s.
+
+    AC-3: Release automation builds/verifies cross-platform artifacts and guarded distribution metadata.
+      Verdict: pass.
+      Exists: `.github/workflows/release.yaml`, `.github/workflows/release-please.yaml`, `.goreleaser.yaml`, Release Please files, and `CHANGELOG.md` are present.
+      Substantive: GoReleaser targets Slipway archives, checksums, nFPM packages, GHCR image, Homebrew Cask, Scoop, AUR, SBOM, and signing surfaces; publication paths require tag/manual context and optional secrets.
+      Wired: `goreleaser check` passed and the prior snapshot release produced local archives/packages without publishing; workflow lint passed.
+
+    AC-4: CLI version metadata is exposed for release smoke checks.
+      Verdict: pass.
+      Exists: `cmd/root.go` defines `version`, `commit`, and `date`; `cmd/root_version_test.go` covers `--version`.
+      Substantive: the version template prints all three fields and release ldflags inject them.
+      Wired: `go test ./cmd -run TestRootVersionFlagPrintsReleaseMetadata -count=1` passed earlier in the same implementation window, focused coverage passed, and `go run . --version` printed `slipway dev`, `commit: unknown`, `built: unknown`.
+
+    AC-5: Approach C distribution support files exist and are Slipway-specific.
+      Verdict: pass.
+      Exists: `.dockerignore`, Dockerfiles, Nix flake, lint configs, MkDocs, justfile, Release Please, GoReleaser, Dependabot, and workflow files are present.
+      Substantive: container base images are digest-pinned, Docker build context is bounded, Trivy Action is pinned by commit SHA, and container image publication uses version tags only.
+      Wired: `go build ./...`, `nix build .#slipway --no-link`, `nix flake check --no-build`, `goreleaser check`, and `jq empty release-please-config.json .release-please-manifest.json` passed.
+
+    AC-6: Maintenance/security automation is meaningful without local secret provisioning.
+      Verdict: pass.
+      Exists: security, Dependabot, PR title, docs, Nix, flake-lock update, Release Please, and release workflows are present.
+      Substantive: security jobs include govulncheck, pinned Trivy Action filesystem scanning, SBOM generation, and license reporting; release verification scans the container image without mounting the Docker socket.
+      Wired: workflow lint passed, optional secrets are checked before external package publishing, and repository settings/secrets are documented in README.
+
+    AC-7: End-to-end verification and Slipway lifecycle evidence prove completion.
+      Verdict: pass.
+      Exists: task evidence, wave evidence, execution summary, spec review, code-quality review, this goal verification, and assurance records are present for run_version 1.
+      Substantive: full suite, build, lint, config, Nix, coverage, and stub scans are recorded in assurance; residual external-publication exceptions are explicit.
+      Wired: `go run . validate --json` reports `evidence_freshness: fresh`; remaining blockers are only missing S4 goal/final closeout evidence before this record is consumed.
+
+  Fresh command evidence:
+  - `go test -timeout=20m ./... -count=1`: pass; `cmd` package 720.749s, all listed packages passed.
+  - `go build ./...`: pass.
+  - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`: pass.
+  - `goreleaser check`: pass, `1 configuration file(s) validated`.
+  - `just lint`: pass, `go vet ./...` and `golangci-lint run --timeout 5m`, `0 issues`.
+  - `nix flake check --no-build`: pass with expected dirty-tree, app-meta, and incompatible-system warnings.
+  - Stub marker scan over changed target files: no TODO/FIXME/HACK/placeholder hits.
+  - Secondary zero-value scan: only benign helper returns and no-op success paths; no production stub.
+  - Focused coverage command passed for `cmd` and `internal/engine/progression`; total cover output was 6.5% because the denominator is the full selected packages, while the change-surface behavior is covered by the focused version and worktree-preflight regression tests.

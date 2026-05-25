@@ -1,0 +1,32 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T08:33:14Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "spec:req-001=pass"
+  - "spec:req-002=pass"
+  - "spec:req-003=pass"
+  - "spec:req-004=pass"
+  - "spec:req-005=pass"
+  - "spec:req-006=pass"
+  - "spec:req-007=pass"
+notes: |
+  Forward trace:
+  - REQ-001 is covered by research/decision artifacts, README comparison context, and workflow-feedback.md entries recorded during the governed run.
+  - REQ-002 is covered by .github/workflows/ci.yml using go-version-file: go.mod, full tests, race tests, vet, golangci-lint, actionlint/yamllint/markdownlint jobs, build, module hygiene, and cross-compilation.
+  - REQ-003 is covered by release-please config, CHANGELOG/manifest files, .github/workflows/release.yaml, .goreleaser.yaml, binary/package/container/provenance verification jobs, and local GoReleaser check/snapshot evidence.
+  - REQ-004 is covered by cmd/root.go version metadata, cmd/root_version_test.go, release ldflags, and go run . --version evidence.
+  - REQ-005 is covered by GoReleaser, Dockerfile/Dockerfile.goreleaser, Nix flake, docs/MkDocs, lint configs, Dependabot, Release Please, and helper just targets.
+  - REQ-006 is covered by PR title, Dependabot, security, docs, Nix, flake-lock update, and release-validation surfaces; secret-dependent publication is documented and guarded.
+  - REQ-007 is covered by assurance.md, execution-summary.yaml, wave-orchestration evidence, and fresh validate output showing execution evidence freshness=fresh.
+
+  Reverse trace:
+  - The worktree-preflight runtime fix is documented in workflow-feedback.md and assurance.md as a bug discovered while exercising the governed workflow; it has a focused regression test.
+  - The explicit 20-minute Go test timeout is documented in requirements.md, README.md, tasks.md, workflow-feedback.md, and assurance.md after the default timeout proved flaky for the current slow cmd package.
+  - Docker/Homebrew/Scoop/AUR/SBOM/signing/provenance paths are within the selected Approach C scope and are guarded by tag/manual workflow context, GitHub permissions, and optional secrets.
+
+  Gaps (code_to_artifact): none blocking.
+  Gaps (artifact_to_code): none blocking.
+  Decision fidelity: Approach C is honored; no local real publication was performed.

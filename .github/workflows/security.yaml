@@ -1,0 +1,101 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck -format sarif ./... > govulncheck.sarif
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
+
+  trivy:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Trivy vulnerability scanner
+        # v0.36.0, pinned by commit SHA after GHSA-69fq-xp46-6x23.
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+      - name: Upload Trivy SARIF report
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+      - name: Generate SBOM
+        run: |
+          syft . -o spdx-json > sbom.spdx.json
+          syft . -o cyclonedx-json > sbom.cdx.json
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: sbom
+          path: |
+            sbom.spdx.json
+            sbom.cdx.json
+          retention-days: 30
+
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+      - name: Check licenses
+        run: |
+          go-licenses report ./... 2>&1 | tee licenses.txt
+          if grep -E "(GPL|AGPL|LGPL|SSPL)" licenses.txt; then
+            echo "::warning::Found potentially restrictive licenses"
+          fi
+      - name: Upload license report
+        uses: actions/upload-artifact@v6
+        with:
+          name: license-report
+          path: licenses.txt
+          retention-days: 30

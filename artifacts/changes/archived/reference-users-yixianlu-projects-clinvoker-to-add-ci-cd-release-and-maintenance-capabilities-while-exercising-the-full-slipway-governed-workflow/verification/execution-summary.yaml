@@ -1,0 +1,138 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-25T09:02:06Z
+overall_verdict: pass
+tasks_plan_hash: 9e4aaa1a843de51787c0af8ba663953bbc0b6b80eae6569a772cb6d6996ea950
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+    - t-07
+    - t-08
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/root.go
+        - cmd/root_version_test.go
+      target_files:
+        - cmd/root.go
+        - cmd/root_version_test.go
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: c2bd51870f43c88a0974b135aa871fa0e01f05c655f2c576a53d959633429887
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .dockerignore
+        - .golangci.yaml
+        - .markdownlint.yaml
+        - .yamllint.yaml
+        - Dockerfile
+        - flake.lock
+        - flake.nix
+        - justfile
+        - mkdocs.yml
+      target_files:
+        - .dockerignore
+        - .golangci.yaml
+        - .markdownlint.yaml
+        - .yamllint.yaml
+        - Dockerfile
+        - flake.nix
+        - justfile
+        - mkdocs.yml
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: 103e19b0817def858dfedaf0ae2c1d36bd8059d4674390c892f8bc2bc2f6399f
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .release-please-manifest.json
+        - CHANGELOG.md
+        - release-please-config.json
+      target_files:
+        - .release-please-manifest.json
+        - CHANGELOG.md
+        - release-please-config.json
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: c4d0130d81a9af76ff73d1438aed41cda1364d91032a57f4a15178a4876bc1b4
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/dependabot.yml
+        - .github/workflows/ci.yml
+        - .github/workflows/docs.yml
+        - .github/workflows/flake-lock-update.yaml
+        - .github/workflows/nix.yaml
+        - .github/workflows/pr-title.yaml
+        - .github/workflows/security.yaml
+      target_files:
+        - .github/dependabot.yml
+        - .github/workflows/ci.yml
+        - .github/workflows/docs.yml
+        - .github/workflows/flake-lock-update.yaml
+        - .github/workflows/nix.yaml
+        - .github/workflows/pr-title.yaml
+        - .github/workflows/security.yaml
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: cdbd47bfc5880400cd1946747bf7cc727e473916200f31467f02087949bf3963
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/release-please.yaml
+        - .github/workflows/release.yaml
+        - .goreleaser.yaml
+        - Dockerfile.goreleaser
+      target_files:
+        - .github/workflows/release-please.yaml
+        - .github/workflows/release.yaml
+        - .goreleaser.yaml
+        - Dockerfile.goreleaser
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: 9bb6871588b51e2654d8bff9cf53ce6babb8c1d59f648529df517fb1b04cd292
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - README.md
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/workflow-feedback.md
+      target_files:
+        - README.md
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/workflow-feedback.md
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: d4d2c1d39946f92cac9adf3b217b98d2f12d0985f915e50eeee4217d0dcbfa76
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-07
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      target_files:
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: e1ed5826fe0f119759b36b7d683d7df37781746d250442b1fecbda6a89c2124c
+      captured_at: 2026-05-25T09:02:06Z
+    - task_id: t-08
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/tasks.md
+      target_files:
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+        - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/tasks.md
+      evidence_ref: artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+      evidence_input_hash: 21e8fe1676defe2303943678fa4e569f9e976ebd95e07a13e4fdb7bf9917ee5d
+      captured_at: 2026-05-25T09:02:06Z

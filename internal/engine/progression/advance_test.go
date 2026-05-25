@@ -712,6 +712,115 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 	}
 }
 
+func TestAdvanceGoverned_AppliesWorktreePreflightBeforeRequiredActionBlockers(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitRepoForValidationTests(t, root)
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("worktree-preflight-before-actions")
+	change.NeedsDiscovery = true
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetStrict
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, model.WorkflowPresetStrict); err != nil {
+		t.Fatalf("scaffold bundle: %v", err)
+	}
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		t.Fatalf("bundle dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Worktree preflight
+REQ-001: The change MUST consume worktree preflight evidence before required-action blockers deadlock execution.
+`), 0o644); err != nil {
+		t.Fatalf("write requirements: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(`# Decision
+
+## Alternatives Considered
+- A: Block before reading evidence.
+- B: Consume preflight evidence before action blockers.
+
+## Selected Approach
+Use B.
+
+## Interfaces and Data Flow
+S2 execution reads worktree-preflight verification and persists worktree metadata.
+
+## Rollout and Rollback
+The change is limited to S2 preflight ordering and can be reverted directly.
+
+## Risk
+Low; failed or missing evidence still returns the existing metadata blocker.
+`), 0o644); err != nil {
+		t.Fatalf("write decision: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte(`# Research
+
+## Alternatives Considered
+- A: Keep existing ordering.
+- B: Consume worktree evidence before required-action blockers.
+
+## Unknowns
+- None.
+
+## Assumptions
+- Worktree preflight evidence is already validated by DeriveWorktreeBlockers.
+
+## Canonical References
+- internal/engine/progression/advance_governed.go
+`), 0o644); err != nil {
+		t.Fatalf("write research: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise worktree preflight ordering
+  - wave: 1
+  - depends_on: []
+  - target_files: ["a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go", "j.go", "k.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644); err != nil {
+		t.Fatalf("write tasks: %v", err)
+	}
+
+	worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
+	branch := "feat/" + change.Slug
+	runGitForValidationTests(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+	writeVerificationForTest(t, root, change.Slug, SkillWorktreePreflight, model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Timestamp: time.Now().UTC(),
+		References: []string{
+			"worktree_path:" + worktreeRoot,
+			"worktree_branch:" + branch,
+			"baseline_verify_cmd:go test ./...",
+		},
+	})
+
+	summary, err := AdvanceGoverned(root, change.Slug, AdvanceOptions{Command: "run"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasAdvanceReasonCode(summary.Blockers, state.WorktreeReasonMetadataRequired) {
+		t.Fatalf("worktree preflight evidence was not consumed before required-action blockers: %+v", summary.Blockers)
+	}
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("load change: %v", err)
+	}
+	if reloaded.WorktreePath == "" || reloaded.WorktreeBranch != branch {
+		t.Fatalf("expected worktree metadata to be persisted, got path=%q branch=%q", reloaded.WorktreePath, reloaded.WorktreeBranch)
+	}
+}
+
 func TestAdvanceIntake_ConfirmToS1Plan(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

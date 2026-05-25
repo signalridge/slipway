@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.v2.jsonschema.json
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - govet
+    - revive
+    - unused
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+          disabled: true
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      - linters:
+          - revive
+        text: "stutters"
+
+formatters:
+  enable:
+    - gofmt

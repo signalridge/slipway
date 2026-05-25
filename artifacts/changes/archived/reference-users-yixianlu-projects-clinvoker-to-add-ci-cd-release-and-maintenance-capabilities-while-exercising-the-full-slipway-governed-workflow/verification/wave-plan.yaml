@@ -1,0 +1,91 @@
+version: 1
+generated_at: 2026-05-25T08:40:58.093886977Z
+tasks_plan_hash: 9e4aaa1a843de51787c0af8ba663953bbc0b6b80eae6569a772cb6d6996ea950
+total_tasks: 8
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Add Slipway version metadata for release verification.
+          target_files:
+            - cmd/root.go
+            - cmd/root_version_test.go
+          task_kind: code
+        - task_id: t-02
+          objective: Add baseline repository tooling and distribution scaffolding.
+          target_files:
+            - .dockerignore
+            - .golangci.yaml
+            - .markdownlint.yaml
+            - .yamllint.yaml
+            - Dockerfile
+            - flake.nix
+            - justfile
+            - mkdocs.yml
+          task_kind: code
+        - task_id: t-03
+          objective: Add release metadata files for automated changelog and release PRs.
+          target_files:
+            - .release-please-manifest.json
+            - CHANGELOG.md
+            - release-please-config.json
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-04
+          objective: Add CI, maintenance, security, docs, and Nix workflows.
+          depends_on:
+            - t-01
+            - t-02
+          target_files:
+            - .github/dependabot.yml
+            - .github/workflows/ci.yml
+            - .github/workflows/docs.yml
+            - .github/workflows/flake-lock-update.yaml
+            - .github/workflows/nix.yaml
+            - .github/workflows/pr-title.yaml
+            - .github/workflows/security.yaml
+          task_kind: code
+        - task_id: t-05
+          objective: Add GoReleaser and tag/manual release workflow for full distribution breadth.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - .github/workflows/release-please.yaml
+            - .github/workflows/release.yaml
+            - .goreleaser.yaml
+            - Dockerfile.goreleaser
+          task_kind: code
+        - task_id: t-06
+          objective: Update operator documentation and workflow feedback for release/maintenance enablement.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - README.md
+            - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/workflow-feedback.md
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-07
+          objective: Run local implementation verification.
+          depends_on:
+            - t-04
+            - t-05
+            - t-06
+          target_files:
+            - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+          task_kind: verification
+    - wave_index: 4
+      tasks:
+        - task_id: t-08
+          objective: Complete governance verification and closeout artifacts.
+          depends_on:
+            - t-07
+          target_files:
+            - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+            - artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/tasks.md
+          task_kind: verification

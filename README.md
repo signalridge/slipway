@@ -146,11 +146,63 @@ If execution looks inconsistent after an interrupted run, start with
 Use the same verification bundle locally that CI now runs:
 
 ```bash
-go test ./... -count=1
+go test -timeout=20m ./... -count=1
 go vet ./...
-staticcheck ./...
-go test ./... -race -count=1
+golangci-lint run --timeout 5m
+go test -timeout=20m ./... -race -count=1
 ```
+
+The repository also includes convenience targets for the release and
+maintenance toolchain:
+
+```bash
+just test
+just build
+just lint
+just release-check
+nix build .#slipway
+```
+
+`go run . --version` and release-built binaries print the Slipway version,
+commit, and build timestamp. Release workflows inject those values with Go
+linker flags; local development defaults to `dev`, `unknown`, and `unknown`.
+
+## Release And Maintenance
+
+The GitHub automation is modeled after the broader distribution workflow in
+`clinvoker`, adapted to Slipway names, root-module builds, and repo-local
+verification.
+
+| Surface | File | Purpose |
+| --- | --- | --- |
+| CI | `.github/workflows/ci.yml` | Go tests on Linux/macOS/Windows, race tests, vet, lint, module hygiene, release metadata smoke build, and cross-compilation |
+| Security | `.github/workflows/security.yaml` | `govulncheck`, Trivy filesystem scanning, SBOM generation, and Go license reporting |
+| Release PRs | `.github/workflows/release-please.yaml` | Release Please manifest-driven changelog and tag PRs |
+| Releases | `.github/workflows/release.yaml` | Tag/manual GoReleaser execution, SLSA provenance, container/package/binary verification, and optional tap publication |
+| Docs | `.github/workflows/docs.yml` | MkDocs strict build and GitHub Pages deploy on `main` |
+| Nix | `.github/workflows/nix.yaml` | Flake check, package build, binary smoke test, and dev shell smoke test |
+| Nix updates | `.github/workflows/flake-lock-update.yaml` | Weekly `flake.lock` update PR |
+| Dependency updates | `.github/dependabot.yml` | Go module, GitHub Actions, and Docker dependency PRs |
+
+Release artifacts are described by `.goreleaser.yaml`. It builds `slipway` for
+Linux, macOS, and Windows; publishes archives, checksums, SBOMs, Debian/RPM/APK
+packages, GHCR images, and optional Homebrew Cask/Scoop/AUR package metadata;
+and uses cosign keyless signing where the GitHub OIDC permission is available.
+
+Repository settings and secrets are intentionally not assumed to exist locally:
+
+| Setting or secret | Required for | Notes |
+| --- | --- | --- |
+| GitHub Actions write permissions | Release Please and release publication | Required for release PRs, tags, GitHub Releases, and GHCR packages |
+| GitHub Pages enabled for Actions | Documentation deploy | Build still runs on PRs without deploying |
+| `GH_PAT` | Optional Homebrew Cask/Scoop tap updates | Release Please falls back to `GITHUB_TOKEN`; external tap publication needs a token with access to those repositories |
+| `AUR_SSH_PRIVATE_KEY` | Optional AUR package upload | Release continues without AUR when the secret is absent |
+| Code scanning upload enabled | SARIF upload visibility | Security jobs still generate SARIF when upload visibility is not enabled |
+
+The Nix package sets `doCheck = false` because the full Slipway test suite is
+covered separately by CI and is comparatively slow inside the package build.
+Use `nix build .#slipway` for package verification and `go test ./... -count=1`
+for behavior verification.
 
 ## Authority model
 

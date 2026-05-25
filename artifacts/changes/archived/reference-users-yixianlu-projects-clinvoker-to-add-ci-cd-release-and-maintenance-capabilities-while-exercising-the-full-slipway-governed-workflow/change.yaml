@@ -1,0 +1,66 @@
+slug: reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow
+description: reference /Users/yixianlu/Projects/clinvoker to add CI/CD, release, and maintenance capabilities while exercising the full Slipway governed workflow
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T06:37:35.356762Z
+quality_mode: full
+workflow_profile: code
+workflow_preset: strict
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd
+worktree_branch: feat/reference-clinvoker-cicd-release-maintenance
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, GitHub Actions, shell
+    test_cmd: go test -timeout=20m ./... -count=1
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - YAML
+        - Shell
+    recent_work: Current branch main is one commit ahead of origin/main with governance runtime scaffolding changes.
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/assurance.md
+        version: 1
+        state: frozen
+        content_hash: a1f95a7293d167f4a2329b4ab51eb731494dd597a6224776ffea354b84fe4069
+        updated_at: 2026-05-25T09:00:56.540749246Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/decision.md
+        version: 1
+        state: frozen
+        content_hash: 684e581a9da0db2756525326c92bff76d4facf7102653509aa6455c82400b97e
+        updated_at: 2026-05-25T06:58:50.626051645Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/intent.md
+        version: 1
+        state: frozen
+        content_hash: 039f01a1f7157273210f1cc3c630bc7530d30ddc2fa789857e033a773069d51e
+        updated_at: 2026-05-25T06:57:51.328871097Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 3a8ee5e452b1368fa458fa1158ce98e1155656b372296be3625cfbc12f313507
+        updated_at: 2026-05-25T08:29:48.191715061Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/research.md
+        version: 1
+        state: frozen
+        content_hash: 92c5a13e10c495549fe56f52ecb101d9f2540c75f5ed9b67c9675a60309083fc
+        updated_at: 2026-05-25T06:58:22.00128166Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway-reference-clinvoker-cicd/artifacts/changes/reference-users-yixianlu-projects-clinvoker-to-add-ci-cd-release-and-maintenance-capabilities-while-exercising-the-full-slipway-governed-workflow/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 9822607bbfa28a3d3904bb5c53515e9da77d3ed0c0657f1618d9b2717378d686
+        updated_at: 2026-05-25T08:40:58.093886977Z
