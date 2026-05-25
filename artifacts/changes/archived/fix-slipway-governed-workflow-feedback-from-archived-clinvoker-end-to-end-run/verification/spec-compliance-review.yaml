@@ -1,0 +1,36 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T10:32:09Z"
+run_version: 1
+references:
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "layer:R0=pass"
+  - "layer:R3=pass"
+  - "layer:IR1=pass"
+  - "layer:IR3=pass"
+  - "trace:REQ-001=workflow-feedback.md"
+  - "trace:REQ-002=actions.go,next_skill_view.go,advance_intake.go"
+  - "trace:REQ-003=codebase_map.go,stats.go,skill_resolution.go"
+  - "trace:REQ-004=research-orchestration,verification-doctrine"
+  - "trace:REQ-005=wave/parse.go,plan-audit"
+  - "trace:REQ-006=lifecycle.go,agent-contracts,workflow-test-menu,worktree-preflight"
+  - "trace:REQ-007=assurance.md,wave-orchestration.yaml"
+notes: |
+  Gaps (artifact_to_code): none. Each requirement has an implementation,
+  documentation, or explicit deferred disposition in workflow-feedback.md.
+
+  Gaps (code_to_artifact): none. Changed runtime behavior maps to REQ-002,
+  REQ-003, REQ-005, or REQ-006; generated guidance and docs map to REQ-004
+  and REQ-006; active artifacts map to REQ-001 and REQ-007.
+
+  Decision fidelity: pass. The implementation follows the selected layered
+  compatibility approach: action wording and handoff surfaces are clarified,
+  scaffold-only codebase-map state is exposed, schemas and task parsing are
+  aligned, locking/timeout/worktree guidance is documented, and archive
+  metadata is rewritten without moving the project-root archive location.
+
+  Safety/external contract review: pass. JSON surfaces only add fields or
+  clarify next-skill selection in unblocked S1 bundle states; no existing
+  response fields are removed. Deferred lifecycle changes are tracked instead
+  of silently changing path authority or stale-evidence policy.

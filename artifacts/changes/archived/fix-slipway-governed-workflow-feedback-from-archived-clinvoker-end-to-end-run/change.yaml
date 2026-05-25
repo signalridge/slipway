@@ -1,0 +1,65 @@
+slug: fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run
+description: fix Slipway governed workflow feedback from archived clinvoker end-to-end run
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T09:46:46.946035Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-slipway-governed-workflow-feedback
+worktree_branch: feat/fix-slipway-governed-workflow-feedback
+artifact_schema: expanded
+project_context:
+    tech_stack: Go CLI governance engine
+    test_cmd: go test -timeout=20m ./... -count=1
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+        - YAML
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        version: 1
+        state: frozen
+        content_hash: da0c8961a7f1fd8a85aab72f9feef8a01f61214e552e10dc51ec116ea3eb3c43
+        updated_at: 2026-05-25T10:27:41.066433353Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/decision.md
+        version: 1
+        state: frozen
+        content_hash: 2964ed961b108079d884f701b92122ab31671f991ad94961ce19509d9025ea82
+        updated_at: 2026-05-25T09:55:04.048900312Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/intent.md
+        version: 1
+        state: frozen
+        content_hash: fcc7f1e94b13c9e8a03b3a2036d21b7340bc67dab59f78c8bdd1bd21b10dc473
+        updated_at: 2026-05-25T09:52:05.104416114Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/requirements.md
+        version: 1
+        state: frozen
+        content_hash: c91a9a918cd2b665dd371ed306090949695145a105dcf6a330ab1fb14159ad15
+        updated_at: 2026-05-25T09:55:04.048352908Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/research.md
+        version: 1
+        state: frozen
+        content_hash: 1a307dd3721d1c6f7e624d05794f3f43a41fefa9ad68f06440d0465425dd4003
+        updated_at: 2026-05-25T09:53:33.717927853Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/artifacts/changes/archived/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 2fd891f882dbda8e052bf4a58ee1aa8c52eafcc4c486436ab8df45340af69777
+        updated_at: 2026-05-25T10:30:42.884373619Z

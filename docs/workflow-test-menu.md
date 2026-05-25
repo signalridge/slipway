@@ -197,10 +197,10 @@ When the change is ready, exercise the governed closeout surfaces:
 ```bash
 go run . review --json
 go run . validate --json
-go test ./... -count=1
+go test -timeout=20m ./... -count=1
 go vet ./...
 staticcheck ./...
-go test ./... -race -count=1
+go test -timeout=20m ./... -race -count=1
 go run . done --json
 ```
 

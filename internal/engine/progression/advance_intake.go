@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -210,6 +211,16 @@ func advanceIntakeConfirm(root string, change *model.Change, fromState model.Wor
 	if change.ClearAutoPassHistory() {
 		cleared = append(cleared, "last_auto_passed_states")
 	}
+	sideEffects := []SideEffect{}
+	if change.NeedsDiscovery && change.PlanSubStep == model.PlanSubStepResearch {
+		if err := artifact.EnsureResearchArtifactForChange(root, *change); err != nil {
+			return AdvanceSummary{}, err
+		}
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   "scaffolded_research",
+			Detail: "research.md created or verified for S1_PLAN/research",
+		})
+	}
 	if err := state.SaveChange(root, *change); err != nil {
 		return AdvanceSummary{}, err
 	}
@@ -220,6 +231,7 @@ func advanceIntakeConfirm(root string, change *model.Change, fromState model.Wor
 		FromSubStep:   fromSub,
 		ToSubStep:     string(change.PlanSubStep),
 		Reason:        "intake_confirmed",
+		SideEffects:   sideEffects,
 		ClearedFields: cleared,
 		Message:       fmt.Sprintf("Advanced to S1_PLAN/%s.", change.PlanSubStep),
 	}, nil

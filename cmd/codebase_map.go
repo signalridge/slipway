@@ -11,10 +11,15 @@ import (
 )
 
 type codebaseMapView struct {
-	ExecutionMode   string            `json:"execution_mode"`
-	CodebaseMapDir  string            `json:"codebase_map_dir"`
-	CodebaseMapDocs map[string]string `json:"codebase_map_docs"`
-	Created         []string          `json:"created,omitempty"`
+	ExecutionMode    string            `json:"execution_mode"`
+	CodebaseMapDir   string            `json:"codebase_map_dir"`
+	CodebaseMapDocs  map[string]string `json:"codebase_map_docs"`
+	Status           string            `json:"status"`
+	DocStates        map[string]string `json:"doc_states,omitempty"`
+	MissingDocs      []string          `json:"missing_docs,omitempty"`
+	ScaffoldOnlyDocs []string          `json:"scaffold_only_docs,omitempty"`
+	PopulatedDocs    []string          `json:"populated_docs,omitempty"`
+	Created          []string          `json:"created,omitempty"`
 }
 
 func makeCodebaseMapCmd() *cobra.Command {
@@ -34,12 +39,21 @@ func makeCodebaseMapCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			assessment, err := artifact.AssessCodebaseMapDocs(root)
+			if err != nil {
+				return err
+			}
 			displayRoot := root
 			dir := state.CodebaseMapDir(root)
 			view := codebaseMapView{
-				ExecutionMode:   "advisory",
-				CodebaseMapDir:  state.DisplayPath(displayRoot, dir),
-				CodebaseMapDocs: artifact.CodebaseMapDisplayDocs(displayRoot, dir),
+				ExecutionMode:    "advisory",
+				CodebaseMapDir:   state.DisplayPath(displayRoot, dir),
+				CodebaseMapDocs:  artifact.CodebaseMapDisplayDocs(displayRoot, dir),
+				Status:           assessment.Status,
+				DocStates:        assessment.DocStates,
+				MissingDocs:      assessment.MissingDocs,
+				ScaffoldOnlyDocs: assessment.ScaffoldOnlyDocs,
+				PopulatedDocs:    assessment.PopulatedDocs,
 			}
 			if len(created) > 0 {
 				view.Created = make([]string, 0, len(created))
@@ -63,6 +77,15 @@ func writeCodebaseMapText(w io.Writer, view codebaseMapView) error {
 	writer := newFormatWriter(w)
 	writer.Writef("Mode: %s\n", view.ExecutionMode)
 	writer.Writef("Codebase Map: %s\n", view.CodebaseMapDir)
+	if view.Status != "" {
+		writer.Writef("Status: %s\n", view.Status)
+	}
+	if len(view.ScaffoldOnlyDocs) > 0 {
+		writer.Writef("Scaffold-only:\n")
+		for _, name := range view.ScaffoldOnlyDocs {
+			writer.Writef("  - %s\n", name)
+		}
+	}
 	if len(view.Created) > 0 {
 		writer.Writef("Created:\n")
 		for _, path := range view.Created {

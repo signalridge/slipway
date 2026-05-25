@@ -1,0 +1,16 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T09:52:59Z"
+run_version: 0
+references:
+  - "artifact:research.md"
+  - "artifact:artifacts/codebase/ARCHITECTURE.md"
+  - "artifact:artifacts/codebase/TESTING.md"
+  - "artifact:artifacts/codebase/CONCERNS.md"
+  - "source:internal/engine/governance/actions.go"
+  - "source:internal/engine/artifact/codebase_map.go"
+  - "source:internal/engine/wave/parse.go"
+  - "source:internal/state/lifecycle.go"
+notes: |
+  Research classified archived feedback against current code and selected a layered compatibility fix.
+  Higher-risk early worktree-binding relocation remains conditional on path-discovery tests.

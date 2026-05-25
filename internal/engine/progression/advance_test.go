@@ -31,6 +31,15 @@ func hasAdvanceReasonDetail(reasons []model.ReasonCode, code, detail string) boo
 	return false
 }
 
+func hasSideEffect(sideEffects []SideEffect, kind string) bool {
+	for _, sideEffect := range sideEffects {
+		if sideEffect.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 func TestAdvance_NoChangeFile(t *testing.T) {
 	t.Parallel()
 	_, err := Advance("/tmp/nonexistent", "bogus-slug")
@@ -867,6 +876,52 @@ func TestAdvanceIntake_ConfirmToS1Plan(t *testing.T) {
 	}
 	if reloaded.IntakeSubStep != model.IntakeSubStepNone {
 		t.Fatalf("expected IntakeSubStep cleared, got %s", reloaded.IntakeSubStep)
+	}
+}
+
+func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("intake-to-research-artifact")
+	change.CurrentState = model.StateS0Intake
+	change.IntakeSubStep = model.IntakeSubStepConfirm
+	change.PlanSubStep = model.PlanSubStepNone
+	change.NeedsDiscovery = true
+	change.ComplexityLevel = "complex"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intent := "# Intent\n\n## Summary\nTest\n\n## Approved Summary\nConfirmed: add governed workflow fixes\n"
+	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+		t.Fatalf("write intent.md: %v", err)
+	}
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Action != "advanced" {
+		t.Fatalf("expected advanced, got %+v", summary)
+	}
+	if summary.ToState != model.StateS1Plan || summary.ToSubStep != string(model.PlanSubStepResearch) {
+		t.Fatalf("expected transition to S1_PLAN/research, got state=%s substep=%s", summary.ToState, summary.ToSubStep)
+	}
+	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
+		t.Fatalf("expected scaffolded_research side effect, got %+v", summary.SideEffects)
+	}
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
+		t.Fatalf("expected research.md to exist after intake confirmation: %v", err)
 	}
 }
 

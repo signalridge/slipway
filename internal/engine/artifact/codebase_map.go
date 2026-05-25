@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/state"
 )
@@ -89,6 +91,21 @@ var codebaseMapDocTemplates = map[string]string{
 `,
 }
 
+const (
+	CodebaseMapStatusMissing      = "missing"
+	CodebaseMapStatusPartial      = "partial"
+	CodebaseMapStatusScaffoldOnly = "scaffold_only"
+	CodebaseMapStatusPopulated    = "populated"
+)
+
+type CodebaseMapAssessment struct {
+	Status           string            `json:"status"`
+	DocStates        map[string]string `json:"doc_states,omitempty"`
+	MissingDocs      []string          `json:"missing_docs,omitempty"`
+	ScaffoldOnlyDocs []string          `json:"scaffold_only_docs,omitempty"`
+	PopulatedDocs    []string          `json:"populated_docs,omitempty"`
+}
+
 func CodebaseMapDisplayDocs(displayRoot, codebaseMapDir string) map[string]string {
 	docs := make(map[string]string, len(codebaseMapDocNames))
 	for _, name := range codebaseMapDocNames {
@@ -121,4 +138,81 @@ func EnsureCodebaseMapDocs(root string) (created []string, err error) {
 		created = append(created, path)
 	}
 	return created, nil
+}
+
+func AssessCodebaseMapDocs(root string) (CodebaseMapAssessment, error) {
+	dir := state.CodebaseMapDir(root)
+	assessment := CodebaseMapAssessment{
+		Status:    CodebaseMapStatusMissing,
+		DocStates: map[string]string{},
+	}
+
+	for _, name := range codebaseMapDocNames {
+		key := codebaseMapDocKeys[name]
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				assessment.DocStates[key] = CodebaseMapStatusMissing
+				assessment.MissingDocs = append(assessment.MissingDocs, name)
+				continue
+			}
+			return CodebaseMapAssessment{}, err
+		}
+		if CodebaseMapDocIsScaffoldOnly(name, string(data)) {
+			assessment.DocStates[key] = CodebaseMapStatusScaffoldOnly
+			assessment.ScaffoldOnlyDocs = append(assessment.ScaffoldOnlyDocs, name)
+			continue
+		}
+		assessment.DocStates[key] = CodebaseMapStatusPopulated
+		assessment.PopulatedDocs = append(assessment.PopulatedDocs, name)
+	}
+
+	slices.Sort(assessment.MissingDocs)
+	slices.Sort(assessment.ScaffoldOnlyDocs)
+	slices.Sort(assessment.PopulatedDocs)
+
+	switch {
+	case len(assessment.PopulatedDocs) == len(codebaseMapDocNames):
+		assessment.Status = CodebaseMapStatusPopulated
+	case len(assessment.PopulatedDocs) == 0 && len(assessment.ScaffoldOnlyDocs) > 0 && len(assessment.MissingDocs) == 0:
+		assessment.Status = CodebaseMapStatusScaffoldOnly
+	case len(assessment.PopulatedDocs) == 0 && len(assessment.ScaffoldOnlyDocs) == 0:
+		assessment.Status = CodebaseMapStatusMissing
+	default:
+		assessment.Status = CodebaseMapStatusPartial
+	}
+	return assessment, nil
+}
+
+func CodebaseMapDocIsScaffoldOnly(name, content string) bool {
+	if template, ok := codebaseMapDocTemplates[name]; ok && normalizeCodebaseMapDoc(content) == normalizeCodebaseMapDoc(template) {
+		return true
+	}
+	return !hasSubstantiveCodebaseMapContent(content)
+}
+
+func hasSubstantiveCodebaseMapContent(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "<!--") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+			item := strings.TrimSpace(trimmed[2:])
+			if idx := strings.Index(item, ":"); idx >= 0 {
+				if strings.TrimSpace(item[idx+1:]) == "" {
+					continue
+				}
+			}
+			return true
+		}
+		return true
+	}
+	return false
+}
+
+func normalizeCodebaseMapDoc(content string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	return strings.TrimSpace(content)
 }

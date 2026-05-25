@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -25,7 +26,9 @@ var repoCodebaseMapDocs = []string{
 type CodebaseMapStats struct {
 	Dir              string    `json:"dir" yaml:"dir"`
 	PresentDocs      int       `json:"present_docs" yaml:"present_docs"`
+	PopulatedDocs    int       `json:"populated_docs" yaml:"populated_docs"`
 	MissingDocs      []string  `json:"missing_docs,omitempty" yaml:"missing_docs,omitempty"`
+	ScaffoldOnlyDocs []string  `json:"scaffold_only_docs,omitempty" yaml:"scaffold_only_docs,omitempty"`
 	LatestModifiedAt time.Time `json:"latest_modified_at,omitempty" yaml:"latest_modified_at,omitempty"`
 	Freshness        string    `json:"freshness" yaml:"freshness"`
 }
@@ -86,6 +89,15 @@ func collectCodebaseMapStats(root string, now time.Time) (CodebaseMapStats, erro
 			return CodebaseMapStats{}, err
 		}
 		stats.PresentDocs++
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return CodebaseMapStats{}, err
+		}
+		if codebaseMapDocIsScaffoldOnly(data) {
+			stats.ScaffoldOnlyDocs = append(stats.ScaffoldOnlyDocs, name)
+		} else {
+			stats.PopulatedDocs++
+		}
 		if info.ModTime().After(latest) {
 			latest = info.ModTime()
 		}
@@ -97,6 +109,10 @@ func collectCodebaseMapStats(root string, now time.Time) (CodebaseMapStats, erro
 		stats.Freshness = "missing"
 	case len(stats.MissingDocs) > 0:
 		stats.Freshness = "partial"
+	case stats.PopulatedDocs == 0 && len(stats.ScaffoldOnlyDocs) > 0:
+		stats.Freshness = "scaffold_only"
+	case len(stats.ScaffoldOnlyDocs) > 0:
+		stats.Freshness = "partial"
 	case latest.IsZero():
 		stats.Freshness = "unknown"
 	case now.Sub(latest) > codebaseMapFreshnessThreshold:
@@ -105,4 +121,22 @@ func collectCodebaseMapStats(root string, now time.Time) (CodebaseMapStats, erro
 		stats.Freshness = "fresh"
 	}
 	return stats, nil
+}
+
+func codebaseMapDocIsScaffoldOnly(data []byte) bool {
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "<!--") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+			item := strings.TrimSpace(trimmed[2:])
+			if idx := strings.Index(item, ":"); idx >= 0 && strings.TrimSpace(item[idx+1:]) == "" {
+				continue
+			}
+			return false
+		}
+		return false
+	}
+	return true
 }

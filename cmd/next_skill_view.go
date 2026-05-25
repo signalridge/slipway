@@ -151,6 +151,16 @@ func assembleSkillViewWithOptions(
 		}
 	}
 
+	if nextSkillName == "" && governedChange != nil &&
+		governedChange.CurrentState == model.StateS1Plan &&
+		governedChange.PlanSubStep == model.PlanSubStepBundle &&
+		advanced.Action != "blocked" &&
+		len(view.Blockers) == 0 {
+		nextSkillName = progression.SkillPlanAudit
+		nextState = string(model.StateS1Plan)
+		view.Warnings = append(view.Warnings, "S1_PLAN/bundle is a machine authoring step; ensure bundle artifacts are complete, then write plan-audit evidence or run `slipway run --json` to enter S1_PLAN/audit.")
+	}
+
 	if nextSkillName == "" {
 		view.NextSkill = nil
 		blockers := append([]model.ReasonCode(nil), view.Blockers...)

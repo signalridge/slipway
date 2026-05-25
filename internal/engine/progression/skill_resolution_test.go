@@ -1,6 +1,8 @@
 package progression
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -144,5 +146,23 @@ func TestHasEmptyCodebaseMap(t *testing.T) {
 	}
 	if !HasEmptyCodebaseMap("/tmp/nonexistent", map[string]string{"x": "nonexistent.md"}) {
 		t.Error("expected true for nonexistent files")
+	}
+
+	root := t.TempDir()
+	scaffold := filepath.Join(root, "artifacts", "codebase", "STACK.md")
+	if err := os.MkdirAll(filepath.Dir(scaffold), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scaffold, []byte("# Stack\n\n- Languages:\n- Notes:\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !HasEmptyCodebaseMap(root, map[string]string{"stack": "artifacts/codebase/STACK.md"}) {
+		t.Error("expected true for scaffold-only files")
+	}
+	if err := os.WriteFile(scaffold, []byte("# Stack\n\n- Languages: Go\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if HasEmptyCodebaseMap(root, map[string]string{"stack": "artifacts/codebase/STACK.md"}) {
+		t.Error("expected false for populated files")
 	}
 }

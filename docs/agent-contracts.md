@@ -56,6 +56,12 @@ Rules:
   exported agent path.
 - Callers derive their own skill prompt path from `next_skill.name` using
   local tool conventions such as `.claude/skills/slipway-{name}/SKILL.md`.
+- For worktree-bound changes, `input_context.workspace_root` is the code and
+  artifact workspace, not necessarily the exported skill catalog root. If the
+  bound worktree does not contain generated host skills, resolve
+  `next_skill.name` through the source checkout or globally installed skill
+  catalog for the calling tool, then write evidence to
+  `next_skill.verification_dir`.
 
 ## Runtime Handoff Context
 
@@ -137,6 +143,13 @@ diagnostic surface may include `input_context.handoff_context`,
 `input_context.gate_status`, `input_context.artifact_status`,
 `input_context.wave_plan`, `governance_signals`, `active_controls`,
 `skill_evidence`, `artifact_amendments`, and `context_budget`.
+
+State-locking note: treat Slipway command invocations against the same
+workspace/change as non-parallelizable unless the command explicitly documents a
+shared-read mode. Even projection commands such as `status`, `next`, and
+`validate` acquire the state lock to avoid racing repairs, artifact
+reconciliation, or state refresh. Agents should run them sequentially and treat
+`state_lock_timeout` as lock contention, not corruption.
 
 Project metadata supplied at creation is part of the diagnostic handoff
 context. Hosts may inject it into prompts, but the state machine does not infer

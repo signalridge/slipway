@@ -81,7 +81,9 @@ notes: |
 ```
 
 ## Surface Findings
-Present the research summary in the structure below so `slipway-plan-audit` can validate it:
+Write `research.md` using the artifact schema headings directly so
+`validate` and `slipway-plan-audit` evaluate the same structure the host asks
+you to produce:
 
 ```markdown
 ## Research Findings
@@ -107,15 +109,25 @@ Present the research summary in the structure below so `slipway-plan-audit` can 
 - Infrastructure needs: [new test helpers, fixtures, mocks needed]
 - Verification approach: [how to verify each acceptance criterion]
 
-### Unknowns Resolved
-- [Entry-time unknown or open question] → [Resolution or finding]
+## Alternatives Considered
+- [Approach 1]: [tradeoffs]
+- [Approach 2]: [tradeoffs]
+- Selected: [chosen direction and rationale]
 
-### Remaining Questions
-- [Questions that slipway-plan-audit must address]
+## Unknowns
+- Resolved: [entry-time unknown or open question] -> [resolution or finding]
+- Remaining: [Questions that slipway-plan-audit must address] or "None"
+
+## Assumptions
+- [Assumption] - Evidence: [file path, command, or artifact reference]
+
+## Canonical References
+- `[file:path]` for each source used as planning authority
 ```
 
-This format enables `slipway-plan-audit` to validate that all research
-dimensions have findings and that entry-time unknowns have been addressed.
+Use this structure so `slipway-plan-audit` can validate it. This format
+enables `slipway-plan-audit` to validate that all research dimensions have
+findings and that the schema-required top-level headings are present.
 
 After presenting findings, <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
 

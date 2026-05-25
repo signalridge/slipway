@@ -110,6 +110,51 @@ func TestParseTaskPlan_CheckpointType(t *testing.T) {
 	assert.Equal(t, "human_verify", nodes[0].CheckpointType)
 }
 
+func TestParseTaskPlan_AcceptsEvidenceAndAcceptanceMetadata(t *testing.T) {
+	md := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Parser-compatible audit task
+  - wave: 1
+  - target_files: ["internal/engine/wave/parse.go"]
+  - task_kind: code
+  - evidence: verdict
+  - acceptance: parser accepts evidence and acceptance metadata
+`
+
+	plan, err := ParseTaskPlan(md)
+	require.NoError(t, err)
+	require.Len(t, plan.Tasks, 1)
+	assert.Equal(t, "verdict", plan.Tasks[0].Evidence)
+	assert.Equal(t, "parser accepts evidence and acceptance metadata", plan.Tasks[0].Acceptance)
+}
+
+func TestTaskPlanSemanticHashIncludesEvidenceAndAcceptance(t *testing.T) {
+	base := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Parser-compatible audit task
+  - wave: 1
+  - target_files: ["internal/engine/wave/parse.go"]
+  - task_kind: code
+  - evidence: verdict
+  - acceptance: first acceptance
+`
+	changed := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Parser-compatible audit task
+  - wave: 1
+  - target_files: ["internal/engine/wave/parse.go"]
+  - task_kind: code
+  - evidence: artifact
+  - acceptance: second acceptance
+`
+
+	baseHash, err := TaskPlanSemanticHash(base)
+	require.NoError(t, err)
+	changedHash, err := TaskPlanSemanticHash(changed)
+	require.NoError(t, err)
+	assert.NotEqual(t, baseHash, changedHash)
+}
+
 func TestParseTaskPlan_RejectsDuplicateTaskID(t *testing.T) {
 	md := `# Tasks
 

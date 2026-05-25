@@ -26,7 +26,9 @@ func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "advisory", view.ExecutionMode)
 		assert.Equal(t, "artifacts/codebase", view.CodebaseMapDir)
+		assert.Equal(t, "scaffold_only", view.Status)
 		require.Len(t, view.CodebaseMapDocs, 7)
+		require.Len(t, view.ScaffoldOnlyDocs, 7)
 		require.Len(t, view.Created, 7)
 
 		for _, path := range view.Created {

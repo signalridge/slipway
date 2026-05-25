@@ -1,0 +1,11 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T09:58:31Z"
+run_version: 0
+references:
+  - "worktree_path:/Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-slipway-governed-workflow-feedback"
+  - "worktree_branch:feat/fix-slipway-governed-workflow-feedback"
+  - "baseline_verify_cmd:go test -timeout=20m ./... -count=1"
+notes: |
+  Dedicated worktree is repo-local under .worktrees and registered with git worktree.
+  Baseline command passed in the dedicated worktree; cmd package took 136.566s and all listed packages passed.

@@ -1,0 +1,120 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-25T10:31:16Z
+overall_verdict: pass
+tasks_plan_hash: c36361b4b71cc3bf4d2665c1afecbf0d1d5e284c4a086c3ddc8b75cffef1df8f
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+    - t-07
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/next_skill_view.go
+        - cmd/progression_next_test.go
+        - internal/engine/governance/actions.go
+        - internal/engine/governance/runtime_actions.go
+        - internal/engine/progression/advance_intake.go
+        - internal/engine/progression/advance_test.go
+      target_files:
+        - cmd/*next*_test.go
+        - cmd/next_skill_view.go
+        - internal/engine/governance/actions.go
+        - internal/engine/governance/runtime_actions.go
+      evidence_ref: workflow-feedback.md:S0 research wording, S1 plan-audit handoff, S1 research scaffold disposition
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/cli_e2e_test.go
+        - cmd/codebase_map.go
+        - cmd/codebase_map_command_test.go
+        - internal/engine/artifact/codebase_map.go
+        - internal/engine/progression/skill_resolution.go
+        - internal/engine/progression/skill_resolution_test.go
+        - internal/state/stats.go
+        - internal/state/stats_test.go
+      target_files:
+        - cmd/codebase_map*_test.go
+        - cmd/codebase_map.go
+        - internal/engine/artifact/codebase_map.go
+        - internal/state/stats.go
+        - internal/state/stats_test.go
+      evidence_ref: workflow-feedback.md:codebase-map scaffold-only disposition
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - docs/agent-contracts.md
+        - internal/tmpl/templates/_partials/command-next-body.tmpl
+        - internal/tmpl/templates/_partials/verification-doctrine.tmpl
+        - internal/tmpl/templates/skills/plan-audit/SKILL.md
+        - internal/tmpl/templates/skills/research-orchestration/SKILL.md
+        - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+        - internal/tmpl/templates_test.go
+      target_files:
+        - .codex/skills
+        - internal/tmpl/templates/_partials/verification-doctrine.tmpl
+        - internal/tmpl/templates/skills/plan-audit/SKILL.md
+        - internal/tmpl/templates/skills/research-orchestration/SKILL.md
+        - internal/tmpl/templates_test.go
+      evidence_ref: workflow-feedback.md:research schema, verification references, worktree skill catalog, worktree default path dispositions
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/wave/parse.go
+        - internal/engine/wave/parse_test.go
+      target_files:
+        - internal/engine/wave/parse.go
+        - internal/engine/wave/parse_test.go
+      evidence_ref: workflow-feedback.md:task metadata parser disposition
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - docs/agent-contracts.md
+        - docs/workflow-test-menu.md
+        - internal/state/lifecycle.go
+        - internal/state/lifecycle_test.go
+        - internal/tmpl/templates/_partials/command-next-body.tmpl
+        - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+        - internal/tmpl/templates_test.go
+      target_files:
+        - cmd/worktree_preflight_test.go
+        - docs/agent-contracts.md
+        - docs/workflow-test-menu.md
+        - internal/state/lifecycle.go
+        - internal/state/lifecycle_test.go
+      evidence_ref: workflow-feedback.md:worktree, locking, timeout, archive path dispositions
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+      target_files:
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+      evidence_ref: workflow-feedback.md:archived feedback disposition audit
+      captured_at: 2026-05-25T10:31:16Z
+    - task_id: t-07
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+        - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification
+      evidence_ref: assurance.md:focused tests, full tests, build, governed verification plan
+      captured_at: 2026-05-25T10:31:16Z

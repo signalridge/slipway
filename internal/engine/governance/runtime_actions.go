@@ -65,6 +65,7 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 
 	actions := ResolveRequiredActions(RequiredActionsInput{
 		ActiveControls:           snap.ActiveControls,
+		CurrentState:             change.CurrentState,
 		HasBlockingOpenQuestions: snap.Traceability.HasBlockingIntentGap(),
 		IntentExists:             artifactExistsInBundle(root, change, "intent.md"),
 		ScopeConfirmed:           changeScopeConfirmed(change, intakeConfirmed),

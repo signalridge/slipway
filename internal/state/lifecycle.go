@@ -87,11 +87,6 @@ func ArchiveChange(
 	//
 	// A crash between steps 1 and 3 leaves repair-forwardable residue
 	// (archived bundle present, git-local runtime state still present).
-	b, err := yaml.Marshal(archived)
-	if err != nil {
-		return model.Change{}, err
-	}
-
 	// Unified change layout always archives the governed bundle alongside the
 	// runtime state, regardless of final status.
 	srcArtifacts, err := GovernedBundleDir(root, change)
@@ -99,6 +94,11 @@ func ArchiveChange(
 		return model.Change{}, err
 	}
 	paths, err := ResolveChangePaths(root, change)
+	if err != nil {
+		return model.Change{}, err
+	}
+	rewriteArchivedArtifactPaths(&archived, paths.GovernedBundleArchive)
+	b, err := yaml.Marshal(archived)
 	if err != nil {
 		return model.Change{}, err
 	}
@@ -130,6 +130,30 @@ func ArchiveChange(
 	}
 
 	return archived, nil
+}
+
+func rewriteArchivedArtifactPaths(change *model.Change, archiveDir string) {
+	if change == nil || len(change.Artifacts) == 0 {
+		return
+	}
+	for key, artifact := range change.Artifacts {
+		name := strings.TrimSpace(filepath.Base(artifact.Path))
+		if name == "." || name == string(filepath.Separator) || name == "" {
+			name = artifactFileNameForArchive(key, artifact)
+		}
+		artifact.Path = filepath.Join(archiveDir, name)
+		change.Artifacts[key] = artifact
+	}
+}
+
+func artifactFileNameForArchive(key string, artifact model.ArtifactState) string {
+	if strings.TrimSpace(artifact.ID) != "" {
+		return artifact.ID + ".md"
+	}
+	if strings.TrimSpace(key) != "" {
+		return key + ".md"
+	}
+	return "artifact.md"
 }
 
 func moveDirIfExists(src, dst string) error {

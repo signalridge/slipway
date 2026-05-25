@@ -9,5 +9,8 @@
 
 - Treat stale or missing verification as a blocker, not a TODO.
 - Bind each claim to the current `run_version`, not to a previous run.
+- Write `references` as a YAML sequence of strings only. Use compact string
+  prefixes such as `source:`, `artifact:`, `command:`, or `test:` for rich
+  citations; do not write structured maps under `references`.
 - If the command output is ambiguous, rerun or narrow the scope before claiming success.
 {{end}}

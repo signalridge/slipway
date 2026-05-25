@@ -1,0 +1,58 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T10:34:06Z"
+run_version: 1
+references:
+  - "fresh:command_ref=go test ./cmd ./internal/state ./internal/engine/artifact ./internal/engine/governance ./internal/engine/progression ./internal/engine/wave ./internal/tmpl -count=1"
+  - "fresh:command_ref=go test -timeout=20m ./... -count=1"
+  - "fresh:command_ref=go build ./..."
+  - "fresh:command_ref=go run . validate --json"
+  - "fresh:stub_scan=pass"
+  - "check:external_api_contracts.safety_baseline=pass"
+notes: |
+  Criteria:
+    AC-1 Feedback dispositions: pass. Exists: workflow-feedback.md contains a
+      disposition audit for every archived feedback item. Substantive: each row
+      is classified as fixed, already fixed, documented, partially fixed, or
+      deferred with rationale. Wired: assurance.md cites the disposition audit.
+    AC-2 Handoff contract clarity: pass. Exists: actions.go,
+      next_skill_view.go, and advance_intake.go contain the runtime changes.
+      Substantive: S0 action wording no longer requests S1 research.md, S1
+      bundle exposes plan-audit only when unblocked, and S0 confirm now
+      materializes research.md on S1 research entry. Wired: focused
+      progression/cmd tests and full suite pass.
+    AC-3 Codebase map truthfulness: pass. Exists: codebase_map.go,
+      artifact/codebase_map.go, stats.go, and skill_resolution.go expose
+      scaffold-only state. Substantive: command, stats, and next behavior
+      distinguish populated from placeholder context. Wired: focused tests
+      and full suite pass.
+    AC-4 Artifact schema and skill guidance alignment: pass. Exists:
+      research-orchestration, verification-doctrine, plan-audit, command-next,
+      and worktree-preflight templates were updated. Substantive: guidance
+      now matches runtime schemas and worktree skill-catalog policy. Wired:
+      template and toolgen tests pass.
+    AC-5 Task contract alignment: pass. Exists: wave parser accepts evidence
+      and acceptance metadata. Substantive: semantic hashes include both
+      fields. Wired: wave parser tests pass.
+    AC-6 Worktree, locking, timeout, and archive friction: pass with explicit
+      deferrals. Exists: docs and lifecycle changes are present. Substantive:
+      lock/timeout/worktree path policy is documented and archive metadata is
+      rewritten to archive-local paths. Wired: lifecycle tests, template tests,
+      and live S2 worktree relocation evidence pass.
+    AC-7 Verification: pass. Exists: wave, review, assurance, and goal
+      verification evidence are present for run_version 1. Substantive:
+      focused tests, full tests, build, validation, review, and safety baseline
+      are recorded. Wired: Slipway advanced through S2 execution and S3 review
+      to S4 verify.
+
+  Stub scan:
+    `rg TODO|FIXME|HACK|XXX|PLACEHOLDER|NotImplemented|not implemented ...`
+    returned one documentation line saying stale verification is not a TODO.
+    The zero-value scan returned normal helper boolean/string returns, not
+    placeholder implementations.
+
+  External API contract safety baseline:
+    pass. JSON changes are additive (`codebase-map` status fields) or clarify
+    governed handoff selection in a previously hostless unblocked state.
+    Existing fields are not removed, and deferred lifecycle-ordering changes
+    are tracked instead of silently changing archive or workspace authority.

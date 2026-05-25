@@ -1,0 +1,28 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T10:31:16Z"
+run_version: 1
+references:
+  - "wave:t-01=pass"
+  - "wave:t-02=pass"
+  - "wave:t-03=pass"
+  - "wave:t-04=pass"
+  - "wave:t-05=pass"
+  - "wave:t-06=pass"
+  - "wave:t-07=pass"
+  - "test:go test ./cmd ./internal/state ./internal/engine/artifact ./internal/engine/governance ./internal/engine/progression ./internal/engine/wave ./internal/tmpl -count=1"
+  - "test:go test -timeout=20m ./... -count=1"
+  - "build:go build ./..."
+notes: |
+  Executed all three planned waves in dependency order.
+
+  Wave 1 fixed handoff/action clarity, scaffold-only codebase-map detection,
+  generated guidance alignment, and task metadata parsing.
+
+  Wave 2 fixed or documented worktree, locking, timeout, archive-path, skill
+  catalog, and feedback-disposition issues. Larger lifecycle-ordering and
+  stale-routing changes are explicitly deferred in workflow-feedback.md.
+
+  Wave 3 ran focused tests, the full Go suite with the documented timeout,
+  and the build command. All commands passed after correcting a generated
+  research-skill public-name wording regression found by internal/toolgen.

@@ -481,6 +481,66 @@ func TestWorkflowStateTemplatesAvoidRetiredIntakeVocabulary(t *testing.T) {
 	}
 }
 
+func TestResearchOrchestrationUsesResearchArtifactSchemaHeadings(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/research-orchestration/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "## Alternatives Considered")
+	assert.Contains(t, content, "## Unknowns")
+	assert.Contains(t, content, "## Assumptions")
+	assert.Contains(t, content, "## Canonical References")
+	assert.NotContains(t, content, "### Unknowns Resolved")
+}
+
+func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "YAML sequence of strings only")
+	assert.Contains(t, content, "do not write structured maps under `references`")
+}
+
+func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "future S3 review or S4 closeout evidence")
+}
+
+func TestNextCommandDocumentsWorktreeSkillCatalogFallback(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("commands/command-entry.md.tmpl", map[string]string{
+		"CommandID":    "next",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:next",
+		"Description":  "Query the next governed host",
+		"BodyTemplate": "command-next-body",
+		"Arguments":    "--json",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "worktree-bound changes")
+	assert.Contains(t, content, "source checkout or globally")
+	assert.Contains(t, content, "next_skill.verification_dir")
+}
+
+func TestWorktreePreflightDocumentsRepoLocalDefaultPath(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/worktree-preflight/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, ".worktrees/<slug>")
+	assert.Contains(t, content, "operator-supplied path")
+}
+
 func TestAgentDefinitionFrontmatterNoRoutingFields(t *testing.T) {
 	t.Parallel()
 	for _, name := range AgentNames() {

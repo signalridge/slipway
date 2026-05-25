@@ -62,11 +62,15 @@ func TestArchiveChangeCancelledUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 	change.NeedsDiscovery = true
 	change.WorktreePath = worktreeRoot
 	change.Status = model.ChangeStatusActive
-	require.NoError(t, SaveChange(root, change))
 
 	bundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", slug)
+	change.Artifacts = map[string]model.ArtifactState{
+		"intent": {ID: "intent", Path: filepath.Join(bundleDir, "intent.md"), State: model.ArtifactLifecycleDraft},
+	}
+	require.NoError(t, SaveChange(root, change))
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "change.yaml"), []byte("id: x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n"), 0o644))
 
 	archived, err := ArchiveChange(root, change, model.ChangeStatusCancelled)
 	require.NoError(t, err)
@@ -81,6 +85,9 @@ func TestArchiveChangeCancelledUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
 	require.NoError(t, err)
+	expectedArchivePath, normErr := NormalizePath(filepath.Join(root, "artifacts", "changes", "archived", slug, "intent.md"))
+	require.NoError(t, normErr)
+	assert.Equal(t, expectedArchivePath, archived.Artifacts["intent"].Path)
 }
 
 func TestArchiveChangeCancelledAllowsUnboundL3BeforeWorktreeBinding(t *testing.T) {

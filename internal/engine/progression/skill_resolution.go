@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 )
 
@@ -80,10 +81,18 @@ func HasEmptyCodebaseMap(root string, docs map[string]string) bool {
 		return true
 	}
 	for _, relPath := range docs {
-		absPath := filepath.Join(root, relPath)
-		if info, err := os.Stat(absPath); err == nil && info.Size() > 0 {
+		absPath := resolveCodebaseMapDisplayPath(root, relPath)
+		data, err := os.ReadFile(absPath)
+		if err == nil && len(data) > 0 && !artifact.CodebaseMapDocIsScaffoldOnly(filepath.Base(absPath), string(data)) {
 			return false
 		}
 	}
 	return true
+}
+
+func resolveCodebaseMapDisplayPath(root, displayPath string) string {
+	if filepath.IsAbs(displayPath) {
+		return displayPath
+	}
+	return filepath.Join(root, displayPath)
 }

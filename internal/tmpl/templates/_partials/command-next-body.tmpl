@@ -10,6 +10,10 @@ slipway next --json
 ## Contract
 - `next_skill.name` is the authoritative governed-host handoff.
 - Derive the skill path from the local tool convention: `slipway-{name}/SKILL.md`.
+- For worktree-bound changes, the code workspace may not contain the exported
+  skill catalog. Resolve `next_skill.name` from the source checkout or globally
+  installed skill catalog for your tool, then write evidence to
+  `next_skill.verification_dir`.
 - Treat the default JSON as an action contract, not a context dump.
 - Treat `next_skill.skill_constraints` and `next_skill.technique_hints` as action metadata for that host.
 - Use only paths returned under `input_context`.

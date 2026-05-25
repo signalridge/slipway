@@ -35,6 +35,27 @@ func TestCollectRepoStatsSummarizesArchivesCodebaseMapAndExplorations(t *testing
 	require.NoError(t, err)
 	require.Len(t, stats.ActiveChanges, 1)
 	assert.Equal(t, 1, stats.ArchiveCount)
+	assert.Equal(t, 1, stats.CodebaseMap.PresentDocs)
+	assert.Equal(t, 0, stats.CodebaseMap.PopulatedDocs)
 	assert.Equal(t, "partial", stats.CodebaseMap.Freshness)
 	assert.Contains(t, stats.CodebaseMap.MissingDocs, "INTEGRATIONS.md")
+	assert.Contains(t, stats.CodebaseMap.ScaffoldOnlyDocs, "STACK.md")
+}
+
+func TestCollectRepoStatsMarksScaffoldOnlyCodebaseMapIncomplete(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	now := time.Now().UTC()
+	require.NoError(t, os.MkdirAll(CodebaseMapDir(root), 0o755))
+	for _, name := range repoCodebaseMapDocs {
+		require.NoError(t, os.WriteFile(filepath.Join(CodebaseMapDir(root), name), []byte("# "+name+"\n\n- Notes:\n"), 0o644))
+	}
+
+	stats, err := CollectRepoStats(root, now)
+	require.NoError(t, err)
+	assert.Equal(t, len(repoCodebaseMapDocs), stats.CodebaseMap.PresentDocs)
+	assert.Equal(t, 0, stats.CodebaseMap.PopulatedDocs)
+	assert.Equal(t, "scaffold_only", stats.CodebaseMap.Freshness)
+	require.Len(t, stats.CodebaseMap.ScaffoldOnlyDocs, len(repoCodebaseMapDocs))
 }

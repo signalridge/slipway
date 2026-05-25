@@ -42,6 +42,61 @@ func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 	})
 }
 
+func TestNextS0ResearchActionDoesNotRequestResearchMarkdown(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createIntakeChangeFixture(t, root, "clarify workflow feedback")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.IntakeSubStep = model.IntakeSubStepResearch
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillIntakeClarification, view.NextSkill.Name)
+		require.NotEmpty(t, view.RequiredActions)
+		for _, action := range view.RequiredActions {
+			if action.ControlID == string(model.ControlResearch) {
+				assert.NotContains(t, action.Description, "complete research.md")
+				assert.Contains(t, action.Description, "S0 intake research questions")
+			}
+		}
+	})
+}
+
+func TestNextS1BundleSurfacesPlanAuditHandoff(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L3", "audit bundle handoff")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.PlanSubStep = model.PlanSubStepBundle
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
+		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S1_PLAN")
+		assert.Contains(t, strings.Join(view.Warnings, "\n"), "S1_PLAN/bundle")
+	})
+}
+
 func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

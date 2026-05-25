@@ -1,0 +1,76 @@
+version: 1
+generated_at: 2026-05-25T09:55:04.049420549Z
+tasks_plan_hash: 7261f7e12b999425f3b4f85c7a23fa8965c52dedc52b55c4debcddffb88391ba
+total_tasks: 7
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Fix handoff/action contract clarity for S0 research and S1 bundle plan-audit routing.
+          target_files:
+            - cmd/*next*_test.go
+            - cmd/next_skill_view.go
+            - internal/engine/governance/actions.go
+            - internal/engine/governance/runtime_actions.go
+          task_kind: code
+        - task_id: t-02
+          objective: Add scaffold-only codebase-map detection and expose it through command/stats/health/next behavior.
+          target_files:
+            - cmd/codebase_map*_test.go
+            - cmd/codebase_map.go
+            - internal/engine/artifact/codebase_map.go
+            - internal/state/stats.go
+            - internal/state/stats_test.go
+          task_kind: code
+        - task_id: t-03
+          objective: Align generated research, verification, and plan-audit guidance with runtime schemas and lifecycle boundaries.
+          target_files:
+            - .codex/skills
+            - internal/tmpl/templates/_partials/verification-doctrine.tmpl
+            - internal/tmpl/templates/skills/plan-audit/SKILL.md
+            - internal/tmpl/templates/skills/research-orchestration/SKILL.md
+            - internal/tmpl/templates_test.go
+          task_kind: doc
+        - task_id: t-04
+          objective: Extend task metadata parsing for evidence and acceptance fields with semantic-hash coverage.
+          target_files:
+            - internal/engine/wave/parse.go
+            - internal/engine/wave/parse_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-05
+          objective: Resolve worktree, locking, timeout, and archive-path feedback with focused fixes or explicit policy documentation.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+          target_files:
+            - cmd/worktree_preflight_test.go
+            - docs/agent-contracts.md
+            - docs/workflow-test-menu.md
+            - internal/state/lifecycle.go
+            - internal/state/lifecycle_test.go
+          task_kind: code
+        - task_id: t-06
+          objective: Record active workflow-feedback dispositions and new friction found during this run.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+          target_files:
+            - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/workflow-feedback.md
+          task_kind: doc
+    - wave_index: 3
+      tasks:
+        - task_id: t-07
+          objective: Run targeted, full, build, and governed workflow verification; update assurance and evidence.
+          depends_on:
+            - t-05
+            - t-06
+          target_files:
+            - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/assurance.md
+            - artifacts/changes/fix-slipway-governed-workflow-feedback-from-archived-clinvoker-end-to-end-run/verification
+          task_kind: verification

@@ -39,7 +39,7 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 			action.Satisfied = !input.HasBlockingOpenQuestions
 
 		case model.ControlResearch:
-			action.Description = "complete research.md, resolve unknowns, and confirm scope via intake before continuing"
+			action.Description = researchActionDescription(input.CurrentState)
 			action.Satisfied = input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK
 
 		case model.ControlDomainReview:
@@ -68,6 +68,7 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 // RequiredActionsInput captures the runtime evidence needed to resolve action satisfaction.
 type RequiredActionsInput struct {
 	ActiveControls           []model.ControlActivation
+	CurrentState             model.WorkflowState
 	HasBlockingOpenQuestions bool
 	IntentExists             bool
 	ScopeConfirmed           bool
@@ -76,6 +77,13 @@ type RequiredActionsInput struct {
 	IndependentReviewDone    bool
 	WorktreePreflightDone    bool
 	RollbackSectionExists    bool
+}
+
+func researchActionDescription(state model.WorkflowState) string {
+	if state == model.StateS0Intake {
+		return "resolve S0 intake research questions in intent.md and confirm scope; S1 research.md is required after intake"
+	}
+	return "complete research.md, resolve unknowns, and confirm scope via intake before continuing"
 }
 
 // UnsatisfiedBlockingActions returns actions that are blocking and not yet satisfied.

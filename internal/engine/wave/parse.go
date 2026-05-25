@@ -23,6 +23,8 @@ type TaskNode struct {
 	Node
 	Completed        bool     `json:"completed,omitempty"`
 	Covers           []string `json:"covers,omitempty"`
+	Evidence         string   `json:"evidence,omitempty"`
+	Acceptance       string   `json:"acceptance,omitempty"`
 	taskKindDeclared bool
 }
 
@@ -92,6 +94,8 @@ func TaskPlanSemanticHash(content string) (string, error) {
 			"target_files":    append([]string(nil), task.TargetFiles...),
 			"task_kind":       task.TaskKind.String(),
 			"covers":          append([]string(nil), task.Covers...),
+			"evidence":        strings.TrimSpace(task.Evidence),
+			"acceptance":      strings.TrimSpace(task.Acceptance),
 			"checkpoint_type": strings.TrimSpace(task.CheckpointType),
 		})
 	}
@@ -109,6 +113,8 @@ var allowedMetadataKeys = map[string]struct{}{
 	"target_files":    {},
 	"task_kind":       {},
 	"covers":          {},
+	"evidence":        {},
+	"acceptance":      {},
 	"checkpoint_type": {},
 }
 
@@ -191,6 +197,8 @@ type taskNodeBuilder struct {
 	taskKind       string
 	checkpointType string
 	covers         []string
+	evidence       string
+	acceptance     string
 	completed      bool
 	seenKeys       map[string]struct{}
 }
@@ -220,6 +228,10 @@ func (b *taskNodeBuilder) applyMetadata(key, value string) error {
 		b.taskKind = cleanValue(value)
 	case "covers":
 		b.covers = parseStringList(value)
+	case "evidence":
+		b.evidence = cleanValue(value)
+	case "acceptance":
+		b.acceptance = cleanValue(value)
 	case "objective":
 		b.objective = cleanValue(value)
 	case "checkpoint_type":
@@ -271,6 +283,8 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 		},
 		Completed:        b.completed,
 		Covers:           append([]string(nil), b.covers...),
+		Evidence:         b.evidence,
+		Acceptance:       b.acceptance,
 		taskKindDeclared: strings.TrimSpace(b.taskKind) != "",
 	}, nil
 }

@@ -35,6 +35,11 @@ Requirements:
 - the checked-out branch MUST match the branch you intend to use for this change
 - the branch SHOULD include the change slug for traceability
 
+Default path policy: when no operator-supplied path or project policy says
+otherwise, prefer a repo-local ignored path such as `.worktrees/<slug>` under
+the source checkout. Sibling or external worktree paths are valid only when
+chosen explicitly by the operator or local project policy.
+
 ### 2. Verify a Clean Baseline
 Run the project's baseline verification command inside that dedicated worktree before implementation begins.
 

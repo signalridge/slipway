@@ -78,6 +78,9 @@ risks.
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
 - require each task to name its evidence shape (`verdict` / `artifact` / `checklist`)
+- require task acceptance criteria to be satisfiable during S2 execution; do
+  not accept criteria that require future S3 review or S4 closeout evidence
+  before the workflow can legally reach those states
 - keep rollout in reviewable batches; do not admit half-states that break the kernel between batches
 - for guardrail-domain work, require a RED test plan before execution
 - keep non-goals explicit, including scope and rollout boundaries
