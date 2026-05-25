@@ -1,5 +1,15 @@
 # Expression Injection
 
+## Quick Navigation
+- The Vulnerability
+- Injection Techniques
+- Detection Patterns
+- The Fix: Environment Variables
+- Where `${{ }}` Is Safe
+- Attacker-Controlled Expressions Quick Reference
+- Exploitation Scenario Template
+- References
+
 ## Overview
 
 Expression injection occurs when GitHub Actions `${{ }}` expressions containing attacker-controlled values are used inside `run:` blocks. The Actions runtime substitutes the expression value **before** the shell interprets it, allowing shell metacharacters in the value to execute arbitrary commands.

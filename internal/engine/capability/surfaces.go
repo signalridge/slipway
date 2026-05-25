@@ -129,6 +129,24 @@ func ExplicitFocusesForCommand(command string) []SurfaceRecord {
 	return out
 }
 
+// ExplicitFocusSurfaces returns every public explicit-focus surface, sorted by
+// command and public alias for deterministic generated documentation.
+func ExplicitFocusSurfaces() []SurfaceRecord {
+	var out []SurfaceRecord
+	for _, s := range surfacePolicy {
+		if s.Class == SurfaceExplicitFocus {
+			out = append(out, s)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Command != out[j].Command {
+			return out[i].Command < out[j].Command
+		}
+		return out[i].PublicName < out[j].PublicName
+	})
+	return out
+}
+
 // LookupFocus resolves a `--focus <alias>` selector for a command surface.
 func LookupFocus(command, alias string) (SurfaceRecord, bool) {
 	command = strings.TrimSpace(command)

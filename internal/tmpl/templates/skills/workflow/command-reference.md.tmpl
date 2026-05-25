@@ -14,35 +14,56 @@ single workflow entry skill.
 ## Lifecycle Core
 {{- range .LifecycleCommands }}
 
+{{- $commandName := .Name }}
 ### `slipway {{ .Name }}`
 - Description: {{ .Description }}
 - Arguments: `{{ .Arguments }}`
 - Prerequisites:
 {{- range .Prerequisites }}
   - {{ . }}
+{{- end }}
+{{- if .Focuses }}
+- Public focuses:
+{{- range .Focuses }}
+  - `slipway {{ $commandName }} --focus {{ .PublicName }}` -> backing skill `{{ .BackingID }}`: {{ .Summary }}
+{{- end }}
 {{- end }}
 {{- end }}
 
 ## Supporting Commands
 {{- range .SupportingCommands }}
 
+{{- $commandName := .Name }}
 ### `slipway {{ .Name }}`
 - Description: {{ .Description }}
 - Arguments: `{{ .Arguments }}`
 - Prerequisites:
 {{- range .Prerequisites }}
   - {{ . }}
+{{- end }}
+{{- if .Focuses }}
+- Public focuses:
+{{- range .Focuses }}
+  - `slipway {{ $commandName }} --focus {{ .PublicName }}` -> backing skill `{{ .BackingID }}`: {{ .Summary }}
+{{- end }}
 {{- end }}
 {{- end }}
 
 ## Diagnostics
 {{- range .DiagnosticCommands }}
 
+{{- $commandName := .Name }}
 ### `slipway {{ .Name }}`
 - Description: {{ .Description }}
 - Arguments: `{{ .Arguments }}`
 - Prerequisites:
 {{- range .Prerequisites }}
   - {{ . }}
+{{- end }}
+{{- if .Focuses }}
+- Public focuses:
+{{- range .Focuses }}
+  - `slipway {{ $commandName }} --focus {{ .PublicName }}` -> backing skill `{{ .BackingID }}`: {{ .Summary }}
+{{- end }}
 {{- end }}
 {{- end }}

@@ -1,0 +1,32 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:40:45Z"
+run_version: 2
+references:
+  - "source:requirements.md:REQ-001..REQ-004"
+  - "artifact:verification/execution-summary.yaml:run_summary_version=2"
+  - "artifact:verification/coverage-analysis.yaml"
+  - "command:git diff --check"
+  - "command:go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1"
+  - "command:go test ./internal/engine/capability ./internal/toolgen -coverprofile=/tmp/slipway-skill-surfaces-coverage.out -count=1"
+  - "command:go test ./... -count=1"
+  - "command:go build ./..."
+notes: |
+  Criteria:
+    AC-1: Generated lookup surfaces expose public focus aliases without changing runtime behavior - pass - Exists: capability.ExplicitFocusSurfaces(), BuildSkillIndexWithPaths(), buildCommandFocusEntries(), and workflow command-reference template changes are present. Substantive: generated output is derived from capability.surfacePolicy, not a hand-written alias table. Wired: go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1 passed; go test ./... -count=1 passed; go build ./... passed.
+    AC-2: Skill-quality guardrails stay mechanical and lightweight - pass - Exists: export_test.go and toolgen_test.go include focus rendering and long-reference navigation checks. Substantive: command-reference guard iterates capability.ExplicitFocusSurfaces() and long-reference guard requires Quick Navigation within the first 40 lines. Wired: go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1 passed, including capability and toolgen packages.
+    AC-3: High-traffic skill/reference prose prevents misuse while staying concise - pass - Exists: workflow SKILL template states focus aliases are command selectors, and three long references include Quick Navigation sections. Substantive: prose preserves CLI authority and avoids duplicating command semantics. Wired: toolgen tests render the workflow skill/reference tree and TestLongReferenceFilesHaveQuickNavigation passed.
+    AC-4: Existing thin-runtime / thick-host contract is preserved - pass - Exists: no lifecycle state, gate, command flag, JSON field, exported host allowlist, or retired catalog artifact was added. Substantive: changes are limited to renderers, templates, references, tests, and artifacts. Wired: go test ./... -count=1 and go build ./... passed.
+
+  Stub and placeholder scan:
+    rg TODO/FIXME/HACK/XXX/PLACEHOLDER/NotImplemented found only expected test assertions for generated scaffold TODO(source/sink/sanitizer) text in internal/toolgen/toolgen_test.go.
+    rg panic(".*implement|panic(".*todo|return nil, nil found only existing ResolveTools empty/none selection returns in internal/toolgen/toolgen.go.
+    rg return ""/0/false found existing documented empty/default branches and boolean helpers, not placeholder implementation.
+    rg -U "{\s*\n\s*}" found no empty blocks in the target Go files.
+
+  Fresh evidence:
+    git diff --check exited 0.
+    go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1 passed: capability 0.396s, toolgen 2.748s, cmd 128.355s.
+    go test ./internal/engine/capability ./internal/toolgen -coverprofile=/tmp/slipway-skill-surfaces-coverage.out -count=1 passed: capability coverage 85.8%, toolgen coverage 77.0%, changed Go functions 100.0% by go tool cover.
+    go test ./... -count=1 passed across all packages; cmd 132.599s, toolgen 8.579s, no package failed.
+    go build ./... exited 0.

@@ -1,0 +1,29 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:40:45Z"
+run_version: 2
+references:
+  - "tasks.md:t-01..t-04"
+  - "internal/engine/capability/export.go"
+  - "internal/engine/capability/surfaces.go"
+  - "internal/toolgen/toolgen.go"
+  - "internal/toolgen/toolgen_test.go"
+  - "internal/engine/capability/export_test.go"
+  - "assurance.md:verification-verdict"
+  - "test:go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1"
+  - "test:go test ./... -count=1"
+  - "build:go build ./..."
+notes: |
+  Executed wave 1 code tasks and wave 2 verification task. Review follow-up
+  tightened the mechanical guardrails: command-reference coverage now iterates
+  every capability.ExplicitFocusSurfaces() entry instead of a hard-coded command
+  subset, and long-reference navigation must appear within the first 40 lines.
+
+  Public focus aliases are rendered from the Go-owned surface policy into the
+  workflow command reference and the informational skill index. Non-exported
+  focus backings are listed only as backing skill IDs, not as host SKILL.md
+  paths. Long reference files over the configured threshold include quick
+  navigation. Fresh verification passed with:
+  - go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1
+  - go test ./... -count=1
+  - go build ./...

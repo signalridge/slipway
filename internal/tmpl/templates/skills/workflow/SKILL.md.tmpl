@@ -72,6 +72,8 @@ their detailed arguments and prerequisites.
 ## Skill Index and Host Handoff
 - when exported skill navigation is needed, read `{{.SkillIndexPath}}`
 - use the index as reference only; it is not progression authority
+- public focus aliases listed in the index are command selectors, not host-skill paths
+- load a focus-backed support skill only through the command/focus surface unless an exported host `SKILL.md` path exists
 - when governed execution is needed, read the host returned by `slipway next --json`
 - derive the host skill path from `next_skill.name` using `.codex/skills/slipway-<name>/SKILL.md` or the equivalent local tool convention
 - use technique skills as overlays for posture and procedure, not as progression authorities

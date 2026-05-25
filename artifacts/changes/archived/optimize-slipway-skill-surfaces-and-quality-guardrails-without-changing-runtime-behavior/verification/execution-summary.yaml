@@ -1,0 +1,64 @@
+version: 1
+run_summary_version: 2
+captured_at: 2026-05-25T15:40:45Z
+overall_verdict: pass
+tasks_plan_hash: 144ae03444df8ff9a3555700ad648235150d0fad2d2036ef46492743bd7707fa
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/capability/export.go
+        - internal/engine/capability/surfaces.go
+        - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/workflow/command-reference.md.tmpl
+        - internal/toolgen/toolgen.go
+      target_files:
+        - internal/engine/capability/export.go
+        - internal/engine/capability/surfaces.go
+        - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/workflow/command-reference.md.tmpl
+        - internal/toolgen/toolgen.go
+      evidence_ref: artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T15:40:45Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/capability/export_test.go
+        - internal/toolgen/toolgen_test.go
+      target_files:
+        - internal/engine/capability/export_test.go
+        - internal/toolgen/toolgen_test.go
+      evidence_ref: artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T15:40:45Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/tmpl/templates/skills/gha-security-review/references/expression-injection.md
+        - internal/tmpl/templates/skills/gha-security-review/references/permissions-and-secrets.md
+        - internal/tmpl/templates/skills/supply-chain-audit/references/vulnerability-assessment-guide.md
+      target_files:
+        - internal/tmpl/templates/skills/gha-security-review/references/expression-injection.md
+        - internal/tmpl/templates/skills/gha-security-review/references/permissions-and-secrets.md
+        - internal/tmpl/templates/skills/supply-chain-audit/references/vulnerability-assessment-guide.md
+      evidence_ref: artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T15:40:45Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/assurance.md
+        - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/tasks.md
+        - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/assurance.md
+        - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification
+      evidence_ref: artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification/wave-orchestration.yaml
+      captured_at: 2026-05-25T15:40:45Z

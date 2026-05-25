@@ -1,0 +1,66 @@
+slug: optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior
+description: optimize Slipway skill surfaces and quality guardrails without changing runtime behavior
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T14:56:00.125538Z
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior
+worktree_branch: feat/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior
+artifact_schema: expanded
+project_context:
+    tech_stack: Go CLI, generated Agent Skills templates
+    test_cmd: go test ./internal/toolgen ./cmd ./internal/engine/capability
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+        - Shell
+        - Python
+    recent_work: Analyze and optimize Slipway skill discoverability, reference usability, and non-functional skill quality gates without changing runtime behavior.
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/assurance.md
+        version: 1
+        state: frozen
+        content_hash: e3c76affe8f20a5a18b2ec545cd239f0cc487e94e357a108f876b80a229fb3a7
+        updated_at: 2026-05-25T15:42:10.823668051Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/decision.md
+        version: 1
+        state: frozen
+        content_hash: b6e74ee1d063900c7fe7526584a4db8b89952cc35b1b833c5a6dbb230383b06f
+        updated_at: 2026-05-25T15:08:28.651512217Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/intent.md
+        version: 1
+        state: frozen
+        content_hash: 1669de3ff732ced92ab42e5bb23347787ea52cbc86f79268dd65933d64e0ec99
+        updated_at: 2026-05-25T14:59:10.342288323Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 916fd212bcb43cffd703ea0d83c81f535726522a0bce957f4e325847f0557f7c
+        updated_at: 2026-05-25T15:08:28.650797384Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/research.md
+        version: 1
+        state: frozen
+        content_hash: 3fd6d41611f538a1f17056bbd296e190313f95b4a43d20f2599928fd760a95b0
+        updated_at: 2026-05-25T15:07:00.956408944Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/artifacts/changes/archived/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 32fedc47c3c6fc96a0f580f25ee89091c60b4c6111781752bbd72d9b1350033b
+        updated_at: 2026-05-25T15:16:25.07143843Z

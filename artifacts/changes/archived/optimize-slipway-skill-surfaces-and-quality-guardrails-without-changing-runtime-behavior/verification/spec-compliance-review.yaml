@@ -1,0 +1,32 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:40:45Z"
+run_version: 2
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "trace:REQ-001=export.go,toolgen.go,command-reference.md.tmpl"
+  - "trace:REQ-002=export_test.go,toolgen_test.go"
+  - "trace:REQ-003=workflow SKILL template,long reference navigation"
+  - "trace:REQ-004=no runtime CLI/state/JSON changes"
+notes: |
+  Gaps (code_to_artifact): none. Changed code and template behavior are covered
+  by requirements and the selected approach.
+
+  Gaps (artifact_to_code): none. REQ-001 is implemented by rendering public
+  focus aliases from capability.surfacePolicy into generated lookup surfaces.
+  REQ-002 is implemented through focused capability/toolgen tests. REQ-003 is
+  implemented through concise workflow authority prose and quick navigation for
+  long references. REQ-004 is honored because no lifecycle state, gate, command
+  flag, JSON contract, exported host allowlist, or retired catalog artifact was
+  added.
+
+  Decision fidelity: pass. The selected Alternative C was implemented without
+  adding marketplace/catalog behavior or changing runtime command semantics.
+
+  Verification rechecked during review after the guardrail-test follow-up:
+  - go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1
+  - go test ./... -count=1
+  - go build ./...

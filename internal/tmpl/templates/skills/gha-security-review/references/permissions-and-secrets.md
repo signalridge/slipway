@@ -1,5 +1,14 @@
 # Permissions and Secrets
 
+## Quick Navigation
+- GITHUB_TOKEN Permissions
+- Secret Management
+- Detection Patterns
+- OIDC Subject Claim Misconfiguration
+- The Fix: Minimal Permissions Pattern
+- Severity Guidelines
+- References
+
 ## Overview
 
 GitHub Actions workflows have access to `GITHUB_TOKEN` (automatic) and repository secrets (configured). Overly broad permissions amplify the impact of any vulnerability. Proper permission scoping is the single most effective mitigation for GitHub Actions attacks.

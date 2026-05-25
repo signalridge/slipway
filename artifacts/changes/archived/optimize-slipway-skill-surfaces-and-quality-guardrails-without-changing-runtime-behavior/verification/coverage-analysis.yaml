@@ -1,0 +1,25 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:40:45Z"
+run_version: 2
+references:
+  - "tool:go version go1.25.5 darwin/arm64"
+  - "command:go test ./internal/engine/capability ./internal/toolgen -coverprofile=/tmp/slipway-skill-surfaces-coverage.out -count=1"
+  - "command:go tool cover -func=/tmp/slipway-skill-surfaces-coverage.out"
+  - "coverage:changed_go_functions=100.0"
+  - "coverage:changed_packages_total=79.0"
+notes: |
+  Coverage is diagnostic evidence, not the completion proof. The changed Go
+  behavior is covered through capability and toolgen tests; full behavioral
+  proof comes from fresh focused and full-suite tests.
+
+  Report:
+    tool: go version go1.25.5 darwin/arm64; go test coverage plus go tool cover
+    command: go test ./internal/engine/capability ./internal/toolgen -coverprofile=/tmp/slipway-skill-surfaces-coverage.out -count=1; go tool cover -func=/tmp/slipway-skill-surfaces-coverage.out
+    whole_codebase_scope: changed Go packages only
+    whole_codebase_pct: 79.0
+    change_surface_scope: new/modified Go functions in export.go, surfaces.go, and toolgen.go
+    change_surface_pct: 100.0
+    uncovered: none on changed Go functions; markdown/template prose has no Go line coverage denominator
+    delta_vs_baseline: flat; no runtime behavior or production branch was added
+    verdict: pass

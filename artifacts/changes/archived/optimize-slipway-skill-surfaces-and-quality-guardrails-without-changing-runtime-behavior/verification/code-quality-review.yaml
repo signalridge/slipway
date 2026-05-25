@@ -1,0 +1,25 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:40:45Z"
+run_version: 2
+references:
+  - "layer:QUALITY=pass"
+  - "test:go test ./internal/engine/capability ./internal/toolgen ./cmd -count=1"
+  - "test:go test ./... -count=1"
+  - "build:go build ./..."
+notes: |
+  Gaps (code_to_artifact): none. The implementation stays within the task
+  target files and matches the approved rollout/rollback story.
+
+  Gaps (artifact_to_code): none. The generated surfaces reuse existing
+  capability metadata instead of duplicating a hand-written alias table. The
+  new ExplicitFocusSurfaces helper is read-only and deterministic. The command
+  reference data path is simple, local to toolgen, and follows the existing
+  command metadata rendering pattern.
+
+  Quality review: pass. The diff is small and localized; review follow-up
+  tightened the new tests so focus rendering coverage follows the full
+  capability surface metadata and long-reference navigation must be near the
+  top of the file. No secrets, auth/data handling, irreversible operations,
+  external API contracts, dependency installs, or runtime state migrations were
+  introduced.

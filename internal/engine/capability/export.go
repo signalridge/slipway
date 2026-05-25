@@ -50,6 +50,24 @@ func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) strin
 		))
 	}
 	b.WriteString("\n")
+
+	focuses := ExplicitFocusSurfaces()
+	if len(focuses) > 0 {
+		b.WriteString("## Public Focus Aliases\n\n")
+		b.WriteString("These are command selectors, not governed host paths. Use the command shown; `slipway next --json` remains the host-selection authority.\n\n")
+		b.WriteString("| Selector | Backing skill | Use when |\n")
+		b.WriteString("| --- | --- | --- |\n")
+		for _, focus := range focuses {
+			b.WriteString(fmt.Sprintf(
+				"| `slipway %s --focus %s` | `%s` | %s |\n",
+				focus.Command,
+				focus.PublicName,
+				focus.BackingID,
+				focus.Summary,
+			))
+		}
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 

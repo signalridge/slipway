@@ -337,6 +337,13 @@ type commandEntry struct {
 	Description   string
 	Arguments     string
 	Prerequisites []string
+	Focuses       []commandFocusEntry
+}
+
+type commandFocusEntry struct {
+	PublicName string
+	BackingID  string
+	Summary    string
 }
 
 // techniqueNames lists the technique skills to generate.
@@ -486,9 +493,23 @@ func buildWorkflowCommandEntries(ids []string, expectedTier string) ([]commandEn
 			Description:   meta.Description,
 			Arguments:     meta.Arguments,
 			Prerequisites: meta.Prerequisites,
+			Focuses:       buildCommandFocusEntries(meta.ID),
 		})
 	}
 	return out, nil
+}
+
+func buildCommandFocusEntries(command string) []commandFocusEntry {
+	focuses := capability.ExplicitFocusesForCommand(command)
+	out := make([]commandFocusEntry, 0, len(focuses))
+	for _, focus := range focuses {
+		out = append(out, commandFocusEntry{
+			PublicName: focus.PublicName,
+			BackingID:  focus.BackingID,
+			Summary:    focus.Summary,
+		})
+	}
+	return out
 }
 
 func validateWorkflowCommandCoverage(groups ...[]string) error {

@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -55,6 +56,9 @@ func TestBuildSkillIndex_RendersShortInformationalIndex(t *testing.T) {
 	if !strings.Contains(index, "slipway-security-review/SKILL.md") {
 		t.Fatal("skill index missing direct host skill path")
 	}
+	if !strings.Contains(index, "## Public Focus Aliases") {
+		t.Fatal("skill index missing public focus alias section")
+	}
 }
 
 func TestBuildSkillIndex_UsesCanonicalPublicSkillLabels(t *testing.T) {
@@ -65,5 +69,35 @@ func TestBuildSkillIndex_UsesCanonicalPublicSkillLabels(t *testing.T) {
 		if !strings.Contains(index, "| `"+publicName+"` |") {
 			t.Errorf("dispatcher index missing public skill label %q", publicName)
 		}
+	}
+}
+
+func TestBuildSkillIndex_RendersPublicFocusAliasesWithoutHostPaths(t *testing.T) {
+	defaultReg := DefaultRegistry()
+	var exportedLike []Skill
+	for _, id := range []string{"incident-response", "independent-review", "root-cause-tracing", "security-review"} {
+		sk, ok := defaultReg.Lookup(id)
+		if !ok {
+			t.Fatalf("default registry missing %q", id)
+		}
+		exportedLike = append(exportedLike, sk)
+	}
+	reg, err := NewRegistry(exportedLike...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	index := BuildSkillIndex(reg)
+	for _, rec := range ExplicitFocusSurfaces() {
+		selector := fmt.Sprintf("`slipway %s --focus %s`", rec.Command, rec.PublicName)
+		if !strings.Contains(index, selector) {
+			t.Errorf("skill index missing public focus selector %s", selector)
+		}
+		if !strings.Contains(index, "`"+rec.BackingID+"`") {
+			t.Errorf("skill index missing backing skill %q", rec.BackingID)
+		}
+	}
+	if strings.Contains(index, "slipway-sast-orchestration/SKILL.md") {
+		t.Fatal("skill index must not expose non-exported focus backing as a host path")
 	}
 }

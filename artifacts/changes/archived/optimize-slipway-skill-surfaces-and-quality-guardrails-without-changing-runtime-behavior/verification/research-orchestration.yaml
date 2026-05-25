@@ -1,0 +1,17 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T15:06:08Z"
+run_version: 0
+references:
+  - "research.md:architecture-patterns-risks-test-strategy"
+  - "external:agentskills-specification"
+  - "external:claude-code-skills-docs"
+  - "external:github-popular-agent-skills-search"
+  - "external:reddit-x-community-signal"
+notes: |
+  Research covered repository architecture, current skill authoring patterns,
+  technical risks, and focused test strategy. The selected approach is the
+  least invasive one: render existing public focus aliases into generated
+  lookup surfaces and add mechanical guardrails for focus/index/reference
+  usability drift. Runtime lifecycle behavior, CLI command semantics, JSON
+  contracts, and host skill export boundaries remain out of scope.

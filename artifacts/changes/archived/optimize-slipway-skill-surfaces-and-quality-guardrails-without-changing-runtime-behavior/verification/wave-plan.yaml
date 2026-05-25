@@ -1,0 +1,41 @@
+version: 1
+generated_at: 2026-05-25T15:09:24.768824887Z
+tasks_plan_hash: 144ae03444df8ff9a3555700ad648235150d0fad2d2036ef46492743bd7707fa
+total_tasks: 4
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Render public focus aliases into generated lookup surfaces.
+          target_files:
+            - internal/engine/capability/export.go
+            - internal/engine/capability/surfaces.go
+            - internal/tmpl/templates/skills/workflow/SKILL.md.tmpl
+            - internal/tmpl/templates/skills/workflow/command-reference.md.tmpl
+            - internal/toolgen/toolgen.go
+          task_kind: code
+        - task_id: t-02
+          objective: Add lightweight mechanical quality guardrails.
+          target_files:
+            - internal/engine/capability/export_test.go
+            - internal/toolgen/toolgen_test.go
+          task_kind: code
+        - task_id: t-03
+          objective: Add top-level navigation to currently long reference files only.
+          target_files:
+            - internal/tmpl/templates/skills/gha-security-review/references/expression-injection.md
+            - internal/tmpl/templates/skills/gha-security-review/references/permissions-and-secrets.md
+            - internal/tmpl/templates/skills/supply-chain-audit/references/vulnerability-assessment-guide.md
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-04
+          objective: Run focused and broad verification, then update assurance.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/assurance.md
+            - artifacts/changes/optimize-slipway-skill-surfaces-and-quality-guardrails-without-changing-runtime-behavior/verification
+          task_kind: verification

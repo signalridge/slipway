@@ -478,6 +478,11 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
 		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
 		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
+		for _, focus := range capability.ExplicitFocusSurfaces() {
+			selector := "`slipway " + focus.Command + " --focus " + focus.PublicName + "`"
+			assert.Contains(t, ref, selector, "%s: missing focus selector %s", cfg.ID, selector)
+			assert.Contains(t, ref, "`"+focus.BackingID+"`", "%s: missing focus backing %s", cfg.ID, focus.BackingID)
+		}
 
 		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md.tmpl"))
 		assert.True(t, os.IsNotExist(err), "%s: raw workflow template leaked into generated tree", cfg.ID)
@@ -1495,6 +1500,8 @@ const referencesBudgetPerFile = 24 * 1024
 // remains practical even when operators choose to print the full set.
 const referencesBudgetPerSkill = 64 * 1024
 
+const longReferenceNavigationLineThreshold = 240
+
 // TestCatalogSkillHasReferences asserts the PR-1 five have a non-empty
 // references/ directory with at least one .md file, and every .md starts
 // with an H1 so hydrate output renders a readable heading.
@@ -1617,6 +1624,52 @@ func TestReferenceFileSizeBudget(t *testing.T) {
 				"%s: references total %d bytes exceeds per-skill cap %d", id, total, referencesBudgetPerSkill)
 		})
 	}
+}
+
+func TestLongReferenceFilesHaveQuickNavigation(t *testing.T) {
+	t.Parallel()
+	templateFS := tmpl.TemplateFS()
+	checked := 0
+
+	err := fs.WalkDir(templateFS, "skills", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !strings.Contains(p, "/references/") || !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		raw, err := fs.ReadFile(templateFS, p)
+		if err != nil {
+			return err
+		}
+		content := string(raw)
+		lineCount := strings.Count(content, "\n")
+		if !strings.HasSuffix(content, "\n") {
+			lineCount++
+		}
+		if lineCount <= longReferenceNavigationLineThreshold {
+			return nil
+		}
+		checked++
+		lines := strings.Split(content, "\n")
+		limit := 40
+		if len(lines) < limit {
+			limit = len(lines)
+		}
+		quickNavigationLine := 0
+		for i := 0; i < limit; i++ {
+			if strings.TrimSpace(lines[i]) == "## Quick Navigation" {
+				quickNavigationLine = i + 1
+				break
+			}
+		}
+		assert.NotZerof(t, quickNavigationLine,
+			"%s has %d lines and needs a top-level quick navigation section within the first %d lines",
+			p, lineCount, limit)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, checked, "expected at least one long reference file to be checked")
 }
 
 // TestTypedPartsRendered asserts that the PR-3 typed partials land in the
