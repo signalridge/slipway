@@ -463,26 +463,7 @@ func parseRefList(raw string) []string {
 }
 
 func hasBlockingOpenQuestions(intentContent string) bool {
-	section := stringutil.LastMarkdownSectionContent(intentContent, "## Open Questions")
-	if section == "" {
-		return false
-	}
-	lines := strings.Split(section, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.EqualFold(trimmed, "(none)") {
-			continue
-		}
-		lowerTrimmed := strings.ToLower(trimmed)
-		if strings.HasPrefix(lowerTrimmed, "- [x]") || strings.HasPrefix(lowerTrimmed, "* [x]") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "- [ ]") || strings.HasPrefix(trimmed, "* [ ]") ||
-			strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			return true
-		}
-	}
-	return false
+	return stringutil.HasBlockingOpenQuestions(intentContent)
 }
 
 func extractMarkdownSectionBody(content, heading string) string {

@@ -477,6 +477,39 @@ REQ-001: Something. INT-001
 	assert.Contains(t, issues, "blocking open questions remain unresolved while downstream artifacts are ready")
 }
 
+func TestTraceabilityBlockingOpenQuestionProse(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	writeFile(t, filepath.Join(dir, "intent.md"), `# Intent
+INT-001: Something
+
+## Open Questions
+Need to decide whether OpenCode commands are flat or nested.
+`)
+
+	slug := "test-change"
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+`)
+	writeFile(t, filepath.Join(dir, "tasks.md"), `- [ ] Do thing
+  covers: [REQ-001]
+`)
+
+	result := EvaluateTraceability(TraceabilityInput{
+		BundleDir: dir,
+		Slug:      slug,
+	})
+
+	assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+	var issues []string
+	for _, g := range result.Gaps {
+		issues = append(issues, g.Issue)
+	}
+	assert.Contains(t, issues, "blocking open questions remain unresolved while downstream artifacts are ready")
+}
+
 func TestTraceabilityResolvedOpenQuestionsDoNotBlock(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

@@ -40,3 +40,78 @@ func TestLastMarkdownSectionContentStripsHTMLComments(t *testing.T) {
 
 	assert.Equal(t, "- keep the canonical section content", LastMarkdownSectionContent(content, "## In Scope"))
 }
+
+func TestHasBlockingOpenQuestions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{
+			name: "empty section",
+			content: `## Open Questions
+<!-- placeholder -->
+`,
+			want: false,
+		},
+		{
+			name: "explicit none",
+			content: `## Open Questions
+(none)
+`,
+			want: false,
+		},
+		{
+			name: "resolved checklist",
+			content: `## Open Questions
+- [x] Resolved by local reference survey.
+`,
+			want: false,
+		},
+		{
+			name: "unchecked checklist",
+			content: `## Open Questions
+- [ ] Which installer path should be documented?
+`,
+			want: true,
+		},
+		{
+			name: "plain bullet question",
+			content: `## Open Questions
+- Which docs build command should be used?
+`,
+			want: true,
+		},
+		{
+			name: "plain prose question",
+			content: `## Open Questions
+Need to decide whether OpenCode commands are flat or nested.
+`,
+			want: true,
+		},
+		{
+			name: "last canonical section wins",
+			content: `## Summary
+Copied source.
+
+## Open Questions
+- Copied unresolved question.
+
+## Open Questions
+(none)
+`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, HasBlockingOpenQuestions(tt.content))
+		})
+	}
+}

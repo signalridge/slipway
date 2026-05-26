@@ -1,0 +1,19 @@
+{
+  "task_id": "t-02",
+  "run_summary_version": 1,
+  "task_kind": "doc",
+  "verdict": "pass",
+  "changed_files": [
+    "README.md",
+    "docs/ai-tools.md",
+    "docs/installation.md"
+  ],
+  "target_files": [
+    "README.md",
+    "docs/ai-tools.md",
+    "docs/installation.md"
+  ],
+  "evidence_ref": "docs/installation.md platform install matrix, AI Tool Installation Prompt, and docs/ai-tools.md OpenCode Notes",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-wave-ai-install"
+}

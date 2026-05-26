@@ -1,0 +1,23 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "internal/engine/governance/traceability.go",
+    "internal/engine/progression/advance_intake.go",
+    "internal/engine/progression/advance_test.go",
+    "internal/stringutil/html.go",
+    "internal/stringutil/html_test.go"
+  ],
+  "target_files": [
+    "internal/engine/governance/traceability.go",
+    "internal/engine/progression/advance_intake.go",
+    "internal/engine/progression/advance_test.go",
+    "internal/stringutil/html.go",
+    "internal/stringutil/html_test.go"
+  ],
+  "evidence_ref": "go test ./internal/stringutil ./internal/engine/progression ./internal/engine/governance -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics|TestTraceability.*OpenQuestions' -count=1",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-wave-open-questions"
+}

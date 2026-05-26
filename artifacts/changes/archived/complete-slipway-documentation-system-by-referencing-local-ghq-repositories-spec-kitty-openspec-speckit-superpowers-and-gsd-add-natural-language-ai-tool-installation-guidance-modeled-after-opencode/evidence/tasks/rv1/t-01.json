@@ -1,0 +1,35 @@
+{
+  "task_id": "t-01",
+  "run_summary_version": 1,
+  "task_kind": "doc",
+  "verdict": "pass",
+  "changed_files": [
+    ".github/workflows/docs.yml",
+    "README.md",
+    "docs/ai-tools.md",
+    "docs/commands.md",
+    "docs/contributing.md",
+    "docs/design.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/operator-guide.md",
+    "docs/workflow.md",
+    "mkdocs.yml"
+  ],
+  "target_files": [
+    ".github/workflows/docs.yml",
+    "README.md",
+    "docs/ai-tools.md",
+    "docs/commands.md",
+    "docs/contributing.md",
+    "docs/design.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/operator-guide.md",
+    "docs/workflow.md",
+    "mkdocs.yml"
+  ],
+  "evidence_ref": "mkdocs build --strict",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-wave-docs"
+}

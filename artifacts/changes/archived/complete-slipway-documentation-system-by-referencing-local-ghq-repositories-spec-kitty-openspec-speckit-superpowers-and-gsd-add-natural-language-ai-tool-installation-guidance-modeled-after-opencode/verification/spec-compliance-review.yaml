@@ -1,0 +1,56 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T15:55:00Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "REQ-001=pass"
+  - "REQ-002=pass"
+  - "REQ-003=pass"
+  - "REQ-004=pass"
+  - "REQ-005=pass"
+  - "REQ-006=pass"
+  - "REQ-007=pass"
+notes: |
+  Gaps (code_to_artifact): none.
+  Gaps (artifact_to_code): none.
+
+  Forward trace:
+  - REQ-001 is implemented by tracked docs pages and mkdocs.yml nav; verified
+    by mkdocs build --strict.
+  - REQ-002 is implemented by research.md reference findings and docs/index.md
+    reference pattern summary; docs use Slipway-specific command and adapter
+    paths rather than copied reference behavior.
+  - REQ-003 is implemented by docs/index.md, installation.md, workflow.md,
+    commands.md, ai-tools.md, operator-guide.md, and contributing.md.
+  - REQ-004 is implemented by docs/installation.md AI Tool Installation Prompt
+    and docs/ai-tools.md OpenCode Notes.
+  - REQ-005 is implemented by stringutil.HasBlockingOpenQuestions, intake and
+    traceability callers, and focused regression tests.
+  - REQ-006 is implemented by docs/installation.md release-first install order,
+    platform/package matrix, and per-platform install sections grounded in
+    .goreleaser.yaml, release.yaml, Dockerfile.goreleaser, flake.nix, and
+    go.mod.
+  - REQ-007 is implemented by README.md product/design entrypoint, Mermaid
+    lifecycle diagram, core capabilities, install summary, AI adapter summary,
+    runtime file summary, and docs map.
+
+  Reverse trace:
+  - README.md was reduced to an entrypoint and retains required command/runtime
+    anchors checked by internal/toolgen.
+  - .github/workflows/docs.yml exists because README and decision.md require a
+    docs workflow backing MkDocs strict build and GitHub Pages deploy.
+  - docs/design.md exists because the corrected docs design requires a dedicated
+    non-redundant home for design philosophy and architecture details.
+  - .gitignore includes site/ because mkdocs build creates generated output that
+    should not be committed.
+  - No extra lifecycle states, artifact roots, guardrail domains, or adapter
+    tools were introduced.
+
+  Decision fidelity:
+  - Selected targeted contract review is honored.
+  - Full rewrite and README-only patch alternatives were not implemented.
+  - Open Questions fix remains narrow and shared through internal/stringutil.

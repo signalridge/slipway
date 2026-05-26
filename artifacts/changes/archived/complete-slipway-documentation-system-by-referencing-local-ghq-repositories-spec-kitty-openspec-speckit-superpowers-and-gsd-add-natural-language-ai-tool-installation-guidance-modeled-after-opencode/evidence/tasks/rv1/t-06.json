@@ -1,0 +1,34 @@
+{
+  "task_id": "t-06",
+  "run_summary_version": 1,
+  "task_kind": "doc",
+  "verdict": "pass",
+  "changed_files": [
+    ".gitignore",
+    "README.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md",
+    "docs/ai-tools.md",
+    "docs/design.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/workflow.md",
+    "mkdocs.yml"
+  ],
+  "target_files": [
+    ".gitignore",
+    "README.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md",
+    "docs/ai-tools.md",
+    "docs/design.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/workflow.md",
+    "mkdocs.yml"
+  ],
+  "evidence_ref": "README redesign; docs/design.md; docs/installation.md release-first platform matrix; Mermaid diagrams; mkdocs build --strict",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-review-correction-docs"
+}

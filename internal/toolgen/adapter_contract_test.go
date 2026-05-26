@@ -111,7 +111,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 	"opencode": {
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".opencode/commands",
-		CommandStyle:  "nested",
+		CommandStyle:  "flat",
 		CommandExt:    ".md",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",

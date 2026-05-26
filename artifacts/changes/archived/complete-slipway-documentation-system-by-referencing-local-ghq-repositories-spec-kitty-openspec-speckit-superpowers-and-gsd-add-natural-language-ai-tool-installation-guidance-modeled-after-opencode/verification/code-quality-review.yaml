@@ -1,0 +1,41 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T15:55:00Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+notes: |
+  Gaps (code_to_artifact): none.
+  Gaps (artifact_to_code): none.
+
+  Code quality:
+  - Open Questions semantics are centralized in stringutil.HasBlockingOpenQuestions.
+  - intake progression and governance traceability no longer duplicate section
+    parsing logic.
+  - Tests cover resolved, unresolved, and canonical last-section cases.
+
+  Documentation quality:
+  - README is now a product entrypoint with purpose, philosophy, capabilities,
+    platform install summary, Mermaid lifecycle, AI adapter summary, and docs
+    map while retaining contract anchors required by internal/toolgen tests.
+  - docs/ pages are split by user task and audience, with docs/design.md owning
+    deeper architecture and philosophy details.
+  - docs/installation.md covers macOS, Linux, Windows, Go install, Nix,
+    containers, source builds, direct archives, package channels, checksums, and
+    AI-tool initialization without overstating optional package-manager
+    publication.
+  - mkdocs.yml points only at existing tracked documentation pages and supports
+    Mermaid fences.
+  - docs workflow is minimal: install MkDocs Material, build strict docs, and
+    deploy Pages only on main pushes.
+
+  Test quality:
+  - Targeted regression tests cover the fixed governance behavior.
+  - mkdocs build --strict, README contract test, targeted Open Questions tests,
+    full Go tests, go build, go vet, and git diff --check pass locally.
+
+  Safety:
+  - No auth, secrets, PII, financial, schema migration, irreversible operation,
+    or external API contract behavior is changed.
+  - AI-tool install prompt tells agents to inspect existing state, avoid
+    overwriting unrelated files, and stop on missing prerequisites.

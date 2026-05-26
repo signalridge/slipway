@@ -1,0 +1,71 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T15:59:43Z"
+run_version: 1
+references:
+  - "command:mkdocs build --strict=pass"
+  - "command:go test ./internal/stringutil ./internal/engine/progression ./internal/engine/governance -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics|TestTraceability.*OpenQuestions' -count=1=pass"
+  - "command:go test ./internal/toolgen -run TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface -count=1=pass"
+  - "command:go test -timeout=20m ./... -count=1=pass"
+  - "command:go build ./...=pass"
+  - "command:go vet ./...=pass"
+  - "command:git diff --check=pass"
+  - "command:rg TODO/FIXME/stub scan over claimed targets=no_hits"
+  - "artifact:requirements.md=REQ-001..REQ-007"
+  - "source:README.md"
+  - "source:docs/installation.md"
+  - "source:docs/design.md"
+  - "source:docs/workflow.md"
+  - "source:docs/ai-tools.md"
+  - "source:internal/stringutil/html.go"
+notes: |
+  Criteria:
+    AC-1: Complete tracked documentation system -- pass.
+      Exists: docs/index.md, docs/design.md, docs/installation.md, docs/workflow.md,
+      docs/commands.md, docs/ai-tools.md, docs/operator-guide.md, docs/contributing.md,
+      mkdocs.yml, and .github/workflows/docs.yml are present.
+      Substantive: docs/index.md maps the doc set and reference patterns; mkdocs.yml
+      wires the nav and Mermaid superfence support; mkdocs build --strict passed.
+      Wired: README links into the docs map and the docs workflow builds the tracked docs.
+    AC-2: Reference-informed design from spec-kitty, OpenSpec, Spec Kit,
+      Superpowers, GSD, and OpenCode -- pass.
+      Exists: requirements.md records REQ-002 and docs/design.md contains the
+      reference-pattern mapping.
+      Substantive: docs/design.md explains how each reference maps to Slipway
+      behavior instead of listing names only.
+      Wired: README and docs/index.md link the design page into the user entry path.
+    AC-3: Release-first installation across platforms and packages -- pass.
+      Exists: docs/installation.md has Release Install Matrix entries for macOS,
+      Linux, and Windows amd64/arm64 plus Homebrew, Scoop, deb, rpm, apk, AUR,
+      container, Go install fallback, Nix, and source build.
+      Substantive: the install order explicitly prefers published release
+      artifacts or release-backed package channels before developer fallbacks.
+      Wired: README summarizes the matrix and points normal users to
+      docs/installation.md.
+    AC-4: Natural-language AI-tool installation guidance including OpenCode -- pass.
+      Exists: docs/installation.md contains the AI Tool Installation Prompt and
+      docs/ai-tools.md contains OpenCode paths.
+      Substantive: the prompt instructs an AI tool to inspect OS/arch, prefer
+      releases, initialize adapters, and verify the install.
+      Wired: README links the AI-tool prompt; docs/ai-tools.md names generated
+      OpenCode skills, commands, hooks, and slash command usage.
+    AC-5: README redesigned with design philosophy, capabilities, and Mermaid -- pass.
+      Exists: README has Design Philosophy, Core Capabilities, lifecycle Mermaid,
+      release install summary, AI-tool adapters, runtime files, and docs map.
+      Substantive: the README explains Slipway's repository-owned governance
+      model and differentiates CLI authority from AI-tool adapters.
+      Wired: toolgen README anchor test passed, preserving generated surface
+      expectations.
+    AC-6: Open Questions no longer causes false intake blockage -- pass.
+      Exists: stringutil.HasBlockingOpenQuestions is implemented and reused from
+      intake progression and traceability checks.
+      Substantive: tests cover empty, `(none)`, checked, unchecked, plain bullet,
+      and canonical last-section semantics.
+      Wired: targeted Go tests for stringutil, progression, and governance passed.
+    AC-7: Verification is current and non-stubbed -- pass.
+      Exists: wave-orchestration, code-quality-review, spec-compliance-review,
+      and this goal-verification record are present for run_version 1.
+      Substantive: full Go test, build, vet, MkDocs strict, diff check, and stub
+      scan passed against the current worktree.
+      Wired: slipway validate in S4 reports fresh evidence and only the expected
+      pre-goal-verification missing-evidence blocker before this record was added.

@@ -1,0 +1,13 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T14:52:55Z"
+run_version: 0
+references:
+  - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/intent.md
+notes: |
+  Intake scope names both public documentation-system completion and AI/operator
+  installation guidance as in scope. It explicitly excludes runtime behavior,
+  command semantics, adapter generation, release packaging, and new
+  network-dependent install automation. Acceptance signals require tracked
+  MkDocs pages, complete user/operator path, AI-tool-readable install guidance,
+  local reference-repo research evidence, and repo-native verification.

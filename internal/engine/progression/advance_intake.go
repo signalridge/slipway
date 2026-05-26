@@ -263,6 +263,5 @@ func sectionNonEmpty(content, heading string) bool {
 
 // hasOpenQuestions checks if the Open Questions section has unresolved items.
 func hasOpenQuestions(content string) bool {
-	// Non-empty open questions section means there are unresolved items.
-	return stringutil.LastMarkdownSectionContent(content, "## Open Questions") != ""
+	return stringutil.HasBlockingOpenQuestions(content)
 }

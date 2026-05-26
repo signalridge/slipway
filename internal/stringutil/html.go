@@ -60,3 +60,26 @@ func LastMarkdownSectionContent(content, heading string) string {
 	}
 	return last
 }
+
+// HasBlockingOpenQuestions reports whether the canonical Open Questions section
+// contains unresolved content. A resolved checklist entry, an empty/comment-only
+// section, or an explicit "(none)" note is documentation, not an intake blocker.
+func HasBlockingOpenQuestions(content string) bool {
+	section := LastMarkdownSectionContent(content, "## Open Questions")
+	if section == "" {
+		return false
+	}
+	lines := strings.Split(section, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.EqualFold(trimmed, "(none)") {
+			continue
+		}
+		lowerTrimmed := strings.ToLower(trimmed)
+		if strings.HasPrefix(lowerTrimmed, "- [x]") || strings.HasPrefix(lowerTrimmed, "* [x]") {
+			continue
+		}
+		return true
+	}
+	return false
+}

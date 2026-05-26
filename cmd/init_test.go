@@ -36,10 +36,10 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err := os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
 		require.NoError(t, err)
 
-		// Command entries in tool dirs (cursor: flat path, others: nested)
+		// Command entries in tool dirs (Cursor/OpenCode: flat path, others: nested)
 		_, err = os.Stat(filepath.Join(root, ".cursor", "commands", "slipway-new.md"))
 		require.NoError(t, err)
-		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway", "next.md"))
+		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-next.md"))
 		require.NoError(t, err)
 
 		// Host-visible technique skills in tool dirs
@@ -78,8 +78,8 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".gemini", "commands", "slipway", "new.toml"))
 		require.NoError(t, err)
 
-		// OpenCode commands should be nested markdown
-		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway", "new.md"))
+		// OpenCode command names come from file names, so use flat markdown.
+		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))
 		require.NoError(t, err)
 
 		// Codex should NOT have project-local commands

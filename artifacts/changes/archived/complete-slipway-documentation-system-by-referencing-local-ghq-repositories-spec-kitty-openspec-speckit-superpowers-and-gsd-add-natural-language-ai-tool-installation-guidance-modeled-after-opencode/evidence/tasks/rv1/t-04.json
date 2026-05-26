@@ -1,0 +1,23 @@
+{
+  "task_id": "t-04",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [],
+  "target_files": [
+    "docs/ai-tools.md",
+    "docs/commands.md",
+    "docs/contributing.md",
+    "docs/design.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/operator-guide.md",
+    "docs/workflow.md",
+    "internal/engine/progression/advance_test.go",
+    "internal/stringutil/html_test.go",
+    "mkdocs.yml"
+  ],
+  "evidence_ref": "mkdocs build --strict; go test -timeout=20m ./... -count=1; go build ./...; go vet ./...; git diff --check",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-wave-verification"
+}

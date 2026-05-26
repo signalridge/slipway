@@ -1,0 +1,17 @@
+{
+  "task_id": "t-05",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md"
+  ],
+  "target_files": [
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md",
+    "artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md"
+  ],
+  "evidence_ref": "research.md Canonical References and assurance.md Requirement Coverage for REQ-001 through REQ-007",
+  "captured_at": "2026-05-26T15:56:46Z",
+  "session_id": "codex-wave-evidence"
+}

@@ -1,0 +1,93 @@
+version: 1
+generated_at: 2026-05-26T15:42:23.835435625Z
+tasks_plan_hash: 80c52d4224834457cd2ee794bebdc950bcb50cfe4692e90176815651fe8b3fc0
+total_tasks: 6
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Create the tracked MkDocs documentation system and README entrypoint.
+          target_files:
+            - .github/workflows/docs.yml
+            - README.md
+            - docs/ai-tools.md
+            - docs/commands.md
+            - docs/contributing.md
+            - docs/design.md
+            - docs/index.md
+            - docs/installation.md
+            - docs/operator-guide.md
+            - docs/workflow.md
+            - mkdocs.yml
+          task_kind: doc
+        - task_id: t-03
+          objective: Keep the Open Questions fix narrow and tested.
+          target_files:
+            - internal/engine/governance/traceability.go
+            - internal/engine/progression/advance_intake.go
+            - internal/engine/progression/advance_test.go
+            - internal/stringutil/html.go
+            - internal/stringutil/html_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: Add AI-tool and OpenCode-modeled installation guidance.
+          depends_on:
+            - t-01
+          target_files:
+            - README.md
+            - docs/ai-tools.md
+            - docs/installation.md
+          task_kind: doc
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Verify documentation and Go behavior from the governed worktree.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - docs/ai-tools.md
+            - docs/commands.md
+            - docs/contributing.md
+            - docs/index.md
+            - docs/installation.md
+            - docs/operator-guide.md
+            - docs/workflow.md
+            - internal/engine/progression/advance_test.go
+            - internal/stringutil/html_test.go
+            - mkdocs.yml
+          task_kind: verification
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: Record reference traceability and final governed evidence.
+          depends_on:
+            - t-04
+          target_files:
+            - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
+            - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md
+          task_kind: verification
+    - wave_index: 5
+      tasks:
+        - task_id: t-06
+          objective: Apply review correction for complete, non-redundant docs design.
+          depends_on:
+            - t-01
+            - t-02
+            - t-05
+          target_files:
+            - .gitignore
+            - README.md
+            - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
+            - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md
+            - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md
+            - docs/ai-tools.md
+            - docs/design.md
+            - docs/index.md
+            - docs/installation.md
+            - docs/workflow.md
+            - mkdocs.yml
+          task_kind: doc

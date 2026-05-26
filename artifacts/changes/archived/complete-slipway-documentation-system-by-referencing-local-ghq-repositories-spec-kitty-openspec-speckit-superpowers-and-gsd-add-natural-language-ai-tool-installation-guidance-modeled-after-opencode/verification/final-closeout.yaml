@@ -1,0 +1,37 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T16:50:07Z"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:go test -timeout=20m ./... -count=1"
+  - "closeout:docs_build=pass:mkdocs build --strict"
+  - "closeout:build=pass:go build ./..."
+  - "closeout:vet=pass:go vet ./..."
+  - "closeout:diff_check=pass:git diff --check"
+  - "closeout:reviewer_independence=pass:code-quality-review.yaml"
+  - "closeout:spec_compliance=pass:spec-compliance-review.yaml"
+  - "closeout:goal_verification=pass:goal-verification.yaml"
+  - "closeout:assurance_complete=pass:assurance.md"
+  - "closeout:guardrail_baseline=not_applicable:no_guardrail_domain"
+notes: |
+  Current run_version is 1 and matches wave-orchestration, code-quality-review,
+  spec-compliance-review, goal-verification, and final-closeout records.
+
+  Fresh closeout commands were run against the current governed worktree after
+  the review corrections for OpenCode flat command evidence, the targeted
+  Open Questions regression evidence name, and Linux package arch examples:
+    - corrected targeted Open Questions regression: pass
+    - mkdocs build --strict: pass
+    - go test -timeout=20m ./... -count=1: pass
+    - go build ./...: pass
+    - go vet ./...: pass
+    - git diff --check: pass
+
+  Governance validation before this closeout showed fresh evidence, no blockers,
+  and G_ship approved. The standard-preset assurance artifact contains scope
+  summary, verification verdict, evidence index, requirement coverage, residual
+  risks, rollback readiness, and archive decision.
+
+  No guardrail domain is set on this change, so guardrail-domain baseline checks
+  are not applicable.

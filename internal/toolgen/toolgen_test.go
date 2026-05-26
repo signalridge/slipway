@@ -1092,15 +1092,53 @@ func TestCodexNoProjectLocalCommands(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "codex should not have project-local commands")
 }
 
-func TestOpenCodeNestedCommands(t *testing.T) {
+func TestOpenCodeFlatCommands(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"opencode"}, true))
 
-	// OpenCode should use nested command paths.
-	path := filepath.Join(root, ".opencode", "commands", "slipway", "new.md")
+	// OpenCode command names come directly from file names, so use flat paths
+	// to keep slash-hyphen invocation stable.
+	path := filepath.Join(root, ".opencode", "commands", "slipway-new.md")
 	_, err := os.Stat(path)
-	assert.NoError(t, err, "opencode should have nested command paths")
+	assert.NoError(t, err, "opencode should have flat command paths")
+}
+
+func TestOpenCodeRefreshPrunesLegacyNestedCommands(t *testing.T) {
+	root := t.TempDir()
+
+	sentinelPath := filepath.Join(root, ".opencode", "slipway", ".adapter-generated")
+	require.NoError(t, os.MkdirAll(filepath.Dir(sentinelPath), 0o755))
+	require.NoError(t, os.WriteFile(sentinelPath, []byte("generated\n"), 0o644))
+
+	legacyDir := filepath.Join(root, ".opencode", "commands", "slipway")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "new.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "custom.md"), []byte("keep user command"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"opencode"}, true))
+
+	_, err := os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))
+	assert.NoError(t, err, "refresh should write flat opencode command paths")
+	_, err = os.Stat(filepath.Join(legacyDir, "new.md"))
+	assert.True(t, os.IsNotExist(err), "refresh should prune legacy generated nested commands")
+	_, err = os.Stat(filepath.Join(legacyDir, "custom.md"))
+	assert.NoError(t, err, "refresh must not delete unknown nested user commands")
+}
+
+func TestOpenCodeRefreshWithoutGeneratedMarkerDoesNotPruneNestedCommands(t *testing.T) {
+	root := t.TempDir()
+
+	legacyDir := filepath.Join(root, ".opencode", "commands", "slipway")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "new.md"), []byte("user command"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"opencode"}, true))
+
+	_, err := os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))
+	assert.NoError(t, err, "refresh should write flat opencode command paths")
+	_, err = os.Stat(filepath.Join(legacyDir, "new.md"))
+	assert.NoError(t, err, "refresh without a generated adapter marker must not prune nested user commands")
 }
 
 func TestCodexGlobalPrompts(t *testing.T) {

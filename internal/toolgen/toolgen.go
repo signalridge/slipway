@@ -89,7 +89,7 @@ var toolRegistry = map[string]ToolConfig{
 		ID:            "opencode",
 		SkillsDir:     ".opencode/skills",
 		CommandsDir:   ".opencode/commands",
-		CommandStyle:  "nested",
+		CommandStyle:  "flat",
 		CommandFormat: "md",
 		PromptsStyle:  "",
 		SettingsPath:  "",
@@ -979,7 +979,7 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig, hadGeneratedAda
 	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter); err != nil {
 		return err
 	}
-	if err := cleanupStaleCommandEntries(root, cfg); err != nil {
+	if err := cleanupStaleCommandEntries(root, cfg, hadGeneratedAdapter); err != nil {
 		return err
 	}
 	return nil
@@ -1054,7 +1054,7 @@ func generatedSkillDirNameSet() map[string]struct{} {
 	return managed
 }
 
-func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
+func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
 	if cfg.CommandsDir == "" {
 		return nil
 	}
@@ -1074,10 +1074,36 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
 
 	switch cfg.CommandStyle {
 	case "flat":
-		return cleanupPrefixedEntries(filepath.Join(root, cfg.CommandsDir), "slipway-", expected)
+		if err := cleanupPrefixedEntries(filepath.Join(root, cfg.CommandsDir), "slipway-", expected); err != nil {
+			return err
+		}
+		if hadGeneratedAdapter {
+			return cleanupLegacyNestedCommandEntries(root, cfg, ext)
+		}
+		return nil
 	default:
 		return cleanupUnexpectedEntries(filepath.Join(root, cfg.CommandsDir, "slipway"), expected)
 	}
+}
+
+func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string) error {
+	dir := filepath.Join(root, cfg.CommandsDir, "slipway")
+	for _, id := range commandIDs() {
+		if err := removePathIfExists(filepath.Join(dir, id+ext)); err != nil {
+			return err
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if len(entries) > 0 {
+		return nil
+	}
+	return os.Remove(dir)
 }
 
 func cleanupStaleGlobalPrompts(cfg ToolConfig) error {

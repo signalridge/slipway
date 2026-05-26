@@ -1,0 +1,128 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-26T15:56:46Z
+overall_verdict: pass
+tasks_plan_hash: 80c52d4224834457cd2ee794bebdc950bcb50cfe4692e90176815651fe8b3fc0
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - .github/workflows/docs.yml
+        - README.md
+        - docs/ai-tools.md
+        - docs/commands.md
+        - docs/contributing.md
+        - docs/design.md
+        - docs/index.md
+        - docs/installation.md
+        - docs/operator-guide.md
+        - docs/workflow.md
+        - mkdocs.yml
+      target_files:
+        - .github/workflows/docs.yml
+        - README.md
+        - docs/ai-tools.md
+        - docs/commands.md
+        - docs/contributing.md
+        - docs/design.md
+        - docs/index.md
+        - docs/installation.md
+        - docs/operator-guide.md
+        - docs/workflow.md
+        - mkdocs.yml
+      evidence_ref: mkdocs build --strict
+      captured_at: 2026-05-26T15:56:46Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - README.md
+        - docs/ai-tools.md
+        - docs/installation.md
+      target_files:
+        - README.md
+        - docs/ai-tools.md
+        - docs/installation.md
+      evidence_ref: docs/installation.md platform install matrix, AI Tool Installation Prompt, and docs/ai-tools.md OpenCode Notes
+      captured_at: 2026-05-26T15:56:46Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/governance/traceability.go
+        - internal/engine/progression/advance_intake.go
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html.go
+        - internal/stringutil/html_test.go
+      target_files:
+        - internal/engine/governance/traceability.go
+        - internal/engine/progression/advance_intake.go
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html.go
+        - internal/stringutil/html_test.go
+      evidence_ref: go test ./internal/stringutil ./internal/engine/progression ./internal/engine/governance -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics|TestTraceability.*OpenQuestions' -count=1
+      captured_at: 2026-05-26T15:56:46Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - docs/ai-tools.md
+        - docs/commands.md
+        - docs/contributing.md
+        - docs/design.md
+        - docs/index.md
+        - docs/installation.md
+        - docs/operator-guide.md
+        - docs/workflow.md
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html_test.go
+        - mkdocs.yml
+      evidence_ref: mkdocs build --strict; go test -timeout=20m ./... -count=1; go build ./...; go vet ./...; git diff --check
+      captured_at: 2026-05-26T15:56:46Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md
+      target_files:
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md
+      evidence_ref: research.md Canonical References and assurance.md Requirement Coverage for REQ-001 through REQ-007
+      captured_at: 2026-05-26T15:56:46Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - .gitignore
+        - README.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md
+        - docs/ai-tools.md
+        - docs/design.md
+        - docs/index.md
+        - docs/installation.md
+        - docs/workflow.md
+        - mkdocs.yml
+      target_files:
+        - .gitignore
+        - README.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md
+        - artifacts/changes/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md
+        - docs/ai-tools.md
+        - docs/design.md
+        - docs/index.md
+        - docs/installation.md
+        - docs/workflow.md
+        - mkdocs.yml
+      evidence_ref: README redesign; docs/design.md; docs/installation.md release-first platform matrix; Mermaid diagrams; mkdocs build --strict
+      captured_at: 2026-05-26T15:56:46Z

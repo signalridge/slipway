@@ -5,6 +5,7 @@ repo_url: https://github.com/signalridge/slipway
 repo_name: signalridge/slipway
 edit_uri: edit/main/docs/
 copyright: Copyright &copy; SignalRidge
+docs_dir: docs
 
 theme:
   name: material
@@ -19,7 +20,11 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - attr_list
   - md_in_html
   - tables
@@ -31,10 +36,11 @@ plugins:
   - search
 
 nav:
-  - Home: README.md
-  - Workflow Test Menu: workflow-test-menu.md
-  - Agent Contracts: agent-contracts.md
-  - Command Contract Matrix: command-contract-matrix.md
-  - Execution Surface Boundary: execution-surface-boundary.md
-  - Worktree Orchestrator Deferment: worktree-orchestrator-deferment.md
-  - ADR: adr-retire-sync-as-product-verb.md
+  - Home: index.md
+  - Installation: installation.md
+  - Design Philosophy: design.md
+  - Governed Workflow: workflow.md
+  - Command Reference: commands.md
+  - AI Tool Adapters: ai-tools.md
+  - Operator Guide: operator-guide.md
+  - Contributing: contributing.md

@@ -27,6 +27,7 @@ Thumbs.db
 
 # Temp files
 tmp/
+site/
 *.tmp
 
 .claude/

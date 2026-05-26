@@ -550,6 +550,123 @@ func TestAdvanceIntake_ClarifyToConfirm(t *testing.T) {
 	}
 }
 
+func TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		questions  string
+		wantSub    model.IntakeSubStep
+		wantReason string
+	}{
+		{
+			name: "explicit none advances to confirm",
+			questions: `## Open Questions
+(none)
+`,
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
+		},
+		{
+			name: "resolved checklist advances to confirm",
+			questions: `## Open Questions
+- [x] Installer path resolved by research.
+`,
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
+		},
+		{
+			name: "unchecked checklist advances to research",
+			questions: `## Open Questions
+- [ ] Which installer path should be documented?
+`,
+			wantSub:    model.IntakeSubStepResearch,
+			wantReason: "open_questions_detected",
+		},
+		{
+			name: "plain bullet advances to research",
+			questions: `## Open Questions
+- Which docs build command should be used?
+`,
+			wantSub:    model.IntakeSubStepResearch,
+			wantReason: "open_questions_detected",
+		},
+		{
+			name: "plain prose advances to research",
+			questions: `## Open Questions
+Need to decide whether OpenCode commands are flat or nested.
+`,
+			wantSub:    model.IntakeSubStepResearch,
+			wantReason: "open_questions_detected",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+				t.Fatalf("save config: %v", err)
+			}
+
+			change := model.NewChange("open-questions-" + strings.ReplaceAll(tt.name, " ", "-"))
+			change.CurrentState = model.StateS0Intake
+			change.IntakeSubStep = model.IntakeSubStepClarify
+			change.PlanSubStep = model.PlanSubStepNone
+			change.ComplexityLevel = "complex"
+			change.WorkflowPreset = model.WorkflowPresetStandard
+			if err := state.SaveChange(root, change); err != nil {
+				t.Fatalf("save change: %v", err)
+			}
+
+			bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+			if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+				t.Fatalf("mkdir bundle: %v", err)
+			}
+			intent := `# Intent
+
+## Summary
+Test
+
+## In Scope
+Add docs
+
+## Out of Scope
+Runtime changes
+
+## Acceptance Signals
+Docs build
+
+` + tt.questions
+			if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+				t.Fatalf("write intent.md: %v", err)
+			}
+
+			writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Timestamp:  change.CreatedAt,
+				RunVersion: 0,
+			})
+
+			summary, err := AdvanceGoverned(root, change.Slug)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if summary.Action != "advanced" {
+				t.Fatalf("expected advanced, got %+v", summary)
+			}
+			if summary.ToSubStep != string(tt.wantSub) {
+				t.Fatalf("expected ToSubStep=%s, got %s", tt.wantSub, summary.ToSubStep)
+			}
+			if summary.Reason != tt.wantReason {
+				t.Fatalf("expected Reason=%s, got %s", tt.wantReason, summary.Reason)
+			}
+		})
+	}
+}
+
 func TestSectionNonEmptyPrefersCanonicalIntentSectionOverSummarySourceDocument(t *testing.T) {
 	t.Parallel()
 
