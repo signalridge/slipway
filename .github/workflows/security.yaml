@@ -39,9 +39,17 @@ jobs:
           )'
           jq -S "$jq_filter" govulncheck.sarif > govulncheck.normalized.sarif
           mv govulncheck.normalized.sarif govulncheck.sarif
+      - name: Upload govulncheck SARIF artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: govulncheck-sarif
+          path: govulncheck.sarif
+          retention-days: 30
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -60,9 +68,17 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH,MEDIUM
+      - name: Upload Trivy SARIF artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          retention-days: 30
       - name: Upload Trivy SARIF report
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
           category: trivy
