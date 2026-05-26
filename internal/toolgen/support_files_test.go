@@ -175,9 +175,10 @@ func TestGeneratedSkillTreeInventoryManifest(t *testing.T) {
 
 	want, err := os.ReadFile(goldenPath)
 	require.NoErrorf(t, err, "missing golden manifest; regenerate with UPDATE_GOLDEN=1")
-	if string(want) != manifest {
+	wantManifest := normalizeTemplateLineEndings(string(want))
+	if wantManifest != manifest {
 		t.Errorf("skill tree inventory drift; rerun with UPDATE_GOLDEN=1 to refresh after intentional changes.\n--- diff sample ---\n%s",
-			firstNDiffLines(string(want), manifest, 20))
+			firstNDiffLines(wantManifest, manifest, 20))
 	}
 }
 

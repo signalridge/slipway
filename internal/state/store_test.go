@@ -682,7 +682,9 @@ func TestListChangesReportsOrphanBundleDirectoryAsIntegrityError(t *testing.T) {
 	_, err := ListChanges(root)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errMissingBundleAuthority)
-	assert.Contains(t, err.Error(), orphanDir)
+	normalizedOrphanDir, normalizeErr := NormalizePath(orphanDir)
+	require.NoError(t, normalizeErr)
+	assert.Contains(t, err.Error(), normalizedOrphanDir)
 }
 
 func TestSaveChangeDoesNotCreateUnusedSidecarDir(t *testing.T) {
@@ -869,5 +871,10 @@ func installFakeGitForStoreTests(t *testing.T, root string, treatAsGitWorkspace 
 		"    ;;\n" +
 		"esac\n"
 	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+	if runtime.GOOS == "windows" {
+		wrapperPath := filepath.Join(fakeBinDir, "git.bat")
+		wrapper := "@echo off\r\nbash \"%~dp0git\" %*\r\nexit /b %ERRORLEVEL%\r\n"
+		require.NoError(t, os.WriteFile(wrapperPath, []byte(wrapper), 0o755))
+	}
 	t.Setenv("PATH", fakeBinDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

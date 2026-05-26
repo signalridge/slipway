@@ -40,7 +40,7 @@ func TestSessionStartHookFindsNearestParentScope(t *testing.T) {
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	assert.Contains(t, string(out), "session_handoff_present: false")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|root")
+	assert.Contains(t, logContent, hookInitialPath(t, nested)+"|root")
 	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|next --json")
 	assert.NotContains(t, logContent, "status --json")
 	assert.NotContains(t, logContent, "--hook-lite")
@@ -392,6 +392,20 @@ func hookObservedPath(t *testing.T, p string) string {
 		observed += "/" + base
 	}
 	return observed
+}
+
+func hookInitialPath(t *testing.T, p string) string {
+	t.Helper()
+
+	if runtime.GOOS != "windows" {
+		return p
+	}
+
+	cmd := exec.Command("bash", "-lc", "printf '%s' \"$PWD\"")
+	cmd.Dir = p
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
 }
 
 func commitHookRepoState(t *testing.T, root string) {

@@ -25,7 +25,9 @@ func TestPersistScopeWorktreeMetadata(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("slug")
 	require.NoError(t, PersistScopeWorktreeMetadata(&change, "/tmp/repo", "main"))
-	assert.Equal(t, "/tmp/repo", change.WorktreePath)
+	normalizedPath, err := NormalizePath("/tmp/repo")
+	require.NoError(t, err)
+	assert.Equal(t, normalizedPath, change.WorktreePath)
 	assert.Equal(t, "main", change.WorktreeBranch)
 }
 

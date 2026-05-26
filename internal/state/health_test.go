@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -752,6 +753,9 @@ func TestCollectHealthReportFailsWhenWorkspaceDiscoveryFails(t *testing.T) {
 }
 
 func TestOrphanBundleSlugsReturnsNonNotExistReadErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows maps this file-as-directory setup to a not-exist error")
+	}
 	t.Parallel()
 
 	root := t.TempDir()

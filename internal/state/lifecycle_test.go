@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -364,6 +365,9 @@ func TestArchiveChangeCrossFilesystemFailureDoesNotLeaveArchivedCopyVisible(t *t
 }
 
 func TestArchiveChangeRollsBackWhenPersistingArchivedAuthorityFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory write-bit semantics are required for this rollback failure")
+	}
 	t.Parallel()
 
 	root := createRuntimeLayout(t)

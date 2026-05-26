@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -442,6 +443,9 @@ func TestArchiveChangeScrubsRuntimeEvidenceRefsFromArchivedExecutionSummary(t *t
 }
 
 func TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX unreadable-directory semantics are required for this freshness failure")
+	}
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
