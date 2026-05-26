@@ -39,7 +39,7 @@ func withChangeStateLockConfigured(
 		return err
 	}
 	lock := fsutil.NewStateLock(lockPath)
-	timeout := time.Duration(cfg.Execution.LockWaitTimeoutSeconds) * time.Second
+	timeout := commandLockWaitDuration(cfg.Execution.LockWaitTimeoutSeconds)
 	held, err := acquireHeldLock(lock, timeout, "slipway "+commandName, func(lockPath string) error {
 		return newPreconditionError(
 			"state_lock_timeout",
@@ -68,7 +68,7 @@ func withChangeCreateLock(root string, run func() error) error {
 		return err
 	}
 
-	timeout := time.Duration(cfg.Execution.LockWaitTimeoutSeconds) * time.Second
+	timeout := commandLockWaitDuration(cfg.Execution.LockWaitTimeoutSeconds)
 	buildTimeoutError := func(lockPath string) error {
 		return newPreconditionError(
 			"state_lock_timeout",
@@ -116,7 +116,7 @@ func withWorkspaceRepairLock(root string, run func(staleLockCleaned bool) error)
 		return err
 	}
 	lock := fsutil.NewStateLock(lockPath)
-	timeout := time.Duration(cfg.Execution.LockWaitTimeoutSeconds) * time.Second
+	timeout := commandLockWaitDuration(cfg.Execution.LockWaitTimeoutSeconds)
 
 	timeoutErr := func(lockPath string) error {
 		return newPreconditionError(

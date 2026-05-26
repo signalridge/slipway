@@ -1,0 +1,62 @@
+slug: optimize-test-runtime-and-prune-redundant-tests
+description: optimize test runtime and prune redundant tests
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-26T06:20:58.63692Z
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests
+worktree_branch: feat/optimize-test-runtime-and-prune-redundant-tests
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/assurance.md
+        version: 1
+        state: frozen
+        content_hash: d5110f93071b7676f2a00ffed5cef6d3a47ae36abef6f80c168427541225c071
+        updated_at: 2026-05-26T07:12:55.90846781Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/decision.md
+        version: 1
+        state: frozen
+        content_hash: ecb06bedf48af07721b609d47de1dd1d5688e41bfc2ee9c99ddc47f26987c9e5
+        updated_at: 2026-05-26T06:33:54.265745055Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/intent.md
+        version: 1
+        state: frozen
+        content_hash: 716f8265d8ab7ffb61081fcbd688715faea8c5db5496bd8b5c91e17165369e72
+        updated_at: 2026-05-26T06:24:56.878216571Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 2833ee232b2c5cf71817de6d4e85ce5ec4b4cb5e10947c901b94959ddde4b704
+        updated_at: 2026-05-26T06:33:54.265363192Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/research.md
+        version: 1
+        state: frozen
+        content_hash: 22647a50610d3fe908cc3803ae6014468964e855d8e3c61991d15ca45617a3a6
+        updated_at: 2026-05-26T06:32:14.742659634Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-prune-redundant-tests/artifacts/changes/archived/optimize-test-runtime-and-prune-redundant-tests/tasks.md
+        version: 1
+        state: frozen
+        content_hash: c54b56a5e58cf2dd4876e415f682b2c5c8de03ea3d537f2da8c58a5fd5a58a3a
+        updated_at: 2026-05-26T06:58:40.946615627Z

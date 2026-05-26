@@ -1,0 +1,75 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-26T07:08:31Z
+overall_verdict: pass
+tasks_plan_hash: b9e3bb8b17189cba33b332a44ecb37f06560e0fff98ca5d3826f8b07a6bd74ae
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/abort.go
+        - cmd/cancel.go
+        - cmd/lock_helpers.go
+        - cmd/locks.go
+        - cmd/process_poll.go
+        - cmd/process_unix.go
+        - cmd/test_main_test.go
+      target_files:
+        - cmd/*_test.go
+        - cmd/lock_helpers.go
+        - cmd/locks.go
+        - cmd/process_poll.go
+        - cmd/process_unix.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      captured_at: 2026-05-26T07:08:31Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/lifecycle_commands_test.go
+        - cmd/status_view_build_test.go
+      target_files:
+        - cmd/governance_gate_consistency_test.go
+        - cmd/health_test.go
+        - cmd/lifecycle_commands_test.go
+        - cmd/progression_next_test.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      captured_at: 2026-05-26T07:08:31Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/common_test.go
+        - cmd/lifecycle_commands_test.go
+        - cmd/new_test.go
+        - cmd/worktree_preflight_test.go
+      target_files:
+        - cmd/*_test.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      captured_at: 2026-05-26T07:08:31Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+      captured_at: 2026-05-26T07:08:31Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+        - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T07:08:31Z

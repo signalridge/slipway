@@ -1486,11 +1486,12 @@ func withWorkspace(t *testing.T, root string, fn func()) {
 	fn()
 }
 
-// initTestWorkspace wraps bootstrap.InitWorkspace and generates a default
-// claude adapter so runtime contract tests see real host prompt surfaces.
+// initTestWorkspace wraps bootstrap.InitWorkspace with the lightest runtime
+// layout. Tests that assert generated adapter files should request those
+// adapters explicitly.
 func initTestWorkspace(t *testing.T, root string) {
 	t.Helper()
-	require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 }
 
 // ensureTestGitRepo initializes a bare-minimum git repo if one doesn't exist.

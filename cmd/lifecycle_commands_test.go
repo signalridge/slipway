@@ -469,46 +469,6 @@ func TestDoneAllReadyArchivesEligibleChanges(t *testing.T) {
 	})
 }
 
-func TestDoneAllReadySkipsShipGateBlockedChanges(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		ready := model.NewChange("bulk-ready")
-		markChangeReadyForDone(t, root, &ready)
-		writeAssuranceMD(t, root, ready.Slug, validAssuranceContent())
-		writePassingExecutionSummary(t, root, ready.Slug, 1, "t-01")
-
-		blocked := model.NewChange("bulk-ship-blocked")
-		blocked.CurrentState = model.StateS4Verify
-		blocked.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, blocked))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, blocked, ""))
-		writePassingExecutionSummary(t, root, blocked.Slug, 1, "t-01")
-		writePassingWaveEvidence(t, root, blocked.Slug, 1)
-		writePassingGoalVerificationEvidence(t, root, blocked.Slug, 1)
-		writeAssuranceMD(t, root, blocked.Slug, validAssuranceContent())
-
-		view := archiveAllDoneReady(root)
-		require.Len(t, view.Archived, 1)
-		assert.Equal(t, newDoneBulkArchived("bulk-ready"), view.Archived[0])
-		require.Len(t, view.Skipped, 1)
-		assert.Equal(t, "bulk-ship-blocked", view.Skipped[0].Slug)
-		assert.Equal(t, string(model.StateS4Verify), view.Skipped[0].Status)
-		assert.Equal(t, "ship_gate_blocked", view.Skipped[0].Reason)
-		assert.Contains(t, model.ReasonSpecs(view.Skipped[0].ReasonCodes), "required_skill_missing:code-quality-review")
-		assert.Contains(t, model.ReasonSpecs(view.Skipped[0].ReasonCodes), "required_skill_missing:spec-compliance-review")
-		assert.Empty(t, view.Failed)
-
-		_, err := state.LoadArchivedChange(root, ready.Slug)
-		require.NoError(t, err)
-		_, err = state.LoadChange(root, blocked.Slug)
-		require.NoError(t, err)
-	})
-}
-
 func TestDoneAllReadyRespectsPerChangeLocks(t *testing.T) {
 	t.Parallel()
 
@@ -1070,7 +1030,7 @@ func createGovernedChangeFixture(t *testing.T, root, description string, mutate 
 	}
 
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+	writeMinimalGovernedBundle(t, root, change)
 	return slug
 }
 
@@ -1223,6 +1183,90 @@ Low risk; failures should surface as explicit readiness blockers.
 `)))
 }
 
+func writeMinimalGovernedBundle(t *testing.T, root string, change model.Change) {
+	t.Helper()
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte(`# Intent
+INT-001: test fixture intent
+
+## Open Questions
+(none)
+`)))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
+### Requirement: FixtureContract
+REQ-001: The fixture must provide a valid governed bundle.
+`)))
+	if change.NeedsDiscovery {
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "research.md", []byte(`## Research Findings
+
+### Architecture
+- Fixture architecture is intentionally minimal.
+
+### Patterns
+- Fixture patterns use direct file writes.
+
+### Risks
+- Low risk fixture.
+
+### Test Strategy
+- Command tests assert the target command surface.
+
+## Alternatives Considered
+### Option A
+Use minimal fixture files.
+
+### Option B
+Run full scaffold for every command test.
+
+Selected: Option A for test runtime.
+
+## Unknowns
+- Remaining: None.
+
+## Assumptions
+- Fixture files only need structural validity.
+
+## Canonical References
+- cmd/lifecycle_commands_test.go
+`)))
+	}
+	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte(`# Decision
+## Alternatives Considered
+### Option A
+Use minimal fixture files.
+
+### Option B
+Run full scaffold for every command test.
+
+## Selected Approach
+Pending investigation. Fixture draft text must not be treated as a locked
+human-reviewed decision.
+
+## Interfaces and Data Flow
+No production interfaces change.
+
+## Rollout and Rollback
+Fixture-only setup.
+
+## Risk
+Low risk fixture.
+`)))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+	if change.WorkflowPreset != model.WorkflowPresetLight {
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+	}
+}
+
 func markChangeReadyForDone(t *testing.T, root string, change *model.Change) {
 	t.Helper()
 	require.NotNil(t, change)
@@ -1230,7 +1274,6 @@ func markChangeReadyForDone(t *testing.T, root string, change *model.Change) {
 	change.IntakeSubStep = ""
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, *change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, *change, ""))
 	writeShipReadyGovernedBundle(t, root, *change)
 	writePassingExecutionSummary(t, root, change.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, change.Slug, 1)

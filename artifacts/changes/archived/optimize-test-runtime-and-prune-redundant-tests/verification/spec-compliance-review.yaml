@@ -1,0 +1,49 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T07:06:30Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "trace:REQ-001=runtime-timing.md:7"
+  - "trace:REQ-002=runtime-timing.md:77"
+  - "trace:REQ-003=runtime-timing.md:53"
+  - "trace:REQ-004=runtime-timing.md:77"
+  - "trace:REQ-005=runtime-timing.md:22"
+notes: |
+  Gaps (artifact_to_code): none.
+  Gaps (code_to_artifact): none.
+
+  Spec-to-code trace:
+  - REQ-001 is covered by the fresh baseline and final timing evidence in
+    verification/runtime-timing.md.
+  - REQ-002 is covered by the deleted/consolidated test coverage matrix in
+    verification/runtime-timing.md and the changed command test files.
+  - REQ-003 is covered by the cmd timing delta in verification/runtime-timing.md.
+  - REQ-004 is covered by surviving tests:
+    TestNextPreviewIncludesAssuranceContractBlockersAtReview,
+    TestBuildNextContextIncludesSelectedArchivedDependencyContext,
+    TestDoneAllReadyPreservesShipGateReasonCodes,
+    TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers, and
+    TestCurrentWorktreeRootPropagatesGitErrors.
+  - REQ-005 is covered by the recorded cmd/full-suite/build/diff-check evidence
+    and the rebuilt execution-summary.yaml at run version 1.
+
+  Code-to-spec trace:
+  - cmd/lock_helpers.go, cmd/locks.go, cmd/abort.go, cmd/cancel.go,
+    cmd/process_poll.go, cmd/process_unix.go, and cmd/test_main_test.go map to
+    the selected timing-seam approach.
+  - cmd/new_test.go, cmd/lifecycle_commands_test.go,
+    cmd/worktree_preflight_test.go, cmd/common_test.go, and
+    cmd/status_view_build_test.go map to aggressive coverage-preserving
+    fixture/test pruning.
+  - verification/runtime-timing.md and execution-summary.yaml map to final
+    verification proof.
+
+  Decision fidelity:
+  - The selected Option A is honored. The implementation compresses artificial
+    waits, removes/consolidates redundant command-surface tests, keeps the
+    changes test-scoped or package-private, and records retained coverage.
+  - No public CLI, JSON, lifecycle, or external contract behavior changed.

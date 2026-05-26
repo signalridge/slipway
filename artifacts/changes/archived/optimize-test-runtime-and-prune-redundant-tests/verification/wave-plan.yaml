@@ -1,0 +1,54 @@
+version: 1
+generated_at: 2026-05-26T06:34:57.13741298Z
+tasks_plan_hash: b9e3bb8b17189cba33b332a44ecb37f06560e0fff98ca5d3826f8b07a6bd74ae
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Add narrow test timing seams for command lock/preemption waits and
+          target_files:
+            - cmd/*_test.go
+            - cmd/lock_helpers.go
+            - cmd/locks.go
+            - cmd/process_unix.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: Delete or consolidate redundant command-surface consistency tests
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/governance_gate_consistency_test.go
+            - cmd/health_test.go
+            - cmd/lifecycle_commands_test.go
+            - cmd/progression_next_test.go
+          task_kind: code
+        - task_id: t-03
+          objective: Convert safe remaining cwd-based command tests to root-injected
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/*_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Re-measure targeted and full-suite runtime.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+          task_kind: verification
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: Run final build, test, and Slipway validation evidence.
+          depends_on:
+            - t-04
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification
+          task_kind: verification

@@ -319,9 +319,7 @@ func initGitRepoForWorktreeTests(t *testing.T, root string) {
 	runGit(t, root, "init", "-b", "main")
 	runGit(t, root, "config", "user.email", "test@example.com")
 	runGit(t, root, "config", "user.name", "Slipway Test")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
-	runGit(t, root, "add", ".")
-	runGit(t, root, "commit", "-m", "init")
+	runGit(t, root, "commit", "--allow-empty", "-m", "init")
 }
 
 func currentGitBranch(t *testing.T, dir string) string {

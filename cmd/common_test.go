@@ -406,19 +406,15 @@ func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing
 	assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
-func TestResolveActiveChangeRefPropagatesWorktreeResolutionErrors(t *testing.T) {
+func TestCurrentWorktreeRootPropagatesGitErrors(t *testing.T) {
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		createGovernedRequest(t, root, "L2", "worktree resolution failure")
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
 
-		realGit, err := exec.LookPath("git")
-		require.NoError(t, err)
-
-		fakeBin := filepath.Join(root, "fake-bin")
-		require.NoError(t, os.MkdirAll(fakeBin, 0o755))
-		fakeGit := filepath.Join(fakeBin, "git")
-		require.NoError(t, os.WriteFile(fakeGit, []byte(fmt.Sprintf(`#!/usr/bin/env bash
+	fakeBin := filepath.Join(root, "fake-bin")
+	require.NoError(t, os.MkdirAll(fakeBin, 0o755))
+	fakeGit := filepath.Join(fakeBin, "git")
+	require.NoError(t, os.WriteFile(fakeGit, []byte(fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 if [ "$#" -ge 2 ] && [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
   printf 'permission denied\n' >&2
@@ -427,12 +423,11 @@ fi
 exec %q "$@"
 `, realGit)), 0o755))
 
-		t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-		_, err = resolveActiveChangeRef(root, "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "git rev-parse --show-toplevel")
-	})
+	_, err = currentWorktreeRoot()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git rev-parse --show-toplevel")
 }
 
 func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {

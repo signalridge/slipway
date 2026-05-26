@@ -49,7 +49,11 @@ func preemptInFlightTasks(root, slug string, grace time.Duration) ([]int, []int,
 			_ = clearActiveTaskPIDs(root, slug)
 			return pids, nil, nil
 		}
-		time.Sleep(100 * time.Millisecond)
+		pollInterval := processPreemptionPollInterval
+		if pollInterval <= 0 {
+			pollInterval = 100 * time.Millisecond
+		}
+		time.Sleep(pollInterval)
 	}
 
 	stillAlive := filterAlivePIDs(pids)

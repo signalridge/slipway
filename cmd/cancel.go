@@ -50,7 +50,7 @@ func makeCancelCmd() *cobra.Command {
 				interrupted, forceKilled, err := preemptInFlightTasks(
 					root,
 					active.Slug,
-					time.Duration(cfg.Execution.CancelGracePeriodSeconds)*time.Second,
+					commandCancelGraceDuration(cfg.Execution.CancelGracePeriodSeconds),
 				)
 				if err != nil {
 					return err

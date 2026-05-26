@@ -1,0 +1,45 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T07:08:31Z"
+run_version: 1
+references:
+  - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/tasks.md
+  - artifacts/changes/optimize-test-runtime-and-prune-redundant-tests/verification/runtime-timing.md
+  - cmd/abort.go
+  - cmd/cancel.go
+  - cmd/common_test.go
+  - cmd/lifecycle_commands_test.go
+  - cmd/lock_helpers.go
+  - cmd/locks.go
+  - cmd/new_test.go
+  - cmd/process_poll.go
+  - cmd/process_unix.go
+  - cmd/status_view_build_test.go
+  - cmd/test_main_test.go
+  - cmd/worktree_preflight_test.go
+  - /tmp/slipway-test-runtime-baseline-20260526.json
+  - /tmp/slipway-test-runtime-post-20260526.json
+notes: |
+  Executed the aggressive test-runtime optimization plan selected by the user.
+  Baseline full-suite timing was 47.01s real with cmd package elapsed at 45.77s.
+  Final full-suite timing is 37.78s real with cmd package elapsed at 36.564s.
+  Standalone cmd package cold run now passes in 29.17s real with package time
+  28.866s.
+
+  Implementation summary:
+  - compressed command lock, cancel grace, and preemption waits in tests through
+    package-private timing seams with unchanged production defaults;
+  - avoided generated adapter scaffolding for command tests that only need a
+    workspace identity;
+  - removed or consolidated redundant command-surface tests after retaining
+    stronger equivalent coverage;
+  - replaced expensive governed lifecycle fixtures with minimal valid bundles;
+  - narrowed one git error-propagation test to the failing boundary.
+
+  Verification:
+  - /usr/bin/time -p go test ./cmd -count=1: pass, real 29.17, package 28.866s
+  - /usr/bin/time -p go test -json -timeout=20m -count=1 ./... > /tmp/slipway-test-runtime-post-20260526.json: pass, real 37.78
+  - go test ./cmd -run 'TestMutatingCommandsBlockOnStateLock|TestCancelPreemptsInFlightTasks|TestCurrentWorktreeRootPropagatesGitErrors' -count=1: pass, package 0.517s
+  - GOOS=windows go test -c ./cmd -o /tmp/slipway-cmd-windows.test.exe: pass
+  - go build ./...: pass
+  - git diff --check: pass

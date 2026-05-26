@@ -8,6 +8,19 @@ import (
 	"github.com/signalridge/slipway/internal/fsutil"
 )
 
+var (
+	commandLockWaitUnit    = time.Second
+	commandCancelGraceUnit = time.Second
+)
+
+func commandLockWaitDuration(seconds int) time.Duration {
+	return time.Duration(seconds) * commandLockWaitUnit
+}
+
+func commandCancelGraceDuration(seconds int) time.Duration {
+	return time.Duration(seconds) * commandCancelGraceUnit
+}
+
 func acquireHeldLock(
 	lock *fsutil.StateLock,
 	timeout time.Duration,

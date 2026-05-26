@@ -465,25 +465,6 @@ REQ-001: The system must authenticate requests.
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_dependency_unknown:t-01->t-99")
 }
 
-func TestBuildGovernedStatusViewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	change := model.NewChange("status-assurance-contract-blocker")
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.ArtifactSchema = model.ArtifactSchemaCore
-	change.CurrentState = model.StateS3Review
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
-
-	writeAssuranceMD(t, root, change.Slug, "## Scope Summary\nIncomplete\n")
-
-	view, err := buildStatusViewFromChange(root, change)
-	require.NoError(t, err)
-	assert.Contains(t, strings.Join(model.ReasonSpecs(view.Blockers), "\n"), "assurance_structure_invalid:")
-}
-
 func TestBuildGovernedStatusViewIncludesAutoPassedStates(t *testing.T) {
 	t.Parallel()
 
@@ -543,42 +524,6 @@ func TestBuildGovernedStatusViewUsesResolvedWorktreeEvidencePaths(t *testing.T) 
 		filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "verification", "plan-audit.yaml"),
 		view.EvidencePointers.NonTaskEvidence["skill.plan-audit"],
 	)
-}
-
-func TestBuildGovernedStatusViewIncludesSelectedArchivedDependencyContext(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	archived := model.NewChange("baseline-auth")
-	archived.CurrentState = model.StateS4Verify
-	archived.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, state.SaveChange(root, archived))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", archived.Slug), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "changes", archived.Slug, "change.yaml"), []byte("id: x"), 0o644))
-	_, err := state.ArchiveChange(root, archived, model.ChangeStatusDone)
-	require.NoError(t, err)
-
-	change := model.NewChange("consumer")
-	change.CurrentState = model.StateDone
-	change.PlanSubStep = model.PlanSubStepNone
-	change.ContextDependencies = model.ContextDependencies{
-		Requires: []model.ContextRequirement{
-			{Slug: "baseline-auth", Provides: []string{"auth-contract"}},
-			{Slug: "missing-auth", Provides: []string{"session-model"}},
-		},
-	}
-
-	view, err := buildStatusViewFromChange(root, change)
-	require.NoError(t, err)
-	require.NotNil(t, view.ContextDependencies)
-	assert.Equal(t, change.ContextDependencies, *view.ContextDependencies)
-	require.Len(t, view.SelectedPriorContext, 1)
-	assert.Equal(t, "baseline-auth", view.SelectedPriorContext[0].Slug)
-	assert.Equal(t, []string{"requires:auth-contract"}, view.SelectedPriorContext[0].SelectedBecause)
-	require.Len(t, view.UnresolvedDependencies, 1)
-	assert.Equal(t, "missing-auth", view.UnresolvedDependencies[0].Slug)
-	assert.Equal(t, []string{"session-model"}, view.UnresolvedDependencies[0].Provides)
-	assert.Equal(t, "archive_not_found", view.UnresolvedDependencies[0].Reason)
 }
 
 func TestForecastDownstreamLevelNeverBelowEffectivePreset(t *testing.T) {

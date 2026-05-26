@@ -1,0 +1,91 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T07:11:48Z"
+run_version: 1
+references:
+  - "fresh:command=/usr/bin/time -p go test ./cmd -count=1"
+  - "fresh:command=/usr/bin/time -p go test -json -timeout=20m -count=1 ./..."
+  - "fresh:command=go test ./cmd -run focused changed-path tests -count=1"
+  - "fresh:command=GOOS=windows go test -c ./cmd"
+  - "fresh:command=go build ./..."
+  - "fresh:command=git diff --check"
+  - "fresh:command=go run . validate --json"
+  - "artifact:verification/runtime-timing.md"
+  - "artifact:verification/execution-summary.yaml"
+  - "coverage:change-surface-retained-test-matrix=pass"
+notes: |
+  Criteria:
+    AC-1: Fresh timing data targets current slowest paths - pass.
+      Exists: verification/runtime-timing.md records baseline and final timing.
+      Substantive: baseline measured full-suite real 47.01s and cmd elapsed
+        45.77s; final full-suite real is 37.78s and cmd elapsed is 36.564s.
+      Wired: the optimization changes are in cmd package tests/fixtures and
+        package-private command timing seams, matching the measured hotspot.
+
+    AC-2: Aggressive coverage-preserving test reduction - pass.
+      Exists: verification/runtime-timing.md lists deleted/narrowed tests and
+        surviving coverage.
+      Substantive: redundant assertions were removed only where stronger tests
+        remain, including next preview assurance blockers, selected archived
+        dependency context, done all-ready ship blockers, and git root error
+        propagation.
+      Wired: final full-suite and cmd package tests pass after the deletion and
+        fixture-narrowing changes.
+
+    AC-3: Command hotspot runtime is reduced - pass.
+      Exists: final timing data is recorded in verification/runtime-timing.md.
+      Substantive: full-suite wall-clock changed from 47.01s to 37.78s
+        (-9.23s, -19.6%); cmd package elapsed changed from 45.77s to 36.564s
+        (-9.206s, -20.1%); standalone cmd package run is 29.17s real.
+      Wired: the final JSON timing was captured from
+        /tmp/slipway-test-runtime-post-20260526.json after the latest code
+        change.
+
+    AC-4: Unique governance coverage is retained - pass.
+      Exists: surviving tests are present:
+        TestNextPreviewIncludesAssuranceContractBlockersAtReview,
+        TestBuildNextContextIncludesSelectedArchivedDependencyContext,
+        TestDoneAllReadyPreservesShipGateReasonCodes,
+        TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers,
+        TestDoneAllReadyArchivesEligibleChanges,
+        TestDoneAllReadyRespectsPerChangeLocks,
+        TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence, and
+        TestCurrentWorktreeRootPropagatesGitErrors.
+      Substantive: those tests cover review blockers, dependency context,
+        bulk done blockers, successful archive behavior, lock behavior,
+        worktree binding, and git root error propagation.
+      Wired: the retained tests are part of the passing cmd/full-suite runs.
+
+    AC-5: Optimized suite remains green with fresh proof - pass.
+      Exists: fresh command outputs were read for cmd package tests, full-suite
+        tests, focused changed-path tests, cross-platform test compilation,
+        build, and diff check.
+      Substantive: /usr/bin/time -p go test ./cmd -count=1 passed with real
+        29.17; /usr/bin/time -p go test -json -timeout=20m -count=1 ./...
+        passed with real 37.78; focused changed-path cmd tests passed in
+        0.517s; GOOS=windows go test -c ./cmd passed; go build ./... passed;
+        git diff --check passed; go run . validate --json passed with
+        can_advance=true, G_ship=approved, evidence_freshness=fresh, and
+        requirements_contract.status=valid.
+      Wired: execution-summary.yaml was rebuilt from runtime task evidence at
+        run_version 1 after the final timing update.
+
+  Coverage analysis:
+    Tool: Go test output plus change-surface retained-test matrix; go version
+      go1.25.5 darwin/arm64.
+    Change surface: command timing seams, command cancellation/preemption waits,
+      command test fixtures, deleted/narrowed command-surface tests, and
+      governed evidence artifacts.
+    Uncovered add-test gaps: none identified. The package-private timing seams
+      are exercised by existing lock/cancel/preemption command tests under the
+      package TestMain timing defaults. Deleted tests are covered by the
+      surviving test matrix in verification/runtime-timing.md.
+    End-to-end gaps: none introduced; public CLI behavior and JSON contracts
+      were not changed.
+
+  Stub scan:
+    rg TODO/FIXME/HACK/XXX/PLACEHOLDER/NotImplemented/not implemented over
+      changed files returned no hits.
+    Broader zero-value scan returned existing legitimate control-flow lines:
+      cmd/cancel.go:136 return nil, nil, cmd/process_unix.go:16 return false,
+      and cmd/process_unix.go:36 return nil, nil, err. These are not stubs.
