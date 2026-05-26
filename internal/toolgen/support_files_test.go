@@ -252,7 +252,10 @@ func classifyByPath(rel string) string {
 
 func executableSentinel(p string) string {
 	if runtime.GOOS == "windows" {
-		return "platform-windows"
+		if strings.HasSuffix(p, ".sh") {
+			return "exec"
+		}
+		return "non-exec"
 	}
 	st, err := os.Stat(p)
 	if err != nil {

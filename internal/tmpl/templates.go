@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"path"
 	"slices"
+	"strings"
 	"text/template"
 )
 
@@ -44,7 +45,7 @@ func Content(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("template %q: %w", name, err)
 	}
-	return string(b), nil
+	return normalizeTemplateLineEndings(string(b)), nil
 }
 
 // ContentIfExists returns a template's raw content when present.
@@ -58,7 +59,7 @@ func ContentIfExists(name string) (content string, exists bool, err error) {
 		}
 		return "", false, fmt.Errorf("template %q: %w", name, err)
 	}
-	return string(b), true, nil
+	return normalizeTemplateLineEndings(string(b)), true, nil
 }
 
 const maxIncludeDepth = 16
@@ -85,7 +86,7 @@ func renderFS(templateFS fs.FS, name string, data any) (string, error) {
 
 	funcMap := template.FuncMap{"include": newIncludeFunc(&t, &includeStack)}
 
-	t, err = template.New(name).Funcs(funcMap).Parse(string(b))
+	t, err = template.New(name).Funcs(funcMap).Parse(normalizeTemplateLineEndings(string(b)))
 	if err != nil {
 		return "", fmt.Errorf("template %q parse: %w", name, err)
 	}
@@ -97,7 +98,7 @@ func renderFS(templateFS fs.FS, name string, data any) (string, error) {
 		if readErr != nil {
 			continue
 		}
-		if _, parseErr := t.Parse(string(pb)); parseErr != nil {
+		if _, parseErr := t.Parse(normalizeTemplateLineEndings(string(pb))); parseErr != nil {
 			return "", fmt.Errorf("partial %q parse: %w", pp, parseErr)
 		}
 	}
@@ -106,7 +107,12 @@ func renderFS(templateFS fs.FS, name string, data any) (string, error) {
 	if err := t.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("template %q execute: %w", name, err)
 	}
-	return buf.String(), nil
+	return normalizeTemplateLineEndings(buf.String()), nil
+}
+
+func normalizeTemplateLineEndings(raw string) string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	return strings.ReplaceAll(raw, "\r", "\n")
 }
 
 func newIncludeFunc(tRef **template.Template, includeStack *[]string) func(string, any) (string, error) {

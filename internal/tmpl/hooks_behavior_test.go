@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -39,8 +40,8 @@ func TestSessionStartHookFindsNearestParentScope(t *testing.T) {
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	assert.Contains(t, string(out), "session_handoff_present: false")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, nested+"|root")
-	assert.Contains(t, logContent, nested+"|next --json")
+	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|root")
+	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|next --json")
 	assert.NotContains(t, logContent, "status --json")
 	assert.NotContains(t, logContent, "--hook-lite")
 	assert.NotContains(t, logContent, "--preview")
@@ -85,7 +86,7 @@ func TestSessionStartHookReadsScopeScopedHandoff(t *testing.T) {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
-	assert.Contains(t, string(out), "session_handoff_path: "+canonicalScopedHandoff)
+	assert.Contains(t, string(out), "session_handoff_path: "+hookObservedPath(t, canonicalScopedHandoff))
 	assert.Contains(t, string(out), "session_handoff_present: true")
 	assert.NotContains(t, string(out), "SCOPED HANDOFF")
 	assert.NotContains(t, string(out), "GLOBAL HANDOFF")
@@ -132,9 +133,9 @@ func TestSessionStartHookUsesCanonicalScopeRootForMarkerOnlyBoundWorktree(t *tes
 
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, nested+"|next --json")
-	assert.NotContains(t, logContent, scopeRoot+"|next --json")
-	assert.NotContains(t, logContent, root+"|next --json")
+	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|next --json")
+	assert.NotContains(t, logContent, hookObservedPath(t, scopeRoot)+"|next --json")
+	assert.NotContains(t, logContent, hookObservedPath(t, root)+"|next --json")
 }
 
 func TestSessionStartHookIgnoresStaleNestedScopeMarkerWithoutConfig(t *testing.T) {
@@ -167,9 +168,9 @@ func TestSessionStartHookIgnoresStaleNestedScopeMarkerWithoutConfig(t *testing.T
 
 	assert.Contains(t, string(out), "<slipway-session-start tool=\"claude\">")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, nested+"|next --json")
-	assert.NotContains(t, logContent, root+"|next --json")
-	assert.NotContains(t, logContent, scopeRoot+"|next --json")
+	assert.Contains(t, logContent, hookObservedPath(t, nested)+"|next --json")
+	assert.NotContains(t, logContent, hookObservedPath(t, root)+"|next --json")
+	assert.NotContains(t, logContent, hookObservedPath(t, scopeRoot)+"|next --json")
 }
 
 func TestSessionStartHookSurfacesNextFailureDiagnostic(t *testing.T) {
@@ -247,7 +248,7 @@ esac
 	assert.Contains(t, string(out), `{"next_skill":{"name":"plan-audit"}}`)
 
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, root+"|next --json")
+	assert.Contains(t, logContent, hookObservedPath(t, root)+"|next --json")
 	assert.NotContains(t, logContent, "status --json")
 	assert.NotContains(t, logContent, "--hook-lite")
 }
@@ -362,6 +363,35 @@ func readHookLog(t *testing.T, logPath string) string {
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	return string(content)
+}
+
+func hookObservedPath(t *testing.T, p string) string {
+	t.Helper()
+
+	if runtime.GOOS != "windows" {
+		return p
+	}
+
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+
+	dir := p
+	base := ""
+	if !info.IsDir() {
+		dir = filepath.Dir(p)
+		base = filepath.Base(p)
+	}
+
+	cmd := exec.Command("bash", "-lc", "pwd -P")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	observed := strings.TrimSpace(string(out))
+	if base != "" {
+		observed += "/" + base
+	}
+	return observed
 }
 
 func commitHookRepoState(t *testing.T, root string) {
