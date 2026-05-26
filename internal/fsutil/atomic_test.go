@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,9 @@ func TestWriteFileAtomicReplacesContent(t *testing.T) {
 }
 
 func TestWriteFileAtomicCrashSafetyOldOrNewVisibilityAndRepairableTemps(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows denies rename while another reader has the target open")
+	}
 	t.Parallel()
 	dir := t.TempDir()
 	target := filepath.Join(dir, "state.yaml")

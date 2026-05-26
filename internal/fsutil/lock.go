@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -177,6 +178,9 @@ func (s *StateLock) CleanupStale(staleAfter time.Duration, now time.Time, isPIDA
 		cleaned = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return false, err
+	}
+	if runtime.GOOS == "windows" {
+		return cleaned, nil
 	}
 	if err := os.Remove(s.lockPath); err == nil {
 		cleaned = true

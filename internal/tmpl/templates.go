@@ -40,7 +40,7 @@ func TemplateFS() fs.FS {
 // Content returns the raw content of a template file.
 // Use for static templates that need no variable substitution.
 func Content(name string) (string, error) {
-	p := path.Join("templates", name)
+	p := templatePath(name)
 	b, err := embeddedTemplates.ReadFile(p)
 	if err != nil {
 		return "", fmt.Errorf("template %q: %w", name, err)
@@ -51,7 +51,7 @@ func Content(name string) (string, error) {
 // ContentIfExists returns a template's raw content when present.
 // Missing templates are reported with exists=false and no error.
 func ContentIfExists(name string) (content string, exists bool, err error) {
-	p := path.Join("templates", name)
+	p := templatePath(name)
 	b, err := embeddedTemplates.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -73,7 +73,7 @@ func Render(name string, data any) (string, error) {
 }
 
 func renderFS(templateFS fs.FS, name string, data any) (string, error) {
-	p := path.Join("templates", name)
+	p := templatePath(name)
 	b, err := fs.ReadFile(templateFS, p)
 	if err != nil {
 		return "", fmt.Errorf("template %q: %w", name, err)
@@ -108,6 +108,10 @@ func renderFS(templateFS fs.FS, name string, data any) (string, error) {
 		return "", fmt.Errorf("template %q execute: %w", name, err)
 	}
 	return normalizeTemplateLineEndings(buf.String()), nil
+}
+
+func templatePath(name string) string {
+	return path.Join("templates", strings.ReplaceAll(name, "\\", "/"))
 }
 
 func normalizeTemplateLineEndings(raw string) string {

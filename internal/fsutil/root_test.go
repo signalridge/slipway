@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -197,6 +198,11 @@ if [[ $path_idx -lt 0 || $show_idx -lt 0 || $path_idx -gt $show_idx ]]; then
 fi
 printf '%%s\n%%s\n%%s\n' %q %q %q
 `, "/repo", "/repo/.git", "/repo/.git")), 0o755))
+	if runtime.GOOS == "windows" {
+		wrapperPath := filepath.Join(fakeBin, "git.bat")
+		wrapper := "@echo off\r\nbash \"%~dp0git\" %*\r\nexit /b %ERRORLEVEL%\r\n"
+		require.NoError(t, os.WriteFile(wrapperPath, []byte(wrapper), 0o755))
+	}
 
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 

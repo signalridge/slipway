@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -152,6 +153,10 @@ func TestCleanupStaleLockRequiresDeadHolderAndAge(t *testing.T) {
 	assert.True(t, cleaned)
 
 	_, err = os.Stat(lockPath)
+	if runtime.GOOS == "windows" {
+		require.NoError(t, err)
+		return
+	}
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 }
