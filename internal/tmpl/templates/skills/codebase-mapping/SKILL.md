@@ -1,0 +1,107 @@
+---
+skill_id: codebase-mapping
+name: slipway-codebase-mapping
+description: "Use when mapping repository architecture, dependency graphs, and module boundaries before planning. Triggers on brownfield discovery or whenever durable structural context is missing."
+---
+
+# Codebase Mapping
+
+## Purpose
+Map repository architecture, dependency graphs, key abstractions, and module
+boundaries before planning. This technique produces durable context for
+research, scope confirmation, and plan audit; it does not own a governed route.
+
+## When This Runs
+Advisory hint during discovery or governed spec bundling within `S1_PLAN`. This is a technique skill — it does not produce governance evidence and missing output does not block any gate.
+
+## Durable Output Contract
+Use `slipway next --json` first and read these path fields:
+- `input_context.codebase_map_dir`
+- `input_context.codebase_map_docs`
+
+Write a durable brownfield map under `artifacts/codebase/` using this fixed document set:
+- `STACK.md`
+- `INTEGRATIONS.md`
+- `ARCHITECTURE.md`
+- `STRUCTURE.md`
+- `CONVENTIONS.md`
+- `TESTING.md`
+- `CONCERNS.md`
+
+These documents are advisory but canonical. Downstream skills consume them by
+path instead of relying on transient chat context.
+
+## Process
+
+### 1. Resolve Output Paths
+Extract `input_context.codebase_map_dir` and `input_context.codebase_map_docs`.
+Create the map directory if needed.
+
+### 2. Repository Structure Scan
+Map top-level directories, build/config files, tests, docs, and
+generated-vs-handwritten boundaries.
+
+### 3. Module Boundary Analysis
+For each major module/package:
+- Public API surface: exported types, functions, interfaces
+- Implementation patterns: how the module organizes private logic
+- Cross-module dependencies: who depends on whom
+- Shared utilities and entry points
+
+### 4. Dependency Graph
+Build a dependency map covering internal directionality, external libraries,
+cycles, layering violations, and high fan-in/fan-out hotspots.
+
+### 5. Key Abstractions
+Identify core domain concepts:
+- primary data types and relationships
+- interface contracts and implementations
+- state flow, error handling, and concurrency patterns
+
+### 6. Change Impact Analysis
+For the current change scope:
+- direct blast radius and transitive dependents
+- tests covering affected code
+- integration points with external systems
+
+### 7. Pattern Inventory
+Document existing patterns that the change should follow:
+- naming, file organization, error handling, tests, and configuration
+
+### 8. Structured Output
+Write the findings into the durable document set.
+
+```markdown
+artifacts/codebase/STACK.md
+- languages, frameworks, build/test tooling, key dependencies, file counts
+
+artifacts/codebase/INTEGRATIONS.md
+- external APIs, infra bindings, queues, databases, file formats, protocols
+
+artifacts/codebase/ARCHITECTURE.md
+- module responsibilities, dependency flow, coupling hotspots, change blast radius
+
+artifacts/codebase/STRUCTURE.md
+- directory layout, entry points, generated-vs-handwritten boundaries, ownership hints
+
+artifacts/codebase/CONVENTIONS.md
+- naming, file organization, error handling, config, state-management conventions
+
+artifacts/codebase/TESTING.md
+- existing test layout, coverage hotspots/gaps, verification commands, fixture patterns
+
+artifacts/codebase/CONCERNS.md
+- risks, architectural pressure points, brittle areas, migration traps, deferred concerns
+```
+
+## Efficiency Guidelines
+- Start broad, then narrow to change-relevant areas.
+- Do NOT read entire files; use symbol overview tools or targeted grep.
+- Limit dependency graph to 2 levels from the change scope.
+- Stop when there is enough context for scope/planning decisions.
+- Keep mapping under 15% of available context budget.
+
+## Relationship to Governance
+Advisory only. Referenced in `technique_hints` during `S1_PLAN` discovery and bundle substeps but does NOT produce governance evidence. Missing codebase mapping SHALL NOT block any gate.
+
+However, `slipway-research-orchestration`, `slipway-plan-audit`, and `slipway-wave-orchestration` SHOULD consume the durable `artifacts/codebase/` documents when present. A thorough codebase map improves scope validation, task targeting, and execution safety.

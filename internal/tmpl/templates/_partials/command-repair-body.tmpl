@@ -1,0 +1,16 @@
+{{- define "command-repair-body" -}}
+# Repair
+
+Diagnose and fix workspace state inconsistencies.
+
+## Invocation
+```bash
+slipway repair
+```
+
+## Contract
+- Scans workspace state for orphaned files, stale locks, and corrupt records.
+- Applies deterministic fixes where possible.
+- Reports what was found and fixed.
+- Show repair summary to user.
+{{- end -}}

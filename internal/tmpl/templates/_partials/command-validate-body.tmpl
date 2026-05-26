@@ -1,0 +1,22 @@
+{{- define "command-validate-body" -}}
+# Validate
+
+Check evidence and gate readiness for the current state without advancing.
+
+## Invocation
+```bash
+slipway validate
+```
+
+## Contract
+- Evaluates all gates and evidence requirements for the current state.
+- Includes a `requirements_contract` summary for governed changes when the
+  governed bundle can be evaluated without permission/read failures.
+- Reports pass/fail status and specific blockers.
+- Does not modify state — read-only diagnostic.
+- Show validation summary to user with actionable remediation steps.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

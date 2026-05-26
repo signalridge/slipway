@@ -1,0 +1,21 @@
+{{- define "command-status-body" -}}
+# Status
+
+Show lifecycle status, evidence progress, and blockers for the active change.
+When multiple active changes exist, summarize them and let the user choose one explicitly.
+
+## Invocation
+```bash
+slipway status --json
+```
+
+## Contract
+- Follow runtime state and gate contracts from Slipway CLI.
+- Treat `status --json` as a lifecycle/status contract, not a governance context dump.
+- Do not expect raw `governance_signals`, `active_controls`, or `required_actions` in default JSON.
+- If `governance_summary` is present, show its blockers, required actions, and authority refs.
+- If complete governance details are needed, run `slipway health --governance --json --change <slug>`.
+- If no active change: suggest `slipway new`.
+- If multiple active changes: show the summary and suggest `slipway status --change <slug>`.
+- Suggest `slipway repair` only for actual state-integrity problems.
+{{- end -}}

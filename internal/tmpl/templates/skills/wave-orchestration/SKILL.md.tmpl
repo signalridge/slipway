@@ -1,0 +1,100 @@
+---
+skill_id: wave-orchestration
+name: slipway-wave-orchestration
+description: "Use when executing dependency-ordered implementation waves with conflict detection. Triggers on post-plan-audit execution or whenever governed tasks must be executed in sequence."
+tool: "{{.ToolID}}"
+---
+
+# Wave Orchestration
+
+```
+IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION
+```
+
+## Purpose
+Execute implementation tasks in dependency order, detect conflicts early, and
+keep wave results reviewable. This host owns the execution dispatch contract.
+
+## Workflow Outline
+Read task/checkpoint state, group dependency-ordered waves, execute one wave at
+a time, spot-check results, write verification, and wait for approval.
+
+## Read Context
+Run `slipway next --json` and read the task plan from the governed change bundle.
+
+If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
+- `STRUCTURE.md`
+- `CONVENTIONS.md`
+- `TESTING.md`
+- `CONCERNS.md`
+
+Use them to align execution with directory conventions, test infrastructure,
+and known risk hotspots.
+
+If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
+when `freshness` is `fresh`; stale checkpoints require rerunning everything.
+Carry `checkpoint_type` and any `user_response_payload` into evidence.
+
+Apply `slipway-coding-discipline` while splitting work: keep task scopes
+minimal, prefer simple changes, and reject executor plans that broaden beyond
+the governed objective.
+
+## Discover and Group Waves
+Parse `tasks.md`, extract task entries and `depends_on`, group tasks into
+waves, and validate that every task belongs to exactly one wave. Wave 1 has no
+unsatisfied dependencies; later waves depend only on earlier waves. Cycles are
+blockers.
+
+Report the wave plan before execution: description, total tasks, wave count,
+and one row per wave with task IDs plus a 3-8 word build summary.
+
+## Execute Waves
+Execute waves in sequence. Within a wave, dispatch tasks in parallel when the
+tool supports it. For each wave: describe the build goal before spawning, wait
+for all executors, spot-check the first 2 files from each task's
+`changed_files`, check blocker evidence, report what the wave enables next, and
+after any checkpoint pause continue with a **fresh** subagent context.
+
+## Dispatch Contract
+- Use one isolated executor context per task when supported; otherwise execute sequentially.
+- Pass file paths only; executors read source files in their own context.
+- Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
+- Outputs: `changed_files`, `test_summary`, and `evidence_ref`.
+- Write scopes must be disjoint, or the brief must name the merge strategy.
+- For `task_kind=code`, enforce RED, then GREEN, then REFACTOR before accepting the result.
+- Detailed dispatch examples live in `references/executor-dispatch-reference.md`.
+
+## Guardrails
+- The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
+- Auto-fix only issues directly blocking the current task and directly caused by the current task's change.
+- After 3 auto-fix attempts on one task, stop and surface the blocker.
+- Architectural change needed: stop, write a blocker, and wait for user direction.
+- Spec or artifact blockers must use `spec:<artifact_id>` references.
+
+## Write Verification
+```yaml
+# Write to: artifacts/changes/{slug}/verification/wave-orchestration.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references: []
+notes: |
+  <verification notes>
+```
+
+## Present and Advance
+Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
+
+After confirmation: `slipway next`
+
+## DO NOT SKIP
+1. Dependency ordering before execution.
+2. File conflict detection after each wave.
+3. Post-execution verification.
+
+## Block If
+- Dependency ordering is incomplete or cyclic.
+- File conflicts remain unresolved after a wave.
+- Retry budget is exhausted.
+- A checkpoint resumes without a fresh subagent context.

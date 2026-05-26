@@ -1,0 +1,13 @@
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
+
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/slipway /slipway
+
+USER nonroot:nonroot
+ENTRYPOINT ["/slipway"]
+CMD ["--help"]
+
+LABEL org.opencontainers.image.title="slipway"
+LABEL org.opencontainers.image.description="Governance CLI for AI-assisted software delivery"
+LABEL org.opencontainers.image.source="https://github.com/signalridge/slipway"
+LABEL org.opencontainers.image.vendor="SignalRidge"

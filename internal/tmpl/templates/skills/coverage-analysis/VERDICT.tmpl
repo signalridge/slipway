@@ -1,0 +1,34 @@
+## Report schema
+```yaml
+tool: "<tool + version>"
+command: "<exact invocation>"
+whole_codebase: { lines: <n>, covered: <n>, pct: <float> }
+change_surface: { lines: <n>, covered: <n>, pct: <float> }
+uncovered:
+  - location: "<path:line>"
+    disposition: add-test | justified-exclusion
+    reason: "<if excluded>"
+delta_vs_baseline: <+/-float>
+verdict: pass | changes-requested | blocked
+```
+
+## Gap report
+List every uncovered region on the change surface, grouped by disposition.
+A `blocked` verdict requires at least one `add-test` row; `pass` requires
+zero `add-test` rows plus an affirmative delta.
+
+```yaml
+gaps:
+  - location: "<path:line-range>"
+    disposition: add-test
+    risk: "<why untested behavior is reachable in prod>"
+    proposed_test: "<unit | integration | e2e>"
+  - location: "<path:line-range>"
+    disposition: justified-exclusion
+    kind: unreachable | trivial-wrapper | generated
+    citation: "<file:line that proves the kind>"
+end_to_end_gaps:
+  - boundary: "<service/process crossed>"
+    why_unit_only_is_insufficient: "<behavior that only e2e catches>"
+delta_direction: up | flat | down
+```

@@ -1,0 +1,62 @@
+package stringutil
+
+import "strings"
+
+// StripHTMLComments removes <!-- ... --> blocks from the string.
+func StripHTMLComments(s string) string {
+	result := s
+	for {
+		start := strings.Index(result, "<!--")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(result[start:], "-->")
+		if end < 0 {
+			break
+		}
+		result = result[:start] + result[start+end+3:]
+	}
+	return result
+}
+
+// LastMarkdownSectionContent returns the content for the last matching level-2
+// markdown heading. This lets canonical intent sections win over duplicated
+// headings embedded earlier in the document, such as a source document copied
+// into the Summary section.
+func LastMarkdownSectionContent(content, heading string) string {
+	normalizedHeading := strings.TrimSpace(heading)
+	if !strings.HasPrefix(normalizedHeading, "## ") {
+		normalizedHeading = "## " + normalizedHeading
+	}
+
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	inSection := false
+	section := make([]string, 0)
+	last := ""
+
+	flush := func() {
+		last = strings.TrimSpace(StripHTMLComments(strings.Join(section, "\n")))
+		section = section[:0]
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			if inSection {
+				flush()
+				inSection = false
+			}
+			if trimmed == normalizedHeading {
+				inSection = true
+			}
+			continue
+		}
+		if inSection {
+			section = append(section, line)
+		}
+	}
+	if inSection {
+		flush()
+	}
+	return last
+}

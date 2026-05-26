@@ -1,0 +1,100 @@
+---
+skill_id: final-closeout
+name: slipway-final-closeout
+description: "Use when refreshing final verification before ship approval. Triggers on goal-verification pass state or any ship-gate freshness recheck."
+---
+
+# Final Closeout
+
+```
+IRON LAW: NO SHIP WITHOUT FRESH, INDEPENDENT CLOSEOUT VERIFICATION
+```
+
+## Purpose
+Refresh verification immediately before ship approval so the ship gate does not
+rest on stale evidence.
+
+## Workflow Outline
+1. Re-read the verification index and closeout prerequisites.
+2. Re-run the proving commands and confirm freshness, completeness, and assurance.
+3. Write the closeout verdict and wait for approval.
+
+## When This Runs
+Only when governed closeout refresh is required. `slipway next` returns `next_skill: final-closeout`.
+This skill runs AFTER goal-verification and BEFORE the G_ship gate decision.
+
+## Read Context
+Run `slipway next --json`. Examine:
+- current `run_summary_version`
+- verification index for prior skills
+- assurance artifact state
+- active blockers list
+
+## Closeout Checklist
+Verify ALL of the following before producing closeout verification:
+- [ ] verification records match current `run_version`
+- [ ] every required governance skill has a passing verification record
+- [ ] full test suite runs green (not cached, not partial)
+- [ ] blocker list is empty
+- [ ] `assurance.md` is complete on standard/strict preset
+- [ ] both review skills have passing verification
+- [ ] artifact staleness propagation is clean
+- [ ] guardrail baseline is rechecked when a guardrail domain is active
+
+Each unchecked item is a blocker.
+
+## Fresh Evidence Contract
+{{template "verification-doctrine"}}
+
+Apply all of the following before passing closeout:
+{{template "fresh-evidence-checklist"}}
+
+Minimum record:
+{{template "fresh-evidence-minimum-record"}}
+
+## Assurance Artifact Verification
+On light preset, skip this section — `assurance.md` is optional.
+
+`assurance.md` MUST contain:
+- scope summary
+- verification verdict with references
+- verification index
+- residual risks
+- archive decision with rationale
+
+If any required section is empty or missing, closeout is blocked.
+
+## Write Verification
+Closeout must be performed independently from implementation.
+
+```yaml
+# Write to: artifacts/changes/{slug}/verification/final-closeout.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:N/N"
+  - "closeout:reviewer_independence=pass"
+  - "closeout:guardrail_baseline=pass"
+notes: |
+  <verification notes>
+```
+
+On standard/strict preset, also add `closeout:assurance_complete=pass`.
+
+## Present and Advance
+Show closeout summary with verification index. {{template "hard-gate"}}
+
+After confirmation: `slipway next`
+
+## DO NOT SKIP
+1. Full test suite pass.
+2. Verification freshness check for all prior skills.
+3. Assurance artifact completeness on standard/strict preset.
+
+## Block If
+- Any required verification is stale, missing, or not passing.
+- Full-suite proof, reviewer independence, or guardrail recheck is missing.
+- Required assurance sections are empty or boilerplate-only.

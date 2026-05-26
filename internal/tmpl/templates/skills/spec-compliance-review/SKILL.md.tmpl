@@ -1,0 +1,107 @@
+---
+skill_id: spec-compliance-review
+name: slipway-spec-compliance-review
+description: "Use when verifying bidirectional alignment between specification artifacts and implementation. Triggers on post-execution review or whenever spec-to-code traceability is under review."
+---
+
+# Spec Compliance Review
+
+```
+IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
+```
+
+## Purpose
+Verify bidirectional alignment between specification artifacts and
+implementation. This is Stage 1 of the governed review sequence. The attached
+`slipway-spec-trace` checklist defines the trace matrix you must produce.
+
+## Workflow Outline
+1. Read the artifacts, code, and execution summary yourself.
+2. Check forward alignment, reverse alignment, intent drift, and decision fidelity.
+3. Write verification, surface blockers, and wait for approval.
+
+## When This Runs
+After wave execution. `slipway next` returns `next_skill: spec-compliance-review`.
+This is Stage 1 of the two-stage review protocol. Must pass before code-quality-review runs.
+
+## Review Contract
+Do not trust prior summaries. Read artifacts, code, and tests yourself before
+claiming alignment.
+
+- Do NOT rely on implementer or orchestrator summaries
+- Do NOT trust claimed test results without rerunning or reading raw output
+- Do NOT trust "all criteria met" assertions without your own verification
+- Read actual implementation files, not only changed-file lists
+
+## Read Context
+Run `slipway next --json` and locate `verification/execution-summary.yaml`.
+Apply the shared requirements checklist from `checklist-quality.md`. Use the
+attached `spec-trace` checklist to enumerate the forward and reverse trace
+edges you must verify.
+Use `slipway-coding-discipline` as a posture check when judging whether the
+implemented change stayed simple, surgical, and goal-driven.
+
+## Required Checks
+### Forward Alignment (Spec -> Code)
+- each spec requirement maps to concrete implementation
+- acceptance criteria are satisfied by tests
+- no spec requirement is silently dropped or deferred without explicit tracking
+
+### Reverse Alignment (Code -> Spec)
+- no undocumented features or behaviors
+- no implementation detail that contradicts the approved artifacts
+- changed files are covered by relevant spec sections
+
+### Intent Drift Detection
+- compare original proposal intent with the final implementation
+- flag semantic drift between what was proposed and what was built
+- check that scope changes are documented
+
+### Decision Fidelity Check
+If `skill_constraints.locked_decisions` is present:
+1. extract each locked decision from `decision.md`
+2. verify the implementation honors it without workaround or reinterpretation
+3. flag violations as `decision_fidelity:violated:<decision_summary>`
+
+### Stub Detection
+Block zero-value or hardcoded production responses, TODO/FIXME/HACK in claimed
+complete code, assertion-free tests, handlers that only log, placeholder API
+responses, and imports unused in the claimed integration path.
+
+## Review Layers
+- `layer:CORRECTNESS=pass|fail`: logic errors, missing branches, broken contracts against spec
+- `layer:SAFETY=pass|fail`: auth/data handling, irreversible operations, external contracts
+
+## Write Verification
+```yaml
+# Write to: artifacts/changes/{slug}/verification/spec-compliance-review.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+notes: |
+  Gaps (code_to_artifact): <code behaviors not documented in spec>
+  Gaps (artifact_to_code): <spec requirements not implemented in code>
+```
+
+The `notes` field SHOULD include gap analysis. Empty gaps indicate full
+bidirectional alignment.
+
+## Present and Advance
+Show review findings. {{template "hard-gate"}}
+
+After confirmation: proceed to code-quality-review.
+
+## DO NOT SKIP
+1. Independent review for governed levels.
+2. Both forward and reverse alignment checks.
+3. Decision fidelity check when locked decisions exist.
+
+## Block If
+- A spec requirement lacks implementation or an accepted skip justification.
+- Code behavior is undocumented or contradicts the approved artifacts.
+- Locked decisions are violated.
+- Claimed-complete work is still stubbed, placeholder-only, or assertion-free.

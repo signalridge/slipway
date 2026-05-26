@@ -1,0 +1,40 @@
+site_name: Slipway
+site_description: Governance CLI for AI-assisted software delivery
+site_url: https://signalridge.github.io/slipway/
+repo_url: https://github.com/signalridge/slipway
+repo_name: signalridge/slipway
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; SignalRidge
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+plugins:
+  - search
+
+nav:
+  - Home: README.md
+  - Workflow Test Menu: workflow-test-menu.md
+  - Agent Contracts: agent-contracts.md
+  - Command Contract Matrix: command-contract-matrix.md
+  - Execution Surface Boundary: execution-surface-boundary.md
+  - Worktree Orchestrator Deferment: worktree-orchestrator-deferment.md
+  - ADR: adr-retire-sync-as-product-verb.md

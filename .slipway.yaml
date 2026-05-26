@@ -1,0 +1,7 @@
+defaults:
+  artifact_schema: expanded
+execution:
+  lock_wait_timeout_seconds: 10
+  lock_stale_after_seconds: 120
+  cancel_grace_period_seconds: 10
+  max_plan_audit_iterations: 3
