@@ -1,0 +1,17 @@
+{
+  "task_id": "t-06",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [],
+  "target_files": [
+    "cmd/common.go",
+    "internal/engine/context/context_test.go",
+    "internal/engine/progression/readiness.go",
+    "internal/fsutil/atomic_test.go",
+    "internal/state/lifecycle_test.go",
+    "internal/toolgen/toolgen_test.go"
+  ],
+  "evidence_ref": "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md",
+  "captured_at": "2026-05-26T11:49:24Z"
+}

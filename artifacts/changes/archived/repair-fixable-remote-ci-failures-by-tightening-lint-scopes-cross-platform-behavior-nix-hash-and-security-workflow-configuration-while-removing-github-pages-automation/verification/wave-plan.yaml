@@ -1,0 +1,104 @@
+version: 1
+generated_at: 2026-05-26T08:46:21.476972025Z
+tasks_plan_hash: e48a172982e0a6f4f990bfbdd0b580ce5d8b7dc7ad891fd24470e205b6bdd882
+total_tasks: 10
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Tighten CI lint scope and maintained Markdown lint cleanliness.
+          target_files:
+            - .github/workflows/ci.yml
+            - .markdownlint.yaml
+            - .yamllint.yaml
+            - docs/command-contract-matrix.md
+          task_kind: code
+        - task_id: t-02
+          objective: Fix cross-platform Go tests and generated Bash scripts.
+          target_files:
+            - cmd/common.go
+            - internal/engine/context/context.go
+            - internal/engine/context/context_test.go
+            - internal/engine/progression/readiness.go
+            - internal/fsutil/atomic.go
+            - internal/state/lifecycle.go
+            - internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh
+            - internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh
+            - internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh
+          task_kind: code
+        - task_id: t-03
+          objective: Update Nix package metadata.
+          target_files:
+            - flake.nix
+          task_kind: code
+        - task_id: t-04
+          objective: Repair checked-in security workflow defects.
+          target_files:
+            - .github/workflows/security.yaml
+          task_kind: code
+        - task_id: t-05
+          objective: Remove GitHub Pages workflow automation.
+          target_files:
+            - .github/workflows/docs.yml
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-06
+          objective: Run focused regression verification.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+            - t-05
+          target_files:
+            - cmd/common.go
+            - internal/engine/context/context_test.go
+            - internal/engine/progression/readiness.go
+            - internal/fsutil/atomic_test.go
+            - internal/state/lifecycle_test.go
+            - internal/toolgen/toolgen_test.go
+          task_kind: verification
+    - wave_index: 3
+      tasks:
+        - task_id: t-07
+          objective: Run full local Go verification.
+          depends_on:
+            - t-06
+          target_files:
+            - cmd
+            - go.mod
+            - go.sum
+            - internal
+          task_kind: verification
+        - task_id: t-08
+          objective: Run lint and workflow-scope verification.
+          depends_on:
+            - t-06
+          target_files:
+            - .github/workflows/ci.yml
+            - .github/workflows/security.yaml
+            - .markdownlint.yaml
+            - .yamllint.yaml
+            - docs/command-contract-matrix.md
+          task_kind: verification
+        - task_id: t-09
+          objective: Run Nix verification.
+          depends_on:
+            - t-03
+          target_files:
+            - flake.nix
+          task_kind: verification
+    - wave_index: 4
+      tasks:
+        - task_id: t-10
+          objective: Record residual external CI risks and governed closeout evidence.
+          depends_on:
+            - t-06
+            - t-07
+            - t-08
+            - t-09
+          target_files:
+            - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+            - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/verification
+          task_kind: verification

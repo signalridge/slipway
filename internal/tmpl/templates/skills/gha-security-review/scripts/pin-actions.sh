@@ -85,9 +85,11 @@ if [ ! -f "$MAPPING" ]; then
 	exit 2
 fi
 
-# Load mapping into an associative array. Each valid row is
+# Load mapping into indexed arrays for compatibility with Bash 3.2 on macOS.
+# Each valid row is
 # "owner/repo@ref<TAB>sha". Rows starting with # or blank are skipped.
-declare -A MAP
+MAP_KEYS=()
+MAP_VALUES=()
 while IFS=$'\t' read -r key sha rest; do
 	case "$key" in
 	'' | '#'*) continue ;;
@@ -100,8 +102,21 @@ while IFS=$'\t' read -r key sha rest; do
 		echo "pin-actions.sh: mapping sha not a 40-char hex: $key -> $sha" >&2
 		exit 2
 	fi
-	MAP["$key"]="$sha"
+	MAP_KEYS+=("$key")
+	MAP_VALUES+=("$sha")
 done <"$MAPPING"
+
+lookup_sha() {
+	local lookup="$1"
+	local i
+	for i in "${!MAP_KEYS[@]}"; do
+		if [ "${MAP_KEYS[$i]}" = "$lookup" ]; then
+			printf '%s\n' "${MAP_VALUES[$i]}"
+			return 0
+		fi
+	done
+	return 1
+}
 
 rewrite_file() {
 	local file="$1"
@@ -130,8 +145,8 @@ rewrite_file() {
 			fi
 
 			local key="${repo}@${ref}"
-			local sha="${MAP[$key]:-}"
-			if [ -z "$sha" ]; then
+			local sha
+			if ! sha="$(lookup_sha "$key")"; then
 				echo "pin-actions.sh: unresolved $key in $file" >&2
 				unresolved=1
 				printf '%s\n' "$line" >>"$tmp"

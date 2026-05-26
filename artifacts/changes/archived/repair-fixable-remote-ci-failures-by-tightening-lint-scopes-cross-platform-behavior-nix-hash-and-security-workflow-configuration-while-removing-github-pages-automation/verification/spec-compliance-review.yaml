@@ -1,0 +1,58 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T11:54:01Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:R3=pass"
+  - "layer:IR1=pass"
+  - "layer:IR3=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "requirements.md"
+  - "decision.md"
+  - "tasks.md"
+  - "verification/execution-summary.yaml"
+  - ".github/workflows/ci.yml"
+  - ".github/workflows/security.yaml"
+  - ".github/workflows/docs.yml"
+  - ".yamllint.yaml"
+  - "docs/command-contract-matrix.md"
+  - "flake.nix"
+  - "internal/fsutil/atomic.go"
+  - "internal/state/lifecycle.go"
+  - "internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh"
+  - "internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh"
+  - "internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh"
+notes: |
+  Gaps (code_to_artifact): None. Changed files map to REQ-001 through REQ-006.
+  Gaps (artifact_to_code): None. All requirements are implemented or explicitly
+  documented as out-of-scope residuals where user scope excludes token/settings
+  work.
+
+  Forward trace:
+  - REQ-001 maps to CI markdown globs, yamllint ignores, and the fenced-block
+    doc fix.
+  - REQ-002 maps to Windows directory sync handling, Bash 3-compatible script
+    rewrites, and the internal package rename.
+  - REQ-003 maps to the updated Nix vendorHash and Nix build verification.
+  - REQ-004 maps to security workflow permissions and govulncheck SARIF tag
+    normalization.
+  - REQ-005 maps to removal of .github/workflows/docs.yml while docs sources
+    remain present.
+  - REQ-006 maps to bounded workflow/SARIF changes, explicit residual risks,
+    and rollback notes in assurance.md.
+
+  Reverse trace:
+  - No Release Please workflow changes were made.
+  - No token, secret, repository-setting, auth, data, or schema behavior was
+    added.
+  - All code/config changes stay within the selected minimal source/config
+    repair approach.
+
+  Review checks:
+  - `git diff --check` passed.
+  - Stub/placeholder grep over changed files and governed artifacts found no
+    remaining TODO/FIXME/HACK/PLACEHOLDER or pending-planning text.
+  - `go run . status --json` reports fresh execution evidence and 10 passing
+    task results.

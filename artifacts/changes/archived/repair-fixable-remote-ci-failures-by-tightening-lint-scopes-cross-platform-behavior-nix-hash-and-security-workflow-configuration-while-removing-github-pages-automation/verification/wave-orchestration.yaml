@@ -1,0 +1,22 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T11:49:24Z"
+run_version: 1
+references:
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-01.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-02.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-03.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-04.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-05.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-06.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-07.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-08.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-09.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/evidence/tasks/rv1/t-10.json"
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md"
+notes: |
+  Executed all four planned waves as one coordinated Codex session because the
+  Wave 1 write scopes were disjoint and verification waves depended on the
+  completed implementation. File conflict check passed: no two same-wave tasks
+  wrote the same target file. Verification commands and residual external CI
+  risks are recorded in assurance.md.

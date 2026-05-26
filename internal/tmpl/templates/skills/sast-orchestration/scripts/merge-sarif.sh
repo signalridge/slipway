@@ -45,7 +45,10 @@ if [ ! -d "$RAW_DIR" ]; then
 	exit 1
 fi
 
-mapfile -t SARIF_FILES < <(find "$RAW_DIR" -maxdepth 1 -type f -name '*.sarif' | sort)
+SARIF_FILES=()
+while IFS= read -r sarif_file; do
+	SARIF_FILES+=("$sarif_file")
+done < <(find "$RAW_DIR" -maxdepth 1 -type f -name '*.sarif' | sort)
 if [ "${#SARIF_FILES[@]}" -eq 0 ]; then
 	echo "Error: no SARIF files found in $RAW_DIR" >&2
 	exit 1

@@ -1,0 +1,17 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T08:40:28Z"
+run_version: 0
+references:
+  - "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/research.md"
+  - ".github/workflows/ci.yml"
+  - ".github/workflows/security.yaml"
+  - ".github/workflows/docs.yml"
+  - "internal/toolgen/toolgen_test.go"
+  - "internal/fsutil/atomic.go"
+  - "internal/state/lifecycle.go"
+notes: |
+  Research completed across architecture, patterns, risks, and test strategy.
+  Selected the minimal source/config repair approach because it matches the
+  user constraint to fix repo-local CI defects, remove GitHub Pages automation
+  for now, and leave missing-token or repository-setting failures untouched.

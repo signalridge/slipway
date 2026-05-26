@@ -1,0 +1,28 @@
+{
+  "task_id": "t-02",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "internal/fsutil/atomic.go",
+    "internal/state/lifecycle.go",
+    "internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh",
+    "internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh",
+    "internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh",
+    "internal/engine/context/context.go",
+    "internal/engine/context/context_test.go"
+  ],
+  "target_files": [
+    "cmd/common.go",
+    "internal/engine/context/context.go",
+    "internal/engine/context/context_test.go",
+    "internal/engine/progression/readiness.go",
+    "internal/fsutil/atomic.go",
+    "internal/state/lifecycle.go",
+    "internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh",
+    "internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh",
+    "internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh"
+  ],
+  "evidence_ref": "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md",
+  "captured_at": "2026-05-26T11:49:24Z"
+}

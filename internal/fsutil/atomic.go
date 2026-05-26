@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -62,7 +63,13 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 		_ = dirFile.Close()
 	}()
 
-	return dirFile.Sync()
+	if err := dirFile.Sync(); err != nil {
+		if runtime.GOOS == "windows" {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // CleanupAtomicTempArtifacts removes stale temp files created by WriteFileAtomic.

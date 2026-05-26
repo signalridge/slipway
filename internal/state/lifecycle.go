@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -279,11 +280,15 @@ func syncDir(path string) error {
 	if err != nil {
 		return err
 	}
-	if err := dir.Sync(); err != nil {
-		_ = dir.Close()
-		return err
+	syncErr := dir.Sync()
+	closeErr := dir.Close()
+	if syncErr != nil {
+		if runtime.GOOS == "windows" {
+			return closeErr
+		}
+		return syncErr
 	}
-	return dir.Close()
+	return closeErr
 }
 
 // scrubChangeRuntimeEvidenceRefs removes evidence refs that point to absolute

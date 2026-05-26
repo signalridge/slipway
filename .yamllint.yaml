@@ -22,6 +22,10 @@ rules:
 
 ignore:
   - .git/
+  - .codex/
+  - .claude/
+  - .worktrees/
+  - artifacts/
   - vendor/
   - node_modules/
   - dist/

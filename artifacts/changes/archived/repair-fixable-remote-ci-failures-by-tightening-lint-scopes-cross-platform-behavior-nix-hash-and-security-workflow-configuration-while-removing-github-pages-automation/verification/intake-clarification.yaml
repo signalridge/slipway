@@ -1,0 +1,13 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T08:12:50Z"
+run_version: 0
+references:
+  - "user_scope:fix code/config repairable CI failures"
+  - "out_of_scope:github_pages_settings"
+  - "out_of_scope:missing_tokens_or_secrets"
+notes: |
+  User instruction clarified the scope: run the Slipway workflow, repair all fixable CI issues,
+  delete GitHub Pages automation for now, and leave token/secret or repository-setting gaps
+  unfixed. Intent sections now record concrete in-scope surfaces, exclusions, constraints, and
+  acceptance signals.

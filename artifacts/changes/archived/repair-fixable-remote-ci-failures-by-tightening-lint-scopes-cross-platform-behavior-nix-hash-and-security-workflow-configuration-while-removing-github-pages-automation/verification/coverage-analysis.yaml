@@ -1,0 +1,22 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T11:54:55Z"
+run_version: 1
+references:
+  - "command:go test ./internal/fsutil ./internal/state ./internal/engine/context ./internal/toolgen -coverprofile=/tmp/slipway-ci-repair.cover -count=1"
+  - "command:go tool cover -func=/tmp/slipway-ci-repair.cover"
+notes: |
+  Coverage report:
+  - Tool: Go test coverprofile with the current workspace Go toolchain.
+  - Scope: changed Go package surface plus generated-script test package.
+  - Package results: fsutil 70.2%, state 67.9%, engine/context 100.0%,
+    toolgen 76.3%.
+  - Combined profile total: 69.8%.
+  - Uncovered change-surface lines requiring new tests: none identified from
+    local review. Windows-only directory sync behavior is verified by the
+    remote Windows test matrix rather than local Darwin coverage.
+  - Workflow YAML, Nix, Markdown, and shell-script behavior are covered by
+    actionlint, Nix build, static grep, and generated script fixture tests
+    rather than Go line coverage.
+  - End-to-end gap: GitHub-hosted yamllint/markdownlint behavior remains a
+    remote-CI proof point because both tools were absent locally.

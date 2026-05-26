@@ -1,0 +1,42 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T11:54:55Z"
+run_version: 1
+references:
+  - "check:external_api_contracts.safety_baseline=pass"
+  - "fresh:command_ref=go test -timeout=20m ./... -count=1"
+  - "fresh:command_ref=go build ./..."
+  - "fresh:command_ref=golangci-lint run --timeout=5m"
+  - "fresh:command_ref=actionlint"
+  - "fresh:command_ref=nix flake check"
+  - "fresh:command_ref=nix build .#slipway"
+  - "fresh:command_ref=go test ./internal/fsutil ./internal/state ./internal/engine/context ./internal/toolgen -coverprofile=/tmp/slipway-ci-repair.cover -count=1"
+  - "artifact:verification/execution-summary.yaml"
+  - "artifact:verification/coverage-analysis.yaml"
+  - "artifact:assurance.md"
+notes: |
+  Criteria:
+    AC-1: CI YAML/Markdown lint scope excludes archived governance evidence and generated host templates - pass - Exists: .github/workflows/ci.yml and .yamllint.yaml contain the excludes. Substantive: markdown globs exclude .worktrees, artifacts, and internal/tmpl/templates; yamllint ignore excludes runtime/governance/generated-local dirs. Wired: CI still invokes yamllint and markdownlint with these configs.
+    AC-2: Cross-platform repairable test failures are fixed - pass - Exists: internal/fsutil/atomic.go, internal/state/lifecycle.go, and three generated shell scripts changed. Substantive: Windows directory sync errors are scoped to directory fsync only; mapfile and declare -A are removed. Wired: TestScriptFixtureContracts, fsutil/state/context/progression focused tests, and full go test passed.
+    AC-3: Nix metadata matches current Go dependency graph - pass - Exists: flake.nix vendorHash changed. Substantive: hash matches the Nix build expectation from remote failure analysis. Wired: nix flake check and nix build .#slipway passed.
+    AC-4: Security workflow checked-in defects are fixed without tokens - pass - Exists: .github/workflows/security.yaml has actions: read and govulncheck SARIF normalization. Substantive: normalization only de-duplicates properties.tags arrays. Wired: actionlint passed and no secret/token dependency was added.
+    AC-5: GitHub Pages automation is removed for now - pass - Exists: .github/workflows/docs.yml is deleted. Substantive: only the Pages deployment workflow was removed; docs sources remain. Wired: workflow listing no longer includes the docs deploy workflow in git diff/status.
+    AC-6: Missing-token or repository-setting issues remain out of scope - pass - Exists: Release Please workflow was not changed. Substantive: assurance.md records residual token/settings risk. Wired: no code/config path adds GH_PAT or Pages settings handling.
+    AC-7: external_api_contracts safety baseline - pass - Exists: goal-verification references check:external_api_contracts.safety_baseline=pass. Substantive: workflow/SARIF changes are bounded, read-only where permissions are added, and reversible. Wired: review evidence includes R0/R3/IR1/IR3 pass and code-quality review passed.
+
+  Fresh commands read in this verification window:
+    - go test ./internal/toolgen -run TestScriptFixtureContracts -count=1: passed.
+    - go test ./internal/fsutil ./internal/state ./internal/engine/context ./internal/engine/progression -count=1: passed.
+    - go test ./cmd -run TestStatusJson -count=1: passed with no matching tests, compiling the package.
+    - golangci-lint run --timeout=5m: 0 issues.
+    - actionlint: passed.
+    - nix flake check: all checks passed for the current system.
+    - nix build .#slipway: passed.
+    - go build ./...: passed.
+    - go test -timeout=20m ./... -count=1: passed.
+    - go test ./internal/fsutil ./internal/state ./internal/engine/context ./internal/toolgen -coverprofile=/tmp/slipway-ci-repair.cover -count=1: passed.
+
+  Local verification exception:
+    yamllint and markdownlint-cli2 were not installed locally, so those exact
+    lint binaries were not run. This is recorded as a residual remote-CI proof
+    point rather than hidden.

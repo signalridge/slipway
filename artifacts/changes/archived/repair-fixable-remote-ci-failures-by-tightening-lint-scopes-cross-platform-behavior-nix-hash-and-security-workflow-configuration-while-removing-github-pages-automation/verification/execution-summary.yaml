@@ -1,0 +1,132 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-26T11:49:24Z
+overall_verdict: pass
+tasks_plan_hash: e48a172982e0a6f4f990bfbdd0b580ce5d8b7dc7ad891fd24470e205b6bdd882
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+    - t-07
+    - t-08
+    - t-09
+    - t-10
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/ci.yml
+        - .yamllint.yaml
+        - docs/command-contract-matrix.md
+      target_files:
+        - .github/workflows/ci.yml
+        - .markdownlint.yaml
+        - .yamllint.yaml
+        - docs/command-contract-matrix.md
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/context/context.go
+        - internal/engine/context/context_test.go
+        - internal/fsutil/atomic.go
+        - internal/state/lifecycle.go
+        - internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh
+        - internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh
+        - internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh
+      target_files:
+        - cmd/common.go
+        - internal/engine/context/context.go
+        - internal/engine/context/context_test.go
+        - internal/engine/progression/readiness.go
+        - internal/fsutil/atomic.go
+        - internal/state/lifecycle.go
+        - internal/tmpl/templates/skills/gha-security-review/scripts/pin-actions.sh
+        - internal/tmpl/templates/skills/root-cause-tracing/scripts/find-polluter-go.sh
+        - internal/tmpl/templates/skills/sast-orchestration/scripts/merge-sarif.sh
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - flake.nix
+      target_files:
+        - flake.nix
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/security.yaml
+      target_files:
+        - .github/workflows/security.yaml
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/docs.yml
+      target_files:
+        - .github/workflows/docs.yml
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - cmd/common.go
+        - internal/engine/context/context_test.go
+        - internal/engine/progression/readiness.go
+        - internal/fsutil/atomic_test.go
+        - internal/state/lifecycle_test.go
+        - internal/toolgen/toolgen_test.go
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-07
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - cmd
+        - go.mod
+        - go.sum
+        - internal
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-08
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - .github/workflows/ci.yml
+        - .github/workflows/security.yaml
+        - .markdownlint.yaml
+        - .yamllint.yaml
+        - docs/command-contract-matrix.md
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-09
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - flake.nix
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z
+    - task_id: t-10
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+        - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+        - artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/verification
+      evidence_ref: artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+      captured_at: 2026-05-26T11:49:24Z

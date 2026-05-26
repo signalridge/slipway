@@ -1,0 +1,66 @@
+slug: repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation
+description: repair fixable remote CI failures by tightening lint scopes, cross-platform behavior, Nix hash, and security workflow configuration while removing GitHub Pages automation
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-26T08:09:05.017927Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation
+worktree_branch: feat/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, GitHub Actions, Nix
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - YAML
+        - Shell
+        - Nix
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md
+        version: 1
+        state: frozen
+        content_hash: 1e560f801b430c77402c8f6830b119a1b25480b7995d3cebe1ba28fdd1422ecd
+        updated_at: 2026-05-26T11:59:41.132971799Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/decision.md
+        version: 1
+        state: frozen
+        content_hash: 2c481f8c522e9697331443decda9b0e56db58b1db506d15647a53fb650741b41
+        updated_at: 2026-05-26T08:44:17.840276894Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/intent.md
+        version: 1
+        state: frozen
+        content_hash: 0862c49e92345ab6ead503185b557523b9966bb0d5ebef88d2846df9f7b3a92d
+        updated_at: 2026-05-26T08:13:43.335130875Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/requirements.md
+        version: 1
+        state: frozen
+        content_hash: f04e05bf7534114e09738b459f952b0dc31c668c3647a75a11aebac261f0c6bf
+        updated_at: 2026-05-26T08:44:17.839965263Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/research.md
+        version: 1
+        state: frozen
+        content_hash: 8eb2dc96622ad7c167d6094a6c5006440ffbb7885d1fbd81b5671248b727cf29
+        updated_at: 2026-05-26T08:41:39.285699909Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/artifacts/changes/archived/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 0ee7d4944e45aa3160cffd44c775d086a37399ae9ea8ecf30f690328fb03c63f
+        updated_at: 2026-05-26T11:53:00.832769005Z

@@ -42,7 +42,9 @@ jobs:
             !CHANGELOG.md
             !.codex/**
             !.github/**
+            !.worktrees/**
             !artifacts/**
+            !internal/tmpl/templates/**
 
   lint-go:
     name: Lint Go

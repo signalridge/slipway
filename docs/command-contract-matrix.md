@@ -167,7 +167,7 @@ user-facing suggestion channel in both JSON and text output. This is
   the list is non-empty. Each line prefers the matched `reason`; if `reason`
   is unavailable, it falls back to `summary`:
 
-  ```
+  ```text
   Suggested:
     - <name> — <reason-or-summary>
   ```

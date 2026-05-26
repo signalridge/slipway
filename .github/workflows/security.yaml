@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
@@ -26,6 +27,18 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
         run: govulncheck -format sarif ./... > govulncheck.sarif
+      - name: Normalize govulncheck SARIF
+        if: always()
+        run: |
+          test -s govulncheck.sarif
+          jq_filter='walk(
+            if type == "object" and (.properties.tags? | type) == "array"
+            then .properties.tags |= unique
+            else .
+            end
+          )'
+          jq -S "$jq_filter" govulncheck.sarif > govulncheck.normalized.sarif
+          mv govulncheck.normalized.sarif govulncheck.sarif
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v4
         if: always()

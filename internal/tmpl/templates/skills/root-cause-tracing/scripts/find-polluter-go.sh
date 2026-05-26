@@ -75,7 +75,10 @@ if ! LIST_OUTPUT="$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPat
 	exit 1
 fi
 
-mapfile -t PKGS < <(printf '%s\n' "$LIST_OUTPUT" | sed '/^[[:space:]]*$/d' | sort)
+PKGS=()
+while IFS= read -r pkg; do
+	PKGS+=("$pkg")
+done < <(printf '%s\n' "$LIST_OUTPUT" | sed '/^[[:space:]]*$/d' | sort)
 
 if [ "${#PKGS[@]}" -eq 0 ]; then
 	echo "find-polluter-go.sh: no test packages found under $PKG_GLOB" >&2

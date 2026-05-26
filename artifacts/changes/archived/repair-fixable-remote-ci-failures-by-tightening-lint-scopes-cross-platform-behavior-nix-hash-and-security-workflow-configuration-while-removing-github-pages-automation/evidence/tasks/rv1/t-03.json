@@ -1,0 +1,14 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "flake.nix"
+  ],
+  "target_files": [
+    "flake.nix"
+  ],
+  "evidence_ref": "artifacts/changes/repair-fixable-remote-ci-failures-by-tightening-lint-scopes-cross-platform-behavior-nix-hash-and-security-workflow-configuration-while-removing-github-pages-automation/assurance.md",
+  "captured_at": "2026-05-26T11:49:24Z"
+}
