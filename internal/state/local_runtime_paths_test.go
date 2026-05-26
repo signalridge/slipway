@@ -151,6 +151,128 @@ func TestGitCommonDirCacheInvalidatesWhenCommondirMetadataChanges(t *testing.T) 
 	assert.Equal(t, 2, calls)
 }
 
+func TestGitCommonDirUsesAncestorGitMetadataDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	nestedRoot := filepath.Join(root, "services", "billing")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "config"), []byte("[core]\nrepositoryformatversion = 0\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	normalizedRoot, err := NormalizePath(root)
+	require.NoError(t, err)
+
+	assert.Equal(t, filepath.Join(normalizedRoot, ".git"), GitCommonDir(nestedRoot))
+}
+
+func TestGitCommonDirUsesLinkedWorktreeCommondirMetadata(t *testing.T) {
+	t.Parallel()
+
+	worktreeRoot := t.TempDir()
+	nestedRoot := filepath.Join(worktreeRoot, "services", "billing")
+	commonGitDir := filepath.Join(t.TempDir(), "repo", ".git")
+	gitDir := filepath.Join(commonGitDir, "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/feature\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("../..\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeRoot, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	assert.Equal(t, filepath.Clean(commonGitDir), GitCommonDir(nestedRoot))
+}
+
+func TestGitWorkspaceRootUsesAncestorGitMetadataDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	nestedRoot := filepath.Join(root, "services", "billing")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "config"), []byte("[core]\nrepositoryformatversion = 0\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	normalizedRoot, err := NormalizePath(root)
+	require.NoError(t, err)
+
+	got, err := gitWorkspaceRoot(nestedRoot)
+	require.NoError(t, err)
+	assert.Equal(t, normalizedRoot, got)
+}
+
+func TestGitWorkspaceRootUsesLinkedWorktreeMetadata(t *testing.T) {
+	t.Parallel()
+
+	worktreeRoot := t.TempDir()
+	nestedRoot := filepath.Join(worktreeRoot, "services", "billing")
+	gitDir := filepath.Join(t.TempDir(), "repo", ".git", "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/feature\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("../..\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeRoot, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	normalizedRoot, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+
+	got, err := gitWorkspaceRoot(nestedRoot)
+	require.NoError(t, err)
+	assert.Equal(t, normalizedRoot, got)
+}
+
+func TestGitWorkspaceRootRejectsIncompleteMetadataFastPath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+
+	_, err := ResolveGitWorkspaceRoot(root)
+	require.Error(t, err)
+}
+
+func TestGitBranchFromMetadataUsesGitDirectoryHead(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	nestedRoot := filepath.Join(root, "services", "billing")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	branch, ok := gitBranchFromMetadata(nestedRoot)
+	require.True(t, ok)
+	assert.Equal(t, "main", branch)
+}
+
+func TestGitBranchFromMetadataUsesLinkedWorktreeHead(t *testing.T) {
+	t.Parallel()
+
+	worktreeRoot := t.TempDir()
+	nestedRoot := filepath.Join(worktreeRoot, "services", "billing")
+	gitDir := filepath.Join(t.TempDir(), "repo", ".git", "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/feature/demo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeRoot, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(nestedRoot, 0o755))
+
+	branch, ok := gitBranchFromMetadata(nestedRoot)
+	require.True(t, ok)
+	assert.Equal(t, "feature/demo", branch)
+}
+
+func TestGitBranchFromMetadataReportsDetachedHead(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("0123456789abcdef\n"), 0o644))
+
+	branch, ok := gitBranchFromMetadata(root)
+	require.True(t, ok)
+	assert.Equal(t, "HEAD", branch)
+}
+
 func TestScopeRootInWorkspaceMapsNestedScopeIntoWorkspace(t *testing.T) {
 	t.Parallel()
 

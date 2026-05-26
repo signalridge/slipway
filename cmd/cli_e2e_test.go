@@ -352,21 +352,6 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndRetiredValidateRequirementsCommandIsUnknown(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		stdout, stderr, err := runRootCommandIn(root, []string{"validate-requirements", "--json"})
-		require.Error(t, err)
-		assert.Empty(t, stdout)
-		assert.Contains(t, stderr, "unknown command")
-		assert.Contains(t, stderr, "validate-requirements")
-	})
-}
-
 func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 	t.Parallel()
 

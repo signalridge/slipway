@@ -990,7 +990,7 @@ func TestRequestCreationCreatesCanonicalBundleState(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = os.Stat(state.ChangeDir(root, slug))
-		assert.True(t, os.IsNotExist(err), "new should not eagerly create runtime sidecar dirs")
+		assert.True(t, os.IsNotExist(err), "new should not eagerly create git-local runtime dirs")
 
 		// Verify change is loadable via state package.
 		change, err := state.LoadChange(root, slug)
@@ -1034,7 +1034,7 @@ func TestArchiveMovesChangeDirAndArtifacts(t *testing.T) {
 		require.NoError(t, err, "archived bundle dir must exist after archive")
 
 		_, err = os.Stat(state.ChangeDir(root, slug))
-		assert.True(t, os.IsNotExist(err), "archive should delete obsolete runtime sidecar dirs")
+		assert.True(t, os.IsNotExist(err), "archive should delete git-local runtime dirs")
 	})
 }
 

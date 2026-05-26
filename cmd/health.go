@@ -323,10 +323,6 @@ func resolveHealthChangeTarget(root, slug string) (*model.Change, error) {
 	}
 	if len(issues) > 0 {
 		for _, issue := range issues {
-			var runtimeErr *state.ChangeRuntimeStateLoadError
-			if errors.As(issue.Err, &runtimeErr) {
-				continue
-			}
 			return nil, issue.Err
 		}
 	}

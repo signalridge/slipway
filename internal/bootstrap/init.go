@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -98,8 +97,7 @@ func InitWorkspace(root string, tools []string, refresh bool, toolsSpecified ...
 }
 
 func requireGitRepository(root string) error {
-	cmd := exec.Command("git", "-C", root, "rev-parse", "--git-dir")
-	if err := cmd.Run(); err != nil {
+	if _, err := state.ResolveGitWorkspaceRoot(root); err != nil {
 		return fmt.Errorf("slipway requires a git repository: %s is not inside a git working tree", root)
 	}
 	return nil

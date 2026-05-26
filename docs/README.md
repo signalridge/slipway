@@ -10,7 +10,7 @@ This directory separates stable product contracts from historical planning notes
 
 ## Decisions
 
-- `adr-retire-sync-as-product-verb.md`: decision to retire the legacy sync-era requirements-check product surface, keeping requirements contract checking inside `validate`
+- `adr-retire-sync-as-product-verb.md`: historical decision record for earlier sync-era command cleanup
 - `worktree-orchestrator-deferment.md`: explicit deferment of first-class worktree / orchestrator promotion
 
 ## Testing / Operation

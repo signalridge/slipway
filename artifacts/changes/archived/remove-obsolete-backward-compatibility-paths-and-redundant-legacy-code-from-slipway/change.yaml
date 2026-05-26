@@ -1,0 +1,62 @@
+slug: remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway
+description: Remove obsolete backward-compatibility paths and redundant legacy code from Slipway
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-26T02:31:37.603988Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway
+worktree_branch: feat/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/assurance.md
+        version: 1
+        state: frozen
+        content_hash: 9a22e7235c6759ea71add9a2fda985452c872b9d7ad16eb5093ef29a1ea4a9cc
+        updated_at: 2026-05-26T03:28:40.490746937Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/decision.md
+        version: 1
+        state: frozen
+        content_hash: bad685b982e81791637bd075276ad7de5cf7ad3ce02171cc552a5593ab10a5c6
+        updated_at: 2026-05-26T02:54:11.763670969Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/intent.md
+        version: 1
+        state: frozen
+        content_hash: ff3605a935e07a75a0dd3e9107c9eed27cada887d97a6d4d61ecb9ac15529ce6
+        updated_at: 2026-05-26T02:54:11.758685855Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 67b9b80992f6293723c23bff77e0456a187f65806f0e4dabc3348a2e7597fbed
+        updated_at: 2026-05-26T02:55:59.052966921Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/research.md
+        version: 1
+        state: frozen
+        content_hash: bd7fa09db3aecf1e902c032a3939a68c60c9dcab470fd96e75f03de4d6e48eda
+        updated_at: 2026-05-26T02:54:11.761956154Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/artifacts/changes/archived/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 35f134065880e98cbddbe48abec9f60f55141a9f0b9c7aea91dbbb858d6dbdcc
+        updated_at: 2026-05-26T03:25:56.159047228Z

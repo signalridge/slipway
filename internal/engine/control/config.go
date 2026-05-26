@@ -18,7 +18,7 @@ type ControlOverrides struct {
 
 // defaultControlModes returns the built-in default mode for each control.
 // These defaults are the canonical source of truth and must not change
-// without careful backward-compatibility consideration.
+// without reviewing downstream behavior and caller expectations.
 var defaultControlModes = map[model.ControlID]model.ControlMode{
 	model.ControlClarification:     model.ControlModeBlocking,
 	model.ControlResearch:          model.ControlModeBlocking,

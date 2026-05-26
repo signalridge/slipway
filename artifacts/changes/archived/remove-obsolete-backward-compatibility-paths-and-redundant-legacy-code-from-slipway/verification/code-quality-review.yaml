@@ -1,0 +1,33 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T05:58:14Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+notes: |
+  Code quality:
+  - Runtime sidecar deletion removes duplicate authority paths instead of
+    adding conditionals; state loading now relies on the canonical change.yaml
+    decoder.
+  - Toolgen cleanup removes upgrade-only branches and stale agent/provenance
+    cleanup paths without introducing replacement abstraction.
+  - Git metadata fast paths are scoped to existing Git root/common-dir/branch
+    resolution call sites and fall back to Git commands when metadata is
+    incomplete. A regression test rejects incomplete .git metadata.
+
+  Test quality:
+  - Compatibility-only tests were removed with their retired behavior.
+  - Current-contract regression tests cover change.yaml-only loading,
+    generated surface refresh behavior, Git metadata fast paths, and the
+    default go test ./... timeout surface.
+  - Verification reran go test ./..., go build ./..., git diff --check, and
+    focused removed-compatibility search.
+
+  Safety and external contracts:
+  - No auth, credential, PII, destructive data, or network-exposed code paths
+    are introduced.
+  - Removed JSON/CLI fields are limited to retired compatibility reporting;
+    current behavior is reflected in docs and tests.
+
+  Gaps (code_to_artifact): none blocking.
+  Gaps (artifact_to_code): none blocking.

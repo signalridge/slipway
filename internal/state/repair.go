@@ -48,7 +48,7 @@ func repairMissingConfig(configPath string) (string, error) {
 
 // RepairArchivedTerminalStatus repairs archive residue left behind by an
 // interrupted terminal archive rewrite. Archived bundles must be terminal,
-// frozen, scrubbed of runtime-only refs, and detached from git-local sidecars.
+// frozen, scrubbed of runtime-only refs, and detached from git-local runtime state.
 func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 	change, err := LoadArchivedChange(root, slug)
 	if err != nil {

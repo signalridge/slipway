@@ -58,9 +58,7 @@ func TestEmitSupportFilesSkipsEmpty(t *testing.T) {
 }
 
 // TestEmitSupportFilesRefreshPrunesStaleArtifacts verifies that refresh mode
-// makes support payloads mirror the template tree. Legacy provenance.yaml
-// files from older generated trees must also be swept so the knowledge-only
-// cleanup doesn't leave stale metadata behind.
+// makes support payloads mirror the template tree.
 func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -73,15 +71,12 @@ func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	dst := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dst, "references"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(dst, "scripts"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dst, "provenance.yaml"), []byte("stale: true\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dst, "references", "stale.md"), []byte("# stale\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dst, "scripts", "stale.sh"), []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
 
 	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "sample", dst, true))
 
-	_, err := os.Stat(filepath.Join(dst, "provenance.yaml"))
-	assert.True(t, os.IsNotExist(err), "refresh should sweep legacy provenance.yaml files")
-	_, err = os.Stat(filepath.Join(dst, "references", "stale.md"))
+	_, err := os.Stat(filepath.Join(dst, "references", "stale.md"))
 	assert.True(t, os.IsNotExist(err), "refresh should prune stale reference files")
 	_, err = os.Stat(filepath.Join(dst, "scripts", "stale.sh"))
 	assert.True(t, os.IsNotExist(err), "refresh should prune stale script files")

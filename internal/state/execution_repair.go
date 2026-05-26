@@ -14,16 +14,13 @@ import (
 )
 
 type ExecutionRepairResult struct {
-	MaterializedWavePlans  []string
-	RecoveredWaveRuns      []string
-	MigratedLegacySidecars []string
-	ClearedCheckpoints     []string
-	RepairedCheckpoints    []string
-	PrunedTaskEvidence     []string
-	NonRepairableFindings  []string
+	MaterializedWavePlans []string
+	RecoveredWaveRuns     []string
+	ClearedCheckpoints    []string
+	RepairedCheckpoints   []string
+	PrunedTaskEvidence    []string
+	NonRepairableFindings []string
 }
-
-var resolveChangePathsForRepair = ResolveChangePaths
 
 func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
@@ -38,22 +35,6 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 		}
 
 		changed := false
-		// Clean up any legacy runtime-state.yaml sidecar.
-		if paths, pathErr := resolveChangePathsForRepair(root, change); pathErr == nil {
-			if legacyRuntimeStateExists(paths.GovernedBundleDir) {
-				if delErr := deleteLegacyRuntimeState(paths.GovernedBundleDir); delErr != nil {
-					result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: legacy sidecar cleanup failed: %v", change.Slug, delErr))
-				} else {
-					result.MigratedLegacySidecars = append(result.MigratedLegacySidecars, change.Slug)
-					changed = true
-				}
-			}
-		} else {
-			result.NonRepairableFindings = append(
-				result.NonRepairableFindings,
-				fmt.Sprintf("%s: legacy sidecar cleanup path resolution failed: %v", change.Slug, pathErr),
-			)
-		}
 
 		var summary *model.ExecutionSummary
 		var summaryErr error
@@ -112,14 +93,12 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 
 	slices.Sort(result.MaterializedWavePlans)
 	slices.Sort(result.RecoveredWaveRuns)
-	slices.Sort(result.MigratedLegacySidecars)
 	slices.Sort(result.ClearedCheckpoints)
 	slices.Sort(result.RepairedCheckpoints)
 	slices.Sort(result.PrunedTaskEvidence)
 	slices.Sort(result.NonRepairableFindings)
 	result.MaterializedWavePlans = slices.Compact(result.MaterializedWavePlans)
 	result.RecoveredWaveRuns = slices.Compact(result.RecoveredWaveRuns)
-	result.MigratedLegacySidecars = slices.Compact(result.MigratedLegacySidecars)
 	result.ClearedCheckpoints = slices.Compact(result.ClearedCheckpoints)
 	result.RepairedCheckpoints = slices.Compact(result.RepairedCheckpoints)
 	result.PrunedTaskEvidence = slices.Compact(result.PrunedTaskEvidence)

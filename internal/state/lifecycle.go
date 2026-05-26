@@ -87,7 +87,7 @@ func ArchiveChange(
 	// Crash-recoverable order:
 	// 1) move active bundle to archived bundle root when present
 	// 2) persist archived change.yaml to archived bundle root
-	// 3) remove active runtime sidecars
+	// 3) remove active git-local runtime state
 	//
 	// A crash between steps 1 and 3 leaves repair-forwardable residue
 	// (archived bundle present, git-local runtime state still present).
@@ -129,7 +129,7 @@ func ArchiveChange(
 		return model.Change{}, err
 	}
 
-	// Archived changes no longer retain git-local runtime sidecars.
+	// Archived changes no longer retain git-local runtime state.
 	if err := removePerChangeLocalRuntimeState(root, change.Slug); err != nil {
 		return model.Change{}, err
 	}

@@ -222,7 +222,7 @@ handoff.
 - `slipway health` validates that mapped agent names exist in the built-in
   governance agent set and that exported host skill surfaces exist for active tools.
 - `slipway health --doctor` includes agent-contract problems in the same
-  prioritized repair/recovery view as runtime-state issues.
+  prioritized repair/recovery view as other workspace integrity issues.
 - `slipway init --tools ...` resolves the canonical scope root first, loads the
   authoritative config there, and mirrors the effective `.slipway.yaml` into
   the active workspace when needed.

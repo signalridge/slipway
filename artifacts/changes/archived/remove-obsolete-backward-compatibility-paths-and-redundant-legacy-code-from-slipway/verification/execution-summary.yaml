@@ -1,0 +1,111 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-26T03:26:08Z
+overall_verdict: pass
+tasks_plan_hash: 397c50e6e94401dd21be4766cf85f1ee8bfa2e4feaff2a97a6a9c17c2968f82a
+completed_tasks:
+    - t-01-runtime-sidecar-removal
+    - t-02-toolgen-legacy-cleanup-removal
+    - t-03-doc-contract-update
+    - t-04-current-contract-regression
+    - t-05-full-verification
+tasks:
+    - task_id: t-01-runtime-sidecar-removal
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/health.go
+        - cmd/lifecycle_events.go
+        - cmd/repair.go
+        - internal/engine/progression/readiness.go
+        - internal/model/change.go
+        - internal/state/change_runtime.go
+        - internal/state/execution_repair.go
+        - internal/state/health.go
+        - internal/state/lifecycle.go
+        - internal/state/repair.go
+        - internal/state/store.go
+      target_files:
+        - cmd/health.go
+        - cmd/lifecycle_events.go
+        - cmd/repair.go
+        - internal/engine/progression/readiness.go
+        - internal/model/change.go
+        - internal/state/change_runtime.go
+        - internal/state/execution_repair.go
+        - internal/state/health.go
+        - internal/state/lifecycle.go
+        - internal/state/repair.go
+        - internal/state/store.go
+      evidence_ref: artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T05:42:13Z
+    - task_id: t-02-toolgen-legacy-cleanup-removal
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/init_test.go
+        - internal/toolgen/support_files_test.go
+        - internal/toolgen/toolgen.go
+        - internal/toolgen/toolgen_test.go
+      target_files:
+        - cmd/init_test.go
+        - internal/toolgen/support_files_test.go
+        - internal/toolgen/toolgen.go
+        - internal/toolgen/toolgen_test.go
+      evidence_ref: artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T05:42:13Z
+    - task_id: t-03-doc-contract-update
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - README.md
+        - docs/README.md
+        - docs/agent-contracts.md
+        - docs/command-contract-matrix.md
+        - docs/execution-surface-boundary.md
+      target_files:
+        - README.md
+        - docs/README.md
+        - docs/agent-contracts.md
+        - docs/command-contract-matrix.md
+        - docs/execution-surface-boundary.md
+      evidence_ref: artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T05:42:13Z
+    - task_id: t-04-current-contract-regression
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/cli_e2e_test.go
+        - cmd/common.go
+        - cmd/health_test.go
+        - cmd/lifecycle_commands_test.go
+        - cmd/repair_test.go
+        - cmd/root_help_test.go
+        - internal/bootstrap/init.go
+        - internal/state/execution_repair_test.go
+        - internal/state/health_test.go
+        - internal/state/local_runtime_paths.go
+        - internal/state/local_runtime_paths_test.go
+        - internal/state/store_test.go
+        - internal/state/worktree.go
+        - internal/toolgen/support_files_test.go
+        - internal/toolgen/toolgen_test.go
+      target_files:
+        - cmd/*_test.go
+        - internal/engine/*_test.go
+        - internal/state/*_test.go
+        - internal/toolgen/*_test.go
+      evidence_ref: artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T05:42:13Z
+    - task_id: t-05-full-verification
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/assurance.md
+        - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/tasks.md
+        - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/execution-summary.yaml
+        - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/execution-summary.yaml
+      evidence_ref: artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/wave-orchestration.yaml
+      captured_at: 2026-05-26T05:42:13Z

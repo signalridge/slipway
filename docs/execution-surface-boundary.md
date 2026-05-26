@@ -21,14 +21,12 @@ Design rules:
 - `run` is the only explicit execution surface and owns all state advancement.
 - Checkpoint continuation is owned by `run --resume-response`.
 
-## Flag Migration
+## Surface Flags
 
-| Legacy form | Current form | Notes |
+| Surface | Valid continuation flags | Notes |
 |---|---|---|
-| `slipway next --auto` | `slipway run` | continuous governed execution moved to `run` |
-| `slipway next --resume-response "<text>"` | `slipway run --resume-response "<text>"` | active checkpoint continuation moved to `run` |
-| `slipway next --preview` | `slipway next` | removed; `next` is now query-only by default |
-| `slipway next --context-guard` | unchanged | remains a `next` query surface |
+| `next` | none | query-only; may include `--context-guard` to report context budget readiness |
+| `run` | `--resume`, `--resume-response "<text>"` | owns continuous governed execution and checkpoint continuation |
 
 ## Resume Taxonomy
 

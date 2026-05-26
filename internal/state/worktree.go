@@ -248,12 +248,15 @@ func ValidateWorktreeAuthenticityReasons(repoRoot, worktreePath, expectedBranch 
 		return stringutil.UniqueSorted(reasons), nil
 	}
 
-	cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
+	actualBranch, ok := gitBranchFromMetadata(normalizedPath)
+	if !ok {
+		cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
+		}
+		actualBranch = strings.TrimSpace(string(out))
 	}
-	actualBranch := strings.TrimSpace(string(out))
 	if actualBranch != expectedBranch {
 		reasons = append(reasons, WorktreeReasonBranchMismatch)
 	}
@@ -398,10 +401,20 @@ func listGitWorktreesUncached(repoRoot string) (map[string]struct{}, error) {
 	return worktrees, nil
 }
 
+// ResolveGitWorkspaceRoot returns the git worktree root for root.
+func ResolveGitWorkspaceRoot(root string) (string, error) {
+	return gitWorkspaceRoot(root)
+}
+
 func gitWorkspaceRoot(root string) (string, error) {
 	normalizedRoot, err := NormalizePath(root)
 	if err != nil {
 		normalizedRoot = filepath.Clean(root)
+	}
+	if worktreeRoot, gitMetadataPath, ok := findGitMetadata(normalizedRoot); ok {
+		if gitDir := gitDirPathFromMetadata(worktreeRoot, gitMetadataPath); gitDir != "" && gitDirLooksLikeWorktreeMetadata(gitDir) {
+			return worktreeRoot, nil
+		}
 	}
 
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")

@@ -417,40 +417,7 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 }
 
 func runtimeStateHealthFindings(root string, change model.Change) ([]HealthFinding, error) {
-	paths, err := ResolveChangePaths(root, change)
-	if err != nil {
-		return nil, nil
-	}
-	bundleDir := paths.GovernedBundleDir
-
 	findings := []HealthFinding{}
-
-	// Check for legacy runtime-state.yaml sidecar presence.
-	if legacyRuntimeStateExists(bundleDir) {
-		runtimePath := filepath.Join(bundleDir, ChangeRuntimeStateFileName)
-		_, loadErr := loadLegacyRuntimeStateFromPath(runtimePath)
-		if loadErr != nil {
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityError,
-				Category:   "runtime_state",
-				Slug:       change.Slug,
-				Message:    "Legacy runtime-state.yaml sidecar is unreadable",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` to remove the unreadable legacy sidecar.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_state_unreadable", loadErr.Error())},
-			})
-		} else {
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityInfo,
-				Category:   "runtime_state",
-				Slug:       change.Slug,
-				Message:    "Legacy runtime-state.yaml sidecar is pending migration",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` or save the change to migrate and remove the legacy sidecar.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_state_pending_migration", change.Slug)},
-			})
-		}
-	}
 
 	// Check for interrupted execution from the change itself.
 	if !change.InterruptedExecutionAt.IsZero() &&
@@ -561,7 +528,7 @@ func hiddenBoundWorktreeDiagnostics(root string) (hiddenBoundWorktreeScan, error
 			if !entry.IsDir() || entry.Name() == "archived" {
 				continue
 			}
-			change, err := loadChangeCandidateIgnoringRuntimeState(BundleChangeFilePath(workspaceRoot, entry.Name()))
+			change, err := loadChangeCandidate(BundleChangeFilePath(workspaceRoot, entry.Name()))
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
 					continue

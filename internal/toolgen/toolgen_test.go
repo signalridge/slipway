@@ -794,58 +794,24 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 	assert.Equal(t, string(firstCommand), string(refreshedCommand))
 }
 
-func TestGenerateRefreshRemovesRetiredCommandArtifacts(t *testing.T) {
-	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-
-	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
-
-	staleSkill := filepath.Join(root, ".claude", "skills", "slipway-sync", "SKILL.md")
-	staleCommand := filepath.Join(root, ".claude", "commands", "slipway", "sync.md")
-	stalePrompt := filepath.Join(codexHome, "prompts", "slipway-sync.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(staleSkill), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Dir(staleCommand), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
-	require.NoError(t, os.WriteFile(staleSkill, []byte("stale sync skill"), 0o644))
-	require.NoError(t, os.WriteFile(staleCommand, []byte("stale sync command"), 0o644))
-	require.NoError(t, os.WriteFile(stalePrompt, []byte("stale sync prompt"), 0o644))
-
-	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
-
-	_, err := os.Stat(staleSkill)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync skill surface")
-	_, err = os.Stat(staleCommand)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync command entry")
-	_, err = os.Stat(stalePrompt)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired sync codex prompt")
-
-	_, err = os.Stat(filepath.Join(root, ".claude", "commands", "slipway", "validate-requirements.md"))
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements command entry")
-	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway-validate-requirements.md"))
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired validate-requirements codex prompt")
-}
-
 func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
-	staleSkillDir := filepath.Join(root, ".claude", "skills", "slipway-sync")
+	staleSkillDir := filepath.Join(root, ".claude", "skills", "slipway-tdd")
 	prefixedUserOwnedDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
 	prefixedUserOwnedFile := filepath.Join(prefixedUserOwnedDir, "SKILL.md")
 	unrelatedDir := filepath.Join(root, ".claude", "skills", "user-owned")
 	unrelatedFile := filepath.Join(unrelatedDir, "SKILL.md")
 
 	require.NoError(t, os.MkdirAll(staleSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("stale sync skill"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("stale generated skill"), 0o644))
 	require.NoError(t, os.MkdirAll(prefixedUserOwnedDir, 0o755))
 	require.NoError(t, os.WriteFile(prefixedUserOwnedFile, []byte("keep prefixed user skill"), 0o644))
 	require.NoError(t, os.MkdirAll(unrelatedDir, 0o755))
 	require.NoError(t, os.WriteFile(unrelatedFile, []byte("keep me"), 0o644))
-	oldManifestPath := filepath.Join(root, ".claude", "skills", retiredCatalogManifestFileName)
-	require.NoError(t, os.WriteFile(oldManifestPath, []byte("old catalog manifest"), 0o644))
 	oldCatalogRoutePath := filepath.Join(root, ".claude", "skills", "slipway", "references", "catalog", "sast-orchestration.md")
 	oldCatalogSupportPath := filepath.Join(root, ".claude", "skills", "slipway", "references", "catalog", "sast-orchestration", "scripts", "merge-sarif.sh")
 	require.NoError(t, os.MkdirAll(filepath.Dir(oldCatalogRoutePath), 0o755))
@@ -856,17 +822,15 @@ func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
 	_, err := os.Stat(staleSkillDir)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired generated skill dirs")
+	assert.True(t, os.IsNotExist(err), "refresh should remove managed generated skill dirs that are no longer exported")
 	_, err = os.Stat(prefixedUserOwnedFile)
 	assert.NoError(t, err, "refresh must not delete unknown user-managed slipway-* skill dirs")
 	_, err = os.Stat(unrelatedFile)
 	assert.NoError(t, err, "refresh must not delete unrelated user-managed entries under skills dir")
-	_, err = os.Stat(oldManifestPath)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired top-level catalog manifest")
 	_, err = os.Stat(oldCatalogRoutePath)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired workflow catalog route files")
+	assert.True(t, os.IsNotExist(err), "refresh should remove stale workflow support files")
 	_, err = os.Stat(oldCatalogSupportPath)
-	assert.True(t, os.IsNotExist(err), "refresh should remove retired workflow catalog support files")
+	assert.True(t, os.IsNotExist(err), "refresh should remove stale workflow support files")
 	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "references", skillIndexFileName))
 	assert.NoError(t, err, "skill index should live under workflow references")
 }
@@ -885,7 +849,7 @@ func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *te
 	assert.NoError(t, err, "refresh without a generated adapter marker must not prune user-owned slipway-* skill dirs")
 }
 
-func TestCodexGenerationOmitsLegacyAgentSurfaces(t *testing.T) {
+func TestCodexGenerationOmitsProjectAgentSurfaces(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
@@ -893,7 +857,7 @@ func TestCodexGenerationOmitsLegacyAgentSurfaces(t *testing.T) {
 	_, err := os.Stat(filepath.Join(root, ".codex", "agents"))
 	assert.True(t, os.IsNotExist(err), "codex should not generate exported agents")
 	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-	assert.True(t, os.IsNotExist(err), "codex should not create the legacy managed agent config on fresh init")
+	assert.True(t, os.IsNotExist(err), "codex should not create project config on fresh init")
 }
 
 func TestGeminiTOMLCommandFormat(t *testing.T) {
@@ -924,43 +888,12 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.NotContains(t, string(claudeSettings), "PostToolUse", "post-tool hook removed")
 	assert.Contains(t, string(claudeSettings), "slipway-session-start.sh")
-	assert.NotContains(t, string(claudeSettings), "slipway-context-monitor.js", "post-tool hook removed")
 
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiSettings), "SessionStart")
-	assert.NotContains(t, string(geminiSettings), "AfterTool", "post-tool hook removed")
 	assert.Contains(t, string(geminiSettings), "slipway-session-start.sh")
-	assert.NotContains(t, string(geminiSettings), "slipway-context-monitor.js", "post-tool hook removed")
-}
-
-func TestRefreshRemovesLegacyPostToolHookRegistration(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
-
-	// Simulate an old-style settings.json that includes PostToolUse hook.
-	claudeDir := filepath.Join(root, ".claude")
-	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
-	oldSettings := `{
-  "hooks": {
-    "SessionStart": [{"hooks": [{"type": "command", "command": "bash \".claude/hooks/slipway-session-start.sh\""}]}],
-    "PostToolUse": [{"hooks": [{"type": "command", "command": "node \".claude/hooks/slipway-context-monitor.js\""}]}]
-  }
-}
-`
-	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(oldSettings), 0o644))
-
-	require.NoError(t, Generate(root, []string{"claude"}, true))
-
-	claudeSettings, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
-	require.NoError(t, err)
-	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.NotContains(t, string(claudeSettings), "PostToolUse",
-		"refresh must remove legacy PostToolUse hook registration")
-	assert.NotContains(t, string(claudeSettings), "slipway-context-monitor",
-		"refresh must remove legacy context-monitor hook command")
 }
 
 func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
@@ -1019,7 +952,6 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 
 	assert.Contains(t, readme, "`slipway new`")
 	assert.Contains(t, readme, "`slipway run`")
-	assert.NotContains(t, readme, "`slipway validate-requirements`")
 	assert.Contains(t, readme, "`artifacts/changes/`")
 	assert.Contains(t, readme, "`artifacts/codebase/`")
 	assert.NotContains(t, readme, "request intake")
@@ -1122,46 +1054,7 @@ func TestCodexRefreshDoesNotCreateManagedConfigTOML(t *testing.T) {
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-	assert.True(t, os.IsNotExist(err), "refresh should not recreate the legacy managed agent config")
-}
-
-func TestConfigTOMLRefreshRemovesManagedBlockAndPreservesUserContent(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
-
-	codexDir := filepath.Join(root, ".codex")
-	require.NoError(t, os.MkdirAll(codexDir, 0o755))
-	userContent := "[model]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-20250514\"\n\n"
-	managedBlock := "# BEGIN slipway agents\n[agents.slipway-executor]\nconfig_file = \"agents/slipway-executor.toml\"\n# END slipway agents\n"
-	fileContent := userContent + managedBlock + "\n[profiles.safe]\napproval_policy = \"never\"\n"
-	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(fileContent), 0o644))
-
-	require.NoError(t, Generate(root, []string{"codex"}, true))
-
-	result, err := os.ReadFile(filepath.Join(codexDir, "config.toml"))
-	require.NoError(t, err)
-
-	s := string(result)
-	assert.Contains(t, s, `provider = "anthropic"`)
-	assert.Contains(t, s, `[profiles.safe]`)
-	assert.NotContains(t, s, "# BEGIN slipway agents")
-	assert.NotContains(t, s, "[agents.slipway-executor]")
-}
-
-func TestConfigTOMLPartialMarkersError(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
-
-	codexDir := filepath.Join(root, ".codex")
-	require.NoError(t, os.MkdirAll(codexDir, 0o755))
-
-	// Only BEGIN marker, no END — should error.
-	broken := "[model]\nprovider = \"anthropic\"\n\n# BEGIN slipway agents\n[agents.slipway-old]\n"
-	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(broken), 0o644))
-
-	err := Generate(root, []string{"codex"}, true)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "incomplete slipway markers")
+	assert.True(t, os.IsNotExist(err), "refresh should not create project config")
 }
 
 func TestCursorNoAgents(t *testing.T) {
@@ -1373,24 +1266,6 @@ func TestDoneSkillDocumentsAllReadyAcrossActiveExecutions(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "done.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "`--all-ready` archives every active change that is currently done-ready.")
-}
-
-func TestRefreshRemovesLegacyAgentFilesButPreservesUserManagedEntries(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	require.NoError(t, Generate(root, []string{"claude"}, true))
-
-	agentsDir := filepath.Join(root, ".claude", "agents")
-	require.NoError(t, os.MkdirAll(agentsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "slipway-legacy.md"), []byte("legacy"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(agentsDir, "user-agent.md"), []byte("keep"), 0o644))
-
-	require.NoError(t, Generate(root, []string{"claude"}, true))
-
-	_, err := os.Stat(filepath.Join(agentsDir, "slipway-legacy.md"))
-	assert.True(t, os.IsNotExist(err), "refresh should remove legacy slipway-managed agent files")
-	_, err = os.Stat(filepath.Join(agentsDir, "user-agent.md"))
-	assert.NoError(t, err, "refresh must preserve unrelated user-managed agent files")
 }
 
 func splitFrontmatter(content string) []string {

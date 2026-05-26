@@ -218,9 +218,9 @@ evidence and append-only trace records.
 | `artifacts/changes/<slug>/{intent,requirements,decision,tasks,assurance}.md` | Intent and contract authority |
 | Computed governance readiness | Read-only command projection used by `status`, `validate`, `next`, `review`, `done`, and `stats`; never persisted as authority |
 
-`runtime-state.yaml` is a legacy sidecar name only. Current Slipway versions
-load it for migration/repair compatibility and then fold recognized runtime
-fields into `change.yaml`.
+`change.yaml` is the only active change state file. Runtime lifecycle fields
+such as artifact states, evidence refs, auto-pass history, and interruption
+metadata are stored there directly.
 
 `status`, `validate`, and `next` are read-only surfaces. They recompute
 readiness and projection in-process and do not rewrite `change.yaml` or append
@@ -275,7 +275,7 @@ owned by the worktree gate rather than by generic governance skill evidence.
   - `status/`: governed status projection (progress, evidence inventory, artifact DAG, diagnostics)
   - `wave/`: wave execution planning and task-plan parsing
 - `internal/model/`: domain types (Change, WorkflowState, ReasonCode, ExecutionSummary, etc.)
-- `internal/state/`: lifecycle authority I/O, bundle paths, runtime sidecar, worktree binding
+- `internal/state/`: lifecycle authority I/O, bundle paths, git-local runtime state, worktree binding
 - `internal/bootstrap/`: workspace initialization
 - `internal/toolgen/`: tool adapter generation and workspace tool resolution
 - `internal/tmpl/`: embedded templates for artifacts, agents, skills, hooks, and command entries

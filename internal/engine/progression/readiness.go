@@ -527,7 +527,7 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 		if _, ok := requiredSet[name]; ok {
 			continue
 		}
-		appendNode(name, false, "runtime_state")
+		appendNode(name, false, "change_state")
 	}
 	slices.SortFunc(nodes, func(a, b ArtifactProjectionNode) int {
 		return strings.Compare(a.Name, b.Name)

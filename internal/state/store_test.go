@@ -99,10 +99,6 @@ func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
 	assert.Contains(t, string(changeRaw), "review_intent_drift_failures:")
 	assert.Contains(t, string(changeRaw), "interrupted_execution_at:")
 
-	// runtime-state.yaml must NOT exist.
-	_, err = os.Stat(filepath.Join(ActiveBundlesDir(root), change.Slug, ChangeRuntimeStateFileName))
-	assert.ErrorIs(t, err, os.ErrNotExist)
-
 	loaded, err := LoadChange(root, change.Slug)
 	require.NoError(t, err)
 	assert.Equal(t, change.Artifacts, loaded.Artifacts)
@@ -112,7 +108,7 @@ func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
 	assert.True(t, change.InterruptedExecutionAt.Equal(loaded.InterruptedExecutionAt))
 }
 
-func TestRestoreChangeAuthorityIfNeededTreatsMatchingRuntimeSidecarAsEqual(t *testing.T) {
+func TestRestoreChangeAuthorityIfNeededAcceptsExistingAuthority(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory permission semantics differ on Windows")
 	}
@@ -781,52 +777,6 @@ func TestListChangesBestEffortSkipsUnreadableChangeBundle(t *testing.T) {
 	assert.Equal(t, bad.Slug, issues[0].Slug)
 	assert.ErrorContains(t, issues[0].Err, "load change")
 
-}
-
-func TestListChangesBestEffortIncludesChangeWhenLegacySidecarIsUnreadable(t *testing.T) {
-	t.Parallel()
-
-	root := createRuntimeLayout(t)
-
-	change := model.NewChange("runtime-state-bad")
-	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS3Review
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, SaveChange(root, change))
-	// Place an unreadable legacy sidecar next to change.yaml.
-	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(BundleChangeFilePath(root, change.Slug)), ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
-
-	changes, issues, err := ListChangesBestEffortWithIssues(root)
-	require.NoError(t, err)
-	require.Len(t, issues, 0)
-	require.Len(t, changes, 1)
-	assert.Equal(t, change.Slug, changes[0].Slug)
-	assert.Equal(t, model.StateS3Review, changes[0].CurrentState)
-}
-
-func TestLoadChangeRejectsLegacySidecarWithInvalidSemantics(t *testing.T) {
-	t.Parallel()
-
-	root := createRuntimeLayout(t)
-
-	change := model.NewChange("runtime-state-semantically-bad")
-	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, SaveChange(root, change))
-
-	// Place a legacy sidecar with a negative review_intent_drift_failures value.
-	require.NoError(t, os.WriteFile(
-		filepath.Join(filepath.Dir(BundleChangeFilePath(root, change.Slug)), ChangeRuntimeStateFileName),
-		[]byte("review_intent_drift_failures: -1\n"), 0o644))
-
-	// The load path should treat this as an unreadable sidecar and still load the change.
-	changes, issues, err := ListChangesBestEffortWithIssues(root)
-	require.NoError(t, err)
-	require.Len(t, issues, 0)
-	require.Len(t, changes, 1)
-	assert.Equal(t, 0, changes[0].ReviewIntentDriftFailures,
-		"invalid legacy sidecar value must not leak into the change")
 }
 
 func TestLoadChangeReturnsWorktreeEnumerationErrorWhenGitWorkspaceLookupMisses(t *testing.T) {

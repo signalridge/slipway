@@ -70,9 +70,9 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
 		assert.True(t, os.IsNotExist(err), "codex should not have exported agents")
 
-		// Codex should not create the legacy managed agent config block on fresh init.
+		// Codex should not create project-local agent config on fresh init.
 		_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-		assert.True(t, os.IsNotExist(err), "codex should not create legacy agent config on fresh init")
+		assert.True(t, os.IsNotExist(err), "codex should not create project-local agent config on fresh init")
 
 		// Gemini commands should be TOML
 		_, err = os.Stat(filepath.Join(root, ".gemini", "commands", "slipway", "new.toml"))

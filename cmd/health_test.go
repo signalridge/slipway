@@ -495,53 +495,6 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 	})
 }
 
-func TestHealthCommandDoctorIncludesUnreadableLegacySidecarRepair(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, "L2", "doctor should include unreadable legacy sidecar repair")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS3Review
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-
-		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, state.ChangeRuntimeStateFileName), []byte("current_state: [\n"), 0o644))
-
-		var out bytes.Buffer
-		cmd := commandForRoot(t, root, makeHealthCmd())
-		cmd.SetArgs([]string{"--json", "--doctor"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		var view healthView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		require.NotNil(t, view.Doctor)
-
-		foundFinding := false
-		for _, finding := range view.Findings {
-			if finding.Category == "runtime_state" && finding.Slug == slug {
-				foundFinding = true
-				assert.True(t, finding.Repairable)
-			}
-		}
-		assert.True(t, foundFinding, "expected unreadable legacy sidecar finding")
-
-		foundAction := false
-		for _, action := range view.Doctor.Actions {
-			if action.Category == "runtime_state" && action.Slug == slug {
-				foundAction = true
-				assert.Equal(t, "slipway repair", action.Command)
-				assert.True(t, action.Repairable)
-			}
-		}
-		assert.True(t, foundAction, "expected doctor to recommend repair for unreadable legacy sidecar")
-	})
-}
-
 func TestHealthCommandReportsInvalidAgentMapping(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -676,16 +629,16 @@ func TestHealthCommandDoesNotReportToolResolutionFailureForMultiAdapterWorkspace
 	})
 }
 
-func TestHealthCommandIgnoresMissingLegacyAgentSurface(t *testing.T) {
+func TestHealthCommandIgnoresMissingProjectAgentSurface(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		legacyAgentPath := filepath.Join(root, ".claude", "agents", "slipway-planner.md")
-		require.NoError(t, os.MkdirAll(filepath.Dir(legacyAgentPath), 0o755))
-		require.NoError(t, os.WriteFile(legacyAgentPath, []byte("legacy agent"), 0o644))
-		require.NoError(t, os.Remove(legacyAgentPath))
+		agentPath := filepath.Join(root, ".claude", "agents", "slipway-planner.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(agentPath), 0o755))
+		require.NoError(t, os.WriteFile(agentPath, []byte("agent"), 0o644))
+		require.NoError(t, os.Remove(agentPath))
 
 		var out bytes.Buffer
 		cmd := commandForRoot(t, root, makeHealthCmd())

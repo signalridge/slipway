@@ -1,0 +1,13 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T02:36:33Z"
+run_version: 0
+references:
+  - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/intent.md
+  - README.md
+  - docs/plans/2026-05-24-governance-kernel-runtime-framework.md
+  - internal/state/change_runtime.go
+  - internal/toolgen/toolgen.go
+notes: |
+  User confirmed the key boundary: remove internal obsolete compatibility and redundant legacy code, but preserve documented or agent-consumed CLI/JSON contracts unless research proves safe removal and the change includes explicit migration.
+  Intake research resolved the entry open questions at boundary level: runtime-state.yaml migration compatibility and command JSON output shapes are documented contracts to retain by default; generated-surface cleanup and retired-route tests require S1 research before selecting concrete removals.

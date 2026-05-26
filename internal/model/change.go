@@ -52,8 +52,7 @@ type Change struct {
 	// Execution
 	ActiveCheckpoint *ActiveCheckpoint `yaml:"active_checkpoint,omitempty" json:"active_checkpoint,omitempty"`
 
-	// Runtime fields (formerly in a separate runtime-state.yaml sidecar, now
-	// unified into change.yaml as part of the single-authority model).
+	// Runtime fields are part of change.yaml so active change state has one authority.
 	Artifacts                 map[string]ArtifactState `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
 	LastAutoPassedStates      []AutoPassedState        `yaml:"last_auto_passed_states,omitempty" json:"last_auto_passed_states,omitempty"`
 	EvidenceRefs              map[string]string        `yaml:"evidence_refs,omitempty" json:"evidence_refs,omitempty"`

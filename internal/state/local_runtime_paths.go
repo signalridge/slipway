@@ -127,6 +127,10 @@ func GitCommonDir(root string) string {
 }
 
 func resolveGitCommonDir(normalizedRoot string) (string, error) {
+	if commonDir, ok := gitCommonDirFromMetadata(normalizedRoot); ok {
+		return commonDir, nil
+	}
+
 	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
 	cmd.Dir = normalizedRoot
 	out, err := cmd.Output()
@@ -137,14 +141,107 @@ func resolveGitCommonDir(normalizedRoot string) (string, error) {
 }
 
 func gitCommonDirProbeForRoot(normalizedRoot string) gitCommonDirProbe {
-	gitMetadataPath := filepath.Join(normalizedRoot, ".git")
+	_, gitMetadataPath, ok := findGitMetadata(normalizedRoot)
+	if !ok {
+		gitMetadataPath = filepath.Join(normalizedRoot, ".git")
+	}
 	probe := gitCommonDirProbe{
 		GitMetadata: gitMetadataProbeForPath(gitMetadataPath),
 	}
-	if gitDir := gitDirPathFromMetadata(normalizedRoot, gitMetadataPath); gitDir != "" {
+	if gitDir := gitDirPathFromMetadata(filepath.Dir(gitMetadataPath), gitMetadataPath); gitDir != "" {
 		probe.CommonDir = gitMetadataProbeForPath(filepath.Join(gitDir, "commondir"))
 	}
 	return probe
+}
+
+func gitCommonDirFromMetadata(normalizedRoot string) (string, bool) {
+	worktreeRoot, gitMetadataPath, ok := findGitMetadata(normalizedRoot)
+	if !ok {
+		return "", false
+	}
+	gitDir := gitDirPathFromMetadata(worktreeRoot, gitMetadataPath)
+	if gitDir == "" {
+		return "", false
+	}
+	if !gitDirLooksLikeWorktreeMetadata(gitDir) {
+		return "", false
+	}
+
+	commondirPath := filepath.Join(gitDir, "commondir")
+	raw, err := os.ReadFile(commondirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return filepath.Clean(gitDir), true
+		}
+		return "", false
+	}
+
+	commonDir := strings.TrimSpace(string(raw))
+	if commonDir == "" {
+		return filepath.Clean(gitDir), true
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(gitDir, commonDir)
+	}
+	return filepath.Clean(commonDir), true
+}
+
+func gitBranchFromMetadata(normalizedRoot string) (string, bool) {
+	worktreeRoot, gitMetadataPath, ok := findGitMetadata(normalizedRoot)
+	if !ok {
+		return "", false
+	}
+	gitDir := gitDirPathFromMetadata(worktreeRoot, gitMetadataPath)
+	if gitDir == "" {
+		return "", false
+	}
+
+	raw, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	if err != nil {
+		return "", false
+	}
+	head := strings.TrimSpace(string(raw))
+	if head == "" {
+		return "", false
+	}
+	if !strings.HasPrefix(head, "ref:") {
+		return "HEAD", true
+	}
+	ref := strings.TrimSpace(strings.TrimPrefix(head, "ref:"))
+	const branchRefPrefix = "refs/heads/"
+	if branch, ok := strings.CutPrefix(ref, branchRefPrefix); ok && branch != "" {
+		return branch, true
+	}
+	return "", false
+}
+
+func gitDirLooksLikeWorktreeMetadata(gitDir string) bool {
+	if _, err := os.Stat(filepath.Join(gitDir, "HEAD")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(gitDir, "config")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(gitDir, "commondir")); err == nil {
+		return true
+	}
+	return false
+}
+
+func findGitMetadata(normalizedRoot string) (string, string, bool) {
+	dir := normalizedRoot
+	for {
+		gitMetadataPath := filepath.Join(dir, ".git")
+		if gitDirPathFromMetadata(dir, gitMetadataPath) != "" {
+			return dir, gitMetadataPath, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", "", false
+		}
+		dir = parent
+	}
 }
 
 func gitMetadataProbeForPath(path string) gitMetadataProbe {

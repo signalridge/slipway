@@ -348,26 +348,6 @@ func loadChangeFromCandidatesWithLoader(
 	return model.Change{}, fs.ErrNotExist
 }
 
-func loadChangeCandidateIgnoringRuntimeState(path string) (model.Change, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return model.Change{}, err
-	}
-	change, err := decodeAndValidateChange(b)
-	if err != nil {
-		return model.Change{}, err
-	}
-	// Best-effort legacy migration: merge any sidecar data, ignore errors.
-	if migrateErr := mergeLegacyRuntimeState(filepath.Dir(path), &change); migrateErr != nil {
-		var runtimeErr *ChangeRuntimeStateLoadError
-		if !errors.As(migrateErr, &runtimeErr) {
-			return model.Change{}, migrateErr
-		}
-		// Ignore unreadable legacy sidecar for diagnostics path.
-	}
-	return change, nil
-}
-
 // LoadChange loads the active change state for the given slug from the canonical bundle paths.
 func LoadChange(root, slug string) (model.Change, error) {
 	paths, rootsErr := candidateBundlePaths(root, slug)
@@ -390,7 +370,7 @@ func loadChangeRegardlessOfVisibilityForDiagnostics(root, slug string) (model.Ch
 	if err != nil {
 		return model.Change{}, err
 	}
-	return loadChangeFromCandidatesWithLoader(root, bundleCandidatesForRoots(roots, slug), loadChangeCandidateIgnoringRuntimeState)
+	return loadChangeFromCandidatesWithLoader(root, bundleCandidatesForRoots(roots, slug), loadChangeCandidate)
 }
 
 func LoadChangeForDiagnostics(root, slug string) (model.Change, error) {
@@ -398,7 +378,7 @@ func LoadChangeForDiagnostics(root, slug string) (model.Change, error) {
 	if rootsErr != nil {
 		return model.Change{}, rootsErr
 	}
-	return loadChangeFromCandidatesWithLoader(root, paths, loadChangeCandidateIgnoringRuntimeState)
+	return loadChangeFromCandidatesWithLoader(root, paths, loadChangeCandidate)
 }
 
 // ListChangesForCreateGuard returns active authoritative changes across all
@@ -472,8 +452,6 @@ func SaveChange(root string, st model.Change) error {
 	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
 		return err
 	}
-	// Clean up any legacy runtime-state.yaml sidecar.
-	_ = deleteLegacyRuntimeState(filepath.Dir(bundlePath))
 	return nil
 }
 
@@ -503,15 +481,7 @@ func loadChangeCandidate(path string) (model.Change, error) {
 	if err != nil {
 		return model.Change{}, err
 	}
-	change, err := decodeAndValidateChange(b)
-	if err != nil {
-		return model.Change{}, err
-	}
-	// Transparently migrate any legacy runtime-state.yaml sidecar.
-	if err := mergeLegacyRuntimeState(filepath.Dir(path), &change); err != nil {
-		return model.Change{}, err
-	}
-	return change, nil
+	return decodeAndValidateChange(b)
 }
 
 func validateBundleAuthorityPath(path string) error {
@@ -724,7 +694,6 @@ func restoreChangeAuthorityIfNeeded(root string, expected model.Change) error {
 	if err == nil {
 		current, decodeErr := decodeAndValidateChange(raw)
 		if decodeErr == nil {
-			_ = mergeLegacyRuntimeState(filepath.Dir(bundlePath), &current)
 			current.Normalize()
 			if reflect.DeepEqual(current, expected) {
 				return nil

@@ -111,11 +111,10 @@ func invocationWorkspaceRoot(projectRoot string) string {
 		return workspaceRoot
 	}
 
-	out, err := exec.Command("git", "-C", wd, "rev-parse", "--show-toplevel").Output()
+	resolved, err := state.ResolveGitWorkspaceRoot(wd)
 	if err != nil {
 		return workspaceRoot
 	}
-	resolved := strings.TrimSpace(string(out))
 	if resolved == "" {
 		return workspaceRoot
 	}

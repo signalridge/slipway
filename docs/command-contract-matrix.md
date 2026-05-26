@@ -116,9 +116,8 @@ classes, flags, and discovery commands are:
 | ExplicitFocus | `--focus <alias>` on `review`, `validate`, `repair` | `<command> --list-focuses [--format text\|json]` |
 | View | `--view <alias>` on `status`, `health` | `<command> --list-views [--format text\|json]` |
 
-Legacy `--mode` has been removed from all routed commands. Raw skill IDs are
-rejected with `unknown_route_mode` (for focus) or `unknown_route_view` (for
-views). The public alias registry is:
+Routed commands accept public aliases only. Skill IDs are implementation
+details and are not a command-line selector surface. The public alias registry is:
 
 ### `--focus` aliases
 

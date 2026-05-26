@@ -20,8 +20,6 @@ import (
 // exported host skills to external agents.
 const skillIndexFileName = "skill-index.md"
 
-const retiredCatalogManifestFileName = "using-slipway-catalog.md"
-
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
 type ToolConfig struct {
 	ID             string
@@ -29,8 +27,6 @@ type ToolConfig struct {
 	CommandsDir    string // "" = no project-local commands (Codex)
 	CommandStyle   string // "nested", "flat", "" = no project-local commands
 	CommandFormat  string // "md" (default), "toml" (Gemini)
-	AgentStyle     string // "md" (default), "toml" (Codex), "" = no agents (Cursor)
-	AgentsDir      string // "" = no agents (Cursor)
 	PromptsStyle   string // "global" (Codex), "" = no global prompts
 	SettingsPath   string
 	SessionEvent   string
@@ -47,8 +43,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".claude/commands",
 		CommandStyle:  "nested",
 		CommandFormat: "md",
-		AgentStyle:    "md",
-		AgentsDir:     ".claude/agents",
 		PromptsStyle:  "",
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
@@ -65,8 +59,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".cursor/commands",
 		CommandStyle:  "flat",
 		CommandFormat: "md",
-		AgentStyle:    "",
-		AgentsDir:     "",
 		PromptsStyle:  "",
 		SettingsPath:  "",
 		SessionEvent:  "",
@@ -83,8 +75,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   "",
 		CommandStyle:  "",
 		CommandFormat: "",
-		AgentStyle:    "toml",
-		AgentsDir:     ".codex/agents",
 		PromptsStyle:  "global",
 		SettingsPath:  "",
 		SessionEvent:  "",
@@ -101,8 +91,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".opencode/commands",
 		CommandStyle:  "nested",
 		CommandFormat: "md",
-		AgentStyle:    "md",
-		AgentsDir:     ".opencode/agents",
 		PromptsStyle:  "",
 		SettingsPath:  "",
 		SessionEvent:  "",
@@ -119,8 +107,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".gemini/commands",
 		CommandStyle:  "nested",
 		CommandFormat: "toml",
-		AgentStyle:    "md",
-		AgentsDir:     ".gemini/agents",
 		PromptsStyle:  "",
 		SettingsPath:  ".gemini/settings.json",
 		SessionEvent:  "SessionStart",
@@ -382,10 +368,6 @@ var hostSkillExportAllowlist = map[string]struct{}{
 	"incident-response": {},
 }
 
-var retiredGeneratedSkillDirNames = []string{
-	"slipway-sync",
-}
-
 func shouldExportAsHostSkill(id string) bool {
 	_, ok := hostSkillExportAllowlist[strings.TrimSpace(id)]
 	return ok
@@ -602,8 +584,7 @@ func HasWorkspaceLocalSurfaces(root string, cfg ToolConfig) bool {
 	skillsRoot := filepath.Join(root, cfg.SkillsDir)
 	if entries, err := os.ReadDir(skillsRoot); err == nil {
 		for _, entry := range entries {
-			name := entry.Name()
-			if strings.HasPrefix(name, "slipway-") || name == retiredCatalogManifestFileName {
+			if strings.HasPrefix(entry.Name(), "slipway-") {
 				return true
 			}
 		}
@@ -998,19 +979,8 @@ func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig, hadGeneratedAda
 	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter); err != nil {
 		return err
 	}
-	if err := cleanupRetiredSkillRootFiles(root, cfg, hadGeneratedAdapter); err != nil {
-		return err
-	}
 	if err := cleanupStaleCommandEntries(root, cfg); err != nil {
 		return err
-	}
-	if err := cleanupStaleAgentFiles(root, cfg); err != nil {
-		return err
-	}
-	if cfg.ID == "codex" {
-		if err := cleanupManagedCodexAgentBlock(root); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -1067,14 +1037,6 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 	return nil
 }
 
-func cleanupRetiredSkillRootFiles(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
-	if !hadGeneratedAdapter {
-		return nil
-	}
-	skillsRoot := filepath.Join(root, cfg.SkillsDir)
-	return removePathIfExists(filepath.Join(skillsRoot, retiredCatalogManifestFileName))
-}
-
 func generatedSkillDirNameSet() map[string]struct{} {
 	managed := map[string]struct{}{}
 	for _, names := range [][]string{
@@ -1088,9 +1050,6 @@ func generatedSkillDirNameSet() map[string]struct{} {
 		for _, name := range names {
 			managed[exportedSkillDirName(name)] = struct{}{}
 		}
-	}
-	for _, name := range retiredGeneratedSkillDirNames {
-		managed[strings.TrimSpace(name)] = struct{}{}
 	}
 	return managed
 }
@@ -1119,13 +1078,6 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig) error {
 	default:
 		return cleanupUnexpectedEntries(filepath.Join(root, cfg.CommandsDir, "slipway"), expected)
 	}
-}
-
-func cleanupStaleAgentFiles(root string, cfg ToolConfig) error {
-	if cfg.AgentsDir == "" {
-		return nil
-	}
-	return cleanupPrefixedEntries(filepath.Join(root, cfg.AgentsDir), "slipway-", nil)
 }
 
 func cleanupStaleGlobalPrompts(cfg ToolConfig) error {
@@ -1384,14 +1336,6 @@ func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh 
 // from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin with
 // "skills/<id>/...") and writes them under dstBase on the local filesystem.
 func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh bool) error {
-	if refresh {
-		// Sweep legacy provenance.yaml files so an older generated tree
-		// cleans up after the knowledge-only cleanup.
-		if err := removePathIfExists(filepath.Join(dstBase, "provenance.yaml")); err != nil {
-			return err
-		}
-	}
-
 	for _, sub := range optionalSkillSupportDirs {
 		dstDir := filepath.Join(dstBase, sub)
 		if refresh {
@@ -1653,7 +1597,6 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
 		mergeHookEventCommand(hooks, cfg.SessionEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.SessionHook)))
 	}
-	removeLegacyHookCommands(hooks, []string{"PostToolUse", "AfterTool"}, "slipway-context-monitor")
 	settings["hooks"] = hooks
 
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
@@ -1728,53 +1671,6 @@ func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
 	})
 }
 
-func removeLegacyHookCommands(hooks map[string]any, eventNames []string, substring string) {
-	for _, eventName := range eventNames {
-		rawEntries, ok := hooks[eventName]
-		if !ok {
-			continue
-		}
-		entries, ok := rawEntries.([]any)
-		if !ok {
-			continue
-		}
-		var kept []any
-		for _, entry := range entries {
-			entryMap, ok := entry.(map[string]any)
-			if !ok {
-				kept = append(kept, entry)
-				continue
-			}
-			hookList, ok := entryMap["hooks"].([]any)
-			if !ok {
-				kept = append(kept, entry)
-				continue
-			}
-			var filteredHooks []any
-			for _, hook := range hookList {
-				hookMap, ok := hook.(map[string]any)
-				if !ok {
-					filteredHooks = append(filteredHooks, hook)
-					continue
-				}
-				cmd, _ := hookMap["command"].(string)
-				if !strings.Contains(cmd, substring) {
-					filteredHooks = append(filteredHooks, hook)
-				}
-			}
-			if len(filteredHooks) > 0 {
-				entryMap["hooks"] = filteredHooks
-				kept = append(kept, entry)
-			}
-		}
-		if len(kept) == 0 {
-			delete(hooks, eventName)
-		} else {
-			hooks[eventName] = kept
-		}
-	}
-}
-
 func commandTrigger(cfg ToolConfig, commandID string) string {
 	if cfg.TriggerStyle == "slash-colon" {
 		return fmt.Sprintf("%s:%s", cfg.TriggerPrefix, commandID)
@@ -1795,47 +1691,6 @@ func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
 		return true
 	}
 	return false
-}
-
-const (
-	codexMarkerBegin = "# BEGIN slipway agents"
-	codexMarkerEnd   = "# END slipway agents"
-)
-
-func cleanupManagedCodexAgentBlock(root string) error {
-	configPath := filepath.Join(root, ".codex", "config.toml")
-	existing, err := os.ReadFile(configPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-
-	content := string(existing)
-	beginIdx := strings.Index(content, codexMarkerBegin)
-	endIdx := strings.Index(content, codexMarkerEnd)
-
-	if beginIdx < 0 && endIdx < 0 {
-		return nil
-	}
-	if beginIdx < 0 || endIdx < 0 {
-		return fmt.Errorf("config.toml has incomplete slipway markers (BEGIN=%v, END=%v); fix or remove the markers manually", beginIdx >= 0, endIdx >= 0)
-	}
-
-	endIdx += len(codexMarkerEnd)
-	if endIdx < len(content) && content[endIdx] == '\n' {
-		endIdx++
-	}
-	newContent := content[:beginIdx] + content[endIdx:]
-	newContent = strings.TrimLeft(newContent, "\n")
-	if strings.TrimSpace(newContent) == "" {
-		return os.WriteFile(configPath, []byte(""), 0o644)
-	}
-	if !strings.HasSuffix(newContent, "\n") {
-		newContent += "\n"
-	}
-	return os.WriteFile(configPath, []byte(newContent), 0o644)
 }
 
 // codexPromptsDir resolves the Codex global prompts directory.

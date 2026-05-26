@@ -30,7 +30,6 @@ type repairSummary struct {
 	WorktreeScopeRepairs      []string `json:"worktree_scope_repairs,omitempty"`
 	MaterializedWavePlans     []string `json:"materialized_wave_plans,omitempty"`
 	RecoveredWaveRuns         []string `json:"recovered_wave_runs,omitempty"`
-	MigratedLegacySidecars    []string `json:"migrated_legacy_sidecars,omitempty"`
 	ClearedCheckpoints        []string `json:"cleared_checkpoints,omitempty"`
 	RepairedCheckpoints       []string `json:"repaired_checkpoints,omitempty"`
 	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
@@ -128,7 +127,6 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.MaterializedWavePlans = execRepair.MaterializedWavePlans
 				summary.RecoveredWaveRuns = execRepair.RecoveredWaveRuns
-				summary.MigratedLegacySidecars = execRepair.MigratedLegacySidecars
 				summary.ClearedCheckpoints = execRepair.ClearedCheckpoints
 				summary.RepairedCheckpoints = execRepair.RepairedCheckpoints
 				summary.PrunedTaskEvidence = execRepair.PrunedTaskEvidence
@@ -259,7 +257,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Worktree scope repairs", summary.WorktreeScopeRepairs)
 	writeRepairSection("Materialized wave plans", summary.MaterializedWavePlans)
 	writeRepairSection("Recovered wave runs", summary.RecoveredWaveRuns)
-	writeRepairSection("Migrated legacy sidecars", summary.MigratedLegacySidecars)
 	writeRepairSection("Cleared checkpoints", summary.ClearedCheckpoints)
 	writeRepairSection("Repaired checkpoints", summary.RepairedCheckpoints)
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
@@ -272,7 +269,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.WorktreeScopeRepairs) == 0 &&
 		len(summary.MaterializedWavePlans) == 0 &&
 		len(summary.RecoveredWaveRuns) == 0 &&
-		len(summary.MigratedLegacySidecars) == 0 &&
 		len(summary.ClearedCheckpoints) == 0 &&
 		len(summary.RepairedCheckpoints) == 0 &&
 		len(summary.PrunedTaskEvidence) == 0 &&

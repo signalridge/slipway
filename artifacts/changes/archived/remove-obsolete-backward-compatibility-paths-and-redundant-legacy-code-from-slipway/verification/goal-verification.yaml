@@ -1,0 +1,56 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T06:00:06Z"
+run_version: 1
+references:
+  - "fresh:test=go test ./...; ok; real=351.31s; cmd=316.097s"
+  - "fresh:build=go build ./...; ok"
+  - "fresh:check=git diff --check; ok"
+  - "fresh:search=removed compatibility term scan; no matches"
+  - "fresh:stub_scan=placeholder scan triaged; empty-body scan no matches"
+  - "check:external_api_contracts.safety_baseline=pass"
+notes: |
+  Criteria:
+    AC-1: Remove legacy runtime sidecar compatibility — pass —
+      Exists: internal/state/change_runtime.go is deleted and load/repair/health
+      sidecar paths are removed from internal/state/store.go,
+      internal/state/execution_repair.go, internal/state/health.go, cmd/repair.go,
+      and lifecycle event output.
+      Substantive: removed sidecar code is not replaced by hidden migration or
+      deletion branches; load paths use change.yaml directly.
+      Wired: go test ./... passes and the removed compatibility term scan has
+      no live-code/docs matches outside excluded historical artifacts.
+
+    AC-2: Remove old generated-surface upgrade cleanup — pass —
+      Exists: internal/toolgen/toolgen.go no longer carries retired
+      slipway-sync/catalog/agent/provenance/PostToolUse cleanup branches.
+      Substantive: current refresh behavior remains through managed
+      slipway-* skill cleanup and deterministic command/support generation.
+      Wired: internal/toolgen tests and full go test ./... pass.
+
+    AC-3: Update docs and tests to the initial-version contract — pass —
+      Exists: README.md and docs contract files now describe change.yaml and
+      current command/adapter behavior instead of old compatibility migration.
+      Substantive: compatibility-only assertions were removed and current
+      behavior tests retained or added.
+      Wired: full go test ./..., go build ./..., and git diff --check passed.
+
+    AC-4: Preserve current command and agent handoff coherence — pass —
+      Exists: current command, lifecycle, status, health, repair, and toolgen
+      tests remain in the suite.
+      Substantive: Git metadata fast paths preserve current behavior while
+      falling back to Git when metadata is incomplete.
+      Wired: go test ./cmd -count=1 passed at 267.899s after the final metadata
+      semantic guard, and full go test ./... passed at 351.31s.
+
+    AC-5: external_api_contracts guardrail compliance — pass —
+      Exists: changed CLI/JSON/reporting surfaces are reflected in tests and docs.
+      Substantive: removed public reporting is limited to retired compatibility
+      fields, and current outputs continue to validate through tests.
+      Wired: spec-compliance-review and code-quality-review passed; high-risk
+      check external_api_contracts.safety_baseline is recorded as pass.
+
+  Stub scan:
+    The placeholder/zero-value scan returned expected guard/helper returns and
+    tests that assert generated TODO examples; no production placeholder,
+    not-implemented path, or empty function body was found.

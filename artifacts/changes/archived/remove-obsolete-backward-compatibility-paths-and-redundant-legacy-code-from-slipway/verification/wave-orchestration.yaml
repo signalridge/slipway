@@ -1,0 +1,28 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T03:26:08Z"
+run_version: 1
+references:
+  - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/assurance.md
+  - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/tasks.md
+  - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/execution-summary.yaml
+notes: |
+  Executed the governed cleanup in dependency order.
+
+  Wave 1 removed the legacy runtime-state sidecar path from state load, health,
+  repair, lifecycle diagnostics, and CLI repair output. It also removed toolgen
+  upgrade-only cleanup for retired generated surfaces, old agent config blocks,
+  post-tool hooks, and provenance support metadata.
+
+  Wave 2 updated tests and docs to describe the current initial-version
+  contract instead of old upgrade behavior. Targeted searches for removed
+  runtime-state and generated-surface compatibility terms now only hit
+  historical ADR/plan artifacts or the governed change bundle itself.
+
+  Wave 3 verification passed:
+  - go test ./internal/state
+  - go test ./internal/toolgen
+  - go test ./cmd
+  - go test ./internal/engine/progression
+  - go test ./...
+  - go build ./...

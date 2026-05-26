@@ -1,0 +1,61 @@
+version: 1
+generated_at: 2026-05-26T02:59:08.13738429Z
+tasks_plan_hash: 8624b5c505e594190a4bef285aeffeb0285a49c24a74b63f29681110f618ed72
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01-runtime-sidecar-removal
+          objective: Remove legacy `runtime-state.yaml` compatibility.
+          target_files:
+            - cmd/health.go
+            - cmd/lifecycle_events.go
+            - cmd/repair.go
+            - internal/state/change_runtime.go
+            - internal/state/execution_repair.go
+            - internal/state/health.go
+            - internal/state/store.go
+          task_kind: code
+        - task_id: t-02-toolgen-legacy-cleanup-removal
+          objective: Remove old generated-surface upgrade cleanup.
+          target_files:
+            - cmd/init_test.go
+            - internal/toolgen/support_files_test.go
+            - internal/toolgen/toolgen.go
+            - internal/toolgen/toolgen_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-03-doc-contract-update
+          objective: Update docs to remove old compatibility promises.
+          depends_on:
+            - t-01-runtime-sidecar-removal
+            - t-02-toolgen-legacy-cleanup-removal
+          target_files:
+            - README.md
+            - docs/README.md
+            - docs/agent-contracts.md
+            - docs/command-contract-matrix.md
+            - docs/execution-surface-boundary.md
+          task_kind: code
+        - task_id: t-04-current-contract-regression
+          objective: Keep current first-version contracts covered.
+          depends_on:
+            - t-01-runtime-sidecar-removal
+            - t-02-toolgen-legacy-cleanup-removal
+          target_files:
+            - cmd/*_test.go
+            - internal/engine/*_test.go
+            - internal/state/*_test.go
+            - internal/toolgen/*_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-05-full-verification
+          objective: Run final verification.
+          depends_on:
+            - t-03-doc-contract-update
+            - t-04-current-contract-regression
+          target_files:
+            - artifacts/changes/remove-obsolete-backward-compatibility-paths-and-redundant-legacy-code-from-slipway/verification/execution-summary.yaml
+          task_kind: verification

@@ -1,0 +1,44 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-26T05:56:50Z"
+run_version: 1
+references:
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "layer:R0=pass"
+  - "layer:R3=pass"
+  - "layer:IR1=pass"
+  - "layer:IR3=pass"
+  - "REQ-001=pass"
+  - "REQ-002=pass"
+  - "REQ-003=pass"
+  - "REQ-004=pass"
+  - "REQ-005=pass"
+notes: |
+  Forward trace:
+  - REQ-001 maps to removal of internal/state/change_runtime.go, removal of
+    runtime-state sidecar merge/delete paths from internal/state/store.go,
+    internal/state/execution_repair.go, internal/state/health.go, and removal
+    of migrated_legacy_sidecars from cmd/repair.go and lifecycle event output.
+  - REQ-002 maps to removal of retired generated-surface cleanup in
+    internal/toolgen/toolgen.go and updated toolgen tests for current
+    first-version generated surfaces.
+  - REQ-003 and REQ-005 map to README/docs updates plus current-contract tests
+    for health, repair, init/toolgen, lifecycle events, and command surfaces.
+  - REQ-004 is covered by default go test ./..., go build ./..., and focused
+    cleanup-term searches.
+
+  Reverse trace:
+  - The additional Git metadata fast paths in internal/state/local_runtime_paths.go,
+    internal/state/worktree.go, internal/bootstrap/init.go, and cmd/common.go
+    are scoped to preserving the current verification surface after removing
+    compatibility code; they do not introduce a new user-facing command
+    contract. The fast path falls back to Git when metadata is incomplete.
+
+  Decision fidelity:
+  - The implementation follows Approach 3: compatibility-only runtime sidecar
+    and retired generated-surface paths are deleted, while current command,
+    JSON, lifecycle, and generated-surface behavior remain covered.
+
+  Gaps (code_to_artifact): none blocking.
+  Gaps (artifact_to_code): none blocking.
