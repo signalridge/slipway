@@ -138,7 +138,7 @@ func makeStatusCmd() *cobra.Command {
 		Short: desc("status"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if rootMode {
-				root, err := projectRootFromWD()
+				root, err := projectRootFromCommand(cmd)
 				if err != nil {
 					return err
 				}
@@ -146,7 +146,7 @@ func makeStatusCmd() *cobra.Command {
 				return err
 			}
 			if statsMode {
-				root, err := projectRootFromWD()
+				root, err := projectRootFromCommand(cmd)
 				if err != nil {
 					return err
 				}
@@ -174,7 +174,7 @@ func makeStatusCmd() *cobra.Command {
 				)
 			}
 			explicitFocus := strings.TrimSpace(focus)
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

@@ -230,7 +230,7 @@ func makeNextCmd() *cobra.Command {
 		Short: desc("next"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

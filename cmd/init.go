@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/spf13/cobra"
@@ -20,7 +18,7 @@ func makeInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: desc("init"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := os.Getwd()
+			root, err := workspaceRootFromCommandOrWD(cmd)
 			if err != nil {
 				return err
 			}

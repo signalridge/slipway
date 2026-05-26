@@ -108,7 +108,7 @@ func makeReviewCmd() *cobra.Command {
 				}
 			}
 
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

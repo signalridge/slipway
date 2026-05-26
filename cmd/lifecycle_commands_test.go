@@ -22,8 +22,10 @@ import (
 )
 
 func TestDoneArchivesGovernedExecution(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
@@ -34,7 +36,7 @@ func TestDoneArchivesGovernedExecution(t *testing.T) {
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		require.NoError(t, doneCmd.Execute())
 
 		// Verify the change was archived.
@@ -44,8 +46,10 @@ func TestDoneArchivesGovernedExecution(t *testing.T) {
 }
 
 func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "archive terminal governed state")
@@ -56,7 +60,7 @@ func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		require.NoError(t, doneCmd.Execute())
 
 		archived, err := state.LoadArchivedChange(root, slug)
@@ -67,8 +71,10 @@ func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
 }
 
 func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		source := model.NewChange("source-archived-workflow")
@@ -93,7 +99,7 @@ func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 		var out bytes.Buffer
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		doneCmd.SetOut(&out)
 		doneCmd.SetArgs([]string{"--json"})
 		require.NoError(t, doneCmd.Execute())
@@ -112,8 +118,10 @@ func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 }
 
 func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
@@ -124,7 +132,7 @@ func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
 		// Write an empty assurance.md (missing required headings).
 		writeAssuranceMD(t, root, change.Slug, "")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		var cliErr *CLIError
@@ -134,8 +142,10 @@ func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
 }
 
 func TestDoneGovernedValidAssuranceSucceeds(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
@@ -146,17 +156,19 @@ func TestDoneGovernedValidAssuranceSucceeds(t *testing.T) {
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		require.NoError(t, doneCmd.Execute())
 	})
 }
 
 func TestDoneLightPresetAllowsMissingAssurance(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
+		create := commandForRoot(t, root, makeNewCmd())
 		create.SetContext(withIntentClassifierContext(create.Context(), simpleIntentClassifier()))
 		create.SetArgs([]string{"--preset", "light", "rename helper comment"})
 		require.NoError(t, create.Execute())
@@ -168,7 +180,7 @@ func TestDoneLightPresetAllowsMissingAssurance(t *testing.T) {
 
 		markChangeReadyForDone(t, root, &change)
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		require.NoError(t, doneCmd.Execute())
 
 		_, err = state.LoadChange(root, slug)
@@ -177,8 +189,10 @@ func TestDoneLightPresetAllowsMissingAssurance(t *testing.T) {
 }
 
 func TestDoneQuickFullRevalidatesShipGateBeforeArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "quick full closeout must be fresh")
@@ -192,7 +206,7 @@ func TestDoneQuickFullRevalidatesShipGateBeforeArchive(t *testing.T) {
 
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -207,8 +221,10 @@ func TestDoneQuickFullRevalidatesShipGateBeforeArchive(t *testing.T) {
 }
 
 func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review evidence must be fresh")
@@ -222,7 +238,7 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -240,8 +256,10 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 }
 
 func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "review layer blockers must stop done")
@@ -256,7 +274,7 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 			References: []string{"layer:R0=pass"},
 		})
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -272,8 +290,10 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 }
 
 func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "summary blockers must stop done")
@@ -291,7 +311,7 @@ func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
 		})
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -308,8 +328,10 @@ func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
 }
 
 func TestDoneRejectsChecklistBlockersBeforeArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "tasks checklist blockers must stop done")
@@ -322,7 +344,7 @@ func TestDoneRejectsChecklistBlockersBeforeArchive(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte("# Tasks\n"), 0o644))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -338,8 +360,10 @@ func TestDoneRejectsChecklistBlockersBeforeArchive(t *testing.T) {
 }
 
 func TestDoneRejectsPlanAuditChanges(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "plan audit change")
@@ -349,7 +373,7 @@ func TestDoneRejectsPlanAuditChanges(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepAudit
 		require.NoError(t, state.SaveChange(root, change))
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		err = doneCmd.Execute()
 		require.Error(t, err)
 		cliErr := asCLIError(err)
@@ -359,11 +383,13 @@ func TestDoneRejectsPlanAuditChanges(t *testing.T) {
 }
 
 func TestDoneRejectsAllReadyWithExplicitRequest(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		doneCmd.SetArgs([]string{"--all-ready", "--change", "some-slug"})
 		err := doneCmd.Execute()
 		cliErr := asCLIError(err)
@@ -375,8 +401,10 @@ func TestDoneRejectsAllReadyWithExplicitRequest(t *testing.T) {
 }
 
 func TestDoneRejectsMalformedConfigBeforeLockProtectedMutation(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createActiveNonDiscoveryChange(t, root, "done malformed config guard")
@@ -388,7 +416,7 @@ func TestDoneRejectsMalformedConfigBeforeLockProtectedMutation(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("{invalid"), 0o644))
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		doneCmd.SetArgs([]string{"--change", slug})
 		err = doneCmd.Execute()
 		require.Error(t, err)
@@ -401,8 +429,10 @@ func TestDoneRejectsMalformedConfigBeforeLockProtectedMutation(t *testing.T) {
 }
 
 func TestDoneAllReadyArchivesEligibleChanges(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		readyL1 := model.NewChange("bulk-l1-ready")
@@ -440,8 +470,10 @@ func TestDoneAllReadyArchivesEligibleChanges(t *testing.T) {
 }
 
 func TestDoneAllReadySkipsShipGateBlockedChanges(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		ready := model.NewChange("bulk-ready")
@@ -478,8 +510,10 @@ func TestDoneAllReadySkipsShipGateBlockedChanges(t *testing.T) {
 }
 
 func TestDoneAllReadyRespectsPerChangeLocks(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
@@ -515,13 +549,15 @@ func TestDoneAllReadyRespectsPerChangeLocks(t *testing.T) {
 }
 
 func TestCancelArchivesDirectExecutionWithCancelledStatus(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		require.NoError(t, cancelCmd.Execute())
 
 		archived, err := state.LoadArchivedChange(root, slug)
@@ -531,13 +567,15 @@ func TestCancelArchivesDirectExecutionWithCancelledStatus(t *testing.T) {
 }
 
 func TestCancelArchivesGovernedExecutionWithCancelledStatus(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		require.NoError(t, cancelCmd.Execute())
 
 		archived, err := state.LoadArchivedChange(root, slug)
@@ -547,8 +585,10 @@ func TestCancelArchivesGovernedExecutionWithCancelledStatus(t *testing.T) {
 }
 
 func TestCancelArchivesUnboundL3Change(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedChangeFixture(t, root, "investigate stale state cleanup", func(change *model.Change) {
@@ -557,7 +597,7 @@ func TestCancelArchivesUnboundL3Change(t *testing.T) {
 			change.NeedsDiscovery = true
 		})
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		require.NoError(t, cancelCmd.Execute())
 
 		archived, err := state.LoadArchivedChange(root, slug)
@@ -569,13 +609,15 @@ func TestCancelArchivesUnboundL3Change(t *testing.T) {
 }
 
 func TestCancelRejectsUnexpectedArgs(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		createIntakeChangeFixture(t, root, "cancel should reject unexpected args")
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		cancelCmd.SetArgs([]string{"unexpected"})
 
 		err := cancelCmd.Execute()
@@ -585,13 +627,15 @@ func TestCancelRejectsUnexpectedArgs(t *testing.T) {
 }
 
 func TestCancelUsesHumanReadableOutputWithoutJSONFlag(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createIntakeChangeFixture(t, root, "cancel text output")
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		var buf bytes.Buffer
 		cancelCmd.SetOut(&buf)
 		cancelCmd.SetErr(&buf)
@@ -604,13 +648,15 @@ func TestCancelUsesHumanReadableOutputWithoutJSONFlag(t *testing.T) {
 }
 
 func TestCancelUsesJSONOutputWhenRequested(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createIntakeChangeFixture(t, root, "cancel json output")
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		cancelCmd.SetArgs([]string{"--json"})
 		var buf bytes.Buffer
 		cancelCmd.SetOut(&buf)
@@ -626,8 +672,10 @@ func TestCancelUsesJSONOutputWhenRequested(t *testing.T) {
 }
 
 func TestPivotStateBoundaryRejected(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		createGovernedChangeFixture(t, root, "refactor service modules", func(change *model.Change) {
@@ -637,7 +685,7 @@ func TestPivotStateBoundaryRejected(t *testing.T) {
 		})
 
 		// S1_PLAN now allows reroute pivot; test that rescope IS rejected.
-		pivotCmd := makePivotCmd()
+		pivotCmd := commandForRoot(t, root, makePivotCmd())
 		pivotCmd.SetArgs([]string{"--rescope"})
 		err := pivotCmd.Execute()
 		require.Error(t, err)
@@ -650,8 +698,10 @@ func TestPivotStateBoundaryRejected(t *testing.T) {
 }
 
 func TestPivotRescopeRejectedOutsideS6(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
@@ -662,7 +712,7 @@ func TestPivotRescopeRejectedOutsideS6(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		pivotCmd := makePivotCmd()
+		pivotCmd := commandForRoot(t, root, makePivotCmd())
 		pivotCmd.SetArgs([]string{"--rescope"})
 		err = pivotCmd.Execute()
 		require.Error(t, err)
@@ -675,13 +725,15 @@ func TestPivotRescopeRejectedOutsideS6(t *testing.T) {
 }
 
 func TestPivotRescopeRejectedAtIntakeState(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		createIntakeChangeFixture(t, root, "narrow intake request")
 
-		pivotCmd := makePivotCmd()
+		pivotCmd := commandForRoot(t, root, makePivotCmd())
 		pivotCmd.SetArgs([]string{"--rescope"})
 		err := pivotCmd.Execute()
 		require.Error(t, err)
@@ -694,8 +746,10 @@ func TestPivotRescopeRejectedAtIntakeState(t *testing.T) {
 }
 
 func TestPivotDefaultsToRerouteWithoutReason(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createActiveNonDiscoveryChange(t, root, "fix login timeout")
 		change, err := state.LoadChange(root, slug)
@@ -705,7 +759,7 @@ func TestPivotDefaultsToRerouteWithoutReason(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		var out bytes.Buffer
-		cmd := makePivotCmd()
+		cmd := commandForRoot(t, root, makePivotCmd())
 		cmd.SetArgs([]string{"--json"})
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
@@ -717,8 +771,10 @@ func TestPivotDefaultsToRerouteWithoutReason(t *testing.T) {
 }
 
 func TestRequestScopedCommandsRejectAmbiguousActiveContext(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		writeActiveChange(t, root, "ambig-a")
 		writeActiveChange(t, root, "ambig-b")
@@ -730,7 +786,7 @@ func TestRequestScopedCommandsRejectAmbiguousActiveContext(t *testing.T) {
 			makeNextCmd,
 		}
 		for _, factory := range commands {
-			cmd := factory()
+			cmd := commandForRoot(t, root, factory())
 			err := cmd.Execute()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "ambiguous")
@@ -739,8 +795,10 @@ func TestRequestScopedCommandsRejectAmbiguousActiveContext(t *testing.T) {
 }
 
 func TestCancelPreemptsInFlightTasks(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
@@ -763,7 +821,7 @@ func TestCancelPreemptsInFlightTasks(t *testing.T) {
 		cfg.Execution.CancelGracePeriodSeconds = 1
 		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
-		cancelCmd := makeCancelCmd()
+		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		require.NoError(t, cancelCmd.Execute())
 
 		waited := make(chan struct{})
@@ -791,8 +849,10 @@ func TestCancelPreemptsInFlightTasks(t *testing.T) {
 }
 
 func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createIntakeChangeFixture(t, root, "fix login timeout")
 
@@ -806,7 +866,7 @@ func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
 			stopLockHolder := startStateLockHolder(t, state.ChangeStateLockPath(root, slug))
 			defer stopLockHolder()
 
-			err := makePivotCmd().Execute()
+			err := commandForRoot(t, root, makePivotCmd()).Execute()
 			require.Error(t, err, "pivot")
 			assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", "pivot")
 		})
@@ -816,7 +876,7 @@ func TestMutatingCommandsBlockOnStateLock(t *testing.T) {
 			stopLockHolder := startStateLockHolder(t, repairLockPath)
 			defer stopLockHolder()
 
-			err := makeRepairCmd().Execute()
+			err := commandForRoot(t, root, makeRepairCmd()).Execute()
 			require.Error(t, err, "repair")
 			assert.Contains(t, strings.ToLower(err.Error()), "state lock timeout", "repair")
 		})
@@ -836,8 +896,10 @@ func assertUnexpectedArgError(t *testing.T, err error) {
 }
 
 func TestRequestCommandBlocksOnChangeCreateLock(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		cfg := model.DefaultConfig()
@@ -848,7 +910,7 @@ func TestRequestCommandBlocksOnChangeCreateLock(t *testing.T) {
 		stopLockHolder := startStateLockHolder(t, lockPath)
 		defer stopLockHolder()
 
-		cmd := makeNewCmd()
+		cmd := commandForRoot(t, root, makeNewCmd())
 		cmd.SetArgs([]string{"change lock follow-up"})
 		err := cmd.Execute()
 		require.Error(t, err)
@@ -857,8 +919,10 @@ func TestRequestCommandBlocksOnChangeCreateLock(t *testing.T) {
 }
 
 func TestGovernedPivotRerouteUpdatesGuardrailDomain(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createActiveNonDiscoveryChange(t, root, "fix login timeout")
 
@@ -870,7 +934,7 @@ func TestGovernedPivotRerouteUpdatesGuardrailDomain(t *testing.T) {
 		change.Description = "update auth middleware policy"
 		require.NoError(t, state.SaveChange(root, change))
 
-		pivot := makePivotCmd()
+		pivot := commandForRoot(t, root, makePivotCmd())
 		require.NoError(t, pivot.Execute())
 
 		updated, err := state.LoadChange(root, slug)
@@ -885,8 +949,10 @@ func TestGovernedPivotRerouteUpdatesGuardrailDomain(t *testing.T) {
 }
 
 func TestChangeYamlStableAfterSave(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
 
@@ -909,11 +975,13 @@ func TestChangeYamlStableAfterSave(t *testing.T) {
 }
 
 func TestRequestCreationCreatesCanonicalBundleState(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		create := makeNewCmd()
+		create := commandForRoot(t, root, makeNewCmd())
 		create.SetArgs([]string{"verify change dir structure"})
 		require.NoError(t, create.Execute())
 
@@ -932,8 +1000,10 @@ func TestRequestCreationCreatesCanonicalBundleState(t *testing.T) {
 }
 
 func TestArchiveMovesChangeDirAndArtifacts(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "archive migration test")
@@ -952,7 +1022,7 @@ func TestArchiveMovesChangeDirAndArtifacts(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, "artifacts", "changes", slug))
 		require.NoError(t, err, "artifact dir must exist before archive")
 
-		doneCmd := makeDoneCmd()
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		require.NoError(t, doneCmd.Execute())
 
 		// Post-conditions: artifact dir moved to archived location.

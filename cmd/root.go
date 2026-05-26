@@ -86,11 +86,15 @@ var (
 
 // Execute runs the root command.
 func Execute() error {
+	return executeRootCommand(rootCmd)
+}
+
+func executeRootCommand(cmd *cobra.Command) error {
 	// Capture Cobra's built-in helpFunc before overriding, so subcommands can
 	// use it directly without walking up the parent chain (which would recurse).
-	defaultHelpFunc := rootCmd.HelpFunc()
-	rootCmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		if c == rootCmd {
+	defaultHelpFunc := cmd.HelpFunc()
+	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+		if c == cmd {
 			if err := writeRootHelp(c.OutOrStdout()); err != nil {
 				c.PrintErrln(err)
 			}
@@ -99,12 +103,12 @@ func Execute() error {
 		defaultHelpFunc(c, args)
 	})
 
-	err := rootCmd.Execute()
+	err := cmd.Execute()
 	if err == nil {
 		return nil
 	}
 	cliErr := asCLIError(err)
-	if emitErr := emitCLIError(rootCmd.ErrOrStderr(), cliErr); emitErr != nil {
+	if emitErr := emitCLIError(cmd.ErrOrStderr(), cliErr); emitErr != nil {
 		return emitErr
 	}
 	return cliErr

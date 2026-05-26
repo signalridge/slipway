@@ -20,7 +20,7 @@ Mitigates: worktree isolation and baseline drift before governed execution.
 ## Workflow Outline
 1. Verify the dedicated worktree and intended branch, creating it only if the
    runtime did not already bind the default worktree.
-2. Run a fresh baseline verification command in that worktree.
+2. Run a fresh, bounded baseline verification command in that worktree.
 3. Write verification references, return to the source workspace, and advance.
 
 ## When This Runs
@@ -48,12 +48,20 @@ checkout and branch `feat/<slug>`. Sibling or external worktree paths are valid
 only when chosen explicitly by the operator or local project policy.
 
 ### 2. Verify a Clean Baseline
-Run the project's baseline verification command inside that dedicated worktree before implementation begins.
+Run the cheapest deterministic baseline command that proves the dedicated
+worktree is usable before implementation begins. Prefer a focused compile,
+smoke, or targeted test command when it exercises the touched workflow boundary.
+Use the project's full test command only when no narrower baseline would prove
+the preflight risk.
 
 At minimum:
 - confirm the command exits successfully
 - capture the exact verification command you ran
 - if baseline fails, set verdict to `fail` and record the failure as a blocker
+
+Do not repeat an expensive full-suite run here solely because final
+goal-verification or closeout will require fresh proof later. Worktree preflight
+proves the starting worktree; final verification proves the completed change.
 
 ### 3. Write Verification
 Write a governance verification record with references that the runtime can parse:
@@ -67,7 +75,7 @@ run_version: 0
 references:
   - "worktree_path:/absolute/path/to/worktree"
   - "worktree_branch:feat/change-slug"
-  - "baseline_verify_cmd:go test ./..."
+  - "baseline_verify_cmd:go test ./cmd -run TestRelevantWorkflowBoundary -count=1"
 notes: |
   <verification notes>
 ```
@@ -87,7 +95,7 @@ The runtime will validate the worktree binding and persist `worktree_path` and `
 
 ## DO NOT SKIP
 1. Use a dedicated worktree, not the primary workspace root.
-2. Run a fresh baseline verification command before writing `pass` verification.
+2. Run a fresh, bounded baseline verification command before writing `pass` verification.
 3. Record absolute worktree path and exact branch name in the verification references.
 
 ## Failure Handling

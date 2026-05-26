@@ -77,7 +77,7 @@ func makeHealthCmd() *cobra.Command {
 				)
 			}
 			explicitFocus := strings.TrimSpace(focus)
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}
@@ -111,7 +111,7 @@ func makeHealthCmd() *cobra.Command {
 					return err
 				}
 				view.Findings = normalizeHealthFindings(root, report.Findings)
-				view.Findings = append(view.Findings, agentContractHealthFindings(root)...)
+				view.Findings = append(view.Findings, agentContractHealthFindings(root, invocationWorkspaceRootFromCommand(cmd, root))...)
 				view.Findings = append(view.Findings, lifecycleEventHealthFindings(root)...)
 				slices.SortFunc(view.Findings, func(a, b state.HealthFinding) int {
 					if a.Category != b.Category {
@@ -453,7 +453,7 @@ func writeHealthText(w io.Writer, view healthView) error {
 	return writer.Err()
 }
 
-func agentContractHealthFindings(root string) []state.HealthFinding {
+func agentContractHealthFindings(root, workspaceRoot string) []state.HealthFinding {
 	registry, err := skill.LoadGovernanceRegistry(root)
 	if err != nil {
 		return []state.HealthFinding{{
@@ -466,7 +466,6 @@ func agentContractHealthFindings(root string) []state.HealthFinding {
 		}}
 	}
 
-	workspaceRoot := invocationWorkspaceRoot(root)
 	validAgents := map[string]struct{}{}
 	missingTemplates := map[string]error{}
 	for _, name := range tmpl.AgentNames() {

@@ -1,0 +1,61 @@
+slug: optimize-test-runtime-and-governance-verification-workflow
+description: optimize test runtime and governance verification workflow
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-25T15:53:28.06285Z
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow
+worktree_branch: feat/optimize-test-runtime-and-governance-verification-workflow
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+        version: 1
+        state: frozen
+        content_hash: cc1f02e390697637923a9d1a3494ad449ea543b2c3e2e21064b64f3c92ce5a19
+        updated_at: 2026-05-25T16:55:29.827240817Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/decision.md
+        version: 1
+        state: frozen
+        content_hash: 47ae28149fb829070d00fbee452147127003ae4c129f27ecc7ce4919da7dd46c
+        updated_at: 2026-05-25T16:28:15.12272994Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/intent.md
+        version: 1
+        state: frozen
+        content_hash: 2eae4578adf9f718cfe4692a906adc6d622a2a8b2a29e6ab960c932b843a50f1
+        updated_at: 2026-05-25T16:46:28.241766859Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/requirements.md
+        version: 1
+        state: frozen
+        content_hash: 98b3b40d502209923ba4fdd6e1512179cadb4e648c0a60c881f385ba8445c4e6
+        updated_at: 2026-05-25T16:28:15.12230394Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/research.md
+        version: 1
+        state: frozen
+        content_hash: e6711578058fcfeeca43af88d8173a31adca6407b9910d220a44ae4e8c597fed
+        updated_at: 2026-05-25T16:17:13.901173296Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/optimize-test-runtime-and-governance-verification-workflow/artifacts/changes/archived/optimize-test-runtime-and-governance-verification-workflow/tasks.md
+        version: 1
+        state: frozen
+        content_hash: 522bfd2b1f71fce95070bac27dfaae1f238714b861223db6bc9b091b75859284
+        updated_at: 2026-05-25T17:01:13.655320844Z

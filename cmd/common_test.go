@@ -15,6 +15,7 @@ import (
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,6 +50,18 @@ func TestProjectRootFromWDRejectsUninitializedGitRepo(t *testing.T) {
 		assert.ErrorIs(t, err, fsutil.ErrProjectRootNotFound)
 		assert.Contains(t, err.Error(), "run `slipway init`")
 	})
+}
+
+func withCommandWorkspace(t *testing.T, root string, fn func()) {
+	t.Helper()
+	ensureTestGitRepo(t, root)
+	fn()
+}
+
+func commandForRoot(t *testing.T, root string, cmd *cobra.Command) *cobra.Command {
+	t.Helper()
+	setCommandProjectRoot(cmd, root)
+	return cmd
 }
 
 func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {

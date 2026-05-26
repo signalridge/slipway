@@ -55,7 +55,7 @@ func makeRepairCmd() *cobra.Command {
 				return err
 			}
 			effectiveMode := resolveEffectiveFocus("repair", focus)
-			root, err := repairRootFromWD()
+			root, err := repairRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

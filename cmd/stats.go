@@ -40,7 +40,7 @@ func makeStatsCmd() *cobra.Command {
 		Args:   cobra.NoArgs,
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

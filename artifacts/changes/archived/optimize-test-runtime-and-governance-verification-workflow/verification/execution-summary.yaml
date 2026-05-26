@@ -1,0 +1,128 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-25T16:54:54Z
+overall_verdict: pass
+tasks_plan_hash: 542748bcfdd81ae7289679887abb1b54d0be322db6b2f2ec2f9ccfbbaa67e38a
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+    - t-07
+    - t-08
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/research.md
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/research.md
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 27308a4c18205da6a41686ba7fc269688a8218e81a392a70e7ead184459d2bbf
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/progression_next_test.go
+        - cmd/stats_test.go
+        - cmd/worktree_preflight_test.go
+      target_files:
+        - cmd/progression_next_test.go
+        - cmd/stats_test.go
+        - cmd/worktree_preflight_test.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 803cabbea0f2c3f88303cf31a1c7c0f264a5d6cd34815c241ccd425d15fe39b1
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/common_test.go
+        - cmd/new_test.go
+      target_files:
+        - cmd/common_test.go
+        - cmd/new_test.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 187b671284be41292febf4ac5c748ca2739a6282bbbd6e9c78db1ab97b77ef1c
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/cli_e2e_test.go
+        - cmd/common.go
+        - cmd/common_test.go
+        - cmd/error_contract_test.go
+        - cmd/health.go
+        - cmd/health_test.go
+        - cmd/init.go
+        - cmd/lifecycle_commands_test.go
+        - cmd/progression_next_test.go
+        - cmd/repair.go
+        - cmd/root.go
+      target_files:
+        - cmd/cli_e2e_test.go
+        - cmd/common.go
+        - cmd/common_test.go
+        - cmd/error_contract_test.go
+        - cmd/health.go
+        - cmd/health_test.go
+        - cmd/init.go
+        - cmd/lifecycle_commands_test.go
+        - cmd/progression_next_test.go
+        - cmd/repair.go
+        - cmd/root.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 08f70ed81757b5ac13720bb4d1bd1e58c745b68b6dde0d9846de2fbc988a4fcb
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - docs/workflow-test-menu.md
+        - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+        - internal/tmpl/templates_test.go
+      target_files:
+        - docs/workflow-test-menu.md
+        - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+        - internal/tmpl/templates_test.go
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 4797fbf34de188f875a8a65fc29535ffef7d3f9096e08f5a9691cdcc21edcdaf
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 2fe2accc4db20605678370655dc4a31b82c9618c6a829c0821b5d2dae55ef10b
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-07
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: e45e6dea5d402706fa9bd7468ea3a58032d725bc80613a3fc8db316eeb1c37a4
+      captured_at: 2026-05-25T16:56:50Z
+    - task_id: t-08
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/execution-summary.yaml
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+        - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/
+      evidence_ref: artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/wave-orchestration.yaml
+      evidence_input_hash: 72ac16daf3fbe6e3727366fd93e95bb1418c773c009303e0a6134dd83b83cc6c
+      captured_at: 2026-05-25T16:56:50Z

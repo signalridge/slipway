@@ -1,0 +1,92 @@
+version: 1
+generated_at: 2026-05-25T16:50:44.959894063Z
+tasks_plan_hash: 542748bcfdd81ae7289679887abb1b54d0be322db6b2f2ec2f9ccfbbaa67e38a
+total_tasks: 8
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Record baseline and identify the dominant runtime bottleneck.
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/research.md
+          task_kind: verification
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: Remove strict-subset tests while preserving stronger command contract coverage.
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/progression_next_test.go
+            - cmd/stats_test.go
+            - cmd/worktree_preflight_test.go
+          task_kind: code
+        - task_id: t-03
+          objective: Reduce fixture setup cost for repository identity.
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/common_test.go
+            - cmd/new_test.go
+          task_kind: code
+        - task_id: t-05
+          objective: Narrow governance verification guidance without weakening final proof.
+          depends_on:
+            - t-01
+          target_files:
+            - docs/workflow-test-menu.md
+            - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+            - internal/tmpl/templates_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Add private command-root injection and migrate safe command tests.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - cmd/cli_e2e_test.go
+            - cmd/common.go
+            - cmd/common_test.go
+            - cmd/error_contract_test.go
+            - cmd/health.go
+            - cmd/health_test.go
+            - cmd/init.go
+            - cmd/lifecycle_commands_test.go
+            - cmd/progression_next_test.go
+            - cmd/repair.go
+            - cmd/root.go
+          task_kind: code
+    - wave_index: 4
+      tasks:
+        - task_id: t-06
+          objective: Run targeted verification for changed behavior.
+          depends_on:
+            - t-02
+            - t-03
+            - t-04
+            - t-05
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/
+          task_kind: verification
+    - wave_index: 5
+      tasks:
+        - task_id: t-07
+          objective: Run final full-suite and build verification with timing comparison.
+          depends_on:
+            - t-06
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+          task_kind: verification
+    - wave_index: 6
+      tasks:
+        - task_id: t-08
+          objective: Record governed execution and readiness evidence.
+          depends_on:
+            - t-07
+          target_files:
+            - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md
+            - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/
+          task_kind: verification

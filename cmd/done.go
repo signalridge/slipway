@@ -217,7 +217,7 @@ func makeDoneCmd() *cobra.Command {
 		Use:   "done",
 		Short: desc("done"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

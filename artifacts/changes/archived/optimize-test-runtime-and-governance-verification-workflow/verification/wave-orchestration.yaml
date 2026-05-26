@@ -1,0 +1,41 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T16:54:54Z"
+run_version: 1
+references:
+  - artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/tasks.md
+  - cmd/new_test.go
+  - cmd/common.go
+  - cmd/root.go
+  - cmd/init.go
+  - cmd/repair.go
+  - cmd/common_test.go
+  - cmd/error_contract_test.go
+  - cmd/health_test.go
+  - cmd/cli_e2e_test.go
+  - cmd/progression_next_test.go
+  - cmd/lifecycle_commands_test.go
+  - cmd/stats_test.go
+  - cmd/worktree_preflight_test.go
+  - docs/workflow-test-menu.md
+  - internal/tmpl/templates/skills/worktree-preflight/SKILL.md
+  - internal/tmpl/templates_test.go
+  - /tmp/slipway-final-test.json
+notes: |
+  Executed the B+C plan selected by the user.
+  Wave 1 baseline/research evidence recorded cmd as the bottleneck: baseline go test ./... real 133.93s and cmd package elapsed 132.699s.
+  Wave 2 removed strict-subset tests, optimized ensureTestGitRepo fixture setup, and narrowed intermediate governance verification guidance.
+  Wave 3 added private command-root injection, local root-command execution for tests, init/repair root override support, and migrated health, CLI e2e, next/run progression, and lifecycle command tests away from process-wide cwd serialization where safe.
+  Cwd-sensitive tests and tests that intentionally verify cwd behavior were left serialized.
+  Verification:
+  - go test ./cmd -run '^TestHealth|^TestCLIEndToEnd|^TestInit' -count=1: pass, 6.173s
+  - go test ./cmd -run '^TestNext|^TestRun' -count=1: pass, 17.946s
+  - go test ./cmd -run '^TestDone|^TestCancel|^TestPivot|^TestRequest|^TestGovernedPivot|^TestChangeYaml|^TestArchive|^TestMutatingCommandsBlockOnStateLock' -count=1: pass, 5.174s
+  - go test ./cmd -count=1: pass, 73.703s package time, 74.03s real
+  - go test ./internal/tmpl -run 'TestWorktreePreflightDocumentsRepoLocalDefaultPath|TestEmbeddedTemplateCoverage' -count=1: pass, 0.383s
+  - go test -json -count=1 ./... > /tmp/slipway-final-test.json: pass, 83.51s real; cmd package elapsed 82.277s
+  - go build ./...: pass
+  - staticcheck ./...: pass
+  - git diff --check: pass
+  Runtime comparison: full-suite real time improved from 133.93s to 83.51s; cmd package elapsed improved from 132.699s to 82.277s.
+  During migration one lifecycle test briefly exercised the real active change through an unrooted command. The bundle was restored to active S2_EXECUTE, the offending command factories were root-injected, and a subsequent cmd full-package run confirmed the active bundle stayed present and not archived.

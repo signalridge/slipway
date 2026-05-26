@@ -30,7 +30,7 @@ func makeCodebaseMapCmd() *cobra.Command {
 		Short: desc("codebase-map"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

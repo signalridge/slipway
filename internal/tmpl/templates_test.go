@@ -539,6 +539,8 @@ func TestWorktreePreflightDocumentsRepoLocalDefaultPath(t *testing.T) {
 
 	assert.Contains(t, content, ".worktrees/<slug>")
 	assert.Contains(t, content, "operator-supplied path")
+	assert.Contains(t, content, "cheapest deterministic baseline command")
+	assert.Contains(t, content, "final verification proves the completed change")
 }
 
 func TestAgentDefinitionFrontmatterNoRoutingFields(t *testing.T) {

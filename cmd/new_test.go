@@ -1500,9 +1500,28 @@ func ensureTestGitRepo(t *testing.T, root string) {
 	if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
 		return
 	}
-	runGit(t, root, "init", "--initial-branch=main")
-	runGit(t, root, "config", "user.email", "test@example.com")
-	runGit(t, root, "config", "user.name", "Test")
+	gitDir := filepath.Join(root, ".git")
+	for _, dir := range []string{
+		filepath.Join(gitDir, "objects", "info"),
+		filepath.Join(gitDir, "objects", "pack"),
+		filepath.Join(gitDir, "refs", "heads"),
+		filepath.Join(gitDir, "refs", "tags"),
+		filepath.Join(gitDir, "info"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "config"), []byte(`[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[user]
+	email = test@example.com
+	name = Test
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "description"), []byte("Slipway test repository\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "info", "exclude"), []byte("*~\n"), 0o644))
 }
 
 func singleChangeSlug(t *testing.T, dir string) string {

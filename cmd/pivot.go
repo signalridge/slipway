@@ -25,7 +25,7 @@ func makePivotCmd() *cobra.Command {
 				kind = string(gate.PivotKindRescope)
 			}
 
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

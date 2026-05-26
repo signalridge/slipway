@@ -236,7 +236,7 @@ Use --full to require refreshed final-closeout evidence before ship.`,
 					)
 				}
 				// TTY interactive mode: infer context, prompt for description
-				root, err := projectRootFromWD()
+				root, err := projectRootFromCommand(cmd)
 				if err != nil {
 					return err
 				}
@@ -320,7 +320,7 @@ func createDirectGovernedChange(
 
 	jsonFlag, _ := cmd.Flags().GetBool("json")
 
-	root, err := projectRootFromWD()
+	root, err := projectRootFromCommand(cmd)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,43 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T17:04:44Z"
+run_version: 1
+references:
+  - "layer:IR1=pass"
+  - "layer:QUALITY=pass"
+  - "layer:INDEPENDENT_REVIEW=pass"
+  - "git diff --check"
+  - "go test ./cmd -run '^TestHealth|^TestCLIEndToEnd|^TestInit' -count=1"
+  - "go test ./cmd -run '^TestNext|^TestRun' -count=1"
+  - "go test ./cmd -run '^TestDone|^TestCancel|^TestPivot|^TestRequest|^TestGovernedPivot|^TestChangeYaml|^TestArchive|^TestMutatingCommandsBlockOnStateLock' -count=1"
+  - "go test ./cmd -count=1"
+  - "go test ./internal/tmpl -run 'TestWorktreePreflightDocumentsRepoLocalDefaultPath|TestEmbeddedTemplateCoverage' -count=1"
+  - "go test -json -count=1 ./..."
+  - "go build ./..."
+  - "staticcheck ./..."
+notes: |
+  Code quality review passed.
+
+  The root-injection seam is intentionally private and context-scoped. It is
+  used by tests to avoid process-wide cwd mutation, and every production command
+  path still falls back to projectRootFromWD when no command context override is
+  present. The init and repair commands use matching root helpers for their
+  pre-initialization and repair-marker semantics.
+
+  The parallelization is conservative: migrated tests use per-test temp roots and
+  command-root overrides, while cwd discovery and env-sensitive tests stay on
+  the older serialized helper path. The runRootCommandIn helper executes a local
+  root command instance, reducing shared rootCmd mutation in e2e-style tests.
+
+  Removed tests were strict subsets of retained tests with stronger assertions.
+  The retained stats, next auto-pass, and worktree-preflight tests continue to
+  cover the command behavior plus state, blocker, or archive accounting checks.
+
+  Workflow guidance now separates intermediate bounded verification from final
+  closeout verification. This reduces repeated full-suite runs without weakening
+  the final proof obligation.
+
+  Verification passed with focused command/template tests, the full cmd package,
+  final full-suite timing, go build, staticcheck, and git diff --check. No
+  security, credential, schema migration, irreversible operation, or external
+  API contract changes were introduced.

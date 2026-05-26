@@ -261,14 +261,21 @@ func TestTypedCLIErrorHelpers(t *testing.T) {
 }
 
 func runRootCommand(args []string) (string, string, error) {
-	rootCmd = newRootCmd()
+	return runRootCommandIn("", args)
+}
+
+func runRootCommandIn(root string, args []string) (string, string, error) {
+	cmd := newRootCmd()
+	if root != "" {
+		setCommandProjectRoot(cmd, root)
+	}
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&errOut)
-	rootCmd.SetArgs(args)
-	err := Execute()
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs(args)
+	err := executeRootCommand(cmd)
 	return out.String(), errOut.String(), err
 }

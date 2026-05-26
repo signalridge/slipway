@@ -194,15 +194,22 @@ go run . next
 
 ### Step 4: Review, Validate, And Close Out
 
-When the change is ready, exercise the governed closeout surfaces:
+When the change is ready, exercise the governed closeout surfaces. Start with
+targeted tests for the touched command or package, then run one final full-suite
+proof after the diff is stable. Add race/static-analysis passes when the change
+touches concurrency, shared state, generated surfaces, or review feedback asks
+for them; do not run every expensive verifier by default during each workflow
+iteration.
 
 ```bash
 go run . review --json
 go run . validate --json
+go test ./cmd -run '<targeted regression tests>' -count=1
 go test -timeout=20m ./... -count=1
-go vet ./...
-staticcheck ./...
-go test -timeout=20m ./... -race -count=1
+# Optional, risk-triggered:
+# go vet ./...
+# staticcheck ./...
+# go test -timeout=20m ./... -race -count=1
 go run . done --json
 ```
 

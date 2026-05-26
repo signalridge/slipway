@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,63 @@ type changeRef struct {
 }
 
 const governedExecutionMode = string(ctxpack.ExecutionModeGoverned)
+
+type projectRootContextKey struct{}
+
+func setCommandProjectRoot(cmd *cobra.Command, root string) {
+	if cmd == nil {
+		return
+	}
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd.SetContext(context.WithValue(ctx, projectRootContextKey{}, root))
+}
+
+func projectRootFromCommand(cmd *cobra.Command) (string, error) {
+	if root, ok := projectRootOverrideFromCommand(cmd); ok {
+		if _, err := os.Stat(state.ConfigPath(root)); err == nil {
+			return root, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		return "", fmt.Errorf("%w: workspace is not initialized; run `slipway init`", fsutil.ErrProjectRootNotFound)
+	}
+	return projectRootFromWD()
+}
+
+func workspaceRootFromCommandOrWD(cmd *cobra.Command) (string, error) {
+	if root, ok := projectRootOverrideFromCommand(cmd); ok {
+		return root, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if normalized, err := state.NormalizePath(wd); err == nil {
+		return normalized, nil
+	}
+	return filepath.Clean(wd), nil
+}
+
+func projectRootOverrideFromCommand(cmd *cobra.Command) (string, bool) {
+	if cmd != nil {
+		if root, ok := cmd.Context().Value(projectRootContextKey{}).(string); ok {
+			root = strings.TrimSpace(root)
+			if root != "" {
+				normalized, err := state.NormalizePath(root)
+				if err == nil {
+					root = normalized
+				} else {
+					root = filepath.Clean(root)
+				}
+				return root, true
+			}
+		}
+	}
+	return "", false
+}
 
 func projectRootFromWD() (string, error) {
 	wd, err := os.Getwd()
@@ -67,6 +125,13 @@ func invocationWorkspaceRoot(projectRoot string) string {
 	return filepath.Clean(resolved)
 }
 
+func invocationWorkspaceRootFromCommand(cmd *cobra.Command, projectRoot string) string {
+	if root, ok := projectRootOverrideFromCommand(cmd); ok {
+		return root
+	}
+	return invocationWorkspaceRoot(projectRoot)
+}
+
 func repairRootFromWD() (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -92,6 +157,16 @@ func repairRootFromWD() (string, error) {
 		}
 	}
 	return "", err
+}
+
+func repairRootFromCommand(cmd *cobra.Command) (string, error) {
+	if root, ok := projectRootOverrideFromCommand(cmd); ok {
+		if hasRepairableWorkspaceMarkers(root) {
+			return root, nil
+		}
+		return "", fmt.Errorf("%w: provided project root %q has no slipway repair markers", fsutil.ErrProjectRootNotFound, root)
+	}
+	return repairRootFromWD()
 }
 
 func hasRepairableWorkspaceMarkers(root string) bool {

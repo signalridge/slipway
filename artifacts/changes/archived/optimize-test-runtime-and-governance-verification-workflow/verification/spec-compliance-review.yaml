@@ -1,0 +1,55 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T17:04:44Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/requirements.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/decision.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/tasks.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/execution-summary.yaml"
+  - "command:go test ./cmd -run '^TestHealth|^TestCLIEndToEnd|^TestInit' -count=1"
+  - "command:go test ./cmd -run '^TestNext|^TestRun' -count=1"
+  - "command:go test ./cmd -run '^TestDone|^TestCancel|^TestPivot|^TestRequest|^TestGovernedPivot|^TestChangeYaml|^TestArchive|^TestMutatingCommandsBlockOnStateLock' -count=1"
+  - "command:go test ./cmd -count=1"
+  - "command:go test ./internal/tmpl -run 'TestWorktreePreflightDocumentsRepoLocalDefaultPath|TestEmbeddedTemplateCoverage' -count=1"
+  - "command:go test -json -count=1 ./..."
+  - "command:go build ./..."
+  - "command:staticcheck ./..."
+notes: |
+  Spec compliance review passed for REQ-001 through REQ-005.
+
+  REQ-001 is satisfied by the baseline and final timing evidence in research.md
+  and assurance.md. The baseline full-suite run took 133.93s real time with the
+  cmd package at 132.699s elapsed; the final full-suite run took 83.51s real
+  time with cmd at 82.277s elapsed.
+
+  REQ-002 is satisfied by deleting only strict-subset tests while retaining
+  stronger coverage: stats hidden-worktree behavior remains covered with
+  archived-owner accounting, worktree-preflight gating remains covered by the
+  blocker test, and light-preset auto-pass behavior remains covered by retained
+  next/run-path assertions.
+
+  REQ-003 is satisfied by the cheaper ensureTestGitRepo fixture and the private
+  command-root context seam. Production command behavior still falls back to
+  projectRootFromWD; no public flag, config, or JSON contract was added.
+
+  REQ-004 is satisfied by migrating isolated health, CLI e2e, progression, and
+  lifecycle command tests to temp-root command execution plus t.Parallel().
+  Tests that intentionally exercise cwd discovery or process environment remain
+  serialized.
+
+  REQ-005 is satisfied by the worktree-preflight template and workflow-test menu
+  changes. Intermediate workflow steps now prefer bounded targeted proof, while
+  final verification still requires a fresh full-suite/build proof and allows
+  staticcheck/race/vet to be triggered by risk.
+
+  No reverse-trace gaps were found between requirements, tasks, implementation,
+  and verification evidence. A transient lifecycle-test migration mistake
+  affected the active bundle during development; the active state was restored,
+  the unrooted command factories were fixed, and subsequent cmd/full-suite
+  verification passed.

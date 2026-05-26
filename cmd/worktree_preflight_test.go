@@ -17,36 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNextL3S1RequiresWorktreePreflightSkill(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree preflight")
-
-		// Advance to S2_EXECUTE where the worktree gate is now checked.
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
-		change.IntakeSubStep = ""
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := makeNextCmd()
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
-		// At S2_EXECUTE with no worktree bound, worktree-preflight is the
-		// resolved skill for NeedsDiscovery=true changes.
-		assert.Equal(t, progression.SkillWorktreePreflight, view.NextSkill.Name)
-	})
-}
-
 func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

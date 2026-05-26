@@ -1,0 +1,85 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-25T17:09:28Z"
+run_version: 1
+references:
+  - "fresh:command=go test -json -count=1 ./... result=pass real=82.05s cmd_elapsed=81.603s"
+  - "fresh:command=go build ./... result=pass"
+  - "fresh:command=staticcheck ./... result=pass"
+  - "fresh:command=git diff --check result=pass"
+  - "fresh:command=go test ./cmd -run '^TestHealth|^TestCLIEndToEnd|^TestInit' -count=1 result=pass elapsed=6.708s"
+  - "fresh:command=go test ./internal/tmpl -run 'TestWorktreePreflightDocumentsRepoLocalDefaultPath|TestEmbeddedTemplateCoverage' -count=1 result=pass elapsed=0.264s"
+  - "fresh:scan=rg TODO/FIXME/HACK/XXX/PLACEHOLDER/NotImplemented/not implemented/panic todo patterns over changed files result=no_hits"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/requirements.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/assurance.md"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/spec-compliance-review.yaml"
+  - "artifact:artifacts/changes/optimize-test-runtime-and-governance-verification-workflow/verification/code-quality-review.yaml"
+notes: |
+  Criteria:
+    AC-1 / REQ-001 measured runtime baseline and final comparison: pass.
+      Exists: research.md and assurance.md contain baseline/final timings and
+      identify cmd as the dominant test bottleneck.
+      Substantive: evidence records baseline full-suite real time of 133.93s
+      and cmd elapsed 132.699s, plus final measured real time of 83.51s and cmd
+      elapsed 82.277s. A fresh S4 full-suite run also passed at 82.05s real and
+      cmd elapsed 81.603s.
+      Wired: the comparison is tied to run_version 1 execution-summary and the
+      fresh full-suite command passed after review evidence was written.
+
+    AC-2 / REQ-002 redundant tests removed or narrowed without coverage loss:
+      pass.
+      Exists: strict-subset tests were removed from stats, progression_next, and
+      worktree_preflight test files.
+      Substantive: retained tests cover the same behaviors with stronger
+      assertions, including stats hidden-worktree archive accounting,
+      worktree-preflight blockers, and light-preset next/run auto-pass gates.
+      Wired: fresh full-suite tests passed, and focused cmd regression coverage
+      passed at 6.708s.
+
+    AC-3 / REQ-003 existing test harness efficiency improved: pass.
+      Exists: ensureTestGitRepo now writes a minimal .git skeleton for repository
+      identity tests, and command-root context helpers exist for test command
+      execution.
+      Substantive: the implementation avoids repeated git init/config
+      subprocesses for identity-only tests and keeps command-root injection
+      private, context-scoped, and fallback-compatible with projectRootFromWD.
+      Wired: production command constructors use projectRootFromCommand or the
+      matching init/repair helper, and fresh cmd/full-suite verification passed.
+
+    AC-4 / REQ-004 safe parallelization: pass.
+      Exists: isolated health, CLI e2e, progression, and lifecycle tests now use
+      temp-root command execution and t.Parallel where safe.
+      Substantive: cwd-sensitive and environment-sensitive tests remain
+      serialized or use the legacy workspace helper.
+      Wired: fresh focused cmd verification and full-suite verification passed,
+      exercising parallelized command tests under Go's scheduler.
+
+    AC-5 / REQ-005 governance verification workflow avoids redundant full runs:
+      pass.
+      Exists: worktree-preflight SKILL.md and docs/workflow-test-menu.md were
+      updated to distinguish bounded intermediate verification from final proof.
+      Substantive: the guidance now reserves expensive full-suite runs for the
+      final stable-diff proof or cases where no narrower baseline is adequate,
+      while keeping build/full-suite verification in closeout.
+      Wired: internal/tmpl template tests passed and fresh full-suite/build proof
+      passed in S4.
+
+  Coverage analysis:
+    Change-surface coverage was evaluated through retained targeted command and
+    template tests plus the full-suite run, rather than a numeric line-coverage
+    report. This change optimizes test harness/runtime and workflow guidance;
+    it does not introduce new externally reachable application behavior. The
+    changed command-root seam is exercised by focused command tests and the full
+    cmd package/full-suite runs.
+
+  Stub and placeholder scan:
+    The TODO/FIXME/HACK/XXX/PLACEHOLDER/NotImplemented/not implemented/panic
+    todo scan over changed files returned no hits. The broader return nil, nil
+    scan found existing legitimate optional/no-action returns such as missing
+    PID files, absent wave execution context, empty caller controls, and doctor
+    action absence; none are unimplemented stubs.
+
+  Guardrail:
+    No security, credential, schema migration, irreversible operation, financial,
+    privacy, or external API contract changes were introduced. Public CLI flags,
+    JSON contracts, and lifecycle semantics remain unchanged.

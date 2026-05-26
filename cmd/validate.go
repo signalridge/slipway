@@ -121,7 +121,7 @@ func makeValidateCmd() *cobra.Command {
 				return err
 			}
 			effectiveMode := resolveEffectiveFocus("validate", focus)
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

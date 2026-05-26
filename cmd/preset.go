@@ -45,7 +45,7 @@ func makePresetCmd() *cobra.Command {
 		Short: desc("preset"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := projectRootFromWD()
+			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
 			}

@@ -23,26 +23,28 @@ func decodeJSONMap(t *testing.T, raw string) map[string]any {
 }
 
 func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		stdout, stderr, err := runRootCommand([]string{"status", "--json"})
+	withCommandWorkspace(t, root, func() {
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		errPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "runtime_failure", errPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"init", "--tools", "claude"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"init", "--tools", "claude"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		assert.Contains(t, stdout, "initialized slipway workspace")
 
-		stdout, stderr, err = runRootCommand([]string{"status", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"status", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statusPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "diagnostics", statusPayload["execution_mode"])
 
-		stdout, stderr, err = runRootCommand([]string{"health", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"health", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		healthPayload := decodeJSONMap(t, stdout)
@@ -50,7 +52,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, findings, 1)
 
-		stdout, stderr, err = runRootCommand([]string{"stats", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"stats", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statsPayload := decodeJSONMap(t, stdout)
@@ -58,12 +60,12 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "missing", codebaseMap["freshness"])
 
-		stdout, stderr, err = runRootCommand([]string{"codebase-map"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"codebase-map"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		assert.Contains(t, stdout, "Created:")
 
-		stdout, stderr, err = runRootCommand([]string{"health", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"health", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		healthPayload = decodeJSONMap(t, stdout)
@@ -71,7 +73,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		_, hasFindings := healthPayload["findings"]
 		assert.False(t, hasFindings)
 
-		stdout, stderr, err = runRootCommand([]string{"stats", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"stats", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statsPayload = decodeJSONMap(t, stdout)
@@ -82,19 +84,21 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 }
 
 func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
+	withCommandWorkspace(t, root, func() {
+		_, _, err := runRootCommandIn(root, []string{"init", "--tools", "claude"})
 		require.NoError(t, err)
 
-		stdout, stderr, err := runRootCommand([]string{"new", "--json", "--preset", "standard", "fix status output"})
+		stdout, stderr, err := runRootCommandIn(root, []string{"new", "--json", "--preset", "standard", "fix status output"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		createPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "governed", createPayload["mode"])
 		assert.Equal(t, "S0_INTAKE", createPayload["current_state"])
 
-		stdout, stderr, err = runRootCommand([]string{"validate", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"validate", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		validatePayload := decodeJSONMap(t, stdout)
@@ -103,44 +107,44 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "missing", requirementsContract["status"])
 
-		stdout, stderr, err = runRootCommand([]string{"next", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"next", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		nextPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S0_INTAKE", nextPayload["current_state"])
 
-		stdout, stderr, err = runRootCommand([]string{"checkpoint", "--json", "--task-id", "task-01", "--type", "human_verify"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"checkpoint", "--json", "--task-id", "task-01", "--type", "human_verify"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		checkpointPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "checkpoint_wrong_state", checkpointPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"pivot", "--json", "--rescope"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"pivot", "--json", "--rescope"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		pivotPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "pivot_state_invalid", pivotPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"review", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"review", "--json"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		reviewPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "review_state_invalid", reviewPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"done", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"done", "--json"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		donePayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "not_done_ready", donePayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"cancel", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"cancel", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		cancelPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "cancelled", cancelPayload["status"])
 		assert.Equal(t, true, cancelPayload["archived"])
 
-		stdout, stderr, err = runRootCommand([]string{"status", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"status", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statusPayload := decodeJSONMap(t, stdout)
@@ -149,13 +153,15 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 }
 
 func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L3", "run should stop at research orchestration")
 
-		stdout, stderr, err := runRootCommand([]string{"run", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommandIn(root, []string{"run", "--json", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
@@ -171,8 +177,10 @@ func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 }
 
 func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "run resume-response e2e")
@@ -205,7 +213,7 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 		_, err = state.MaterializeWavePlan(root, change)
 		require.NoError(t, err)
 
-		stdout, stderr, err := runRootCommand([]string{"run", "--json", "--resume-response", "verified ok", "--change", slug})
+		stdout, stderr, err := runRootCommandIn(root, []string{"run", "--json", "--resume-response", "verified ok", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
@@ -225,8 +233,10 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 }
 
 func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		slug := createGovernedRequest(t, root, "L2", "abort then resume e2e")
@@ -252,19 +262,19 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 `)))
 		materializeWaveExecutionForSummary(t, root, slug)
 
-		stdout, stderr, err := runRootCommand([]string{"abort", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommandIn(root, []string{"abort", "--json", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		abortPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S2_EXECUTE", abortPayload["current_state"])
 
-		stdout, stderr, err = runRootCommand([]string{"run", "--json", "--change", slug})
+		stdout, stderr, err = runRootCommandIn(root, []string{"run", "--json", "--change", slug})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		errPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "resume_required", errPayload["error_code"])
 
-		stdout, stderr, err = runRootCommand([]string{"run", "--json", "--resume", "--change", slug})
+		stdout, stderr, err = runRootCommandIn(root, []string{"run", "--json", "--resume", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		runPayload := decodeJSONMap(t, stdout)
@@ -280,25 +290,27 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 }
 
 func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		_, _, err := runRootCommand([]string{"init", "--tools", "none"})
+	withCommandWorkspace(t, root, func() {
+		_, _, err := runRootCommandIn(root, []string{"init", "--tools", "none"})
 		require.NoError(t, err)
 
-		stdout, stderr, err := runRootCommand([]string{"new", "--json", "--discuss", "--full", "Refine status messaging"})
+		stdout, stderr, err := runRootCommandIn(root, []string{"new", "--json", "--discuss", "--full", "Refine status messaging"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		newPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "governed", newPayload["mode"])
 		assert.Equal(t, "full", newPayload["quality_mode"])
 
-		stdout, stderr, err = runRootCommand([]string{"repair", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"repair", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		repairPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, false, repairPayload["stale_lock_cleaned"])
 
-		stdout, stderr, err = runRootCommand([]string{"cancel", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"cancel", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		cancelPayload := decodeJSONMap(t, stdout)
@@ -307,8 +319,10 @@ func TestCLIEndToEndNewRepairAndCancelFlow(t *testing.T) {
 }
 
 func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "sync e2e positive path")
 		change, err := state.LoadChange(root, slug)
@@ -321,7 +335,7 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		reqContent := "# Requirements\n\n### Requirement: Token Auth\nREQ-001: The system MUST support token-based authentication.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
-		stdout, stderr, err := runRootCommand([]string{"validate", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
@@ -339,11 +353,13 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 }
 
 func TestCLIEndToEndRetiredValidateRequirementsCommandIsUnknown(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		stdout, stderr, err := runRootCommand([]string{"validate-requirements", "--json"})
+		stdout, stderr, err := runRootCommandIn(root, []string{"validate-requirements", "--json"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		assert.Contains(t, stderr, "unknown command")
@@ -352,8 +368,10 @@ func TestCLIEndToEndRetiredValidateRequirementsCommandIsUnknown(t *testing.T) {
 }
 
 func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "checkpoint e2e positive path")
 		change, err := state.LoadChange(root, slug)
@@ -370,7 +388,7 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 		taskID := plan.Waves[0].Tasks[0].TaskID
 
 		out := bytes.NewBuffer(nil)
-		cmd := makeCheckpointCmd()
+		cmd := commandForRoot(t, root, makeCheckpointCmd())
 		cmd.SetOut(out)
 		cmd.SetErr(out)
 		cmd.SetArgs([]string{"--json", "--task-id", taskID, "--type", "human_verify"})
@@ -391,8 +409,10 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 }
 
 func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "review e2e positive path")
 		change, err := state.LoadChange(root, slug)
@@ -422,7 +442,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		out := bytes.NewBuffer(nil)
-		cmd := makeReviewCmd()
+		cmd := commandForRoot(t, root, makeReviewCmd())
 		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(out)
 		cmd.SetErr(out)
@@ -436,8 +456,10 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 }
 
 func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "done e2e positive path")
 		change, err := state.LoadChange(root, slug)
@@ -448,7 +470,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 		out := bytes.NewBuffer(nil)
-		cmd := makeDoneCmd()
+		cmd := commandForRoot(t, root, makeDoneCmd())
 		cmd.SetOut(out)
 		cmd.SetErr(out)
 		cmd.SetArgs([]string{"--json"})
@@ -469,8 +491,10 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 }
 
 func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	withWorkspace(t, root, func() {
+	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
 		// Create governed change via helper (request + scaffold + advance to S1).
@@ -485,7 +509,7 @@ func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
 		validateOut := bytes.NewBuffer(nil)
-		validateCmd := makeValidateCmd()
+		validateCmd := commandForRoot(t, root, makeValidateCmd())
 		validateCmd.SetOut(validateOut)
 		validateCmd.SetErr(validateOut)
 		validateCmd.SetArgs([]string{"--json", "--change", slug})

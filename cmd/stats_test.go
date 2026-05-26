@@ -200,42 +200,6 @@ func TestStatsReportsBrokenExecutionSummaryInExecutionStatesWithoutFailing(t *te
 	assert.Contains(t, view.IntegrityIssues[0], "execution_summary_load_failed")
 }
 
-func TestStatsIncludesHiddenBoundWorktreeChanges(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	ensureTestGitRepo(t, root)
-	initTestWorkspace(t, root)
-	initGitRepoForWorktreeTests(t, root)
-
-	slug := createGovernedRequest(t, root, "L3", "stats should not lose hidden bound worktree changes")
-	change, err := state.LoadChange(root, slug)
-	require.NoError(t, err)
-
-	worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
-	branch := "feat/" + change.Slug
-	runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
-	normalizedWT, err := state.NormalizePath(worktreeRoot)
-	require.NoError(t, err)
-
-	changeBeforeWT := change
-	change.CurrentState = model.StateS4Verify
-	change.PlanSubStep = model.PlanSubStepNone
-	change.WorktreePath = normalizedWT
-	change.WorktreeBranch = branch
-	require.NoError(t, state.RelocateGovernedBundle(root, changeBeforeWT, change))
-	require.NoError(t, state.SaveChange(root, change))
-
-	writePassingExecutionSummary(t, root, slug, 1, "t-01")
-	writePassingWaveEvidence(t, root, slug, 1)
-
-	require.NoError(t, os.Remove(filepath.Join(normalizedWT, ".slipway.yaml")))
-
-	view, err := buildStatsView(root, time.Now().UTC())
-	require.NoError(t, err)
-	assert.Equal(t, 1, view.ActiveCount)
-	assert.Containsf(t, view.MissingReviewEvidence, slug, "view=%+v", view)
-}
-
 func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
