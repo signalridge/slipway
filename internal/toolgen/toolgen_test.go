@@ -565,6 +565,19 @@ func TestInjectAdapterFrontmatterPrependsNameAndDescription(t *testing.T) {
 	assert.Less(t, skillIDAt, bodyAt)
 }
 
+func TestInjectAdapterFrontmatterNormalizesCRLFDelimiters(t *testing.T) {
+	t.Parallel()
+
+	src := "---\r\nskill_id: demo\r\nsummary: \"Use when X. Triggers on Y.\"\r\n---\r\n\r\n# Body\r\n"
+
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", "Use when X. Triggers on Y.")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(out, "---\nname: slipway-demo\n"))
+	assert.Contains(t, out, "\n---\n\n# Body\n")
+	assert.NotContains(t, out, "\r")
+}
+
 func TestInjectAdapterFrontmatterEscapesDoubleQuotes(t *testing.T) {
 	t.Parallel()
 

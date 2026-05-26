@@ -1209,8 +1209,8 @@ func renderSourceManagedSkill(raw, id string) (string, error) {
 // existing authoring fields are preserved verbatim below them.
 //
 // The function is string-based on purpose: it keeps the body byte-for-byte
-// identical to the source (important for tier-size and schema-lint gates
-// that measure post-frontmatter bytes).
+// identical to the source after line-ending normalization (important for
+// tier-size and schema-lint gates that measure post-frontmatter bytes).
 func injectAdapterFrontmatter(raw, publicName, description string) (string, error) {
 	fm, tail, err := splitSkillFrontmatter(raw)
 	if err != nil {
@@ -1272,6 +1272,7 @@ func extractAndStripAdapterFields(raw, id string) (description string, stripped 
 }
 
 func splitSkillFrontmatter(raw string) (fm string, tail string, err error) {
+	raw = normalizeTemplateLineEndings(raw)
 	const open = "---\n"
 	if !strings.HasPrefix(raw, open) {
 		return "", "", fmt.Errorf("SKILL.md missing opening `---` delimiter")
@@ -1282,6 +1283,11 @@ func splitSkillFrontmatter(raw string) (fm string, tail string, err error) {
 		return "", "", fmt.Errorf("SKILL.md missing closing `---` delimiter")
 	}
 	return rest[:idx], rest[idx:], nil
+}
+
+func normalizeTemplateLineEndings(raw string) string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	return strings.ReplaceAll(raw, "\r", "\n")
 }
 
 func parseSingleLineFrontmatterScalar(raw, field, id string) (string, error) {

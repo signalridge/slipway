@@ -109,6 +109,9 @@ func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
 }
 
 func TestEmitSupportFilesCopiesSharedGitHubHelpers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit semantics are POSIX-only")
+	}
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
