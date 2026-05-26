@@ -95,14 +95,9 @@ func TestEvaluateRequirementsContractReturnsErrorForUnreadableFile(t *testing.T)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 
 	reqPath := filepath.Join(bundleDir, "requirements.md")
-	require.NoError(t, os.WriteFile(reqPath, []byte(`# Requirements
-
-### Requirement: Auth
-REQ-001: The system must authenticate requests.
-`), 0o644))
-	require.NoError(t, os.Chmod(reqPath, 0))
+	require.NoError(t, os.Mkdir(reqPath, 0o755))
 	t.Cleanup(func() {
-		_ = os.Chmod(reqPath, 0o644)
+		_ = os.RemoveAll(reqPath)
 	})
 
 	_, err := EvaluateRequirementsContract(bundleDir, slug)

@@ -331,17 +331,20 @@ func TestPresetCommandScaffoldFailureRollsBackToPendingConfirmation(t *testing.T
 		change.PlanSubStep = model.PlanSubStepResearch
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Make the bundle directory unwritable so scaffold fails.
+		// Replace intent.md with a directory so scaffold preparation fails
+		// portably before downstream artifacts are rewritten.
 		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.Chmod(bundleDir, 0o555))
-		defer func() { _ = os.Chmod(bundleDir, 0o755) }()
+		blockedArtifact := filepath.Join(bundleDir, "intent.md")
+		require.NoError(t, os.Remove(blockedArtifact))
+		require.NoError(t, os.Mkdir(blockedArtifact, 0o755))
+		defer func() { _ = os.RemoveAll(blockedArtifact) }()
 
 		cmd := makePresetCmd()
 		cmd.SetArgs([]string{"light"})
 		err = cmd.Execute()
 		require.Error(t, err)
 
-		_ = os.Chmod(bundleDir, 0o755)
+		_ = os.RemoveAll(blockedArtifact)
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.True(t, reloaded.WorkflowPresetConfirmationPending(),
@@ -376,18 +379,20 @@ func TestPresetCommandReScaffoldFailurePreservesConfirmedPreset(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepResearch
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Remove a governed artifact then make bundle dir unwritable.
+		// Replace intent.md with a directory so re-scaffold preparation fails
+		// portably.
 		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
-		_ = os.Remove(filepath.Join(bundleDir, "requirements.md"))
-		require.NoError(t, os.Chmod(bundleDir, 0o555))
-		defer func() { _ = os.Chmod(bundleDir, 0o755) }()
+		blockedArtifact := filepath.Join(bundleDir, "intent.md")
+		require.NoError(t, os.Remove(blockedArtifact))
+		require.NoError(t, os.Mkdir(blockedArtifact, 0o755))
+		defer func() { _ = os.RemoveAll(blockedArtifact) }()
 
 		retryCmd := makePresetCmd()
 		retryCmd.SetArgs([]string{"strict"})
 		err = retryCmd.Execute()
-		require.Error(t, err, "re-scaffold should fail because bundle dir is not writable")
+		require.Error(t, err, "re-scaffold should fail because intent.md cannot be read as a file")
 
-		_ = os.Chmod(bundleDir, 0o755)
+		_ = os.RemoveAll(blockedArtifact)
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.WorkflowPresetStrict, reloaded.WorkflowPreset,

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -407,6 +408,10 @@ func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing
 }
 
 func TestCurrentWorktreeRootPropagatesGitErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake git shell wrapper lookup is not reliable on Windows")
+	}
+
 	root := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
@@ -483,8 +488,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, "strict", view.EffectiveWorkflowPreset)
 		assert.NotContains(t, model.ReasonSpecs(view.Blockers), state.WorktreeReasonDedicatedRequired)
-		expectedSource, err := state.NormalizePath(filepath.Join(worktreeRoot, "artifacts", "changes", slug, "change.yaml"))
-		require.NoError(t, err)
+		expectedSource := state.DisplayPath(root, filepath.Join(worktreeRoot, "artifacts", "changes", slug, "change.yaml"))
 		assert.Equal(t, expectedSource, view.SourceStateFile)
 	})
 }

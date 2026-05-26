@@ -10,12 +10,12 @@ func resolveInputContextPath(projectRoot, workspaceRoot, target string) string {
 	if target == "" {
 		return ""
 	}
-	if filepath.IsAbs(target) {
-		return target
+	if filepath.IsAbs(target) || strings.HasPrefix(target, "/") || strings.HasPrefix(target, `\`) {
+		return filepath.ToSlash(filepath.Clean(target))
 	}
 	base := strings.TrimSpace(workspaceRoot)
 	if base == "" {
 		base = projectRoot
 	}
-	return filepath.Join(base, target)
+	return filepath.ToSlash(filepath.Join(base, target))
 }

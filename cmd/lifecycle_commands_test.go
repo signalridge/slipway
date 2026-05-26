@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -755,6 +756,9 @@ func TestRequestScopedCommandsRejectAmbiguousActiveContext(t *testing.T) {
 }
 
 func TestCancelPreemptsInFlightTasks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process signaling is Unix-only")
+	}
 	t.Parallel()
 
 	root := t.TempDir()

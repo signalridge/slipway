@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -52,6 +53,10 @@ func TestAbortRejectsUnexpectedArgs(t *testing.T) {
 }
 
 func TestAbortOutsideExecuteDoesNotPreemptTrackedProcesses(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process liveness probing is Unix-only")
+	}
+
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)

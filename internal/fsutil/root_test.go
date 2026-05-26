@@ -178,6 +178,8 @@ func TestResolveGitWorkspaceInfoRequiresAbsolutePathFormatBeforeShowTopLevel(t *
 	fakeBin := filepath.Join(root, "fake-bin")
 	require.NoError(t, os.MkdirAll(fakeBin, 0o755))
 
+	expectedRepo := filepath.Join(root, "repo")
+	expectedGitDir := filepath.Join(expectedRepo, ".git")
 	fakeGit := filepath.Join(fakeBin, "git")
 	require.NoError(t, os.WriteFile(fakeGit, []byte(fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
@@ -197,7 +199,7 @@ if [[ $path_idx -lt 0 || $show_idx -lt 0 || $path_idx -gt $show_idx ]]; then
   exit 1
 fi
 printf '%%s\n%%s\n%%s\n' %q %q %q
-`, "/repo", "/repo/.git", "/repo/.git")), 0o755))
+`, filepath.ToSlash(expectedRepo), filepath.ToSlash(expectedGitDir), filepath.ToSlash(expectedGitDir))), 0o755))
 	if runtime.GOOS == "windows" {
 		wrapperPath := filepath.Join(fakeBin, "git.bat")
 		wrapper := "@echo off\r\nbash \"%~dp0git\" %*\r\nexit /b %ERRORLEVEL%\r\n"
@@ -208,9 +210,9 @@ printf '%%s\n%%s\n%%s\n' %q %q %q
 
 	info, err := resolveGitWorkspaceInfo(root)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Clean("/repo"), info.worktreeRoot)
-	assert.Equal(t, filepath.Clean("/repo/.git"), info.commonDir)
-	assert.Equal(t, filepath.Clean("/repo/.git"), info.localGitDir)
+	assert.Equal(t, filepath.Clean(expectedRepo), info.worktreeRoot)
+	assert.Equal(t, filepath.Clean(expectedGitDir), info.commonDir)
+	assert.Equal(t, filepath.Clean(expectedGitDir), info.localGitDir)
 }
 
 func writeSharedScopeMarker(t *testing.T, root string) {

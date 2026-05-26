@@ -195,7 +195,7 @@ func TestBuildStatusViewFromChange(t *testing.T) {
 	assert.Equal(t, slug, view.Slug)
 	assert.Equal(t, string(change.Status), view.LifecycleStatus)
 	assert.Equal(t, change.CurrentState, view.CurrentState)
-	assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
+	assert.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "change.yaml")), view.SourceStateFile)
 }
 
 func TestBuildGovernedStatusView(t *testing.T) {
@@ -214,7 +214,7 @@ func TestBuildGovernedStatusView(t *testing.T) {
 	assert.Equal(t, slug, view.Slug)
 	assert.Equal(t, string(change.Status), view.LifecycleStatus)
 	assert.Equal(t, change.CurrentState, view.CurrentState)
-	assert.Equal(t, filepath.Join("artifacts", "changes", slug, "change.yaml"), view.SourceStateFile)
+	assert.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "change.yaml")), view.SourceStateFile)
 	require.Contains(t, view.GateStatus, "G_plan")
 	assert.NotEmpty(t, view.ArtifactDAG)
 }

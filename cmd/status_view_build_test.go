@@ -517,11 +517,11 @@ func TestBuildGovernedStatusViewUsesResolvedWorktreeEvidencePaths(t *testing.T) 
 	view, err := buildStatusViewFromChange(root, loaded)
 	require.NoError(t, err)
 
-	assert.Equal(t, filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "change.yaml"), view.SourceStateFile)
+	assert.Equal(t, state.DisplayPath(root, filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "change.yaml")), view.SourceStateFile)
 	require.Contains(t, view.EvidencePointers.NonTaskEvidence, "skill.plan-audit")
 	assert.Equal(
 		t,
-		filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "verification", "plan-audit.yaml"),
+		state.DisplayPath(root, filepath.Join(normalizedWT, "artifacts", "changes", change.Slug, "verification", "plan-audit.yaml")),
 		view.EvidencePointers.NonTaskEvidence["skill.plan-audit"],
 	)
 }

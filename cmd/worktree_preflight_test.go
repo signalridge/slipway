@@ -191,9 +191,9 @@ func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
 		normalizedWT, normErr := state.NormalizePath(worktreePath)
 		require.NoError(t, normErr)
 		assert.Equal(t, normalizedWT, view.InputContext.WorkspaceRoot)
-		assert.Equal(t, filepath.Join(normalizedWT, "artifacts", "changes", slug), view.InputContext.ArtifactBundle)
+		assert.Equal(t, filepath.ToSlash(filepath.Join(normalizedWT, "artifacts", "changes", slug)), view.InputContext.ArtifactBundle)
 		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, filepath.Join(normalizedWT, "artifacts", "changes", slug, "verification"), view.NextSkill.VerificationDir)
+		assert.Equal(t, filepath.ToSlash(filepath.Join(normalizedWT, "artifacts", "changes", slug, "verification")), view.NextSkill.VerificationDir)
 	})
 }
 

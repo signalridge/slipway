@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
@@ -152,11 +154,21 @@ REQ-001: The system must authenticate requests.
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md"), view.RequirementsContract.Source)
-		assert.Contains(t, view.RequirementsContract.Source, worktreePath)
+		normalizedWorktreePath, err := state.NormalizePath(worktreePath)
+		require.NoError(t, err)
+		normalizedSource, err := state.NormalizePath(view.RequirementsContract.Source)
+		require.NoError(t, err)
+		rel, err := filepath.Rel(normalizedWorktreePath, normalizedSource)
+		require.NoError(t, err)
+		assert.False(t, rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 	})
 }
 
 func TestValidateOmitsRequirementsContractWhenRequirementsFileIsUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod does not make files unreadable for the current user on Windows")
+	}
+
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -171,11 +183,6 @@ func TestValidateOmitsRequirementsContractWhenRequirementsFileIsUnreadable(t *te
 		bundleDir, err := state.GovernedBundleDir(root, change)
 		require.NoError(t, err)
 		reqPath := filepath.Join(bundleDir, "requirements.md")
-		require.NoError(t, os.WriteFile(reqPath, []byte(`# Requirements
-
-### Requirement: Auth
-REQ-001: The system must authenticate requests.
-`), 0o644))
 		require.NoError(t, os.Chmod(reqPath, 0))
 		t.Cleanup(func() {
 			_ = os.Chmod(reqPath, 0o644)
