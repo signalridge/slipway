@@ -111,7 +111,26 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 }
 
 func ListArchivedChangeSlugs(root string) ([]string, error) {
-	return listSubdirs(ArchivedBundlesDir(root))
+	workspaceRoots, err := candidateWorkspaceRoots(root)
+	if err != nil {
+		return nil, err
+	}
+	unique := map[string]struct{}{}
+	for _, workspaceRoot := range workspaceRoots {
+		slugs, err := listSubdirs(ArchivedBundlesDir(workspaceRoot))
+		if err != nil {
+			return nil, err
+		}
+		for _, slug := range slugs {
+			unique[slug] = struct{}{}
+		}
+	}
+	slugs := make([]string, 0, len(unique))
+	for slug := range unique {
+		slugs = append(slugs, slug)
+	}
+	slices.Sort(slugs)
+	return slugs, nil
 }
 
 func hasPerChangeLocalRuntimeState(root, slug string) bool {

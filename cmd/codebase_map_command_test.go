@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +16,7 @@ func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
+		require.NoError(t, os.Remove(filepath.Join(root, ".gitignore")))
 
 		var out bytes.Buffer
 		cmd := makeCodebaseMapCmd()
@@ -36,6 +38,9 @@ func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 			_, err := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
 			require.NoError(t, err)
 		}
+		gitignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+		require.NoError(t, err)
+		assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
 	})
 }
 
@@ -65,6 +70,10 @@ func TestCodebaseMapCommandWritesToInvocationWorktree(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "artifacts/codebase", view.CodebaseMapDir)
 		require.FileExists(t, filepath.Join(worktreePath, "artifacts", "codebase", "STACK.md"))
+		require.FileExists(t, filepath.Join(worktreePath, ".gitignore"))
+		gitignore, err := os.ReadFile(filepath.Join(worktreePath, ".gitignore"))
+		require.NoError(t, err)
+		assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
 		require.NoFileExists(t, filepath.Join(root, "artifacts", "codebase", "STACK.md"))
 	})
 }

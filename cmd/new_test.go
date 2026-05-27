@@ -106,6 +106,7 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
+		require.NoError(t, os.Remove(filepath.Join(root, ".gitignore")))
 
 		classifier := &recordingIntentClassifier{
 			classification: progression.IntentClassification{
@@ -126,6 +127,9 @@ func TestNewCommandGuardrailAutoCreatesDiscoveryChange(t *testing.T) {
 		assert.True(t, change.NeedsDiscovery)
 		assert.Equal(t, model.GuardrailDomainAuthAuthZ, change.GuardrailDomain)
 		assert.Equal(t, model.StateS0Intake, change.CurrentState)
+		gitignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+		require.NoError(t, err)
+		assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
 	})
 }
 

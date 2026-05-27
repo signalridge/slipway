@@ -1,0 +1,56 @@
+slug: make-slipway-archived-change-records-git-safe-while-keeping-raw-evidence-events-verification-loc
+description: make Slipway archived change records Git-safe while keeping raw evidence events verification local
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-27T14:49:21.745289Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/make-slipway-archived-change-records-git-safe-while-keeping-raw-evidence-events-verification-loc
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, Markdown
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 5da22b5f7425b77e31927628c48d5ef59074251d6e825ff25da68c805b88a9a0
+        updated_at: 2026-05-27T15:51:56.296327Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: a2688a252144bebe1a00a481d52b9af3a5942b7e32864e760926480cfe58f258
+        updated_at: 2026-05-27T15:51:56.296327Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 5ff22a8c87397407c27a8e2fb74615a034c42bae93049f269d5b1c5545d36efa
+        updated_at: 2026-05-27T15:51:56.296327Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ecc28016a5987b6feaee5662dc755044f3c891f01c22e65eb55c48bd65655773
+        updated_at: 2026-05-27T15:51:56.296327Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 665e9d06db1b2a1c9b3d279bb3fbfe38aa466893507ac7d9307571963033282a
+        updated_at: 2026-05-27T15:51:56.296327Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 80784a0f8caf88f5e4913c5730c82b8431dae2edc9807c8b4413689b90f76cc3
+        updated_at: 2026-05-27T15:51:56.296327Z

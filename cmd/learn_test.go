@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,6 +71,26 @@ func TestBuildLearnViewAggregatesLifecycleSignalsIntoPreviewProposals(t *testing
 	assert.Equal(t, 1.0, view.Proposals[0].Metrics["plan_audit_stall_rate"])
 	assert.NotEmpty(t, view.Proposals[0].RecommendedAction)
 	assert.NotEmpty(t, view.Proposals[0].Risk)
+}
+
+func TestBuildLearnViewToleratesArchivedChangeWithoutLifecycleEvents(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("archived-no-events")
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "changes", change.Slug, "intent.md"), []byte("# Intent\n"), 0o644))
+
+	_, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	view, err := buildLearnView(root, time.Date(2026, 5, 27, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, view.Signals.ArchivedChanges)
+	assert.Equal(t, 1, view.AnalyzedChanges)
+	assert.Empty(t, view.Signals.MissingLifecycleLogs)
+	assert.Empty(t, view.IntegrityIssues)
 }
 
 func TestLearnPreviewCommandReturnsReadOnlyPreviewFlags(t *testing.T) {

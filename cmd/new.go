@@ -391,6 +391,9 @@ func createDirectGovernedChange(
 	}
 
 	return withChangeCreateLock(root, func() error {
+		if _, err := state.EnsureLocalStateGitIgnore(root); err != nil {
+			return err
+		}
 		if err := rejectIfConflictingChange(root); err != nil {
 			return err
 		}

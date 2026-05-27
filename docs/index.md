@@ -20,9 +20,9 @@ Slipway keeps three surfaces separate:
 
 | Surface | Role |
 | --- | --- |
-| `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority. |
-| `artifacts/changes/<slug>/events/lifecycle.jsonl` | Append-only audit trace for mutating lifecycle outcomes. |
-| `artifacts/changes/<slug>/*.md` and `verification/*.yaml` | Intent, requirements, decisions, task plan, assurance, and skill evidence. |
+| `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority; archived snapshots are Git-safe project records. |
+| `artifacts/changes/<slug>/*.md` | Intent, research, requirements, decisions, task plan, and assurance project records. |
+| `artifacts/changes/<slug>/events/`, `verification/`, and `evidence/` | Local-only raw proof directories by default. |
 
 `status`, `validate`, and `next` recompute readiness without mutating state. `run` is the primary governed execution surface: it advances until a skill, blocker, checkpoint, or done-ready state is surfaced.
 

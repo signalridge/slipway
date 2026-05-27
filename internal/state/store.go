@@ -160,6 +160,7 @@ func candidateWorkspaceRoots(root string) ([]string, error) {
 type bundleCandidate struct {
 	WorkspaceRoot string
 	Path          string
+	Archived      bool
 }
 
 func bundleCandidatesForRoots(workspaceRoots []string, slug string) []bundleCandidate {
@@ -179,6 +180,7 @@ func archivedBundleCandidatesForRoots(workspaceRoots []string, slug string) []bu
 		paths = append(paths, bundleCandidate{
 			WorkspaceRoot: workspaceRoot,
 			Path:          BundleArchivedChangeFilePath(workspaceRoot, slug),
+			Archived:      true,
 		})
 	}
 	return paths
@@ -321,7 +323,7 @@ func loadChangeFromCandidatesWithLoader(
 	for _, candidate := range paths {
 		change, err := load(candidate.Path)
 		if err == nil {
-			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change) {
+			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change, candidate.Archived) {
 				continue
 			}
 			return change, nil
@@ -397,7 +399,10 @@ func ListChangesForCreateGuard(root string) ([]model.Change, error) {
 	return changes, err
 }
 
-func changeVisibleFromRoot(root, workspaceRoot string, change model.Change) bool {
+func changeVisibleFromRoot(root, workspaceRoot string, change model.Change, archivedCandidate bool) bool {
+	if archivedCandidate && change.Status != model.ChangeStatusActive && strings.TrimSpace(change.WorktreePath) == "" {
+		return true
+	}
 	normalizedRoot, err := NormalizePath(root)
 	if err != nil {
 		normalizedRoot = filepath.Clean(root)

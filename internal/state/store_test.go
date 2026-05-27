@@ -812,6 +812,18 @@ func TestListChangesIgnoresWorktreeEnumerationFailureOutsideGitWorkspace(t *test
 	assert.Empty(t, changes)
 }
 
+func TestChangeVisibleFromRootOnlyAllowsEmptyWorktreeForArchivedCandidates(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	otherWorkspace := t.TempDir()
+	change := model.NewChange("portable-archive")
+	change.Status = model.ChangeStatusDone
+
+	assert.False(t, changeVisibleFromRoot(root, otherWorkspace, change, false))
+	assert.True(t, changeVisibleFromRoot(root, otherWorkspace, change, true))
+	assert.True(t, changeVisibleFromRoot(root, root, change, false))
+}
+
 func createRuntimeLayout(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

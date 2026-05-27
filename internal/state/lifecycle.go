@@ -102,7 +102,7 @@ func ArchiveChange(
 	if err != nil {
 		return model.Change{}, err
 	}
-	rewriteArchivedArtifactPaths(&archived, paths.GovernedBundleArchive)
+	sanitizeArchivedChangeSnapshot(&archived)
 	b, err := yaml.Marshal(archived)
 	if err != nil {
 		return model.Change{}, err
@@ -138,7 +138,15 @@ func ArchiveChange(
 	return archived, nil
 }
 
-func rewriteArchivedArtifactPaths(change *model.Change, archiveDir string) {
+func sanitizeArchivedChangeSnapshot(change *model.Change) {
+	if change == nil {
+		return
+	}
+	change.WorktreePath = ""
+	rewriteArchivedArtifactPaths(change)
+}
+
+func rewriteArchivedArtifactPaths(change *model.Change) {
 	if change == nil || len(change.Artifacts) == 0 {
 		return
 	}
@@ -147,7 +155,7 @@ func rewriteArchivedArtifactPaths(change *model.Change, archiveDir string) {
 		if name == "." || name == string(filepath.Separator) || name == "" {
 			name = artifactFileNameForArchive(key, artifact)
 		}
-		artifact.Path = filepath.Join(archiveDir, name)
+		artifact.Path = filepath.ToSlash(name)
 		change.Artifacts[key] = artifact
 	}
 }

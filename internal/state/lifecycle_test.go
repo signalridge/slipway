@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -90,9 +91,15 @@ func TestArchiveChangeCancelledUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug))
 	require.NoError(t, err)
-	expectedArchivePath, normErr := NormalizePath(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "intent.md"))
-	require.NoError(t, normErr)
-	assert.Equal(t, expectedArchivePath, archived.Artifacts["intent"].Path)
+	assert.Empty(t, archived.WorktreePath)
+	assert.Equal(t, "intent.md", archived.Artifacts["intent"].Path)
+
+	raw, err := os.ReadFile(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "change.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "worktree_path:")
+	assert.NotContains(t, string(raw), worktreeRoot)
+	assert.NotContains(t, string(raw), filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "intent.md"))
+	assert.Contains(t, strings.ReplaceAll(string(raw), "\r\n", "\n"), "path: intent.md\n")
 }
 
 func TestLoadArchivedChangeFindsBoundWorktreeArchive(t *testing.T) {
@@ -127,7 +134,34 @@ func TestLoadArchivedChangeFindsBoundWorktreeArchive(t *testing.T) {
 	loaded, err := LoadArchivedChange(root, slug)
 	require.NoError(t, err)
 	assert.Equal(t, model.ChangeStatusDone, loaded.Status)
-	assert.Equal(t, worktreeRoot, loaded.WorktreePath)
+	assert.Empty(t, loaded.WorktreePath)
+	assert.Equal(t, "intent.md", loaded.Artifacts["intent"].Path)
+}
+
+func TestListArchivedChangeSlugsIncludesBoundWorktreeArchives(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeRepoLayout(t)
+	slug := "listed-worktree-archive"
+	worktreeRoot := addGitWorktree(t, root, "listed-worktree-archive")
+
+	change := model.NewChange(slug)
+	change.WorktreePath = worktreeRoot
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateDone
+	bundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", slug)
+	change.Artifacts = map[string]model.ArtifactState{
+		"intent": {ID: "intent", Path: filepath.Join(bundleDir, "intent.md"), State: model.ArtifactLifecycleDraft},
+	}
+	require.NoError(t, SaveChange(root, change))
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n"), 0o644))
+
+	_, err := ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	slugs, err := ListArchivedChangeSlugs(root)
+	require.NoError(t, err)
+	assert.Contains(t, slugs, slug)
 }
 
 func TestArchiveChangeCancelledAllowsUnboundL3BeforeWorktreeBinding(t *testing.T) {
