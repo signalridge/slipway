@@ -63,7 +63,7 @@ func LastMarkdownSectionContent(content, heading string) string {
 
 // HasBlockingOpenQuestions reports whether the canonical Open Questions section
 // contains unresolved content. A resolved checklist entry, an empty/comment-only
-// section, or an explicit "(none)" note is documentation, not an intake blocker.
+// section, or an explicit none marker is documentation, not an intake blocker.
 func HasBlockingOpenQuestions(content string) bool {
 	section := LastMarkdownSectionContent(content, "## Open Questions")
 	if section == "" {
@@ -72,14 +72,41 @@ func HasBlockingOpenQuestions(content string) bool {
 	lines := strings.Split(section, "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.EqualFold(trimmed, "(none)") {
+		if trimmed == "" {
 			continue
 		}
 		lowerTrimmed := strings.ToLower(trimmed)
 		if strings.HasPrefix(lowerTrimmed, "- [x]") || strings.HasPrefix(lowerTrimmed, "* [x]") {
 			continue
 		}
+		if strings.HasPrefix(lowerTrimmed, "- [ ]") || strings.HasPrefix(lowerTrimmed, "* [ ]") {
+			return true
+		}
+		if isExplicitNoneMarker(trimmed) {
+			continue
+		}
 		return true
 	}
 	return false
+}
+
+func isExplicitNoneMarker(line string) bool {
+	normalized := strings.TrimSpace(line)
+	for {
+		next := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(normalized, "-"), "*"))
+		if next == normalized {
+			break
+		}
+		normalized = next
+	}
+	normalized = strings.Trim(normalized, " \t().:")
+	normalized = strings.TrimSuffix(normalized, ".")
+	normalized = strings.ToLower(strings.TrimSpace(normalized))
+
+	switch normalized {
+	case "none", "n/a", "na", "not applicable", "no open questions", "no unresolved questions":
+		return true
+	default:
+		return false
+	}
 }

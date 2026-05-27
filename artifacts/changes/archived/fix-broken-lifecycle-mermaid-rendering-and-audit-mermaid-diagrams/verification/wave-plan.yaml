@@ -1,0 +1,56 @@
+version: 1
+generated_at: 2026-05-27T11:50:03.46904505Z
+tasks_plan_hash: 761b67a7adf1cd24b9b52c48a9ef7cd993bfb5c8dae73a47e430149499f317d9
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Replace the README Lifecycle Mermaid block and append the repo status image.
+          target_files:
+            - README.md
+          task_kind: doc
+        - task_id: t-02
+          objective: Normalize explicit none markers in Open Questions detection.
+          target_files:
+            - internal/stringutil/html.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-03
+          objective: Add focused Open Questions regression coverage and workflow docs.
+          depends_on:
+            - t-02
+          target_files:
+            - docs/workflow.md
+            - internal/engine/progression/advance_test.go
+            - internal/stringutil/html_test.go
+          task_kind: test
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Audit Mermaid blocks in README/docs.
+          depends_on:
+            - t-01
+          target_files:
+            - README.md
+            - docs/ai-tools.md
+            - docs/design.md
+            - docs/workflow.md
+          task_kind: verification
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: Run repo-native validation for the bounded code/docs change.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+          target_files:
+            - README.md
+            - docs/workflow.md
+            - internal/engine/progression/advance_test.go
+            - internal/stringutil/html.go
+            - internal/stringutil/html_test.go
+          task_kind: verification

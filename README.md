@@ -68,18 +68,20 @@ See [Design Philosophy](docs/design.md) for the longer architecture explanation.
 ## Lifecycle
 
 ```mermaid
-flowchart LR
-  New["slipway new"] --> Intake["S0 Intake<br/>intent + scope"]
-  Intake --> Plan["S1 Plan<br/>research + requirements + decision + tasks"]
-  Plan --> Execute["S2 Execute<br/>task waves + evidence"]
-  Execute --> Review["S3 Review<br/>spec + quality review"]
-  Review --> Verify["S4 Verify<br/>goal verification"]
-  Verify --> Closeout["S5 Closeout<br/>fresh proof + assurance"]
-  Closeout --> Done["slipway done<br/>archive terminal state"]
+stateDiagram-v2
+  [*] --> S0_INTAKE: slipway new
+  S0_INTAKE --> S1_PLAN: intent confirmed
+  S1_PLAN --> S2_EXECUTE: plan approved
+  S2_EXECUTE --> S3_REVIEW: task evidence complete
+  S3_REVIEW --> S4_VERIFY: reviews pass
+  S4_VERIFY --> S5_CLOSEOUT: goals verified
+  S5_CLOSEOUT --> DONE_READY: closeout proof fresh
+  DONE_READY --> [*]: slipway done
 
-  Next["slipway next"] -. read-only handoff .-> Intake
-  Status["slipway status / validate"] -. read-only inspection .-> Plan
-  Run["slipway run"] -. governed advancement .-> Execute
+  S0_INTAKE --> S0_INTAKE: clarification or research
+  S1_PLAN --> S1_PLAN: research or audit blockers
+  S2_EXECUTE --> S2_EXECUTE: wave blockers
+  S3_REVIEW --> S2_EXECUTE: review requires changes
 ```
 
 The primary lifecycle commands are `slipway new`, `slipway next`, `slipway run`, `slipway status`, and `slipway done`.
@@ -177,3 +179,7 @@ mkdocs build --strict
 ```
 
 CI also runs Markdown/YAML/action linting, Go tests across platforms, race tests, build checks, security scans, release checks, Nix checks, and the docs workflow in `.github/workflows/docs.yml`.
+
+## Repository Status
+
+![Repository status](https://camo.githubusercontent.com/fa4d9bd227a6f8cb32c28b1074b8ae35ffb526036c23c3aaedcc0084bc545d08/68747470733a2f2f7265706f62656174732e6178696f6d2e636f2f6170692f656d6265642f383165663961386335313139313866633065656365396264303962623436626137386565666430632e737667)

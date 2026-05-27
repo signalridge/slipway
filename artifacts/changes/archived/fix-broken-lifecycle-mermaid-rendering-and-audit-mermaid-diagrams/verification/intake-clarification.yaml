@@ -1,0 +1,12 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T11:37:55Z"
+run_version: 0
+references:
+  - artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/intent.md
+notes: |
+  User corrected the README-end request from configuration guidance to a repo status image,
+  then confirmed continuation. Scope is docs-only: repair README Lifecycle Mermaid rendering,
+  audit Mermaid blocks in README/docs for low-risk improvements, and append the provided
+  camo.githubusercontent.com repo status image to README. Explicitly out of scope: CLI behavior,
+  lifecycle semantics, JSON contracts, and Go state-machine changes.

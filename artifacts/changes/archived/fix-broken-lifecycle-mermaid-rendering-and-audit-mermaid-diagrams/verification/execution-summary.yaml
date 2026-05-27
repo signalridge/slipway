@@ -1,0 +1,64 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-27T11:52:54Z
+overall_verdict: pass
+tasks_plan_hash: 761b67a7adf1cd24b9b52c48a9ef7cd993bfb5c8dae73a47e430149499f317d9
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - README.md
+      target_files:
+        - README.md
+      evidence_ref: artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/verification/wave-orchestration.yaml#t-01
+      captured_at: 2026-05-27T11:52:54Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/stringutil/html.go
+      target_files:
+        - internal/stringutil/html.go
+      evidence_ref: artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/verification/wave-orchestration.yaml#t-02
+      captured_at: 2026-05-27T11:52:54Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: test
+      changed_files:
+        - docs/workflow.md
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html_test.go
+      target_files:
+        - docs/workflow.md
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html_test.go
+      evidence_ref: artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/verification/wave-orchestration.yaml#t-03
+      captured_at: 2026-05-27T11:52:54Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - README.md
+        - docs/ai-tools.md
+        - docs/design.md
+        - docs/workflow.md
+      evidence_ref: artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/verification/wave-orchestration.yaml#t-04
+      captured_at: 2026-05-27T11:52:54Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - README.md
+        - docs/workflow.md
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html.go
+        - internal/stringutil/html_test.go
+      evidence_ref: artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/verification/wave-orchestration.yaml#t-05
+      captured_at: 2026-05-27T11:52:54Z

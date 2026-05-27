@@ -64,11 +64,32 @@ func TestHasBlockingOpenQuestions(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "explicit none bullet",
+			content: `## Open Questions
+- None.
+`,
+			want: false,
+		},
+		{
+			name: "explicit no open questions bullet",
+			content: `## Open Questions
+* No open questions.
+`,
+			want: false,
+		},
+		{
 			name: "resolved checklist",
 			content: `## Open Questions
 - [x] Resolved by local reference survey.
 `,
 			want: false,
+		},
+		{
+			name: "unchecked none checklist remains blocking",
+			content: `## Open Questions
+- [ ] None.
+`,
+			want: true,
 		},
 		{
 			name: "unchecked checklist",

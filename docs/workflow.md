@@ -86,6 +86,11 @@ Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run`
 
 ```markdown
 ## Open Questions
+- None.
+```
+
+```markdown
+## Open Questions
 - [x] Installer path resolved by research.
 ```
 

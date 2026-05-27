@@ -1,0 +1,19 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T11:47:31Z"
+run_version: 0
+references:
+  - artifacts/changes/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/research.md
+  - artifacts/codebase/ARCHITECTURE.md
+  - artifacts/codebase/TESTING.md
+  - artifacts/codebase/CONCERNS.md
+  - internal/stringutil/html.go
+  - internal/stringutil/html_test.go
+  - internal/engine/progression/advance_test.go
+  - README.md
+  - docs/workflow.md
+notes: |
+  Research covered architecture, patterns, risks, and test strategy for the Mermaid/README
+  documentation edits and the added Open Questions false-positive fix. Selected approach:
+  normalize explicit none markers such as "- None." in HasBlockingOpenQuestions, document it,
+  and keep unchecked checklist items plus substantive unresolved prose blocking.

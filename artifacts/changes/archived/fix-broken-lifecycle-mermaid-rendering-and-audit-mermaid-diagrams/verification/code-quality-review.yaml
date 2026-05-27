@@ -1,0 +1,25 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T11:55:42Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - internal/stringutil/html.go
+  - internal/stringutil/html_test.go
+  - internal/engine/progression/advance_test.go
+  - README.md
+  - docs/workflow.md
+notes: |
+  Gaps (code_to_artifact): none. The helper change is small and deterministic:
+  explicit none marker normalization is isolated to HasBlockingOpenQuestions, while
+  unchecked checklist entries still return blocking. No broad parsing framework or
+  dependency was added.
+
+  Gaps (artifact_to_code): none. Focused tests cover resolved marker bullets and
+  unchecked checklist blocking. README/docs edits are bounded and Mermaid syntax was
+  verified with mmdc. Safety review found no auth, credential, privacy, destructive,
+  schema, or external API surface touched.
+
+  Test evidence reviewed: go test ./internal/stringutil ./internal/engine/progression
+  -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics'
+  -count=1 passed.

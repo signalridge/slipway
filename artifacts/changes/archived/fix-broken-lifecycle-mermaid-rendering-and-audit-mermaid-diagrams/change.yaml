@@ -1,0 +1,56 @@
+slug: fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams
+description: fix broken Lifecycle Mermaid rendering and audit Mermaid diagrams
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-05-27T11:18:21.68082Z
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams
+worktree_branch: feat/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Markdown
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/assurance.md
+        state: frozen
+        content_hash: 46f9ee634ae8f391ad2d148bf8d1055ca0054b27a0b03fcf371f527947748065
+        updated_at: 2026-05-27T12:04:09.703724614Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/decision.md
+        state: frozen
+        content_hash: 502d999b7fbd11ccd90fb0f12037258affee5d6874e9f45b7621e12b2bc8a5de
+        updated_at: 2026-05-27T11:49:38.444860831Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/intent.md
+        state: frozen
+        content_hash: 944269e1fb462bdd9f0f9312081f8f348bb6273700b2c5f57a1133cd822b61cb
+        updated_at: 2026-05-27T11:45:21.830293885Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/requirements.md
+        state: frozen
+        content_hash: 146c62dc2d6439a5c7f37507b5f238fb7d86b59ac24faec82d9feaabfe5bb149
+        updated_at: 2026-05-27T11:49:38.422882172Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/research.md
+        state: frozen
+        content_hash: c7c1e6f578dd43ea076f4bc16c80c9692c8fcc5b0f2a1ba15e75805538986132
+        updated_at: 2026-05-27T11:47:24.856013962Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/artifacts/changes/archived/fix-broken-lifecycle-mermaid-rendering-and-audit-mermaid-diagrams/tasks.md
+        state: frozen
+        content_hash: f3a391b89e0e68fe89002b8f2b8872ef9e3192503c404678ff62dd68b2725d5b
+        updated_at: 2026-05-27T11:54:00.931472261Z

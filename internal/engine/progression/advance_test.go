@@ -568,6 +568,14 @@ func TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics(t *testing.T) {
 			wantReason: "clarification_complete",
 		},
 		{
+			name: "explicit none bullet advances to confirm",
+			questions: `## Open Questions
+- None.
+`,
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
+		},
+		{
 			name: "resolved checklist advances to confirm",
 			questions: `## Open Questions
 - [x] Installer path resolved by research.

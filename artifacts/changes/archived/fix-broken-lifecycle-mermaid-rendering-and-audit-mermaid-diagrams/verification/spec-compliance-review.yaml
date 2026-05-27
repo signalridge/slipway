@@ -1,0 +1,26 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T11:54:36Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - requirements.md#REQ-001 -> README.md Lifecycle stateDiagram-v2
+  - requirements.md#REQ-002 -> Mermaid CLI parse over README.md and docs/*.md
+  - requirements.md#REQ-003 -> README.md Repository Status image
+  - requirements.md#REQ-004 -> internal/stringutil/html.go marker normalization
+  - requirements.md#REQ-005 -> internal/stringutil/html_test.go, internal/engine/progression/advance_test.go, docs/workflow.md
+notes: |
+  Gaps (artifact_to_code): none. REQ-001 is implemented by the README Lifecycle
+  state diagram. REQ-002 is covered by the Mermaid parse verification. REQ-003 is
+  implemented by the README Repository Status image using the provided camo URL.
+  REQ-004 is implemented in HasBlockingOpenQuestions while preserving unchecked
+  checklist blockers. REQ-005 is covered by focused helper/progression tests and
+  docs/workflow.md.
+
+  Gaps (code_to_artifact): none. Changed files map back to the approved tasks:
+  README.md -> t-01/t-04, docs/workflow.md and tests -> t-03, html.go -> t-02.
+  Decision fidelity: pass. The implementation follows the locked Approach B and
+  does not change public command surfaces, JSON fields, or lifecycle state order.

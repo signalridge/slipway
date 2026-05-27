@@ -1,0 +1,46 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T12:02:47Z"
+run_version: 1
+references:
+  - "fresh:command=go test ./internal/stringutil ./internal/engine/progression -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics' -count=1"
+  - "fresh:command=go test -cover ./internal/stringutil ./internal/engine/progression -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics' -count=1"
+  - "fresh:command=Mermaid CLI parse for all README.md and docs/*.md mermaid blocks"
+  - "fresh:command=rg placeholder/stub scan on changed files"
+  - "fresh:command=go test ./..."
+notes: |
+  Criteria:
+    AC-1: README Lifecycle Mermaid renders reliably - pass.
+      Exists: README.md contains a stateDiagram-v2 under ## Lifecycle.
+      Substantive: The diagram covers S0_INTAKE through DONE_READY plus retry/self-loop paths.
+      Wired: Mermaid CLI parsed README.md:70 successfully in the fresh all-diagram parse.
+
+    AC-2: Mermaid diagram audit stays bounded - pass.
+      Exists: README.md and docs/*.md contain 4 Mermaid blocks.
+      Substantive: No broad docs rewrite was introduced; only README Lifecycle changed.
+      Wired: Fresh Mermaid CLI parse processed README.md:70, docs/ai-tools.md:5,
+      docs/design.md:18, and docs/workflow.md:12 with MERMAID_OK.
+
+    AC-3: README ends with requested repo status image - pass.
+      Exists: README.md ends with ## Repository Status and the provided camo URL image.
+      Substantive: The image is a real Markdown image embed, not config text.
+      Wired: README.md final section contains the user-provided camo.githubusercontent.com URL.
+
+    AC-4: Explicit none markers do not block Open Questions - pass.
+      Exists: internal/stringutil/html.go includes explicit none marker normalization.
+      Substantive: Unchecked checklist entries still return blocking before none marker handling.
+      Wired: Focused tests passed for TestHasBlockingOpenQuestions and
+      TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics.
+
+    AC-5: Open Questions behavior is documented and tested - pass.
+      Exists: docs/workflow.md documents "- None."; tests cover "- None." and "- [ ] None.".
+      Substantive: The tests assert both resolved and blocking cases.
+      Wired: Focused tests and full go test ./... passed on the current worktree.
+
+  Fresh command output:
+    - Focused tests: ok internal/stringutil; ok internal/engine/progression.
+    - Coverage diagnostic: internal/stringutil 69.0%; internal/engine/progression 8.8%
+      for the focused command. Change-surface behavior is directly covered by the named tests.
+    - Stub scan: only legitimate boolean return false paths in helper/tests were matched;
+      no TODO/FIXME/HACK/placeholder/not implemented production stubs were found.
+    - Full suite: go test ./... passed for all packages.
