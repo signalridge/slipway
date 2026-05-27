@@ -1,0 +1,23 @@
+{{- define "command-done-body" -}}
+# Done
+
+Finalize a done-ready change: check G_ship gate, archive runtime state, and clean up.
+
+## Invocation
+```bash
+slipway done
+# or
+slipway done --all-ready
+```
+
+## Contract
+- Only call when the change has reached DONE-ready state.
+- `--all-ready` archives every active change that is currently done-ready.
+- CLI checks G_ship gate before archiving.
+- If gate fails, show blockers and suggest remediation.
+- Show archived change summary to user.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

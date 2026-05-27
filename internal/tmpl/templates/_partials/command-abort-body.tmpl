@@ -1,0 +1,25 @@
+{{- define "command-abort-body" -}}
+# Abort
+
+Abort only the active execution session. Unlike `cancel`, this does not archive or terminally close the change.
+
+## Invocation
+```bash
+slipway abort --json
+```
+
+## Contract
+- Only valid for an active change in `S2_EXECUTE`.
+- Interrupts in-flight task processes using the standard preemption helpers.
+- Clears the active checkpoint, if any.
+- Preserves the governed change for later inspection or resume.
+- Use `slipway run --resume` to continue later, or `slipway cancel` if the change should terminate and archive.
+
+## When To Use
+- Execution must stop now, but the change should remain active.
+- A task runner is wedged or the operator wants to recover manually before resuming.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

@@ -1,0 +1,26 @@
+## Procedure
+1. Name the assets the change affects (data, credentials, privileged
+   operations). Asset naming comes first; skipping it produces vague threats.
+2. Name the actors that can reach each asset (anonymous, authenticated user,
+   internal service, admin). Cite the surface that exposes each actor.
+3. For each (asset, actor) pair, enumerate threats using STRIDE (spoofing,
+   tampering, repudiation, information disclosure, denial of service,
+   elevation of privilege). Drop pairs with no plausible threat.
+4. For each threat, cite the mitigation: existing code path, proposed change,
+   or accepted residual risk. Residuals require explicit acceptance.
+5. Produce an ownership map: which skill or review surface owns catching
+   regressions of each mitigation.
+
+### STRIDE prompts
+- **S**poofing: can an actor claim identity they do not hold at this
+  boundary? Cite the authenticator that would stop them.
+- **T**ampering: can an actor modify data or messages in flight or at
+  rest? Cite the integrity control (signature, transaction, constraint).
+- **R**epudiation: can an actor deny an action that matters? Cite the
+  audit record that would contradict the denial.
+- **I**nformation disclosure: can an actor read data outside their
+  authorization scope? Cite the authorization check or filter.
+- **D**enial of service: can an actor exhaust a bounded resource? Cite
+  the quota, rate limit, or backpressure that bounds cost.
+- **E**levation of privilege: can an actor cross a trust boundary into a
+  role with broader authority? Cite the privilege check.

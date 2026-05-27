@@ -1,0 +1,19 @@
+{{- define "command-cancel-body" -}}
+# Cancel
+
+Cancel the active change and archive its terminal state.
+
+## Invocation
+```bash
+slipway cancel
+```
+
+## Contract
+- Terminates the active change regardless of current state.
+- Archives terminal state for audit trail.
+- Show cancellation summary to user.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

@@ -1,0 +1,19 @@
+## Checklist
+- [ ] Spec-to-code: every acceptance signal cites a file:line or test.
+- [ ] Spec-to-code: every skipped item has reviewer-accepted justification.
+- [ ] Code-to-spec: every non-trivial diff hunk cites the plan item it implements.
+- [ ] Code-to-spec: unlinked diff hunks are flagged as drift, not silently accepted.
+- [ ] Re-derived acceptance signal agrees with the plan's stated signal.
+
+## Coverage matrix
+Produce one row per mapping, direction explicit. `status` is `covered`
+(spec item realized / hunk approved), `skipped` (spec item intentionally
+deferred with justification), or `drift` (hunk has no plan item).
+
+| direction | spec_item / diff_hunk | realized_by / plan_item | status |
+|-----------|------------------------|--------------------------|--------|
+| spec-to-code | "<quoted plan line>" | "<path:line or test>" | covered / skipped |
+| code-to-spec | "<path:line-range>" | "<quoted plan line>" | covered / drift |
+
+The matrix is the reviewable primary artifact; prose summaries substitute
+for it only when no rows would change after write-up.
