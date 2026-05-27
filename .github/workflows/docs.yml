@@ -28,6 +28,9 @@ jobs:
   pages-status:
     name: Check Pages Deployment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
     outputs:
       deploy: ${{ steps.pages.outputs.deploy }}
     steps:
