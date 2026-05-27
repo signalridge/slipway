@@ -1,0 +1,50 @@
+# Binaries
+wavor
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Go build cache
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Wavor runtime state (local only)
+.wavor/
+
+# Temp files
+tmp/
+site/
+*.tmp
+
+.claude/
+.codex/
+.serena/
+.cursor/
+.opencode/
+.gemini/
+openspec/
+
+# slipway managed
+.worktrees/
+
+# Stray Python bytecode in bundled helpers
+__pycache__/
+*.pyc
+
+# Local scratch copies for research
+skills_ref/
+.ruff_cache/

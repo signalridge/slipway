@@ -1,0 +1,111 @@
+---
+skill_id: goal-verification
+name: slipway-goal-verification
+description: "Use when verifying acceptance criteria with fresh evidence before completion claims. Triggers on post-review completion checks or whenever completion is being asserted."
+---
+
+# Goal Verification
+
+```
+IRON LAW: NO COMPLETION CLAIMS WITHOUT FRESH 3-LEVEL VERIFICATION
+```
+
+## Purpose
+Verify that acceptance criteria are met and that every completion claim has
+fresh, concrete proof from the current run.
+
+## Workflow Outline
+1. Enumerate every acceptance criterion that must be proven.
+2. Verify each criterion at Exists, Substantive, and Wired levels.
+3. Aggregate blockers, write verification, and wait for approval.
+
+## When This Runs
+After review passes. `slipway next` returns `next_skill: goal-verification`.
+
+## Read Context
+Run `slipway next --json` and read the acceptance criteria from the original
+change description and governed artifacts.
+If `validate --json`, `status --json`, or `review --json` exposes
+`scope_contract`, read it before finalizing completion. Final evidence must
+state whether the in-scope contract passed, failed, or was not applicable.
+
+## Extract Acceptance Criteria
+Enumerate every acceptance criterion as a discrete item and assign a stable ID
+(`AC-1`, `AC-2`, ...). This list is the verification scope.
+
+## Verify Each Criterion (3-Level Check)
+For each criterion, record a verdict with concrete proof at all three levels:
+- **Exists**: the claimed file, function, endpoint, test, or artifact is present
+- **Substantive**: the implementation is real, not a TODO, placeholder, empty body, or hardcoded stub
+- **Wired**: the implementation is integrated, reachable from the correct entry point, and exercised by a real path or test
+
+Record each result as:
+```json
+{ "id": "AC-1", "description": "<criterion text>", "verdict": "pass|fail|blocked", "evidence": "<concrete proof>" }
+```
+
+## Fresh Evidence Contract
+{{template "verification-doctrine"}}
+
+Apply all of the following before marking any criterion `pass`:
+{{template "fresh-evidence-checklist"}}
+
+Minimum record:
+{{template "fresh-evidence-minimum-record"}}
+
+## Stub And Placeholder Scan
+Run the following scans against all claimed target files. Any real hit is a blocker.
+
+```bash
+grep -rn 'TODO\|FIXME\|HACK\|XXX\|PLACEHOLDER\|NotImplemented\|not implemented' <target_files>
+grep -rn 'panic(".*implement\|panic(".*todo\|return nil, nil' <target_files>
+grep -rn 'return ""$\|return 0$\|return false$' <target_files>
+grep -Pzo '\{\s*\n\s*\}' <target_files>
+```
+
+Also block:
+- zero-value or hardcoded production responses
+- assertion-free tests
+- imports unused in the claimed integration path
+- commented-out code replacing real implementation
+
+## Aggregate Verdict
+- `pass`: every criterion passes at Exists, Substantive, and Wired levels
+- `fail`: any criterion is `fail` or `blocked`
+- Populate `blockers[]` with failed criterion IDs
+- Run guardrail high-risk checks when applicable
+- Use fresh test execution, not cached output
+- For performance or regression claims, require baseline and candidate measurements from the same environment
+
+## Write Verification
+```yaml
+# Write to: artifacts/changes/{slug}/verification/goal-verification.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "fresh:command_ref=<path or transcript ref>"
+  - "scope_contract:pass"
+notes: |
+  Criteria:
+    AC-1: <criterion text> — pass — <concrete proof>
+  Scope Contract: pass|fail|not_applicable — <reason or source>
+```
+
+## Present and Advance
+Show verification summary. {{template "hard-gate"}}
+
+After confirmation: `slipway next`
+
+## DO NOT SKIP
+1. Fresh verification record, not cached evidence.
+2. Evidence-backed claims only.
+3. Scope Contract pass/fail/not-applicable statement when contract evidence exists.
+4. Guardrail high-risk checks when applicable.
+
+## Block If
+- A criterion lacks fresh evidence.
+- The implementation is stubbed, placeholder-only, or unwired.
+- Scope Contract evidence exists and reports fail without an accepted amendment or rollback.
+- Guardrail-domain proof or performance proof is missing for a claimed outcome.

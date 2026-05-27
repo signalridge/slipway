@@ -1,0 +1,311 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+  actions: read
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: signalridge/slipway
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Resolve release tag
+        id: tag
+        run: echo "tag_name=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: Run tests
+        run: go test -timeout=20m ./... -race -count=1
+      - name: Build and verify release metadata
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.tag_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          mkdir -p bin
+          go build \
+            -ldflags="-s -w \
+            -X github.com/signalridge/slipway/cmd.version=${VERSION} \
+            -X github.com/signalridge/slipway/cmd.commit=${GITHUB_SHA::12} \
+            -X github.com/signalridge/slipway/cmd.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o bin/slipway .
+          ./bin/slipway --version
+          ./bin/slipway --help
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [test]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      hashes: ${{ steps.hash.outputs.hashes }}
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+      gh_pat_available: ${{ steps.optional-secrets.outputs.gh_pat_available }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Resolve release tag
+        id: tag
+        run: echo "tag_name=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: Detect optional publishing secrets
+        id: optional-secrets
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            echo "gh_pat_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gh_pat_available=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "aur_key_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "aur_key_available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+      - name: Setup AUR SSH
+        if: env.AUR_SSH_PRIVATE_KEY != ''
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          ssh-keyscan -t ed25519,rsa,ecdsa aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur_key
+            User aur
+          EOF
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          COSIGN_EXPERIMENTAL: "1"
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(echo '${{ steps.goreleaser.outputs.metadata }}' | jq -r '.version')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Generate release subjects
+        id: hash
+        run: |
+          cd dist
+          subjects=$(find . -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} + | sort)
+          if [ -z "$subjects" ]; then
+            echo "::error::No archive subjects were generated"
+            exit 1
+          fi
+          hashes=$(printf "%s\n" "$subjects" | base64 -w0)
+          echo "hashes=${hashes}" >> "$GITHUB_OUTPUT"
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: dist/*.sbom.spdx.json
+          retention-days: 30
+
+  provenance:
+    name: Generate SLSA Provenance
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.release.outputs.hashes }}
+      upload-assets: true
+
+  verify-nix:
+    name: Verify Nix
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Build package
+        run: nix build .#slipway
+      - name: Verify binary
+        run: |
+          ./result/bin/slipway --version
+          ./result/bin/slipway --help
+
+  verify-container:
+    name: Verify Container
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and test container
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --version
+          docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --help
+      - name: Run Trivy vulnerability scan
+        id: image-ref
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
+      - name: Scan container image
+        # v0.36.0, pinned by commit SHA after GHSA-69fq-xp46-6x23.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ steps.image-ref.outputs.ref }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  verify-homebrew:
+    name: Verify Homebrew
+    runs-on: macos-latest
+    needs: [release]
+    if: needs.release.outputs.gh_pat_available == 'true'
+    steps:
+      - name: Install via Homebrew
+        run: |
+          brew tap signalridge/tap
+          brew install --cask slipway
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-deb:
+    name: Verify Debian Package
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Download and install deb
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/slipway_${TAG}_linux_amd64.deb"
+          sudo dpkg -i "slipway_${TAG}_linux_amd64.deb"
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-rpm:
+    name: Verify RPM Package
+    runs-on: ubuntu-latest
+    needs: [release]
+    container: fedora:44@sha256:498c452f32a739b61f0ef215bce9924ebc4866cbe44710f58157d77723b7a6d2
+    steps:
+      - name: Download and install rpm
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/slipway_${TAG}_linux_amd64.rpm"
+          rpm -i "slipway_${TAG}_linux_amd64.rpm"
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-binary:
+    name: Verify Binary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: slipway_VERSION_linux_amd64.tar.gz
+            command: ./slipway
+          - os: macos-latest
+            asset: slipway_VERSION_darwin_arm64.tar.gz
+            command: ./slipway
+          - os: windows-latest
+            asset: slipway_VERSION_windows_amd64.zip
+            command: ./slipway.exe
+    steps:
+      - name: Download and extract binary
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          ASSET=$(echo "${{ matrix.asset }}" | sed "s/VERSION/${TAG}/")
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/${ASSET}"
+          case "${ASSET}" in
+            *.zip) unzip "${ASSET}" ;;
+            *.tar.gz) tar xzf "${ASSET}" ;;
+          esac
+      - name: Verify binary
+        shell: bash
+        run: |
+          "${{ matrix.command }}" --version
+          "${{ matrix.command }}" --help
