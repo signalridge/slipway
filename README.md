@@ -1,3 +1,30 @@
+<div align="center">
+
+![Slipway](https://capsule-render.vercel.app/api?type=waving&color=0%3A0f766e,100%3A2563eb&height=200&section=header&text=Slipway&fontSize=48&fontColor=ffffff&fontAlignY=30&desc=Governance%20CLI%20for%20AI-assisted%20software%20delivery&descSize=16&descColor=dbeafe&descAlignY=55&animation=fadeIn)
+
+<p>
+  <a href="https://github.com/signalridge/slipway/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/signalridge/slipway/ci.yml?style=for-the-badge&logo=github&label=CI"></a>&nbsp;
+  <a href="https://github.com/signalridge/slipway/actions/workflows/docs.yml"><img alt="Docs" src="https://img.shields.io/github/actions/workflow/status/signalridge/slipway/docs.yml?style=for-the-badge&logo=materialformkdocs&label=Docs"></a>&nbsp;
+  <a href="https://github.com/signalridge/slipway/releases"><img alt="Release" src="https://img.shields.io/github/v/release/signalridge/slipway?style=for-the-badge&logo=github"></a>&nbsp;
+  <a href="https://goreportcard.com/report/github.com/signalridge/slipway"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/signalridge/slipway"></a>
+</p>
+
+<p>
+  <a href="docs/installation.md"><img alt="Homebrew Cask" src="https://img.shields.io/badge/Homebrew_Cask-FBB040?style=flat-square&logo=homebrew&logoColor=black"></a>
+  <a href="docs/installation.md"><img alt="Scoop" src="https://img.shields.io/badge/Scoop-00BFFF?style=flat-square&logo=windows&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="AUR" src="https://img.shields.io/badge/AUR-1793D1?style=flat-square&logo=archlinux&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="Nix" src="https://img.shields.io/badge/Nix-5277C3?style=flat-square&logo=nixos&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="deb" src="https://img.shields.io/badge/deb-A81D33?style=flat-square&logo=debian&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="rpm" src="https://img.shields.io/badge/rpm-EE0000?style=flat-square&logo=redhat&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="apk" src="https://img.shields.io/badge/apk-0D597F?style=flat-square&logo=alpinelinux&logoColor=white"></a>
+  <a href="docs/installation.md"><img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white"></a>
+</p>
+
+[Documentation](https://signalridge.github.io/slipway/) | [Installation](docs/installation.md) | [Release Notes](CHANGELOG.md)
+
+</div>
+
 # Slipway
 
 Slipway is a governance CLI for AI-assisted software delivery inside a local Git repository.

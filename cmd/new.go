@@ -597,7 +597,15 @@ func generateUniqueChangeSlug(description string, slugExists func(string) (bool,
 	}
 
 	for n := 2; n <= generateUniqueChangeSlugMaxAttempts; n++ {
-		candidate := fmt.Sprintf("%s-%d", baseSlug, n)
+		suffix := fmt.Sprintf("-%d", n)
+		candidateBase := baseSlug
+		if len(candidateBase)+len(suffix) > model.MaxSlugLength {
+			candidateBase = strings.Trim(candidateBase[:model.MaxSlugLength-len(suffix)], "-")
+			if candidateBase == "" {
+				candidateBase = "change"
+			}
+		}
+		candidate := candidateBase + suffix
 		exists, err := slugExists(candidate)
 		if err != nil {
 			return "", err

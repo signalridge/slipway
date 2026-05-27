@@ -75,8 +75,8 @@
   "separate-pull-requests": false,
   "group-pull-request-title-pattern": "chore: release ${version}",
   "pull-request-title-pattern": "chore: release ${version}",
-  "pull-request-header": "This PR was automatically created by release-please.",
-  "pull-request-footer": "---\n\nAfter this PR is merged, the tag-based release workflow builds and verifies Slipway artifacts.",
+  "pull-request-header": "This PR was automatically created by [release-please](https://github.com/googleapis/release-please).",
+  "pull-request-footer": "---\n\n**How to use:**\n- Review the CHANGELOG.md changes\n- Merge this PR to create the release tag\n- The tag-based Release workflow will build, publish, and verify Slipway artifacts",
   "sequential-calls": false,
   "plugins": []
 }

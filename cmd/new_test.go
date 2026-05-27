@@ -77,6 +77,21 @@ func TestGenerateUniqueChangeSlugUsesNextAvailableSuffix(t *testing.T) {
 	}, seen)
 }
 
+func TestGenerateUniqueChangeSlugKeepsCollisionSuffixWithinMaxLength(t *testing.T) {
+	t.Parallel()
+
+	description := strings.Repeat("long ", 80)
+	baseSlug := model.SlugifyTitle(description)
+	slug, err := generateUniqueChangeSlug(description, func(candidate string) (bool, error) {
+		return candidate == baseSlug, nil
+	})
+
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(slug), model.MaxSlugLength)
+	assert.NotEqual(t, baseSlug, slug)
+	assert.True(t, strings.HasSuffix(slug, "-2"))
+}
+
 func TestGenerateUniqueChangeSlugFailsWhenAttemptsExhausted(t *testing.T) {
 	t.Parallel()
 
