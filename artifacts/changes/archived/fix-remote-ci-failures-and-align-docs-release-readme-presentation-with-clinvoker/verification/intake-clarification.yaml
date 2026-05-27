@@ -1,0 +1,10 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T09:27:06Z"
+run_version: 0
+references:
+  - "intent.md#Approved Summary"
+  - "intent.md#In Scope"
+  - "intent.md#Out of Scope"
+notes: |
+  The operator explicitly requested repair of the remote CI failures and requested clinvoker-inspired release documentation and README presentation improvements. Scope is concrete: GitHub Actions hardening, README/release-please presentation, slug-length prevention, and validation. Out of scope: enabling GitHub Pages settings, release matrix redesign, and rewriting historical archived artifacts.

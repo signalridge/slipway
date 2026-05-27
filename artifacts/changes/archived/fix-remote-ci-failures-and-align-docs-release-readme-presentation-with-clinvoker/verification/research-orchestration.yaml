@@ -1,0 +1,13 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T09:27:06Z"
+run_version: 0
+references:
+  - "research.md#Research Findings"
+  - "research.md#Alternatives Considered"
+  - "research.md#Unknowns"
+  - "README.md"
+  - ".github/workflows/ci.yml"
+  - ".github/workflows/docs.yml"
+notes: |
+  Research covered architecture, existing patterns, risks, and test strategy for workflow hardening, slug-length prevention, and clinvoker-inspired presentation changes. The selected approach combines immediate CI remediation with recurrence prevention and requested README/release polish.

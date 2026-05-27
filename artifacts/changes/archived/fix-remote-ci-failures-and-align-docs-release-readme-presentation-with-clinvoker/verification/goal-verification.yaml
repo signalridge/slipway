@@ -1,0 +1,16 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T09:27:06Z"
+run_version: 1
+references:
+  - "fresh:command_ref=actionlint .github/workflows/ci.yml .github/workflows/docs.yml .github/workflows/release-please.yaml .github/workflows/release.yaml"
+  - "fresh:command_ref=mkdocs build --strict"
+  - "fresh:command_ref=goreleaser check"
+  - "fresh:command_ref=go build ./..."
+  - "fresh:command_ref=go test -timeout=20m ./... -count=1"
+  - "remote:CI=success:26502350786"
+  - "remote:Docs=success:26502350589"
+  - "remote:Security=success:26502350648"
+  - "remote:Release Please=success:26502350562"
+notes: |
+  User goal is satisfied: remote CI failures are fixed on latest main, README and release presentation were improved using clinvoker as reference, and local plus remote validation passed. The only remaining operational action is optional repository settings work if Pages publishing should be enabled later.

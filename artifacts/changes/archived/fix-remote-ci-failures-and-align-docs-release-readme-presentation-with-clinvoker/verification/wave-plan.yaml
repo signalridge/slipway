@@ -1,0 +1,43 @@
+version: 1
+generated_at: 2026-05-27T09:31:41.148265493Z
+tasks_plan_hash: 67236308b46a1563450a290e24e1ff72f4649dc1b9be7ed1dab4f2f6af2dad50
+total_tasks: 4
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: harden CI long-path and future slug generation
+          target_files:
+            - .github/workflows/ci.yml
+            - cmd/new.go
+            - cmd/new_test.go
+            - internal/model/identity.go
+            - internal/model/identity_test.go
+          task_kind: code
+        - task_id: t-02
+          objective: harden docs workflow around Pages settings
+          target_files:
+            - .github/workflows/docs.yml
+          task_kind: ops
+    - wave_index: 2
+      tasks:
+        - task_id: t-03
+          objective: update README and Release Please presentation
+          depends_on:
+            - t-01
+            - t-02
+          target_files:
+            - README.md
+            - release-please-config.json
+          task_kind: doc
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: validate locally and monitor remote Actions
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/**
+          task_kind: verification

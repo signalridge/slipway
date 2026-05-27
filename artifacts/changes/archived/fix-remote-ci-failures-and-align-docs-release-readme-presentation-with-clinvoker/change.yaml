@@ -1,0 +1,60 @@
+slug: fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker
+description: fix remote CI failures and align docs release/readme presentation with clinvoker
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-27T09:00:14.03632Z
+quality_mode: full
+workflow_profile: config
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker
+worktree_branch: feat/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, GitHub Actions, MkDocs, GoReleaser, Release Please
+    test_cmd: go test -timeout=20m ./... -count=1
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - YAML
+        - Markdown
+    recent_work: Fix remote CI failures and align docs/release/readme presentation with clinvoker patterns
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/assurance.md
+        state: frozen
+        content_hash: 1407ff3098fd7c9524b47ee6013c8aeff1fca01dd01bd98b9de91afe030db49e
+        updated_at: 2026-05-27T09:30:19.033130639Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/decision.md
+        state: frozen
+        content_hash: e4c6d065b1749d8117b517c151516613a8b0d12610225be133fadc8c6688dd32
+        updated_at: 2026-05-27T09:30:19.023093852Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/intent.md
+        state: frozen
+        content_hash: a028861970efa9c4d55826c718ec470db68ebf37ae87db05c713e8d34e2f2434
+        updated_at: 2026-05-27T09:32:11.185944152Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/requirements.md
+        state: frozen
+        content_hash: 972a8c5877bfe0d2bedc6fcc2399c8318951598a78a8ca7f93bfb4dc71830034
+        updated_at: 2026-05-27T09:30:19.022313911Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/research.md
+        state: frozen
+        content_hash: d3134f90e2ea2c046ce56ab6a9457ebf119cc2fd7fbb87ede4a1ee5acc67894a
+        updated_at: 2026-05-27T09:30:19.013632678Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/artifacts/changes/archived/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/tasks.md
+        state: frozen
+        content_hash: b0712d6990c407424441c3017d373e5f8f63a954ec1d552b8d47d549f1036569
+        updated_at: 2026-05-27T09:31:41.148265493Z

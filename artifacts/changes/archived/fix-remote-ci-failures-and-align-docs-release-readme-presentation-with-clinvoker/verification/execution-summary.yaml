@@ -1,0 +1,71 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-27T09:34:48Z
+overall_verdict: pass
+tasks_plan_hash: 67236308b46a1563450a290e24e1ff72f4649dc1b9be7ed1dab4f2f6af2dad50
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/ci.yml
+        - cmd/new.go
+        - cmd/new_test.go
+        - internal/model/identity.go
+        - internal/model/identity_test.go
+      target_files:
+        - .github/workflows/ci.yml
+        - cmd/new.go
+        - cmd/new_test.go
+        - internal/model/identity.go
+        - internal/model/identity_test.go
+      evidence_ref: go test ./internal/model ./cmd -run 'TestSlugifyTitle|TestGenerateUniqueChangeSlug' -count=1
+      captured_at: 2026-05-27T09:34:48Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: ops
+      changed_files:
+        - .github/workflows/docs.yml
+      target_files:
+        - .github/workflows/docs.yml
+      evidence_ref: actionlint .github/workflows/docs.yml; mkdocs build --strict; Docs run 26502350589
+      captured_at: 2026-05-27T09:34:48Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - README.md
+        - release-please-config.json
+      target_files:
+        - README.md
+        - release-please-config.json
+      evidence_ref: jq empty release-please-config.json .release-please-manifest.json; goreleaser check
+      captured_at: 2026-05-27T09:34:48Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/assurance.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/decision.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/intent.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/requirements.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/research.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/tasks.md
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/code-quality-review.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/execution-summary.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/final-closeout.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/goal-verification.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/intake-clarification.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/plan-audit.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/research-orchestration.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/spec-compliance-review.yaml
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/fix-remote-ci-failures-and-align-docs-release-readme-presentation-with-clinvoker/**
+      evidence_ref: gh run list --branch main --limit 20 --json databaseId,status,conclusion,workflowName,displayTitle,headSha,url,createdAt,updatedAt
+      captured_at: 2026-05-27T09:34:48Z

@@ -1,0 +1,11 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T09:27:06Z"
+run_version: 1
+references:
+  - "main=00f13975d154bfd110f9d129c1d7bd7daba8d21d"
+  - "origin/main=00f13975d154bfd110f9d129c1d7bd7daba8d21d"
+  - "git status=clean"
+  - "remote:latest-main-actions=green"
+notes: |
+  Final closeout refreshed after remote validation. Main and origin/main are aligned at 00f13975d154bfd110f9d129c1d7bd7daba8d21d. Latest Actions for CI, Docs, Security, and Release Please are green. Nix succeeded on the preceding implementation commit and was not triggered by the final docs-permission-only commit.
