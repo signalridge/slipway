@@ -1,0 +1,42 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:43:05Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "README.md:115"
+  - "README.md:122"
+  - "docs/installation.md:7"
+  - "docs/installation.md:14"
+  - "docs/installation.md:292"
+  - "docs/installation.md:312"
+notes: |
+  Gaps (code_to_artifact): None.
+  Gaps (artifact_to_code): None.
+
+  Spec-to-code trace:
+  - REQ-001 README AI-agent install discoverability -> README.md lines 115-127
+    add a copyable prompt and link to the detailed checklist.
+  - REQ-002 canonical installation docs -> docs/installation.md lines 7-19
+    add the prominent short prompt while preserving the existing platform
+    matrix and detailed AI Tool Installation Prompt.
+  - REQ-003 safety and adapter contract -> README.md line 122 and
+    docs/installation.md lines 14, 292, and 310-312 require GitHub
+    anchor/raw Markdown/Releases sources, prohibit normal-install source
+    cloning, preserve user-owned files, and block unrelated social or
+    promotional actions.
+  - REQ-004 verification -> `mkdocs build --strict` passed at
+    2026-05-27T13:38:38Z.
+
+  Code-to-spec trace:
+  - README.md Install With An AI Agent section -> REQ-001 and REQ-003.
+  - docs/installation.md top-level Install With An AI Agent section -> REQ-002
+    and REQ-003.
+  - docs/installation.md detailed prompt source/safety additions -> REQ-003.
+
+  Decision fidelity:
+  - Honors Approach 2 by adding a compact README entry plus a prominent
+    installation-page prompt while keeping the detailed prompt as canonical.

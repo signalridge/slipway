@@ -1,0 +1,76 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:46:31Z"
+run_version: 1
+references:
+  - "source:README.md:115"
+  - "source:README.md:122"
+  - "source:README.md:127"
+  - "source:docs/installation.md:7"
+  - "source:docs/installation.md:14"
+  - "source:docs/installation.md:19"
+  - "source:docs/installation.md:292"
+  - "source:docs/installation.md:310"
+  - "source:docs/installation.md:312"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/requirements.md"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification/coverage-analysis.yaml"
+  - "command:git diff -- README.md docs/installation.md"
+  - "command:git diff --check -- README.md docs/installation.md"
+  - "command:rg -n 'TODO|FIXME|HACK|XXX|PLACEHOLDER|NotImplemented|not implemented|panic\\(\".*(implement|todo)|return nil, nil|return \"\"$|return 0$|return false$|\\{\\s*\\}' README.md docs/installation.md"
+  - "command:mkdocs build --strict"
+  - "command:go run . validate --json"
+notes: |
+  Criteria:
+    AC-1: README exposes a compact AI-agent install entry.
+      Verdict: pass.
+      Exists: README.md has `## Install With An AI Agent` at line 115.
+      Substantive: README.md lines 119-125 contain a copyable prompt with the
+        GitHub blob anchor, raw Markdown fallback, GitHub Releases source, source
+        clone restriction, safety boundaries, adapter initialization, and
+        verification commands.
+      Wired: README.md line 127 links to `docs/installation.md#ai-tool-installation-prompt`,
+        so README first-contact users can reach the detailed checklist.
+
+    AC-2: docs/installation.md remains the canonical detailed installation guide
+      while adding a prominent short prompt.
+      Verdict: pass.
+      Exists: docs/installation.md has `## Install With An AI Agent` at line 7
+        and the existing `## AI Tool Installation Prompt` at line 285.
+      Substantive: docs/installation.md lines 11-19 contain the short agent
+        prompt and hand off to the detailed checklist; the release install
+        matrix and manual platform sections remain in the file.
+      Wired: the short prompt uses the local anchor
+        `#ai-tool-installation-prompt`, and the detailed prompt is still the
+        canonical checklist used by the installation page.
+
+    AC-3: AI-agent guidance preserves safety and adapter contracts.
+      Verdict: pass.
+      Exists: README.md line 122 and docs/installation.md lines 14 and 292 name
+        canonical public sources; docs/installation.md lines 310-312 contain
+        file-preservation and no-promotion boundaries.
+      Substantive: the prompt requires Slipway-owned release sources, especially
+        https://github.com/signalridge/slipway/releases, prohibits cloning
+        Slipway source for normal installation, blocks unverified same-name
+        packages, and requires the agent to ask when tool adapters are unclear.
+      Wired: the detailed prompt still initializes supported tool IDs at
+        docs/installation.md lines 303-308 and reports generated adapter files at
+        docs/installation.md lines 321-327.
+
+    AC-4: documentation remains renderable and the change surface has fresh
+      verification.
+      Verdict: pass.
+      Exists: verification evidence exists in coverage-analysis.yaml and this
+        goal-verification record.
+      Substantive: `git diff --check -- README.md docs/installation.md` exited 0;
+        the placeholder/stub scan returned no matches; `mkdocs build --strict`
+        exited 0 and built documentation in 0.17 seconds at 2026-05-27T13:46:31Z.
+      Wired: the docs build exercises the MkDocs rendering path for
+        docs/installation.md and repository docs navigation. `go run .
+        validate --json` exited 0 with `skills_ready.goal-verification=pass`,
+        `blockers=null`, `can_advance=true`, and `G_ship=approved`.
+
+  Coverage analysis:
+    This is a documentation-only change. No executable Go line, schema, runtime
+    path, or adapter generation path changed, so source-code coverage is not the
+    relevant proof surface. The full changed documentation surface was reviewed
+    via diff, placeholder scan, whitespace check, and MkDocs strict rendering.

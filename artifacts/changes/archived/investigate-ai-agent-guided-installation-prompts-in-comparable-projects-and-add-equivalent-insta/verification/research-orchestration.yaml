@@ -1,0 +1,17 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:27:17Z"
+run_version: 0
+references:
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/research.md"
+  - "artifacts/codebase/ARCHITECTURE.md"
+  - "artifacts/codebase/TESTING.md"
+  - "artifacts/codebase/CONCERNS.md"
+  - "docs/installation.md"
+  - "README.md"
+notes: |
+  Research covered architecture, existing documentation patterns, external
+  AI-guided setup examples, prompt-safety risks, and verification strategy.
+  User confirmed Approach 2: add a prominent short AI-agent install entry while
+  preserving the existing detailed installation prompt as the canonical
+  checklist.

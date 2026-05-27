@@ -1,0 +1,39 @@
+version: 1
+generated_at: 2026-05-27T13:30:46.527391377Z
+tasks_plan_hash: dc81dd2b4b4a9ce3c8f60eb382b12d204c092dbb639a4be7378ad2e295c5fa6c
+total_tasks: 4
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Add a README AI-agent install entry.
+          target_files:
+            - README.md
+          task_kind: doc
+        - task_id: t-02
+          objective: Add a prominent short AI-agent prompt to installation docs.
+          target_files:
+            - docs/installation.md
+          task_kind: doc
+    - wave_index: 2
+      tasks:
+        - task_id: t-03
+          objective: Tighten agent safety and adapter-contract wording.
+          depends_on:
+            - t-01
+            - t-02
+          target_files:
+            - README.md
+            - docs/installation.md
+          task_kind: doc
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Verify docs and governed readiness.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+          target_files:
+            - artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification
+          task_kind: verification

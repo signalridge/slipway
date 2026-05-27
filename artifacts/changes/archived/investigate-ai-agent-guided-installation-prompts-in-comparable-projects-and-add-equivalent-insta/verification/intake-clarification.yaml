@@ -1,0 +1,11 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:17:31Z"
+run_version: 0
+references:
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/intent.md"
+notes: |
+  User confirmed the proposed scope in conversation. In scope is documentation
+  for AI-agent-guided Slipway install/init instructions informed by comparable
+  projects. Out of scope are binary distribution, release automation, new
+  installer behavior, and broad documentation rewrites.

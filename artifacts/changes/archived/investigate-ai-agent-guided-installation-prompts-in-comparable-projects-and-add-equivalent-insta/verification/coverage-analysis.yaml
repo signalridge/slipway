@@ -1,0 +1,32 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:46:31Z"
+run_version: 1
+references:
+  - "command:git diff --numstat -- README.md docs/installation.md"
+  - "command:rg -n 'TODO|FIXME|HACK|XXX|PLACEHOLDER|NotImplemented|not implemented|panic\\(\".*(implement|todo)|return nil, nil|return \"\"$|return 0$|return false$|\\{\\s*\\}' README.md docs/installation.md"
+  - "command:mkdocs build --strict"
+notes: |
+  Tool: docs-only coverage review; git diff surface plus mkdocs build --strict.
+  Whole-codebase coverage: not applicable for docs-only change.
+  Change-surface coverage: 31 changed documentation lines reviewed; 31 covered
+  by diff inspection, placeholder/stub scan, whitespace check, and MkDocs strict
+  rendering; 0 uncovered.
+  Delta vs baseline: flat; no executable code coverage changed.
+  Gaps: none.
+  End-to-end gaps: none; the change does not cross runtime process boundaries.
+
+  This is a documentation-only change touching README.md and docs/installation.md.
+  Source-code line coverage is not applicable because no Go code, runtime path,
+  schema, or generated adapter implementation changed.
+
+  Change-surface denominator comes from `git diff --numstat -- README.md
+  docs/installation.md`: README.md added 14 lines; docs/installation.md added
+  17 lines and removed 1 line. The relevant behavioral proof surface is
+  documentation rendering and explicit prompt content review.
+
+  Fresh proof:
+  - `rg -n ... README.md docs/installation.md` exited 1 with no matches for
+    TODO/FIXME/HACK/PLACEHOLDER/not implemented/stub-like returns/empty braces.
+  - `mkdocs build --strict` exited 0 and built documentation in 0.17 seconds at
+    2026-05-27T13:46:31Z.

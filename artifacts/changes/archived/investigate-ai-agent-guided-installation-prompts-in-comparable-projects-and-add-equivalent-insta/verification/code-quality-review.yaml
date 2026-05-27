@@ -1,0 +1,25 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:43:05Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - "README.md:115"
+  - "docs/installation.md:7"
+  - "docs/installation.md:292"
+  - "mkdocs build --strict"
+notes: |
+  Gaps (code_to_artifact): None.
+  Gaps (artifact_to_code): None.
+
+  Quality review:
+  - The README addition is intentionally short and links to the canonical
+    detailed checklist instead of duplicating the full platform matrix.
+  - The installation page keeps the existing release matrix and detailed
+    prompt, adding only a prominent short prompt and safety/source clarifications.
+  - The selected GitHub anchor is the clearest primary URL for AI agents; raw
+    Markdown remains a fallback for tools that prefer direct text retrieval.
+  - Safety wording is explicit: no unverified same-name packages, no normal
+    source cloning, no user-file overwrites, and no unrelated social or
+    promotional actions.
+  - `mkdocs build --strict` passed after the final URL correction.

@@ -1,0 +1,57 @@
+slug: investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta
+description: investigate AI-agent-guided installation prompts in comparable projects and add equivalent install guidance to Slipway
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-27T13:15:44.977283Z
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta
+worktree_branch: feat/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, MkDocs
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+artifacts:
+    assurance:
+        id: assurance
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/assurance.md
+        state: frozen
+        content_hash: 9fd2217dd681607e83f594d4c64908e73ba2cb9147260de6f47f902b0490f536
+        updated_at: 2026-05-27T14:10:28Z
+    decision:
+        id: decision
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/decision.md
+        state: frozen
+        content_hash: af08c1d1c0d77a7391ff5979b8e040665a2cc735bf2aa4e69f70d178b7dced54
+        updated_at: 2026-05-27T13:29:02.053231135Z
+    intent:
+        id: intent
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/intent.md
+        state: frozen
+        content_hash: d086f99d7be35f3a5c2d3045722aacf5a92103022c0d02dabbaba0caf47a63f6
+        updated_at: 2026-05-27T14:06:11Z
+    requirements:
+        id: requirements
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/requirements.md
+        state: frozen
+        content_hash: 784e5d7c6569328a8340c83051b5df4a8846fb3672466eb16f40c6267922d219
+        updated_at: 2026-05-27T13:28:37.139756713Z
+    research:
+        id: research
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/research.md
+        state: frozen
+        content_hash: 8176edba973d601355bf0372d2175c3ae7f7ce440eec1dc3fc977112a64937c7
+        updated_at: 2026-05-27T14:06:11Z
+    tasks:
+        id: tasks
+        path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/tasks.md
+        state: frozen
+        content_hash: de6ca309f695060279e2bbcc1218f25b56ab4cf4fdde0a5122d29691fb4b91ad
+        updated_at: 2026-05-27T14:06:11Z

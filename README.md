@@ -112,6 +112,20 @@ Slipway can be installed or built several ways. The full platform matrix is in [
 
 Prefer published release artifacts or release-backed package-manager channels for normal installation. Treat GitHub Releases under `signalridge/slipway`, `ghcr.io/signalridge/slipway`, `signalridge/tap`, `signalridge/scoop-bucket`, and `slipway-bin` as the documented release sources; stop and verify before using same-name packages from unrelated registries. Use `go install`, Nix, or a local source build when you need a developer fallback, a not-yet-packaged platform path, or unreleased code.
 
+## Install With An AI Agent
+
+Paste this into an AI coding tool with terminal access:
+
+```text
+Install and initialize Slipway for this repository.
+
+Start in the current Git checkout for the repository that should use Slipway. Follow the AI-tool installation prompt at https://github.com/signalridge/slipway/blob/main/docs/installation.md#ai-tool-installation-prompt, or fetch the raw Markdown from https://raw.githubusercontent.com/signalridge/slipway/refs/heads/main/docs/installation.md if that is easier for your tools. Use only documented Slipway-owned release sources, especially https://github.com/signalridge/slipway/releases. Do not clone the Slipway source repository for normal installation; use source build only if this checkout is already Slipway itself or I explicitly ask for source installation. Do not install unverified same-name packages, overwrite user-owned AI-tool files, or perform unrelated social or promotional actions.
+
+After installing, initialize adapters for the AI tools I use; ask if the tool list is unclear. Verify with `slipway --version`, `slipway status --json`, and `git status --short --branch`, then report the generated files.
+```
+
+For the full platform matrix and detailed agent checklist, see [Installation](docs/installation.md#ai-tool-installation-prompt).
+
 ## Quick Install
 
 With Go:

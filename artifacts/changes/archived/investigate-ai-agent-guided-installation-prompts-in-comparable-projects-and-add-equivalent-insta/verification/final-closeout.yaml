@@ -1,0 +1,51 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T14:10:28Z"
+run_version: 1
+references:
+  - "closeout:evidence_freshness=pass"
+  - "closeout:test_suite=pass:go test -count=1 ./..."
+  - "closeout:docs_build=pass:mkdocs build --strict"
+  - "closeout:diff_check=pass:git diff --check"
+  - "closeout:prior_validate=pass:go run . validate --json before archive"
+  - "closeout:post_archive_status=expected:go run . status --json reports no active change"
+  - "closeout:assurance_complete=pass"
+  - "closeout:reviewer_independence=pass"
+  - "closeout:guardrail_baseline=pass:no_sensitive_guardrail_domain"
+  - "artifact:artifacts/codebase/ARCHITECTURE.md"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/assurance.md"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification/goal-verification.yaml"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification/spec-compliance-review.yaml"
+  - "artifact:artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification/code-quality-review.yaml"
+notes: |
+  Final closeout verification and post-review evidence repair:
+  - Current run_version is 1, matching the task run summary version reported by
+    `go run . status --json`.
+  - Required governance skills have passing records: intake-clarification,
+    research-orchestration, plan-audit, wave-orchestration,
+    spec-compliance-review, code-quality-review, and goal-verification.
+  - Review independence is satisfied by separate spec-compliance-review and
+    code-quality-review records.
+  - `git diff --check` exited 0 after all documentation and evidence edits.
+  - `mkdocs build --strict` exited 0 and built documentation in 0.35 seconds.
+  - `go test -count=1 ./...` exited 0. The output listed the root package and
+    internal/writeutil as `[no test files]`, and all tested packages returned
+    `ok`, including cmd, internal/architecture, internal/bootstrap, all
+    internal/engine packages, internal/fsutil, internal/model, internal/state,
+    internal/stringutil, internal/tmpl, and internal/toolgen.
+  - Before archive finalization, `go run . validate --json` exited 0 with
+    blockers=null, can_advance=true, G_ship=approved, evidence_freshness=fresh,
+    requirements_contract=valid, and scope_contract=pass.
+  - After archive finalization, active-change validation is no longer
+    re-runnable for this slug; the current checkout reports no active change as
+    expected for a completed archive.
+  - assurance.md contains the required standard-preset sections: scope summary,
+    verification verdict, evidence index, requirement coverage, residual risks,
+    rollback readiness, and archive decision.
+  - The generated artifacts/codebase snapshot is intentionally retained with
+    this commit as supporting codebase context.
+  - Non-event artifact references were repaired to point at the archived bundle
+    path. events/lifecycle.jsonl remains an append-only historical trace and
+    keeps the active-path references that were emitted before final archive.
+  - No sensitive guardrail domain is active for this documentation-only change,
+    so no additional guardrail baseline proof is required.

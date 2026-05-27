@@ -1,0 +1,15 @@
+{
+  "task_id": "t-02",
+  "run_summary_version": 1,
+  "task_kind": "doc",
+  "verdict": "pass",
+  "changed_files": [
+    "docs/installation.md"
+  ],
+  "target_files": [
+    "docs/installation.md"
+  ],
+  "evidence_ref": "docs/installation.md",
+  "captured_at": "2026-05-27T13:38:38Z",
+  "session_id": "codex-docs-agent-install-t-02"
+}

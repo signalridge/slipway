@@ -1,0 +1,17 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "doc",
+  "verdict": "pass",
+  "changed_files": [
+    "README.md",
+    "docs/installation.md"
+  ],
+  "target_files": [
+    "README.md",
+    "docs/installation.md"
+  ],
+  "evidence_ref": "README.md; docs/installation.md",
+  "captured_at": "2026-05-27T13:38:38Z",
+  "session_id": "codex-docs-agent-install-t-03"
+}

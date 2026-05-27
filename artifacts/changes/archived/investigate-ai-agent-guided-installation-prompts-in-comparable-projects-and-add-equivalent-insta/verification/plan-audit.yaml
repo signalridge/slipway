@@ -1,0 +1,29 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:31:05Z"
+run_version: 0
+references:
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/requirements.md"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/decision.md"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/tasks.md"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/research.md"
+  - "artifacts/codebase/ARCHITECTURE.md"
+  - "artifacts/codebase/STRUCTURE.md"
+  - "artifacts/codebase/TESTING.md"
+  - "artifacts/codebase/CONCERNS.md"
+notes: |
+  8D audit passed for the planned documentation change.
+  Coverage: REQ-001 through REQ-004 are covered by t-01 through t-04.
+  Completeness: each task has a bounded objective in the checkbox text plus
+  wave, dependency, target_files, task_kind, covers, evidence, and acceptance
+  metadata.
+  Dependency integrity: t-03 depends on earlier-wave t-01/t-02; t-04 depends
+  on earlier-wave t-01/t-02/t-03; no same-wave dependency remains.
+  Key links: target files are README.md, docs/installation.md, and verification
+  evidence.
+  Scope control: all tasks stay within documentation and governed evidence.
+  Context compliance: task kinds are doc or verification.
+  Test coverage mapping: final verification requires mkdocs build --strict and
+  governed validate output.
+  Alternatives: decision.md records three alternatives and selects Approach 2,
+  matching research.md and user confirmation.

@@ -1,0 +1,47 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-27T13:38:38Z
+overall_verdict: pass
+tasks_plan_hash: dc81dd2b4b4a9ce3c8f60eb382b12d204c092dbb639a4be7378ad2e295c5fa6c
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - README.md
+      target_files:
+        - README.md
+      evidence_ref: README.md
+      captured_at: 2026-05-27T13:38:38Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - docs/installation.md
+      target_files:
+        - docs/installation.md
+      evidence_ref: docs/installation.md
+      captured_at: 2026-05-27T13:38:38Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - README.md
+        - docs/installation.md
+      target_files:
+        - README.md
+        - docs/installation.md
+      evidence_ref: README.md; docs/installation.md
+      captured_at: 2026-05-27T13:38:38Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: verification
+      target_files:
+        - artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification
+      evidence_ref: mkdocs build --strict
+      captured_at: 2026-05-27T13:38:38Z

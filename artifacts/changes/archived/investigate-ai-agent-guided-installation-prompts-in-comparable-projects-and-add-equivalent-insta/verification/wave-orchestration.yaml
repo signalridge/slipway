@@ -1,0 +1,18 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T13:38:38Z"
+run_version: 1
+references:
+  - "README.md"
+  - "docs/installation.md"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/evidence/tasks/rv1/t-01.json"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/evidence/tasks/rv1/t-02.json"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/evidence/tasks/rv1/t-03.json"
+  - "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/evidence/tasks/rv1/t-04.json"
+notes: |
+  Executed three planned waves. Wave 1 added the README AI-agent install entry
+  and the prominent installation-page prompt. Wave 2 tightened the prompt to use
+  GitHub anchor/raw Markdown and Releases as canonical public sources,
+  explicitly preventing normal-install source cloning, unverified same-name
+  packages, user-file overwrites, and unrelated social or promotional actions.
+  Wave 3 verified the docs with `mkdocs build --strict`.

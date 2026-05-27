@@ -1,0 +1,13 @@
+{
+  "task_id": "t-04",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [],
+  "target_files": [
+    "artifacts/changes/archived/investigate-ai-agent-guided-installation-prompts-in-comparable-projects-and-add-equivalent-insta/verification"
+  ],
+  "evidence_ref": "mkdocs build --strict",
+  "captured_at": "2026-05-27T13:38:38Z",
+  "session_id": "codex-docs-agent-install-t-04"
+}

@@ -4,6 +4,20 @@ Slipway should normally be installed from published release artifacts or release
 
 Replace `vX.Y.Z` with the release tag you want. For unreleased work, use the local checkout build path.
 
+## Install With An AI Agent
+
+Paste this into an AI coding tool with terminal access:
+
+```text
+Install and initialize Slipway for this repository.
+
+Start in the current Git checkout for the repository that should use Slipway. Follow the AI-tool installation prompt at https://github.com/signalridge/slipway/blob/main/docs/installation.md#ai-tool-installation-prompt, or fetch the raw Markdown from https://raw.githubusercontent.com/signalridge/slipway/refs/heads/main/docs/installation.md if that is easier for your tools. Use only documented Slipway-owned release sources, especially https://github.com/signalridge/slipway/releases. Do not clone the Slipway source repository for normal installation; use source build only if this checkout is already Slipway itself or I explicitly ask for source installation. Do not install unverified same-name packages, overwrite user-owned AI-tool files, or perform unrelated social or promotional actions.
+
+After installing, initialize adapters for the AI tools I use; ask if the tool list is unclear. Verify with `slipway --version`, `slipway status --json`, and `git status --short --branch`, then report the generated files.
+```
+
+Use the detailed [AI Tool Installation Prompt](#ai-tool-installation-prompt) when the agent needs the full platform decision tree, adapter paths, and verification checklist.
+
 ## Official Sources
 
 Use documented release sources owned by the Slipway project: GitHub Releases under `signalridge/slipway`, container images at `ghcr.io/signalridge/slipway`, Homebrew Cask entries from `signalridge/tap`, Scoop manifests from `signalridge/scoop-bucket`, and AUR `slipway-bin` when that channel has been published. If an AI tool finds a same-name package in another registry, stop and verify ownership before installing it.
@@ -275,7 +289,7 @@ Paste this into an AI coding tool when you want the tool to install and initiali
 ```text
 Install Slipway for this repository.
 
-Work from the current Git checkout. First inspect the repository root, confirm whether .slipway.yaml already exists, identify the operating system and CPU architecture, and check whether a slipway binary is already on PATH with `slipway --version`.
+Work from the current Git checkout for the repository that should use Slipway. First inspect the repository root, confirm whether .slipway.yaml already exists, identify the operating system and CPU architecture, and check whether a slipway binary is already on PATH with `slipway --version`. Use https://github.com/signalridge/slipway/blob/main/docs/installation.md#ai-tool-installation-prompt, https://raw.githubusercontent.com/signalridge/slipway/refs/heads/main/docs/installation.md, and https://github.com/signalridge/slipway/releases as the canonical public installation sources; do not clone the Slipway source repository just to discover release assets.
 
 If Slipway is not installed, choose a documented path that fits this machine:
 1. Prefer a published Slipway release artifact or release-backed package channel owned by the Slipway project for this OS and architecture. Do not install same-name packages from unrelated registries without verifying ownership.
@@ -294,6 +308,8 @@ Use one of:
 - `slipway init --tools all`
 
 Do not overwrite unrelated user-owned AI-tool files. If Slipway-generated adapter files already exist, use `slipway init --tools <detected-tools> --refresh`.
+
+Do not perform unrelated social or promotional actions such as starring repositories, advertising projects, or changing model/provider settings unless I explicitly ask for that.
 
 Verify the result by running:
 - `slipway status --json`
