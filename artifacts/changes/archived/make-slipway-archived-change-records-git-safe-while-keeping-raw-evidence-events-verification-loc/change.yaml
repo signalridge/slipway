@@ -22,14 +22,14 @@ artifacts:
         id: assurance
         path: assurance.md
         state: frozen
-        content_hash: 5da22b5f7425b77e31927628c48d5ef59074251d6e825ff25da68c805b88a9a0
-        updated_at: 2026-05-27T15:51:56.296327Z
+        content_hash: 5255f1de9663480f105887350673f24163a63f99580e1d11f623edd0b9f9d329
+        updated_at: 2026-05-27T17:23:11Z
     decision:
         id: decision
         path: decision.md
         state: frozen
-        content_hash: a2688a252144bebe1a00a481d52b9af3a5942b7e32864e760926480cfe58f258
-        updated_at: 2026-05-27T15:51:56.296327Z
+        content_hash: c312ba3ad5d75b3bb09a496570ad3b72c086d476c44d462a757da9c7853fd590
+        updated_at: 2026-05-27T17:23:11Z
     intent:
         id: intent
         path: intent.md
@@ -40,8 +40,8 @@ artifacts:
         id: requirements
         path: requirements.md
         state: frozen
-        content_hash: ecc28016a5987b6feaee5662dc755044f3c891f01c22e65eb55c48bd65655773
-        updated_at: 2026-05-27T15:51:56.296327Z
+        content_hash: 17b3cf10931841dfd7b1a01f53c4ebe5eeb15670bb2337a51702694207004671
+        updated_at: 2026-05-27T17:23:11Z
     research:
         id: research
         path: research.md
@@ -52,5 +52,5 @@ artifacts:
         id: tasks
         path: tasks.md
         state: frozen
-        content_hash: 80784a0f8caf88f5e4913c5730c82b8431dae2edc9807c8b4413689b90f76cc3
-        updated_at: 2026-05-27T15:51:56.296327Z
+        content_hash: 67b20734cc02daa3059033f32f1b43cf202096578fa918bbf9780344f783c687
+        updated_at: 2026-05-27T17:23:11Z

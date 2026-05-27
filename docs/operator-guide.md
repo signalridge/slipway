@@ -7,7 +7,7 @@ This guide is for people and agents maintaining a Slipway workspace.
 | Path | Role | Git policy |
 | --- | --- | --- |
 | `.slipway.yaml` | Repository-local Slipway configuration. | Commit when project defaults change. |
-| `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority for an active change. Archived snapshots omit machine-local `worktree_path` and use archive-local artifact paths. | Trackable project record. |
+| `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority for an active change. Archived snapshots stay in the owning workspace, omit machine-local `worktree_path`, and use archive-local artifact paths. | Trackable project record. |
 | `artifacts/changes/<slug>/*.md` | Intent, research, requirements, decisions, tasks, and assurance. | Trackable project records. |
 | `artifacts/changes/<slug>/events/lifecycle.jsonl` | Append-only trace for mutating lifecycle events. | Local-only raw proof by default. |
 | `artifacts/changes/<slug>/verification/*.yaml` | Skill and verification evidence. | Local-only raw proof by default. |
@@ -28,6 +28,7 @@ go run . status --json
 ```
 
 Avoid deciding readiness from `main...HEAD` alone. Pair branch comparisons with direct worktree status and diff checks.
+After `slipway done`, Git-safe archived records remain in the owning worktree; commit or merge them before removing that worktree.
 
 ## Health And Repair
 

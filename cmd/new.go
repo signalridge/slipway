@@ -477,6 +477,15 @@ func createDirectGovernedChange(
 		if err != nil {
 			return err
 		}
+		if strings.TrimSpace(change.WorktreePath) != "" {
+			workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+			if err != nil {
+				return err
+			}
+			if _, err := state.EnsureLocalStateGitIgnore(workspaceRoot); err != nil {
+				return err
+			}
+		}
 		if err := state.SaveChange(root, change); err != nil {
 			return err
 		}

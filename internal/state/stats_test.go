@@ -42,6 +42,27 @@ func TestCollectRepoStatsSummarizesArchivesCodebaseMapAndExplorations(t *testing
 	assert.Contains(t, stats.CodebaseMap.ScaffoldOnlyDocs, "STACK.md")
 }
 
+func TestCollectRepoStatsCountsWorktreeArchiveAfterWorktreeMetadataIsRemoved(t *testing.T) {
+	t.Parallel()
+
+	root, worktreeRoot := setupRepoWithWorktree(t)
+	now := time.Now().UTC()
+	change := model.NewChange("stats-worktree-archive")
+	change.WorktreePath = worktreeRoot
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+	_, err := ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(filepath.Join(worktreeRoot, ".slipway.yaml")))
+	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
+
+	stats, err := CollectRepoStats(root, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.ArchiveCount)
+}
+
 func TestCollectRepoStatsMarksScaffoldOnlyCodebaseMapIncomplete(t *testing.T) {
 	t.Parallel()
 

@@ -10,6 +10,7 @@ GIVEN a worktree-bound governed change with artifact paths under an absolute wor
 WHEN the change is archived as done or cancelled
 THEN the archived `change.yaml` omits `worktree_path`
 AND each archived artifact path is relative to the archived bundle
+AND the archived bundle is written to the owning workspace archive directory
 AND the archived record can still be loaded and listed through normal archived-change lookup.
 
 ### Requirement: Raw proof directories remain local-only

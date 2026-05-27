@@ -36,6 +36,10 @@ those commands create or rely on local Slipway state.
 DEC-005: Preserve local evidence/events/verification directories on disk after
 archive; only their default Git visibility changes.
 
+DEC-006: Archive worktree-bound changes in the owning workspace archived bundle
+directory. Dedicated worktrees own their governed record until commit/merge, so
+`slipway done` must not write terminal archive records into another checkout.
+
 ## Interfaces and Data Flow
 
 - `internal/state` owns the reusable ignore block and archive snapshot
@@ -48,6 +52,8 @@ archive; only their default Git visibility changes.
   `artifacts/codebase/`.
 - `cmd/learn` tolerates absent lifecycle logs for archived records because
   archived `events/` is intentionally local-only.
+- `state.ResolveChangePaths` resolves active bundles and terminal archives in
+  the owning workspace.
 
 ## Rollout and Rollback
 
@@ -62,9 +68,9 @@ current model and archive lookup is path-based.
 
 ## Risk
 
-- Existing tests expect archived worktree paths and absolute artifact paths.
-  Mitigation: update tests to assert portable records while preserving archive
-  discovery.
+- Existing tests expected absolute artifact paths in archived worktree records.
+  Mitigation: update tests to assert portable worktree-owned records while
+  preserving archive discovery.
 - Ignoring `events/` reduces cross-clone learning signals. Mitigation: archived
   changes without local events are not treated as integrity failures, and
   durable summaries remain in top-level records.

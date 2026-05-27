@@ -291,6 +291,10 @@ func makeDoneCmd() *cobra.Command {
 				}); err != nil {
 					return err
 				}
+				archivePaths, err := state.ResolveChangePaths(root, change)
+				if err != nil {
+					return err
+				}
 				archived, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
 				if err != nil {
 					return err
@@ -303,10 +307,6 @@ func makeDoneCmd() *cobra.Command {
 				archiveKind := "terminal"
 				if len(archived.RemediationSources) > 0 {
 					archiveKind = "remediation"
-				}
-				archivePaths, err := state.ResolveChangePaths(root, archived)
-				if err != nil {
-					return err
 				}
 				view := doneView{
 					Slug:                    active.Slug,

@@ -173,6 +173,10 @@ func TestNewDiscoveryChangeBindsDefaultWorktreeBeforeIntentArtifact(t *testing.T
 		worktreeIntent := filepath.Join(payload.WorktreePath, "artifacts", "changes", payload.Slug, "intent.md")
 		_, err = os.Stat(worktreeIntent)
 		require.NoError(t, err)
+
+		worktreeGitIgnore, err := os.ReadFile(filepath.Join(payload.WorktreePath, ".gitignore"))
+		require.NoError(t, err)
+		assert.Contains(t, string(worktreeGitIgnore), state.LocalStateGitIgnoreBlock())
 	})
 }
 

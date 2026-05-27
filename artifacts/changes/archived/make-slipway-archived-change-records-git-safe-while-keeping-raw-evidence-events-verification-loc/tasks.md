@@ -47,9 +47,18 @@
   - evidence: verdict
   - acceptance: go test ./internal/state ./internal/bootstrap ./cmd passes.
 
+- [x] `t-07` Close independent-review archive/worktree gaps.
+  - wave: 2
+  - depends_on: [t-05]
+  - target_files: [cmd/done.go, cmd/lifecycle_commands_test.go, cmd/new.go, cmd/new_test.go, internal/state/lifecycle.go, internal/state/lifecycle_test.go, internal/state/paths.go, internal/state/paths_test.go, internal/state/repair.go, internal/state/repair_test.go, internal/state/stats.go, internal/state/stats_test.go, internal/state/store.go, internal/state/store_test.go]
+  - task_kind: code
+  - covers: [REQ-001, REQ-002, REQ-003]
+  - evidence: verdict
+  - acceptance: worktree-bound `done --json` reports the owning-worktree archive path when run from the worktree; archive repair sanitizes worktree-local archives in place; archived worktree slugs remain reserved; `new` ensures ignore rules in the default worktree.
+
 - [x] `t-06` Run full repository verification and final Git-safety checks.
   - wave: 3
-  - depends_on: [t-05]
+  - depends_on: [t-07]
   - target_files: [artifacts/changes/archived/make-slipway-archived-change-records-git-safe-while-keeping-raw-evidence-events-verification-loc/**]
   - task_kind: verification
   - covers: [REQ-001, REQ-002, REQ-003, REQ-004, REQ-005]

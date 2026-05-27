@@ -82,15 +82,11 @@ func TestArchiveChangeCancelledUsesDedicatedWorktreeBundleForL3(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "change.yaml"))
+	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug))
 	require.NoError(t, err)
-
 	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
-
-	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug))
-	require.NoError(t, err)
 	assert.Empty(t, archived.WorktreePath)
 	assert.Equal(t, "intent.md", archived.Artifacts["intent"].Path)
 
@@ -127,7 +123,6 @@ func TestLoadArchivedChangeFindsBoundWorktreeArchive(t *testing.T) {
 	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug, "change.yaml"))
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
-
 	_, err = os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug, "change.yaml"))
 	require.NoError(t, err)
 
@@ -576,7 +571,7 @@ func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(verifyDir, ExecutionSummaryFileName), raw, 0o644))
 
-	require.NoError(t, scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug))
+	require.NoError(t, scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, filepath.Join(ArchivedBundlesDir(root), slug)))
 
 	scrubbed, err := LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
@@ -595,7 +590,7 @@ func TestScrubArchivedExecutionSummaryMalformedSummaryRemovesFile(t *testing.T) 
 	summaryPath := filepath.Join(verifyDir, ExecutionSummaryFileName)
 	require.NoError(t, os.WriteFile(summaryPath, []byte("tasks: [\n"), 0o644))
 
-	require.NoError(t, scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug))
+	require.NoError(t, scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, filepath.Join(ArchivedBundlesDir(root), slug)))
 
 	_, err := os.Stat(summaryPath)
 	require.ErrorIs(t, err, os.ErrNotExist)
