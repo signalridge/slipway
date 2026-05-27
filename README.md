@@ -182,4 +182,4 @@ CI also runs Markdown/YAML/action linting, Go tests across platforms, race tests
 
 ## Repository Status
 
-![Repository status](https://camo.githubusercontent.com/fa4d9bd227a6f8cb32c28b1074b8ae35ffb526036c23c3aaedcc0084bc545d08/68747470733a2f2f7265706f62656174732e6178696f6d2e636f2f6170692f656d6265642f383165663961386335313139313866633065656365396264303962623436626137386565666430632e737667)
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/20e468225cab8a858d9bc969314a0e9c3d12bddb.svg "Repobeats analytics image")
