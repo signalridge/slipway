@@ -34,6 +34,6 @@ Slipway keeps three surfaces separate:
 4. Use `slipway next --json` for a read-only handoff or `slipway run --json` to advance.
 5. Close only after review, goal verification, and final closeout evidence pass.
 
-## Design Comparisons
+## Design Boundaries
 
-The [Design Philosophy](design.md#design-comparisons) page compares Slipway with adjacent spec, workflow, and agent systems across authority, lifecycle, adapter, installation, and evidence boundaries. Use it to understand why Slipway keeps a small local governance kernel instead of becoming a hosted platform, project tracker, or host-specific agent workflow.
+The [Design Philosophy](design.md#design-boundaries) page describes Slipway's authority, lifecycle, adapter, installation, and evidence boundaries. Use it to understand why Slipway keeps a small local governance kernel instead of becoming a hosted platform, project tracker, or host-specific agent workflow.

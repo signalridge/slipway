@@ -15,7 +15,6 @@ func makeRunCmd() *cobra.Command {
 		jsonOutput     bool
 		resume         bool
 		resumeResponse string
-		quickMode      bool
 		diagnostics    bool
 		changeSlug     string
 	)
@@ -42,7 +41,7 @@ func makeRunCmd() *cobra.Command {
 				if err := validateRunEntry(root, ref, resume, resumeResponse); err != nil {
 					return err
 				}
-				view, err := runGovernedLoop(root, ref, resumeResponse, quickMode)
+				view, err := runGovernedLoop(root, ref, resumeResponse)
 				if err != nil {
 					return err
 				}
@@ -86,7 +85,6 @@ func makeRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave when no active checkpoint exists")
 	cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused checkpoint")
-	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
@@ -160,14 +158,14 @@ func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse st
 	return nil
 }
 
-func runGovernedLoop(root string, ref changeRef, resumeResponse string, quickMode bool) (nextView, error) {
+func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
 	nextResumeResponse := resumeResponse
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextView(root, ref, nextResumeResponse, false, true, false, quickMode)
+		view, err := buildNextView(root, ref, nextResumeResponse, false, true, false)
 		if err != nil {
 			return nextView{}, err
 		}

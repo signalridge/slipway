@@ -87,7 +87,7 @@ func TestHasBlockingOpenQuestions(t *testing.T) {
 		{
 			name: "plain prose question",
 			content: `## Open Questions
-Need to decide whether OpenCode commands are flat or nested.
+Need to decide which adapter layout should be documented.
 `,
 			want: true,
 		},

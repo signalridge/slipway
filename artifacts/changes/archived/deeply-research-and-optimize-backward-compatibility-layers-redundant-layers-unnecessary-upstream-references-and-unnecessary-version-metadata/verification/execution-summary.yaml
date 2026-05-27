@@ -1,0 +1,114 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-27T08:13:46Z
+overall_verdict: pass
+tasks_plan_hash: 228d646bae957ee839e7b6f74e2cecc40dcdddc8d465d2a4fc6199209d6ada89
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/next.go
+        - cmd/next_eval_fixture_test.go
+        - cmd/next_handoff.go
+        - cmd/root_help_test.go
+        - cmd/run.go
+        - internal/engine/progression/advance.go
+        - internal/engine/progression/advance_governed.go
+      target_files:
+        - cmd/next.go
+        - cmd/next_eval_fixture_test.go
+        - cmd/next_handoff.go
+        - cmd/root_help_test.go
+        - cmd/run.go
+        - internal/engine/progression/advance.go
+        - internal/engine/progression/advance_governed.go
+      evidence_ref: rg quickMode|QuickMode|--quick; go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1
+      captured_at: 2026-05-27T08:13:46Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/common_test.go
+        - cmd/pivot_execution_test.go
+        - cmd/progression_next_test.go
+        - internal/engine/progression/advance_test.go
+        - internal/engine/progression/wave_sync.go
+        - internal/engine/progression/wave_sync_test.go
+      target_files:
+        - cmd/common_test.go
+        - cmd/pivot_execution_test.go
+        - cmd/progression_next_test.go
+        - internal/engine/progression/advance_test.go
+        - internal/engine/progression/wave_sync.go
+        - internal/engine/progression/wave_sync_test.go
+      evidence_ref: go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./... -count=1
+      captured_at: 2026-05-27T08:13:46Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/change.yaml
+        - artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/change.yaml
+        - internal/engine/artifact/manager.go
+        - internal/model/model_test.go
+        - internal/model/types.go
+      target_files:
+        - artifacts/changes/archived/**
+        - internal/engine/artifact/manager.go
+        - internal/model/model_test.go
+        - internal/model/types.go
+      evidence_ref: 'rg ManifestVersion|ArtifactState.*Version|version: 1; shasum -a 256 artifacts/changes/archived/*/research.md artifacts/changes/archived/*/intent.md; go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./...'
+      captured_at: 2026-05-27T08:13:46Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/research.md
+        - artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/intent.md
+        - artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md
+        - docs/design.md
+        - docs/index.md
+        - docs/workflow.md
+        - internal/engine/governance/traceability_test.go
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html_test.go
+        - internal/tmpl/templates/skills/root-cause-tracing/references/root-cause-tracing.md
+      target_files:
+        - artifacts/changes/archived/**
+        - docs/design.md
+        - docs/index.md
+        - docs/workflow.md
+        - internal/engine/governance/traceability_test.go
+        - internal/engine/progression/advance_test.go
+        - internal/stringutil/html_test.go
+        - internal/tmpl/templates/skills/root-cause-tracing/references/root-cause-tracing.md
+      evidence_ref: mkdocs build --strict; go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./... -count=1
+      captured_at: 2026-05-27T08:13:46Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/assurance.md
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-01.json
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-02.json
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-03.json
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-04.json
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-05.json
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/tasks.md
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/final-closeout.yaml
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/goal-verification.yaml
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/wave-orchestration.yaml
+      target_files:
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/assurance.md
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/**
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/tasks.md
+        - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/**
+      evidence_ref: go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./... -count=1; go build ./...; mkdocs build --strict; git diff --check; go run . validate --json --change deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata
+      captured_at: 2026-05-27T08:13:46Z

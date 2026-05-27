@@ -287,7 +287,7 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 	}))
 	runtimeEvidence := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(runtimeEvidence), 0o755))
-	require.NoError(t, os.WriteFile(runtimeEvidence, []byte(`{"task_id":"task-a","run_summary_version":1,"verdict":"pass"}`), 0o644))
+	require.NoError(t, os.WriteFile(runtimeEvidence, []byte(`{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test:task-a","captured_at":"2026-04-06T10:01:00Z"}`), 0o644))
 	pidPath := state.TaskPIDFilePath(root, slug)
 	require.NoError(t, os.MkdirAll(filepath.Dir(pidPath), 0o755))
 	require.NoError(t, os.WriteFile(pidPath, []byte(`{"task-a":123}`), 0o644))

@@ -46,19 +46,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		}
 	}()
 
-	// Quick mode: inject advisory-control disablement in-memory (not persisted).
-	if options.QuickMode {
-		existing := make(map[model.ControlID]struct{}, len(change.CallerDisabledCtrls))
-		for _, id := range change.CallerDisabledCtrls {
-			existing[id] = struct{}{}
-		}
-		for _, id := range quickModeDisabledControls {
-			if _, ok := existing[id]; !ok {
-				change.CallerDisabledCtrls = append(change.CallerDisabledCtrls, id)
-			}
-		}
-	}
-
 	fromState := change.CurrentState
 	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {

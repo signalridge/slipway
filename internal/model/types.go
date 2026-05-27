@@ -128,7 +128,6 @@ func (s ArtifactLifecycle) IsValid() bool {
 type ArtifactState struct {
 	ID          string            `yaml:"id" json:"id"`
 	Path        string            `yaml:"path,omitempty" json:"path,omitempty"`
-	Version     int               `yaml:"version,omitempty" json:"version,omitempty"`
 	State       ArtifactLifecycle `yaml:"state" json:"state"`
 	ContentHash string            `yaml:"content_hash,omitempty" json:"content_hash,omitempty"`
 	UpdatedAt   time.Time         `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`

@@ -221,7 +221,6 @@ func makeNextCmd() *cobra.Command {
 	var jsonOutput bool
 	var contextGuard bool
 	var noAutoPass bool
-	var quickMode bool
 	var diagnostics bool
 	var changeSlug string
 
@@ -242,7 +241,7 @@ func makeNextCmd() *cobra.Command {
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
 				if jsonOutput && !diagnostics && !contextGuard {
-					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass, quickMode)
+					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass)
 					if err != nil {
 						return err
 					}
@@ -250,7 +249,7 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextView(root, ref, "", true, !jsonOutput, noAutoPass, quickMode)
+				view, err := buildNextView(root, ref, "", true, !jsonOutput, noAutoPass)
 				if err != nil {
 					return err
 				}
@@ -276,15 +275,13 @@ func makeNextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format")
 	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
-	cmd.Flags().BoolVar(&quickMode, "quick", false, "Disable advisory controls (clarification, research, independent_review, worktree_isolation)")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
 }
 
-func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, quickMode ...bool) (nextView, error) {
-	quick := len(quickMode) > 0 && quickMode[0]
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, quick)
+func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -428,17 +425,16 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 // advanceIfReady attempts state advancement unless in preview mode.
 // When skipAutoPass is true, advancement proceeds but auto-pass is
 // suppressed so the caller can decide whether to accept auto-pass.
-func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, quickMode bool) (progression.AdvanceSummary, error) {
+func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool) (progression.AdvanceSummary, error) {
 	if preview {
 		return progression.AdvanceSummary{Action: "query"}, nil
 	}
 
 	var opts []progression.AdvanceOptions
-	if skipAutoPass || quickMode {
+	if skipAutoPass {
 		opts = append(opts, progression.AdvanceOptions{
 			SkipAutoPass: skipAutoPass,
 			Command:      "run",
-			QuickMode:    quickMode,
 		})
 	} else {
 		opts = append(opts, progression.AdvanceOptions{

@@ -46,9 +46,8 @@ type nextHandoffContext struct {
 	ResumeCheckpoint *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
 }
 
-func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, quickMode ...bool) (nextView, error) {
-	quick := len(quickMode) > 0 && quickMode[0]
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, quick)
+func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
 	if err != nil {
 		return nextView{}, err
 	}

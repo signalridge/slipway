@@ -34,18 +34,18 @@ flowchart TB
 
 The separation matters. `next`, `status`, and `validate` can recompute readiness without mutating lifecycle authority. `run` and `done` are explicit mutation surfaces. Generated host files help AI tools discover the right action, but the CLI remains the execution authority.
 
-## Design Comparisons
+## Design Boundaries
 
-Slipway names adjacent systems to clarify design tradeoffs. The comparison is about where authority lives, how much workflow becomes runtime, and which surfaces remain adapters. Slipway's stance is a small local governance kernel with explicit evidence and mutation boundaries.
+Slipway's durable design is expressed through its own authority boundaries, not through ongoing comparison with upstream tools. Adjacent workflow and agent systems can still be useful research inputs, but they do not define Slipway's runtime contract.
 
-| Adjacent system | Design logic | Slipway stance |
-| --- | --- | --- |
-| spec-kitty | Mission/work-package runtime with lanes, doctrine loading, optional dashboard/orchestrator surfaces, and worktree scheduling. | Keep one governed change bundle at a time, with `change.yaml` as current-state authority and lifecycle events as trace; do not import lane/platform scheduling. |
-| OpenSpec | Lightweight change/spec artifacts and broad slash-command/tool delivery so teams can align before code. | Keep artifact evidence, but separate read-only views (`next`, `status`, `validate`) from mutating surfaces (`run`, `done`) and keep the CLI as authority. |
-| Spec Kit | Spec-driven development scaffolding with integration management, official-source install guidance, and multi-agent command templates. | Document Slipway-owned release channels and generated adapter paths, but avoid turning adapter installation into project governance authority. |
-| Superpowers | Host-skill methodology drives agent behavior through reusable workflow discipline. | Use generated skills as procedural handoffs and evidence prompts; completion remains governed by Slipway artifacts and fresh verification. |
-| GSD | Broad workflow framework with audience-indexed docs, command references, and meta-prompted agent roles. | Keep user/operator docs navigable by task while limiting runtime scope to auditable lifecycle transitions and recovery commands. |
-| OpenCode | Host command UX stores project commands under `.opencode/commands/` and routes prompt execution through the tool. | Generate OpenCode commands as one adapter surface; the stable contract is the generated file path and CLI command, not OpenCode-specific governance state. |
+| Boundary | Slipway stance |
+| --- | --- |
+| Runtime authority | Keep `change.yaml` as current-state authority and lifecycle events as trace. |
+| State mutation | Keep `next`, `status`, and `validate` read-only; reserve state changes for explicit mutation commands such as `run` and `done`. |
+| Adapter surfaces | Generate host files as handoff aids. The stable contract is the generated path plus CLI command, not host-specific governance state. |
+| Installation guidance | Document Slipway-owned release and initialization paths without making adapter installation a governance source of truth. |
+| Execution evidence | Treat task evidence, review evidence, and final verification as first-class Slipway artifacts bound to the current run. |
+| Scope discipline | Reuse small primitives when they fit, but avoid importing lane schedulers, dashboards, or project-management runtimes into the governance kernel. |
 
 ## Non-Goals
 

@@ -485,7 +485,7 @@ func TestTraceabilityBlockingOpenQuestionProse(t *testing.T) {
 INT-001: Something
 
 ## Open Questions
-Need to decide whether OpenCode commands are flat or nested.
+Need to decide which adapter layout should be documented.
 `)
 
 	slug := "test-change"

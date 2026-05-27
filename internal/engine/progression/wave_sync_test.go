@@ -173,20 +173,64 @@ func TestTasksPlanChangedSinceTaskEvidenceBlockersAppliesOnFirstExecution(t *tes
 	}, blockers)
 }
 
-func Test_deriveTaskIDFromEvidenceFilename(t *testing.T) {
+func TestParseTaskEvidenceRejectsCompatibilityFallbacks(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		input, want string
+	cases := []struct {
+		name    string
+		payload string
+		wantErr string
 	}{
-		{"t1.json", "t1"},
-		{"t1--session123.json", "t1"},
-		{"task-abc.json", "task-abc"},
+		{
+			name:    "nested-task-run",
+			payload: `{"task_run":{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test"},"captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "task_run is not supported",
+		},
+		{
+			name:    "missing-task-id",
+			payload: `{"run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "task_id is required",
+		},
+		{
+			name:    "missing-run-summary-version",
+			payload: `{"task_id":"task-a","task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "run_summary_version is required",
+		},
+		{
+			name:    "missing-task-kind",
+			payload: `{"task_id":"task-a","run_summary_version":1,"verdict":"pass","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "task_kind is required",
+		},
+		{
+			name:    "missing-verdict",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "verdict is required",
+		},
+		{
+			name:    "missing-evidence-ref",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "evidence_ref is required",
+		},
+		{
+			name:    "missing-captured-at",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test"}`,
+			wantErr: "captured_at is required",
+		},
+		{
+			name:    "invalid-captured-at",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"yesterday"}`,
+			wantErr: "captured_at must be RFC3339Nano",
+		},
 	}
-	for _, tt := range tests {
-		got := deriveTaskIDFromEvidenceFilename(tt.input)
-		if got != tt.want {
-			t.Errorf("deriveTaskIDFromEvidenceFilename(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, tc.name+".json")
+			require.NoError(t, os.WriteFile(path, []byte(tc.payload), 0o644))
+			_, _, _, err := ParseTaskEvidence(root, path, 1)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
 	}
 }
 
@@ -245,6 +289,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
 		"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -313,6 +358,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -374,6 +420,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -483,6 +530,7 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
 		"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -564,6 +612,7 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 			"task_kind":           "code",
 			"verdict":             "pass",
 			"blockers":            []string{},
+			"evidence_ref":        "test:" + taskID,
 			"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
 			"session_id":          sharedSessionID,
 		}
@@ -635,6 +684,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 		"run_summary_version": 1,
 		"task_kind":           "code",
 		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -736,6 +786,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"run_summary_version": 1,
 		"task_kind":           "code",
 		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
 		"captured_at":         firstEvidenceAt.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -788,6 +839,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"run_summary_version": 2,
 		"task_kind":           "code",
 		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
 		"captured_at":         secondEvidenceAt.Format(time.RFC3339Nano),
 	}
 	raw, err = json.Marshal(taskEvidence)
@@ -859,6 +911,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 		"run_summary_version": 1,
 		"task_kind":           "code",
 		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
 	}
 	raw, err := json.Marshal(taskEvidence)

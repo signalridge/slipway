@@ -22,42 +22,36 @@ artifacts:
     assurance:
         id: assurance
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/assurance.md
-        version: 1
         state: frozen
         content_hash: f4821be49305c6a34299a0708ca4af270b0cc29827597a6bab4bfa7bdac3b963
         updated_at: 2026-05-26T16:50:07Z
     decision:
         id: decision
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/decision.md
-        version: 1
         state: frozen
         content_hash: c9e9499b68883b6e157838879eeaa197f2ecded72073cadbdc37b327fea0cb83
         updated_at: 2026-05-26T16:52:25Z
     intent:
         id: intent
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/intent.md
-        version: 1
         state: frozen
-        content_hash: eb67c52ce14cd41114b51483567fab6afb63bc5f4038e9cc61404fbed961549e
-        updated_at: 2026-05-26T16:48:11Z
+        content_hash: 2d99295449d450163b452c2ed70e2cf1e426bc4e24b5d4be94528ec6ecde27f0
+        updated_at: 2026-05-27T08:09:54Z
     requirements:
         id: requirements
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/requirements.md
-        version: 1
         state: frozen
         content_hash: ea3dd3af298f2be662aa0880afecdf1871af9240898b9ac2f17c3beaea7a3a71
         updated_at: 2026-05-26T16:48:11Z
     research:
         id: research
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/research.md
-        version: 1
         state: frozen
-        content_hash: bf42882c32507b423b18bb9dad255df21e04578c470529b2dfe6d5a2f571a997
-        updated_at: 2026-05-26T16:48:11Z
+        content_hash: 1618a7b30472bc32d4002c6aea482f2b91fff5054fd0a4f8cf52f636be8ef5df
+        updated_at: 2026-05-27T08:09:54Z
     tasks:
         id: tasks
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/tasks.md
-        version: 1
         state: frozen
         content_hash: e8585f9c4bb86466fb99a80df42103be92c6144ef4e74090a0f92f28ed1e8749
         updated_at: 2026-05-26T15:42:23.835435625Z

@@ -1,0 +1,18 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T08:13:46Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - "review:line-level-diff"
+  - "test:go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1"
+  - "test:go test ./... -count=1"
+  - "build:go build ./..."
+  - "docs:mkdocs build --strict"
+  - "lint:git diff --check"
+  - "assurance:complete"
+  - "archive_hashes:refreshed"
+notes: |
+  Gaps (code_to_artifact): none found. The code changes remove obsolete paths without introducing a replacement compatibility mode or broad abstraction.
+  Gaps (artifact_to_code): none found. Tests cover command help without --quick, strict task evidence parse failures, existing workflow evidence behavior, artifact serialization without per-artifact version, the updated Open Questions example, completed assurance, and refreshed archived hashes.
+  Quality review: the change is narrow and follows existing command/progression patterns. Strict task evidence errors are explicit, docs no longer make external systems durable design anchors, and retained version fields are the persisted run/schema versions still used by freshness and stored schema validation.

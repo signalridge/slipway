@@ -94,8 +94,8 @@ Implement Scope Contract reconciliation as a Slipway-native evaluator over `task
 - `cmd/codebase_map.go`: codebase-map command output path selection.
 - `cmd/common.go`: invocation workspace/root helpers for routed commands.
 - `internal/state/paths.go`: artifact path resolution for bound worktrees.
-- `/Users/yixianlu/ghq/github.com/Priivacy-ai/spec-kitty/src/specify_cli/ownership/models.py`: source ownership declaration pattern.
-- `/Users/yixianlu/ghq/github.com/Priivacy-ai/spec-kitty/src/specify_cli/policy/commit_guard.py`: source file-boundary enforcement pattern.
+- `spec-kitty/src/specify_cli/ownership/models.py`: source ownership declaration pattern.
+- `spec-kitty/src/specify_cli/policy/commit_guard.py`: source file-boundary enforcement pattern.
 
 ## Canonical References
 - `internal/engine/wave/parse.go`
@@ -109,5 +109,5 @@ Implement Scope Contract reconciliation as a Slipway-native evaluator over `task
 - `artifacts/codebase/ARCHITECTURE.md`
 - `artifacts/codebase/TESTING.md`
 - `artifacts/codebase/CONCERNS.md`
-- `/Users/yixianlu/ghq/github.com/Priivacy-ai/spec-kitty/src/specify_cli/ownership/models.py`
-- `/Users/yixianlu/ghq/github.com/Priivacy-ai/spec-kitty/src/specify_cli/policy/commit_guard.py`
+- `spec-kitty/src/specify_cli/ownership/models.py`
+- `spec-kitty/src/specify_cli/policy/commit_guard.py`

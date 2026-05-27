@@ -153,7 +153,6 @@ func TemplateContent(name string) (string, error) {
 }
 
 type templateData struct {
-	ManifestVersion    int
 	Slug               string
 	InitialRequest     string
 	QualityMode        string
@@ -210,7 +209,6 @@ func buildTemplateData(root string, change model.Change, docs *DocSections, over
 	projectLanguages := strings.Join(projectCtx.Languages, ", ")
 	slug := strings.TrimSpace(change.Slug)
 	data := templateData{
-		ManifestVersion:    1,
 		Slug:               slug,
 		InitialRequest:     strings.TrimSpace(change.Description),
 		QualityMode:        string(change.EffectiveQualityMode()),
@@ -1323,9 +1321,6 @@ func materializeRequiredArtifacts(root string, change *model.Change, schema []Ar
 		current := change.Artifacts[artifactID]
 		if current.ID == "" {
 			current.ID = artifactID
-		}
-		if current.Version < 1 {
-			current.Version = 1
 		}
 		if current.State == "" {
 			current.State = model.ArtifactLifecycleDraft

@@ -103,7 +103,7 @@ These entries remain blockers:
 
 ```markdown
 ## Open Questions
-Need to decide whether OpenCode commands are flat or nested.
+Need to decide which adapter layout should be documented.
 ```
 
 This lets an artifact preserve the question history without keeping intake stuck after clarification is complete.

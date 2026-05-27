@@ -21,14 +21,9 @@ complex
 - Audit Slipway's current tracked documentation surface (`README.md`,
   `mkdocs.yml`, and any created `docs/` pages) against the requested doc-system
   outcome.
-- Study local ghq reference repositories for documentation and AI-tool
-  onboarding patterns:
-  - `/Users/yixianlu/ghq/github.com/Priivacy-ai/spec-kitty`
-  - `/Users/yixianlu/ghq/github.com/Fission-AI/OpenSpec`
-  - `/Users/yixianlu/ghq/github.com/github/spec-kit`
-  - `/Users/yixianlu/ghq/github.com/obra/superpowers`
-  - `/Users/yixianlu/ghq/github.com/gsd-build/get-shit-done`
-  - `/Users/yixianlu/ghq/github.com/opencode-ai/opencode`
+- Study local reference repositories for documentation and AI-tool onboarding
+  patterns across spec governance, tool matrices, installation safety,
+  skill-prompt workflows, command docs, and host-command examples.
 - Create or update the tracked Slipway documentation system so MkDocs has
   real pages for concept, installation, workflow, command, adapter, and
   contributor/operator documentation.

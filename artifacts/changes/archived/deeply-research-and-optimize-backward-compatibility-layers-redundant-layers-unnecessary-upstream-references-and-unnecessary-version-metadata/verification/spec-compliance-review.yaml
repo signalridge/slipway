@@ -1,0 +1,21 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T08:13:46Z"
+run_version: 1
+references:
+  - "layer:R0=pass"
+  - "layer:IR1=pass"
+  - "layer:CORRECTNESS=pass"
+  - "layer:SAFETY=pass"
+  - "requirements:REQ-001..REQ-006=covered"
+  - "decision:Approach B honored"
+  - "scope_contract:pass"
+  - "test:go test ./... -count=1"
+  - "build:go build ./..."
+  - "docs:mkdocs build --strict"
+  - "assurance:complete"
+  - "archive_hashes:refreshed"
+notes: |
+  Gaps (code_to_artifact): none found. The implementation stays within the selected cleanup scope: --quick removal, strict task evidence, artifact metadata removal, docs/archive reference cleanup, assurance completion, and archived hash refresh.
+  Gaps (artifact_to_code): none found. REQ-001 removes the current quick bypass, REQ-002 is enforced by strict ParseTaskEvidence errors, REQ-003 removes ArtifactState.Version and ManifestVersion, REQ-004 is reflected in docs/archive cleanup with matching archived hashes, REQ-005 preserves intentionally scoped versions and lifecycle compatibility, and REQ-006 is covered by focused and full verification.
+  Decision fidelity: Approach B is honored; no replacement quick/lite/compact mode or new override surface was introduced.

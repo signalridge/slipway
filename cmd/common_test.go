@@ -269,8 +269,9 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-01",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
-		"evidence_input_hash": evidenceInputHash,
+		"input_hash":          evidenceInputHash,
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)

@@ -20,8 +20,6 @@ import (
 
 // TaskEvidencePayload is the parsed payload from a task evidence JSON file.
 type TaskEvidencePayload struct {
-	TaskRun *model.TaskRun `json:"task_run,omitempty"`
-
 	TaskID            string             `json:"task_id,omitempty"`
 	RunSummaryVersion int                `json:"run_summary_version,omitempty"`
 	TaskKind          model.TaskKind     `json:"task_kind,omitempty"`
@@ -253,7 +251,7 @@ func LoadExecutionTasksFromEvidence(root, slug string, runSummaryVersion int) ([
 }
 
 // ParseTaskEvidence parses a single task evidence file into an execution task summary.
-func ParseTaskEvidence(root, path string, expectedRunSummaryVersion int) (model.ExecutionTaskSummary, time.Time, string, error) {
+func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (model.ExecutionTaskSummary, time.Time, string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
@@ -263,30 +261,29 @@ func ParseTaskEvidence(root, path string, expectedRunSummaryVersion int) (model.
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}
 
-	run := model.TaskRun{}
-	if payload.TaskRun != nil {
-		run = *payload.TaskRun
-	} else {
-		run = model.TaskRun{
-			TaskID:            strings.TrimSpace(payload.TaskID),
-			RunSummaryVersion: payload.RunSummaryVersion,
-			TaskKind:          payload.TaskKind,
-			Verdict:           payload.Verdict,
-			ChangedFiles:      append([]string(nil), payload.ChangedFiles...),
-			TargetFiles:       append([]string(nil), payload.TargetFiles...),
-			EvidenceRef:       strings.TrimSpace(payload.EvidenceRef),
-			Blockers:          append([]model.ReasonCode(nil), payload.Blockers...),
-		}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", err
+	}
+	if _, ok := envelope["task_run"]; ok {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("task_run is not supported; use flat task evidence fields")
 	}
 
-	if run.TaskID == "" {
-		run.TaskID = deriveTaskIDFromEvidenceFilename(filepath.Base(path))
+	run := model.TaskRun{
+		TaskID:            strings.TrimSpace(payload.TaskID),
+		RunSummaryVersion: payload.RunSummaryVersion,
+		TaskKind:          payload.TaskKind,
+		Verdict:           payload.Verdict,
+		ChangedFiles:      append([]string(nil), payload.ChangedFiles...),
+		TargetFiles:       append([]string(nil), payload.TargetFiles...),
+		EvidenceRef:       strings.TrimSpace(payload.EvidenceRef),
+		Blockers:          append([]model.ReasonCode(nil), payload.Blockers...),
 	}
 	if run.TaskID == "" {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("task_id is required")
 	}
 	if run.RunSummaryVersion == 0 {
-		run.RunSummaryVersion = expectedRunSummaryVersion
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("run_summary_version is required")
 	}
 	if run.RunSummaryVersion != expectedRunSummaryVersion {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf(
@@ -295,38 +292,35 @@ func ParseTaskEvidence(root, path string, expectedRunSummaryVersion int) (model.
 			run.RunSummaryVersion,
 		)
 	}
-	if run.TaskKind == "" || !run.TaskKind.IsValid() {
-		if run.TaskKind != "" && !run.TaskKind.IsValid() {
-			run.Blockers = append(run.Blockers, model.NewReasonCode("invalid_task_kind", string(run.TaskKind)))
-		}
-		run.TaskKind = model.TaskKindCode
+	if run.TaskKind == "" {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("task_kind is required")
+	}
+	if !run.TaskKind.IsValid() {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("invalid task_kind: %q", run.TaskKind)
+	}
+	if run.Verdict == "" {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("verdict is required")
 	}
 	if !run.Verdict.IsValid() {
-		run.Blockers = append(run.Blockers, model.NewReasonCode("invalid_or_missing_verdict", ""))
-		run.Verdict = model.TaskVerdictIncomplete
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("invalid task verdict: %q", run.Verdict)
 	}
 	run.Blockers = model.NormalizeReasonCodes(run.Blockers)
 	if strings.TrimSpace(run.EvidenceRef) == "" {
-		rel, relErr := filepath.Rel(root, path)
-		if relErr == nil {
-			run.EvidenceRef = filepath.ToSlash(rel)
-		}
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("evidence_ref is required")
 	}
 	if err := run.Validate(); err != nil {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}
 
-	capturedAt := time.Time{}
-	if strings.TrimSpace(payload.CapturedAt) != "" {
-		if ts, err := time.Parse(time.RFC3339Nano, payload.CapturedAt); err == nil {
-			capturedAt = ts.UTC()
-		}
+	capturedAtRaw := strings.TrimSpace(payload.CapturedAt)
+	if capturedAtRaw == "" {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("captured_at is required")
 	}
-	if capturedAt.IsZero() {
-		if info, err := os.Stat(path); err == nil {
-			capturedAt = info.ModTime().UTC()
-		}
+	capturedAt, err := time.Parse(time.RFC3339Nano, capturedAtRaw)
+	if err != nil {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("captured_at must be RFC3339Nano: %w", err)
 	}
+	capturedAt = capturedAt.UTC()
 	task := model.ExecutionTaskSummary{
 		TaskID:            run.TaskID,
 		Verdict:           run.Verdict,
@@ -343,15 +337,6 @@ func ParseTaskEvidence(root, path string, expectedRunSummaryVersion int) (model.
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}
 	return task, capturedAt, strings.TrimSpace(payload.SessionID), nil
-}
-
-// deriveTaskIDFromEvidenceFilename extracts a task ID from an evidence filename.
-func deriveTaskIDFromEvidenceFilename(fileName string) string {
-	base := strings.TrimSuffix(strings.TrimSpace(fileName), filepath.Ext(fileName))
-	if idx := strings.Index(base, "--"); idx > 0 {
-		base = base[:idx]
-	}
-	return strings.TrimSpace(base)
 }
 
 // CollectNonPassTaskBlockers returns blocker strings for tasks that don't have a pass verdict.

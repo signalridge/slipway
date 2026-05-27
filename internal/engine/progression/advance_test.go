@@ -594,7 +594,7 @@ func TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics(t *testing.T) {
 		{
 			name: "plain prose advances to research",
 			questions: `## Open Questions
-Need to decide whether OpenCode commands are flat or nested.
+Need to decide which adapter layout should be documented.
 `,
 			wantSub:    model.IntakeSubStepResearch,
 			wantReason: "open_questions_detected",
@@ -804,6 +804,7 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
   "task_kind": "code",
   "verdict": "fail",
   "blockers": [],
+  "evidence_ref": "test:task-a",
   "captured_at": "2026-04-06T10:01:00Z"
 }`)
 	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug, 1), "task-a.json")

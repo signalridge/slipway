@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,4 +25,26 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	assert.Contains(t, help, "Finalize a done-ready change and archive it")
 	assert.NotContains(t, help, "completed change")
 	assert.NotContains(t, help, "Auto-classify advisory versus governed work")
+}
+
+func TestProgressionCommandsDoNotExposeQuickBypass(t *testing.T) {
+	t.Parallel()
+
+	for name, makeCmd := range map[string]func() *cobra.Command{
+		"next": makeNextCmd,
+		"run":  makeRunCmd,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := makeCmd()
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetErr(&buf)
+			cmd.SetArgs([]string{"--help"})
+
+			require.NoError(t, cmd.Execute())
+			assert.NotContains(t, buf.String(), "--quick")
+		})
+	}
 }

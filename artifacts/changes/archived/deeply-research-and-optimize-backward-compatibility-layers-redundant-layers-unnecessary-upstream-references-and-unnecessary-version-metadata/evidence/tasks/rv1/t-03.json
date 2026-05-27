@@ -1,0 +1,22 @@
+{
+  "task_id": "t-03",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/change.yaml",
+    "artifacts/changes/archived/complete-slipway-documentation-system-by-referencing-local-ghq-repositories-spec-kitty-openspec-speckit-superpowers-and-gsd-add-natural-language-ai-tool-installation-guidance-modeled-after-opencode/change.yaml",
+    "internal/engine/artifact/manager.go",
+    "internal/model/model_test.go",
+    "internal/model/types.go"
+  ],
+  "target_files": [
+    "artifacts/changes/archived/**",
+    "internal/engine/artifact/manager.go",
+    "internal/model/model_test.go",
+    "internal/model/types.go"
+  ],
+  "evidence_ref": "rg ManifestVersion|ArtifactState.*Version|version: 1; shasum -a 256 artifacts/changes/archived/*/research.md artifacts/changes/archived/*/intent.md; go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./...",
+  "captured_at": "2026-05-27T08:13:46Z",
+  "session_id": "codex-backcompat-cleanup-t03"
+}

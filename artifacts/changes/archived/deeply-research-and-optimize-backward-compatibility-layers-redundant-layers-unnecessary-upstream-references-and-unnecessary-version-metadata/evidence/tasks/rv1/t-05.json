@@ -1,0 +1,27 @@
+{
+  "task_id": "t-05",
+  "run_summary_version": 1,
+  "task_kind": "verification",
+  "verdict": "pass",
+  "changed_files": [
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/assurance.md",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-01.json",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-02.json",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-03.json",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-04.json",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/t-05.json",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/tasks.md",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/final-closeout.yaml",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/goal-verification.yaml",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/wave-orchestration.yaml"
+  ],
+  "target_files": [
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/assurance.md",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/evidence/tasks/rv1/**",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/tasks.md",
+    "artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification/**"
+  ],
+  "evidence_ref": "go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./... -count=1; go build ./...; mkdocs build --strict; git diff --check; go run . validate --json --change deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata",
+  "captured_at": "2026-05-27T08:13:46Z",
+  "session_id": "codex-backcompat-cleanup-t05"
+}

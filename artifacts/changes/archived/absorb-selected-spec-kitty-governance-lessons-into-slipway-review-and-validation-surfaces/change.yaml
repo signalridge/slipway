@@ -20,42 +20,36 @@ artifacts:
     assurance:
         id: assurance
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/assurance.md
-        version: 1
         state: frozen
         content_hash: 08780e34dc7ff81db3c7b97841e7c116d6c9226cd539bcb1642c72b1af86b219
         updated_at: 2026-05-27T03:00:00Z
     decision:
         id: decision
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/decision.md
-        version: 1
         state: frozen
         content_hash: 4b235cccb51842eebbbc27028577240c5fdfe3104d71ee34ac007ed3d81b98b2
         updated_at: 2026-05-26T17:55:05.700529844Z
     intent:
         id: intent
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/intent.md
-        version: 1
         state: frozen
         content_hash: a4d1652f50dea66ff818135f2dfb6303cd66fa8459bf22d4cf0c3f4e57187f47
         updated_at: 2026-05-26T17:54:33.889123784Z
     requirements:
         id: requirements
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/requirements.md
-        version: 1
         state: frozen
         content_hash: 83b78413d07d4e76af45bde958b7b986b26552e3b4189ffda02b4de627ed7240
         updated_at: 2026-05-26T17:54:42.289608855Z
     research:
         id: research
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/research.md
-        version: 1
         state: frozen
-        content_hash: ea89ad1d8fbe8bda97c9b7dc4691662c8c1a6558ee8d10c3a02c46521f4de9ba
-        updated_at: 2026-05-26T17:54:57.71524623Z
+        content_hash: 529635af4f6e029c979e8ea725499515da00726a0764b28c49efc99879faf20d
+        updated_at: 2026-05-27T08:09:54Z
     tasks:
         id: tasks
         path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/artifacts/changes/archived/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/tasks.md
-        version: 1
         state: frozen
         content_hash: 50fada9075c2dee9973d3b7d09a1f139eb2c47af8fa5ba05a72df1caca95a84c
         updated_at: 2026-05-27T02:23:57Z

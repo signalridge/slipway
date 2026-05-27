@@ -1,0 +1,24 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T08:13:46Z"
+run_version: 1
+references:
+  - "task:t-01=pass"
+  - "task:t-02=pass"
+  - "task:t-03=pass"
+  - "task:t-04=pass"
+  - "task:t-05=pass"
+  - "test:go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1"
+  - "test:go test ./... -count=1"
+  - "build:go build ./..."
+  - "docs:mkdocs build --strict"
+  - "lint:git diff --check"
+  - "validate:go run . validate --json --change deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata"
+  - "assurance:complete"
+  - "archive_hashes:refreshed"
+notes: |
+  Removed the current --quick bypass surface instead of replacing it with another mode.
+  Tightened task evidence to explicit flat fields and removed nested/default fallback parsing.
+  Removed artifact-state version metadata and template manifest version while preserving persisted run/schema versions.
+  Replaced durable docs comparison tables with Slipway-owned design boundaries and normalized stale local upstream paths in tracked archives.
+  Filled assurance.md and refreshed archived artifact content hashes after review findings.

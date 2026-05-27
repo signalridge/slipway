@@ -1,0 +1,25 @@
+{
+  "task_id": "t-02",
+  "run_summary_version": 1,
+  "task_kind": "code",
+  "verdict": "pass",
+  "changed_files": [
+    "cmd/common_test.go",
+    "cmd/pivot_execution_test.go",
+    "cmd/progression_next_test.go",
+    "internal/engine/progression/advance_test.go",
+    "internal/engine/progression/wave_sync.go",
+    "internal/engine/progression/wave_sync_test.go"
+  ],
+  "target_files": [
+    "cmd/common_test.go",
+    "cmd/pivot_execution_test.go",
+    "cmd/progression_next_test.go",
+    "internal/engine/progression/advance_test.go",
+    "internal/engine/progression/wave_sync.go",
+    "internal/engine/progression/wave_sync_test.go"
+  ],
+  "evidence_ref": "go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1; go test ./... -count=1",
+  "captured_at": "2026-05-27T08:13:46Z",
+  "session_id": "codex-backcompat-cleanup-t02"
+}

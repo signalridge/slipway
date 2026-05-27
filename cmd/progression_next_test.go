@@ -2530,6 +2530,9 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		taskEvidence := map[string]any{
 			"task_id":             "task-01",
 			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"evidence_ref":        "test:task-01",
 			"input_hash":          originalHash,
 			"captured_at":         time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano),
 		}
@@ -2950,6 +2953,8 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks

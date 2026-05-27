@@ -121,7 +121,6 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 		"plan": {
 			ID:          "plan",
 			Path:        "artifacts/changes/round-trip-new-format/plan.md",
-			Version:     2,
 			State:       ArtifactLifecycleApproved,
 			ContentHash: strings.Repeat("a", 64),
 			UpdatedAt:   artifactUpdatedAt,

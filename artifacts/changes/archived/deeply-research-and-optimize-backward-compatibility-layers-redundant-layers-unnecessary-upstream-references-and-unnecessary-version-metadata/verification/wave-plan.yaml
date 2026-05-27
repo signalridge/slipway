@@ -1,0 +1,64 @@
+version: 1
+generated_at: 2026-05-27T07:15:45.943609317Z
+tasks_plan_hash: 2163f315ad3562198ceea8405e15d976d495cc6311c6d51941c8bf57ab6794e2
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: Remove the current quick-mode command and progression bypass.
+          target_files:
+            - cmd/next.go
+            - cmd/progression_next_test.go
+            - cmd/root_help_test.go
+            - cmd/run.go
+            - internal/engine/progression/advance.go
+            - internal/engine/progression/advance_governed.go
+            - internal/engine/progression/advance_test.go
+          task_kind: code
+        - task_id: t-02
+          objective: Tighten task evidence parsing to explicit flat JSON fields.
+          target_files:
+            - internal/engine/progression/wave_sync.go
+            - internal/engine/progression/wave_sync_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-03
+          objective: Remove unused artifact version metadata.
+          depends_on:
+            - t-01
+            - t-02
+          target_files:
+            - artifacts/changes/archived
+            - internal/engine/artifact/manager.go
+            - internal/engine/artifact/manager_test.go
+            - internal/model/model_test.go
+            - internal/model/types.go
+            - internal/state/lifecycle_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: Clean stale docs and tracked archived upstream references.
+          depends_on:
+            - t-03
+          target_files:
+            - artifacts/changes/archived
+            - docs/design.md
+            - docs/index.md
+            - docs/workflow.md
+            - internal/engine/governance/traceability_test.go
+            - internal/engine/progression/advance_test.go
+            - internal/stringutil/html_test.go
+          task_kind: doc
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: Verify focused behavior and full repository health.
+          depends_on:
+            - t-04
+          target_files:
+            - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/assurance.md
+            - artifacts/changes/deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata/verification
+          task_kind: verification

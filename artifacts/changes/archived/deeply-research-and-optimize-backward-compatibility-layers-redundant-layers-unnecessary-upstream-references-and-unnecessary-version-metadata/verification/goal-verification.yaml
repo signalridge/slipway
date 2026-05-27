@@ -1,0 +1,24 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T08:13:46Z"
+run_version: 1
+references:
+  - "fresh:command_ref=go test ./cmd ./internal/engine/progression ./internal/engine/artifact ./internal/model ./internal/engine/governance ./internal/stringutil -count=1"
+  - "fresh:command_ref=go test ./... -count=1"
+  - "fresh:command_ref=go build ./..."
+  - "fresh:command_ref=mkdocs build --strict"
+  - "fresh:command_ref=git diff --check"
+  - "fresh:command_ref=go run . validate --json --change deeply-research-and-optimize-backward-compatibility-layers-redundant-layers-unnecessary-upstream-references-and-unnecessary-version-metadata"
+  - "scan:no_stub_markers"
+  - "scope_contract:pass"
+  - "evidence_freshness:fresh"
+  - "assurance:complete"
+  - "archive_hashes:refreshed"
+notes: |
+  Criteria:
+    AC-1: Remove current --quick bypass surface - pass - command help no longer registers --quick for next/run, root help asserts no quick surface, and rg only finds the negative help assertion.
+    AC-2: Strict task evidence parsing - pass - ParseTaskEvidence rejects task_run, missing task_id, missing run_summary_version, missing task_kind, missing verdict, missing evidence_ref, and missing/invalid captured_at; focused tests and go test ./... -count=1 passed after review fixes.
+    AC-3: Remove unnecessary artifact version metadata - pass - ArtifactState.Version and ManifestVersion are removed, materialization no longer writes per-artifact version, active artifact states omit version: 1, and archived artifact hashes were refreshed after archive text edits.
+    AC-4: Clean durable docs/archive upstream references - pass - docs/design.md records Slipway-owned design boundaries, docs/index.md points to that section, stale OpenCode-specific unresolved-question examples are generic, local ghq absolute reference paths in tracked archives were normalized, and archived metadata now matches the edited files.
+    AC-5: Preserve intentional versions and compatibility only where still wired - pass - run_version, run_summary_version, schema/version fields for execution, wave plans, lifecycle events, governance snapshots, and policy packs remain intact.
+    AC-6: Final verification is fresh - pass - focused tests, go test ./... -count=1, go build ./..., mkdocs build --strict, git diff --check, and validate all ran after the assurance and archived-hash fixes.
