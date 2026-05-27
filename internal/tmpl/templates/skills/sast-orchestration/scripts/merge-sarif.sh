@@ -10,9 +10,9 @@
 # separate `runs[]` entries. Results are deduplicated within each group by
 # `(ruleId, artifact uri, startLine)` and emitted in deterministic order.
 #
-# Narrow lift from `trailofbits/semgrep/scripts/merge_sarif.py`, implemented
-# as shell + jq so the shipped helper stays offline and deterministic without
-# introducing Python runtime caches into the rendered tree.
+# Implemented as shell + jq so the shipped helper stays offline and
+# deterministic without introducing Python runtime caches into the rendered
+# tree.
 
 set -euo pipefail
 

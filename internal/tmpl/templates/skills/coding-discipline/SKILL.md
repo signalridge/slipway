@@ -18,10 +18,11 @@ new routed/public surface. This is a reusable technique skill: it supplies the
 posture for planning, implementation, and review hosts while those hosts keep
 their own detailed procedures and evidence contracts.
 
-## Provenance
-Absorbed from the four-part Karpathy-style coding guidelines in
-`multica-ai/andrej-karpathy-skills`, then adapted to Slipway's existing host
-and evidence model.
+## Design Stance
+This skill keeps Slipway implementation work scoped and evidence-driven. It
+compresses coding discipline into four guardrails while leaving planning, TDD,
+verification, and review mechanics to the owning governed skills. It is not an
+additional routed workflow or independent methodology.
 
 ## Think Before Coding
 - state assumptions and open questions explicitly

@@ -1,8 +1,7 @@
 # Incident Severity Matrix
 
-Distilled from `alirezarezvani/incident-commander/references/incident_severity_matrix.md`.
-This is the triage table; it sits next to the framework and drives
-paging/SLA/communication cadence.
+This is Slipway's four-level incident triage table. It sits next to the
+framework and drives paging/SLA/communication cadence.
 
 ## Four-level matrix
 

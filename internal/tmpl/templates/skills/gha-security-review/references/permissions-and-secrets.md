@@ -7,7 +7,6 @@
 - OIDC Subject Claim Misconfiguration
 - The Fix: Minimal Permissions Pattern
 - Severity Guidelines
-- References
 
 ## Overview
 
@@ -264,11 +263,3 @@ Environment protection rules add:
 | Secrets in `pull_request_target` with fork checkout | **Critical** | All secrets exposed to attacker code |
 | OIDC with wildcard subject claim | **High** | Any workflow can assume cloud role |
 | Secrets written to files/artifacts | **High** | Persistent exposure beyond workflow run |
-
----
-
-## References
-
-- [GitHub Docs: Permissions for GITHUB_TOKEN](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#permissions-for-the-github_token)
-- [GitHub Docs: Using OIDC for cloud deployments](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
-- [GitHub Blog: Security hardening — Permissions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)

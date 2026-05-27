@@ -1,10 +1,9 @@
 # SARIF Merge Operator Guide
 
-Synthesized reference. Consolidates operator-facing merge guidance from
-`trailofbits/semgrep/scripts/merge_sarif.py` (authoritative merge semantics)
-and `trailofbits/audit-augmentation/references/formats.md` (external report
-interchange shape). The companion script ships as
-`scripts/merge-sarif.sh` under this skill.
+This guide defines Slipway's SARIF merge expectations for SAST orchestration.
+The companion script ships as `scripts/merge-sarif.sh` under this skill. The
+merge step keeps SARIF audit trails intact before downstream reporting or
+code-scanning upload.
 
 ## When to merge
 
@@ -84,9 +83,7 @@ sort-keys JSON output that stays byte-stable across reruns.
 
 When a downstream consumer expects CSV / JSON / GitHub code-scanning ingest
 instead of raw SARIF, defer the translation to the report stage. The merge
-step should leave the SARIF shape intact so audit trails survive. See
-`trailofbits/audit-augmentation/references/formats.md` (upstream) for the
-external-shape mappings.
+step should leave the SARIF shape intact so audit trails survive.
 
 ## Anti-patterns
 

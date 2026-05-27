@@ -700,14 +700,17 @@ func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
 	assert.Contains(t, content, "references/query-patterns.md")
 }
 
-func TestCodingDisciplineSkillKeepsFourPrinciplesAndProvenance(t *testing.T) {
+func TestCodingDisciplineSkillKeepsFourPrinciplesAndDesignStance(t *testing.T) {
 	t.Parallel()
 
 	content, err := Content("skills/coding-discipline/SKILL.md")
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "## Provenance")
-	assert.Contains(t, content, "multica-ai/andrej-karpathy-skills")
+	assert.Contains(t, content, "## Design Stance")
+	assert.Contains(t, content, "It is not an")
+	assert.Contains(t, content, "additional routed workflow or independent methodology.")
+	assert.NotContains(t, content, "## Provenance")
+	assert.NotContains(t, content, "multica-ai/andrej-karpathy-skills")
 	assert.Contains(t, content, "## Think Before Coding")
 	assert.Contains(t, content, "## Simplicity First")
 	assert.Contains(t, content, "## Surgical Changes")

@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 # find-variant.sh — scaffold a starter CodeQL or Semgrep variant-hunt rule.
 #
-# This is a template scaffold generator. It emits a minimal,
-# source-grounded starter body plus stable TODO placeholders the hunter
-# must fill in. It does **not** synthesize a finished, runnable query
-# and it does **not** bind to any local ruleset name.
-#
-# Upstream source:
-#   trailofbits/variant-analysis/resources/codeql/*.ql
-#   trailofbits/variant-analysis/resources/semgrep/*.yaml
+# This is a template scaffold generator. It emits a minimal, seed-aware starter
+# body plus stable TODO placeholders the hunter must fill in. It does **not**
+# synthesize a finished, runnable query and it does **not** bind to any local
+# ruleset name.
 
 set -euo pipefail
 

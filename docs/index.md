@@ -34,12 +34,6 @@ Slipway keeps three surfaces separate:
 4. Use `slipway next --json` for a read-only handoff or `slipway run --json` to advance.
 5. Close only after review, goal verification, and final closeout evidence pass.
 
-## Reference Patterns
+## Design Comparisons
 
-This documentation system borrows structure, not content, from local reference projects:
-
-- spec-kitty: task-oriented documentation categories and explicit verification notes.
-- OpenSpec and Spec Kit: supported-tool matrices, non-interactive setup, and integration safety caveats.
-- Superpowers: natural-language AI-tool installation guidance for OpenCode-style flows.
-- GSD: audience-indexed docs and runtime-specific command syntax.
-- OpenCode: project command files under `.opencode/commands/` and natural project command usage.
+The [Design Philosophy](design.md#design-comparisons) page compares Slipway with adjacent spec, workflow, and agent systems across authority, lifecycle, adapter, installation, and evidence boundaries. Use it to understand why Slipway keeps a small local governance kernel instead of becoming a hosted platform, project tracker, or host-specific agent workflow.

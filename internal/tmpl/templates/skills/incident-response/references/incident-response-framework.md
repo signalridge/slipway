@@ -1,10 +1,10 @@
 # Incident Response Framework
 
-Operational synthesis of PagerDuty, Google SRE (*Site Reliability Engineering*
-ch. 14), and Atlassian incident-management patterns. Distilled to the
-action-changing material: roles, phase entry/exit gates, handoffs, and
-decision authority. Upstream:
-`alirezarezvani/incident-commander/references/incident-response-framework.md`.
+Slipway keeps this incident-response reference focused on action-changing
+material: roles, phase entry/exit gates, handoffs, and decision authority.
+Broader incident-management frameworks cover more practice areas; this
+document narrows the operator surface to what changes how a Slipway-managed
+response proceeds.
 
 ## Core roles
 
@@ -16,9 +16,9 @@ decision authority. Upstream:
 | Customer Liaison | Outbound customer comms, status page drafts | Inbound triage, technical debug |
 | Ops Lead (optional, SEV1) | Operational track execution | Stakeholder comms |
 
-**Rule:** the person debugging is never the person communicating. Google
-measured ~40% MTTR regression when one person held both; it is a discipline
-failure, not a staffing problem.
+**Rule:** the person debugging is never the person communicating. Combining
+the roles slows mitigation and increases the chance that customer-facing
+updates lag behind operational reality.
 
 ## Phase gates
 
@@ -44,8 +44,8 @@ failure, not a staffing problem.
 | SEV3 | Partial degradation, workaround exists | Non-critical feature broken | 1 hr | 2×/day |
 | SEV4 | Minor, no user impact | Internal tool glitch | next business day | on resolve |
 
-Reassess severity every 30 min (Atlassian rule). Upgrading is cheap;
-downgrading prematurely costs trust.
+Reassess severity every 30 min. Upgrading is cheap; downgrading prematurely
+costs trust.
 
 ## Decision authority
 
@@ -78,10 +78,10 @@ asynchronously. Script:
 
 ## Runbook-first, improvise-second
 
-Follow runbooks before improvising. Atlassian measures 50–60% MTTR
-reduction for known failure modes when responders follow the playbook. If
-no runbook exists, write the first line of one at the top of the channel
-transcript before debugging — the postmortem will need it.
+Follow runbooks before improvising. Known failure modes should use the
+documented recovery path before responders branch into ad hoc debugging. If no
+runbook exists, write the first line of one at the top of the channel
+transcript before debugging - the postmortem will need it.
 
 ## Anti-patterns
 

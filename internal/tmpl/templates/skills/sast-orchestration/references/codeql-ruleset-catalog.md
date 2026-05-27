@@ -50,8 +50,6 @@ codeql pack download trailofbits/java-queries
 codeql pack download GitHubSecurityLab/CodeQL-Community-Packs-<Lang>
 ```
 
-**Source:** [github.com/GitHubSecurityLab/CodeQL-Community-Packs](https://github.com/GitHubSecurityLab/CodeQL-Community-Packs)
-
 ---
 
 ## Verify Installation

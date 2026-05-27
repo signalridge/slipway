@@ -2,9 +2,9 @@
 # find-polluter-go.sh — bisect a Go test suite to locate the test that
 # mutates shared on-disk state (the "polluter").
 #
-# Forked from the upstream superpowers debugging helper and specialized for
-# Go's `go test` invocation. The original npm-oriented variant is preserved
-# upstream.
+# Slipway-specific helper for Go's `go test` invocation. It stays offline and
+# deterministic while reporting the first package that creates the pollution
+# path.
 #
 # Usage:
 #   find-polluter-go.sh <pollution-path> <package-glob> [-run <regex>]

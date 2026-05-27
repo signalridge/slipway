@@ -14,14 +14,12 @@ SAFETY INVARIANT (Wave-3 PR-2 blast-radius contract):
     is supplied explicitly, and the confirm path still echoes the exact
     request body to stderr before posting. Do not relax this default.
 
-Lifted from ``getsentry/iterate-pr/scripts/reply_to_thread.py`` (Wave-3
-PR-2). Narrowings vs upstream:
+Slipway-specific behavior:
 
-  - Shebang narrowed from PEP 723 ``requires-python = ">=3.9"`` to the
-    shared Slipway Python contract (3.8+).
-  - Added a mandatory ``--confirm`` gate: upstream posts immediately.
-  - Added a fail-fast ``gh``/credentials preflight (only enforced when
-    ``--confirm`` is set, so dry-run works offline).
+  - Uses a plain shebang; the shared Slipway Python contract targets 3.8+.
+  - Requires an explicit ``--confirm`` gate before posting.
+  - Runs a fail-fast ``gh``/credentials preflight only when ``--confirm`` is
+    set, so dry-run works offline.
 
 Credentials come from ``GH_TOKEN`` / ``GITHUB_TOKEN`` or the existing
 ``gh`` login. Invalid env tokens are rejected during preflight before any

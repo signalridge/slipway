@@ -51,7 +51,9 @@ func init() {
 }
 ```
 
-**Real-world:** Used against awesome-go (140k+ stars). The Go quality check script ran `go run ./.github/scripts/check-quality/`, and the attacker injected an `init()` function that exfiltrated `GITHUB_TOKEN` with write permissions across 6 PRs.
+This pattern matters because the `init()` payload runs before the expected
+quality-check entrypoint, so reviewers may miss the execution path when they
+only inspect the invoked command.
 
 ### npm preinstall / postinstall
 
@@ -96,7 +98,9 @@ runs:
       shell: bash
 ```
 
-**Real-world:** Used against trivy (25k+ stars). The attacker modified `.github/actions/setup-go/action.yaml` to inject a payload. The "Set up Go" step took 5+ minutes (vs. normal seconds), and the stolen PAT was used to rename the repo, delete releases, and push malicious artifacts.
+This pattern matters because the workflow still appears to call the same local
+action path, while the fork has replaced the action body that runs under target
+repository privileges.
 
 ### Makefile / Shell Script Override
 
@@ -201,10 +205,3 @@ EXECUTION: Workflow checks out fork code (line X), then runs [command] (line Y)
   which executes the attacker's modified [file]
 IMPACT: GITHUB_TOKEN with [permissions] exfiltrated; attacker can [actions]
 ```
-
----
-
-## References
-
-- [GitHub Security Lab: Keeping your GitHub Actions and workflows secure (pwn requests)](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)
-- [HackerBot Claw campaign — awesome-go and trivy attacks](https://www.stepsecurity.io/blog/hackerbot-claw-github-actions-exploitation)

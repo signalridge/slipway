@@ -160,13 +160,13 @@ digraph principle {
 **Include context:** Directory, cwd, environment variables, timestamps
 **Capture stack:** `new Error().stack` shows complete call chain
 
-## Real-World Impact
+## Operational Impact
 
-From debugging session (2025-10-03):
-- Found root cause through 5-level trace
-- Fixed at source (getter validation)
-- Added 4 layers of defense
-- 1847 tests passed, zero pollution
+Root-cause tracing changes the fix target:
+- Find the original trigger instead of the first visible symptom.
+- Fix at the source boundary where invalid state enters.
+- Add validation at each layer that can reintroduce the same failure.
+- Prove the polluted state cannot recur with a focused regression test.
 
 ## Failure Signatures and Debugging Anti-Patterns
 

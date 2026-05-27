@@ -56,8 +56,8 @@ labelled `affected`, `safe-with-reason`, or `needs-followup`.
 
 ## Helpers
 - `scripts/find-variant.sh --engine=<codeql|semgrep> --language=<lang>`
-  — emits a starter query / rule scaffold grounded in the upstream
-  CodeQL and Semgrep template shelves, with TODO placeholders for seed
+  — emits a starter query / rule scaffold for CodeQL and Semgrep, with
+  TODO placeholders for seed
   location, sources, sinks, and sanitizers. This is **not** a finished
   runnable query and it does **not** bind to any local ruleset naming.
   Supported languages per engine: `python`, `go`, `java`,

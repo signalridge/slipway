@@ -45,6 +45,6 @@ openspec/
 __pycache__/
 *.pyc
 
-# Local research references (upstream skill repos)
+# Local scratch copies for research
 skills_ref/
 .ruff_cache/

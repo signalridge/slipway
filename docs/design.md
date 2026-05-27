@@ -34,18 +34,18 @@ flowchart TB
 
 The separation matters. `next`, `status`, and `validate` can recompute readiness without mutating lifecycle authority. `run` and `done` are explicit mutation surfaces. Generated host files help AI tools discover the right action, but the CLI remains the execution authority.
 
-## Borrowed Patterns
+## Design Comparisons
 
-Slipway's documentation and workflow shape intentionally borrow patterns from local reference projects while keeping Slipway's own model.
+Slipway names adjacent systems to clarify design tradeoffs. The comparison is about where authority lives, how much workflow becomes runtime, and which surfaces remain adapters. Slipway's stance is a small local governance kernel with explicit evidence and mutation boundaries.
 
-| Reference | Borrowed pattern | Slipway adaptation |
+| Adjacent system | Design logic | Slipway stance |
 | --- | --- | --- |
-| spec-kitty | Task-oriented docs categories and documentation verification notes. | Docs are organized by adoption task, operation task, reference, and contribution path. |
-| OpenSpec | Tool matrix and non-interactive setup documentation. | `slipway init --tools` documents each supported adapter path and command style. |
-| Spec Kit | Installation safety, integration keys, and official-source caveats. | Install docs separate release archives, package channels, source builds, and AI-tool initialization. |
-| Superpowers | Natural-language agent installation prompt. | Slipway provides a copy-paste prompt that tells an AI tool how to inspect, install, initialize, and verify without inventing steps. |
-| GSD | Audience-indexed documentation and explicit command references. | The docs home routes new users, operators, AI-tool integrators, and contributors to different pages. |
-| OpenCode | Project command files under `.opencode/commands/`. | OpenCode adapter docs name the generated `.opencode/commands/slipway-*.md` files and project command usage. |
+| spec-kitty | Mission/work-package runtime with lanes, doctrine loading, optional dashboard/orchestrator surfaces, and worktree scheduling. | Keep one governed change bundle at a time, with `change.yaml` as current-state authority and lifecycle events as trace; do not import lane/platform scheduling. |
+| OpenSpec | Lightweight change/spec artifacts and broad slash-command/tool delivery so teams can align before code. | Keep artifact evidence, but separate read-only views (`next`, `status`, `validate`) from mutating surfaces (`run`, `done`) and keep the CLI as authority. |
+| Spec Kit | Spec-driven development scaffolding with integration management, official-source install guidance, and multi-agent command templates. | Document Slipway-owned release channels and generated adapter paths, but avoid turning adapter installation into project governance authority. |
+| Superpowers | Host-skill methodology drives agent behavior through reusable workflow discipline. | Use generated skills as procedural handoffs and evidence prompts; completion remains governed by Slipway artifacts and fresh verification. |
+| GSD | Broad workflow framework with audience-indexed docs, command references, and meta-prompted agent roles. | Keep user/operator docs navigable by task while limiting runtime scope to auditable lifecycle transitions and recovery commands. |
+| OpenCode | Host command UX stores project commands under `.opencode/commands/` and routes prompt execution through the tool. | Generate OpenCode commands as one adapter surface; the stable contract is the generated file path and CLI command, not OpenCode-specific governance state. |
 
 ## Non-Goals
 

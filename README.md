@@ -23,7 +23,7 @@ AI coding tools are fast at changing files and weak at preserving accountable pr
 - **Evidence before confidence**: tests, builds, review records, and assurance artifacts are proof surfaces, not after-the-fact notes.
 - **AI tools are adapters**: host-specific skills, commands, hooks, and prompts route back into the same CLI instead of creating parallel workflows.
 - **Human-readable, machine-checkable artifacts**: Markdown remains readable to people, while stable sections and YAML records give the runtime something deterministic to inspect.
-- **Smallest useful control plane**: Slipway borrows good patterns from spec-kitty, OpenSpec, Spec Kit, Superpowers, GSD, and OpenCode without copying their product model.
+- **Smallest useful control plane**: Slipway stays narrower than adjacent spec, workflow, and agent frameworks by keeping governance authority in the CLI and repository artifacts.
 
 See [Design Philosophy](docs/design.md) for the longer architecture explanation.
 
@@ -131,7 +131,7 @@ The AI-tool installation prompt in [Installation](docs/installation.md#ai-tool-i
 ## Documentation
 
 - [Installation](docs/installation.md): platform packages, source builds, repository initialization, and AI-tool install prompt.
-- [Design Philosophy](docs/design.md): governing principles, authority boundaries, and reference-project influence.
+- [Design Philosophy](docs/design.md): governing principles, authority boundaries, and adjacent-system tradeoffs.
 - [Governed Workflow](docs/workflow.md): lifecycle states, read-only surfaces, mutating commands, and Open Questions semantics.
 - [Command Reference](docs/commands.md): core, situational, and diagnostics commands.
 - [AI Tool Adapters](docs/ai-tools.md): generated paths and host invocation styles.

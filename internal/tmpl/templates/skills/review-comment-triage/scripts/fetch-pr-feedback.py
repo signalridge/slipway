@@ -22,12 +22,10 @@ Bot classification:
   - Info bots (Codecov, Dependabot, Renovate, etc.) post status reports
     and are placed in the ``bot`` bucket for silent skipping.
 
-Lifted from ``getsentry/iterate-pr/scripts/fetch_pr_feedback.py`` (Wave-3
-PR-2). Narrowings vs upstream:
+Slipway-specific behavior:
 
-  - Shebang narrowed from PEP 723 ``requires-python = ">=3.9"`` to the
-    shared Slipway Python contract (3.8+).
-  - Added a fail-fast ``gh``/credentials preflight that exits 2 with an
+  - Uses a plain shebang; the shared Slipway Python contract targets 3.8+.
+  - Runs a fail-fast ``gh``/credentials preflight that exits 2 with an
     actionable message when ``gh`` is missing or unauthenticated.
 
 No live API calls are made by the preflight itself. Credentials are

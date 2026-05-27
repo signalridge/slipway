@@ -106,10 +106,10 @@ await new Promise(r => setTimeout(r, 200));   // Then: wait for timed behavior
 2. Based on known timing (not guessing)
 3. Comment explaining WHY
 
-## Real-World Impact
+## Operational Impact
 
-From debugging session (2025-10-03):
-- Fixed 15 flaky tests across 3 files
-- Pass rate: 60% → 100%
-- Execution time: 40% faster
-- No more race conditions
+Condition-based waiting changes flaky tests into deterministic checks:
+- Wait for the state transition that matters instead of sleeping blindly.
+- Keep timing waits only when the behavior under test is explicitly timed.
+- Document the timing contract when a bounded timeout is necessary.
+- Prove the race is gone by rerunning the affected test path.
