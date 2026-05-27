@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/require"
@@ -30,13 +32,20 @@ func verificationReadPathForTest(root, slug, skillName string) string {
 func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion int, taskIDs ...string) {
 	t.Helper()
 	now := time.Now().UTC()
+	targetsByTaskID := plannedTargetsByTaskID(t, root, slug)
 	tasks := make([]model.ExecutionTaskSummary, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
+		targetFiles := append([]string(nil), targetsByTaskID[taskID]...)
+		changedFiles := append([]string(nil), targetFiles...)
+		if len(changedFiles) == 0 {
+			changedFiles = []string{"cmd/placeholder.go"}
+		}
 		tasks = append(tasks, model.ExecutionTaskSummary{
 			TaskID:       taskID,
 			Verdict:      model.TaskVerdictPass,
 			TaskKind:     model.TaskKindCode,
-			ChangedFiles: []string{"cmd/placeholder.go"},
+			ChangedFiles: changedFiles,
+			TargetFiles:  targetFiles,
 			CapturedAt:   now,
 		})
 	}
@@ -49,4 +58,29 @@ func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion in
 		Tasks:             tasks,
 	}
 	writeExecutionSummary(t, root, slug, summary)
+}
+
+func plannedTargetsByTaskID(t *testing.T, root, slug string) map[string][]string {
+	t.Helper()
+	out := map[string][]string{}
+	change, err := state.LoadChange(root, slug)
+	if err != nil {
+		return out
+	}
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return out
+	}
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
+	if err != nil {
+		return out
+	}
+	plan, err := wave.ParseTaskPlan(string(raw))
+	if err != nil {
+		return out
+	}
+	for _, task := range plan.Tasks {
+		out[task.TaskID] = append([]string(nil), task.TargetFiles...)
+	}
+	return out
 }

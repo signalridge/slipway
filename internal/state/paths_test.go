@@ -51,7 +51,7 @@ func TestGovernedBundleDirFallsBackToProjectRootWithoutWorktree(t *testing.T) {
 	assert.Equal(t, filepath.Join(expectedRoot, "artifacts", "changes", change.Slug), bundleDir)
 }
 
-func TestResolveChangePathsUsesRepoScopedCodebaseMapAndUnboundArtifactArchive(t *testing.T) {
+func TestResolveChangePathsUsesWorkspaceCodebaseMapAndUnboundArtifactArchive(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	change := model.NewChange("repo-scoped-context")
@@ -78,6 +78,7 @@ func TestResolveChangePathsPrefersBoundWorktreeEvenWithoutDiscovery(t *testing.T
 	expectedWorktree, normErr := NormalizePath(worktreeDir)
 	require.NoError(t, normErr)
 	assert.Equal(t, expectedWorktree, paths.WorkspaceRoot)
+	assert.Equal(t, filepath.Join(expectedWorktree, "artifacts", "codebase"), paths.CodebaseMapDir)
 	assert.Equal(t, filepath.Join(expectedWorktree, "artifacts", "changes", change.Slug), paths.GovernedBundleDir)
 	assert.Equal(t, filepath.Join(expectedWorktree, "artifacts", "changes", "archived", change.Slug), paths.GovernedBundleArchive)
 }

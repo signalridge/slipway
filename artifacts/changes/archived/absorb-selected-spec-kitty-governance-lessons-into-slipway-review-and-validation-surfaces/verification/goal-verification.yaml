@@ -1,0 +1,20 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T02:58:32Z"
+run_version: 1
+references:
+  - "fresh:command_ref=go test -count=1 ./internal/engine/scopecontract"
+  - "fresh:command_ref=go build ./..."
+  - "fresh:command_ref=go test -count=1 ./..."
+  - "fresh:command_ref=go run . codebase-map --json"
+  - "scope_contract:pass"
+  - "archive_correction:recorded"
+notes: |
+  Criteria:
+    AC-1: Scope Contract evaluator exists, is substantive, and is wired through shared governance readiness — pass — internal/engine/scopecontract plus readiness/CLI tests.
+    AC-2: Scope drift fails validation/status/review after execution evidence exists — pass — cmd/scope_contract_test.go and evaluator tests show drift; exact file targets now reject nested file changes unless a directory/glob target is explicit.
+    AC-3: Host guidance names contract evidence checks — pass — template updates and contract_absorption_test.go.
+    AC-4: Worktree-local codebase-map output is used for updateable artifacts — pass — codebase-map command/context/path tests and live codebase-map JSON show artifacts/codebase under the active worktree.
+    AC-5: spec-kitty platform features remain excluded — pass — no lane scheduler, dashboard, SaaS/doctrine/orchestrator layer, event-sourcing rewrite, or adapter expansion was introduced.
+  Scope Contract: pass — planned targets and changed files reconcile, and the review-discovered exact-file false negative is covered by regression tests.
+  Archive correction: pass — post-DONE evidence refresh is explicitly recorded in lifecycle trace instead of being silent.

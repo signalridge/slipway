@@ -118,6 +118,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.NextReadyActions = projectNextReadyActionsWithPrimary(change.CurrentState, primaryAction)
 	view.AutoPassedStates = append([]model.AutoPassedState(nil), change.LastAutoPassedStates...)
 	view.NeedsDiscovery = profile.NeedsDiscovery
+	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	if !change.ContextDependencies.IsEmpty() {
 		deps := change.ContextDependencies
 		view.ContextDependencies = &deps

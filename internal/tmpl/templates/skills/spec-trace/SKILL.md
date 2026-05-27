@@ -48,9 +48,14 @@ code_to_spec:
     plan_item: "<quoted plan line>"
   - diff_hunk: "<path:line-range>"
     drift: "<why this is outside scope>"
+scope_contract:
+  status: pass | fail | not_applicable
+  reference: "scope_contract:pass or scope_contract:fail:<reason>"
+  out_of_scope_files: ["<path>"]
 ```
 
 ## Anti-patterns
 - "Plan was followed" without per-item citations.
 - Diff hunks accepted as "refactor" without a plan line to cite.
+- Changed files accepted despite `scope_contract:fail:<reason>` evidence.
 - Verdict `pass` when a skipped spec item has no justification.

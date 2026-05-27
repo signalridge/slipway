@@ -1,0 +1,64 @@
+version: 1
+generated_at: 2026-05-27T02:11:58Z
+total_tasks: 5
+waves:
+    - wave_index: 1
+      tasks:
+        - task_id: t-01
+          objective: implement Scope Contract evaluator
+          target_files:
+            - internal/engine/scopecontract/evaluate.go
+            - internal/engine/scopecontract/evaluate_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: surface Scope Contract drift in governance validation and review readiness
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/execution_summary_test_helper_test.go
+            - cmd/review.go
+            - cmd/scope_contract_test.go
+            - cmd/status.go
+            - cmd/status_view_build.go
+            - cmd/validate.go
+            - internal/engine/progression/readiness.go
+            - internal/model/reason_code.go
+          task_kind: code
+        - task_id: t-03
+          objective: make codebase-map output worktree-local for updateable artifacts
+          depends_on:
+            - t-01
+          target_files:
+            - cmd/codebase_map.go
+            - cmd/codebase_map_command_test.go
+            - cmd/codebase_map_context_test.go
+            - internal/state/paths.go
+            - internal/state/paths_test.go
+            - internal/state/store.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-04
+          objective: tighten host skill guidance for contract evidence checks
+          depends_on:
+            - t-01
+          target_files:
+            - internal/engine/capability/contract_absorption_test.go
+            - internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl
+            - internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl
+            - internal/tmpl/templates/skills/spec-trace/SKILL.md
+          task_kind: doc
+    - wave_index: 4
+      tasks:
+        - task_id: t-05
+          objective: verify governance boundaries and final behavior
+          depends_on:
+            - t-02
+            - t-03
+            - t-04
+          target_files:
+            - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/**
+            - artifacts/codebase/**
+          task_kind: verification

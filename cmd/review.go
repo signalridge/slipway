@@ -29,6 +29,7 @@ type reviewView struct {
 	Mode               string                    `json:"mode,omitempty"`
 	HydrateReferences  []string                  `json:"hydrate_references,omitempty"`
 	ArtifactAmendments []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
+	ScopeContract      *scopeContractView        `json:"scope_contract,omitempty"`
 	Blockers           []model.ReasonCode        `json:"blockers,omitempty"`
 	Waves              []reviewWaveView          `json:"waves,omitempty"`
 	Gaps               *reviewGaps               `json:"gaps,omitempty"`
@@ -239,6 +240,7 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 		Verdict:           verdict,
 		Mode:              effectiveMode,
 		HydrateReferences: hydrateKeys,
+		ScopeContract:     buildScopeContractView(readiness.ScopeContract),
 		Blockers:          blockers,
 		Waves:             waveViews,
 		Gaps:              classifyReviewGaps(blockers),

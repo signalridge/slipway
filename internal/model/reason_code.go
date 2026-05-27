@@ -120,6 +120,22 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill is present but not ready",
 	},
+	"scope_contract_changed_files_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Scope Contract changed-files evidence is missing",
+	},
+	"scope_contract_drift": {
+		Severity: ReasonSeverityError,
+		Message:  "Changed files are outside the planned Scope Contract",
+	},
+	"scope_contract_evaluation_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Scope Contract evaluation failed",
+	},
+	"scope_contract_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Scope Contract is missing required target files",
+	},
 	"rescope_requires_s2_state": {
 		Severity: ReasonSeverityError,
 		Message:  "Rescope pivots are only allowed from S2_EXECUTE",

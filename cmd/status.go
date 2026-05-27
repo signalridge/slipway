@@ -47,6 +47,7 @@ type statusView struct {
 	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
 	EvidencePointers          statusEvidencePointers      `json:"evidence_pointers,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
+	ScopeContract             *scopeContractView          `json:"scope_contract,omitempty"`
 	SourceStateFile           string                      `json:"source_state_file,omitempty"`
 	Timeline                  []statusTimelineEvent       `json:"timeline,omitempty"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`

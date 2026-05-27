@@ -38,3 +38,33 @@ func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 		}
 	})
 }
+
+func TestCodebaseMapCommandWritesToInvocationWorktree(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		worktreePath := filepath.Join(t.TempDir(), "codebase-map-worktree")
+		runGit(t, root, "worktree", "add", worktreePath, "-b", "codebase-map-worktree")
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(worktreePath))
+		defer func() {
+			require.NoError(t, os.Chdir(previousWD))
+		}()
+
+		var out bytes.Buffer
+		cmd := makeCodebaseMapCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view codebaseMapView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, "artifacts/codebase", view.CodebaseMapDir)
+		require.FileExists(t, filepath.Join(worktreePath, "artifacts", "codebase", "STACK.md"))
+		require.NoFileExists(t, filepath.Join(root, "artifacts", "codebase", "STACK.md"))
+	})
+}

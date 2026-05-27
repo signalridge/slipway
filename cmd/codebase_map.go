@@ -34,17 +34,18 @@ func makeCodebaseMapCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			workspaceRoot := invocationWorkspaceRootFromCommand(cmd, root)
 
-			created, err := artifact.EnsureCodebaseMapDocs(root)
+			created, err := artifact.EnsureCodebaseMapDocs(workspaceRoot)
 			if err != nil {
 				return err
 			}
-			assessment, err := artifact.AssessCodebaseMapDocs(root)
+			assessment, err := artifact.AssessCodebaseMapDocs(workspaceRoot)
 			if err != nil {
 				return err
 			}
-			displayRoot := root
-			dir := state.CodebaseMapDir(root)
+			displayRoot := workspaceRoot
+			dir := state.CodebaseMapDir(workspaceRoot)
 			view := codebaseMapView{
 				ExecutionMode:    "advisory",
 				CodebaseMapDir:   state.DisplayPath(displayRoot, dir),

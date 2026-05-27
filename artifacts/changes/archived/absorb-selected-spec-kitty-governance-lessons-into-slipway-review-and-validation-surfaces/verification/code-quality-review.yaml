@@ -1,0 +1,17 @@
+verdict: pass
+blockers: []
+timestamp: "2026-05-27T02:58:32Z"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+  - "diff:git diff --check"
+  - "test:go test -count=1 ./internal/engine/scopecontract"
+  - "test:go build ./..."
+  - "test:go test ./internal/engine/... ./cmd"
+  - "test:go test -count=1 ./..."
+notes: |
+  Gaps (code_to_artifact): none.
+  Gaps (artifact_to_code): none.
+  Quality: evaluator is isolated, readiness integration is shared, CLI report mapping is shallow, and tests cover evaluator behavior, CLI blockers, template wording, and worktree-local codebase-map paths.
+  Review remediation: bare non-glob targets now match exact files only; explicit directories still use trailing slash or /** and have regression coverage.
+  Risk: Scope Contract remains file-boundary-only by design; hook/context pruning and operation-level policies stay deferred.

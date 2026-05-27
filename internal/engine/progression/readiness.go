@@ -13,6 +13,7 @@ import (
 	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
+	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -57,6 +58,7 @@ type GovernanceReadiness struct {
 	GateEvaluations    map[gate.GateID]gate.GateEvaluation
 	ArtifactReadiness  ArtifactReadiness
 	ArtifactProjection *ArtifactProjection
+	ScopeContract      *scopecontract.Report
 	ReviewSurface      *ReviewAuthority
 	reviewAuthority    *ReviewAuthority
 	ShipSurface        *ShipAuthority
@@ -246,6 +248,18 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	if state.ExecutionSummaryRelevantState(effectiveState) &&
 		readiness.EvidenceFreshness == ctxpack.EvidenceFreshnessStale {
 		readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
+	}
+	if state.ExecutionSummaryReady(execCtx.Summary) {
+		scopeReport, err := scopecontract.EvaluateBundle(paths.GovernedBundleDir, execCtx.Summary)
+		if err != nil {
+			readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(scopecontract.ReasonScopeContractEvaluationFailed, err.Error()))
+			readiness.Diagnostics = append(readiness.Diagnostics, "scope_contract_evaluation_failed: "+err.Error())
+		} else {
+			cloned := scopeReport.Clone()
+			readiness.ScopeContract = &cloned
+			readiness.Blockers = append(readiness.Blockers, scopeReport.Blockers...)
+			readiness.Diagnostics = append(readiness.Diagnostics, scopeReport.Diagnostics...)
+		}
 	}
 
 	if opts.IncludeArtifactProjection {

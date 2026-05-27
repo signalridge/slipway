@@ -6,6 +6,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -35,6 +36,7 @@ type validateView struct {
 	GateDetails               map[string]model.GateRecord `json:"gate_details,omitempty"`
 	EvidenceFreshness         string                      `json:"evidence_freshness"`
 	RequirementsContract      *requirementsContractView   `json:"requirements_contract,omitempty"`
+	ScopeContract             *scopeContractView          `json:"scope_contract,omitempty"`
 	Diagnostics               []string                    `json:"diagnostics,omitempty"`
 	Mode                      string                      `json:"mode,omitempty"`
 	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
@@ -45,6 +47,16 @@ type requirementsContractView struct {
 	Status  string `json:"status"`
 	Source  string `json:"source,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+type scopeContractView struct {
+	Status                  string             `json:"status"`
+	PlannedTargets          []string           `json:"planned_targets,omitempty"`
+	ChangedFiles            []string           `json:"changed_files,omitempty"`
+	OutOfScopeFiles         []string           `json:"out_of_scope_files,omitempty"`
+	MissingContractTasks    []string           `json:"missing_contract_tasks,omitempty"`
+	MissingChangedFileTasks []string           `json:"missing_changed_file_tasks,omitempty"`
+	Blockers                []model.ReasonCode `json:"blockers,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -237,6 +249,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.GovernanceForecast = presetFields.GovernanceForecast
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.RequirementsContract = requirementsContract
+	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	gateDetails := gateStatusFromEvaluations(readiness.GateEvaluations)
 	gateStatus := map[string]string{}
 	for name, gate := range gateDetails {
@@ -248,4 +261,19 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 	}
 	return view, nil
+}
+
+func buildScopeContractView(report *scopecontract.Report) *scopeContractView {
+	if report == nil {
+		return nil
+	}
+	return &scopeContractView{
+		Status:                  string(report.Status),
+		PlannedTargets:          append([]string(nil), report.PlannedTargets...),
+		ChangedFiles:            append([]string(nil), report.ChangedFiles...),
+		OutOfScopeFiles:         append([]string(nil), report.OutOfScopeFiles...),
+		MissingContractTasks:    append([]string(nil), report.MissingContractTasks...),
+		MissingChangedFileTasks: append([]string(nil), report.MissingChangedFileTasks...),
+		Blockers:                append([]model.ReasonCode(nil), report.Blockers...),
+	}
 }

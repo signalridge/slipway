@@ -174,13 +174,13 @@ func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 	assert.Empty(t, strings.Join(view.Warnings, "\n"))
 }
 
-func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
+func TestNextUsesWorktreeScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "repo-scoped codebase map in worktree")
+		slug := createGovernedRequest(t, root, "L3", "worktree-scoped codebase map in worktree")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -210,11 +210,9 @@ func TestNextUsesRepoScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 
-		expectedRoot, err := state.NormalizePath(root)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.ToSlash(filepath.Join(expectedRoot, "artifacts", "codebase")), view.InputContext.CodebaseMapDir)
-		assert.Equal(t, filepath.ToSlash(filepath.Join(expectedRoot, "artifacts", "codebase", "STACK.md")), view.InputContext.CodebaseMapDocs["stack"])
-		assert.Equal(t, filepath.ToSlash(filepath.Join(expectedRoot, "artifacts", "codebase", "ARCHITECTURE.md")), view.InputContext.CodebaseMapDocs["architecture"])
+		assert.Equal(t, "artifacts/codebase", view.InputContext.CodebaseMapDir)
+		assert.Equal(t, "artifacts/codebase/STACK.md", view.InputContext.CodebaseMapDocs["stack"])
+		assert.Equal(t, "artifacts/codebase/ARCHITECTURE.md", view.InputContext.CodebaseMapDocs["architecture"])
 	})
 }
 

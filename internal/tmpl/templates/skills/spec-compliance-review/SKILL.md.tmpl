@@ -17,7 +17,7 @@ implementation. This is Stage 1 of the governed review sequence. The attached
 
 ## Workflow Outline
 1. Read the artifacts, code, and execution summary yourself.
-2. Check forward alignment, reverse alignment, intent drift, and decision fidelity.
+2. Check forward alignment, reverse alignment, Scope Contract evidence, intent drift, and decision fidelity.
 3. Write verification, surface blockers, and wait for approval.
 
 ## When This Runs
@@ -52,6 +52,13 @@ implemented change stayed simple, surgical, and goal-driven.
 - no implementation detail that contradicts the approved artifacts
 - changed files are covered by relevant spec sections
 
+### Scope Contract Evidence
+When `validate --json`, `status --json`, or `review --json` exposes
+`scope_contract`, include it in the review. A pass requires
+`scope_contract.status=pass`; a fail must be recorded as
+`scope_contract:fail:<reason>` and treated as artifact-to-code drift until the
+contract is amended or the change is reverted.
+
 ### Intent Drift Detection
 - compare original proposal intent with the final implementation
 - flag semantic drift between what was proposed and what was built
@@ -82,6 +89,7 @@ run_version: 1
 references:
   - "layer:CORRECTNESS=pass"
   - "layer:SAFETY=pass"
+  - "scope_contract:pass"
 notes: |
   Gaps (code_to_artifact): <code behaviors not documented in spec>
   Gaps (artifact_to_code): <spec requirements not implemented in code>

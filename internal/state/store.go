@@ -73,7 +73,8 @@ func bundleChangeFilePathForChange(root string, change model.Change) (string, er
 	return filepath.Join(wsRoot, "artifacts", "changes", change.Slug, "change.yaml"), nil
 }
 
-// CodebaseMapDir returns the repo-scoped durable brownfield map directory.
+// CodebaseMapDir returns the durable brownfield map directory for the provided
+// workspace root.
 func CodebaseMapDir(root string) string {
 	return filepath.Join(root, "artifacts", "codebase")
 }

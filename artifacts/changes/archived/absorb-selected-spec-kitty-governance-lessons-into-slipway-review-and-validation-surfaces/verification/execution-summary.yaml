@@ -1,0 +1,110 @@
+version: 1
+run_summary_version: 1
+captured_at: 2026-05-27T02:17:03Z
+overall_verdict: pass
+tasks_plan_hash: 7a77b205aa81be6eab877a334873341fd4c93abebff5c01cd1b28041a420ee83
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/engine/scopecontract/evaluate.go
+        - internal/engine/scopecontract/evaluate_test.go
+      target_files:
+        - internal/engine/scopecontract/evaluate.go
+        - internal/engine/scopecontract/evaluate_test.go
+      evidence_ref: go test ./internal/engine/scopecontract
+      captured_at: 2026-05-27T02:17:03Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/execution_summary_test_helper_test.go
+        - cmd/review.go
+        - cmd/scope_contract_test.go
+        - cmd/status.go
+        - cmd/status_view_build.go
+        - cmd/validate.go
+        - internal/engine/progression/readiness.go
+        - internal/model/reason_code.go
+      target_files:
+        - cmd/execution_summary_test_helper_test.go
+        - cmd/review.go
+        - cmd/scope_contract_test.go
+        - cmd/status.go
+        - cmd/status_view_build.go
+        - cmd/validate.go
+        - internal/engine/progression/readiness.go
+        - internal/model/reason_code.go
+      evidence_ref: go test ./cmd -run ScopeContract
+      captured_at: 2026-05-27T02:17:03Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/codebase_map.go
+        - cmd/codebase_map_command_test.go
+        - cmd/codebase_map_context_test.go
+        - internal/state/paths.go
+        - internal/state/paths_test.go
+        - internal/state/store.go
+      target_files:
+        - cmd/codebase_map.go
+        - cmd/codebase_map_command_test.go
+        - cmd/codebase_map_context_test.go
+        - internal/state/paths.go
+        - internal/state/paths_test.go
+        - internal/state/store.go
+      evidence_ref: go test ./cmd ./internal/state -run CodebaseMap|ResolveChangePaths
+      captured_at: 2026-05-27T02:17:03Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: doc
+      changed_files:
+        - internal/engine/capability/contract_absorption_test.go
+        - internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/spec-trace/SKILL.md
+      target_files:
+        - internal/engine/capability/contract_absorption_test.go
+        - internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl
+        - internal/tmpl/templates/skills/spec-trace/SKILL.md
+      evidence_ref: go test ./internal/engine/capability -run ScopeContract|SpecTrace|GoalVerification
+      captured_at: 2026-05-27T02:17:03Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: verification
+      changed_files:
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/assurance.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/decision.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/intent.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/requirements.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/research.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/tasks.md
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/code-quality-review.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/execution-summary.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/final-closeout.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/goal-verification.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/plan-audit.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/spec-compliance-review.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/wave-orchestration.yaml
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/verification/wave-plan.yaml
+        - artifacts/codebase/ARCHITECTURE.md
+        - artifacts/codebase/CONCERNS.md
+        - artifacts/codebase/CONVENTIONS.md
+        - artifacts/codebase/INTEGRATIONS.md
+        - artifacts/codebase/STACK.md
+        - artifacts/codebase/STRUCTURE.md
+        - artifacts/codebase/TESTING.md
+      target_files:
+        - artifacts/changes/absorb-selected-spec-kitty-governance-lessons-into-slipway-review-and-validation-surfaces/**
+        - artifacts/codebase/**
+      evidence_ref: go test ./...; go run . codebase-map --json
+      captured_at: 2026-05-27T02:17:03Z
