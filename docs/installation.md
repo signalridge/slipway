@@ -270,37 +270,61 @@ If `--tools` is omitted during refresh, Slipway detects previously generated ada
 
 ## AI Tool Installation Prompt
 
-Paste this into an AI coding tool when you want the tool to install and initialize Slipway for the current repository:
+Paste this into an AI coding tool when you want the tool to install and initialize Slipway for the current repository. Read it before pasting and supervise the agent while it runs. The prompt is short on purpose — it points the agent at this page so the canonical guidance below stays in one place:
 
 ```text
 Install Slipway for this repository.
 
-Work from the current Git checkout. First inspect the repository root, confirm whether .slipway.yaml already exists, identify the operating system and CPU architecture, and check whether a slipway binary is already on PATH with `slipway --version`.
+Read https://signalridge.github.io/slipway/installation/ — specifically the
+"AI Tool Installation Prompt" section — and follow it.
 
-If Slipway is not installed, choose a documented path that fits this machine:
-1. Prefer a published Slipway release artifact or release-backed package channel owned by the Slipway project for this OS and architecture. Do not install same-name packages from unrelated registries without verifying ownership.
-2. On macOS, use Homebrew Cask if `brew` is available and `signalridge/tap/slipway` has been published: `brew install --cask signalridge/tap/slipway`; otherwise use the matching `darwin_amd64` or `darwin_arm64` release archive.
-3. On Linux, use the matching `linux_amd64` or `linux_arm64` release archive, or the matching `.deb`, `.rpm`, `.apk`, AUR package, or container image when that channel is available.
-4. On Windows, use Scoop if available and configured, otherwise use the matching `windows_amd64` or `windows_arm64` release zip.
-5. If release packages are unavailable but Go is available, run `go install github.com/signalridge/slipway@latest` and then `slipway --version`.
-6. If this repository is the Slipway source checkout and you intentionally need the local unreleased version, run `go build -o ./bin/slipway .` and use `./bin/slipway`.
-7. If none of the documented paths work, stop and report the missing prerequisite instead of inventing an installer.
+Before installing, detect the operating system and CPU architecture, and run
+`slipway --version` to see if Slipway is already on PATH. Prefer documented
+release sources owned by the Slipway project (the `signalridge` org). Do NOT
+install same-name packages from unrelated registries. If no documented path
+applies, stop and report.
 
-Initialize the current repository with the tool adapters I use. Ask if the tool list is unclear. Supported tool IDs are claude, codex, cursor, gemini, and opencode.
+After installing, run `slipway --version`, `slipway status --json`, and
+`git status --short --branch`. Report which install path succeeded and what
+files were generated (especially `.slipway.yaml` and adapter directories).
+```
 
-Use one of:
-- `slipway init --tools <tool-id>`
-- `slipway init --tools claude,codex,opencode`
-- `slipway init --tools all`
+The rest of this section is the canonical guidance the agent will read after fetching this page.
 
-Do not overwrite unrelated user-owned AI-tool files. If Slipway-generated adapter files already exist, use `slipway init --tools <detected-tools> --refresh`.
+### Discovery
 
-Verify the result by running:
+- Inspect the repository root and note whether `.slipway.yaml` already exists.
+- Detect this machine's operating system and CPU architecture.
+- Run `slipway --version`. If it prints a version, Slipway is already on PATH — skip to **Verify**. Otherwise continue to **Install**.
+
+### Install (try in preference order; stop on the first success)
+
+1. A documented Slipway release artifact or release-backed package channel owned by the Slipway project (`signalridge`) for this OS and architecture. If the matching artifact is missing, do NOT fall back to a same-name package from an unrelated registry — continue to the next step.
+2. **macOS:** if `brew` is available and the `signalridge/tap` cask has been published, run `brew install --cask signalridge/tap/slipway`. Otherwise use the matching `darwin_amd64` or `darwin_arm64` release archive.
+3. **Linux:** pick the matching `linux_amd64` or `linux_arm64` release archive, or the matching `.deb`, `.rpm`, `.apk`, AUR `slipway-bin`, or `ghcr.io/signalridge/slipway` container image when that channel is available.
+4. **Windows:** use Scoop (`signalridge/scoop-bucket`) if configured. Otherwise use the matching `windows_amd64` or `windows_arm64` release zip.
+5. If no release-backed channel is available but Go is installed, run `go install github.com/signalridge/slipway@latest`.
+6. If this repository IS the Slipway source checkout and you intentionally need the local unreleased version, run `go build -o ./bin/slipway .` and use `./bin/slipway`.
+7. If none of the documented paths work, STOP and report which paths were attempted and what blocked each. Do not invent an installer and do not pull a same-name package from an unrelated registry.
+
+### Initialize
+
+- Ask which AI-tool adapters this repository uses if it is unclear. Supported tool IDs are `claude`, `codex`, `cursor`, `gemini`, and `opencode`.
+- Run one of `slipway init --tools <tool-id>`, `slipway init --tools claude,codex,opencode`, or `slipway init --tools all`.
+- If Slipway-generated adapter files already exist, use `slipway init --tools <detected-tools> --refresh` instead.
+- Do NOT overwrite unrelated user-owned AI-tool files. If a generated path would collide with user-owned content, stop and report instead of overwriting.
+
+### Verify
+
+- `slipway --version`
 - `slipway status --json`
 - `git status --short --branch`
 
-Report the generated files, especially .slipway.yaml and any tool directories such as .opencode/skills or .opencode/commands.
-```
+### Report
+
+- Which install path succeeded, and which earlier paths were skipped or failed.
+- Newly generated files, especially `.slipway.yaml` and any tool directories such as `.claude/skills`, `.codex/skills`, `.cursor/skills`, `.gemini/skills`, or `.opencode/skills`.
+- Any unresolved follow-ups the user should know about (for example, a missing release on this platform or `slipway init` choices that still need a human decision).
 
 For OpenCode specifically, the expected generated project surfaces are:
 
