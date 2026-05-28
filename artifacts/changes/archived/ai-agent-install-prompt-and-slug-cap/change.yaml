@@ -1,0 +1,57 @@
+slug: ai-agent-install-prompt-and-slug-cap
+description: Add AI-agent installation guidance to README and docs/installation.md, modeled after comparable governed-delivery projects
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-28T07:52:50.272814Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/ai-agent-install-prompt-and-slug-cap
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+    recent_work: 'PR #8 (docs: add AI-agent installation guidance) was closed 2026-05-28 after main was force-pushed; restarting governed flow on current baseline.'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 151180f2ef4b0fbdd3310f970d92e5c5b298fee894dc43db476a77089af4c184
+        updated_at: 2026-05-28T08:18:54.282844778Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: ea7ee3c29bc1b57d26e92a8f5f9a1381301d96be55abc05aea433a5bb58438c6
+        updated_at: 2026-05-28T08:38:09.536577518Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 334a48f0ab688bba43f6209eb4c91cbe18134c3db0b917d944f005e1d369344e
+        updated_at: 2026-05-28T08:35:19.550028646Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: a2855b3411d0f9e05b2df5f9d68ac6160a0a8631e61fe01d6f5520f36caf797a
+        updated_at: 2026-05-28T08:37:01.259961117Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: eb3d6d26e2e4c12c3204bbe58355484c58b7564e618f6badab218960b53fa232
+        updated_at: 2026-05-28T08:36:35.652901653Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: cf38e11eae02051f9a1a31a7b7855d905be384aa8bce01225c1806f601b217e3
+        updated_at: 2026-05-28T08:49:12.585224151Z

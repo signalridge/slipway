@@ -138,6 +138,27 @@ slipway init --tools all
 
 Omitting `--tools` creates only `.slipway.yaml`. Use `--refresh` to regenerate already managed adapters deterministically.
 
+## AI-Agent Install
+
+Paste the prompt below into an AI coding tool to have it install and initialize Slipway for the current repository. Read it before pasting and supervise the agent while it runs. The prompt is short on purpose — it points the agent at the canonical [AI Tool Installation Prompt](docs/installation.md#ai-tool-installation-prompt) section, which carries the full Discovery / Install / Initialize / Verify / Report guidance.
+
+```text
+Install Slipway for this repository.
+
+Read https://signalridge.github.io/slipway/installation/ — specifically the
+"AI Tool Installation Prompt" section — and follow it.
+
+Before installing, detect the operating system and CPU architecture, and run
+`slipway --version` to see if Slipway is already on PATH. Prefer documented
+release sources owned by the Slipway project (the `signalridge` org). Do NOT
+install same-name packages from unrelated registries. If no documented path
+applies, stop and report.
+
+After installing, run `slipway --version`, `slipway status --json`, and
+`git status --short --branch`. Report which install path succeeded and what
+files were generated (especially `.slipway.yaml` and adapter directories).
+```
+
 ## Quick Workflow
 
 ```bash

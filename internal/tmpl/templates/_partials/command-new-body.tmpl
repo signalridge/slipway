@@ -33,9 +33,18 @@ slipway new "<description>" --trivial --json
 Forces `complexity_level=trivial`, which minimizes intake depth (fewer required
 sections, abbreviated clarification).
 
+## Description Guidelines
+- Use a short imperative phrase. Aim for ≤ 50 characters.
+- The description becomes the change slug (lowercased, hyphenated, capped at
+  60 chars). Concise input produces a meaningful slug; long descriptions get
+  byte-truncated mid-word and lose readability.
+- Prefer `"add OAuth login flow"` over
+  `"add OAuth login flow with refresh tokens and admin role assertions"`.
+
 ## Workflow
 1. Run `slipway new "<description>" --json`, and prefer `--preset` when the
-   user already knows the intended governance posture.
+   user already knows the intended governance posture. Keep the description
+   short per the guidelines above.
 2. Read the JSON output for `slug`, `current_state`, `intake_substep`,
    `needs_discovery`, `complexity_level`, and preset fields.
 3. If `workflow_preset` is still pending, run
@@ -46,4 +55,6 @@ sections, abbreviated clarification).
 - Do not ask the user to manually choose internal routing labels.
 - Do not recreate advisory auto-classification inside governed entry.
 - Do not skip intake — all changes start at S0_INTAKE, not S1_PLAN.
+- Do not pass a sentence-length description; the slug truncation will produce
+  a worse handle than a tight imperative phrase would.
 {{- end -}}
