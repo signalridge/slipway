@@ -2,6 +2,7 @@ package state
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -52,7 +53,10 @@ func EnsureLocalStateGitIgnore(root string) (GitIgnoreUpdate, error) {
 		return GitIgnoreUpdate{}, err
 	}
 
-	next := ensureLocalStateGitIgnoreBlock(string(current))
+	next, err := ensureLocalStateGitIgnoreBlock(string(current))
+	if err != nil {
+		return GitIgnoreUpdate{Path: path}, err
+	}
 	update := GitIgnoreUpdate{Path: path, Changed: next != string(current)}
 	if !update.Changed {
 		return update, nil
@@ -63,33 +67,33 @@ func EnsureLocalStateGitIgnore(root string) (GitIgnoreUpdate, error) {
 	return update, nil
 }
 
-func ensureLocalStateGitIgnoreBlock(current string) string {
+func ensureLocalStateGitIgnoreBlock(current string) (string, error) {
 	block := LocalStateGitIgnoreBlock()
 	start := strings.Index(current, localStateGitIgnoreStart)
 	if start >= 0 {
 		end := strings.Index(current[start:], localStateGitIgnoreEnd)
-		if end >= 0 {
-			end += start + len(localStateGitIgnoreEnd)
-			if end < len(current) && current[end] == '\r' {
-				end++
-			}
-			if end < len(current) && current[end] == '\n' {
-				end++
-			}
-			return current[:start] + block + current[end:]
+		if end < 0 {
+			return "", fmt.Errorf(
+				".gitignore contains the Slipway start marker %q without a matching end marker %q; refusing to overwrite (run `slipway repair` to reset the managed block)",
+				localStateGitIgnoreStart,
+				localStateGitIgnoreEnd,
+			)
 		}
-		prefix := current[:start]
-		if prefix != "" && !strings.HasSuffix(prefix, "\n") {
-			prefix += "\n"
+		end += start + len(localStateGitIgnoreEnd)
+		if end < len(current) && current[end] == '\r' {
+			end++
 		}
-		return prefix + block
+		if end < len(current) && current[end] == '\n' {
+			end++
+		}
+		return current[:start] + block + current[end:], nil
 	}
 
 	if strings.TrimSpace(current) == "" {
-		return block
+		return block, nil
 	}
 	if !strings.HasSuffix(current, "\n") {
 		current += "\n"
 	}
-	return current + "\n" + block
+	return current + "\n" + block, nil
 }

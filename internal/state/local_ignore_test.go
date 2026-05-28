@@ -55,6 +55,23 @@ func TestEnsureLocalStateGitIgnoreReplacesExistingManagedBlock(t *testing.T) {
 	assert.Contains(t, string(content), "/artifacts/changes/**/verification/")
 }
 
+func TestEnsureLocalStateGitIgnoreRefusesOrphanedStartMarker(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	orphaned := "build/\n" + localStateGitIgnoreStart + "\n/half-written/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(orphaned), 0o644))
+
+	update, err := EnsureLocalStateGitIgnore(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), localStateGitIgnoreStart)
+	assert.Contains(t, err.Error(), localStateGitIgnoreEnd)
+	assert.False(t, update.Changed)
+
+	content, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, orphaned, string(content))
+}
+
 func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeRepoLayout(t)
