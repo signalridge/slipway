@@ -1,0 +1,2337 @@
+package toolgen
+
+import (
+	"encoding/json"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/signalridge/slipway/internal/tmpl"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+var (
+	execLookPath  = exec.LookPath
+	osExecCommand = exec.Command
+)
+
+type hydrateReferenceEntry struct {
+	Name   string `yaml:"name"`
+	Reason string `yaml:"reason"`
+}
+
+// loadHydrateReferencesFromFS parses a SKILL.md frontmatter block from an fs.FS
+// and returns the declared hydrate_references[] records (empty slice when absent).
+func loadHydrateReferencesFromFS(t *testing.T, src fs.FS, name string) []hydrateReferenceEntry {
+	t.Helper()
+	raw, err := fs.ReadFile(src, name)
+	require.NoError(t, err)
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lines := strings.Split(content, "\n")
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	if start >= len(lines) || strings.TrimSpace(lines[start]) != "---" {
+		return nil
+	}
+	end := -1
+	for i := start + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		t.Fatalf("%s: unterminated frontmatter", name)
+	}
+	block := strings.Join(lines[start+1:end], "\n")
+	var fm struct {
+		HydrateReferences []hydrateReferenceEntry `yaml:"hydrate_references"`
+	}
+	require.NoErrorf(t, yaml.Unmarshal([]byte(block), &fm), "%s: parse frontmatter", name)
+	return fm.HydrateReferences
+}
+
+func TestRegistryHasFiveTools(t *testing.T) {
+	t.Parallel()
+	registry := Registry()
+	require.Len(t, registry, 5)
+
+	ids := make([]string, len(registry))
+	for i, cfg := range registry {
+		ids[i] = cfg.ID
+	}
+	assert.Equal(t, []string{"claude", "codex", "cursor", "gemini", "opencode"}, ids)
+}
+
+func TestResolveTools(t *testing.T) {
+	t.Parallel()
+	all, err := ResolveTools("all")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"claude", "codex", "cursor", "gemini", "opencode"}, all)
+
+	none, err := ResolveTools("none")
+	require.NoError(t, err)
+	assert.Nil(t, none)
+
+	selected, err := ResolveTools("cursor,claude,cursor")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"claude", "cursor"}, selected)
+
+	_, err = ResolveTools("unknown")
+	require.Error(t, err)
+}
+
+func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
+	t.Parallel()
+	// Verify registry has 18 commands (5 core + 9 situational + 4 diagnostics).
+	assert.Len(t, commandRegistry, 18)
+
+	// Verify all registry entries have the required fields.
+	for _, def := range commandRegistry {
+		assert.NotEmpty(t, def.ID, "registry entry missing ID")
+		assert.Contains(t, []CommandClass{CommandClassQuery, CommandClassMutation}, def.Class,
+			"registry entry %s has invalid Class %q", def.ID, def.Class)
+		assert.NotEmpty(t, def.Description, "registry entry %s missing Description", def.ID)
+		assert.NotEmpty(t, def.Tier, "registry entry %s missing Tier", def.ID)
+		assert.True(t, def.Tier == "core" || def.Tier == "situational" || def.Tier == "diagnostics",
+			"registry entry %s has invalid Tier %q", def.ID, def.Tier)
+	}
+
+	// Count tiers.
+	core, sit, diag := 0, 0, 0
+	query, mutation := 0, 0
+	for _, def := range commandRegistry {
+		switch def.Class {
+		case CommandClassQuery:
+			query++
+		case CommandClassMutation:
+			mutation++
+		}
+		switch def.Tier {
+		case "core":
+			core++
+		case "situational":
+			sit++
+		case "diagnostics":
+			diag++
+		}
+	}
+	assert.Equal(t, 5, core, "expected 5 core commands")
+	assert.Equal(t, 9, sit, "expected 9 situational commands")
+	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
+	assert.Equal(t, 6, query, "expected 6 query commands")
+	assert.Equal(t, 12, mutation, "expected 12 mutation commands")
+
+	// Verify commandIDs() returns sorted list matching adapter skill commands only.
+	ids := commandIDs()
+	assert.Len(t, ids, 14)
+	for i := 1; i < len(ids); i++ {
+		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
+	}
+}
+
+func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
+	t.Parallel()
+
+	exported := map[string]struct{}{}
+	for _, name := range GovernanceSkillNames {
+		exported[name] = struct{}{}
+	}
+	for _, name := range standaloneGovernanceNames {
+		exported[name] = struct{}{}
+	}
+	for _, name := range TemplatedGovernanceSkillNames {
+		exported[name] = struct{}{}
+	}
+
+	for _, name := range workflowGovernanceNames {
+		_, ok := exported[name]
+		assert.Truef(t, ok, "workflow governance host %q is not exported by toolgen", name)
+	}
+	for _, name := range extraExportedGovernanceNames {
+		_, ok := exported[name]
+		assert.Truef(t, ok, "extra exported governance surface %q is not exported by toolgen", name)
+	}
+	assert.Len(t, exported, len(governanceSurfaceDescriptors), "governance export union drifted from descriptor table")
+}
+
+func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	entries, err := os.ReadDir(skillsRoot)
+	require.NoError(t, err)
+
+	var got []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(skillsRoot, entry.Name(), "SKILL.md")); err == nil {
+			got = append(got, entry.Name())
+		}
+	}
+
+	expectedSet := map[string]struct{}{}
+	for _, names := range [][]string{
+		GovernanceSkillNames,
+		standaloneGovernanceNames,
+		TemplatedGovernanceSkillNames,
+		standaloneNames,
+		techniqueNames,
+		catalogSkillIDs,
+	} {
+		for _, name := range names {
+			if shouldExportAsHostSkill(name) {
+				expectedSet[exportedSkillDirName(name)] = struct{}{}
+			}
+		}
+	}
+	var expected []string
+	for name := range expectedSet {
+		expected = append(expected, name)
+	}
+	assert.ElementsMatch(t, expected, got)
+	assert.Len(t, got, 22, "host skill count should stay within the slim exported surface target")
+}
+
+func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	for _, id := range []string{"threat-modeling", "sast-orchestration", "review-comment-triage"} {
+		_, err := os.Stat(filepath.Join(root, SkillPath(cfg, id)))
+		assert.True(t, os.IsNotExist(err), "%s should not be emitted as a host SKILL.md", id)
+
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "catalog", id+".md"))
+		assert.True(t, os.IsNotExist(err), "%s should not be emitted as a catalog route card", id)
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "catalog", id))
+		assert.True(t, os.IsNotExist(err), "%s should not copy support files under workflow catalog references", id)
+	}
+
+	_, err := os.Stat(filepath.Join(root, SkillIndexPath(cfg)))
+	assert.NoError(t, err, "workflow-owned skill index should still be generated")
+}
+
+func TestResolveNextSkillOutputsMapToExportedHostSkills(t *testing.T) {
+	t.Parallel()
+
+	for _, id := range []string{
+		"intake-clarification",
+		"research-orchestration",
+		"worktree-preflight",
+		"plan-audit",
+		"wave-orchestration",
+		"spec-compliance-review",
+		"code-quality-review",
+		"goal-verification",
+		"final-closeout",
+		"tdd-governance",
+	} {
+		assert.Truef(t, shouldExportAsHostSkill(id), "next-skill output %q must map to an exported host skill", id)
+	}
+}
+
+func TestDetectExistingTools(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	// Empty workspace: no tools detected.
+	assert.Empty(t, DetectExistingTools(root))
+
+	// Bare .claude/ directory (not generated by slipway): should NOT be detected.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
+	assert.Empty(t, DetectExistingTools(root), "bare .claude/ should not trigger detection")
+
+	// Create slipway sentinel for claude.
+	claudeCfg := toolRegistry["claude"]
+	writeGeneratedAdapterMarker(t, root, claudeCfg)
+	detected := DetectExistingTools(root)
+	assert.Equal(t, []string{"claude"}, detected)
+
+	// Add slipway sentinel for cursor.
+	cursorCfg := toolRegistry["cursor"]
+	writeGeneratedAdapterMarker(t, root, cursorCfg)
+	detected = DetectExistingTools(root)
+	assert.Equal(t, []string{"claude", "cursor"}, detected)
+}
+
+func TestHasGeneratedAdapter(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	assert.False(t, hasGeneratedAdapter(root, toolRegistry["claude"]))
+
+	writeGeneratedAdapterMarker(t, root, toolRegistry["claude"])
+	assert.True(t, hasGeneratedAdapter(root, toolRegistry["claude"]))
+	assert.False(t, hasGeneratedAdapter(root, toolRegistry["cursor"]))
+}
+
+func TestGenerateProducesAllExpectedFiles(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"claude", "cursor", "codex", "gemini", "opencode"}, true))
+
+	for _, toolID := range []string{"claude", "cursor", "codex", "gemini", "opencode"} {
+		cfg := toolRegistry[toolID]
+
+		// Sentinel marker
+		sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+		_, err := os.Stat(sentinelPath)
+		assert.NoError(t, err, "%s: missing adapter sentinel", toolID)
+
+		// Governance skills (static) + standalone governance guidance skills
+		allStaticGov := append([]string{}, GovernanceSkillNames...)
+		allStaticGov = append(allStaticGov, standaloneGovernanceNames...)
+		for _, name := range allStaticGov {
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
+			_, err := os.Stat(path)
+			assert.NoError(t, err, "%s: missing governance skill %s", toolID, name)
+		}
+
+		// Templated governance skills (tool-aware)
+		for _, name := range TemplatedGovernanceSkillNames {
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
+			_, err := os.Stat(path)
+			assert.NoError(t, err, "%s: missing templated governance skill %s", toolID, name)
+		}
+
+		// Standalone exported skills
+		for _, name := range standaloneNames {
+			path := filepath.Join(root, cfg.SkillsDir, adapterSkillName(name), "SKILL.md")
+			_, err := os.Stat(path)
+			assert.NoError(t, err, "%s: missing standalone skill %s", toolID, name)
+		}
+
+		// Command entries — per-tool path and format assertions
+		if cfg.CommandsDir != "" {
+			ext := ".md"
+			if cfg.CommandFormat == "toml" {
+				ext = ".toml"
+			}
+			for _, id := range commandIDs() {
+				var path string
+				switch cfg.CommandStyle {
+				case "flat":
+					path = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
+				default:
+					path = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
+				}
+				_, err := os.Stat(path)
+				assert.NoError(t, err, "%s: missing command entry %s", toolID, id)
+			}
+		} else {
+			// Codex: no project-local commands
+			commandsDir := filepath.Join(root, "."+toolID, "commands")
+			_, err := os.Stat(commandsDir)
+			assert.True(t, os.IsNotExist(err), "%s: unexpected commands directory generated", toolID)
+		}
+
+		// Technique skills
+		for _, name := range techniqueNames {
+			path := filepath.Join(root, cfg.SkillsDir, "slipway-"+name, "SKILL.md")
+			_, err := os.Stat(path)
+			if shouldExportAsHostSkill(name) {
+				assert.NoError(t, err, "%s: missing technique %s", toolID, name)
+			} else {
+				assert.True(t, os.IsNotExist(err), "%s: unexpected host technique %s", toolID, name)
+			}
+		}
+
+		// Registry-owned host skills. Non-exported registry skills remain
+		// internal metadata and must not create workflow catalog route files.
+		reg := capability.DefaultRegistry()
+		for _, id := range catalogSkillIDs {
+			skillDir := filepath.Join(root, cfg.SkillsDir, "slipway-"+id)
+			skillPath := filepath.Join(skillDir, "SKILL.md")
+			if shouldExportAsHostSkill(id) {
+				body, err := os.ReadFile(skillPath)
+				assert.NoError(t, err, "%s: missing registry host skill %s", toolID, id)
+
+				fm := extractAdapterFrontmatter(t, string(body), toolID, id)
+				assert.Equal(t, "slipway-"+id, fm["name"],
+					"%s: registry skill %s: wrong name", toolID, id)
+				assert.NotEmpty(t, fm["description"],
+					"%s: registry skill %s: empty description", toolID, id)
+				sk, ok := reg.Lookup(id)
+				if assert.Truef(t, ok, "%s: registry skill %s missing from registry", toolID, id) {
+					assert.Equal(t, sk.Summary, fm["description"],
+						"%s: registry skill %s: description drifted from registry summary", toolID, id)
+				}
+			} else {
+				_, err := os.Stat(skillPath)
+				assert.True(t, os.IsNotExist(err), "%s: unexpected catalog-only host skill %s", toolID, id)
+			}
+			_, err := os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "catalog", id+".md"))
+			assert.True(t, os.IsNotExist(err), "%s: unexpected catalog route artifact %s", toolID, id)
+			_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "catalog", id))
+			assert.True(t, os.IsNotExist(err), "%s: unexpected catalog support root %s", toolID, id)
+		}
+
+		// Workflow-owned skill index
+		indexPath := filepath.Join(root, SkillIndexPath(cfg))
+		indexBytes, err := os.ReadFile(indexPath)
+		assert.NoError(t, err, "%s: missing workflow skill index", toolID)
+		index := string(indexBytes)
+		assert.Contains(t, index, "# Slipway Skill Index",
+			"%s: skill index missing header", toolID)
+		assert.Contains(t, index, "## Index",
+			"%s: skill index missing dispatcher index", toolID)
+		assert.NotContains(t, index, "references/catalog/",
+			"%s: skill index must not expose catalog paths", toolID)
+		for _, id := range catalogSkillIDs {
+			if shouldExportAsHostSkill(id) {
+				assert.Contains(t, index, filepath.ToSlash(SkillPath(cfg, id)),
+					"%s: skill index missing host path for %s", toolID, id)
+			} else {
+				assert.NotContains(t, index, "slipway-"+id+"/SKILL.md",
+					"%s: skill index should not list non-exported skill %s", toolID, id)
+			}
+		}
+
+		if cfg.SessionHook != "" {
+			hookPath := filepath.Join(root, cfg.SessionHook)
+			_, err := os.Stat(hookPath)
+			assert.NoError(t, err, "%s: missing session-start hook", toolID)
+		} else {
+			hookPath := filepath.Join(root, "."+toolID, "hooks", "slipway-session-start.sh")
+			_, err := os.Stat(hookPath)
+			assert.True(t, os.IsNotExist(err), "%s: unexpected session hook generated", toolID)
+		}
+
+		switch {
+		case cfg.SettingsPath != "":
+			settingsPath := filepath.Join(root, cfg.SettingsPath)
+			content, err := os.ReadFile(settingsPath)
+			assert.NoError(t, err, "%s: missing settings file", toolID)
+			settings := string(content)
+			assert.Contains(t, settings, "SessionStart", "%s: missing session-start registration", toolID)
+			assert.NotContains(t, settings, "slipway-context-monitor", "%s: unexpected post-tool registration", toolID)
+		default:
+			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
+			_, err := os.Stat(settingsPath)
+			assert.True(t, os.IsNotExist(err), "%s: unexpected settings file generated", toolID)
+		}
+	}
+}
+
+func TestWorkflowSkillGenerationAndReference(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "codex", "cursor", "gemini", "opencode"}, true))
+
+	for _, cfg := range Registry() {
+		skillPath := filepath.Join(root, cfg.SkillsDir, "slipway", "SKILL.md")
+		content, err := os.ReadFile(skillPath)
+		require.NoError(t, err, "%s: missing workflow skill", cfg.ID)
+
+		s := string(content)
+		fm := extractAdapterFrontmatter(t, s, cfg.ID, "workflow")
+		assert.Equal(t, "slipway", fm["name"], "%s: wrong workflow public name", cfg.ID)
+		assert.Equal(t, "workflow", fm["skill_id"], "%s: wrong workflow skill_id", cfg.ID)
+		assert.NotEmpty(t, fm["description"], "%s: missing workflow description", cfg.ID)
+		assert.Equal(t, cfg.ID, fm["tool"], "%s: wrong workflow tool metadata", cfg.ID)
+		assert.Contains(t, s, "Use `slipway` as the single exported entry skill for Slipway.", "%s: missing canonical entry skill name", cfg.ID)
+		assert.Contains(t, s, "Slipway is a governance CLI for AI-assisted software delivery.", "%s: missing framework intro", cfg.ID)
+		assert.Contains(t, s, "`done-ready` means", "%s: missing done-ready semantics", cfg.ID)
+		assert.Contains(t, s, "explicit `slipway done`", "%s: missing done finalization semantics", cfg.ID)
+		assert.Contains(t, s, "`slipway new --json`", "%s: missing governed entry guidance", cfg.ID)
+		assert.Contains(t, s, "`next_skill.name`", "%s: missing governed host handoff", cfg.ID)
+		assert.Contains(t, s, "slipway-{name}", "%s: missing caller-owned skill path contract", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.prompt_path`", "%s: stale prompt_path contract leaked", cfg.ID)
+		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
+		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
+		assert.Contains(t, s, filepath.ToSlash(SkillIndexPath(cfg)), "%s: missing workflow skill index path", cfg.ID)
+		assert.Contains(t, s, "informational only", "%s: missing skill index authority boundary", cfg.ID)
+		assert.NotContains(t, s, "follow the listed catalog artifact path", "%s: stale catalog artifact triage guidance leaked", cfg.ID)
+		assert.NotContains(t, s, "using-slipway-catalog.md", "%s: stale top-level catalog manifest leaked", cfg.ID)
+
+		refPath := filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md")
+		refContent, err := os.ReadFile(refPath)
+		require.NoError(t, err, "%s: missing workflow command reference", cfg.ID)
+		ref := string(refContent)
+		assert.Contains(t, ref, "## Lifecycle Core", "%s: missing lifecycle section", cfg.ID)
+		assert.Contains(t, ref, "## Supporting Commands", "%s: missing supporting section", cfg.ID)
+		assert.Contains(t, ref, "## Diagnostics", "%s: missing diagnostics section", cfg.ID)
+		assert.Contains(t, ref, "### `slipway new`", "%s: missing new command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway run`", "%s: missing run command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway repair`", "%s: missing repair command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
+		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
+		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
+		for _, focus := range capability.ExplicitFocusSurfaces() {
+			selector := "`slipway " + focus.Command + " --focus " + focus.PublicName + "`"
+			assert.Contains(t, ref, selector, "%s: missing focus selector %s", cfg.ID, selector)
+			assert.Contains(t, ref, "`"+focus.BackingID+"`", "%s: missing focus backing %s", cfg.ID, focus.BackingID)
+		}
+
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md.tmpl"))
+		assert.True(t, os.IsNotExist(err), "%s: raw workflow template leaked into generated tree", cfg.ID)
+
+		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway-new", "SKILL.md"))
+		assert.True(t, os.IsNotExist(err), "%s: unexpected per-command standalone skill generated", cfg.ID)
+	}
+
+	_, err := os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
+	assert.True(t, os.IsNotExist(err), "codex should not emit a workflow global prompt")
+}
+
+func TestRenderCatalogSkillUsesFixedTypedTemplateOrder(t *testing.T) {
+	t.Parallel()
+
+	skill := capability.Skill{
+		ID: "_test-catalog-assembler",
+		Bindings: []capability.Binding{
+			{Attachment: capability.AttachmentProcedure},
+			{Attachment: capability.AttachmentChecklist},
+			{Attachment: capability.AttachmentReportSchema},
+		},
+	}
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	bodyIdx := regexp.MustCompile("BODY_SECTION").FindStringIndex(content)
+	proseIdx := regexp.MustCompile("PROSE_SECTION").FindStringIndex(content)
+	checklistIdx := regexp.MustCompile("CHECKLIST_SECTION").FindStringIndex(content)
+	verdictIdx := regexp.MustCompile("VERDICT_SECTION").FindStringIndex(content)
+	require.NotNil(t, bodyIdx)
+	require.NotNil(t, proseIdx)
+	require.NotNil(t, checklistIdx)
+	require.NotNil(t, verdictIdx)
+	assert.Less(t, bodyIdx[0], proseIdx[0])
+	assert.Less(t, proseIdx[0], checklistIdx[0])
+	assert.Less(t, checklistIdx[0], verdictIdx[0])
+}
+
+func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T) {
+	t.Parallel()
+
+	reg := capability.DefaultRegistry()
+	skill, ok := reg.Lookup("context-assembly")
+	require.True(t, ok)
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "context-assembly", "SKILL.md")))
+	require.NoError(t, err)
+
+	// Output equals the source body with the adapter-frontmatter header
+	// prepended; no typed-template sections are appended.
+	injected, err := injectAdapterFrontmatter(raw, "slipway-"+skill.ID, skill.Summary)
+	require.NoError(t, err)
+	assert.Equal(t, injected, content)
+}
+
+func TestInjectAdapterFrontmatterPrependsNameAndDescription(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nsummary: \"Use when X. Triggers on Y.\"\n---\n\n# Body\n"
+
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", "Use when X. Triggers on Y.")
+	require.NoError(t, err)
+
+	// Header lines appear before existing fields.
+	nameAt := strings.Index(out, "name: slipway-demo")
+	descAt := strings.Index(out, "description: \"Use when X. Triggers on Y.\"")
+	skillIDAt := strings.Index(out, "skill_id: demo")
+	bodyAt := strings.Index(out, "# Body")
+	require.GreaterOrEqual(t, nameAt, 0)
+	require.GreaterOrEqual(t, descAt, 0)
+	require.GreaterOrEqual(t, skillIDAt, 0)
+	require.GreaterOrEqual(t, bodyAt, 0)
+	assert.Less(t, nameAt, descAt)
+	assert.Less(t, descAt, skillIDAt)
+	assert.Less(t, skillIDAt, bodyAt)
+}
+
+func TestInjectAdapterFrontmatterNormalizesCRLFDelimiters(t *testing.T) {
+	t.Parallel()
+
+	src := "---\r\nskill_id: demo\r\nsummary: \"Use when X. Triggers on Y.\"\r\n---\r\n\r\n# Body\r\n"
+
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", "Use when X. Triggers on Y.")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(out, "---\nname: slipway-demo\n"))
+	assert.Contains(t, out, "\n---\n\n# Body\n")
+	assert.NotContains(t, out, "\r")
+}
+
+func TestInjectAdapterFrontmatterEscapesDoubleQuotes(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\n---\n\nbody\n"
+
+	out, err := injectAdapterFrontmatter(src, "slipway-demo", `needs "quote" and \backslash`)
+	require.NoError(t, err)
+	assert.Contains(t, out, `description: "needs \"quote\" and \\backslash"`)
+}
+
+func TestInjectAdapterFrontmatterRejectsMissingDelimiter(t *testing.T) {
+	t.Parallel()
+
+	_, err := injectAdapterFrontmatter("no frontmatter here", "slipway-x", "desc")
+	assert.Error(t, err)
+}
+
+func TestExtractAndStripAdapterFieldsStripsCanonicalFields(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: slipway-demo\ndescription: \"Use when X. Triggers on Y.\"\nsummary: \"keep me\"\n---\n\n# Body\n"
+
+	description, stripped, err := extractAndStripAdapterFields(src, "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "Use when X. Triggers on Y.", description)
+	assert.Contains(t, stripped, "skill_id: demo")
+	assert.Contains(t, stripped, "summary: \"keep me\"")
+	assert.NotContains(t, stripped, "\nname:")
+	assert.NotContains(t, stripped, "\ndescription:")
+}
+
+func TestExtractAndStripAdapterFieldsRejectsPublicNameDrift(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: demo\ndescription: \"Use when X. Triggers on Y.\"\n---\n"
+
+	_, _, err := extractAndStripAdapterFields(src, "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slipway-demo")
+}
+
+func TestAdapterSkillNameUsesBareEntryNameOnlyForWorkflow(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "slipway", adapterSkillName("workflow"))
+	assert.Equal(t, "slipway-demo", adapterSkillName("demo"))
+}
+
+func TestExtractAndStripAdapterFieldsRejectsMissingDescription(t *testing.T) {
+	t.Parallel()
+
+	src := "---\nskill_id: demo\nname: slipway-demo\n---\n"
+
+	_, _, err := extractAndStripAdapterFields(src, "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing description")
+}
+
+func TestRenderCatalogSkillUsesTypedTemplatesForProductionSkill(t *testing.T) {
+	t.Parallel()
+
+	reg := capability.DefaultRegistry()
+	skill, ok := reg.Lookup("independent-review")
+	require.True(t, ok)
+
+	content, err := renderCatalogSkill(skill)
+	require.NoError(t, err)
+
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "independent-review", "SKILL.md")))
+	require.NoError(t, err)
+
+	// This asserts production catalog assembly actually uses optional typed
+	// templates, not only the dedicated test fixture.
+	assert.NotEqual(t, raw, content)
+	assert.Contains(t, content, "## Procedure")
+	assert.Contains(t, content, "## Checklist")
+	assert.Contains(t, content, "## Report schema")
+}
+
+func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	toolIDs, err := ResolveTools("all")
+	require.NoError(t, err)
+	require.NoError(t, Generate(root, toolIDs, true))
+
+	for _, cfg := range Registry() {
+		for _, id := range commandIDs() {
+			_, absPath := commandSurfacePath(root, codexHome, cfg, id)
+			content, err := os.ReadFile(absPath)
+			require.NoError(t, err, "missing generated command surface for %s/%s", cfg.ID, id)
+
+			s := string(content)
+			assert.Contains(t, s, commandDescriptions[id], "%s/%s missing registry description", cfg.ID, id)
+			if cfg.PromptsStyle == "global" {
+				assert.Contains(t, s, "slipway "+id, "%s/%s missing prompt command reference", cfg.ID, id)
+			} else {
+				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
+			}
+		}
+
+		if cfg.SettingsPath != "" && cfg.SessionHook != "" {
+			assertHookCommandRegistered(
+				t,
+				filepath.Join(root, cfg.SettingsPath),
+				cfg.SessionEvent,
+				`bash "`+filepath.ToSlash(cfg.SessionHook)+`"`,
+			)
+		}
+	}
+}
+
+// extractAdapterFrontmatter reads a minimal adapter contract from a
+// generated SKILL.md: the set of `key: value` pairs inside the leading
+// `---` / `---` frontmatter block. It tolerates double-quoted values and
+// ignores nested YAML (lists, maps), which are not part of the adapter
+// contract.
+func extractAdapterFrontmatter(t *testing.T, raw, toolID, skillID string) map[string]string {
+	t.Helper()
+	require.Truef(t, len(raw) >= 4 && raw[:4] == "---\n",
+		"%s: catalog skill %s: missing frontmatter opener", toolID, skillID)
+	rest := raw[4:]
+	end := indexOf(rest, "\n---")
+	require.GreaterOrEqualf(t, end, 0,
+		"%s: catalog skill %s: missing frontmatter closer", toolID, skillID)
+	out := map[string]string{}
+	for _, line := range splitLines(rest[:end]) {
+		// Only scan flat top-level `key: value` pairs. Lines that start
+		// with whitespace or `-` belong to nested structures.
+		if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '-' {
+			continue
+		}
+		colon := indexOf(line, ":")
+		if colon <= 0 {
+			continue
+		}
+		key := line[:colon]
+		value := ""
+		if colon+1 < len(line) {
+			value = strings.TrimSpace(line[colon+1:])
+		}
+		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+			value = value[1 : len(value)-1]
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func indexOf(s, sub string) int { return strings.Index(s, sub) }
+func splitLines(s string) []string {
+	return strings.Split(s, "\n")
+}
+
+func writeGeneratedAdapterMarker(t *testing.T, root string, cfg ToolConfig) {
+	t.Helper()
+
+	markerPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
+	require.NoError(t, os.MkdirAll(filepath.Dir(markerPath), 0o755))
+	require.NoError(t, os.WriteFile(markerPath, []byte("marker"), 0o644))
+}
+
+func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	// Build set of valid commands.
+	validCmds := map[string]bool{
+		"new": true, "next": true, "run": true, "status": true, "done": true,
+		"abort": true, "cancel": true, "review": true, "validate": true,
+		"pivot": true, "preset": true, "repair": true, "init": true, "checkpoint": true,
+	}
+
+	// Pattern to find `slipway <cmd>` references in generated files.
+	re := regexp.MustCompile("`slipway ([a-z][a-z-]*)`")
+
+	cfg := toolRegistry["claude"]
+	allSkillIDs := append([]string(nil), GovernanceSkillNames...)
+	allSkillIDs = append(allSkillIDs, standaloneGovernanceNames...)
+	allSkillIDs = append(allSkillIDs, TemplatedGovernanceSkillNames...)
+	allSkillIDs = append(allSkillIDs, techniqueNames...)
+
+	for _, id := range allSkillIDs {
+		path := filepath.Join(root, cfg.SkillsDir, "slipway-"+id, "SKILL.md")
+		content, err := os.ReadFile(path)
+		if err != nil {
+			continue // skip if file doesn't exist
+		}
+
+		matches := re.FindAllStringSubmatch(string(content), -1)
+		for _, m := range matches {
+			cmd := m[1]
+			// Allow `slipway next --json` style references (extract base command).
+			assert.True(t, validCmds[cmd],
+				"skill %q references unknown command `slipway %s`", id, cmd)
+		}
+
+		// Verify no `slipway advance` references remain (D4 validation).
+		assert.NotContains(t, string(content), "slipway advance",
+			"skill %q still references retired `slipway advance`", id)
+	}
+}
+
+func TestGenerateDeterministicAndRefresh(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, false))
+
+	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+	firstCommand, err := os.ReadFile(commandPath)
+	require.NoError(t, err)
+
+	// Non-refresh generation should keep existing files unchanged.
+	require.NoError(t, os.WriteFile(commandPath, []byte("custom"), 0o644))
+	require.NoError(t, Generate(root, []string{"claude"}, false))
+	secondCommand, err := os.ReadFile(commandPath)
+	require.NoError(t, err)
+	assert.Equal(t, "custom", string(secondCommand))
+
+	// Refresh should deterministically regenerate content.
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+	refreshedCommand, err := os.ReadFile(commandPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(firstCommand), string(refreshedCommand))
+}
+
+func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	staleSkillDir := filepath.Join(root, ".claude", "skills", "slipway-tdd")
+	prefixedUserOwnedDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
+	prefixedUserOwnedFile := filepath.Join(prefixedUserOwnedDir, "SKILL.md")
+	unrelatedDir := filepath.Join(root, ".claude", "skills", "user-owned")
+	unrelatedFile := filepath.Join(unrelatedDir, "SKILL.md")
+
+	require.NoError(t, os.MkdirAll(staleSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staleSkillDir, "SKILL.md"), []byte("stale generated skill"), 0o644))
+	require.NoError(t, os.MkdirAll(prefixedUserOwnedDir, 0o755))
+	require.NoError(t, os.WriteFile(prefixedUserOwnedFile, []byte("keep prefixed user skill"), 0o644))
+	require.NoError(t, os.MkdirAll(unrelatedDir, 0o755))
+	require.NoError(t, os.WriteFile(unrelatedFile, []byte("keep me"), 0o644))
+	oldCatalogRoutePath := filepath.Join(root, ".claude", "skills", "slipway", "references", "catalog", "sast-orchestration.md")
+	oldCatalogSupportPath := filepath.Join(root, ".claude", "skills", "slipway", "references", "catalog", "sast-orchestration", "scripts", "merge-sarif.sh")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldCatalogRoutePath), 0o755))
+	require.NoError(t, os.WriteFile(oldCatalogRoutePath, []byte("old catalog route"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldCatalogSupportPath), 0o755))
+	require.NoError(t, os.WriteFile(oldCatalogSupportPath, []byte("old catalog support"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	_, err := os.Stat(staleSkillDir)
+	assert.True(t, os.IsNotExist(err), "refresh should remove managed generated skill dirs that are no longer exported")
+	_, err = os.Stat(prefixedUserOwnedFile)
+	assert.NoError(t, err, "refresh must not delete unknown user-managed slipway-* skill dirs")
+	_, err = os.Stat(unrelatedFile)
+	assert.NoError(t, err, "refresh must not delete unrelated user-managed entries under skills dir")
+	_, err = os.Stat(oldCatalogRoutePath)
+	assert.True(t, os.IsNotExist(err), "refresh should remove stale workflow support files")
+	_, err = os.Stat(oldCatalogSupportPath)
+	assert.True(t, os.IsNotExist(err), "refresh should remove stale workflow support files")
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway", "references", skillIndexFileName))
+	assert.NoError(t, err, "skill index should live under workflow references")
+}
+
+func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	userOwnedSlipwayDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
+	require.NoError(t, os.MkdirAll(userOwnedSlipwayDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(userOwnedSlipwayDir, "SKILL.md"), []byte("keep me"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	_, err := os.Stat(filepath.Join(userOwnedSlipwayDir, "SKILL.md"))
+	assert.NoError(t, err, "refresh without a generated adapter marker must not prune user-owned slipway-* skill dirs")
+}
+
+func TestCodexGenerationOmitsProjectAgentSurfaces(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	_, err := os.Stat(filepath.Join(root, ".codex", "agents"))
+	assert.True(t, os.IsNotExist(err), "codex should not generate exported agents")
+	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "codex should not create project config on fresh init")
+}
+
+func TestGeminiTOMLCommandFormat(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"gemini"}, true))
+
+	// Gemini commands should use .toml extension.
+	path := filepath.Join(root, ".gemini", "commands", "slipway", "new.toml")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	s := string(content)
+	assert.Contains(t, s, `description = "`)
+	assert.Contains(t, s, `prompt = """`)
+
+	// No .md command files should exist.
+	mdPath := filepath.Join(root, ".gemini", "commands", "slipway", "new.md")
+	_, err = os.Stat(mdPath)
+	assert.True(t, os.IsNotExist(err), "gemini should not have .md command files")
+}
+
+func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"claude", "gemini"}, true))
+
+	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claudeSettings), "SessionStart")
+	assert.Contains(t, string(claudeSettings), "slipway-session-start.sh")
+
+	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(geminiSettings), "SessionStart")
+	assert.Contains(t, string(geminiSettings), "slipway-session-start.sh")
+}
+
+func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
+	t.Parallel()
+
+	newEntry, err := renderCommandEntry(toolRegistry["claude"], "new")
+	require.NoError(t, err)
+	assert.Contains(t, newEntry, "Create a governed change with intake-first workflow")
+	assert.Contains(t, newEntry, ".slipway.yaml` must exist")
+	assert.NotContains(t, newEntry, "an active change must exist")
+	assert.NotContains(t, newEntry, "change intake")
+
+	statusEntry, err := renderCommandEntry(toolRegistry["claude"], "status")
+	require.NoError(t, err)
+	assert.Contains(t, statusEntry, ".slipway.yaml` must exist")
+	assert.NotContains(t, statusEntry, "an active change must exist")
+
+	nextEntry, err := renderCommandEntry(toolRegistry["claude"], "next")
+	require.NoError(t, err)
+	assert.Contains(t, nextEntry, ".slipway.yaml` must exist")
+	assert.Contains(t, nextEntry, "an active change must exist")
+
+	initEntry, err := renderCommandEntry(toolRegistry["gemini"], "init")
+	require.NoError(t, err)
+	assert.NotContains(t, initEntry, ".slipway.yaml` must exist")
+	assert.NotContains(t, initEntry, "an active change must exist")
+}
+
+func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
+	t.Parallel()
+
+	nextEntry, err := renderCommandEntry(toolRegistry["claude"], "next")
+	require.NoError(t, err)
+	normalizedNextEntry := strings.Join(strings.Fields(nextEntry), " ")
+	assert.Contains(t, normalizedNextEntry, "without advancing lifecycle state")
+	assert.Contains(t, nextEntry, "`next_skill.name` is the authoritative governed-host handoff")
+	assert.Contains(t, nextEntry, "Run `slipway run --json` when evidence is ready")
+
+	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
+	require.NoError(t, err)
+	assert.Contains(t, runEntry, "Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome")
+	assert.Contains(t, runEntry, "`run` owns continuous governed execution")
+	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
+}
+
+func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
+	t.Parallel()
+
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	readmePath := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "README.md"))
+	content, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	readme := string(content)
+
+	assert.Contains(t, readme, "`slipway new`")
+	assert.Contains(t, readme, "`slipway run`")
+	assert.Contains(t, readme, "`artifacts/changes/`")
+	assert.Contains(t, readme, "`artifacts/codebase/`")
+	assert.NotContains(t, readme, "request intake")
+	assert.NotContains(t, readme, "active request resolution")
+	assert.NotContains(t, readme, "`openspec/`")
+	assert.NotContains(t, readme, "`openspec/`: change and spec artifacts used by governed workflows")
+
+	assert.Equal(t, "Create a governed change with intake-first workflow", commandDescriptions["new"])
+	assert.Equal(t, "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", commandDescriptions["run"])
+	assert.Equal(t, "Finalize a done-ready change and archive it", commandDescriptions["done"])
+}
+
+func TestCodexPromptsUseCommandSpecificPrerequisites(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	newPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-new.md"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(newPrompt), "an active change must exist")
+
+	statusPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-status.md"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(statusPrompt), "an active change must exist")
+
+	nextPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-next.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(nextPrompt), "an active change must exist")
+
+	initPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-init.md"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(initPrompt), ".slipway.yaml` must exist")
+}
+
+func TestCodexPromptsIncludeTierAndSurface(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	// Core command should have tier: "core".
+	newPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-new.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(newPrompt), `class: "mutation"`, "core command prompt missing class metadata")
+	assert.Contains(t, string(newPrompt), `tier: "core"`, "core command prompt missing tier metadata")
+	assert.Contains(t, string(newPrompt), `surface: "adapter"`, "command prompt missing surface metadata")
+
+	// Query command should preserve class alongside tier and surface metadata.
+	statusPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-status.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(statusPrompt), `class: "query"`, "query command prompt missing class metadata")
+	assert.Contains(t, string(statusPrompt), `tier: "core"`, "query command prompt missing tier metadata")
+	assert.Contains(t, string(statusPrompt), `surface: "adapter"`, "query command prompt missing surface metadata")
+}
+
+func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "gemini", "codex"}, true))
+
+	claudeStatus, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "status.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claudeStatus), `class: "query"`)
+
+	geminiRun, err := os.ReadFile(filepath.Join(root, ".gemini", "commands", "slipway", "run.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(geminiRun), `class = "mutation"`)
+
+	codexAbort, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-abort.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(codexAbort), `class: "mutation"`)
+}
+
+func TestGeneratedWaveOrchestrationSkillUsesWavePlanSummaryGuidance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	path := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration", "SKILL.md")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(content), "description, total tasks, wave count")
+	assert.NotContains(t, string(content), "{request_description}")
+}
+
+func TestCodexRefreshDoesNotCreateManagedConfigTOML(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+	_, err := os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "fresh generation should not create config.toml")
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "refresh should not create project config")
+}
+
+func TestCursorNoAgents(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"cursor"}, true))
+
+	// No agent directory should be created for Cursor.
+	agentsDir := filepath.Join(root, ".cursor", "agents")
+	_, err := os.Stat(agentsDir)
+	assert.True(t, os.IsNotExist(err), "cursor should not have agents directory")
+}
+
+func TestCodexNoProjectLocalCommands(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	// No commands directory should be created.
+	commandsDir := filepath.Join(root, ".codex", "commands")
+	_, err := os.Stat(commandsDir)
+	assert.True(t, os.IsNotExist(err), "codex should not have project-local commands")
+}
+
+func TestOpenCodeFlatCommands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"opencode"}, true))
+
+	// OpenCode command names come directly from file names, so use flat paths
+	// to keep slash-hyphen invocation stable.
+	path := filepath.Join(root, ".opencode", "commands", "slipway-new.md")
+	_, err := os.Stat(path)
+	assert.NoError(t, err, "opencode should have flat command paths")
+}
+
+func TestOpenCodeRefreshPrunesLegacyNestedCommands(t *testing.T) {
+	root := t.TempDir()
+
+	sentinelPath := filepath.Join(root, ".opencode", "slipway", ".adapter-generated")
+	require.NoError(t, os.MkdirAll(filepath.Dir(sentinelPath), 0o755))
+	require.NoError(t, os.WriteFile(sentinelPath, []byte("generated\n"), 0o644))
+
+	legacyDir := filepath.Join(root, ".opencode", "commands", "slipway")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "new.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "custom.md"), []byte("keep user command"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"opencode"}, true))
+
+	_, err := os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))
+	assert.NoError(t, err, "refresh should write flat opencode command paths")
+	_, err = os.Stat(filepath.Join(legacyDir, "new.md"))
+	assert.True(t, os.IsNotExist(err), "refresh should prune legacy generated nested commands")
+	_, err = os.Stat(filepath.Join(legacyDir, "custom.md"))
+	assert.NoError(t, err, "refresh must not delete unknown nested user commands")
+}
+
+func TestOpenCodeRefreshWithoutGeneratedMarkerDoesNotPruneNestedCommands(t *testing.T) {
+	root := t.TempDir()
+
+	legacyDir := filepath.Join(root, ".opencode", "commands", "slipway")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "new.md"), []byte("user command"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"opencode"}, true))
+
+	_, err := os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))
+	assert.NoError(t, err, "refresh should write flat opencode command paths")
+	_, err = os.Stat(filepath.Join(legacyDir, "new.md"))
+	assert.NoError(t, err, "refresh without a generated adapter marker must not prune nested user commands")
+}
+
+func TestCodexGlobalPrompts(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	// Prompt files should be generated at $CODEX_HOME/prompts/.
+	promptPath := filepath.Join(codexHome, "prompts", "slipway-new.md")
+	content, err := os.ReadFile(promptPath)
+	require.NoError(t, err)
+
+	s := string(content)
+	// Check frontmatter.
+	assert.Contains(t, s, "description:")
+	assert.Contains(t, s, "argument-hint:")
+	// Check $ARGUMENTS usage.
+	assert.Contains(t, s, "$ARGUMENTS")
+	// Check it contains the body partial content.
+	assert.Contains(t, s, "slipway new")
+
+	// Verify all command IDs have prompt files.
+	for _, id := range commandIDs() {
+		path := filepath.Join(codexHome, "prompts", "slipway-"+id+".md")
+		_, err := os.Stat(path)
+		assert.NoError(t, err, "missing codex prompt for %s", id)
+	}
+	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
+	assert.True(t, os.IsNotExist(err), "workflow entry skill must not be emitted as a codex global prompt")
+
+	// Verify refresh protection.
+	require.NoError(t, os.WriteFile(promptPath, []byte("custom"), 0o644))
+	require.NoError(t, Generate(root, []string{"codex"}, false))
+	customContent, _ := os.ReadFile(promptPath)
+	assert.Equal(t, "custom", string(customContent), "prompt should not be overwritten without refresh")
+
+	// Verify refresh overwrites.
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+	refreshedContent, _ := os.ReadFile(promptPath)
+	assert.NotEqual(t, "custom", string(refreshedContent), "prompt should be overwritten with refresh")
+}
+
+func TestByteStabilityAllTools(t *testing.T) {
+	for _, toolID := range []string{"claude", "codex", "cursor", "gemini", "opencode"} {
+		t.Run(toolID, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("CODEX_HOME", t.TempDir())
+			require.NoError(t, Generate(root, []string{toolID}, true))
+
+			// Collect all generated files.
+			files := map[string][]byte{}
+			err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+				if err != nil || info.IsDir() {
+					return err
+				}
+				rel, _ := filepath.Rel(root, path)
+				content, readErr := os.ReadFile(path)
+				if readErr != nil {
+					return readErr
+				}
+				files[rel] = content
+				return nil
+			})
+			require.NoError(t, err)
+
+			// Regenerate and compare.
+			require.NoError(t, Generate(root, []string{toolID}, true))
+			err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+				if err != nil || info.IsDir() {
+					return err
+				}
+				rel, _ := filepath.Rel(root, path)
+				content, readErr := os.ReadFile(path)
+				if readErr != nil {
+					return readErr
+				}
+				original, exists := files[rel]
+				assert.True(t, exists, "new file appeared on second generation: %s", rel)
+				if exists {
+					assert.Equal(t, string(original), string(content), "file %s not byte-stable", rel)
+				}
+				return nil
+			})
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	routingFields := []string{
+		"required_levels:", "state:", "type:", "skill_name:",
+		"guardrail_required:", "closeout_conditional:",
+		"reviewer_independent:", "run_summary_bound:", "mitigation_target:",
+	}
+
+	allStaticGov := append([]string{}, GovernanceSkillNames...)
+	allStaticGov = append(allStaticGov, standaloneGovernanceNames...)
+	for _, name := range allStaticGov {
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
+		content, err := os.ReadFile(path)
+		require.NoError(t, err, "failed to read %s", name)
+		s := string(content)
+
+		// Extract frontmatter between --- markers.
+		parts := splitFrontmatter(s)
+		require.Len(t, parts, 3, "%s missing frontmatter", name)
+		fm := parts[1]
+		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
+		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
+		for _, field := range routingFields {
+			assert.NotContains(t, fm, field, "%s frontmatter has routing field %s", name, field)
+		}
+	}
+
+	for _, name := range TemplatedGovernanceSkillNames {
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+name, "SKILL.md")
+		content, err := os.ReadFile(path)
+		require.NoError(t, err, "failed to read %s", name)
+		s := string(content)
+		parts := splitFrontmatter(s)
+		require.Len(t, parts, 3, "%s missing frontmatter", name)
+		fm := parts[1]
+		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
+		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
+		// wave-orchestration is tool-aware; the 4 converted governance skills
+		// use Render for partial support but are tool-independent.
+		if name == "wave-orchestration" {
+			assert.Contains(t, fm, "tool:", "%s missing tool", name)
+		}
+		for _, field := range []string{"required_levels:", "state:", "type:", "mitigation_target:", "run_summary_bound:"} {
+			assert.NotContains(t, fm, field, "%s frontmatter has routing field %s", name, field)
+		}
+	}
+}
+
+func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	for _, name := range standaloneNames {
+		path := filepath.Join(root, ".claude", "skills", adapterSkillName(name), "SKILL.md")
+		content, err := os.ReadFile(path)
+		require.NoError(t, err, "failed to read %s", name)
+		parts := splitFrontmatter(string(content))
+		require.Len(t, parts, 3, "%s missing frontmatter", name)
+		fm := parts[1]
+		assert.Contains(t, fm, "name:", "%s missing name", name)
+		assert.Contains(t, fm, "skill_id:", "%s missing skill_id", name)
+		assert.Contains(t, fm, "description:", "%s missing description", name)
+		assert.Contains(t, fm, "Use when ", "%s description must use trigger-oriented wording", name)
+		assert.Contains(t, fm, "Triggers on", "%s description must describe trigger contract", name)
+		for _, field := range []string{"state:", "type:", "required_levels:", "mitigation_target:", "run_summary_bound:"} {
+			assert.NotContains(t, fm, field, "%s frontmatter has retired field %s", name, field)
+		}
+	}
+}
+
+func TestDoneSkillDocumentsAllReadyAcrossActiveExecutions(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	content, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "done.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "`--all-ready` archives every active change that is currently done-ready.")
+}
+
+func splitFrontmatter(content string) []string {
+	// Split on "---" preserving the text between first two markers.
+	i := 0
+	for i < len(content) && content[i] == '\n' {
+		i++
+	}
+	if i < len(content)-3 && content[i:i+3] == "---" {
+		rest := content[i+3:]
+		end := -1
+		for j := 0; j < len(rest); j++ {
+			if j == 0 || rest[j-1] == '\n' {
+				if len(rest[j:]) >= 3 && rest[j:j+3] == "---" {
+					end = j
+					break
+				}
+			}
+		}
+		if end >= 0 {
+			return []string{content[:i], rest[:end], rest[end+3:]}
+		}
+	}
+	return []string{content}
+}
+
+func commandSurfacePath(root, codexHome string, cfg ToolConfig, id string) (string, string) {
+	if cfg.PromptsStyle == "global" {
+		rel := filepath.ToSlash(filepath.Join("prompts", "slipway-"+id+".md"))
+		return rel, filepath.Join(codexHome, filepath.FromSlash(rel))
+	}
+
+	ext := ".md"
+	if cfg.CommandFormat == "toml" {
+		ext = ".toml"
+	}
+	var rel string
+	switch cfg.CommandStyle {
+	case "flat":
+		rel = filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway-"+id+ext))
+	default:
+		rel = filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway", id+ext))
+	}
+	return rel, filepath.Join(root, filepath.FromSlash(rel))
+}
+
+func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command string) {
+	t.Helper()
+
+	content, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+
+	settings := map[string]any{}
+	require.NoError(t, json.Unmarshal(content, &settings))
+
+	hooks, ok := settings["hooks"].(map[string]any)
+	require.True(t, ok, "settings missing hooks object")
+
+	entries, ok := hooks[eventName].([]any)
+	require.True(t, ok, "settings missing hook event %s", eventName)
+
+	found := false
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawHooks, ok := entryMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range rawHooks {
+			hookMap, ok := hook.(map[string]any)
+			if ok && hookMap["command"] == command {
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+	assert.True(t, found, "expected %s to register hook command %q", settingsPath, command)
+}
+
+// hydratedSkillIDs lists the PR-1 slice of skills required to ship a
+// non-empty references/ tree. Kept local so drift in the registry does not
+// silently expand the set without updating the plan.
+var hydratedSkillIDs = []string{
+	"gha-security-review",
+	"incident-response",
+	"multi-reviewer-calibration",
+	"mutation-testing",
+	"property-testing",
+	"root-cause-tracing",
+	"sast-orchestration",
+	"supply-chain-audit",
+	"variant-analysis",
+}
+
+// referencesBudgetPerFile caps any single reference at 24 KB so hydrate
+// payloads never saturate the per-skill ceiling with one oversized file.
+const referencesBudgetPerFile = 24 * 1024
+
+// referencesBudgetPerSkill caps total reference bytes per skill at 64 KB so
+// reference shelves stay reviewable and explicit `--hydrate-ref` selection
+// remains practical even when operators choose to print the full set.
+const referencesBudgetPerSkill = 64 * 1024
+
+const longReferenceNavigationLineThreshold = 240
+
+// TestCatalogSkillHasReferences asserts the PR-1 five have a non-empty
+// references/ directory with at least one .md file, and every .md starts
+// with an H1 so hydrate output renders a readable heading.
+func TestCatalogSkillHasReferences(t *testing.T) {
+	t.Parallel()
+	templateFS := tmpl.TemplateFS()
+	for _, id := range hydratedSkillIDs {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			refsDir := path.Join("skills", id, "references")
+			info, err := fs.Stat(templateFS, refsDir)
+			require.NoErrorf(t, err, "missing references/ dir for %s", id)
+			require.Truef(t, info.IsDir(), "%s: references path is not a directory", id)
+
+			entries, err := fs.ReadDir(templateFS, refsDir)
+			require.NoError(t, err)
+			mdCount := 0
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+					continue
+				}
+				mdCount++
+				raw, err := fs.ReadFile(templateFS, path.Join(refsDir, e.Name()))
+				require.NoError(t, err)
+				head := strings.TrimLeft(string(raw), "\ufeff \t\n")
+				assert.Truef(t, strings.HasPrefix(head, "# "),
+					"%s/%s must open with an H1 heading (# ...) for hydrate readability", id, e.Name())
+			}
+			assert.NotZerof(t, mdCount, "%s: references/ must contain at least one .md file", id)
+		})
+	}
+}
+
+// TestHydrateReferencesResolveToFiles is the PR-1 temporary frontmatter-only
+// gate: every SKILL.md that declares hydrate_references[] must use typed
+// records whose name is a bare .md basename resolving to a file under that
+// skill's references/ directory. Names must be unique within the skill and
+// must not contain path separators or ...
+func TestHydrateReferencesResolveToFiles(t *testing.T) {
+	t.Parallel()
+	templateFS := tmpl.TemplateFS()
+	entries, err := fs.ReadDir(templateFS, "skills")
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		id := e.Name()
+		skillPath := path.Join("skills", id, "SKILL.md")
+		if _, err := fs.Stat(templateFS, skillPath); err != nil {
+			continue
+		}
+		refs := loadHydrateReferencesFromFS(t, templateFS, skillPath)
+		if len(refs) == 0 {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			seen := make(map[string]struct{}, len(refs))
+			for _, r := range refs {
+				assert.NotEmptyf(t, r.Name, "%s: hydrate_references entry missing name", id)
+				assert.NotEmptyf(t, r.Reason, "%s: hydrate_references entry %q missing reason", id, r.Name)
+				assert.Falsef(t,
+					strings.ContainsAny(r.Name, "/\\") || strings.Contains(r.Name, ".."),
+					"%s: hydrate_references name %q must be a basename with no path separators or ..", id, r.Name)
+				assert.Truef(t, strings.HasSuffix(r.Name, ".md"),
+					"%s: hydrate_references name %q must end with .md", id, r.Name)
+
+				if _, dup := seen[r.Name]; dup {
+					t.Errorf("%s: duplicate hydrate_references name %q", id, r.Name)
+				}
+				seen[r.Name] = struct{}{}
+
+				refPath := path.Join("skills", id, "references", r.Name)
+				_, err := fs.Stat(templateFS, refPath)
+				assert.NoErrorf(t, err,
+					"%s: hydrate_references %q does not resolve to a file under references/", id, r.Name)
+			}
+		})
+	}
+}
+
+// TestReferenceFileSizeBudget enforces per-file and per-skill size caps on
+// reference material so hydrate payloads stay bounded.
+func TestReferenceFileSizeBudget(t *testing.T) {
+	t.Parallel()
+	templateFS := tmpl.TemplateFS()
+	entries, err := fs.ReadDir(templateFS, "skills")
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		id := e.Name()
+		refsDir := path.Join("skills", id, "references")
+		info, err := fs.Stat(templateFS, refsDir)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			files, err := fs.ReadDir(templateFS, refsDir)
+			require.NoError(t, err)
+			total := 0
+			for _, f := range files {
+				if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+					continue
+				}
+				p := path.Join(refsDir, f.Name())
+				st, err := fs.Stat(templateFS, p)
+				require.NoError(t, err)
+				size := int(st.Size())
+				assert.LessOrEqualf(t, size, referencesBudgetPerFile,
+					"%s/%s size %d bytes exceeds per-file cap %d", id, f.Name(), size, referencesBudgetPerFile)
+				total += size
+			}
+			assert.LessOrEqualf(t, total, referencesBudgetPerSkill,
+				"%s: references total %d bytes exceeds per-skill cap %d", id, total, referencesBudgetPerSkill)
+		})
+	}
+}
+
+func TestLongReferenceFilesHaveQuickNavigation(t *testing.T) {
+	t.Parallel()
+	templateFS := tmpl.TemplateFS()
+	checked := 0
+
+	err := fs.WalkDir(templateFS, "skills", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !strings.Contains(p, "/references/") || !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		raw, err := fs.ReadFile(templateFS, p)
+		if err != nil {
+			return err
+		}
+		content := string(raw)
+		lineCount := strings.Count(content, "\n")
+		if !strings.HasSuffix(content, "\n") {
+			lineCount++
+		}
+		if lineCount <= longReferenceNavigationLineThreshold {
+			return nil
+		}
+		checked++
+		lines := strings.Split(content, "\n")
+		limit := 40
+		if len(lines) < limit {
+			limit = len(lines)
+		}
+		quickNavigationLine := 0
+		for i := 0; i < limit; i++ {
+			if strings.TrimSpace(lines[i]) == "## Quick Navigation" {
+				quickNavigationLine = i + 1
+				break
+			}
+		}
+		assert.NotZerof(t, quickNavigationLine,
+			"%s has %d lines and needs a top-level quick navigation section within the first %d lines",
+			p, lineCount, limit)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, checked, "expected at least one long reference file to be checked")
+}
+
+// TestTypedPartsRendered asserts that the PR-3 typed partials land in the
+// assembled SKILL.md for the four skills the plan extends (spec-trace,
+// threat-modeling, coverage-analysis, security-review). Each expected
+// section heading must appear exactly once so source-body sections and
+// partial-rendered sections never co-exist.
+func TestTypedPartsRendered(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	cases := []struct {
+		skill    string
+		headings []string
+	}{
+		{"spec-trace", []string{"## Checklist"}},
+		{"threat-modeling", []string{"## Procedure", "## Checklist"}},
+		{"coverage-analysis", []string{"## Report schema"}},
+		{"security-review", []string{"## Checklist"}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.skill, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
+			var body string
+			if !shouldExportAsHostSkill(tc.skill) {
+				skill, ok := capability.DefaultRegistry().Lookup(tc.skill)
+				require.True(t, ok, "missing catalog skill %s", tc.skill)
+				rendered, err := renderCatalogSkill(skill)
+				require.NoError(t, err)
+				body = rendered
+			} else {
+				raw, err := os.ReadFile(path)
+				require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
+				body = string(raw)
+			}
+			for _, h := range tc.headings {
+				count := strings.Count(body, "\n"+h+"\n")
+				assert.Equalf(t, 1, count,
+					"%s: heading %q must appear exactly once in assembled SKILL.md (found %d)",
+					tc.skill, h, count)
+			}
+		})
+	}
+}
+
+func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	path := filepath.Join(root, "slipway-tdd-governance", "SKILL.md")
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
+	assert.Contains(t, body, "reproducible command or transcript reference")
+	assert.NotContains(t, body, "{{template", "rendered tdd-governance must not leak raw template directives")
+}
+
+// TestSecurityReviewReferenceOverlaysPresent asserts that the rendered
+// security-review/references/ directory contains the six topic /
+// infrastructure overlays authored after removing language-specific overlays.
+func TestSecurityReviewReferenceOverlaysPresent(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	refsDir := filepath.Join(root, "slipway-security-review", "references")
+	expected := []string{
+		"authentication.md",
+		"authorization.md",
+		"injection.md",
+		"xss.md",
+		"ssrf.md",
+		"infrastructure-docker.md",
+	}
+	for _, name := range expected {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := filepath.Join(refsDir, name)
+			info, err := os.Stat(p)
+			require.NoErrorf(t, err, "security-review overlay %q missing from rendered tree", name)
+			assert.Falsef(t, info.IsDir(), "%s: expected file, got directory", name)
+			assert.NotZerof(t, info.Size(), "%s: overlay is empty", name)
+		})
+	}
+}
+
+// TestRenderedSkillProseUsesCanonicalPublicNames verifies that exported-skill
+// prose references stay on the canonical adapter-visible public-name form once
+// the generated tree has been canonicalized. Runtime-owned identifiers such as
+// `skill_id`, bindings, and verification filenames are covered elsewhere.
+func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
+	root := generatedSkillsRoot(t)
+	cases := []struct {
+		skill       string
+		mustContain []string
+		mustOmit    []string
+	}{
+		{
+			skill: "research-orchestration",
+			mustContain: []string{
+				"`slipway-plan-audit` can validate it",
+				"[Questions that slipway-plan-audit must address]",
+				"`slipway-plan-audit` to validate",
+			},
+			mustOmit: []string{
+				"`plan-audit` can validate it",
+				"[Questions that plan-audit must address]",
+				"`plan-audit` to validate",
+			},
+		},
+		{
+			skill: "codebase-mapping",
+			mustContain: []string{
+				"`slipway-research-orchestration`, `slipway-plan-audit`, and `slipway-wave-orchestration` SHOULD consume",
+			},
+			mustOmit: []string{
+				"research-orchestration, plan-audit, and wave-orchestration SHOULD consume",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.skill, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(root, "slipway-"+tc.skill, "SKILL.md")
+			raw, err := os.ReadFile(path)
+			require.NoErrorf(t, err, "missing rendered SKILL.md for %s", tc.skill)
+			body := string(raw)
+			for _, want := range tc.mustContain {
+				assert.Containsf(t, body, want, "%s: expected canonical public-name prose", tc.skill)
+			}
+			for _, unwanted := range tc.mustOmit {
+				assert.NotContainsf(t, body, unwanted, "%s: found stale bare public-name prose", tc.skill)
+			}
+		})
+	}
+}
+
+// generatedSkillsRoot generates a codex tree and returns the path to
+// `<root>/.codex/skills/` for script-contract tests.
+func generatedSkillsRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+	cfg := toolRegistry["codex"]
+	return filepath.Join(root, cfg.SkillsDir)
+}
+
+func scriptPathForTest(t *testing.T, skillsRoot, skillID, name string) string {
+	t.Helper()
+	if shouldExportAsHostSkill(skillID) {
+		return filepath.Join(skillsRoot, "slipway-"+skillID, "scripts", name)
+	}
+	dstDir := t.TempDir()
+	require.NoError(t, emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstDir, true),
+		"materialize source support files for non-exported skill %s", skillID)
+	return filepath.Join(dstDir, "scripts", name)
+}
+
+// TestScriptExecutableBit asserts every rendered scripts/*.sh file has an
+// executable bit set. Skipped on Windows where POSIX perm bits are not
+// meaningful.
+func TestScriptExecutableBit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit semantics are POSIX-only")
+	}
+	root := generatedSkillsRoot(t)
+	shellCount := 0
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !strings.Contains(filepath.ToSlash(p), "/scripts/") || !strings.HasSuffix(p, ".sh") {
+			return nil
+		}
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		assert.NotZerof(t, info.Mode().Perm()&0o111,
+			"%s: expected executable bit on .sh script, got %v", p, info.Mode().Perm())
+		shellCount++
+		return nil
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, shellCount, "expected at least one .sh script in the generated tree")
+}
+
+// TestScriptStaticChecks validates each rendered script parses.
+//   - *.sh  -> `bash -n`
+//   - *.py  -> `python3 -m py_compile`
+//
+// If a required interpreter is missing locally, the corresponding check
+// is skipped with an explicit message; CI must provide bash and python3.
+func TestScriptStaticChecks(t *testing.T) {
+	root := generatedSkillsRoot(t)
+
+	bashPath, bashErr := execLookPath("bash")
+	pyPath, pyErr := execLookPath("python3")
+
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		slash := filepath.ToSlash(p)
+		if !strings.Contains(slash, "/scripts/") {
+			return nil
+		}
+		switch {
+		case strings.HasSuffix(p, ".sh"):
+			if bashErr != nil {
+				t.Logf("skipping bash -n for %s: %v", p, bashErr)
+				return nil
+			}
+			out, cerr := runCommand(bashPath, "-n", p)
+			assert.NoErrorf(t, cerr, "bash -n %s failed: %s", p, out)
+		case strings.HasSuffix(p, ".py"):
+			if pyErr != nil {
+				t.Logf("skipping py_compile for %s: %v", p, pyErr)
+				return nil
+			}
+			out, cerr := runCommand(pyPath, "-m", "py_compile", p)
+			assert.NoErrorf(t, cerr, "py_compile %s failed: %s", p, out)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+// TestScriptFixtureContracts exercises each Wave-1 script against a
+// fixture scenario:
+//   - merge-sarif.sh merges two SARIF files and produces a deterministic
+//     result set (deduped, sorted).
+//   - pin-actions.sh rewrites a workflow using a checked-in mapping,
+//     fails on unresolved refs, and rejects missing --mapping with
+//     usage text.
+//   - find-polluter-go.sh surfaces a stable usage error when argv is
+//     insufficient, independent of a Go toolchain being available.
+func TestScriptFixtureContracts(t *testing.T) {
+	root := generatedSkillsRoot(t)
+
+	t.Run("merge-sarif", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("jq"); err != nil {
+			t.Skipf("jq unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "sast-orchestration", "merge-sarif.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		raw := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"}]}},
+            "results":[{"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]}]}]}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"},{"id":"R2"}]}},
+            "results":[
+              {"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]},
+              {"ruleId":"R2","locations":[{"physicalLocation":{"artifactLocation":{"uri":"y.go"},"region":{"startLine":7}}}]}]}]}`), 0o644))
+
+		outPath := filepath.Join(t.TempDir(), "merged.sarif")
+		out, cerr := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
+
+		data, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		var merged map[string]any
+		require.NoError(t, json.Unmarshal(data, &merged))
+		runs, _ := merged["runs"].([]any)
+		require.Len(t, runs, 1, "expected exactly one merged run")
+		run0 := runs[0].(map[string]any)
+		results, _ := run0["results"].([]any)
+		assert.Len(t, results, 2, "expected 2 deduped results (R1@x.go:1 + R2@y.go:7)")
+
+		out2, cerr2 := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr2, "merge-sarif.sh second run failed: %s", out2)
+		data2, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		assert.Equal(t, string(data), string(data2), "merge output must be deterministic across runs")
+	})
+
+	t.Run("merge-sarif keeps tool runs separate", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("jq"); err != nil {
+			t.Skipf("jq unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "sast-orchestration", "merge-sarif.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		raw := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"DUP"}]}},
+            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
+          "version":"2.1.0",
+          "runs":[{"tool":{"driver":{"name":"CodeQL","rules":[{"id":"DUP"}]}},
+            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
+
+		outPath := filepath.Join(t.TempDir(), "merged.sarif")
+		out, cerr := runCommand(bashPath, script, raw, outPath)
+		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
+
+		data, err := os.ReadFile(outPath)
+		require.NoError(t, err)
+		var merged struct {
+			Runs []struct {
+				Tool struct {
+					Driver struct {
+						Name  string `json:"name"`
+						Rules []struct {
+							ID string `json:"id"`
+						} `json:"rules"`
+					} `json:"driver"`
+				} `json:"tool"`
+				Results []struct {
+					RuleID string `json:"ruleId"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		require.NoError(t, json.Unmarshal(data, &merged))
+		require.Len(t, merged.Runs, 2, "different tools must remain in separate SARIF runs")
+		assert.Equal(t, "CodeQL", merged.Runs[0].Tool.Driver.Name)
+		assert.Equal(t, "semgrep", merged.Runs[1].Tool.Driver.Name)
+		assert.Len(t, merged.Runs[0].Results, 1, "CodeQL result must not be deduped away by semgrep")
+		assert.Len(t, merged.Runs[1].Results, 1, "semgrep result must stay in its own run")
+		assert.Equal(t, "DUP", merged.Runs[0].Tool.Driver.Rules[0].ID)
+		assert.Equal(t, "DUP", merged.Runs[1].Tool.Driver.Rules[0].ID)
+	})
+
+	t.Run("pin-actions", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "gha-security-review", "pin-actions.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// Missing --mapping fails with usage text.
+		dir := t.TempDir()
+		wf := filepath.Join(dir, "ci.yml")
+		require.NoError(t, os.WriteFile(wf, []byte("jobs:\n  x:\n    steps:\n      - uses: actions/checkout@v4\n"), 0o644))
+		out, cerr := runCommand(bashPath, script, wf)
+		assert.Errorf(t, cerr, "expected failure when --mapping is missing")
+		assert.Contains(t, out, "Usage:", "expected usage text on missing --mapping")
+
+		// Successful rewrite with mapping.
+		mapping := filepath.Join(dir, "pins.tsv")
+		require.NoError(t, os.WriteFile(mapping,
+			[]byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf)
+		require.NoErrorf(t, cerr, "pin-actions.sh unexpected failure: %s", out)
+		rewritten, err := os.ReadFile(wf)
+		require.NoError(t, err)
+		assert.Contains(t, string(rewritten), "@b4ffde65f46336ab88eb53be808477a3936bae11")
+		assert.Contains(t, string(rewritten), "# v4")
+
+		// Unresolved reference: non-zero exit, no rewrite.
+		wf2 := filepath.Join(dir, "ci2.yml")
+		body := "jobs:\n  x:\n    steps:\n      - uses: custom/act@v9\n"
+		require.NoError(t, os.WriteFile(wf2, []byte(body), 0o644))
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf2)
+		assert.Errorf(t, cerr, "expected failure on unresolved ref")
+		assert.Contains(t, out, "unresolved")
+		after, err := os.ReadFile(wf2)
+		require.NoError(t, err)
+		assert.Equal(t, body, string(after), "file must be untouched when unresolved refs remain")
+
+		// Unreadable workflow preserves the documented exit code 3 instead of
+		// collapsing it into the generic unresolved-ref exit path.
+		out, cerr = runCommand(bashPath, script, "--mapping", mapping, filepath.Join(dir, "missing.yml"))
+		require.Error(t, cerr, "expected unreadable workflow to fail")
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, cerr, &exitErr)
+		assert.Equal(t, 3, exitErr.ExitCode())
+		assert.Contains(t, out, "cannot read")
+	})
+
+	t.Run("find-polluter-go", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// No argv -> stable usage.
+		out, cerr := runCommand(bashPath, script)
+		assert.Errorf(t, cerr, "expected usage exit")
+		assert.Contains(t, out, "Usage:")
+
+		// Nonexistent pollution path with empty package set should exit
+		// cleanly or produce the "no test packages" diagnostic when a
+		// Go toolchain is present.
+	})
+
+	t.Run("find-polluter-go reports go list failures", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("go"); err != nil {
+			t.Skipf("go unavailable: %v", err)
+		}
+
+		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		emptyDir := t.TempDir()
+		out, cerr := runCommandInDir(emptyDir, bashPath, script, filepath.Join(emptyDir, ".pollution"), "./...")
+		assert.Errorf(t, cerr, "expected go list failure outside a Go module")
+		assert.Contains(t, out, "go list failed for ./...")
+		assert.NotContains(t, out, "no test packages found", "go list failures must not collapse into an empty-package diagnostic")
+	})
+
+	t.Run("find-polluter-go external tests", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("go"); err != nil {
+			t.Skipf("go unavailable: %v", err)
+		}
+
+		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		modRoot := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/polluter\n\ngo 1.22\n"), 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Join(modRoot, "polluter"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "impl.go"), []byte("package polluter\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "polluter_test.go"), []byte(`package polluter_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestOnlyExternalPolluter(t *testing.T) {
+	target := filepath.Join("..", ".pollution")
+	if err := os.WriteFile(target, []byte("polluted"), 0o644); err != nil {
+		t.Fatalf("write pollution marker: %v", err)
+	}
+}
+`), 0o644))
+
+		pollutionPath := filepath.Join(modRoot, ".pollution")
+		out, cerr := runCommandInDir(modRoot, bashPath, script, pollutionPath, "./...")
+		assert.Errorf(t, cerr, "expected polluter detection to exit non-zero")
+		assert.Contains(t, out, "POLLUTER:", "external-test-only package should still be enumerated")
+		assert.Contains(t, out, "example.com/polluter/polluter")
+	})
+
+	t.Run("find-variant codeql python", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=codeql", "--language=python",
+			"--seed-file=app/views.py", "--seed-line=42",
+			"--variant-name=SQLi-audit", "--original-bug=CVE-2025-0001")
+		require.NoErrorf(t, cerr, "find-variant codeql python failed: %s", out)
+		assert.Contains(t, out, "import python",
+			"Python CodeQL scaffold must import the Python library")
+		assert.Contains(t, out, "TaintTracking",
+			"Python CodeQL scaffold must use taint tracking")
+		assert.Contains(t, out, "Seed: app/views.py:42",
+			"scaffold must embed the seed location verbatim")
+		assert.Contains(t, out, "TODO(source)",
+			"scaffold must carry a source-shape TODO")
+		assert.Contains(t, out, "TODO(sink)",
+			"scaffold must carry a sink-shape TODO")
+		assert.Contains(t, out, "TODO(sanitizer)",
+			"scaffold must carry a sanitizer-shape TODO")
+		assert.Contains(t, out, "CVE-2025-0001",
+			"scaffold must echo the original bug id")
+	})
+
+	t.Run("find-variant semgrep go", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=semgrep", "--language=go")
+		require.NoErrorf(t, cerr, "find-variant semgrep go failed: %s", out)
+		assert.Contains(t, out, "id: variant-taint-go",
+			"Go Semgrep scaffold must carry the namespaced rule id")
+		assert.Contains(t, out, "mode: taint",
+			"Go Semgrep scaffold must use taint mode")
+		assert.Contains(t, out, "languages: [go]",
+			"Go Semgrep scaffold must declare language")
+		assert.Contains(t, out, "TODO(source)")
+		assert.Contains(t, out, "TODO(sink)")
+		assert.Contains(t, out, "TODO(sanitizer)")
+	})
+
+	t.Run("find-variant invalid engine", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script,
+			"--engine=unknown", "--language=python")
+		require.Error(t, cerr, "unsupported engine must exit non-zero")
+		assert.Contains(t, out, "unsupported engine/language pair",
+			"error must cite the engine/language contract")
+		assert.Contains(t, out, "Usage:",
+			"error output must include the usage block")
+	})
+
+	t.Run("find-variant missing args", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommand(bashPath, script)
+		require.Error(t, cerr, "missing required flags must fail")
+		assert.Contains(t, out, "--engine and --language are required",
+			"error must explain which flags are mandatory")
+	})
+
+	// Wave-3 PR-2: ci-triage + review-comment-triage Python helpers. All
+	// four must fail fast with a credential-signal when GH_TOKEN is invalid
+	// (no live network calls are made by the tests themselves — the
+	// upstream gh CLI surfaces the 401 / auth-missing condition inside
+	// this test harness). reply-to-thread additionally must respect the
+	// dry-run safety default.
+
+	t.Run("fetch-pr-checks rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "ci-triage", "fetch-pr-checks.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--pr", "999999999",
+		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth") ||
+				strings.Contains(out, "No PR found"),
+			"fetch-pr-checks must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-pr-feedback rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-pr-feedback.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--pr", "999999999",
+		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth") ||
+				strings.Contains(out, "Could not determine repository"),
+			"fetch-pr-feedback must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-review-requests rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-review-requests.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			bashPath, script, "--teams", "none-such-slipway-test",
+		)
+		require.Error(t, cerr, "invalid credentials must exit non-zero")
+		assert.True(t,
+			strings.Contains(out, "invalid or unauthorized") ||
+				strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth"),
+			"fetch-review-requests must surface a stable credential-error signal, got:\n%s", out)
+	})
+
+	t.Run("fetch-review-requests avoids bash4-only syntax", func(t *testing.T) {
+		t.Parallel()
+		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-review-requests.sh")
+		raw, err := os.ReadFile(script)
+		require.NoError(t, err)
+
+		content := string(raw)
+		assert.NotContains(t, content, "mapfile ",
+			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
+		assert.NotContains(t, content, "readarray ",
+			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
+		assert.NotContains(t, content, ",,}",
+			"fetch-review-requests must avoid Bash 4 lowercase expansion")
+	})
+
+	t.Run("reply-to-thread defaults to dry-run", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "review-comment-triage", "reply-to-thread.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		// No --confirm: preflight must NOT be triggered (dry-run works
+		// offline) and exit must be non-zero.
+		out, cerr := runCommandEnv(
+			// Intentionally neuter PATH so a late preflight would also
+			// refuse, but dry-run is supposed to bypass the gh probe.
+			[]string{"GH_TOKEN=", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "PRRT_abc", "dry-run body",
+		)
+		require.Error(t, cerr, "dry-run must exit non-zero to prevent silent success")
+		assert.Contains(t, out, "DRY-RUN",
+			"dry-run must announce itself explicitly")
+		assert.Contains(t, out, "addPullRequestReviewThreadReply",
+			"dry-run must print the intended GraphQL mutation")
+		assert.Contains(t, out, "PRRT_abc",
+			"dry-run must echo the thread id in the mutation body")
+	})
+
+	t.Run("reply-to-thread confirm rejects invalid credentials", func(t *testing.T) {
+		t.Parallel()
+		pythonPath, err := execLookPath("python3")
+		if err != nil {
+			t.Skipf("python3 unavailable: %v", err)
+		}
+		script := scriptPathForTest(t, root, "review-comment-triage", "reply-to-thread.py")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		out, cerr := runCommandEnv(
+			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
+			pythonPath, script, "--confirm", "PRRT_abc", "real body",
+		)
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, cerr, &exitErr, "--confirm with invalid credentials must exit non-zero")
+		assert.Equal(t, 2, exitErr.ExitCode(), "invalid credentials should fail during preflight")
+		assert.Contains(t, out, "BEGIN REQUEST",
+			"reply-to-thread --confirm must print the pending request before posting")
+		assert.Contains(t, out, "addPullRequestReviewThreadReply",
+			"reply-to-thread --confirm must show the GraphQL mutation body")
+		assert.Contains(t, out, "PRRT_abc",
+			"reply-to-thread --confirm must echo the thread id in the request body")
+		assert.NotContains(t, out, "GraphQL error",
+			"invalid credentials should be rejected before attempting the GraphQL write")
+		assert.True(t,
+			strings.Contains(out, "invalid or unauthorized") ||
+				strings.Contains(out, "Bad credentials") ||
+				strings.Contains(out, "not authenticated") ||
+				strings.Contains(out, "gh auth"),
+			"reply-to-thread --confirm must surface the credential path, got:\n%s", out)
+	})
+}
+
+// runCommand runs an external command capturing combined output. Returns
+// stdout+stderr and the exit error (if any).
+func runCommand(name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// runCommandEnv runs a command with a supplemental environment appended to
+// the inherited environment. Later entries win for duplicate keys, matching
+// exec.Cmd.Env semantics. PATH is inherited from the test process so tools
+// like `gh` and `python3` remain locatable.
+func runCommandEnv(extraEnv []string, name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	cmd.Env = append(os.Environ(), extraEnv...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func runCommandInDir(dir, name string, args ...string) (string, error) {
+	cmd := osExecCommand(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}

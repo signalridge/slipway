@@ -1,0 +1,46 @@
+site_name: Slipway
+site_description: Governance CLI for AI-assisted software delivery
+site_url: https://signalridge.github.io/slipway/
+repo_url: https://github.com/signalridge/slipway
+repo_name: signalridge/slipway
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; SignalRidge
+docs_dir: docs
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Design Philosophy: design.md
+  - Governed Workflow: workflow.md
+  - Command Reference: commands.md
+  - AI Tool Adapters: ai-tools.md
+  - Operator Guide: operator-guide.md
+  - Contributing: contributing.md

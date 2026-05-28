@@ -1,0 +1,100 @@
+---
+skill_id: code-quality-review
+name: slipway-code-quality-review
+description: "Use when reviewing engineering quality, consistency, and safety beyond spec compliance. Triggers on Stage 2 review after spec-compliance-review passes, or whenever a second-stage review is required."
+---
+
+# Code Quality Review
+
+```
+IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
+```
+
+## Purpose
+Review implementation for engineering quality, consistency, and safety beyond
+spec compliance. This is Stage 2 of the governed review sequence and assumes
+Stage 1 already passed.
+
+## Workflow Outline
+1. Read the code and execution summary with fresh context.
+2. Review quality, test quality, safety, and cross-artifact consistency.
+3. Write verification, surface blockers, and wait for approval.
+
+## When This Runs
+After spec-compliance-review passes. This is Stage 2 of the two-stage review protocol.
+`slipway next` returns `next_skill: code-quality-review` after spec-compliance-review verification passes.
+
+## Review Contract
+This host MUST NOT run until `spec-compliance-review` has a passing
+verification. Use fresh context; do not carry assumptions from Stage 1.
+
+- Do NOT rely on Stage 1 or implementer summaries
+- Do NOT trust "tests pass" claims without reading or rerunning the tests
+- Do NOT trust "no duplication" claims without searching for similar patterns
+- If something "looks fine at a glance", treat that as a signal to inspect it line-by-line
+
+## Read Context
+Run `slipway next --json` and locate `verification/execution-summary.yaml`.
+Verify `spec-compliance-review` exists with `verdict=pass`.
+Use `slipway-coding-discipline` as the baseline review posture for simplicity,
+small diffs, and goal-driven execution.
+
+## Required Checks
+### Code Quality
+- readability: naming, abstraction level, self-documenting flow
+- maintainability: separation of concerns, minimal coupling, reasonable complexity
+- duplication: no copy-paste pattern that should be abstracted
+- consistency: follow project conventions and existing patterns
+
+### Test Quality
+- changed code has adequate coverage
+- tests are readable and maintainable
+- critical paths have edge-case coverage
+- no test-only hacks masking real issues
+
+### Safety
+- auth/data handling patterns are sane
+- irreversible operations have appropriate guards
+- external contract changes are backward-compatible or versioned
+- no secrets or credentials in code
+
+### Cross-Artifact Consistency
+- implementation matches test expectations
+- config changes are reflected in docs
+- API contracts match between layers
+
+## Review Layer
+Record the outcome in `references` as `layer:QUALITY=pass|fail`.
+
+## Write Verification
+```yaml
+# Write to: artifacts/changes/{slug}/verification/code-quality-review.yaml
+verdict: pass
+blockers: []
+timestamp: "<ISO-8601-UTC>"
+run_version: 1
+references:
+  - "layer:QUALITY=pass"
+notes: |
+  Gaps (code_to_artifact): <code patterns not reflected in artifacts>
+  Gaps (artifact_to_code): <artifact expectations not met by code>
+```
+
+The `notes` field SHOULD include gap analysis. Empty gaps indicate full
+cross-artifact consistency.
+
+## Present and Advance
+Show review findings. {{template "hard-gate"}}
+
+After confirmation: `slipway next`
+
+## DO NOT SKIP
+1. Fresh context separate from spec-compliance-review.
+2. Line-level review of changed code.
+3. Verification record written after review.
+
+## Block If
+- Stage 1 has not passed.
+- Changed code fails readability, maintainability, duplication, or convention checks.
+- Tests are weak, misleading, or missing for important paths.
+- Safety or cross-artifact consistency gaps remain unresolved.

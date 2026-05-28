@@ -1,0 +1,39 @@
+{{- define "command-next-body" -}}
+# Slipway Next
+
+Query the next governed host without advancing lifecycle state.
+
+```bash
+slipway next --json
+```
+
+## Contract
+- `next_skill.name` is the authoritative governed-host handoff.
+- Derive the skill path from the local tool convention: `slipway-{name}/SKILL.md`.
+- For worktree-bound changes, the code workspace may not contain the exported
+  skill catalog. Resolve `next_skill.name` from the source checkout or globally
+  installed skill catalog for your tool, then write evidence to
+  `next_skill.verification_dir`.
+- Treat the default JSON as an action contract, not a context dump.
+- Treat `next_skill.skill_constraints` and `next_skill.technique_hints` as action metadata for that host.
+- Use only paths returned under `input_context`.
+- Do not expect inline policy-pack prose; read policy-pack content only by path when diagnostics or local config provide one.
+- `context_budget` appears only when `guard_action` is `warn` or `stop`; absence means no budget guard is active.
+- Write evidence to `next_skill.verification_dir`.
+- If `blockers` is non-empty, resolve the blockers before executing the skill.
+- If governance control details are needed, run `slipway health --governance --json --change <slug>`.
+- Do not infer or guess a governed host without `slipway next --json`.
+
+## Execute
+If `next_skill` is present:
+1. Read the generated `SKILL.md` for `next_skill.name`.
+2. Follow that skill's evidence contract.
+3. Run `slipway run --json` when evidence is ready.
+
+If `next_skill` is null, inspect `blockers` for the terminal or remediation action.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+- `--diagnostics`: include governance/readiness diagnostic fields
+{{- end -}}

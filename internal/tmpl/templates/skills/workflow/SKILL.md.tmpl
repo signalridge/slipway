@@ -1,0 +1,87 @@
+---
+skill_id: workflow
+name: {{.PublicName}}
+description: "Use when you need the single AI-first entrypoint into Slipway: first contact with a governed repo, deciding whether to create or continue a change, or routing between `slipway status`, `slipway new`, `slipway next`, `slipway run`, and `slipway done`. Triggers on lifecycle navigation, active-change continuation, or uncertainty about which Slipway surface should own the next step."
+tool: "{{.ToolID}}"
+---
+
+# Slipway Workflow
+
+```
+IRON LAW: THIS SKILL ROUTES INTO THE CLI; IT DOES NOT REPLACE THE CLI
+```
+
+## Purpose
+Use `{{.PublicName}}` as the single exported entry skill for Slipway. It tells
+an AI how to enter governed work, how to continue an active change, and when to
+hand off to a more specific command surface or governed host skill.
+
+Slipway is a governance CLI for AI-assisted software delivery. A governed
+change is the unit of work. `done-ready` means the change has satisfied the
+workflow gates and can be finalized; `done` happens only after explicit `slipway done`.
+
+## Primary Route Table
+| Situation | Command |
+|---|---|
+| Unsure whether a governed change already exists | `slipway status --json` |
+| No active change and governed work should begin | `slipway new --json` |
+| Active change and you need the next governed host without advancing | `slipway next --json` |
+| Active change and you want the CLI to advance to the next governed step | `slipway run --json` |
+| The change is already `done-ready` and should be finalized | `slipway done` |
+
+## Entry Rules
+When starting governed work and you can classify intent directly, enter through
+`slipway new --json`.
+
+Provide these fields when known:
+- `guardrail_domain`
+- `complexity`: `trivial`, `simple`, `complex`, or `critical`
+- `needs_discovery`
+
+If these fields are omitted, the CLI applies conservative fallback defaults.
+
+## Runtime Authority Boundaries
+- `ResolveNextSkill` selects governed host skills. This skill does not guess or override that selection.
+- `commandRegistry` owns command descriptions, arguments, prerequisites, and surface metadata.
+- `references/skill-index.md` is informational only. It helps inspect exported host skills; the kernel does not read it back.
+- Existing CLI commands remain the only execution surface. This skill never reimplements transitions, gates, or command semantics.
+
+## Handoff After `slipway next --json`
+- read the generated SKILL.md for `next_skill.name`
+- derive the SKILL.md path from your own tool convention using `slipway-{name}`
+- treat the default JSON as an action contract; do not expect diagnostic context fields
+- `context_budget` appears only when the guard action is `warn` or `stop`
+- if governance controls, policy prose, or full readiness details are needed, run `slipway health --governance --json --change <slug>` or rerun `next/run` with `--diagnostics`
+- read policy packs by path; do not expect inline policy-pack prose in default JSON
+- do not look for retired agent fields or a second exported prompt file
+- do not guess the next governed host without the CLI response
+
+## Delegation Surface
+Detailed command contracts live in `references/command-reference.md`. For
+commands that ship generated command surfaces, prefer those surfaces over
+re-explaining the command inline here.
+
+{{if eq .ToolID "codex"}}For Codex, command surfaces remain global prompt files under
+`~/.codex/prompts/slipway-<command>.md`.{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
+directory `{{.CommandsDir}}`.{{end}}
+
+CLI-only diagnostics such as `learn`, `stats`, `health`, and `codebase-map` do not have
+separate command prompt surfaces; use the generated workflow reference file for
+their detailed arguments and prerequisites.
+
+## Skill Index and Host Handoff
+- when exported skill navigation is needed, read `{{.SkillIndexPath}}`
+- use the index as reference only; it is not progression authority
+- public focus aliases listed in the index are command selectors, not host-skill paths
+- load a focus-backed support skill only through the command/focus surface unless an exported host `SKILL.md` path exists
+- when governed execution is needed, read the host returned by `slipway next --json`
+- derive the host skill path from `next_skill.name` using `.codex/skills/slipway-<name>/SKILL.md` or the equivalent local tool convention
+- use technique skills as overlays for posture and procedure, not as progression authorities
+- once a more specific host, command surface, or technique skill clearly owns the task, leave this entry skill and follow that more specific surface
+
+## Hard Rules
+- do not bypass lifecycle gates
+- do not treat this workflow skill as progression authority
+- do not invent command semantics not present in the CLI
+- do not guess the next governed host without `slipway next --json`
+- do not duplicate long per-command prose here when the reference file or command surface already owns it

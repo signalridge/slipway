@@ -1,0 +1,294 @@
+package model
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+)
+
+const ExecutionSummaryVersion = 1
+
+type ExecutionVerdict string
+
+const (
+	ExecutionVerdictPass ExecutionVerdict = "pass"
+	ExecutionVerdictFail ExecutionVerdict = "fail"
+)
+
+func (v ExecutionVerdict) IsValid() bool {
+	switch v {
+	case ExecutionVerdictPass, ExecutionVerdictFail:
+		return true
+	default:
+		return false
+	}
+}
+
+type ExecutionTaskSummary struct {
+	TaskID            string       `yaml:"task_id" json:"task_id"`
+	Verdict           TaskVerdict  `yaml:"verdict" json:"verdict"`
+	TaskKind          TaskKind     `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
+	ChangedFiles      []string     `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
+	TargetFiles       []string     `yaml:"target_files,omitempty" json:"target_files,omitempty"`
+	EvidenceRef       string       `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
+	EvidenceInputHash string       `yaml:"evidence_input_hash,omitempty" json:"evidence_input_hash,omitempty"`
+	Blockers          []ReasonCode `yaml:"blockers,omitempty" json:"blockers,omitempty"`
+	CapturedAt        time.Time    `yaml:"captured_at,omitempty" json:"captured_at,omitempty"`
+}
+
+func (t *ExecutionTaskSummary) Normalize() {
+	if t.ChangedFiles == nil {
+		t.ChangedFiles = []string{}
+	}
+	if t.TargetFiles == nil {
+		t.TargetFiles = []string{}
+	}
+	if t.Blockers == nil {
+		t.Blockers = []ReasonCode{}
+	}
+	if !t.CapturedAt.IsZero() {
+		t.CapturedAt = t.CapturedAt.Round(0).UTC()
+	}
+	slices.Sort(t.ChangedFiles)
+	slices.Sort(t.TargetFiles)
+	if len(t.Blockers) == 0 {
+		t.Blockers = []ReasonCode{}
+	} else {
+		t.Blockers = NormalizeReasonCodes(t.Blockers)
+	}
+}
+
+func (t ExecutionTaskSummary) Validate() error {
+	if err := ValidateTaskID(t.TaskID); err != nil {
+		return err
+	}
+	if !t.Verdict.IsValid() {
+		return fmt.Errorf("invalid verdict %q", t.Verdict)
+	}
+	if t.TaskKind != "" && !t.TaskKind.IsValid() {
+		return fmt.Errorf("invalid task_kind %q", t.TaskKind)
+	}
+	for i, blocker := range t.Blockers {
+		if err := blocker.Validate(); err != nil {
+			return fmt.Errorf("blockers[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func (t ExecutionTaskSummary) ToTaskRun(runSummaryVersion int) TaskRun {
+	return TaskRun{
+		TaskID:            t.TaskID,
+		RunSummaryVersion: runSummaryVersion,
+		TaskKind:          t.TaskKind,
+		Verdict:           t.Verdict,
+		ChangedFiles:      append([]string(nil), t.ChangedFiles...),
+		TargetFiles:       append([]string(nil), t.TargetFiles...),
+		EvidenceRef:       strings.TrimSpace(t.EvidenceRef),
+		Blockers:          append([]ReasonCode(nil), t.Blockers...),
+	}
+}
+
+func (t ExecutionTaskSummary) Equal(other ExecutionTaskSummary) bool {
+	left := t
+	right := other
+	left.Normalize()
+	right.Normalize()
+
+	return left.TaskID == right.TaskID &&
+		left.Verdict == right.Verdict &&
+		left.TaskKind == right.TaskKind &&
+		left.EvidenceRef == right.EvidenceRef &&
+		left.EvidenceInputHash == right.EvidenceInputHash &&
+		left.CapturedAt.Equal(right.CapturedAt) &&
+		slices.Equal(left.ChangedFiles, right.ChangedFiles) &&
+		slices.Equal(left.TargetFiles, right.TargetFiles) &&
+		slices.Equal(left.Blockers, right.Blockers)
+}
+
+type ExecutionSummary struct {
+	Version           int                    `yaml:"version" json:"version"`
+	RunSummaryVersion int                    `yaml:"run_summary_version" json:"run_summary_version"`
+	CapturedAt        time.Time              `yaml:"captured_at" json:"captured_at"`
+	OverallVerdict    ExecutionVerdict       `yaml:"overall_verdict" json:"overall_verdict"`
+	TasksPlanHash     string                 `yaml:"tasks_plan_hash,omitempty" json:"tasks_plan_hash,omitempty"`
+	CompletedTasks    []string               `yaml:"completed_tasks,omitempty" json:"completed_tasks,omitempty"`
+	NonPassTasks      []string               `yaml:"non_pass_tasks,omitempty" json:"non_pass_tasks,omitempty"`
+	OpenBlockers      []ReasonCode           `yaml:"open_blockers,omitempty" json:"open_blockers,omitempty"`
+	Tasks             []ExecutionTaskSummary `yaml:"tasks,omitempty" json:"tasks,omitempty"`
+}
+
+func (s *ExecutionSummary) Normalize() {
+	if s.Version == 0 {
+		s.Version = ExecutionSummaryVersion
+	}
+	if !s.CapturedAt.IsZero() {
+		s.CapturedAt = s.CapturedAt.Round(0).UTC()
+	}
+	s.TasksPlanHash = strings.TrimSpace(s.TasksPlanHash)
+	if s.CompletedTasks == nil {
+		s.CompletedTasks = []string{}
+	}
+	if s.NonPassTasks == nil {
+		s.NonPassTasks = []string{}
+	}
+	if s.OpenBlockers == nil {
+		s.OpenBlockers = []ReasonCode{}
+	}
+	if s.Tasks == nil {
+		s.Tasks = []ExecutionTaskSummary{}
+	}
+	slices.Sort(s.CompletedTasks)
+	slices.Sort(s.NonPassTasks)
+	if len(s.OpenBlockers) == 0 {
+		s.OpenBlockers = []ReasonCode{}
+	} else {
+		s.OpenBlockers = NormalizeReasonCodes(s.OpenBlockers)
+	}
+	for i := range s.Tasks {
+		s.Tasks[i].Normalize()
+	}
+	slices.SortFunc(s.Tasks, func(a, b ExecutionTaskSummary) int {
+		return strings.Compare(a.TaskID, b.TaskID)
+	})
+}
+
+func (s *ExecutionSummary) SyncDerivedFields() {
+	if s == nil {
+		return
+	}
+
+	completed := make([]string, 0, len(s.Tasks))
+	nonPass := make([]string, 0, len(s.Tasks))
+	for _, task := range s.Tasks {
+		if task.Verdict == TaskVerdictPass && len(task.Blockers) == 0 {
+			completed = append(completed, task.TaskID)
+		} else {
+			nonPass = append(nonPass, task.TaskID)
+		}
+	}
+
+	s.CompletedTasks = sortedStringCopy(completed)
+	s.NonPassTasks = sortedStringCopy(nonPass)
+	if len(s.NonPassTasks) > 0 || len(s.OpenBlockers) > 0 {
+		s.OverallVerdict = ExecutionVerdictFail
+	} else {
+		s.OverallVerdict = ExecutionVerdictPass
+	}
+}
+
+func (s ExecutionSummary) Validate() error {
+	if s.Version != ExecutionSummaryVersion {
+		return fmt.Errorf("version must be %d", ExecutionSummaryVersion)
+	}
+	if s.RunSummaryVersion < 1 {
+		return fmt.Errorf("run_summary_version must be >= 1")
+	}
+	if s.CapturedAt.IsZero() {
+		return fmt.Errorf("captured_at is required")
+	}
+	if !s.OverallVerdict.IsValid() {
+		return fmt.Errorf("invalid overall_verdict %q", s.OverallVerdict)
+	}
+	completed := make([]string, 0, len(s.Tasks))
+	nonPass := make([]string, 0, len(s.Tasks))
+	seenTaskIDs := make(map[string]struct{}, len(s.Tasks))
+	for i, task := range s.Tasks {
+		if err := task.Validate(); err != nil {
+			return fmt.Errorf("tasks[%d]: %w", i, err)
+		}
+		if _, exists := seenTaskIDs[task.TaskID]; exists {
+			return fmt.Errorf("duplicate task_id %q", task.TaskID)
+		}
+		seenTaskIDs[task.TaskID] = struct{}{}
+		if task.Verdict == TaskVerdictPass && len(task.Blockers) == 0 {
+			completed = append(completed, task.TaskID)
+		} else {
+			nonPass = append(nonPass, task.TaskID)
+		}
+	}
+	for i, blocker := range s.OpenBlockers {
+		if err := blocker.Validate(); err != nil {
+			return fmt.Errorf("open_blockers[%d]: %w", i, err)
+		}
+	}
+	if !slices.Equal(sortedStringCopy(s.CompletedTasks), sortedStringCopy(completed)) {
+		return fmt.Errorf("completed_tasks must match pass-without-blockers tasks")
+	}
+	if !slices.Equal(sortedStringCopy(s.NonPassTasks), sortedStringCopy(nonPass)) {
+		return fmt.Errorf("non_pass_tasks must match tasks with failing verdicts or open blockers")
+	}
+	expectedVerdict := ExecutionVerdictPass
+	if len(nonPass) > 0 || len(s.OpenBlockers) > 0 {
+		expectedVerdict = ExecutionVerdictFail
+	}
+	if s.OverallVerdict != expectedVerdict {
+		return fmt.Errorf("overall_verdict must match derived task results and open blockers")
+	}
+	return nil
+}
+
+func (s ExecutionSummary) TaskRunMap() map[string]TaskRun {
+	runs := make(map[string]TaskRun, len(s.Tasks))
+	for _, task := range s.Tasks {
+		runs[task.TaskID] = task.ToTaskRun(s.RunSummaryVersion)
+	}
+	return runs
+}
+
+func (s ExecutionSummary) Equal(other ExecutionSummary) bool {
+	left := s
+	right := other
+	left.Normalize()
+	right.Normalize()
+
+	if left.Version != right.Version ||
+		left.RunSummaryVersion != right.RunSummaryVersion ||
+		!left.CapturedAt.Equal(right.CapturedAt) ||
+		left.OverallVerdict != right.OverallVerdict ||
+		left.TasksPlanHash != right.TasksPlanHash ||
+		!slices.Equal(left.CompletedTasks, right.CompletedTasks) ||
+		!slices.Equal(left.NonPassTasks, right.NonPassTasks) ||
+		!slices.Equal(left.OpenBlockers, right.OpenBlockers) ||
+		len(left.Tasks) != len(right.Tasks) {
+		return false
+	}
+
+	for i := range left.Tasks {
+		if !left.Tasks[i].Equal(right.Tasks[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s ExecutionSummary) TasksByVerdict() map[string]int {
+	counts := map[string]int{}
+	for _, task := range s.Tasks {
+		counts[string(task.Verdict)]++
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	return counts
+}
+
+func (s ExecutionSummary) LatestRelevantUpdateAt() time.Time {
+	latest := s.CapturedAt
+	for _, task := range s.Tasks {
+		if task.CapturedAt.After(latest) {
+			latest = task.CapturedAt
+		}
+	}
+	return latest
+}
+
+func sortedStringCopy(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := append([]string(nil), values...)
+	slices.Sort(out)
+	return out
+}
