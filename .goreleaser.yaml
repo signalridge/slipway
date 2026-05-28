@@ -1,12 +1,9 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
-
 project_name: slipway
-
 before:
   hooks:
     - go mod tidy
-
 builds:
   - id: slipway
     main: .
@@ -25,7 +22,6 @@ builds:
       - -X github.com/signalridge/slipway/cmd.version={{.Version}}
       - -X github.com/signalridge/slipway/cmd.commit={{.ShortCommit}}
       - -X github.com/signalridge/slipway/cmd.date={{.Date}}
-
 archives:
   - id: slipway
     formats:
@@ -37,11 +33,9 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
-
 checksum:
   name_template: checksums.txt
   algorithm: sha256
-
 changelog:
   sort: asc
   use: github
@@ -75,7 +69,6 @@ changelog:
       - "^style:"
       - "Merge pull request"
       - "Merge branch"
-
 release:
   github:
     owner: signalridge
@@ -98,7 +91,6 @@ release:
     brew install --cask signalridge/tap/slipway
     go install github.com/signalridge/slipway@{{ .Tag }}
     ```
-
 homebrew_casks:
   - name: slipway
     repository:
@@ -121,7 +113,6 @@ homebrew_casks:
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/slipway"]
           end
-
 scoops:
   - name: slipway
     repository:
@@ -132,7 +123,6 @@ scoops:
     description: "Governance CLI for AI-assisted software delivery"
     license: UNLICENSED
     skip_upload: auto
-
 nfpms:
   - id: slipway
     package_name: slipway
@@ -148,7 +138,6 @@ nfpms:
     bindir: /usr/bin
     section: utils
     priority: optional
-
 aurs:
   - name: slipway-bin
     homepage: "https://github.com/signalridge/slipway"
@@ -156,13 +145,12 @@ aurs:
     maintainers:
       - "SignalRidge <support@signalridge.com>"
     license: UNLICENSED
-    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
+    private_key: "{{ .Env.HOME }}/.ssh/aur_key"
     git_url: "ssh://aur@aur.archlinux.org/slipway-bin.git"
     skip_upload: auto
     package: |-
       install -Dm755 "./slipway" "${pkgdir}/usr/bin/slipway"
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/slipway/README.md"
-
 dockers_v2:
   - id: slipway
     ids:
@@ -182,12 +170,10 @@ dockers_v2:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .Date }}"
-
 sboms:
   - artifacts: archive
     documents:
       - "${artifact}.sbom.spdx.json"
-
 signs:
   - cmd: cosign
     env:
@@ -201,7 +187,6 @@ signs:
       - "--yes"
     artifacts: checksum
     output: true
-
 docker_signs:
   - cmd: cosign
     env:
