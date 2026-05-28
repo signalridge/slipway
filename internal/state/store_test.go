@@ -605,6 +605,28 @@ func TestChangeSlugExistsTreatsHiddenSiblingWorktreeAuthorityAsReserved(t *testi
 	assert.True(t, exists)
 }
 
+func TestChangeSlugExistsTreatsWorktreeArchiveFromWorktreeChangeAsReserved(t *testing.T) {
+	t.Parallel()
+
+	root, worktreeRoot := setupRepoWithWorktree(t)
+	slug := "worktree-archive-reserved"
+	change := model.NewChange(slug)
+	change.WorktreePath = worktreeRoot
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	_, err := ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(filepath.Join(worktreeRoot, ".slipway.yaml")))
+	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
+
+	exists, err := ChangeSlugExists(root, slug)
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
 func TestListChangesForCreateGuardIncludesHiddenSiblingWorktreeAuthority(t *testing.T) {
 	t.Parallel()
 
@@ -810,6 +832,18 @@ func TestListChangesIgnoresWorktreeEnumerationFailureOutsideGitWorkspace(t *test
 	changes, err := ListChanges(root)
 	require.NoError(t, err)
 	assert.Empty(t, changes)
+}
+
+func TestChangeVisibleFromRootOnlyAllowsEmptyWorktreeForArchivedCandidates(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	otherWorkspace := t.TempDir()
+	change := model.NewChange("portable-archive")
+	change.Status = model.ChangeStatusDone
+
+	assert.False(t, changeVisibleFromRoot(root, otherWorkspace, change, false))
+	assert.True(t, changeVisibleFromRoot(root, otherWorkspace, change, true))
+	assert.True(t, changeVisibleFromRoot(root, root, change, false))
 }
 
 func createRuntimeLayout(t *testing.T) string {

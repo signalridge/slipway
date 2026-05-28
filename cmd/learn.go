@@ -183,7 +183,9 @@ func analyzeChangeForLearning(root string, change model.Change, view *learnView)
 		return
 	}
 	if len(events) == 0 {
-		view.Signals.MissingLifecycleLogs = append(view.Signals.MissingLifecycleLogs, change.Slug)
+		if change.Status == model.ChangeStatusActive {
+			view.Signals.MissingLifecycleLogs = append(view.Signals.MissingLifecycleLogs, change.Slug)
+		}
 		return
 	}
 	view.Signals.LifecycleEventCount += len(events)

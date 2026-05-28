@@ -159,6 +159,57 @@ func TestRepairMissingConfigCreatesDefault(t *testing.T) {
 	assert.Equal(t, model.ArtifactSchemaExpanded, cfg.Defaults.ArtifactSchema)
 }
 
+func TestRepairArchivedTerminalStatusSanitizesSiblingWorktreeArchiveInPlace(t *testing.T) {
+	t.Parallel()
+
+	root, worktreeRoot := setupRepoWithWorktree(t)
+	slug := "repair-worktree-archive"
+	bundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", slug)
+	change := model.NewChange(slug)
+	change.WorktreePath = worktreeRoot
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	change.Artifacts = map[string]model.ArtifactState{
+		"intent": {
+			ID:    "intent",
+			Path:  filepath.Join(bundleDir, "intent.md"),
+			State: model.ArtifactLifecycleFrozen,
+		},
+	}
+	require.NoError(t, SaveChange(root, change))
+
+	archivedBundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(archivedBundleDir), 0o755))
+	require.NoError(t, os.Rename(bundleDir, archivedBundleDir))
+	require.NoError(t, os.MkdirAll(ChangeDir(root, slug), 0o755))
+
+	repaired, err := RepairArchivedTerminalStatus(root, slug)
+	require.NoError(t, err)
+	assert.True(t, repaired)
+
+	_, err = os.Stat(filepath.Join(archivedBundleDir, "change.yaml"))
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
+	assert.True(t, os.IsNotExist(err))
+
+	raw, err := os.ReadFile(filepath.Join(archivedBundleDir, "change.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "worktree_path:")
+	assert.NotContains(t, string(raw), worktreeRoot)
+	assert.Contains(t, string(raw), "path: intent.md")
+
+	loaded, err := LoadArchivedChange(root, slug)
+	require.NoError(t, err)
+	assert.Empty(t, loaded.WorktreePath)
+	assert.Equal(t, "intent.md", loaded.Artifacts["intent"].Path)
+
+	_, err = os.Stat(ChangeDir(root, slug))
+	require.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+}
+
 func TestDiagnoseBundleConsistencyDetectsCorruptChangeYaml(t *testing.T) {
 	t.Parallel()
 

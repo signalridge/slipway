@@ -38,8 +38,13 @@ site/
 .gemini/
 openspec/
 
-# slipway managed
-.worktrees/
+# Slipway local state (managed)
+/artifacts/codebase/
+/artifacts/changes/**/evidence/
+/artifacts/changes/**/events/
+/artifacts/changes/**/verification/
+/.worktrees/
+# End Slipway local state
 
 # Stray Python bytecode in bundled helpers
 __pycache__/

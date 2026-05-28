@@ -92,8 +92,9 @@ func ArchiveChange(
 	//
 	// A crash between steps 1 and 3 leaves repair-forwardable residue
 	// (archived bundle present, git-local runtime state still present).
-	// Unified change layout always archives the governed bundle alongside the
-	// runtime state, regardless of final status.
+	// The active governed bundle may live in a dedicated worktree, but the
+	// terminal archive is a repo-scope project record so that the worktree can
+	// be removed after completion.
 	srcArtifacts, err := GovernedBundleDir(root, change)
 	if err != nil {
 		return model.Change{}, err
@@ -102,7 +103,7 @@ func ArchiveChange(
 	if err != nil {
 		return model.Change{}, err
 	}
-	rewriteArchivedArtifactPaths(&archived, paths.GovernedBundleArchive)
+	sanitizeArchivedChangeSnapshot(&archived)
 	b, err := yaml.Marshal(archived)
 	if err != nil {
 		return model.Change{}, err
@@ -138,7 +139,15 @@ func ArchiveChange(
 	return archived, nil
 }
 
-func rewriteArchivedArtifactPaths(change *model.Change, archiveDir string) {
+func sanitizeArchivedChangeSnapshot(change *model.Change) {
+	if change == nil {
+		return
+	}
+	change.WorktreePath = ""
+	rewriteArchivedArtifactPaths(change)
+}
+
+func rewriteArchivedArtifactPaths(change *model.Change) {
 	if change == nil || len(change.Artifacts) == 0 {
 		return
 	}
@@ -147,7 +156,7 @@ func rewriteArchivedArtifactPaths(change *model.Change, archiveDir string) {
 		if name == "." || name == string(filepath.Separator) || name == "" {
 			name = artifactFileNameForArchive(key, artifact)
 		}
-		artifact.Path = filepath.Join(archiveDir, name)
+		artifact.Path = filepath.ToSlash(name)
 		change.Artifacts[key] = artifact
 	}
 }
@@ -305,10 +314,6 @@ func scrubChangeRuntimeEvidenceRefs(change *model.Change) {
 
 // Archived execution summaries must not retain machine-local runtime paths, but
 // archive-safe relative refs or inline text should survive.
-func scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug string) error {
-	return scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, filepath.Join(ArchivedBundlesDir(root), slug))
-}
-
 func scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir string) error {
 	path := filepath.Join(archiveDir, "verification", ExecutionSummaryFileName)
 	raw, err := os.ReadFile(path)

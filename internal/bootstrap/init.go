@@ -47,6 +47,9 @@ func InitWorkspace(root string, tools []string, refresh bool, toolsSpecified ...
 	if err := ensureWorkspaceScopeVisibility(scopeRoot, workspaceRoot, refresh); err != nil {
 		return err
 	}
+	if _, err := state.EnsureLocalStateGitIgnore(scopeRoot); err != nil {
+		return err
+	}
 
 	// When --refresh is set and --tools was not explicitly provided, auto-detect
 	// existing sentinelized adapters.

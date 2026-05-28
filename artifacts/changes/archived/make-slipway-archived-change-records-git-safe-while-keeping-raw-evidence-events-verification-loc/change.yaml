@@ -1,0 +1,56 @@
+slug: make-slipway-archived-change-records-git-safe-while-keeping-raw-evidence-events-verification-loc
+description: make Slipway archived change records Git-safe while keeping raw evidence events verification local
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-27T14:49:21.745289Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/make-slipway-archived-change-records-git-safe-while-keeping-raw-evidence-events-verification-loc
+artifact_schema: expanded
+project_context:
+    tech_stack: Go, Markdown
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 5255f1de9663480f105887350673f24163a63f99580e1d11f623edd0b9f9d329
+        updated_at: 2026-05-27T17:23:11Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: c312ba3ad5d75b3bb09a496570ad3b72c086d476c44d462a757da9c7853fd590
+        updated_at: 2026-05-27T17:23:11Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 5ff22a8c87397407c27a8e2fb74615a034c42bae93049f269d5b1c5545d36efa
+        updated_at: 2026-05-27T15:51:56.296327Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 17b3cf10931841dfd7b1a01f53c4ebe5eeb15670bb2337a51702694207004671
+        updated_at: 2026-05-27T17:23:11Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 665e9d06db1b2a1c9b3d279bb3fbfe38aa466893507ac7d9307571963033282a
+        updated_at: 2026-05-27T15:51:56.296327Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 67b20734cc02daa3059033f32f1b43cf202096578fa918bbf9780344f783c687
+        updated_at: 2026-05-27T17:23:11Z

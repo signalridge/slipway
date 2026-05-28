@@ -31,6 +31,7 @@ type doneView struct {
 	Archived                bool                     `json:"archived"`
 	ArchivePath             string                   `json:"archive_path,omitempty"`
 	ArchiveKind             string                   `json:"archive_kind,omitempty"`
+	ArchiveCommitRequired   bool                     `json:"archive_commit_required,omitempty"`
 	RemediationSources      []model.ArchiveReference `json:"remediation_sources,omitempty"`
 }
 
@@ -291,6 +292,10 @@ func makeDoneCmd() *cobra.Command {
 				}); err != nil {
 					return err
 				}
+				archivePaths, err := state.ResolveChangePaths(root, change)
+				if err != nil {
+					return err
+				}
 				archived, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
 				if err != nil {
 					return err
@@ -304,10 +309,6 @@ func makeDoneCmd() *cobra.Command {
 				if len(archived.RemediationSources) > 0 {
 					archiveKind = "remediation"
 				}
-				archivePaths, err := state.ResolveChangePaths(root, archived)
-				if err != nil {
-					return err
-				}
 				view := doneView{
 					Slug:                    active.Slug,
 					ExecutionMode:           governedExecutionMode,
@@ -320,6 +321,7 @@ func makeDoneCmd() *cobra.Command {
 					Archived:                true,
 					ArchivePath:             state.DisplayPath(root, archivePaths.GovernedBundleArchive),
 					ArchiveKind:             archiveKind,
+					ArchiveCommitRequired:   strings.TrimSpace(change.WorktreePath) != "",
 					RemediationSources:      archived.RemediationSources,
 				}
 

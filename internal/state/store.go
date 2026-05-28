@@ -160,6 +160,7 @@ func candidateWorkspaceRoots(root string) ([]string, error) {
 type bundleCandidate struct {
 	WorkspaceRoot string
 	Path          string
+	Archived      bool
 }
 
 func bundleCandidatesForRoots(workspaceRoots []string, slug string) []bundleCandidate {
@@ -179,6 +180,7 @@ func archivedBundleCandidatesForRoots(workspaceRoots []string, slug string) []bu
 		paths = append(paths, bundleCandidate{
 			WorkspaceRoot: workspaceRoot,
 			Path:          BundleArchivedChangeFilePath(workspaceRoot, slug),
+			Archived:      true,
 		})
 	}
 	return paths
@@ -196,7 +198,7 @@ func candidateBundlePaths(root, slug string) ([]bundleCandidate, error) {
 }
 
 func candidateArchivedBundlePaths(root, slug string) ([]bundleCandidate, error) {
-	roots, err := candidateWorkspaceRoots(root)
+	roots, err := allWorkspaceRoots(root)
 	if err != nil {
 		return nil, err
 	}
@@ -300,8 +302,12 @@ func ChangeSlugExists(root, slug string) (bool, error) {
 		return false, err
 	}
 
-	if _, err := os.Stat(BundleArchivedChangeFilePath(root, slug)); err == nil {
+	if _, _, err := loadArchivedChangeWithCandidate(root, slug); err == nil {
 		return true, nil
+	} else if errors.Is(err, errMissingBundleAuthority) {
+		return true, nil
+	} else if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return false, err
 	}
@@ -309,7 +315,8 @@ func ChangeSlugExists(root, slug string) (bool, error) {
 }
 
 func loadChangeFromCandidates(root string, paths []bundleCandidate) (model.Change, error) {
-	return loadChangeFromCandidatesWithLoader(root, paths, loadChangeCandidate)
+	change, _, err := loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, loadChangeCandidate)
+	return change, err
 }
 
 func loadChangeFromCandidatesWithLoader(
@@ -317,14 +324,23 @@ func loadChangeFromCandidatesWithLoader(
 	paths []bundleCandidate,
 	load func(string) (model.Change, error),
 ) (model.Change, error) {
+	change, _, err := loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, load)
+	return change, err
+}
+
+func loadChangeFromCandidatesWithLoaderAndCandidate(
+	root string,
+	paths []bundleCandidate,
+	load func(string) (model.Change, error),
+) (model.Change, bundleCandidate, error) {
 	var firstAuthorityErr error
 	for _, candidate := range paths {
 		change, err := load(candidate.Path)
 		if err == nil {
-			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change) {
+			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change, candidate.Archived) {
 				continue
 			}
-			return change, nil
+			return change, candidate, nil
 		}
 		if errors.Is(err, fs.ErrNotExist) {
 			if bundleErr := validateBundleAuthorityPath(candidate.Path); bundleErr != nil {
@@ -337,16 +353,16 @@ func loadChangeFromCandidatesWithLoader(
 					}
 					continue
 				}
-				return model.Change{}, bundleErr
+				return model.Change{}, bundleCandidate{}, bundleErr
 			}
 			continue
 		}
-		return model.Change{}, err
+		return model.Change{}, bundleCandidate{}, err
 	}
 	if firstAuthorityErr != nil {
-		return model.Change{}, firstAuthorityErr
+		return model.Change{}, bundleCandidate{}, firstAuthorityErr
 	}
-	return model.Change{}, fs.ErrNotExist
+	return model.Change{}, bundleCandidate{}, fs.ErrNotExist
 }
 
 // LoadChange loads the active change state for the given slug from the canonical bundle paths.
@@ -356,6 +372,14 @@ func LoadChange(root, slug string) (model.Change, error) {
 		return model.Change{}, rootsErr
 	}
 	return loadChangeFromCandidates(root, paths)
+}
+
+func loadArchivedChangeWithCandidate(root, slug string) (model.Change, bundleCandidate, error) {
+	paths, err := candidateArchivedBundlePaths(root, slug)
+	if err != nil {
+		return model.Change{}, bundleCandidate{}, err
+	}
+	return loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, loadChangeCandidate)
 }
 
 func loadChangeRegardlessOfVisibility(root, slug string) (model.Change, error) {
@@ -397,7 +421,10 @@ func ListChangesForCreateGuard(root string) ([]model.Change, error) {
 	return changes, err
 }
 
-func changeVisibleFromRoot(root, workspaceRoot string, change model.Change) bool {
+func changeVisibleFromRoot(root, workspaceRoot string, change model.Change, archivedCandidate bool) bool {
+	if archivedCandidate && change.Status != model.ChangeStatusActive && strings.TrimSpace(change.WorktreePath) == "" {
+		return true
+	}
 	normalizedRoot, err := NormalizePath(root)
 	if err != nil {
 		normalizedRoot = filepath.Clean(root)

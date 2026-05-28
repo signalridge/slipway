@@ -24,6 +24,8 @@ type ResolvedChangePaths struct {
 }
 
 // ResolveChangePaths returns the canonical path set for the given change.
+// Governed bundles and their terminal archives follow the bound workspace so a
+// dedicated worktree owns its full change record.
 func ResolveChangePaths(root string, change model.Change) (ResolvedChangePaths, error) {
 	projectRoot, err := NormalizePath(root)
 	if err != nil {

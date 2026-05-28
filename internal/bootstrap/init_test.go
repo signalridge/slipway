@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -51,6 +52,25 @@ func TestInitWorkspaceCreatesRuntimeMinimalLayout(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 	_, err = os.Stat(filepath.Join(root, "artifacts"))
 	assert.True(t, os.IsNotExist(err))
+
+	gitignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	require.NoError(t, err)
+	assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
+}
+
+func TestInitWorkspacePreservesExistingGitIgnoreEntries(t *testing.T) {
+	t.Parallel()
+	root := initGitRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules/\n"), 0o644))
+
+	require.NoError(t, InitWorkspace(root, nil, false))
+	require.NoError(t, InitWorkspace(root, nil, false))
+
+	gitignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	require.NoError(t, err)
+	assert.Contains(t, string(gitignore), "node_modules/\n")
+	assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
+	assert.Equal(t, 1, strings.Count(string(gitignore), "# Slipway local state (managed)"))
 }
 
 func TestInitWorkspaceRefreshWithoutToolsAutoDetects(t *testing.T) {

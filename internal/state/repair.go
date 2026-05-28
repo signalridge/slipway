@@ -50,7 +50,7 @@ func repairMissingConfig(configPath string) (string, error) {
 // interrupted terminal archive rewrite. Archived bundles must be terminal,
 // frozen, scrubbed of runtime-only refs, and detached from git-local runtime state.
 func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
-	change, err := LoadArchivedChange(root, slug)
+	change, candidate, err := loadArchivedChangeWithCandidate(root, slug)
 	if err != nil {
 		if isNotExist(err) {
 			return false, nil
@@ -59,7 +59,8 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 	}
 
 	repaired := false
-	changeNeedsPersist := false
+	before := cloneChangeForRepairComparison(change)
+	archiveDir := filepath.Dir(candidate.Path)
 
 	if change.Status != model.ChangeStatusDone && change.Status != model.ChangeStatusCancelled {
 		if change.CurrentState == model.StateDone {
@@ -67,51 +68,113 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 		} else {
 			change.Status = model.ChangeStatusCancelled
 		}
-		changeNeedsPersist = true
-		repaired = true
 	}
 
-	frozenArtifacts := FreezeArtifacts(change.Artifacts)
-	if !reflect.DeepEqual(change.Artifacts, frozenArtifacts) {
-		change.Artifacts = frozenArtifacts
-		changeNeedsPersist = true
-		repaired = true
-	}
-
-	beforeRefs := len(change.EvidenceRefs)
+	change.Artifacts = FreezeArtifacts(change.Artifacts)
 	scrubChangeRuntimeEvidenceRefs(&change)
-	if len(change.EvidenceRefs) != beforeRefs {
-		changeNeedsPersist = true
-		repaired = true
-	}
+	sanitizeArchivedChangeSnapshot(&change)
+	change.Normalize()
 
-	if changeNeedsPersist {
-		change.Normalize()
+	if !reflect.DeepEqual(before, change) {
 		raw, err := yaml.Marshal(change)
 		if err != nil {
 			return false, err
 		}
-		if err := fsutil.WriteFileAtomic(BundleArchivedChangeFilePath(root, slug), raw, 0o644); err != nil {
+		if err := fsutil.WriteFileAtomic(filepath.Join(archiveDir, "change.yaml"), raw, 0o644); err != nil {
 			return false, err
 		}
+		repaired = true
 	}
 
-	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefs(root, slug); err != nil {
+	if err := scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir); err != nil {
 		return false, err
 	}
 
-	if hasPerChangeLocalRuntimeState(root, slug) {
-		if err := removePerChangeLocalRuntimeState(root, slug); err != nil {
-			return false, err
-		}
+	cleaned, err := removeArchivedLocalRuntimeState(root, candidate.WorkspaceRoot, slug)
+	if err != nil {
+		return false, err
+	}
+	if cleaned {
 		repaired = true
 	}
 
 	return repaired, nil
 }
 
+func cloneChangeForRepairComparison(change model.Change) model.Change {
+	clone := change
+	if change.Artifacts != nil {
+		clone.Artifacts = make(map[string]model.ArtifactState, len(change.Artifacts))
+		for key, artifact := range change.Artifacts {
+			clone.Artifacts[key] = artifact
+		}
+	}
+	if change.EvidenceRefs != nil {
+		clone.EvidenceRefs = make(map[string]string, len(change.EvidenceRefs))
+		for key, ref := range change.EvidenceRefs {
+			clone.EvidenceRefs[key] = ref
+		}
+	}
+	return clone
+}
+
+func removeArchivedLocalRuntimeState(root, workspaceRoot, slug string) (bool, error) {
+	removed := false
+	for _, runtimeRoot := range archiveRuntimeCleanupRoots(root, workspaceRoot) {
+		if !hasPerChangeLocalRuntimeState(runtimeRoot, slug) {
+			continue
+		}
+		if err := removePerChangeLocalRuntimeState(runtimeRoot, slug); err != nil {
+			return false, err
+		}
+		removed = true
+	}
+	return removed, nil
+}
+
+func archiveRuntimeCleanupRoots(root, workspaceRoot string) []string {
+	candidates := []string{root, workspaceRoot}
+	seen := map[string]struct{}{}
+	roots := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		normalized, err := NormalizePath(candidate)
+		if err != nil {
+			normalized = filepath.Clean(candidate)
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		roots = append(roots, normalized)
+	}
+	return roots
+}
+
 func ListArchivedChangeSlugs(root string) ([]string, error) {
-	return listSubdirs(ArchivedBundlesDir(root))
+	workspaceRoots, err := allWorkspaceRoots(root)
+	if err != nil {
+		return nil, err
+	}
+	unique := map[string]struct{}{}
+	for _, workspaceRoot := range workspaceRoots {
+		slugs, err := listSubdirs(ArchivedBundlesDir(workspaceRoot))
+		if err != nil {
+			return nil, err
+		}
+		for _, slug := range slugs {
+			unique[slug] = struct{}{}
+		}
+	}
+	slugs := make([]string, 0, len(unique))
+	for slug := range unique {
+		slugs = append(slugs, slug)
+	}
+	slices.Sort(slugs)
+	return slugs, nil
 }
 
 func hasPerChangeLocalRuntimeState(root, slug string) bool {

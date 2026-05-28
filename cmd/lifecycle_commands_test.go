@@ -71,6 +71,87 @@ func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
 	})
 }
 
+func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-worktree-archive-path"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, normalizedWT, change)
+		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(normalizedWT))
+		defer func() {
+			_ = os.Chdir(previousWD)
+		}()
+
+		var out bytes.Buffer
+		doneCmd := makeDoneCmd()
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		expectedArchive := filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug)
+		assert.Equal(t, state.DisplayPath(root, expectedArchive), view.ArchivePath)
+		assert.True(t, view.ArchiveCommitRequired)
+		require.FileExists(t, filepath.Join(expectedArchive, "change.yaml"))
+		require.NoFileExists(t, filepath.Join(root, "artifacts", "changes", "archived", slug, "change.yaml"))
+	})
+}
+
+func TestDoneJSONOmitsArchiveCommitRequiredForRepoScopedChange(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-repo-archive-no-worktree"
+		change := model.NewChange(slug)
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, root, change)
+		writeAssuranceMD(t, root, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		var out bytes.Buffer
+		doneCmd := makeDoneCmd()
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.False(t, view.ArchiveCommitRequired)
+		assert.NotContains(t, out.String(), "archive_commit_required")
+	})
+}
+
 func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 	t.Parallel()
 

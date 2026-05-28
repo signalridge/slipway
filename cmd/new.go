@@ -391,6 +391,9 @@ func createDirectGovernedChange(
 	}
 
 	return withChangeCreateLock(root, func() error {
+		if _, err := state.EnsureLocalStateGitIgnore(root); err != nil {
+			return err
+		}
 		if err := rejectIfConflictingChange(root); err != nil {
 			return err
 		}
@@ -473,6 +476,15 @@ func createDirectGovernedChange(
 		worktreeBinding, err := state.EnsureDefaultWorktreeForChange(root, &change)
 		if err != nil {
 			return err
+		}
+		if strings.TrimSpace(change.WorktreePath) != "" {
+			workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+			if err != nil {
+				return err
+			}
+			if _, err := state.EnsureLocalStateGitIgnore(workspaceRoot); err != nil {
+				return err
+			}
 		}
 		if err := state.SaveChange(root, change); err != nil {
 			return err

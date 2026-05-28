@@ -52,7 +52,7 @@ func CollectRepoStats(root string, now time.Time) (RepoStats, error) {
 		}
 	}
 
-	archives, err := listSubdirs(ArchivedBundlesDir(root))
+	archives, err := ListArchivedChangeSlugs(root)
 	if err != nil {
 		return RepoStats{}, err
 	}

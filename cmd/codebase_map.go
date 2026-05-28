@@ -36,6 +36,9 @@ func makeCodebaseMapCmd() *cobra.Command {
 			}
 			workspaceRoot := invocationWorkspaceRootFromCommand(cmd, root)
 
+			if _, err := state.EnsureLocalStateGitIgnore(workspaceRoot); err != nil {
+				return err
+			}
 			created, err := artifact.EnsureCodebaseMapDocs(workspaceRoot)
 			if err != nil {
 				return err
