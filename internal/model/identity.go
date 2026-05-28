@@ -7,7 +7,7 @@ import (
 
 var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
-const MaxSlugLength = 96
+const MaxSlugLength = 60
 
 func SlugifyTitle(title string) string {
 	slug := strings.ToLower(strings.TrimSpace(title))
