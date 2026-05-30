@@ -1,0 +1,42 @@
+version: 1
+slug: fix-issue-24-governed-workflow-feedback
+description: fix issue 24 governed workflow feedback
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-30T17:53:15.355081Z
+quality_mode: standard
+workflow_preset: standard
+artifact_schema: core
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 98a875349afbf2f85edafa79ec9dc7732193ad1ff325a1a57bc0f02e45f09556
+        updated_at: 2026-05-30T18:42:34Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: f80dfa5cb3610ddd93f4d7d5838538facdf0ce8d05ce101102c1766afe6ca0d8
+        updated_at: 2026-05-30T17:55:02.573571434Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: c4b60bb54674cafd1293070081881ac1773683b21d0e5c5bfcd71d5e880380da
+        updated_at: 2026-05-30T17:57:49.788339401Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 9b17f8061ec96cffe1851846774436893c493d23fe5b99b57c356e3859f92d7b
+        updated_at: 2026-05-30T18:12:42.905313772Z

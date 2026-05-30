@@ -648,6 +648,12 @@ func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []strin
 	return stringutil.UniqueSorted(filtered)
 }
 
+// WorkspaceChangedFiles returns implementation-side changed files for the
+// resolved workspace, excluding governed bundle files.
+func WorkspaceChangedFiles(paths state.ResolvedChangePaths) []string {
+	return scopeContractWorkspaceChangedFiles(paths)
+}
+
 func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {
 	file = filepath.ToSlash(strings.TrimSpace(file))
 	file = strings.TrimPrefix(file, "./")

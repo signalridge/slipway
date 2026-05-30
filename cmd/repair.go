@@ -708,6 +708,18 @@ func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, 
 
 		summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
 		if err == nil && state.ExecutionSummaryReady(summary) {
+			diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+			if diagnostics.Status != "stale" || executionFreshnessHasPlanningDrift(diagnostics) {
+				continue
+			}
+		}
+		_, parseIssues, taskEvidenceErr := progression.LoadExecutionTasksFromEvidence(root, change.Slug, record.RunVersion)
+		if taskEvidenceErr != nil {
+			findings = append(findings, fmt.Sprintf("%s: execution summary recovery preflight failed: %v", change.Slug, taskEvidenceErr))
+			continue
+		}
+		if len(parseIssues) > 0 {
+			findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %s", change.Slug, strings.Join(model.ReasonSpecs(model.ReasonCodesFromSpecs(parseIssues)), ",")))
 			continue
 		}
 
@@ -731,17 +743,24 @@ func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, 
 			findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %v", change.Slug, syncErr))
 			continue
 		}
+		if len(syncResult.Blockers) > 0 {
+			restoreUnreadableExecutionSummaryBackup(root, change, backupPath)
+			findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %s", change.Slug, strings.Join(model.ReasonSpecs(syncResult.Blockers), ",")))
+			continue
+		}
 
 		rebuiltSummary, loadErr := state.LoadOptionalRelevantExecutionSummary(root, change)
 		if loadErr != nil || !state.ExecutionSummaryReady(rebuiltSummary) {
 			restoreUnreadableExecutionSummaryBackup(root, change, backupPath)
 			if loadErr != nil {
 				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary still unreadable: %v", change.Slug, loadErr))
-			} else if len(syncResult.Blockers) > 0 {
-				findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %s", change.Slug, strings.Join(model.ReasonSpecs(syncResult.Blockers), ",")))
 			} else {
 				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary is still incomplete", change.Slug))
 			}
+			continue
+		}
+		if diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, rebuiltSummary); diagnostics.Status == "stale" {
+			findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary is still stale: %s", change.Slug, executionFreshnessRepairReason(diagnostics)))
 			continue
 		}
 		rebuilt = append(rebuilt, change.Slug)
@@ -750,6 +769,26 @@ func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, 
 	slices.Sort(rebuilt)
 	slices.Sort(findings)
 	return slices.Compact(rebuilt), slices.Compact(findings), nil
+}
+
+func executionFreshnessHasPlanningDrift(diagnostics state.ExecutionFreshnessDiagnostics) bool {
+	for _, pair := range diagnostics.StalePairs {
+		if pair.Reason == state.StalePlanningEvidenceBlockerToken {
+			return true
+		}
+	}
+	return false
+}
+
+func executionFreshnessRepairReason(diagnostics state.ExecutionFreshnessDiagnostics) string {
+	if diagnostics.FirstStaleCause != nil && strings.TrimSpace(diagnostics.FirstStaleCause.Reason) != "" {
+		return diagnostics.FirstStaleCause.Reason
+	}
+	if len(diagnostics.TaskInputDiffs) > 0 {
+		diff := diagnostics.TaskInputDiffs[0]
+		return fmt.Sprintf("%s task=%s field=%s", state.StaleExecutionEvidenceBlockerToken, diff.TaskID, diff.Field)
+	}
+	return state.StaleExecutionEvidenceBlockerToken
 }
 
 func backupUnreadableExecutionSummary(root string, change model.Change, now time.Time) (string, error) {

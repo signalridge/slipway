@@ -32,15 +32,19 @@ type doneView struct {
 	ArchivePath             string                   `json:"archive_path,omitempty"`
 	ArchiveKind             string                   `json:"archive_kind,omitempty"`
 	ArchiveCommitRequired   bool                     `json:"archive_commit_required,omitempty"`
+	WorktreeDirtyWarning    string                   `json:"worktree_dirty_warning,omitempty"`
+	WorktreeDirtyFiles      []string                 `json:"worktree_dirty_files,omitempty"`
 	RemediationSources      []model.ArchiveReference `json:"remediation_sources,omitempty"`
 }
 
 type doneBulkItem struct {
-	Slug        string             `json:"slug,omitempty"`
-	Status      string             `json:"status,omitempty"`
-	Reason      string             `json:"reason,omitempty"`
-	ErrorDetail string             `json:"error_detail,omitempty"`
-	ReasonCodes []model.ReasonCode `json:"reason_codes,omitempty"`
+	Slug                 string             `json:"slug,omitempty"`
+	Status               string             `json:"status,omitempty"`
+	Reason               string             `json:"reason,omitempty"`
+	ErrorDetail          string             `json:"error_detail,omitempty"`
+	ReasonCodes          []model.ReasonCode `json:"reason_codes,omitempty"`
+	WorktreeDirtyWarning string             `json:"worktree_dirty_warning,omitempty"`
+	WorktreeDirtyFiles   []string           `json:"worktree_dirty_files,omitempty"`
 }
 
 type doneBulkView struct {
@@ -84,6 +88,23 @@ func newDoneBulkFailed(slug, reason, errorDetail string) doneBulkItem {
 func markChangeDone(change *model.Change) {
 	change.Status = model.ChangeStatusDone
 	change.CurrentState = model.StateDone
+}
+
+const doneWorktreeDirtyWarning = "worktree has uncommitted source changes; commit or review these files before removing the worktree"
+
+func doneWorktreeDirtyState(root string, change model.Change) (string, []string) {
+	if strings.TrimSpace(change.WorktreePath) == "" {
+		return "", nil
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return "", nil
+	}
+	files := progression.WorkspaceChangedFiles(paths)
+	if len(files) == 0 {
+		return "", nil
+	}
+	return doneWorktreeDirtyWarning, files
 }
 
 func detectRemediationSources(root string, change model.Change) []model.ArchiveReference {
@@ -273,6 +294,7 @@ func makeDoneCmd() *cobra.Command {
 				if shipBlocked {
 					return shipGateBlockedError(change, shipEval)
 				}
+				worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 				beforeChange := change
 				markChangeDone(&change)
 				change.RemediationSources = mergeArchiveReferences(
@@ -322,6 +344,8 @@ func makeDoneCmd() *cobra.Command {
 					ArchivePath:             state.DisplayPath(root, archivePaths.GovernedBundleArchive),
 					ArchiveKind:             archiveKind,
 					ArchiveCommitRequired:   strings.TrimSpace(change.WorktreePath) != "",
+					WorktreeDirtyWarning:    worktreeDirtyWarning,
+					WorktreeDirtyFiles:      worktreeDirtyFiles,
 					RemediationSources:      archived.RemediationSources,
 				}
 
@@ -443,6 +467,7 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 			append([]model.ReasonCode(nil), shipEval.ReasonCodes...),
 		)
 	}
+	worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 	beforeChange := change
 	markChangeDone(&change)
 
@@ -461,7 +486,10 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 	if _, err := state.ArchiveChange(root, change, model.ChangeStatusDone); err != nil {
 		return newDoneBulkFailed(slug, "archive_failed", err.Error())
 	}
-	return newDoneBulkArchived(slug)
+	item := newDoneBulkArchived(slug)
+	item.WorktreeDirtyWarning = worktreeDirtyWarning
+	item.WorktreeDirtyFiles = worktreeDirtyFiles
+	return item
 }
 
 func reconcileDoneFilesystemState(root string, change *model.Change) error {
