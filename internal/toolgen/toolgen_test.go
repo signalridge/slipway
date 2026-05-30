@@ -454,6 +454,11 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, s, "`done-ready` means", "%s: missing done-ready semantics", cfg.ID)
 		assert.Contains(t, s, "explicit `slipway done`", "%s: missing done finalization semantics", cfg.ID)
 		assert.Contains(t, s, "`slipway new --json`", "%s: missing governed entry guidance", cfg.ID)
+		assert.Contains(t, s, "JSON stdin fields for `slipway new --json`, not command-line flags", "%s: missing JSON stdin classification transport contract", cfg.ID)
+		assert.Contains(t, s, `echo '{"description":"fix typo","guardrail_domain":"","needs_discovery":false,"complexity":"simple"}' | slipway new --json`, "%s: missing minimal JSON stdin example", cfg.ID)
+		assert.NotContains(t, s, "--guardrail-domain", "%s: unsupported guardrail flag leaked", cfg.ID)
+		assert.NotContains(t, s, "--needs-discovery", "%s: unsupported discovery flag leaked", cfg.ID)
+		assert.NotContains(t, s, "--complexity", "%s: unsupported complexity flag leaked", cfg.ID)
 		assert.Contains(t, s, "`next_skill.name`", "%s: missing governed host handoff", cfg.ID)
 		assert.Contains(t, s, "slipway-{name}", "%s: missing caller-owned skill path contract", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
@@ -473,6 +478,8 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, ref, "## Supporting Commands", "%s: missing supporting section", cfg.ID)
 		assert.Contains(t, ref, "## Diagnostics", "%s: missing diagnostics section", cfg.ID)
 		assert.Contains(t, ref, "### `slipway new`", "%s: missing new command entry", cfg.ID)
+		assert.Contains(t, ref, "JSON stdin fields for `slipway new --json`, not command-line flags", "%s: missing new stdin contract notes", cfg.ID)
+		assert.Contains(t, ref, "`guardrail_domain`, `needs_discovery`, and `complexity`", "%s: missing new stdin classification shape", cfg.ID)
 		assert.Contains(t, ref, "### `slipway run`", "%s: missing run command entry", cfg.ID)
 		assert.Contains(t, ref, "### `slipway repair`", "%s: missing repair command entry", cfg.ID)
 		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
@@ -493,6 +500,31 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 
 	_, err := os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
 	assert.True(t, os.IsNotExist(err), "codex should not emit a workflow global prompt")
+}
+
+func TestGeneratedNewCommandSurfacesDocumentJSONStdinClassification(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
+
+	surfaces := map[string]string{
+		"claude": filepath.Join(root, ".claude", "commands", "slipway", "new.md"),
+		"codex":  filepath.Join(codexHome, "prompts", "slipway-new.md"),
+	}
+	for id, path := range surfaces {
+		content, err := os.ReadFile(path)
+		require.NoError(t, err, "%s: missing generated new command surface", id)
+		s := string(content)
+
+		assert.Contains(t, s, "If the AI caller already knows the classification, provide it as JSON stdin with `--json`.", "%s: missing explicit JSON stdin path", id)
+		assert.Contains(t, s, "`guardrail_domain`, `needs_discovery`, and `complexity` are JSON stdin fields, not command-line flags.", "%s: missing classification field transport", id)
+		assert.Contains(t, s, `echo '{"description":"fix typo","guardrail_domain":"","needs_discovery":false,"complexity":"simple"}' | slipway new --json`, "%s: missing minimal JSON stdin example", id)
+		assert.NotContains(t, s, "--guardrail-domain", "%s: unsupported guardrail flag leaked", id)
+		assert.NotContains(t, s, "--needs-discovery", "%s: unsupported discovery flag leaked", id)
+		assert.NotContains(t, s, "--complexity", "%s: unsupported complexity flag leaked", id)
+	}
 }
 
 func TestRenderCatalogSkillUsesFixedTypedTemplateOrder(t *testing.T) {

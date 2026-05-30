@@ -22,6 +22,12 @@ single workflow entry skill.
 {{- range .Prerequisites }}
   - {{ . }}
 {{- end }}
+{{- if .Notes }}
+- Notes:
+{{- range .Notes }}
+  - {{ . }}
+{{- end }}
+{{- end }}
 {{- if .Focuses }}
 - Public focuses:
 {{- range .Focuses }}
@@ -41,6 +47,12 @@ single workflow entry skill.
 {{- range .Prerequisites }}
   - {{ . }}
 {{- end }}
+{{- if .Notes }}
+- Notes:
+{{- range .Notes }}
+  - {{ . }}
+{{- end }}
+{{- end }}
 {{- if .Focuses }}
 - Public focuses:
 {{- range .Focuses }}
@@ -59,6 +71,12 @@ single workflow entry skill.
 - Prerequisites:
 {{- range .Prerequisites }}
   - {{ . }}
+{{- end }}
+{{- if .Notes }}
+- Notes:
+{{- range .Notes }}
+  - {{ . }}
+{{- end }}
 {{- end }}
 {{- if .Focuses }}
 - Public focuses:
