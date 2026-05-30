@@ -433,9 +433,24 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 		})
 	}
 
-	orphaned, err := orphanTaskEvidence(root, change.Slug, summary.RunSummaryVersion, PlannedTaskIDSet(*plan))
+	orphaned, taskEvidenceIssues, err := orphanTaskEvidence(root, change.Slug, summary.RunSummaryVersion, PlannedTaskIDSet(*plan))
 	if err != nil {
 		return nil, err
+	}
+	if len(taskEvidenceIssues) > 0 {
+		reasons := make([]model.ReasonCode, 0, len(taskEvidenceIssues))
+		for _, issue := range taskEvidenceIssues {
+			reasons = append(reasons, model.NewReasonCode("task_evidence_unreadable", issue.message(root)))
+		}
+		findings = append(findings, HealthFinding{
+			Severity:   model.ReasonSeverityError,
+			Category:   "execution_evidence",
+			Slug:       change.Slug,
+			Message:    "Task evidence is unreadable",
+			Repairable: false,
+			RepairHint: "Regenerate execution evidence for the affected tasks before relying on health or repair diagnostics.",
+			Reasons:    model.NormalizeReasonCodes(reasons),
+		})
 	}
 	if len(orphaned) > 0 {
 		findings = append(findings, HealthFinding{

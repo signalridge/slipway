@@ -174,32 +174,6 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	}, nil
 }
 
-func EvaluateReviewLayerBlockers(
-	change model.Change,
-	artifactReviewEvidence model.VerificationRecord,
-	projection *ArtifactProjection,
-	reviewAll bool,
-) []model.ReasonCode {
-	return EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, model.VerificationRecord{}, projection, reviewAll)
-}
-
-func EvaluateReviewLayerBlockersFromEvidence(
-	change model.Change,
-	reviewEvidence []model.VerificationRecord,
-	projection *ArtifactProjection,
-	reviewAll bool,
-) []model.ReasonCode {
-	if len(reviewEvidence) == 0 || reviewEvidence[0].Verdict == "" {
-		return model.ReasonCodesFromSpecs([]string{"required_skill_missing:spec-compliance-review"})
-	}
-	artifactReviewEvidence := reviewEvidence[0]
-	implementationReviewEvidence := model.VerificationRecord{}
-	if len(reviewEvidence) > 1 {
-		implementationReviewEvidence = reviewEvidence[1]
-	}
-	return EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, projection, reviewAll)
-}
-
 func EvaluateReviewLayerBlockersFromNamedEvidence(
 	change model.Change,
 	artifactReviewEvidence model.VerificationRecord,
@@ -357,7 +331,7 @@ func reviewArtifactNameForLayers(artifactID string) string {
 	switch strings.ToLower(base) {
 	case "", ".":
 		return ""
-	case "change", "status", "change.yaml":
+	case "change", "change.yaml":
 		return "change.yaml"
 	}
 	if filepath.Ext(base) != "" {

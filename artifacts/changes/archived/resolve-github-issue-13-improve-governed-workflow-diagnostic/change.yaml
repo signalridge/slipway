@@ -26,8 +26,8 @@ artifacts:
         id: assurance
         path: assurance.md
         state: frozen
-        content_hash: f39273e341c7008a0d69fdcd7f54bb8e871e81962e45d74cf5f0759e7bfb7cb5
-        updated_at: 2026-05-30T04:40:31.872830131Z
+        content_hash: 010e03f14dc24767180ff1aa193cdfb5eba754a12f37c106765fe4930022d76a
+        updated_at: 2026-05-30T06:50:41Z
     decision:
         id: decision
         path: decision.md
@@ -56,5 +56,5 @@ artifacts:
         id: tasks
         path: tasks.md
         state: frozen
-        content_hash: 5e330226a48548e9b105a7a7503f4f330d2c4c93274b3fb10c98a534cc202c80
-        updated_at: 2026-05-30T05:16:28.979347734Z
+        content_hash: b219d456196d4eab75ceec5e560548cfc3e13536cce58f915b11a44043b52fba
+        updated_at: 2026-05-30T06:10:25Z

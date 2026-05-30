@@ -654,6 +654,53 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 	})
 }
 
+func TestRepairReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair reports malformed task evidence")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` report malformed task evidence
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		require.NoError(t, os.MkdirAll(state.EvidenceTasksDir(root, slug), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(state.EvidenceTasksDir(root, slug), "broken.json"), []byte("{"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		found := false
+		for _, finding := range summary.NonRepairableFindings {
+			if strings.Contains(finding, slug) &&
+				strings.Contains(finding, "task evidence unreadable") &&
+				strings.Contains(finding, "broken.json") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected repair to report malformed task evidence without failing")
+	})
+}
+
 func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -768,12 +815,16 @@ func TestRepairReportsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 			"task_id":     "t-01",
 			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
 		})
+		writeTaskEvidenceFile(t, root, slug, 1, "t-02", map[string]any{
+			"task_id":     "t-02",
+			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
+		})
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
 			Version:           model.ExecutionSummaryVersion,
 			RunSummaryVersion: 1,
 			CapturedAt:        summaryCapturedAt,
 			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01"},
+			CompletedTasks:    []string{"t-01", "t-02"},
 			Tasks: []model.ExecutionTaskSummary{{
 				TaskID:          "t-01",
 				Verdict:         model.TaskVerdictPass,
@@ -781,6 +832,13 @@ func TestRepairReportsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 				ChangedFiles:    []string{"cmd/repair.go"},
 				CapturedAt:      summaryCapturedAt,
 				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01"),
+			}, {
+				TaskID:          "t-02",
+				Verdict:         model.TaskVerdictPass,
+				TaskKind:        model.TaskKindCode,
+				ChangedFiles:    []string{"cmd/repair.go"},
+				CapturedAt:      summaryCapturedAt,
+				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-02"),
 			}},
 		})
 
@@ -794,17 +852,20 @@ func TestRepairReportsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 
 		require.NotEmpty(t, summary.UnrepairedDrift)
-		found := false
+		foundTasks := map[string]bool{}
 		for _, drift := range summary.UnrepairedDrift {
-			if strings.Contains(drift.Target, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks/t-01.json") &&
-				strings.Contains(drift.Reason, state.StaleExecutionEvidenceBlockerToken) &&
-				strings.Contains(drift.Reason, "field=captured_at") &&
-				strings.Contains(drift.NextAction, "do not edit") {
-				found = true
-				break
+			for _, taskID := range []string{"t-01", "t-02"} {
+				if !strings.Contains(drift.Target, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks/"+taskID+".json") {
+					continue
+				}
+				if strings.Contains(drift.Reason, state.StaleExecutionEvidenceBlockerToken) &&
+					strings.Contains(drift.Reason, "field=captured_at") &&
+					strings.Contains(drift.NextAction, "do not edit") {
+					foundTasks[taskID] = true
+				}
 			}
 		}
-		assert.True(t, found, "expected repair to report ready-but-stale execution-summary drift")
+		assert.Equal(t, map[string]bool{"t-01": true, "t-02": true}, foundTasks, "expected repair to report each stale task input drift")
 		require.Contains(t, summary.PathAuthority, slug)
 		assert.Contains(t, summary.PathAuthority[slug].TaskEvidencePath, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
 	})

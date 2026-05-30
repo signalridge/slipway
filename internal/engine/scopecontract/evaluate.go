@@ -131,11 +131,7 @@ func changedFiles(summary *model.ExecutionSummary) []string {
 
 func mergeChangedFiles(left, right []string) []string {
 	files := make([]string, 0, len(left)+len(right))
-	for _, file := range left {
-		if normalized := normalizePathPattern(file); normalized != "" {
-			files = append(files, normalized)
-		}
-	}
+	files = append(files, left...)
 	for _, file := range right {
 		if normalized := normalizePathPattern(file); normalized != "" {
 			files = append(files, normalized)

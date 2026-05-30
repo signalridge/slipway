@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +190,60 @@ func TestCollectHealthReportReportsMissingWavePlan(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected missing wave-plan health finding")
+}
+
+func TestCollectHealthReportReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("malformed-task-evidence")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` report malformed task evidence
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/health.go"]
+  - task_kind: code
+`), 0o644))
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "t-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
+	}))
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(EvidenceTasksDir(root, change.Slug), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(EvidenceTasksDir(root, change.Slug), "broken.json"), []byte("{"), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	found := false
+	for _, finding := range report.Findings {
+		if finding.Category != "execution_evidence" || finding.Slug != change.Slug {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "task_evidence_unreadable" && strings.Contains(reason.Detail, "broken.json") {
+				found = true
+				assert.False(t, finding.Repairable)
+			}
+		}
+	}
+	assert.True(t, found, "expected malformed task evidence finding")
 }
 
 func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {

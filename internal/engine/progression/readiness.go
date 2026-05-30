@@ -172,7 +172,10 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readiness.FreshnessDiagnostics = execCtx.Diagnostics
 	readiness.SummaryIssues = model.ReasonCodesFromSpecs(execCtx.Issues)
 	if state.ExecutionSummaryReady(execCtx.Summary) {
-		readiness.EvidenceFreshness = state.ExecutionSummaryFreshness(root, evaluationChange, execCtx.Summary)
+		readiness.EvidenceFreshness = ctxpack.EvidenceFreshness(strings.TrimSpace(execCtx.Diagnostics.Status))
+		if readiness.EvidenceFreshness == "" {
+			readiness.EvidenceFreshness = ctxpack.EvidenceFreshnessUnknown
+		}
 	}
 
 	paths, err := state.ResolveChangePaths(root, evaluationChange)

@@ -128,9 +128,9 @@ type techniqueHint struct {
 }
 
 type reviewContextView struct {
-	RequiredArtifactLayers       []string `json:"required_artifact_layers"`
-	RequiredImplementationLayers []string `json:"required_implementation_layers"`
-	OptionalLayers               []string `json:"optional_layers"`
+	RequiredArtifactLayers       []string `json:"required_artifact_layers,omitempty"`
+	RequiredImplementationLayers []string `json:"required_implementation_layers,omitempty"`
+	OptionalLayers               []string `json:"optional_layers,omitempty"`
 }
 
 type nextContext struct {
@@ -744,6 +744,17 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		writeLine("Next Skill: %s\n", view.NextSkill.Name)
 		writeLine("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
 		writeLine("  Evidence State: %s\n", view.NextSkill.State)
+		if len(view.NextSkill.RequiredTokens) > 0 {
+			writeLine("  Required Tokens: %s\n", strings.Join(view.NextSkill.RequiredTokens, ", "))
+		}
+		if view.NextSkill.ReviewContext != nil {
+			if len(view.NextSkill.ReviewContext.RequiredArtifactLayers) > 0 {
+				writeLine("  Required Artifact Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredArtifactLayers, ", "))
+			}
+			if len(view.NextSkill.ReviewContext.RequiredImplementationLayers) > 0 {
+				writeLine("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
+			}
+		}
 
 		if len(view.NextSkill.TechniqueHints) > 0 {
 			writeLine("\nTechnique Hints:\n")

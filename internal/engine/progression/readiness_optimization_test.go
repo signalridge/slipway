@@ -308,7 +308,7 @@ func TestEvaluateReviewLayerBlockersTreatsProjectedChangeYamlAsManifest(t *testi
 	change := model.NewChange("manifest-review-scope")
 	change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
 
-	blockers := EvaluateReviewLayerBlockers(
+	blockers := EvaluateReviewLayerBlockersFromNamedEvidence(
 		change,
 		model.VerificationRecord{
 			Verdict: model.VerificationVerdictPass,
@@ -318,6 +318,7 @@ func TestEvaluateReviewLayerBlockersTreatsProjectedChangeYamlAsManifest(t *testi
 				"layer:IR3=pass",
 			},
 		},
+		model.VerificationRecord{},
 		&ArtifactProjection{
 			Nodes: []ArtifactProjectionNode{{
 				Name:     "change.yaml",
@@ -353,16 +354,17 @@ func TestEvaluateReviewLayerBlockersMergesImplementationReviewEvidence(t *testin
 	}
 
 	assert.Contains(t,
-		model.ReasonSpecs(EvaluateReviewLayerBlockersFromEvidence(
+		model.ReasonSpecs(EvaluateReviewLayerBlockersFromNamedEvidence(
 			change,
-			[]model.VerificationRecord{specEvidence, {Verdict: model.VerificationVerdictPass}},
+			specEvidence,
+			model.VerificationRecord{Verdict: model.VerificationVerdictPass},
 			projection,
 			false,
 		)),
 		"review_layer_missing:IR1",
 	)
 	assert.Empty(t,
-		EvaluateReviewLayerBlockersFromEvidence(change, []model.VerificationRecord{specEvidence, codeEvidence}, projection, false),
+		EvaluateReviewLayerBlockersFromNamedEvidence(change, specEvidence, codeEvidence, projection, false),
 	)
 }
 
@@ -392,9 +394,10 @@ func TestEvaluateReviewLayerBlockersRequiresImplementationEvidenceProvenance(t *
 		References: nil,
 	}
 
-	blockers := model.ReasonSpecs(EvaluateReviewLayerBlockersFromEvidence(
+	blockers := model.ReasonSpecs(EvaluateReviewLayerBlockersFromNamedEvidence(
 		change,
-		[]model.VerificationRecord{specEvidenceWithImplementationRefs, codeEvidenceWithoutRefs},
+		specEvidenceWithImplementationRefs,
+		codeEvidenceWithoutRefs,
 		projection,
 		false,
 	))

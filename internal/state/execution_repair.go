@@ -84,9 +84,12 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 					result.RecoveredWaveRuns = append(result.RecoveredWaveRuns, change.Slug)
 				}
 
-				pruned, pruneErr := pruneOrphanTaskEvidence(root, change.Slug, summary.RunSummaryVersion, PlannedTaskIDSet(*plan))
+				pruned, taskEvidenceIssues, pruneErr := pruneOrphanTaskEvidence(root, change.Slug, summary.RunSummaryVersion, PlannedTaskIDSet(*plan))
 				if pruneErr != nil {
 					result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: prune orphan task evidence: %v", change.Slug, pruneErr))
+				}
+				for _, issue := range taskEvidenceIssues {
+					result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: task evidence unreadable: %s", change.Slug, issue.message(root)))
 				}
 				if len(pruned) > 0 {
 					result.PrunedTaskEvidence = append(result.PrunedTaskEvidence, pruned...)
@@ -270,17 +273,30 @@ func waveRunsEquivalent(left, right []model.WaveRun) bool {
 	return true
 }
 
-func orphanTaskEvidence(root, slug string, runVersion int, allowed map[string]struct{}) ([]string, error) {
+type taskEvidenceScanIssue struct {
+	Path string
+	Err  error
+}
+
+func (i taskEvidenceScanIssue) message(root string) string {
+	if i.Err == nil {
+		return DisplayPath(root, i.Path)
+	}
+	return fmt.Sprintf("%s: %v", DisplayPath(root, i.Path), i.Err)
+}
+
+func orphanTaskEvidence(root, slug string, runVersion int, allowed map[string]struct{}) ([]string, []taskEvidenceScanIssue, error) {
 	dir := EvidenceTasksDir(root, slug)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	orphaned := []string{}
+	issues := []taskEvidenceScanIssue{}
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -288,11 +304,13 @@ func orphanTaskEvidence(root, slug string, runVersion int, allowed map[string]st
 		path := filepath.Join(dir, entry.Name())
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, err
+			issues = append(issues, taskEvidenceScanIssue{Path: path, Err: err})
+			continue
 		}
 		evidenceRunVersion, err := flatTaskEvidenceRunVersion(raw)
 		if err != nil {
-			return nil, fmt.Errorf("classify task evidence %s: %w", DisplayPath(root, path), err)
+			issues = append(issues, taskEvidenceScanIssue{Path: path, Err: err})
+			continue
 		}
 		if evidenceRunVersion != runVersion {
 			continue
@@ -304,7 +322,10 @@ func orphanTaskEvidence(root, slug string, runVersion int, allowed map[string]st
 		orphaned = append(orphaned, path)
 	}
 	slices.Sort(orphaned)
-	return orphaned, nil
+	slices.SortFunc(issues, func(a, b taskEvidenceScanIssue) int {
+		return strings.Compare(a.Path, b.Path)
+	})
+	return orphaned, issues, nil
 }
 
 func flatTaskEvidenceRunVersion(raw []byte) (int, error) {
@@ -320,17 +341,17 @@ func flatTaskEvidenceRunVersion(raw []byte) (int, error) {
 	return payload.RunSummaryVersion, nil
 }
 
-func pruneOrphanTaskEvidence(root, slug string, runVersion int, allowed map[string]struct{}) ([]string, error) {
-	paths, err := orphanTaskEvidence(root, slug, runVersion, allowed)
+func pruneOrphanTaskEvidence(root, slug string, runVersion int, allowed map[string]struct{}) ([]string, []taskEvidenceScanIssue, error) {
+	paths, issues, err := orphanTaskEvidence(root, slug, runVersion, allowed)
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	pruned := []string{}
 	for _, path := range paths {
 		if err := os.Remove(path); err != nil {
-			return nil, err
+			return nil, issues, err
 		}
 		pruned = append(pruned, filepath.ToSlash(filepath.Join(slug, filepath.Base(path))))
 	}
-	return pruned, nil
+	return pruned, issues, nil
 }

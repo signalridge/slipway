@@ -57,8 +57,28 @@ func TestOrphanTaskEvidenceIgnoresPreviousRunVersionEvidence(t *testing.T) {
 	writeEvidence("task-b", 2)
 	writeEvidence("task-c", 2)
 
-	orphaned, err := orphanTaskEvidence(root, slug, 2, map[string]struct{}{"task-b": {}})
+	orphaned, issues, err := orphanTaskEvidence(root, slug, 2, map[string]struct{}{"task-b": {}})
 	require.NoError(t, err)
+	require.Empty(t, issues)
 	require.Len(t, orphaned, 1)
 	assert.Equal(t, filepath.Join(dir, "task-c.json"), orphaned[0])
+}
+
+func TestOrphanTaskEvidenceReportsMalformedEvidenceAndContinues(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "orphan-task-malformed"
+	dir := EvidenceTasksDir(root, slug)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "task-a.json"), []byte(`{"run_summary_version":2}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "task-b.json"), []byte(`{`), 0o644))
+
+	orphaned, issues, err := orphanTaskEvidence(root, slug, 2, map[string]struct{}{})
+	require.NoError(t, err)
+	require.Len(t, orphaned, 1)
+	assert.Equal(t, filepath.Join(dir, "task-a.json"), orphaned[0])
+	require.Len(t, issues, 1)
+	assert.Equal(t, filepath.Join(dir, "task-b.json"), issues[0].Path)
+	assert.Contains(t, issues[0].Err.Error(), "parse task evidence")
 }

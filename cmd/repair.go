@@ -411,20 +411,35 @@ func buildFreshnessRepairDriftFindings(root string, changes []model.Change) ([]r
 			}
 		}
 		if (target == "" || reason == state.StaleExecutionEvidenceBlockerToken) && len(diagnostics.TaskInputDiffs) > 0 {
-			diff := diagnostics.TaskInputDiffs[0]
-			if diff.EvidencePath != "" {
-				target = diff.EvidencePath
+			for _, diff := range diagnostics.TaskInputDiffs {
+				diffTarget := target
+				if diff.EvidencePath != "" {
+					diffTarget = diff.EvidencePath
+				}
+				diffReason := fmt.Sprintf("%s: task=%s field=%s expected=%s current=%s",
+					state.StaleExecutionEvidenceBlockerToken,
+					diff.TaskID,
+					diff.Field,
+					diff.Expected,
+					diff.Current,
+				)
+				diffNextAction := nextAction
+				if diff.NextAction != "" {
+					diffNextAction = diff.NextAction
+				}
+				if diffTarget == "" && diagnostics.PathAuthority != nil {
+					diffTarget = diagnostics.PathAuthority.VerificationPath
+				}
+				if diffNextAction == "" {
+					diffNextAction = "regenerate execution-summary.yaml from current wave-backed task evidence"
+				}
+				out = append(out, repairDriftFinding{
+					Reason:     diffReason,
+					Target:     diffTarget,
+					NextAction: diffNextAction,
+				})
 			}
-			reason = fmt.Sprintf("%s: task=%s field=%s expected=%s current=%s",
-				state.StaleExecutionEvidenceBlockerToken,
-				diff.TaskID,
-				diff.Field,
-				diff.Expected,
-				diff.Current,
-			)
-			if diff.NextAction != "" {
-				nextAction = diff.NextAction
-			}
+			continue
 		}
 		if target == "" && diagnostics.PathAuthority != nil {
 			target = diagnostics.PathAuthority.VerificationPath

@@ -74,6 +74,9 @@ func (i ExecutionTaskFreshnessInputs) Equal(other ExecutionTaskFreshnessInputs) 
 
 func (i ExecutionTaskFreshnessInputs) FieldMap() map[string]string {
 	i = i.Normalized()
+	if i.IsZero() {
+		return map[string]string{}
+	}
 	return map[string]string{
 		"change_id":           i.ChangeID,
 		"run_summary_version": fmt.Sprintf("%d", i.RunSummaryVersion),

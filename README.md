@@ -174,7 +174,8 @@ slipway done --json
 Diagnostic JSON uses explicit review and freshness contracts: review evidence
 must record exact layer tokens such as `layer:R0=pass` or `layer:IR1=pass`, and
 execution freshness is based on structural task inputs rather than legacy
-`evidence_input_hash` compatibility.
+`evidence_input_hash`; legacy hash-only summaries remain parseable only so
+diagnostics can mark them stale.
 
 ## AI Tool Adapters
 

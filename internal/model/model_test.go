@@ -17,6 +17,22 @@ func TestTaskRunKeyUsesTaskIDWithoutRunVersionSuffix(t *testing.T) {
 	assert.Equal(t, "task-a", key)
 }
 
+func TestExecutionTaskFreshnessInputsFieldMapOmitsZeroValue(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, ExecutionTaskFreshnessInputs{}.FieldMap())
+	assert.Equal(t, map[string]string{
+		"change_id":           "demo",
+		"run_summary_version": "1",
+		"task_id":             "task-a",
+		"guardrail_domain":    "",
+	}, (ExecutionTaskFreshnessInputs{
+		ChangeID:          "demo",
+		RunSummaryVersion: 1,
+		TaskID:            "task-a",
+	}).FieldMap())
+}
+
 func TestChangeUnmarshalYAMLRequiresCanonicalFields(t *testing.T) {
 	t.Parallel()
 

@@ -563,6 +563,12 @@ func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 				TaskKind:    model.TaskKindDoc,
 				EvidenceRef: filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "task-b.md")),
 			},
+			{
+				TaskID:      "task-c",
+				Verdict:     model.TaskVerdictPass,
+				TaskKind:    model.TaskKindCode,
+				EvidenceRef: filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "verification", "wave-orchestration.yaml")) + "#task-c",
+			},
 		},
 	}
 	summary.Normalize()
@@ -577,6 +583,7 @@ func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, scrubbed.Tasks[0].EvidenceRef)
 	require.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "task-b.md")), scrubbed.Tasks[1].EvidenceRef)
+	require.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "wave-orchestration.yaml"))+"#task-c", scrubbed.Tasks[2].EvidenceRef)
 }
 
 func TestScrubArchivedExecutionSummaryMalformedSummaryRemovesFile(t *testing.T) {

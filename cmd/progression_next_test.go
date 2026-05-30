@@ -598,6 +598,32 @@ func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	assert.Contains(t, buf.String(), "Planning Note: This is a recovery-only planning state entered after post-audit machine validation failed.")
 }
 
+func TestWriteNextHumanShowsReviewLayerRequirements(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	err := writeNextHuman(&buf, nextView{
+		Slug:            "review-layers",
+		CurrentState:    model.StateS3Review,
+		Phase:           model.PhaseReviewing,
+		ExecutionMode:   "governed",
+		LifecycleStatus: "active",
+		NextSkill: &nextSkillView{
+			Name:            progression.SkillCodeQualityReview,
+			VerificationDir: "artifacts/changes/review-layers/verification",
+			State:           "missing",
+			RequiredTokens:  []string{"layer:IR1=pass", "layer:IR3=pass"},
+			ReviewContext: &reviewContextView{
+				RequiredImplementationLayers: []string{"IR1", "IR3"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	rendered := buf.String()
+	assert.Contains(t, rendered, "Required Tokens: layer:IR1=pass, layer:IR3=pass")
+	assert.Contains(t, rendered, "Required Implementation Layers: IR1, IR3")
+}
+
 func TestNextReturnsSkillNameWithoutToolSpecificRuntimeFields(t *testing.T) {
 	t.Parallel()
 
