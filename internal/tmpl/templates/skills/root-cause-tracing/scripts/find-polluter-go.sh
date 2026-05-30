@@ -70,15 +70,16 @@ fi
 # includes packages with either in-package tests or external `_test` packages.
 LIST_OUTPUT=""
 LIST_STDERR_FILE="$(mktemp "${TMPDIR:-/tmp}/find-polluter-go-list-stderr.XXXXXX")"
-cleanup_list_stderr() {
-	rm -f "$LIST_STDERR_FILE"
-}
-trap cleanup_list_stderr EXIT
+trap 'rm -f "$LIST_STDERR_FILE"' EXIT
 
 if LIST_OUTPUT="$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' "$PKG_GLOB" 2>"$LIST_STDERR_FILE")"; then
-	LIST_STDERR="$(cat "$LIST_STDERR_FILE")"
+	LIST_STATUS=0
 else
-	LIST_STDERR="$(cat "$LIST_STDERR_FILE")"
+	LIST_STATUS=$?
+fi
+LIST_STDERR="$(cat "$LIST_STDERR_FILE")"
+
+if [ "$LIST_STATUS" -ne 0 ]; then
 	echo "find-polluter-go.sh: go list failed for $PKG_GLOB" >&2
 	if [ -n "$LIST_STDERR" ]; then
 		printf '%s\n' "$LIST_STDERR" >&2
@@ -88,6 +89,7 @@ else
 	fi
 	exit 1
 fi
+
 if [ -n "$LIST_STDERR" ]; then
 	printf '%s\n' "$LIST_STDERR" >&2
 fi
