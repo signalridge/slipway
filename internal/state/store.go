@@ -22,6 +22,26 @@ var (
 	errMissingBundleAuthority = errors.New("change bundle missing authority file")
 )
 
+type BoundChangeRef struct {
+	Slug         string
+	WorktreePath string
+}
+
+type ChangeBoundElsewhereError struct {
+	BoundChanges []BoundChangeRef
+}
+
+func (err *ChangeBoundElsewhereError) Error() string {
+	if err == nil || len(err.BoundChanges) == 0 {
+		return "active changes are bound to other worktrees"
+	}
+	parts := make([]string, 0, len(err.BoundChanges))
+	for _, change := range err.BoundChanges {
+		parts = append(parts, fmt.Sprintf("%s -> %s", change.Slug, change.WorktreePath))
+	}
+	return "active changes are bound to other worktrees: " + strings.Join(parts, ", ")
+}
+
 // RuntimeDir returns the parent directory for all non-authoritative runtime state.
 func RuntimeDir(root string) string {
 	return GitRuntimeDir(root)
@@ -264,6 +284,16 @@ func discoverActiveChangeSlugsAcrossRoots(root string, includeHidden, bestEffort
 			if _, err := os.Stat(bundlePath); err != nil {
 				if !errors.Is(err, fs.ErrNotExist) {
 					return nil, err
+				}
+				hasFiles, emptyErr := orphanBundleDirHasFiles(filepath.Dir(bundlePath))
+				if emptyErr != nil {
+					return nil, emptyErr
+				}
+				if !hasFiles {
+					if !discovery.HasAuthority && discovery.FirstOrphanDir == "" {
+						delete(found, slug)
+					}
+					continue
 				}
 				if discovery.FirstOrphanDir == "" {
 					discovery.FirstOrphanDir = filepath.Dir(bundlePath)
@@ -582,6 +612,7 @@ func FindActiveChangeForWorktree(root, currentWorktreePath string) (model.Change
 	// Phase 1: Match by worktree path.
 	var worktreeMatches []model.Change
 	var unboundActive []model.Change
+	var boundElsewhere []BoundChangeRef
 	for _, c := range changes {
 		if c.Status != model.ChangeStatusActive {
 			continue
@@ -596,6 +627,8 @@ func FindActiveChangeForWorktree(root, currentWorktreePath string) (model.Change
 		}
 		if normalizedChange == normalizedCurrent {
 			worktreeMatches = append(worktreeMatches, c)
+		} else {
+			boundElsewhere = append(boundElsewhere, BoundChangeRef{Slug: c.Slug, WorktreePath: c.WorktreePath})
 		}
 	}
 
@@ -613,8 +646,76 @@ func FindActiveChangeForWorktree(root, currentWorktreePath string) (model.Change
 	if len(unboundActive) > 1 {
 		return model.Change{}, ErrMultipleActiveChanges
 	}
+	if len(boundElsewhere) > 0 {
+		slices.SortFunc(boundElsewhere, func(a, b BoundChangeRef) int {
+			if a.Slug != b.Slug {
+				return strings.Compare(a.Slug, b.Slug)
+			}
+			return strings.Compare(a.WorktreePath, b.WorktreePath)
+		})
+		return model.Change{}, &ChangeBoundElsewhereError{BoundChanges: boundElsewhere}
+	}
 
 	return model.Change{}, ErrNoActiveChange
+}
+
+func RepairEmptyOrphanBundleDirs(root string) ([]string, error) {
+	workspaceRoots, err := allWorkspaceRoots(root)
+	if err != nil {
+		return nil, err
+	}
+	removed := []string{}
+	for _, workspaceRoot := range workspaceRoots {
+		entries, err := os.ReadDir(ActiveBundlesDir(workspaceRoot))
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() || entry.Name() == "archived" {
+				continue
+			}
+			bundleDir := filepath.Join(ActiveBundlesDir(workspaceRoot), entry.Name())
+			changeYaml := filepath.Join(bundleDir, "change.yaml")
+			if _, err := os.Stat(changeYaml); err == nil {
+				continue
+			} else if !errors.Is(err, fs.ErrNotExist) {
+				return nil, err
+			}
+			hasFiles, err := orphanBundleDirHasFiles(bundleDir)
+			if err != nil {
+				return nil, err
+			}
+			if hasFiles {
+				continue
+			}
+			if err := os.RemoveAll(bundleDir); err != nil {
+				return nil, err
+			}
+			removed = append(removed, entry.Name())
+		}
+	}
+	slices.Sort(removed)
+	return slices.Compact(removed), nil
+}
+
+func orphanBundleDirHasFiles(dir string) (bool, error) {
+	hasFiles := false
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == dir {
+			return nil
+		}
+		if !entry.IsDir() {
+			hasFiles = true
+		}
+		return nil
+	})
+	return hasFiles, err
 }
 
 // ListChanges returns all changes found in the changes directory.

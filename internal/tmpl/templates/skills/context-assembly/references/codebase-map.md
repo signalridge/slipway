@@ -48,6 +48,9 @@ extra top-level files expecting downstream consumers to discover them.
    scaffold-only, or stale. The command is idempotent; reruns populate missing
    or scaffold-only files with deterministic baseline repository facts and do
    not overwrite hand-authored substantive content.
+   - `status: baseline` means the documents contain CLI-detected facts only.
+     Treat them as a starting point awaiting authored verification, not as
+     completed brownfield analysis.
 3. Refine each baseline document with file:line citations or command
    transcripts when the task needs stronger evidence. The artifact is a
    reviewable handoff, not free-form notes.
@@ -85,6 +88,7 @@ skill.
 | Symptom | Remediation |
 |---------|-------------|
 | Doc exists but contains only the scaffold | Run `slipway codebase-map`; if it remains scaffold-only, treat it as missing and fill with citations before handoff. |
+| `codebase-map --json` reports `status: "baseline"` | Keep the detected facts, then add source-backed findings and citations before treating the map as reviewed context. |
 | Citations reference files that no longer exist | Rerun on the affected scope; annotate historical files as removed. |
 | Two docs disagree (e.g., `STRUCTURE.md` names an entry point that `ARCHITECTURE.md` ignores) | The inconsistency itself is a finding; surface it in `CONCERNS.md` rather than silently picking one. |
 | Command fails with workspace-uninitialized error | Run `slipway init` first; the command assumes workspace state. |

@@ -355,6 +355,23 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if archived, archiveErr := state.LoadArchivedChange(root, slug); archiveErr == nil {
+				archivePath := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml"))
+				if path, pathErr := state.ArchivedChangeFilePathForRead(root, slug); pathErr == nil {
+					archivePath = state.DisplayPath(root, path)
+				}
+				return changeRef{}, newPreconditionError(
+					"archived_change_not_validatable",
+					fmt.Sprintf("change %q is archived with status=%s; active governance commands only validate active changes", slug, archived.Status),
+					fmt.Sprintf("Inspect archived evidence at %s, or choose an active change with `slipway status`.", archivePath),
+					slug,
+					map[string]any{
+						"archived":     true,
+						"archive_path": archivePath,
+						"status":       string(archived.Status),
+					},
+				)
+			}
 			return changeRef{}, newPreconditionError(
 				"no_active_change",
 				fmt.Sprintf("no change found for slug %q", slug),
@@ -413,6 +430,32 @@ func loadChangeBySlug(root, slug string) (model.Change, error) {
 }
 
 func wrapResolutionError(err error) error {
+	var boundElsewhere *state.ChangeBoundElsewhereError
+	if errors.As(err, &boundElsewhere) {
+		boundChanges := make([]map[string]string, 0, len(boundElsewhere.BoundChanges))
+		parts := make([]string, 0, len(boundElsewhere.BoundChanges))
+		for _, change := range boundElsewhere.BoundChanges {
+			boundChanges = append(boundChanges, map[string]string{
+				"slug":          change.Slug,
+				"worktree_path": change.WorktreePath,
+			})
+			parts = append(parts, fmt.Sprintf("%s at %s", change.Slug, change.WorktreePath))
+		}
+		remediation := "Use `slipway next --change <slug>` / `slipway run --change <slug>`, or cd into the bound worktree."
+		if len(boundElsewhere.BoundChanges) == 1 {
+			change := boundElsewhere.BoundChanges[0]
+			remediation = fmt.Sprintf("Use `slipway next --change %s` / `slipway run --change %s`, or cd into %s.", change.Slug, change.Slug, change.WorktreePath)
+		}
+		return newPreconditionError(
+			"change_bound_to_other_worktree",
+			"active change is bound to another worktree: "+strings.Join(parts, ", "),
+			remediation,
+			"",
+			map[string]any{
+				"bound_changes": boundChanges,
+			},
+		)
+	}
 	if errors.Is(err, state.ErrNoActiveChange) {
 		return newPreconditionError(
 			"no_active_change",

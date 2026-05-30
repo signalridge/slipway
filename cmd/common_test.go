@@ -80,6 +80,59 @@ func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
 	assert.Equal(t, "slug-missing", cliErr.Slug)
 }
 
+func TestResolveExplicitChangeRejectsArchivedSlugWithConcreteDiagnostic(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "archived explicit request")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	_, err = resolveExplicitChange(root, slug)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, slug, cliErr.Slug)
+	assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
+	assert.Equal(t, true, cliErr.Details["archived"])
+	assert.Contains(t, fmt.Sprint(cliErr.Details["archive_path"]), filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml")))
+	assert.Contains(t, cliErr.Message, slug)
+	assert.Contains(t, cliErr.Remediation, "archived")
+}
+
+func TestValidateChangeFlagRejectsArchivedSlugWithConcreteDiagnostic(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "validate archived explicit request")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	cmd := commandForRoot(t, root, makeValidateCmd())
+	cmd.SetArgs([]string{"--json", "--change", slug})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	err = cmd.Execute()
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, slug, cliErr.Slug)
+	assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
+	assert.NotContains(t, out.String(), "no active change or ambiguous")
+}
+
 func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

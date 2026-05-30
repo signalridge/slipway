@@ -64,14 +64,16 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		assert.Contains(t, stdout, "Created:")
+		assert.Contains(t, stdout, "Scaffold-only:")
 
 		stdout, stderr, err = runRootCommandIn(root, []string{"health", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		healthPayload = decodeJSONMap(t, stdout)
 		assert.Equal(t, "diagnostics", healthPayload["execution_mode"])
-		_, hasFindings := healthPayload["findings"]
-		assert.False(t, hasFindings)
+		findings, ok = healthPayload["findings"].([]any)
+		require.True(t, ok)
+		require.Len(t, findings, 1)
 
 		stdout, stderr, err = runRootCommandIn(root, []string{"stats", "--json"})
 		require.NoError(t, err)
@@ -79,7 +81,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		statsPayload = decodeJSONMap(t, stdout)
 		codebaseMap, ok = statsPayload["codebase_map"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "fresh", codebaseMap["freshness"])
+		assert.Equal(t, "scaffold_only", codebaseMap["freshness"])
 	})
 }
 
