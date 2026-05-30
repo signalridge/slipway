@@ -1,0 +1,56 @@
+version: 1
+slug: resolve-issue-21-clarify-json-stdin-classification-contract
+description: 'resolve issue 21: clarify JSON stdin classification contract in exported agent surfaces'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-30T14:26:24.477975Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-issue-21-clarify-json-stdin-classification-contract
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Markdown
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: a4ce25963262ab844b428215ddb5fe9418b9ee2f6dee823c905bda2e0e976c2b
+        updated_at: 2026-05-30T14:48:54.561754955Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 82c3ad0b99e90431538428a87d8e58504c8c2eaff60568bf6022f08078e87861
+        updated_at: 2026-05-30T14:33:21.993579033Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: ebe527448fbf93e93df95b4534ad9bfe01e00993ae1ffc7881278a1a82a17d84
+        updated_at: 2026-05-30T15:11:19Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 3c36b178dda687a020db93a36a607eaf9b0c899940720cedff4e0de8db4fbbf2
+        updated_at: 2026-05-30T14:33:21.993303742Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: a5852cf65a441e462869e60cb1f5c9f1d51488f1f168b1b09d44a78d0eb28666
+        updated_at: 2026-05-30T14:31:33.655123598Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 74a824d60f94436013ef8691c98b0ce87c40fcb69a17abc1a20e266503b43922
+        updated_at: 2026-05-30T14:40:48.885524561Z
