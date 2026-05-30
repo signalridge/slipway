@@ -285,10 +285,6 @@ func decodeExecutionSummaryStrict(raw []byte, summary *model.ExecutionSummary) e
 	return decoder.Decode(summary)
 }
 
-func collectExecutionSummaryIssues(root string, change model.Change, summary *model.ExecutionSummary) []string {
-	return collectExecutionSummaryIssuesFromDiagnostics(change, summary, ExecutionSummaryFreshnessDiagnostics(root, change, summary))
-}
-
 func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *model.ExecutionSummary, diagnostics ExecutionFreshnessDiagnostics) []string {
 	if !ExecutionSummaryRelevantState(change.CurrentState) || !ExecutionSummaryReady(summary) || strings.TrimSpace(change.Slug) == "" {
 		return nil
@@ -778,42 +774,6 @@ func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *
 		}
 	}
 	return latest
-}
-
-func planningInputsChangedAfterExecution(root string, change model.Change, summary *model.ExecutionSummary) bool {
-	if !ExecutionSummaryReady(summary) || strings.TrimSpace(root) == "" || strings.TrimSpace(change.Slug) == "" {
-		return false
-	}
-	bundleDir, err := GovernedBundleDir(root, change)
-	if err != nil {
-		return false
-	}
-	latestEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
-	if captured := summary.CapturedAt.UTC(); captured.After(latestEvidenceAt) {
-		latestEvidenceAt = captured
-	}
-
-	for _, path := range []string{
-		filepath.Join(bundleDir, "intent.md"),
-		filepath.Join(bundleDir, "requirements.md"),
-		filepath.Join(bundleDir, "research.md"),
-		filepath.Join(bundleDir, "decision.md"),
-	} {
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		if info.ModTime().UTC().After(latestEvidenceAt) {
-			return true
-		}
-	}
-
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	if strings.TrimSpace(summary.TasksPlanHash) != "" {
-		return isTasksPlanFreshnessRelevant(tasksPath, summary)
-	}
-	info, err := os.Stat(tasksPath)
-	return err == nil && info.ModTime().UTC().After(latestEvidenceAt)
 }
 
 func collectTaskEvidenceFreshnessInputs(
