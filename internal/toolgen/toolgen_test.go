@@ -2020,11 +2020,38 @@ func TestScriptFixtureContracts(t *testing.T) {
 		_, err = os.Stat(script)
 		require.NoError(t, err)
 
-		emptyDir := t.TempDir()
-		out, cerr := runCommandInDir(emptyDir, bashPath, script, filepath.Join(emptyDir, ".pollution"), "./...")
-		assert.Errorf(t, cerr, "expected go list failure outside a Go module")
-		assert.Contains(t, out, "go list failed for ./...")
+		modRoot := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/listfail\n\ngo 1.22\n"), 0o644))
+		out, cerr := runCommandInDir(modRoot, bashPath, script, filepath.Join(modRoot, ".pollution"), "./does-not-exist/...")
+		assert.Errorf(t, cerr, "expected go list failure for missing package tree")
+		assert.Contains(t, out, "go list failed for ./does-not-exist/...")
 		assert.NotContains(t, out, "no test packages found", "go list failures must not collapse into an empty-package diagnostic")
+	})
+
+	t.Run("find-polluter-go ignores go list warnings when no packages match", func(t *testing.T) {
+		t.Parallel()
+		bashPath, err := execLookPath("bash")
+		if err != nil {
+			t.Skipf("bash unavailable: %v", err)
+		}
+		if _, err := execLookPath("go"); err != nil {
+			t.Skipf("go unavailable: %v", err)
+		}
+
+		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
+		_, err = os.Stat(script)
+		require.NoError(t, err)
+
+		modRoot := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/emptyparent\n\ngo 1.22\n"), 0o644))
+		emptyDir := filepath.Join(modRoot, "empty")
+		require.NoError(t, os.MkdirAll(emptyDir, 0o755))
+
+		out, cerr := runCommandInDir(emptyDir, bashPath, script, filepath.Join(emptyDir, ".pollution"), "./...")
+		assert.Errorf(t, cerr, "expected no matching test packages to exit non-zero")
+		assert.Contains(t, out, "no test packages found under ./...")
+		assert.NotContains(t, out, "-- go test go: warning", "go list stderr must not be parsed as a package")
+		assert.NotContains(t, out, "checking 1 package(s)", "go list warning must not become a package entry")
 	})
 
 	t.Run("find-polluter-go external tests", func(t *testing.T) {
