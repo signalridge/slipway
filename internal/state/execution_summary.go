@@ -669,7 +669,7 @@ func nextActionForPlanningStage(path string) string {
 	case planAuditFileName:
 		return "rerun plan-audit before rebuilding downstream wave and execution evidence"
 	case WavePlanFileName:
-		return "regenerate wave-plan.yaml from current planning evidence before rerunning execution"
+		return "rerun plan-audit and regenerate wave-plan.yaml from current planning evidence before rerunning execution"
 	default:
 		return "regenerate stale planning evidence before repairing downstream execution evidence"
 	}

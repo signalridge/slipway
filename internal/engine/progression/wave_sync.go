@@ -39,6 +39,28 @@ type TaskEvidenceRunVersionMismatchError struct {
 	Got      int
 }
 
+const taskEvidenceRequiredFields = "task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs"
+
+func taskEvidenceActionDetail(root, slug string, runSummaryVersion int) string {
+	parts := []string{}
+	if runSummaryVersion > 0 {
+		parts = append(parts, fmt.Sprintf("run_summary_version=%d", runSummaryVersion))
+	}
+	if strings.TrimSpace(root) != "" && strings.TrimSpace(slug) != "" {
+		parts = append(parts, "task_evidence_path="+state.DisplayPath(root, state.EvidenceTasksDir(root, slug)))
+	}
+	parts = append(parts, "required_fields="+taskEvidenceRequiredFields)
+	return strings.Join(parts, "; ")
+}
+
+func runSummaryMissingDetail(root, slug, skillName string) string {
+	detail := skillName + ":run_summary_missing"
+	if actionDetail := taskEvidenceActionDetail(root, slug, 0); actionDetail != "" {
+		detail += "; " + actionDetail
+	}
+	return detail
+}
+
 func (e TaskEvidenceRunVersionMismatchError) Error() string {
 	return fmt.Sprintf("run_summary_version mismatch: expected=%d got=%d", e.Expected, e.Got)
 }
@@ -64,7 +86,7 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 	}
 	if len(tasks) == 0 {
 		blockers := []model.ReasonCode{
-			model.NewReasonCode("missing_task_evidence_for_run_summary", fmt.Sprintf("run_summary_version=%d", record.RunVersion)),
+			model.NewReasonCode("missing_task_evidence_for_run_summary", taskEvidenceActionDetail(root, change.Slug, record.RunVersion)),
 		}
 		blockers = append(blockers, model.ReasonCodesFromSpecs(parseIssues)...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil

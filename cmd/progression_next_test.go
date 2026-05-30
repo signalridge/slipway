@@ -3442,7 +3442,16 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
 	require.NoError(t, err)
 
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:run_summary_version=1")
+	var missingEvidenceBlocker string
+	for _, blocker := range model.ReasonSpecs(view.Blockers) {
+		if strings.HasPrefix(blocker, "missing_task_evidence_for_run_summary:run_summary_version=1") {
+			missingEvidenceBlocker = blocker
+			break
+		}
+	}
+	require.NotEmpty(t, missingEvidenceBlocker)
+	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
+	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
 }
 

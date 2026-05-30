@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -91,7 +92,16 @@ func TestEvaluateRequiredSkills_FailsClosedWhenRunSummaryBoundSkillHasNoSummary(
 	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 0, false)
 	require.NoError(t, err)
 	assert.Empty(t, passing)
-	assert.Contains(t, blockers, "required_skill_not_ready:spec-compliance-review:run_summary_missing")
+	var runSummaryBlocker string
+	for _, blocker := range blockers {
+		if strings.HasPrefix(blocker, "required_skill_not_ready:spec-compliance-review:run_summary_missing") {
+			runSummaryBlocker = blocker
+			break
+		}
+	}
+	require.NotEmpty(t, runSummaryBlocker)
+	assert.Contains(t, runSummaryBlocker, "task_evidence_path=")
+	assert.Contains(t, runSummaryBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
 }
 
 func TestEvaluateRequiredSkillsForChange_RequiresExplicitPlanSubStep(t *testing.T) {

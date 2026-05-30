@@ -95,7 +95,7 @@ func evaluateRequiredSkills(
 		}
 
 		if def.RunSummaryBound && latestRunSummaryVersion < 1 {
-			blockers = append(blockers, "required_skill_not_ready:"+skillName+":run_summary_missing")
+			blockers = append(blockers, "required_skill_not_ready:"+runSummaryMissingDetail(root, slug, skillName))
 			continue
 		}
 

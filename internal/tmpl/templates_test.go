@@ -740,6 +740,23 @@ func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
 	}
 }
 
+func TestReviewTemplatesRequireNegativePathAndToolchainEvidence(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+
+	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+	assert.Contains(t, specCompliance, "requirement-named negative/error paths")
+	assert.Contains(t, specCompliance, "negative_path:pass")
+
+	codeQuality, err := Render("skills/code-quality-review/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+	assert.Contains(t, codeQuality, "dependency/toolchain compatibility")
+	assert.Contains(t, codeQuality, "MSRV")
+	assert.Contains(t, codeQuality, "toolchain_compat:pass")
+}
+
 func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
 	t.Parallel()
 
