@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 )
 
 // WriteFileAtomic writes the file using temp-in-dir, fsync, rename, fsync-parent.
@@ -74,6 +75,15 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 
 // CleanupAtomicTempArtifacts removes stale temp files created by WriteFileAtomic.
 func CleanupAtomicTempArtifacts(root string) ([]string, error) {
+	return CleanupAtomicTempArtifactsOlderThan(root, 0, time.Now().UTC())
+}
+
+// CleanupAtomicTempArtifactsOlderThan removes temp files created by
+// WriteFileAtomic only after they are old enough to be considered abandoned.
+func CleanupAtomicTempArtifactsOlderThan(root string, staleAfter time.Duration, now time.Time) ([]string, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	deleted := make([]string, 0)
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -84,6 +94,18 @@ func CleanupAtomicTempArtifacts(root string) ([]string, error) {
 		}
 		if !strings.HasPrefix(d.Name(), ".tmp-") {
 			return nil
+		}
+		if staleAfter > 0 {
+			info, err := d.Info()
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
+			if now.Sub(info.ModTime()) < staleAfter {
+				return nil
+			}
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

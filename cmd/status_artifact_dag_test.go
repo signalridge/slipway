@@ -158,3 +158,45 @@ func TestArtifactDAGFromProjectionSkipsNonRequiredNodes(t *testing.T) {
 	require.Len(t, dag, 1)
 	assert.Equal(t, "intent.md", dag[0].Name)
 }
+
+func TestArtifactDAGBlockingFlagDependsOnCurrentLifecycleGate(t *testing.T) {
+	t.Parallel()
+
+	nodes := []enginestatus.ArtifactNode{{
+		Name:  "requirements.md",
+		State: string(model.ArtifactLifecycleDraft),
+		Ready: false,
+	}}
+
+	planning := mapArtifactDAGNodesForGateStatus(nodes, map[string]model.GateRecord{
+		"G_plan": {
+			GateID:      "G_plan",
+			Status:      model.GateStatusBlocked,
+			ReasonCodes: []model.ReasonCode{model.NewReasonCode("artifact_not_ready", "")},
+		},
+	})
+	require.Len(t, planning, 1)
+	assert.True(t, planning[0].Blocking)
+	assert.Equal(t, "G_plan", planning[0].BlockingReason)
+
+	review := mapArtifactDAGNodesForGateStatus(nodes, map[string]model.GateRecord{
+		"G_plan": {
+			GateID: "G_plan",
+			Status: model.GateStatusApproved,
+		},
+	})
+	require.Len(t, review, 1)
+	assert.False(t, review[0].Blocking)
+	assert.Empty(t, review[0].BlockingReason)
+
+	ship := mapArtifactDAGNodesForGateStatus(nodes, map[string]model.GateRecord{
+		"G_ship": {
+			GateID:      "G_ship",
+			Status:      model.GateStatusBlocked,
+			ReasonCodes: []model.ReasonCode{model.NewReasonCode("missing_required_artifact", "requirements.md")},
+		},
+	})
+	require.Len(t, ship, 1)
+	assert.True(t, ship[0].Blocking)
+	assert.Equal(t, "G_ship:missing_required_artifact", ship[0].BlockingReason)
+}

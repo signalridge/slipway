@@ -813,9 +813,14 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
   "verdict": "fail",
   "blockers": [],
   "evidence_ref": "test:task-a",
-  "captured_at": "2026-04-06T10:01:00Z"
+  "captured_at": "2026-04-06T10:01:00Z",
+  "freshness_inputs": {
+    "change_id": "sync-no-change-rewrite",
+    "run_summary_version": 1,
+    "task_id": "task-a"
+  }
 }`)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "task-a.json")
 	if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
 		t.Fatalf("mkdir task dir: %v", err)
 	}

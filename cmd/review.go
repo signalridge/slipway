@@ -189,8 +189,10 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 		return reviewView{}, wrapGovernanceReadinessError("evaluate review prerequisites", change.Slug, err)
 	}
 	artifactReviewEvidence := model.VerificationRecord{}
+	implementationReviewEvidence := model.VerificationRecord{}
 	if readiness.ReviewSurface != nil {
 		artifactReviewEvidence = readiness.ReviewSurface.PassingSkills[progression.SkillSpecComplianceReview]
+		implementationReviewEvidence = readiness.ReviewSurface.PassingSkills[progression.SkillCodeQualityReview]
 	}
 
 	var waveViews []reviewWaveView
@@ -206,7 +208,7 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 	waveViews = waveStatus
 	blockers = append(blockers, readiness.Blockers...)
 	if reviewAll {
-		blockers = append(blockers, progression.EvaluateReviewLayerBlockers(change, artifactReviewEvidence, readiness.ArtifactProjection, true)...)
+		blockers = append(blockers, progression.EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, readiness.ArtifactProjection, true)...)
 	}
 	blockers = model.NormalizeReasonCodes(blockers)
 	if len(blockers) > 0 {
@@ -364,7 +366,7 @@ func evaluateReviewVerdict(execCtx executionContext, waveCtx *waveExecutionConte
 			blockers = append(blockers, model.NewReasonCode("non_pass_task", task.TaskID))
 		}
 		if len(task.Blockers) > 0 {
-			key, err := model.BuildTaskRunKey(task.TaskID, summary.RunSummaryVersion)
+			key, err := model.BuildTaskRunKey(task.TaskID)
 			if err != nil {
 				blockers = append(blockers, model.NewReasonCode("task_blockers_invalid_key", task.TaskID))
 				continue

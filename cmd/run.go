@@ -45,6 +45,7 @@ func makeRunCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				applyNextInvocationWorkspacePath(cmd, root, &view)
 				change, err := state.LoadChange(root, ref.Slug)
 				if err != nil {
 					return err
@@ -142,9 +143,13 @@ func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse st
 	case resume && !hasResumeContext:
 		return newInvalidUsageError(
 			"resume_unavailable",
-			"--resume requested but no resumable governed execution state is available",
-			"Run `slipway run` to start a fresh execution loop, or use `slipway status` to inspect the current wave state.",
-			nil,
+			"--resume requested but no resumable governed execution state is available; current_state="+string(change.CurrentState),
+			"Resume only applies to interrupted S2_EXECUTE wave execution. For the current state, use `slipway run`, `slipway validate --json`, or record the required review evidence.",
+			map[string]any{
+				"current_state":    change.CurrentState,
+				"resumable_states": []model.WorkflowState{model.StateS2Execute},
+				"next_action":      "use normal run/validate/review evidence flow for non-resumable states",
+			},
 		)
 	case !resume && hasResumeContext:
 		return newInvalidUsageError(

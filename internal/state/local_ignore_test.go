@@ -83,7 +83,7 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 		"artifacts/changes/demo/evidence/governance/review.yaml",
 		"artifacts/changes/demo/events/lifecycle.jsonl",
 		"artifacts/changes/demo/verification/final-closeout.yaml",
-		"artifacts/changes/archived/demo/evidence/tasks/rv1/t-01.json",
+		"artifacts/changes/archived/demo/evidence/tasks/t-01.json",
 		"artifacts/changes/archived/demo/events/lifecycle.jsonl",
 		"artifacts/changes/archived/demo/verification/final-closeout.yaml",
 		".worktrees/demo/change.yaml",

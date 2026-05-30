@@ -47,6 +47,37 @@ slipway repair --json
 ```
 
 Repair is intended for bounded local integrity issues such as stale locks, interrupted archives, corrupt config, or repairable layout drift.
+In JSON output, `applied_repairs` lists fixes that were performed, while
+`unrepaired_drift` lists drift that still needs operator action with a target,
+reason, and next action. Do not edit freshness fields or timestamps by hand;
+regenerate the named evidence or rescope the source artifact instead.
+
+Health findings include active-change impact. Codebase-map warnings are
+advisory by default and should be marked non-blocking for the current gate,
+with a refresh path or command when the map needs to be rebuilt.
+
+## Diagnostic JSON
+
+Execution freshness diagnostics are structural rather than hash-based. Current
+execution summaries record task freshness inputs such as `change_id`,
+`run_summary_version`, `task_id`, and `guardrail_domain`; old hash-only
+summaries are treated as stale and must be regenerated.
+
+`next --json --diagnostics`, `run --json --diagnostics`, `validate --json`, and
+`status --json` expose freshness failures with stale source/evidence pairs,
+first stale cause, downstream evidence chain, expected/current task input
+values, authoritative bundle and runtime paths, and a safe next action.
+
+Review handoffs use exact layer tokens. Spec-compliance evidence records
+`layer:R0=pass` and, when the guardrail domain requires it, `layer:R3=pass`.
+Code-quality evidence records `layer:IR1=pass` and, when required,
+`layer:IR3=pass`. Tokens such as `layer:CORRECTNESS=pass`,
+`layer:SAFETY=pass`, or `layer:QUALITY=pass` are not gate-satisfying
+substitutes.
+
+Status artifact DAG entries include `blocking` and `blocking_reason`. A draft
+planning artifact can be informational after the lifecycle has moved past the
+planning gate; treat the flag as the current gate signal.
 
 ## Verification Stack
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,4 +83,28 @@ readLoop:
 	final, err := os.ReadFile(target)
 	require.NoError(t, err)
 	assert.True(t, bytes.Equal(final, oldData) || bytes.Equal(final, newData))
+}
+
+func TestCleanupAtomicTempArtifactsOlderThanSkipsFreshTemps(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	freshTemp := filepath.Join(dir, ".tmp-state.yaml-fresh")
+	staleTemp := filepath.Join(dir, ".tmp-state.yaml-stale")
+	require.NoError(t, os.WriteFile(freshTemp, []byte("fresh"), 0o644))
+	require.NoError(t, os.WriteFile(staleTemp, []byte("stale"), 0o644))
+
+	now := time.Date(2026, 4, 9, 1, 0, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(freshTemp, now.Add(-time.Second), now.Add(-time.Second)))
+	require.NoError(t, os.Chtimes(staleTemp, now.Add(-5*time.Minute), now.Add(-5*time.Minute)))
+
+	deleted, err := CleanupAtomicTempArtifactsOlderThan(dir, 2*time.Minute, now)
+	require.NoError(t, err)
+	assert.Contains(t, deleted, staleTemp)
+	assert.NotContains(t, deleted, freshTemp)
+
+	_, err = os.Stat(freshTemp)
+	require.NoError(t, err)
+	_, err = os.Stat(staleTemp)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }

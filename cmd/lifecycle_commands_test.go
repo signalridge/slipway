@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -354,6 +355,13 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
 			References: []string{"layer:R0=pass"},
+		})
+		writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC().Add(time.Second),
+			RunVersion: 1,
+			References: []string{"layer:QUALITY=pass"},
 		})
 
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
@@ -1382,7 +1390,7 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{"run_summary:rv1"},
+		References: []string{fmt.Sprintf("run_summary_version=%d", runSummaryVersion)},
 	})
 }
 
@@ -1393,14 +1401,14 @@ func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryV
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:R0=pass", "layer:IR1=pass"},
+		References: []string{"layer:R0=pass", "layer:R3=pass"},
 	})
 	writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(time.Second),
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:QUALITY=pass"},
+		References: []string{"layer:IR1=pass", "layer:IR3=pass", "layer:QUALITY=pass"},
 	})
 }
 

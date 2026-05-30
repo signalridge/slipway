@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/review"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
@@ -50,9 +51,7 @@ func parseLockedDecisions(decisionPath string) []string {
 	return decisions
 }
 
-func buildReviewContext(guardrailDomain string) *reviewContextView {
-	artLayers := review.RequiredArtifactLayers(guardrailDomain, "")
-	implLayers := review.RequiredImplementationLayers(guardrailDomain)
+func buildReviewContext(change *model.Change, projection *progression.ArtifactProjection, reviewAll bool, skillName string) *reviewContextView {
 	optLayers := review.OptionalLayers()
 
 	toStrings := func(layers []review.ReviewLayer) []string {
@@ -63,9 +62,21 @@ func buildReviewContext(guardrailDomain string) *reviewContextView {
 		return out
 	}
 
+	var artLayers []string
+	var implLayers []string
+	if change != nil {
+		requiredLayers := progression.RequiredReviewLayerNamesForSkill(*change, projection, reviewAll, skillName)
+		switch skillName {
+		case progression.SkillSpecComplianceReview:
+			artLayers = requiredLayers
+		case progression.SkillCodeQualityReview:
+			implLayers = requiredLayers
+		}
+	}
+
 	return &reviewContextView{
-		RequiredArtifactLayers:       toStrings(artLayers),
-		RequiredImplementationLayers: toStrings(implLayers),
+		RequiredArtifactLayers:       artLayers,
+		RequiredImplementationLayers: implLayers,
 		OptionalLayers:               toStrings(optLayers),
 	}
 }

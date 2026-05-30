@@ -10,6 +10,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -67,11 +68,11 @@ func TestClassifyReviewGapsSeparatesArtifactAndCodeBlockers(t *testing.T) {
 	t.Parallel()
 
 	gaps := classifyReviewGaps([]model.ReasonCode{
-		model.NewReasonCode("task_blockers", "task-a__rv1"),
+		model.NewReasonCode("task_blockers", "task-a"),
 		model.NewReasonCode("required_skill_missing", "spec-compliance-review"),
 	})
 	require.NotNil(t, gaps)
-	assert.Equal(t, []string{"task_blockers:task-a__rv1"}, gaps.CodeToArtifact)
+	assert.Equal(t, []string{"task_blockers:task-a"}, gaps.CodeToArtifact)
 	assert.Equal(t, []string{"required_skill_missing:spec-compliance-review"}, gaps.ArtifactToCode)
 }
 
@@ -319,13 +320,14 @@ REQ-001: The system must preserve governed verify-state when review prerequisite
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  now.Add(time.Second),
 			RunVersion: 1,
-			References: []string{"layer:R0=pass", "layer:IR1=pass"},
+			References: []string{"layer:R0=pass", "layer:R3=pass"},
 		})
 		writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  now.Add(2 * time.Second),
 			RunVersion: 1,
+			References: []string{"layer:IR1=pass", "layer:IR3=pass"},
 		})
 
 		var out bytes.Buffer
@@ -633,6 +635,45 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 		require.NotEmpty(t, view.Waves, "review should still surface wave status on blocked paths when wave execution data is available")
 		assert.Equal(t, "pass", view.Waves[0].Verdict)
+	})
+}
+
+func TestReviewAllDoesNotTreatImplementationEvidenceAsArtifactEvidence(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "review should keep review evidence roles named")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		change.GuardrailDomain = string(model.GuardrailDomainExternalAPIContracts)
+		require.NoError(t, state.SaveChange(root, change))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
+		writeSkillVerification(t, root, slug, progression.SkillCodeQualityReview, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+			References: []string{"layer:IR1=pass", "layer:IR3=pass"},
+		})
+
+		var out bytes.Buffer
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--json", "--all", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view reviewView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		specs := model.ReasonSpecs(view.Blockers)
+		assert.Contains(t, specs, "required_skill_missing:spec-compliance-review")
+		assert.NotContains(t, specs, "review_layer_missing:R0")
+		assert.NotContains(t, specs, "review_layer_missing:R3")
 	})
 }
 
@@ -946,7 +987,7 @@ func TestEvaluateReviewVerdictSurfacesSummaryLevelBlockers(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(blockers), "session_isolation_warning:session_id=abc:shared_by=task-a,task-b")
 }
 
-func TestEvaluateReviewVerdictSurfacesInvalidTaskRunKey(t *testing.T) {
+func TestEvaluateReviewVerdictSurfacesTaskBlockerByTaskID(t *testing.T) {
 	t.Parallel()
 
 	summary := &model.ExecutionSummary{
@@ -956,7 +997,7 @@ func TestEvaluateReviewVerdictSurfacesInvalidTaskRunKey(t *testing.T) {
 		OverallVerdict:    model.ExecutionVerdictFail,
 		Tasks: []model.ExecutionTaskSummary{
 			{
-				TaskID:     "task-a__rvshadow",
+				TaskID:     "task-a",
 				Verdict:    model.TaskVerdictPass,
 				TaskKind:   model.TaskKindCode,
 				Blockers:   []model.ReasonCode{model.NewReasonCode("lint_failed", "")},
@@ -971,8 +1012,7 @@ func TestEvaluateReviewVerdictSurfacesInvalidTaskRunKey(t *testing.T) {
 	}, nil)
 
 	assert.Equal(t, "fail", verdict)
-	assert.Contains(t, model.ReasonSpecs(blockers), "task_blockers_invalid_key:task-a__rvshadow")
-	assert.NotContains(t, model.ReasonSpecs(blockers), "task_blockers:task-a__rvshadow")
+	assert.Contains(t, model.ReasonSpecs(blockers), "task_blockers:task-a")
 }
 
 func materializeWaveExecutionForSummary(t *testing.T, root, slug string) {

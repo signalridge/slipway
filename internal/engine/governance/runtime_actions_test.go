@@ -91,7 +91,7 @@ Pending.
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 2,
-		References: []string{"run_summary:rv2"},
+		References: []string{"run_summary_version=2"},
 	})
 	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,

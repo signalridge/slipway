@@ -17,6 +17,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("passing-display-skill")
+	change.CurrentState = model.StateS4Verify
+	readiness := progression.GovernanceReadiness{
+		PassingSkills: map[string]model.VerificationRecord{
+			progression.SkillGoalVerification: {
+				Verdict:   model.VerificationVerdictPass,
+				Timestamp: time.Now().UTC(),
+			},
+		},
+	}
+
+	assert.Nil(t, buildActionableNextSkillView(change, readiness))
+
+	view := nextView{CurrentState: model.StateS4Verify}
+	err := assembleSkillViewWithOptions(
+		t.TempDir(),
+		&view,
+		changeRef{Slug: change.Slug},
+		progression.AdvanceSummary{},
+		&change,
+		nil,
+		readiness.PassingSkills,
+		nil,
+		false,
+		assembleSkillViewOptions{},
+	)
+	require.NoError(t, err)
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S4_VERIFY")
+}
+
 func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 	t.Parallel()
 
@@ -297,8 +331,8 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 	assert.Empty(t, view.Advanced.AutoPassedStates)
 	require.Len(t, view.AutoPassEligible, 1)
 	assert.Equal(t, model.StateS4Verify, view.AutoPassEligible[0].State)
-	require.NotNil(t, view.NextSkill)
-	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S4_VERIFY")
 
 	updated, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
@@ -537,6 +571,7 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 				Timestamp: time.Now().UTC(),
 			},
 		},
+		nil,
 		true,
 	)
 	require.NoError(t, err)
@@ -561,6 +596,32 @@ func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Change: req-validate (S1_PLAN/validate)")
 	assert.Contains(t, buf.String(), "Planning Note: This is a recovery-only planning state entered after post-audit machine validation failed.")
+}
+
+func TestWriteNextHumanShowsReviewLayerRequirements(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	err := writeNextHuman(&buf, nextView{
+		Slug:            "review-layers",
+		CurrentState:    model.StateS3Review,
+		Phase:           model.PhaseReviewing,
+		ExecutionMode:   "governed",
+		LifecycleStatus: "active",
+		NextSkill: &nextSkillView{
+			Name:            progression.SkillCodeQualityReview,
+			VerificationDir: "artifacts/changes/review-layers/verification",
+			State:           "missing",
+			RequiredTokens:  []string{"layer:IR1=pass", "layer:IR3=pass"},
+			ReviewContext: &reviewContextView{
+				RequiredImplementationLayers: []string{"IR1", "IR3"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	rendered := buf.String()
+	assert.Contains(t, rendered, "Required Tokens: layer:IR1=pass, layer:IR3=pass")
+	assert.Contains(t, rendered, "Required Implementation Layers: IR1, IR3")
 }
 
 func TestNextReturnsSkillNameWithoutToolSpecificRuntimeFields(t *testing.T) {
@@ -632,12 +693,65 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 		require.NotNil(t, view.NextSkill.ReviewContext)
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R3")
-		assert.Contains(t, view.NextSkill.ReviewContext.RequiredImplementationLayers, "IR1")
-		assert.Contains(t, view.NextSkill.ReviewContext.RequiredImplementationLayers, "IR3")
+		assert.Empty(t, view.NextSkill.ReviewContext.RequiredImplementationLayers)
+		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
+		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:R3=pass")
+		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
 	})
 }
 
-func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
+func TestReviewRequiredTokensUseArtifactScopedSpecLayers(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		change := model.NewChange("manifest-only-review")
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		change.GuardrailDomain = "external_api_contracts"
+		projection := &progression.ArtifactProjection{
+			Nodes: []progression.ArtifactProjectionNode{{
+				Name:  "change.yaml",
+				State: string(model.ArtifactLifecycleDraft),
+			}},
+		}
+
+		view := nextView{
+			Slug:         change.Slug,
+			CurrentState: change.CurrentState,
+		}
+		err := assembleSkillViewWithOptions(
+			root,
+			&view,
+			changeRef{Slug: change.Slug},
+			progression.AdvanceSummary{},
+			&change,
+			nil,
+			nil,
+			projection,
+			false,
+			handoffSkillViewOptions,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
+		require.NotNil(t, view.NextSkill.ReviewContext)
+		assert.ElementsMatch(t, []string{"R0"}, view.NextSkill.ReviewContext.RequiredArtifactLayers)
+		assert.Empty(t, view.NextSkill.ReviewContext.RequiredImplementationLayers)
+		assert.ElementsMatch(t, []string{"layer:R0=pass"}, view.NextSkill.RequiredTokens)
+
+		actionable := buildActionableNextSkillView(change, progression.GovernanceReadiness{
+			ArtifactProjection: projection,
+		})
+		require.NotNil(t, actionable)
+		assert.Equal(t, progression.SkillSpecComplianceReview, actionable.Name)
+		assert.ElementsMatch(t, []string{"layer:R0=pass"}, actionable.RequiredTokens)
+	})
+}
+
+func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -668,7 +782,12 @@ func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
+		assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.Name)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.DisplayName)
+		assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.BlockingName)
+		assert.Contains(t, view.NextSkill.ResolutionReason, "blocking skill")
+		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
+		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
 
 		statusBySkill := map[string]skillEvidenceEntry{}
 		for _, entry := range view.SkillEvidence {
@@ -681,6 +800,186 @@ func TestNextJSONReportsRequiredSkillEvidenceWithoutAutoSkip(t *testing.T) {
 		assert.Equal(t, model.VerificationVerdictPass, statusBySkill[progression.SkillSpecComplianceReview].Verdict)
 		assert.False(t, statusBySkill[progression.SkillCodeQualityReview].HasEvidence)
 		assert.Equal(t, "missing", statusBySkill[progression.SkillCodeQualityReview].Status)
+	})
+}
+
+func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "consistent review next skill")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		change.GuardrailDomain = "external_api_contracts"
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+			References: []string{
+				"layer:R0=pass",
+				"layer:R3=pass",
+				"layer:IR1=pass",
+				"layer:IR3=pass",
+			},
+		})
+
+		nextCmd := commandForRoot(t, root, makeNextCmd())
+		nextCmd.SetArgs([]string{"--json", "--change", slug})
+		var nextOut bytes.Buffer
+		nextCmd.SetOut(&nextOut)
+		require.NoError(t, nextCmd.Execute())
+		var handoff nextHandoffView
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
+		require.NotNil(t, handoff.NextSkill)
+		assert.Equal(t, progression.SkillCodeQualityReview, handoff.NextSkill.Name)
+		require.NotNil(t, handoff.NextSkill.ReviewContext)
+		assert.Empty(t, handoff.NextSkill.ReviewContext.RequiredArtifactLayers)
+		assert.Contains(t, handoff.NextSkill.ReviewContext.RequiredImplementationLayers, "IR1")
+		assert.Contains(t, handoff.NextSkill.ReviewContext.RequiredImplementationLayers, "IR3")
+		assert.Contains(t, handoff.NextSkill.RequiredTokens, "layer:IR1=pass")
+		assert.Contains(t, handoff.NextSkill.RequiredTokens, "layer:IR3=pass")
+		assert.NotContains(t, handoff.NextSkill.RequiredTokens, "layer:R0=pass")
+
+		nextDiagCmd := commandForRoot(t, root, makeNextCmd())
+		nextDiagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var nextDiagOut bytes.Buffer
+		nextDiagCmd.SetOut(&nextDiagOut)
+		require.NoError(t, nextDiagCmd.Execute())
+		var nextDiag nextView
+		require.NoError(t, json.Unmarshal(nextDiagOut.Bytes(), &nextDiag))
+		require.NotNil(t, nextDiag.NextSkill)
+		assert.Equal(t, progression.SkillCodeQualityReview, nextDiag.NextSkill.Name)
+		assert.Contains(t, nextDiag.NextSkill.RequiredTokens, "layer:IR1=pass")
+
+		validateCmd := commandForRoot(t, root, makeValidateCmd())
+		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		var validateOut bytes.Buffer
+		validateCmd.SetOut(&validateOut)
+		require.NoError(t, validateCmd.Execute())
+		var validate validateView
+		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+		require.NotNil(t, validate.ActionableNextSkill)
+		assert.Equal(t, progression.SkillCodeQualityReview, validate.ActionableNextSkill.Name)
+		assert.Contains(t, validate.ActionableNextSkill.RequiredTokens, "layer:IR1=pass")
+		assert.Contains(t, validate.ActionableNextSkill.RequiredTokens, "layer:IR3=pass")
+		assert.NotContains(t, validate.ActionableNextSkill.RequiredTokens, "layer:R0=pass")
+		assert.NotContains(t, validate.ActionableNextSkill.RequiredTokens, "layer:R3=pass")
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		require.NoError(t, runCmd.Execute())
+		var runView nextView
+		require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
+		require.NotNil(t, runView.NextSkill)
+		assert.Equal(t, progression.SkillCodeQualityReview, runView.NextSkill.Name)
+		assert.Equal(t, progression.SkillSpecComplianceReview, runView.NextSkill.DisplayName)
+		assert.Equal(t, progression.SkillCodeQualityReview, runView.NextSkill.BlockingName)
+		assert.Contains(t, runView.NextSkill.ResolutionReason, "display skill")
+		assert.Contains(t, runView.NextSkill.RequiredTokens, "layer:IR1=pass")
+	})
+}
+
+func TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("optional-final-closeout")
+	change.QualityMode = model.QualityModeStandard
+	change.CurrentState = model.StateS4Verify
+	change.PlanSubStep = model.PlanSubStepNone
+
+	view := nextView{
+		Slug:         change.Slug,
+		CurrentState: model.StateS4Verify,
+		InputContext: nextContext{WorkspaceRoot: root},
+	}
+	err := assembleSkillViewWithOptions(
+		root,
+		&view,
+		changeRef{Slug: change.Slug},
+		progression.AdvanceSummary{Action: "blocked", FromState: model.StateS4Verify, Blockers: []model.ReasonCode{model.NewReasonCode("ship_gate_blocked", "assurance.md")}},
+		&change,
+		nil,
+		map[string]model.VerificationRecord{
+			progression.SkillGoalVerification: {
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  time.Now().UTC(),
+				RunVersion: 1,
+			},
+		},
+		nil,
+		true,
+		handoffSkillViewOptions,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
+	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.DisplayName)
+	assert.Empty(t, view.NextSkill.BlockingName)
+	assert.Contains(t, view.NextSkill.ResolutionReason, "passing goal-verification")
+	assert.NotContains(t, view.NextSkill.ResolutionReason, "blocking skill")
+}
+
+func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "path authority should not depend on execution freshness")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepBundle
+		require.NoError(t, state.SaveChange(root, change))
+
+		nextCmd := commandForRoot(t, root, makeNextCmd())
+		nextCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var nextOut bytes.Buffer
+		nextCmd.SetOut(&nextOut)
+		require.NoError(t, nextCmd.Execute())
+		var nextDiag nextView
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextDiag))
+		require.NotNil(t, nextDiag.FreshnessDiagnostics)
+		assert.Equal(t, "unknown", nextDiag.FreshnessDiagnostics.Status)
+		require.NotNil(t, nextDiag.FreshnessDiagnostics.PathAuthority)
+		assert.Contains(t, nextDiag.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath, ".git/slipway/runtime/changes/"+slug)
+
+		validateCmd := commandForRoot(t, root, makeValidateCmd())
+		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		var validateOut bytes.Buffer
+		validateCmd.SetOut(&validateOut)
+		require.NoError(t, validateCmd.Execute())
+		var validate validateView
+		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+		require.NotNil(t, validate.FreshnessDiagnostics)
+		assert.Equal(t, "unknown", validate.FreshnessDiagnostics.Status)
+		require.NotNil(t, validate.FreshnessDiagnostics.PathAuthority)
+
+		statusCmd := commandForRoot(t, root, makeStatusCmd())
+		statusCmd.SetArgs([]string{"--json", "--change", slug})
+		var statusOut bytes.Buffer
+		statusCmd.SetOut(&statusOut)
+		require.NoError(t, statusCmd.Execute())
+		var status statusView
+		require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+		require.NotNil(t, status.FreshnessDiagnostics)
+		assert.Equal(t, "unknown", status.FreshnessDiagnostics.Status)
+		require.NotNil(t, status.FreshnessDiagnostics.PathAuthority)
 	})
 }
 
@@ -755,6 +1054,7 @@ func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
 				Timestamp: time.Now().UTC(),
 			},
 		},
+		nil,
 		true,
 	)
 	require.NoError(t, err)
@@ -1207,6 +1507,17 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 	assert.Contains(t, view.Warnings, "optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired")
+
+	cmd := commandForRoot(t, root, makeNextCmd())
+	cmd.SetArgs([]string{"--json", "--change", slug})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Execute())
+	var handoff nextHandoffView
+	require.NoError(t, json.Unmarshal(out.Bytes(), &handoff))
+	assert.Nil(t, handoff.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "run_slipway_done_to_finalize")
+	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S4_VERIFY")
 }
 
 func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPath(t *testing.T) {
@@ -1307,11 +1618,68 @@ func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T
 		assert.NotContains(t, raw, "governance_signals")
 		assert.NotContains(t, raw, "active_controls")
 		assert.NotContains(t, raw, "required_actions")
+		assert.NotContains(t, raw, "freshness_diagnostics")
 		input, ok := raw["input_context"].(map[string]any)
 		require.True(t, ok)
 		assert.NotContains(t, input, "handoff_context")
 		assert.NotContains(t, input, "gate_status")
 		assert.NotContains(t, input, "artifact_status")
+	})
+}
+
+func TestNextJSONDefaultOmitsFreshnessDiagnosticsWhenDiagnosticsViewHasThem(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "handoff suppresses freshness diagnostics")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundleDir, err := state.GovernedBundleDir(root, change)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`t-01`"+` handoff suppresses freshness diagnostics
+  - wave: 1
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`), 0o644))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		requirementsPath := filepath.Join(bundleDir, "requirements.md")
+		require.NoError(t, os.WriteFile(requirementsPath, []byte("# Requirements\n\nREQ-001: changed after execution.\n"), 0o644))
+		updatedAt := time.Now().UTC().Add(time.Minute)
+		require.NoError(t, os.Chtimes(requirementsPath, updatedAt, updatedAt))
+
+		diagnosticsCmd := commandForRoot(t, root, makeNextCmd())
+		diagnosticsCmd.SetArgs([]string{"--json", "--diagnostics"})
+		var diagnosticsBuf bytes.Buffer
+		diagnosticsCmd.SetOut(&diagnosticsBuf)
+		require.NoError(t, diagnosticsCmd.Execute())
+
+		var diagnosticsRaw map[string]any
+		require.NoError(t, json.Unmarshal(diagnosticsBuf.Bytes(), &diagnosticsRaw))
+		assert.Contains(t, diagnosticsRaw, "freshness_diagnostics")
+
+		handoffCmd := commandForRoot(t, root, makeNextCmd())
+		handoffCmd.SetArgs([]string{"--json"})
+		var handoffBuf bytes.Buffer
+		handoffCmd.SetOut(&handoffBuf)
+		require.NoError(t, handoffCmd.Execute())
+
+		var handoffRaw map[string]any
+		require.NoError(t, json.Unmarshal(handoffBuf.Bytes(), &handoffRaw))
+		assert.NotContains(t, handoffRaw, "freshness_diagnostics")
 	})
 }
 
@@ -1336,7 +1704,9 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
 		assert.NotNil(t, view.NextSkill.SkillConstraints)
 		assert.NotEmpty(t, view.NextSkill.TechniqueHints)
-		assert.Nil(t, view.NextSkill.ReviewContext)
+		require.NotNil(t, view.NextSkill.ReviewContext)
+		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
+		assert.Empty(t, view.NextSkill.ReviewContext.RequiredImplementationLayers)
 		require.NotNil(t, view.ContextBudget)
 		assert.Equal(t, "ok", view.ContextBudget.GuardAction)
 		assert.Nil(t, view.Constraints)
@@ -1345,6 +1715,7 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		assert.Empty(t, view.RequiredActions)
 		assert.Empty(t, view.SkillEvidence)
 		assert.Empty(t, view.ArtifactAmendments)
+		assert.Nil(t, view.FreshnessDiagnostics)
 		require.NotNil(t, view.InputContext.HandoffContext)
 		assert.NotEmpty(t, view.InputContext.HandoffContext.ChangeAuthority)
 		assert.Empty(t, view.InputContext.HandoffContext.PolicyPacks)
@@ -1377,8 +1748,8 @@ func TestNextHandoffViewOmitsHealthyBudget(t *testing.T) {
 				StateContext:    3,
 			},
 		},
-		Blockers:     []model.ReasonCode{},
-		Confirmation: true,
+		Blockers:                []model.ReasonCode{},
+		ConfirmationRequirement: confirmationNoBoundary("no_confirmation_boundary"),
 	}
 
 	handoff := buildNextHandoffView(view)
@@ -1387,6 +1758,57 @@ func TestNextHandoffViewOmitsHealthyBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "context_budget")
 	assert.NotContains(t, string(raw), "breakdown")
+}
+
+func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *testing.T) {
+	t.Parallel()
+
+	handoff := deriveConfirmationRequirement(nextView{
+		NextSkill: &nextSkillView{Name: progression.SkillCodeQualityReview},
+	})
+	assert.True(t, handoff.Required)
+	assert.Equal(t, "hard_stop", handoff.Boundary)
+	assert.True(t, handoff.FreshConfirmationRequired)
+	assert.False(t, handoff.PriorAuthorizationSufficient)
+	assert.Equal(t, "skill_handoff:code-quality-review", handoff.Reason)
+
+	doneReady := deriveConfirmationRequirement(nextView{
+		Blockers: []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
+	})
+	assert.False(t, doneReady.Required)
+	assert.Equal(t, "command_required", doneReady.Boundary)
+	assert.False(t, doneReady.FreshConfirmationRequired)
+	assert.True(t, doneReady.PriorAuthorizationSufficient)
+	assert.Equal(t, "run_slipway_done_to_finalize", doneReady.Reason)
+}
+
+func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
+	t.Parallel()
+
+	view := nextView{
+		Slug:            "confirm",
+		Phase:           model.PhaseReviewing,
+		ExecutionMode:   governedExecutionMode,
+		CurrentState:    model.StateS3Review,
+		LifecycleStatus: string(model.ChangeStatusActive),
+		NextSkill: &nextSkillView{
+			Name:            progression.SkillCodeQualityReview,
+			VerificationDir: "artifacts/changes/confirm/verification/code-quality-review",
+			State:           string(model.StateS3Review),
+		},
+		InputContext: nextContext{WorkspaceRoot: "/repo"},
+		Blockers:     []model.ReasonCode{},
+	}
+	view.ConfirmationRequirement = deriveConfirmationRequirement(view)
+
+	raw, err := json.Marshal(buildNextHandoffView(view))
+	require.NoError(t, err)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	assert.NotContains(t, payload, "confirmation_required")
+	require.Contains(t, payload, "confirmation_requirement")
+	require.Equal(t, "hard_stop", payload["confirmation_requirement"].(map[string]any)["boundary"])
 }
 
 func TestNextHandoffViewOutputsMinimalWarnBudget(t *testing.T) {
@@ -1420,8 +1842,8 @@ func TestNextHandoffViewOutputsMinimalWarnBudget(t *testing.T) {
 				StateContext:    3,
 			},
 		},
-		Blockers:     []model.ReasonCode{},
-		Confirmation: true,
+		Blockers:                []model.ReasonCode{},
+		ConfirmationRequirement: confirmationNoBoundary("no_confirmation_boundary"),
 	}
 
 	handoff := buildNextHandoffView(view)
@@ -1486,9 +1908,9 @@ func TestNextHandoffViewStopBudgetKeepsRecoveryPathsWithoutDiagnostics(t *testin
 			ControlID:   "domain-review",
 			Description: "record domain review evidence",
 		}},
-		SkillEvidence: []skillEvidenceEntry{{SkillName: "wave-orchestration"}},
-		Blockers:      []model.ReasonCode{},
-		Confirmation:  true,
+		SkillEvidence:           []skillEvidenceEntry{{SkillName: "wave-orchestration"}},
+		Blockers:                []model.ReasonCode{},
+		ConfirmationRequirement: confirmationHardStop("skill_handoff:wave-orchestration"),
 	}
 
 	handoff := buildNextHandoffView(view)
@@ -1934,6 +2356,36 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "wave_runs_incomplete", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
+	})
+}
+
+func TestRunResumeUnavailableExplainsLifecycleBoundary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "resume boundary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeRunCmd())
+		cmd.SetArgs([]string{"--json", "--resume", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err = cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "resume_unavailable", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Message, "current_state=S3_REVIEW")
+		assert.Equal(t, model.StateS3Review, cliErr.Details["current_state"])
+		assert.Contains(t, cliErr.Remediation, "S2_EXECUTE")
 	})
 }
 
@@ -2517,15 +2969,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 
-		originalHash, err := state.ComputeTaskEvidenceInputHash(
-			change.Slug,
-			1,
-			"task-01",
-			change.GuardrailDomain,
-		)
-		require.NoError(t, err)
-
-		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-01.json")
+		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-01.json")
 		require.NoError(t, os.MkdirAll(filepath.Dir(taskEvidencePath), 0o755))
 		taskEvidence := map[string]any{
 			"task_id":             "task-01",
@@ -2533,8 +2977,8 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 			"task_kind":           "code",
 			"verdict":             "pass",
 			"evidence_ref":        "test:task-01",
-			"input_hash":          originalHash,
 			"captured_at":         time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano),
+			"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-01"),
 		}
 		rawTaskEvidence, err := json.Marshal(taskEvidence)
 		require.NoError(t, err)
@@ -2549,12 +2993,12 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 			CompletedTasks:    []string{"task-01"},
 			Tasks: []model.ExecutionTaskSummary{
 				{
-					TaskID:            "task-01",
-					Verdict:           model.TaskVerdictPass,
-					TaskKind:          model.TaskKindCode,
-					EvidenceRef:       taskEvidencePath,
-					EvidenceInputHash: originalHash,
-					CapturedAt:        oldTS,
+					TaskID:          "task-01",
+					Verdict:         model.TaskVerdictPass,
+					TaskKind:        model.TaskKindCode,
+					EvidenceRef:     taskEvidencePath,
+					FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-01"),
+					CapturedAt:      oldTS,
 				},
 			},
 		})
@@ -2618,10 +3062,8 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
-		// In preview mode, skill resolution reflects the current substep.
-		// At S1_PLAN/research, the skill is research-orchestration.
-		assert.Equal(t, progression.SkillResearchOrchestration, view.NextSkill.Name)
+		assert.Nil(t, view.NextSkill)
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S1_PLAN")
 	})
 }
 
@@ -3000,13 +3442,36 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
 	require.NoError(t, err)
 
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:rv1")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_task_evidence_for_run_summary:run_summary_version=1")
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
 }
 
 func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion int, taskID string, payload map[string]any) {
 	t.Helper()
-	dir := state.EvidenceTasksDir(root, slug, runSummaryVersion)
+	if _, ok := payload["task_id"]; !ok {
+		payload["task_id"] = taskID
+	}
+	if _, ok := payload["run_summary_version"]; !ok {
+		payload["run_summary_version"] = runSummaryVersion
+	}
+	if _, ok := payload["task_kind"]; !ok {
+		payload["task_kind"] = "code"
+	}
+	if _, ok := payload["verdict"]; !ok {
+		payload["verdict"] = "pass"
+	}
+	if _, ok := payload["evidence_ref"]; !ok {
+		payload["evidence_ref"] = "test:" + taskID
+	}
+	if _, ok := payload["captured_at"]; !ok {
+		payload["captured_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if _, ok := payload["freshness_inputs"]; !ok {
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		payload["freshness_inputs"] = state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, taskID)
+	}
+	dir := state.EvidenceTasksDir(root, slug)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	path := filepath.Join(dir, taskID+".json")
 	raw, err := json.Marshal(payload)
