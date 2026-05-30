@@ -29,6 +29,10 @@ go run . status --json
 
 Avoid deciding readiness from `main...HEAD` alone. Pair branch comparisons with direct worktree status and diff checks.
 After `slipway done`, Git-safe archived records remain in the owning worktree; commit or merge them before removing that worktree.
+When a worktree-bound change still has uncommitted source changes, `done --json`
+archives the governed bundle but returns `worktree_dirty_warning` and
+`worktree_dirty_files` so the operator can commit or inspect the source diff
+before deleting the worktree.
 
 ## Health And Repair
 
@@ -51,6 +55,10 @@ In JSON output, `applied_repairs` lists fixes that were performed, while
 `unrepaired_drift` lists drift that still needs operator action with a target,
 reason, and next action. Do not edit freshness fields or timestamps by hand;
 regenerate the named evidence or rescope the source artifact instead.
+For ready execution summaries that are stale only because runtime task evidence
+is newer, repair can rebuild the summary from current wave-backed task evidence.
+Planning-source drift remains unrepaired and points back to planning or review
+evidence refresh instead.
 
 Health findings include active-change impact. Codebase-map warnings are
 advisory by default and should be marked non-blocking for the current gate,
@@ -67,6 +75,9 @@ summaries are treated as stale and must be regenerated.
 `status --json` expose freshness failures with stale source/evidence pairs,
 first stale cause, downstream evidence chain, expected/current task input
 values, authoritative bundle and runtime paths, and a safe next action.
+Missing task evidence blockers include the runtime task evidence directory and
+the required flat JSON fields:
+`task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`.
 
 Review handoffs use exact layer tokens. Spec-compliance evidence records
 `layer:R0=pass` and, when the guardrail domain requires it, `layer:R3=pass`.
@@ -118,3 +129,5 @@ Before `done`:
 4. Stage intended files only.
 5. Confirm `git diff --cached --check`.
 6. Run `slipway done --json` when the change is done-ready.
+7. If `worktree_dirty_warning` is present, inspect or commit the listed source
+   files before removing the worktree.

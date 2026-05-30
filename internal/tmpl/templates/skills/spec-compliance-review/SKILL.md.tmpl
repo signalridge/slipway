@@ -62,6 +62,12 @@ When `validate --json`, `status --json`, or `review --json` exposes
 `scope_contract:fail:<reason>` and treated as artifact-to-code drift until the
 contract is amended or the change is reverted.
 
+### Negative Path Evidence
+When requirements describe rejection, error, blocker, stale, or repair-failure
+behavior, verify requirement-named negative/error paths with concrete tests or
+runtime evidence. A pass requires `negative_path:pass`; a fail must name the
+missing requirement path and block the review.
+
 ### Intent Drift Detection
 - compare original proposal intent with the final implementation
 - flag semantic drift between what was proposed and what was built
@@ -99,6 +105,7 @@ references:
   - "layer:R0=pass"
   - "layer:R3=pass" # include only when review_context requires R3
   - "scope_contract:pass"
+  - "negative_path:pass" # include when requirements name negative/error paths
 notes: |
   Gaps (code_to_artifact): <code behaviors not documented in spec>
   Gaps (artifact_to_code): <spec requirements not implemented in code>
@@ -122,3 +129,4 @@ After confirmation: proceed to code-quality-review.
 - Code behavior is undocumented or contradicts the approved artifacts.
 - Locked decisions are violated.
 - Claimed-complete work is still stubbed, placeholder-only, or assertion-free.
+- Requirement-named negative/error paths lack tests or runtime evidence.

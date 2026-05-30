@@ -66,6 +66,14 @@ small diffs, and goal-driven execution.
 - config changes are reflected in docs
 - API contracts match between layers
 
+### Dependency And Toolchain Compatibility
+- dependency/toolchain compatibility is checked when manifests, lockfiles, or
+  generated tool surfaces change
+- MSRV and declared tool versions match dependency metadata and CI/runtime
+  expectations
+- dependency updates do not silently raise the required compiler, runtime, or
+  external tool version
+
 ## Review Layers
 - `layer:IR1=pass|fail`: mandatory baseline implementation quality review.
 - `layer:IR3=pass|fail`: mandatory when
@@ -86,6 +94,7 @@ run_version: 1
 references:
   - "layer:IR1=pass"
   - "layer:IR3=pass" # include only when review_context requires IR3
+  - "toolchain_compat:pass" # include when dependency/toolchain files changed
 notes: |
   Gaps (code_to_artifact): <code patterns not reflected in artifacts>
   Gaps (artifact_to_code): <artifact expectations not met by code>
@@ -109,3 +118,5 @@ After confirmation: `slipway next`
 - Changed code fails readability, maintainability, duplication, or convention checks.
 - Tests are weak, misleading, or missing for important paths.
 - Safety or cross-artifact consistency gaps remain unresolved.
+- Dependency/toolchain compatibility evidence is missing for manifest, lockfile,
+  or generated tool-surface changes.
