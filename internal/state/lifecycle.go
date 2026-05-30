@@ -32,6 +32,14 @@ func LoadArchivedChange(root, slug string) (model.Change, error) {
 	return loadChangeFromCandidates(root, paths)
 }
 
+func ArchivedChangeFilePathForRead(root, slug string) (string, error) {
+	_, candidate, err := loadArchivedChangeWithCandidate(root, slug)
+	if err != nil {
+		return "", err
+	}
+	return candidate.Path, nil
+}
+
 // ValidateDoneArchivePreconditions checks if a change can be archived as done.
 func ValidateDoneArchivePreconditions(change model.Change) error {
 	if change.Status != model.ChangeStatusActive && change.Status != model.ChangeStatusDone {

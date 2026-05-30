@@ -256,6 +256,7 @@ func TestRepairReportsOrphanBundleDirectoryFinding(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", "orphan-dir"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "changes", "orphan-dir", "intent.md"), []byte("# orphan\n"), 0o644))
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
@@ -275,6 +276,29 @@ func TestRepairReportsOrphanBundleDirectoryFinding(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "expected orphan bundle finding in repair summary")
+	})
+}
+
+func TestRepairRemovesEmptyOrphanBundleDirectory(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		emptyResidue := filepath.Join(root, "artifacts", "changes", "empty-residue")
+		require.NoError(t, os.MkdirAll(filepath.Join(emptyResidue, "verification"), 0o755))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.RemovedEmptyOrphanBundles, "empty-residue")
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "empty_orphan_bundle", Target: "empty-residue"})
+		assert.Empty(t, summary.NonRepairableFindings)
+		require.NoDirExists(t, emptyResidue)
 	})
 }
 

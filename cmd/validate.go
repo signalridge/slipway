@@ -169,7 +169,7 @@ func makeValidateCmd() *cobra.Command {
 			return encodeJSONResponse(cmd, view)
 		},
 	}
-	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
+	addChangeSelectorFlags(cmd, &changeSlug, "Explicit active change slug")
 	cmd.Flags().StringVar(&focus, "focus", "", "Validate focus (e.g. sast, property, mutation)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output (validate currently emits JSON only)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")

@@ -31,6 +31,12 @@ Write a durable brownfield map under `artifacts/codebase/` using this fixed docu
 These documents are advisory but canonical. Downstream skills consume them by
 path instead of relying on transient chat context.
 
+`slipway codebase-map --json` may report `status: "baseline"` and
+`baseline_docs` when the CLI has written only detected repository facts. Baseline
+docs are not finished mapping work; refine them with file:line citations,
+module-boundary findings, and change-specific risks before treating the map as
+reviewed context.
+
 ## Process
 
 ### 1. Resolve Output Paths
