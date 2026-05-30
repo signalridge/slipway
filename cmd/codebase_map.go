@@ -18,6 +18,7 @@ type codebaseMapView struct {
 	DocStates        map[string]string `json:"doc_states,omitempty"`
 	MissingDocs      []string          `json:"missing_docs,omitempty"`
 	ScaffoldOnlyDocs []string          `json:"scaffold_only_docs,omitempty"`
+	BaselineDocs     []string          `json:"baseline_docs,omitempty"`
 	PopulatedDocs    []string          `json:"populated_docs,omitempty"`
 	Created          []string          `json:"created,omitempty"`
 }
@@ -57,6 +58,7 @@ func makeCodebaseMapCmd() *cobra.Command {
 				DocStates:        assessment.DocStates,
 				MissingDocs:      assessment.MissingDocs,
 				ScaffoldOnlyDocs: assessment.ScaffoldOnlyDocs,
+				BaselineDocs:     assessment.BaselineDocs,
 				PopulatedDocs:    assessment.PopulatedDocs,
 			}
 			if len(created) > 0 {
@@ -87,6 +89,12 @@ func writeCodebaseMapText(w io.Writer, view codebaseMapView) error {
 	if len(view.ScaffoldOnlyDocs) > 0 {
 		writer.Writef("Scaffold-only:\n")
 		for _, name := range view.ScaffoldOnlyDocs {
+			writer.Writef("  - %s\n", name)
+		}
+	}
+	if len(view.BaselineDocs) > 0 {
+		writer.Writef("Baseline:\n")
+		for _, name := range view.BaselineDocs {
 			writer.Writef("  - %s\n", name)
 		}
 	}

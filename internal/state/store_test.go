@@ -315,7 +315,13 @@ func TestFindActiveChangeForWorktreeNoMatchNoFallback(t *testing.T) {
 	require.NoError(t, SaveChange(root, ch2))
 
 	_, err := FindActiveChangeForWorktree(root, queryDir)
-	require.ErrorIs(t, err, ErrNoActiveChange)
+	var boundErr *ChangeBoundElsewhereError
+	require.ErrorAs(t, err, &boundErr)
+	require.Len(t, boundErr.BoundChanges, 2)
+	assert.Equal(t, "other-a", boundErr.BoundChanges[0].Slug)
+	assert.Equal(t, ch1.WorktreePath, boundErr.BoundChanges[0].WorktreePath)
+	assert.Equal(t, "other-b", boundErr.BoundChanges[1].Slug)
+	assert.Equal(t, ch2.WorktreePath, boundErr.BoundChanges[1].WorktreePath)
 }
 
 func TestTwoConcurrentChangesDifferentWorktreesCoexist(t *testing.T) {
@@ -721,6 +727,7 @@ func TestListChangesReportsOrphanBundleDirectoryAsIntegrityError(t *testing.T) {
 	// Create a bundle directory without change.yaml (orphan).
 	orphanDir := filepath.Join(root, "artifacts", "changes", "orphan-dir")
 	require.NoError(t, os.MkdirAll(orphanDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "intent.md"), []byte("# orphan\n"), 0o644))
 
 	// Also create a valid change so we can verify orphan integrity is not hidden
 	// just because another bundle is still readable.
@@ -733,6 +740,21 @@ func TestListChangesReportsOrphanBundleDirectoryAsIntegrityError(t *testing.T) {
 	normalizedOrphanDir, normalizeErr := NormalizePath(orphanDir)
 	require.NoError(t, normalizeErr)
 	assert.Contains(t, err.Error(), normalizedOrphanDir)
+}
+
+func TestListChangesIgnoresEmptyOrphanBundleDirectory(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeLayout(t)
+
+	emptyResidue := filepath.Join(root, "artifacts", "changes", "empty-residue", "verification")
+	require.NoError(t, os.MkdirAll(emptyResidue, 0o755))
+	validChange := model.NewChange("valid-change")
+	require.NoError(t, SaveChange(root, validChange))
+
+	changes, err := ListChanges(root)
+	require.NoError(t, err)
+	require.Len(t, changes, 1)
+	assert.Equal(t, "valid-change", changes[0].Slug)
 }
 
 func TestSaveChangeDoesNotCreateUnusedSidecarDir(t *testing.T) {

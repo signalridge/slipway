@@ -699,6 +699,7 @@ func TestCollectHealthReportFindsOrphanBundleDirsAcrossWorktrees(t *testing.T) {
 	require.NoError(t, EnsureWorkspaceScopeMarker(root, worktreeRoot))
 	orphanDir := filepath.Join(worktreeRoot, "artifacts", "changes", "orphan-worktree-bundle")
 	require.NoError(t, os.MkdirAll(orphanDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "intent.md"), []byte("# orphan\n"), 0o644))
 
 	report, err := CollectHealthReport(root)
 	require.NoError(t, err)
@@ -726,6 +727,7 @@ func TestCollectHealthReportDeduplicatesMatchingOrphanBundleDirsAcrossWorktrees(
 		require.NoError(t, EnsureWorkspaceScopeMarker(root, worktreeRoot))
 		orphanDir := filepath.Join(worktreeRoot, "artifacts", "changes", "shared-orphan")
 		require.NoError(t, os.MkdirAll(orphanDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "intent.md"), []byte("# orphan\n"), 0o644))
 	}
 
 	report, err := CollectHealthReport(root)
@@ -753,6 +755,7 @@ func TestCollectHealthReportFindsHiddenWorktreeOrphanBundleDirs(t *testing.T) {
 
 	orphanDir := filepath.Join(worktreeRoot, "artifacts", "changes", "hidden-orphan-worktree-bundle")
 	require.NoError(t, os.MkdirAll(orphanDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "intent.md"), []byte("# orphan\n"), 0o644))
 
 	report, err := CollectHealthReport(root)
 	require.NoError(t, err)
@@ -766,6 +769,22 @@ func TestCollectHealthReportFindsHiddenWorktreeOrphanBundleDirs(t *testing.T) {
 		}
 	}
 	assert.Contains(t, orphanReasons, "hidden-orphan-worktree-bundle")
+}
+
+func TestCollectHealthReportIgnoresEmptyOrphanBundleDirs(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", "empty-residue", "verification"), 0o755))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	for _, finding := range report.Findings {
+		for _, reason := range finding.Reasons {
+			assert.NotEqual(t, "empty-residue", reason.Detail)
+		}
+	}
 }
 
 func TestCollectHealthReportMarksInvalidWorktreeBindingNonRepairable(t *testing.T) {

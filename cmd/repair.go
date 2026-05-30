@@ -34,6 +34,7 @@ type repairSummary struct {
 	RepairedCheckpoints       []string                                 `json:"repaired_checkpoints,omitempty"`
 	PrunedTaskEvidence        []string                                 `json:"pruned_task_evidence,omitempty"`
 	RebuiltExecutionSummaries []string                                 `json:"rebuilt_execution_summaries,omitempty"`
+	RemovedEmptyOrphanBundles []string                                 `json:"removed_empty_orphan_bundles,omitempty"`
 	NonRepairableFindings     []string                                 `json:"non_repairable_findings,omitempty"`
 	AppliedRepairs            []repairAppliedFinding                   `json:"applied_repairs,omitempty"`
 	UnrepairedDrift           []repairDriftFinding                     `json:"unrepaired_drift,omitempty"`
@@ -95,6 +96,11 @@ func makeRepairCmd() *cobra.Command {
 					return err
 				}
 				summary.WorktreeScopeRepairs = worktreeScopeRepairs
+				removedEmptyOrphans, err := state.RepairEmptyOrphanBundleDirs(root)
+				if err != nil {
+					return err
+				}
+				summary.RemovedEmptyOrphanBundles = removedEmptyOrphans
 
 				cfg, err := loadConfigAtRoot(root)
 				if err != nil {
@@ -286,6 +292,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Repaired checkpoints", summary.RepairedCheckpoints)
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
 	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
+	writeRepairSection("Removed empty orphan bundles", summary.RemovedEmptyOrphanBundles)
 	writeRepairSection("Non-repairable findings", summary.NonRepairableFindings)
 	writeRepairSection("Applied repairs", repairAppliedFindingStrings(summary.AppliedRepairs))
 	writeRepairSection("Unrepaired drift", repairDriftFindingStrings(summary.UnrepairedDrift))
@@ -300,6 +307,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.RepairedCheckpoints) == 0 &&
 		len(summary.PrunedTaskEvidence) == 0 &&
 		len(summary.RebuiltExecutionSummaries) == 0 &&
+		len(summary.RemovedEmptyOrphanBundles) == 0 &&
 		len(summary.NonRepairableFindings) == 0 &&
 		len(summary.AppliedRepairs) == 0 &&
 		len(summary.UnrepairedDrift) == 0 {
@@ -328,6 +336,7 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 	appendItems("repaired_checkpoint", summary.RepairedCheckpoints)
 	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
 	appendItems("rebuilt_execution_summary", summary.RebuiltExecutionSummaries)
+	appendItems("empty_orphan_bundle", summary.RemovedEmptyOrphanBundles)
 	if summary.StaleLockCleaned {
 		findings = append(findings, repairAppliedFinding{Kind: "stale_lock_cleaned", Target: "workspace"})
 	}

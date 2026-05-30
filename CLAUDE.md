@@ -92,6 +92,7 @@ All routed commands support `--json` for structured output:
 - `slipway review --json` — review current change
 - `slipway validate --json` — validate governance state
 - `slipway repair --json` — repair local integrity issues
+- `slipway codebase-map --json` — create or refresh advisory repo-scoped context under `artifacts/codebase`
 - `slipway next --json` — query next step as a handoff-only JSON surface (read-only, does not advance state)
 - `slipway next --json --no-auto-pass` — query next step, reporting `auto_pass_eligible` instead of auto-passing
 - `slipway next --json --diagnostics` — include governance/readiness diagnostics in the next-step view
@@ -105,3 +106,8 @@ conventions such as `.claude/skills/slipway-{name}/SKILL.md`. Default `next`
 JSON is intentionally compact; use `--diagnostics` for gate status, artifact
 status, skill evidence, context-budget details, wave plans, and transition
 traces.
+
+`codebase-map --json` can report `status: "baseline"` with `baseline_docs`
+when documents contain only CLI-detected repository facts. Treat baseline docs
+as a starting point awaiting source-backed verification, not as completed
+brownfield analysis.

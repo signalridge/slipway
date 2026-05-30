@@ -48,6 +48,11 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway health` | query | Show repo-local integrity and repairability findings. |
 | `slipway codebase-map` | mutation | Create or refresh advisory repo-scoped context under `artifacts/codebase/`. |
 
+`codebase-map --json` reports `status: "baseline"` when documents contain only
+CLI-detected repository facts. Baseline docs are useful starting context, not
+authored brownfield analysis; callers should refine them with source-backed
+findings before relying on them for planning or review.
+
 ## Useful JSON Invocations
 
 ```bash
@@ -70,7 +75,12 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 
 `validate --json` mirrors actionable review handoff through `actionable_next_skill`, including `required_tokens` for the exact layer references the actionable skill must supply. `status --json` includes `freshness_diagnostics` when execution evidence is known stale and marks each `artifact_dag` node with `blocking` plus `blocking_reason` so draft planning artifacts are not mistaken for current review blockers.
 
-`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
+`validate --change <slug>` selects an explicit active change. If the slug names
+an archived terminal change, the command fails with
+`archived_change_not_validatable` and returns the terminal status plus archived
+`change.yaml` path instead of the generic no-active diagnostic.
+
+`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
 ## Resume And Checkpoints
 

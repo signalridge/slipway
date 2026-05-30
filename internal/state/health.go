@@ -659,6 +659,13 @@ func OrphanBundleSlugs(root string) ([]string, error) {
 			changeYaml := filepath.Join(ActiveBundlesDir(workspaceRoot), entry.Name(), "change.yaml")
 			if _, err := os.Stat(changeYaml); err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
+					hasFiles, emptyErr := orphanBundleDirHasFiles(filepath.Dir(changeYaml))
+					if emptyErr != nil {
+						return nil, emptyErr
+					}
+					if !hasFiles {
+						continue
+					}
 					orphans = append(orphans, entry.Name())
 					continue
 				}

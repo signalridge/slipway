@@ -28,10 +28,11 @@ func TestCodebaseMapCommandCreatesDurableDocSet(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "advisory", view.ExecutionMode)
 		assert.Equal(t, "artifacts/codebase", view.CodebaseMapDir)
-		assert.Equal(t, "populated", view.Status)
+		assert.Equal(t, "scaffold_only", view.Status)
 		require.Len(t, view.CodebaseMapDocs, 7)
-		require.Empty(t, view.ScaffoldOnlyDocs)
-		require.Len(t, view.PopulatedDocs, 7)
+		require.Empty(t, view.BaselineDocs)
+		require.Len(t, view.ScaffoldOnlyDocs, 7)
+		require.Empty(t, view.PopulatedDocs)
 		require.Len(t, view.Created, 7)
 
 		for _, path := range view.Created {
@@ -75,5 +76,24 @@ func TestCodebaseMapCommandWritesToInvocationWorktree(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(gitignore), state.LocalStateGitIgnoreBlock())
 		require.NoFileExists(t, filepath.Join(root, "artifacts", "codebase", "STACK.md"))
+	})
+}
+
+func TestCodebaseMapCommandReportsBaselineDocsInTextOutput(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "Cargo.toml"), []byte("[workspace]\nmembers = []\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeCodebaseMapCmd()
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		text := out.String()
+		assert.Contains(t, text, "Status: baseline")
+		assert.Contains(t, text, "Baseline:")
+		assert.Contains(t, text, "STACK.md")
+		assert.NotContains(t, text, "Status: populated")
 	})
 }

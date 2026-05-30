@@ -1,0 +1,58 @@
+version: 1
+slug: fix-codebase-map-fabricating-go-slipway-repository-context-f
+description: Fix codebase-map fabricating Go/Slipway repository context for non-Go/non-Slipway repos (language-agnostic fact detection + distinguish CLI-generated baseline docs from authored content in status/JSON), and make next/run active-change discovery self-explanatory when invoked from the root checkout while a change is bound to another worktree
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-30T10:10:19.227948Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-codebase-map-fabricating-go-slipway-repository-context-f
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 0.3.0 release (#16); improved governed workflow diagnostics (#15)
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 7b554f4b3e09bc74d43918483014f615e0bd8d881d14b3e99e60f13cf6db7be5
+        updated_at: 2026-05-30T12:52:51.616175001Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: b9bde2dbd93602a3d86791624c36ff3b204e5454c5ec2d262233295a042f0e88
+        updated_at: 2026-05-30T12:31:28.76436513Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: e327f6c14721bc5764ebd052875c40bd4db93f3054554c4b92789e517e6be65d
+        updated_at: 2026-05-30T12:33:46.326276373Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 74256d91d6756c64affe51d498ea44a8816dfcafe40acca3a263f4b7428580a7
+        updated_at: 2026-05-30T12:29:42.399850544Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 9bde812d57df5f436aea0f68e67b49e1f1f39f1cf24b4b66d3cf8fc3a9502ecf
+        updated_at: 2026-05-30T12:31:49.869254644Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 7c35d63d573b44a1785c5f30ffe25536813f597ee04259c2e738cc207af5a6da
+        updated_at: 2026-05-30T12:30:48.943371934Z
