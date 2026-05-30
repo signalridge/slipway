@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2](https://github.com/signalridge/slipway/compare/v0.3.1...v0.3.2) (2026-05-30)
+
+
+### Bug Fixes
+
+* address issue 24 workflow feedback ([#25](https://github.com/signalridge/slipway/issues/25)) ([6339e82](https://github.com/signalridge/slipway/commit/6339e8277ecdb417594a4bcfa2692be85982014d))
+
 ## [0.3.1](https://github.com/signalridge/slipway/compare/v0.3.0...v0.3.1) (2026-05-30)
 
 
