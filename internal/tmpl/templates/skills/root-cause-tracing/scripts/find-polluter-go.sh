@@ -69,10 +69,27 @@ fi
 # Enumerate candidate packages. `go list` keeps output deterministic and
 # includes packages with either in-package tests or external `_test` packages.
 LIST_OUTPUT=""
-if ! LIST_OUTPUT="$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' "$PKG_GLOB" 2>&1)"; then
+LIST_STDERR_FILE="$(mktemp "${TMPDIR:-/tmp}/find-polluter-go-list-stderr.XXXXXX")"
+cleanup_list_stderr() {
+	rm -f "$LIST_STDERR_FILE"
+}
+trap cleanup_list_stderr EXIT
+
+if LIST_OUTPUT="$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' "$PKG_GLOB" 2>"$LIST_STDERR_FILE")"; then
+	LIST_STDERR="$(cat "$LIST_STDERR_FILE")"
+else
+	LIST_STDERR="$(cat "$LIST_STDERR_FILE")"
 	echo "find-polluter-go.sh: go list failed for $PKG_GLOB" >&2
-	echo "$LIST_OUTPUT" >&2
+	if [ -n "$LIST_STDERR" ]; then
+		printf '%s\n' "$LIST_STDERR" >&2
+	fi
+	if [ -n "$LIST_OUTPUT" ]; then
+		printf '%s\n' "$LIST_OUTPUT" >&2
+	fi
 	exit 1
+fi
+if [ -n "$LIST_STDERR" ]; then
+	printf '%s\n' "$LIST_STDERR" >&2
 fi
 
 PKGS=()

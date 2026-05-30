@@ -1,0 +1,56 @@
+version: 1
+slug: fix-issue-18-harden-find-polluter-go-go-list-handling
+description: 'fix issue #18: harden find-polluter-go go list handling'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-05-30T13:35:28.738752Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-issue-18-harden-find-polluter-go-go-list-handling
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+        - Shell
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 1aece7d225545cee71e34bd7110414ae98febfd5903bc8c3b9606ff0d6a012f4
+        updated_at: 2026-05-30T13:53:53.887894784Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 24765559b19be00222154676bae4ab166f3d7ddefaa27bd11d83eb84dd2c12d9
+        updated_at: 2026-05-30T13:42:10.396875488Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: d7461cea2e0b35966ebce0c757585c90babba8a46ea32785f90d0d5ff4f87232
+        updated_at: 2026-05-30T13:37:16.580168058Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: eeeb8a5cb89bc23167f602dd58b77716715fa44a8b47edd887d1ea93d39d0f62
+        updated_at: 2026-05-30T13:42:10.396413447Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 37f0255a3408d2d7d9fc35055d8951380578a56ba4abf83fc02ad104167a5cd4
+        updated_at: 2026-05-30T13:40:36.218297406Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: e3f68f0f8942ffb8039ab7b6d80b5df8a3db09439d47785a937750384f1f0464
+        updated_at: 2026-05-30T13:48:32.071019798Z
