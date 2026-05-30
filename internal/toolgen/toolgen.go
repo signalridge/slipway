@@ -133,6 +133,7 @@ type CommandDef struct {
 	Description      string
 	Arguments        string
 	Prerequisites    []string
+	Notes            []string
 	Tier             string // "core" | "situational" | "diagnostics"
 	HasPromptSurface bool   // true = generates inline command prompt surface; false for CLI-only commands
 }
@@ -143,7 +144,11 @@ var commandRegistry = []CommandDef{
 	// Core (5)
 	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasPromptSurface: true,
 		Arguments:     `"<description>" [--preset light|standard|strict] [--profile code|docs|research|config|meta] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."}},
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."},
+		Notes: []string{
+			"JSON stdin fields for `slipway new --json`, not command-line flags: `guardrail_domain`, `needs_discovery`, and `complexity`.",
+			"Minimal explicit-classification example: `echo '{\"description\":\"fix typo\",\"guardrail_domain\":\"\",\"needs_discovery\":false,\"complexity\":\"simple\"}' | slipway new --json`.",
+		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--diagnostics] [--context-guard] [--change <slug>]"},
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasPromptSurface: true,
@@ -323,6 +328,7 @@ type commandEntry struct {
 	Description   string
 	Arguments     string
 	Prerequisites []string
+	Notes         []string
 	Focuses       []commandFocusEntry
 }
 
@@ -432,6 +438,7 @@ type commandRenderData struct {
 	Description   string
 	Arguments     string
 	Prerequisites []string
+	Notes         []string
 }
 
 func commandPrerequisites(id string) []string {
@@ -457,6 +464,7 @@ func buildCommandRenderData(id string) (commandRenderData, error) {
 		Description:   commandDescriptions[id],
 		Arguments:     commandArguments(id),
 		Prerequisites: commandPrerequisites(id),
+		Notes:         append([]string(nil), def.Notes...),
 	}, nil
 }
 
@@ -475,6 +483,7 @@ func buildWorkflowCommandEntries(ids []string, expectedTier string) ([]commandEn
 			Description:   meta.Description,
 			Arguments:     meta.Arguments,
 			Prerequisites: meta.Prerequisites,
+			Notes:         append([]string(nil), meta.Notes...),
 			Focuses:       buildCommandFocusEntries(meta.ID),
 		})
 	}

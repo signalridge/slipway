@@ -33,10 +33,16 @@ workflow gates and can be finalized; `done` happens only after explicit `slipway
 When starting governed work and you can classify intent directly, enter through
 `slipway new --json`.
 
-Provide these fields when known:
+These are JSON stdin fields for `slipway new --json`, not command-line flags.
+Provide them when known:
 - `guardrail_domain`
 - `complexity`: `trivial`, `simple`, `complex`, or `critical`
 - `needs_discovery`
+
+Minimal explicit-classification example:
+```bash
+echo '{"description":"fix typo","guardrail_domain":"","needs_discovery":false,"complexity":"simple"}' | slipway new --json
+```
 
 If these fields are omitted, the CLI applies conservative fallback defaults.
 
