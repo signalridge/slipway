@@ -10,10 +10,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestTaskRunKeyRejectsEmbeddedDelimiter(t *testing.T) {
+func TestTaskRunKeyUsesTaskIDWithoutRunVersionSuffix(t *testing.T) {
 	t.Parallel()
-	_, err := BuildTaskRunKey("task-a__rvshadow", 1)
-	require.Error(t, err)
+	key, err := BuildTaskRunKey("task-a")
+	require.NoError(t, err)
+	assert.Equal(t, "task-a", key)
 }
 
 func TestChangeUnmarshalYAMLRequiresCanonicalFields(t *testing.T) {
@@ -21,13 +22,16 @@ func TestChangeUnmarshalYAMLRequiresCanonicalFields(t *testing.T) {
 
 	var change Change
 	require.NoError(t, yaml.Unmarshal([]byte(`
+version: 1
 slug: canonical-change
 status: active
 current_state: S1_PLAN
 plan_substep: bundle
 `), &change))
+	change.Normalize()
 
 	assert.Equal(t, "canonical-change", change.Slug)
+	assert.Equal(t, ChangeVersion, change.Version)
 	assert.Equal(t, ChangeStatusActive, change.Status)
 	assert.Equal(t, StateS1Plan, change.CurrentState)
 	assert.Equal(t, PlanSubStepBundle, change.PlanSubStep)
@@ -156,6 +160,7 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 
 	raw, err := yaml.Marshal(change)
 	require.NoError(t, err)
+	assert.Contains(t, string(raw), "version: 1")
 	assert.NotContains(t, string(raw), "gates:")
 	assert.Contains(t, string(raw), "artifacts:")
 	assert.Contains(t, string(raw), "last_auto_passed_states:")
@@ -168,6 +173,7 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	decoded.Normalize()
 
 	require.NoError(t, decoded.Validate())
+	assert.Equal(t, ChangeVersion, decoded.Version)
 	assert.Equal(t, change.Slug, decoded.Slug)
 	assert.Equal(t, change.Description, decoded.Description)
 	assert.Equal(t, change.Status, decoded.Status)
@@ -193,14 +199,27 @@ func TestChangeUnmarshalYAMLParsesInterruptedExecutionAt(t *testing.T) {
 
 	var change Change
 	require.NoError(t, yaml.Unmarshal([]byte(`
+version: 1
 slug: unified-runtime-field
 status: active
 current_state: S2_EXECUTE
 interrupted_execution_at: 2026-04-10T12:00:00Z
 `), &change))
+	change.Normalize()
 
 	expected := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	assert.True(t, change.InterruptedExecutionAt.Equal(expected))
+}
+
+func TestChangeValidateRejectsUnsupportedVersion(t *testing.T) {
+	t.Parallel()
+
+	change := NewChange("unsupported-version")
+	change.Version = ChangeVersion + 1
+
+	err := change.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported change version")
 }
 
 func TestNormalizeReasonCodesSortsGateReasons(t *testing.T) {

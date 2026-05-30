@@ -7,9 +7,13 @@ import (
 	"time"
 )
 
+const ChangeVersion = 1
+
 // Change is the single, unified lifecycle object for governed work.
 // The Slug is the primary key and user-visible identifier.
 type Change struct {
+	Version int `yaml:"version" json:"version"`
+
 	// Identity
 	Slug        string `yaml:"slug" json:"slug"`                                   // Primary key, directory name
 	Description string `yaml:"description,omitempty" json:"description,omitempty"` // User intent description
@@ -74,6 +78,7 @@ func (c Change) Phase() UserPhase {
 // NewChange creates a new Change with the given slug, initialized at S0_INTAKE.
 func NewChange(slug string) Change {
 	return Change{
+		Version:        ChangeVersion,
 		Slug:           slug,
 		Status:         ChangeStatusActive,
 		CurrentState:   StateS0Intake,
@@ -98,6 +103,9 @@ func (c *Change) normalizeCollections() {
 
 func (c *Change) Normalize() {
 	c.normalizeCollections()
+	if c.Version == 0 {
+		c.Version = ChangeVersion
+	}
 	// Enforce substep consistency: clear substeps that do not belong to the
 	// current state and seed entry defaults for states that require them.
 	if c.CurrentState != StateS0Intake {
@@ -152,6 +160,9 @@ func normalizeArchiveReferences(refs []ArchiveReference) []ArchiveReference {
 }
 
 func (c Change) Validate() error {
+	if c.Version != ChangeVersion {
+		return fmt.Errorf("unsupported change version: %d", c.Version)
+	}
 	if c.Slug == "" {
 		return fmt.Errorf("slug is required")
 	}

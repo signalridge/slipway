@@ -17,21 +17,27 @@ import (
 // Repairable=true means the issue can be resolved by `slipway repair` (cleanup).
 // Repairable=false means operator intervention is required (contract violation).
 type HealthFinding struct {
-	Severity   model.ReasonSeverity `json:"severity" yaml:"severity"`
-	Category   string               `json:"category" yaml:"category"`
-	Slug       string               `json:"slug,omitempty" yaml:"slug,omitempty"`
-	Message    string               `json:"message" yaml:"message"`
-	Repairable bool                 `json:"repairable" yaml:"repairable"`
-	RepairHint string               `json:"repair_hint,omitempty" yaml:"repair_hint,omitempty"`
-	Reasons    []model.ReasonCode   `json:"reasons,omitempty" yaml:"reasons,omitempty"`
+	Severity             model.ReasonSeverity `json:"severity" yaml:"severity"`
+	Category             string               `json:"category" yaml:"category"`
+	Slug                 string               `json:"slug,omitempty" yaml:"slug,omitempty"`
+	Message              string               `json:"message" yaml:"message"`
+	Repairable           bool                 `json:"repairable" yaml:"repairable"`
+	RepairHint           string               `json:"repair_hint,omitempty" yaml:"repair_hint,omitempty"`
+	ActiveChangeBlocking bool                 `json:"active_change_blocking" yaml:"active_change_blocking"`
+	ActiveChangeImpact   string               `json:"active_change_impact,omitempty" yaml:"active_change_impact,omitempty"`
+	Reasons              []model.ReasonCode   `json:"reasons,omitempty" yaml:"reasons,omitempty"`
 }
 
 type HealthReport struct {
 	Findings []HealthFinding `json:"findings,omitempty" yaml:"findings,omitempty"`
 }
 
-func CollectHealthReport(root string) (HealthReport, error) {
+func CollectHealthReport(root string, activeSlugOpt ...string) (HealthReport, error) {
 	findings := []HealthFinding{}
+	activeSlug := ""
+	if len(activeSlugOpt) > 0 {
+		activeSlug = strings.TrimSpace(activeSlugOpt[0])
+	}
 
 	cfgPath := ConfigPath(root)
 	if _, err := os.Stat(cfgPath); err == nil {
@@ -122,9 +128,11 @@ func CollectHealthReport(root string) (HealthReport, error) {
 	}
 
 	activeCount := 0
+	onlyActiveSlug := ""
 	for _, change := range changes {
 		if change.Status == model.ChangeStatusActive {
 			activeCount++
+			onlyActiveSlug = change.Slug
 		}
 		reasons, reasonErr := dedicatedWorktreeHealthReasons(root, change)
 		if reasonErr != nil {
@@ -148,6 +156,7 @@ func CollectHealthReport(root string) (HealthReport, error) {
 		}
 	}
 	if activeCount > 1 {
+		onlyActiveSlug = ""
 		findings = append(findings, HealthFinding{
 			Severity:   model.ReasonSeverityError,
 			Category:   "active_change_selection",
@@ -157,6 +166,9 @@ func CollectHealthReport(root string) (HealthReport, error) {
 			Reasons:    []model.ReasonCode{model.NewReasonCode("multiple_active_changes", "")},
 		})
 	}
+	if activeSlug == "" && activeCount == 1 {
+		activeSlug = onlyActiveSlug
+	}
 
 	codebaseStats, err := collectCodebaseMapStats(root, nowUTC())
 	if err != nil {
@@ -164,15 +176,18 @@ func CollectHealthReport(root string) (HealthReport, error) {
 	}
 	if codebaseStats.Freshness != "fresh" {
 		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityWarning,
-			Category:   "codebase_map",
-			Message:    "Repo-scoped codebase map is missing, partial, or stale",
-			Repairable: true,
-			RepairHint: "Run `slipway codebase-map` to create or refresh the durable brownfield map.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("codebase_map_freshness_"+codebaseStats.Freshness, strings.Join(codebaseStats.MissingDocs, ","))},
+			Severity:             model.ReasonSeverityWarning,
+			Category:             "codebase_map",
+			Message:              "Repo-scoped codebase map is missing, partial, or stale",
+			Repairable:           true,
+			RepairHint:           "Run `slipway codebase-map` to create or refresh the durable brownfield map.",
+			ActiveChangeBlocking: false,
+			ActiveChangeImpact:   "non_blocking_for_active_change",
+			Reasons:              []model.ReasonCode{model.NewReasonCode("codebase_map_freshness_"+codebaseStats.Freshness, strings.Join(codebaseStats.MissingDocs, ","))},
 		})
 	}
 
+	annotateActiveChangeImpact(findings, activeSlug)
 	slices.SortFunc(findings, func(a, b HealthFinding) int {
 		if a.Category != b.Category {
 			return strings.Compare(a.Category, b.Category)
@@ -181,6 +196,27 @@ func CollectHealthReport(root string) (HealthReport, error) {
 	})
 
 	return HealthReport{Findings: findings}, nil
+}
+
+func annotateActiveChangeImpact(findings []HealthFinding, activeSlug string) {
+	activeSlug = strings.TrimSpace(activeSlug)
+	for i := range findings {
+		if strings.TrimSpace(findings[i].ActiveChangeImpact) != "" {
+			continue
+		}
+		if activeSlug != "" && strings.TrimSpace(findings[i].Slug) != "" && findings[i].Slug != activeSlug {
+			findings[i].ActiveChangeBlocking = false
+			findings[i].ActiveChangeImpact = "non_blocking_for_active_change"
+			continue
+		}
+		if findings[i].Severity == model.ReasonSeverityError {
+			findings[i].ActiveChangeBlocking = true
+			findings[i].ActiveChangeImpact = "blocking_for_active_change"
+			continue
+		}
+		findings[i].ActiveChangeBlocking = false
+		findings[i].ActiveChangeImpact = "non_blocking_for_active_change"
+	}
 }
 
 func executionSummaryHealthFinding(root string, change model.Change) (*HealthFinding, error) {
@@ -370,7 +406,7 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 			Message:    "Wave runs are missing for the latest execution summary",
 			Repairable: true,
 			RepairHint: "Run `slipway repair` to reconstruct wave runs before resuming or reviewing execution.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("wave_runs_missing", fmt.Sprintf("rv%d", summary.RunSummaryVersion))},
+			Reasons:    []model.ReasonCode{model.NewReasonCode("wave_runs_missing", fmt.Sprintf("run_summary_version=%d", summary.RunSummaryVersion))},
 		})
 	} else if len(runs) < len(plan.Waves) {
 		findings = append(findings, HealthFinding{

@@ -61,6 +61,17 @@ slipway health --doctor --json
 
 `next --json` includes `next_skill.name` for AI-tool handoff. The host tool derives the local `SKILL.md` path from its own adapter conventions.
 
+When diagnostics are enabled, review-state handoff JSON can also include:
+
+- `next_skill.display_name`, `next_skill.blocking_name`, and `next_skill.resolution_reason` when the conceptual stage differs from the actionable missing skill.
+- `next_skill.review_context.required_artifact_layers` and `next_skill.review_context.required_implementation_layers`, which map to exact gate tokens such as `layer:R0=pass`, `layer:R3=pass`, `layer:IR1=pass`, and `layer:IR3=pass`.
+- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, and whether the current boundary is a command-only or evidence-continuation step.
+- `freshness_diagnostics`, which reports stale source/evidence pairs, field-level execution input mismatches, path authority, and the next regeneration action.
+
+`validate --json` mirrors actionable review handoff through `actionable_next_skill`, including `required_tokens` for the exact layer references the actionable skill must supply. `status --json` includes `freshness_diagnostics` when execution evidence is known stale and marks each `artifact_dag` node with `blocking` plus `blocking_reason` so draft planning artifacts are not mistaken for current review blockers.
+
+`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
+
 ## Resume And Checkpoints
 
 If execution pauses on a checkpoint:
@@ -77,3 +88,8 @@ slipway run --resume --json
 ```
 
 Use `health --doctor` before repair or resume when state looks interrupted or inconsistent.
+
+`run --resume` only applies to resumable execution states such as `S2_EXECUTE`.
+If the active change is already in review or verify, JSON errors include
+`current_state`, `resumable_states`, and a `next_action` directing the operator
+back to the normal run, validate, or review-evidence flow.

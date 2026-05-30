@@ -2,7 +2,7 @@
 #
 # Contract artifacts (must not delete — progression/gate depends on them):
 #   - artifacts/changes/<slug>/change.yaml — state machine, gates, evidence refs
-#   - evidence/tasks/rv* — frozen run summaries, skill verification
+#   - evidence/tasks/* — frozen task execution summaries and skill verification
 #   - evidence/governance/* — governance snapshots, review evidence
 #   - Per-change governed artifacts (intent.md, requirements.md, tasks.md,
 #     decision.md, assurance.md, research.md) as defined by schema below

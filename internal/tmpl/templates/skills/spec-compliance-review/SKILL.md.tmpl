@@ -35,6 +35,9 @@ claiming alignment.
 
 ## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
+Read `next_skill.review_context.required_artifact_layers` for required review
+tokens and the top-level `confirmation_requirement` object for stop boundaries.
+Those fields are the source of truth for this handoff.
 Apply the shared requirements checklist from `checklist-quality.md`. Use the
 attached `spec-trace` checklist to enumerate the forward and reverse trace
 edges you must verify.
@@ -76,8 +79,14 @@ complete code, assertion-free tests, handlers that only log, placeholder API
 responses, and imports unused in the claimed integration path.
 
 ## Review Layers
-- `layer:CORRECTNESS=pass|fail`: logic errors, missing branches, broken contracts against spec
-- `layer:SAFETY=pass|fail`: auth/data handling, irreversible operations, external contracts
+- `layer:R0=pass|fail`: mandatory baseline artifact-to-code spec compliance.
+- `layer:R3=pass|fail`: mandatory when `review_context.required_artifact_layers`
+  includes `R3`, including guardrail-domain contract review such as
+  `external_api_contracts`.
+
+Do not use `layer:CORRECTNESS=pass` or `layer:SAFETY=pass` as gate-satisfying
+substitutes. They may be prose categories in notes, but governance gates consume
+the exact `R*` layer tokens.
 
 ## Write Verification
 ```yaml
@@ -87,8 +96,8 @@ blockers: []
 timestamp: "<ISO-8601-UTC>"
 run_version: 1
 references:
-  - "layer:CORRECTNESS=pass"
-  - "layer:SAFETY=pass"
+  - "layer:R0=pass"
+  - "layer:R3=pass" # include only when review_context requires R3
   - "scope_contract:pass"
 notes: |
   Gaps (code_to_artifact): <code behaviors not documented in spec>

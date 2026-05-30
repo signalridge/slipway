@@ -21,15 +21,20 @@ type nextHandoffView struct {
 	AutoPassEligible []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
 	Blockers         []model.ReasonCode      `json:"blockers"`
 	Warnings         []string                `json:"warnings,omitempty"`
-	Confirmation     bool                    `json:"confirmation_required"`
+	Confirmation     confirmationRequirement `json:"confirmation_requirement"`
 }
 
 type nextSkillHandoff struct {
-	Name             string            `json:"name"`
-	VerificationDir  string            `json:"verification_dir"`
-	State            string            `json:"state"`
-	SkillConstraints *skillConstraints `json:"skill_constraints,omitempty"`
-	TechniqueHints   []techniqueHint   `json:"technique_hints,omitempty"`
+	Name             string             `json:"name"`
+	DisplayName      string             `json:"display_name,omitempty"`
+	BlockingName     string             `json:"blocking_name,omitempty"`
+	ResolutionReason string             `json:"resolution_reason,omitempty"`
+	RequiredTokens   []string           `json:"required_tokens,omitempty"`
+	VerificationDir  string             `json:"verification_dir"`
+	State            string             `json:"state"`
+	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
+	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
+	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
 }
 
 type contextBudgetHandoff struct {
@@ -53,9 +58,9 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 	}
 
 	view := nextView{
-		Slug:         ref.Slug,
-		Phase:        model.PhasePlanning,
-		Confirmation: true,
+		Slug:                    ref.Slug,
+		Phase:                   model.PhasePlanning,
+		ConfirmationRequirement: confirmationNoBoundary("initializing"),
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -75,6 +80,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		return nextView{}, err
 	}
 	finalize := func() (nextView, error) {
+		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
 		if err := consumeNextCheckpoint(root, governedChange, &view); err != nil {
 			return nextView{}, err
 		}
@@ -83,12 +89,14 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 	view.Phase = model.PhaseFor(view.CurrentState)
 
 	var nextSkillEvidence map[string]model.VerificationRecord
+	var nextSkillArtifactProjection *progression.ArtifactProjection
 	if governedChange != nil {
 		readiness, err := progression.EvaluateGovernanceReadiness(
 			root,
 			*governedChange,
 			progression.GovernanceReadinessOptions{
-				IncludeGateEvaluations: true,
+				IncludeGateEvaluations:    true,
+				IncludeArtifactProjection: true,
 			},
 		)
 		if err != nil {
@@ -96,13 +104,21 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		}
 		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
 		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
+		// The compact handoff source view deliberately omits freshness
+		// diagnostics: nextHandoffView has no such field, and the diagnostic
+		// surfaces are built only by the --diagnostics next view. Keeping this
+		// path free of them preserves the narrow handoff contract.
 		nextSkillEvidence = readiness.PassingSkills
+		nextSkillArtifactProjection = readiness.ArtifactProjection
 	}
 
 	if view.CurrentState == model.StateDone {
 		view.NextSkill = nil
 		view.Blockers = []model.ReasonCode{model.NewReasonCode("change_is_done", "")}
 		return finalize()
+	}
+	if err := projectDoneReadyForReadOnlyQuery(root, governedChange, &advanced); err != nil {
+		return nextView{}, err
 	}
 	if advanced.Action == "done_ready" {
 		view.NextSkill = nil
@@ -122,7 +138,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		}
 	}
 
-	if err := assembleSkillViewWithOptions(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence, autoSkipEvidence, handoffSkillViewOptions); err != nil {
+	if err := assembleSkillViewWithOptions(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence, nextSkillArtifactProjection, autoSkipEvidence, handoffSkillViewOptions); err != nil {
 		return nextView{}, err
 	}
 	return finalize()
@@ -173,9 +189,14 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 	if view.NextSkill != nil {
 		nextSkill = &nextSkillHandoff{
 			Name:             view.NextSkill.Name,
+			DisplayName:      view.NextSkill.DisplayName,
+			BlockingName:     view.NextSkill.BlockingName,
+			ResolutionReason: view.NextSkill.ResolutionReason,
+			RequiredTokens:   append([]string(nil), view.NextSkill.RequiredTokens...),
 			VerificationDir:  view.NextSkill.VerificationDir,
 			State:            view.NextSkill.State,
 			SkillConstraints: cloneSkillConstraints(view.NextSkill.SkillConstraints),
+			ReviewContext:    cloneReviewContext(view.NextSkill.ReviewContext),
 			TechniqueHints:   cloneTechniqueHints(view.NextSkill.TechniqueHints),
 		}
 	}
@@ -203,7 +224,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),
 		Blockers:         view.Blockers,
 		Warnings:         view.Warnings,
-		Confirmation:     view.Confirmation,
+		Confirmation:     view.ConfirmationRequirement,
 	}
 }
 
@@ -231,6 +252,17 @@ func cloneSkillConstraints(in *skillConstraints) *skillConstraints {
 		GuardrailDomain:  in.GuardrailDomain,
 		MitigationTarget: in.MitigationTarget,
 		RunSummaryBound:  in.RunSummaryBound,
+	}
+}
+
+func cloneReviewContext(in *reviewContextView) *reviewContextView {
+	if in == nil {
+		return nil
+	}
+	return &reviewContextView{
+		RequiredArtifactLayers:       append([]string(nil), in.RequiredArtifactLayers...),
+		RequiredImplementationLayers: append([]string(nil), in.RequiredImplementationLayers...),
+		OptionalLayers:               append([]string(nil), in.OptionalLayers...),
 	}
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -29,7 +30,7 @@ var fullSkillViewOptions = assembleSkillViewOptions{
 
 var handoffSkillViewOptions = assembleSkillViewOptions{
 	IncludeSkillEvidence: false,
-	IncludeReviewContext: false,
+	IncludeReviewContext: true,
 	IncludeContextBudget: true,
 	IncludeAgentContext:  false,
 }
@@ -48,6 +49,7 @@ func assembleSkillView(
 	governedChange *model.Change,
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
+	artifactProjection *progression.ArtifactProjection,
 	autoSkipEvidence bool,
 ) error {
 	return assembleSkillViewWithOptions(
@@ -58,6 +60,7 @@ func assembleSkillView(
 		governedChange,
 		execCtx,
 		precomputedPassingSkills,
+		artifactProjection,
 		autoSkipEvidence,
 		fullSkillViewOptions,
 	)
@@ -71,6 +74,7 @@ func assembleSkillViewWithOptions(
 	governedChange *model.Change,
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
+	artifactProjection *progression.ArtifactProjection,
 	autoSkipEvidence bool,
 	options assembleSkillViewOptions,
 ) error {
@@ -80,6 +84,9 @@ func assembleSkillViewWithOptions(
 		resolveChange = *governedChange
 	}
 	nextSkillName, nextState := progression.ResolveNextSkill(resolveChange)
+	displaySkillName := nextSkillName
+	resolutionReason := ""
+	blockingResolution := false
 
 	var evidenceMap map[string]model.VerificationRecord
 	if governedChange != nil && nextSkillName != "" {
@@ -131,6 +138,7 @@ func assembleSkillViewWithOptions(
 					nextSkillName = ""
 				} else {
 					nextSkillName = progression.SkillCodeQualityReview
+					resolutionReason = "passing spec-compliance-review evidence advances display skill to code-quality-review"
 				}
 			}
 		}
@@ -138,6 +146,7 @@ func assembleSkillViewWithOptions(
 		if nextSkillName == progression.SkillGoalVerification && evidenceMap != nil {
 			if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
 				nextSkillName = progression.SkillFinalCloseout
+				resolutionReason = "passing goal-verification evidence makes final-closeout available before finalization"
 			}
 		}
 	}
@@ -149,6 +158,25 @@ func assembleSkillViewWithOptions(
 		if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
 			nextSkillName = ""
 		}
+	}
+
+	blockersForResolution := append([]model.ReasonCode(nil), view.Blockers...)
+	if advanced.Action == "blocked" {
+		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
+	}
+	if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
+		nextSkillName = actionableSkill
+		blockingResolution = true
+		if reason != "" {
+			resolutionReason = reason
+			view.Warnings = append(view.Warnings, reason)
+		}
+	} else if skillHasPassingEvidence(evidenceMap, nextSkillName) {
+		nextSkillName = ""
+	}
+	if !blockingResolution && displaySkillName != "" && displaySkillName != nextSkillName && hasRequiredSkillBlockerFor(blockersForResolution, nextSkillName) {
+		blockingResolution = true
+		resolutionReason = fmt.Sprintf("blocking skill evidence supersedes already-passing display skill: %s", nextSkillName)
 	}
 
 	if nextSkillName == "" && governedChange != nil &&
@@ -186,6 +214,17 @@ func assembleSkillViewWithOptions(
 		VerificationDir: verificationDir,
 		State:           nextState,
 	}
+	if displaySkillName != "" && displaySkillName != nextSkillName {
+		ns.DisplayName = displaySkillName
+		if blockingResolution {
+			ns.BlockingName = nextSkillName
+		}
+		if resolutionReason != "" {
+			ns.ResolutionReason = resolutionReason
+		} else {
+			ns.ResolutionReason = "passing skill evidence advances display skill"
+		}
+	}
 
 	if governedChange != nil {
 		if model.WorkflowState(nextState) == model.StateS1Plan && progression.HasEmptyCodebaseMap(root, view.InputContext.CodebaseMapDocs) {
@@ -203,11 +242,10 @@ func assembleSkillViewWithOptions(
 	ns.TechniqueHints = appendWorkflowProfileTechniqueHints(ns.TechniqueHints, nextSkillName, governedChange)
 
 	if options.IncludeReviewContext && (nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview) {
-		var guardrailDomain string
+		ns.ReviewContext = buildReviewContext(governedChange, artifactProjection, false, nextSkillName)
 		if governedChange != nil {
-			guardrailDomain = governedChange.GuardrailDomain
+			ns.RequiredTokens = progression.RequiredReviewLayerTokensForSkill(*governedChange, artifactProjection, false, nextSkillName)
 		}
-		ns.ReviewContext = buildReviewContext(guardrailDomain)
 	}
 
 	if def, ok := skill.LookupDefinitionInRegistry(registry, nextSkillName); ok {
@@ -228,6 +266,72 @@ func assembleSkillViewWithOptions(
 	applyContextBudgetGuard(view)
 
 	return nil
+}
+
+func resolveActionableBlockingSkill(
+	current string,
+	evidenceMap map[string]model.VerificationRecord,
+	blockers []model.ReasonCode,
+) (string, string) {
+	current = strings.TrimSpace(current)
+	if current == "" || !skillHasPassingEvidence(evidenceMap, current) {
+		return "", ""
+	}
+	for _, blocker := range blockers {
+		if !isRequiredSkillBlocker(blocker.Code) {
+			continue
+		}
+		skillName := blockerSkillName(blocker.Detail)
+		if skillName == "" || skillName == current {
+			continue
+		}
+		return skillName, fmt.Sprintf("blocking skill evidence supersedes already-passing display skill: %s", skillName)
+	}
+	return "", ""
+}
+
+func hasRequiredSkillBlockerFor(blockers []model.ReasonCode, skillName string) bool {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" {
+		return false
+	}
+	for _, blocker := range blockers {
+		if !isRequiredSkillBlocker(blocker.Code) {
+			continue
+		}
+		if blockerSkillName(blocker.Detail) == skillName {
+			return true
+		}
+	}
+	return false
+}
+
+func skillHasPassingEvidence(evidenceMap map[string]model.VerificationRecord, skillName string) bool {
+	if len(evidenceMap) == 0 {
+		return false
+	}
+	rec, ok := evidenceMap[skillName]
+	return ok && rec.IsPassing()
+}
+
+func isRequiredSkillBlocker(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "required_skill_missing", "required_skill_not_ready", "required_skill_not_passed", "required_skill_blockers_present":
+		return true
+	default:
+		return false
+	}
+}
+
+func blockerSkillName(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return ""
+	}
+	if before, _, ok := strings.Cut(detail, ":"); ok {
+		return strings.TrimSpace(before)
+	}
+	return detail
 }
 
 func buildRequiredSkillEvidence(

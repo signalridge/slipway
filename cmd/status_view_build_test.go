@@ -57,7 +57,7 @@ func TestBuildGovernedStatusViewUsesExecutionSummaryForProgress(t *testing.T) {
 				TaskID:       "task-a",
 				Verdict:      model.TaskVerdictPass,
 				ChangedFiles: []string{"cmd/status.go"},
-				EvidenceRef:  filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv1", "task-a.json")),
+				EvidenceRef:  filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "task-a.json")),
 				CapturedAt:   time.Now().UTC(),
 			},
 			{
@@ -164,6 +164,15 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 	assert.Equal(t, "stale", view.EvidenceFreshness)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), state.StaleExecutionEvidenceBlockerToken)
 	assert.Contains(t, view.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
+	require.NotNil(t, view.FreshnessDiagnostics)
+	assert.Equal(t, "stale", view.FreshnessDiagnostics.Status)
+	require.NotNil(t, view.FreshnessDiagnostics.FirstStaleCause)
+	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.SourceArtifact, "artifacts/changes/stale-execution-summary")
+	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.EvidenceArtifact, "execution-summary.yaml")
+	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.NextAction, "rerun")
+	require.NotNil(t, view.FreshnessDiagnostics.PathAuthority)
+	assert.Contains(t, view.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath, ".git/slipway/runtime/changes/stale-execution-summary")
+	assert.Contains(t, view.FreshnessDiagnostics.PathAuthority.GovernedBundlePath, "artifacts/changes/stale-execution-summary")
 }
 
 func TestBuildGovernedStatusViewKeepsExecutionSummaryProgressWhenChecklistExists(t *testing.T) {
@@ -287,7 +296,7 @@ func TestBuildGovernedStatusViewIgnoresExecutionSummaryOutsideExecutionStates(t 
 				TaskID:      "task-a",
 				Verdict:     model.TaskVerdictPass,
 				TaskKind:    model.TaskKindCode,
-				EvidenceRef: filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "rv7", "task-a.json")),
+				EvidenceRef: filepath.ToSlash(filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks", "task-a.json")),
 				CapturedAt:  time.Now().UTC(),
 			},
 		},

@@ -40,13 +40,17 @@ type Report struct {
 }
 
 func Evaluate(plan wave.TaskPlan, summary *model.ExecutionSummary) Report {
+	return EvaluateWithChangedFiles(plan, summary, nil)
+}
+
+func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummary, extraChangedFiles []string) Report {
 	report := Report{Status: StatusNotApplicable}
 	if summary == nil || summary.RunSummaryVersion < 1 {
 		return report
 	}
 
 	report.PlannedTargets = plannedTargets(plan)
-	report.ChangedFiles = changedFiles(summary)
+	report.ChangedFiles = mergeChangedFiles(changedFiles(summary), extraChangedFiles)
 
 	if len(plan.Tasks) == 0 {
 		report.Status = StatusFail
@@ -78,6 +82,10 @@ func Evaluate(plan wave.TaskPlan, summary *model.ExecutionSummary) Report {
 }
 
 func EvaluateBundle(bundleDir string, summary *model.ExecutionSummary) (Report, error) {
+	return EvaluateBundleWithChangedFiles(bundleDir, summary, nil)
+}
+
+func EvaluateBundleWithChangedFiles(bundleDir string, summary *model.ExecutionSummary, extraChangedFiles []string) (Report, error) {
 	report := Report{Status: StatusNotApplicable}
 	if summary == nil || summary.RunSummaryVersion < 1 {
 		return report, nil
@@ -91,7 +99,7 @@ func EvaluateBundle(bundleDir string, summary *model.ExecutionSummary) (Report, 
 	if err != nil {
 		return Report{}, err
 	}
-	return Evaluate(plan, summary), nil
+	return EvaluateWithChangedFiles(plan, summary, extraChangedFiles), nil
 }
 
 func plannedTargets(plan wave.TaskPlan) []string {
@@ -116,6 +124,21 @@ func changedFiles(summary *model.ExecutionSummary) []string {
 			if normalized := normalizePathPattern(file); normalized != "" {
 				files = append(files, normalized)
 			}
+		}
+	}
+	return stringutil.UniqueSorted(files)
+}
+
+func mergeChangedFiles(left, right []string) []string {
+	files := make([]string, 0, len(left)+len(right))
+	for _, file := range left {
+		if normalized := normalizePathPattern(file); normalized != "" {
+			files = append(files, normalized)
+		}
+	}
+	for _, file := range right {
+		if normalized := normalizePathPattern(file); normalized != "" {
+			files = append(files, normalized)
 		}
 	}
 	return stringutil.UniqueSorted(files)

@@ -32,6 +32,24 @@ func TestRepairRejectsPlainGitRepoWithoutSlipwayMarkers(t *testing.T) {
 	})
 }
 
+func TestWriteRepairTextDoesNotReportNoopWhenUnrepairedDriftExists(t *testing.T) {
+	var out bytes.Buffer
+
+	err := writeRepairText(&out, repairSummary{
+		UnrepairedDrift: []repairDriftFinding{{
+			Reason:     state.StalePlanningEvidenceBlockerToken,
+			Target:     "artifacts/changes/demo/tasks.md",
+			NextAction: "regenerate wave plan from the current tasks.md",
+		}},
+	})
+
+	require.NoError(t, err)
+	text := out.String()
+	assert.Contains(t, text, "Unrepaired drift:")
+	assert.Contains(t, text, state.StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, text, "No repairs were needed")
+}
+
 func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -125,6 +143,48 @@ func TestRepairRecoversMissingConfigFromNestedDirectoryWhenRootMarkersExist(t *t
 	_, statErr := os.Stat(state.ConfigPath(nested))
 	require.Error(t, statErr)
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestRepairDoesNotCleanFreshAtomicTempArtifacts(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		tmpDir := filepath.Join(root, ".git", "slipway", "locks", "changes")
+		require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+		freshTemp := filepath.Join(tmpDir, ".tmp-demo.lock.meta-fresh")
+		staleTemp := filepath.Join(tmpDir, ".tmp-demo.lock.meta-stale")
+		require.NoError(t, os.WriteFile(freshTemp, []byte("fresh"), 0o644))
+		require.NoError(t, os.WriteFile(staleTemp, []byte("stale"), 0o644))
+		old := time.Now().Add(-5 * time.Minute)
+		require.NoError(t, os.Chtimes(staleTemp, old, old))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		hasCleanedSuffix := func(suffix string) bool {
+			for _, cleaned := range summary.CleanedAtomicTemps {
+				if strings.HasSuffix(cleaned, suffix) {
+					return true
+				}
+			}
+			return false
+		}
+		staleSuffix := filepath.Join(".git", "slipway", "locks", "changes", ".tmp-demo.lock.meta-stale")
+		freshSuffix := filepath.Join(".git", "slipway", "locks", "changes", ".tmp-demo.lock.meta-fresh")
+		assert.True(t, hasCleanedSuffix(staleSuffix))
+		assert.False(t, hasCleanedSuffix(freshSuffix))
+
+		_, err := os.Stat(freshTemp)
+		require.NoError(t, err)
+		_, err = os.Stat(staleTemp)
+		assert.ErrorIs(t, err, os.ErrNotExist)
+	})
 }
 
 func TestRepairRecoversMissingConfigAfterInitWorkspace(t *testing.T) {
@@ -330,6 +390,101 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 	})
 }
 
+func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair should converge unreadable execution summary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` rebuild unreadable execution summary
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
+		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+		})
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"changed_files": []string{"cmd/repair.go"},
+			"target_files":  []string{"cmd/repair.go"},
+		})
+
+		summaryPath := executionSummaryPathForTest(root, slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
+		require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.Contains(t, summary.MaterializedWavePlans, slug)
+		assert.Contains(t, summary.RebuiltExecutionSummaries, slug)
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "materialized_wave_plan", Target: slug})
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "rebuilt_execution_summary", Target: slug})
+
+		for _, finding := range summary.NonRepairableFindings {
+			assert.False(t,
+				strings.Contains(finding, slug) && strings.Contains(finding, "execution summary unreadable"),
+				"rebuilt summary must not leave unreadable finding: %s", finding,
+			)
+		}
+		for _, drift := range summary.UnrepairedDrift {
+			assert.False(t,
+				strings.Contains(drift.Target, slug) && strings.Contains(drift.Reason, "execution summary unreadable"),
+				"rebuilt summary must not leave unreadable drift: %+v", drift,
+			)
+		}
+
+		rebuilt, err := state.LoadExecutionSummary(root, slug)
+		require.NoError(t, err)
+		assert.True(t, state.ExecutionSummaryReady(&rebuilt))
+	})
+}
+
+func TestBuildUnrepairedDriftFindingsKeepsActionableTargets(t *testing.T) {
+	t.Parallel()
+
+	drift := buildUnrepairedDriftFindings([]string{
+		"bundle directory exists without change.yaml: orphan-dir",
+		"multiple active changes require operator intervention",
+		"demo: execution summary unreadable: bad yaml",
+	})
+
+	require.Len(t, drift, 3)
+	assert.Contains(t, drift, repairDriftFinding{
+		Target:     filepath.ToSlash(filepath.Join("artifacts", "changes", "orphan-dir")),
+		Reason:     "bundle directory exists without change.yaml",
+		NextAction: "repair or replace the authoritative change.yaml before continuing",
+	})
+	assert.Contains(t, drift, repairDriftFinding{
+		Target:     "workspace",
+		Reason:     "multiple active changes require operator intervention",
+		NextAction: "inspect the named artifact and rerun the owning Slipway command after correction",
+	})
+	assert.Contains(t, drift, repairDriftFinding{
+		Target:     "demo",
+		Reason:     "execution summary unreadable: bad yaml",
+		NextAction: "regenerate execution-summary.yaml from current wave-backed task evidence",
+	})
+}
+
 func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -368,8 +523,11 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 		assert.Contains(t, summary.MaterializedWavePlans, slug)
-		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+		assert.Contains(t, summary.RecoveredWaveRuns, slug)
 		assert.Contains(t, summary.ClearedCheckpoints, slug)
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "materialized_wave_plan", Target: slug})
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "recovered_wave_run", Target: slug})
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "cleared_checkpoint", Target: slug})
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -380,6 +538,68 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		require.Len(t, runs, 1)
 
 		assert.Nil(t, change.ActiveCheckpoint)
+	})
+}
+
+func TestRepairClearsStaleCheckpointWhenExecutionSummaryUnreadable(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair should clear stale checkpoint despite unreadable summary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.ActiveCheckpoint = &model.ActiveCheckpoint{
+			PausedTaskID:    "t-01",
+			PausedWaveIndex: 1,
+			PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
+			CheckpointType:  string(model.CheckpointHumanVerify),
+		}
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` clear stale checkpoint despite unreadable summary
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+
+		// Unreadable summary with no recoverable evidence: the summary cannot be
+		// rebuilt, so repair must still clear the stale checkpoint instead of
+		// leaving execution wedged behind an unreadable summary.
+		summaryPath := executionSummaryPathForTest(root, slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
+		require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		assert.Contains(t, summary.ClearedCheckpoints, slug)
+		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "cleared_checkpoint", Target: slug})
+
+		unreadableReported := false
+		for _, finding := range summary.NonRepairableFindings {
+			if strings.Contains(finding, slug) && strings.Contains(finding, "execution summary unreadable") {
+				unreadableReported = true
+				break
+			}
+		}
+		assert.True(t, unreadableReported, "unreadable summary must still be reported alongside the checkpoint repair")
+
+		change, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Nil(t, change.ActiveCheckpoint, "stale checkpoint must be cleared even when the summary is unreadable")
 	})
 }
 
@@ -408,7 +628,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 		materializeWaveExecutionForSummary(t, root, slug)
 
 		require.NoError(t, os.WriteFile(state.WavePlanPathForRead(root, slug), []byte("version: [\n"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(state.WaveEvidenceDir(root, slug, 1), "wave-01.yaml"), []byte("wave_index: [\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(state.WaveEvidenceDir(root, slug), "wave-01.yaml"), []byte("wave_index: [\n"), 0o644))
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
@@ -419,7 +639,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 		assert.Contains(t, summary.MaterializedWavePlans, slug)
-		assert.Contains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+		assert.Contains(t, summary.RecoveredWaveRuns, slug)
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -480,7 +700,7 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 `)))
 		require.NoError(t, os.Chtimes(tasksPath, updatedAt, updatedAt))
 
-		evidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "t-01.json")
+		evidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
 		_, err = os.Stat(evidencePath)
 		require.NoError(t, err)
 
@@ -494,9 +714,9 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 
 		assert.NotContains(t, summary.MaterializedWavePlans, slug)
-		assert.NotContains(t, summary.RecoveredWaveRuns, slug+"@rv1")
+		assert.NotContains(t, summary.RecoveredWaveRuns, slug)
 		assert.NotContains(t, summary.ClearedCheckpoints, slug)
-		assert.NotContains(t, summary.PrunedTaskEvidence, filepath.ToSlash(filepath.Join(slug, "rv1", "t-01.json")))
+		assert.NotContains(t, summary.PrunedTaskEvidence, filepath.ToSlash(filepath.Join(slug, "t-01.json")))
 
 		foundBlocked := false
 		for _, finding := range summary.NonRepairableFindings {
@@ -506,6 +726,16 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 			}
 		}
 		assert.True(t, foundBlocked, "expected repair summary to report blocked wave-plan reconstruction")
+		require.NotEmpty(t, summary.UnrepairedDrift)
+		foundWavePlanDrift := false
+		for _, drift := range summary.UnrepairedDrift {
+			if drift.Target == slug && strings.Contains(drift.Reason, "wave plan repair blocked") {
+				foundWavePlanDrift = true
+				assert.Contains(t, drift.NextAction, "regenerate or rescope")
+				break
+			}
+		}
+		assert.True(t, foundWavePlanDrift, "expected unrepaired drift to keep the wave-plan repair blocker")
 
 		_, err = os.Stat(evidencePath)
 		require.NoError(t, err, "historical task evidence must be preserved")
@@ -517,5 +747,132 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 
 		require.NotNil(t, change.ActiveCheckpoint, "repair must preserve the historical checkpoint when reconstruction is blocked")
 		assert.Equal(t, "t-01", change.ActiveCheckpoint.PausedTaskID)
+	})
+}
+
+func TestRepairReportsReadyButStaleExecutionSummaryDrift(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair reports stale ready execution summary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		runtimeCapturedAt := time.Now().UTC()
+		summaryCapturedAt := runtimeCapturedAt.Add(time.Hour)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_id":     "t-01",
+			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
+		})
+		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
+			Version:           model.ExecutionSummaryVersion,
+			RunSummaryVersion: 1,
+			CapturedAt:        summaryCapturedAt,
+			OverallVerdict:    model.ExecutionVerdictPass,
+			CompletedTasks:    []string{"t-01"},
+			Tasks: []model.ExecutionTaskSummary{{
+				TaskID:          "t-01",
+				Verdict:         model.TaskVerdictPass,
+				TaskKind:        model.TaskKindCode,
+				ChangedFiles:    []string{"cmd/repair.go"},
+				CapturedAt:      summaryCapturedAt,
+				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01"),
+			}},
+		})
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		require.NotEmpty(t, summary.UnrepairedDrift)
+		found := false
+		for _, drift := range summary.UnrepairedDrift {
+			if strings.Contains(drift.Target, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks/t-01.json") &&
+				strings.Contains(drift.Reason, state.StaleExecutionEvidenceBlockerToken) &&
+				strings.Contains(drift.Reason, "field=captured_at") &&
+				strings.Contains(drift.NextAction, "do not edit") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "expected repair to report ready-but-stale execution-summary drift")
+		require.Contains(t, summary.PathAuthority, slug)
+		assert.Contains(t, summary.PathAuthority[slug].TaskEvidencePath, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
+	})
+}
+
+func TestRepairPathAuthorityUsesLinkedWorktreeInvocationWorkspace(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair path authority linked worktree")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		worktreeRoot := filepath.Join(root, ".worktrees", slug)
+		branch := "feat/" + slug
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch, "HEAD")
+
+		bound := change
+		require.NoError(t, state.PersistScopeWorktreeMetadata(&bound, worktreeRoot, branch))
+		require.NoError(t, state.RelocateGovernedBundle(root, change, bound))
+		require.NoError(t, state.SaveChange(root, bound))
+
+		runtimeCapturedAt := time.Now().UTC()
+		summaryCapturedAt := runtimeCapturedAt.Add(time.Hour)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
+		})
+		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
+			Version:           model.ExecutionSummaryVersion,
+			RunSummaryVersion: 1,
+			CapturedAt:        summaryCapturedAt,
+			OverallVerdict:    model.ExecutionVerdictPass,
+			CompletedTasks:    []string{"t-01"},
+			Tasks: []model.ExecutionTaskSummary{{
+				TaskID:          "t-01",
+				Verdict:         model.TaskVerdictPass,
+				TaskKind:        model.TaskKindCode,
+				ChangedFiles:    []string{"cmd/repair.go"},
+				CapturedAt:      summaryCapturedAt,
+				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(bound, 1, "t-01"),
+			}},
+		})
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(worktreeRoot))
+		defer func() {
+			_ = os.Chdir(previousWD)
+		}()
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		require.Contains(t, summary.PathAuthority, slug)
+		require.NotNil(t, summary.PathAuthority[slug])
+		assert.Equal(t, state.DisplayPath(root, worktreeRoot), summary.PathAuthority[slug].InvocationWorkspacePath)
+		assert.Equal(t, state.DisplayPath(root, worktreeRoot), summary.PathAuthority[slug].BoundWorkspacePath)
 	})
 }

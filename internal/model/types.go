@@ -229,18 +229,12 @@ func ValidateTaskID(taskID string) error {
 	if strings.TrimSpace(taskID) == "" {
 		return errors.New("task_id is required")
 	}
-	if strings.Contains(taskID, "__rv") {
-		return fmt.Errorf("task_id must not contain delimiter %q: %q", "__rv", taskID)
-	}
 	return nil
 }
 
-func BuildTaskRunKey(taskID string, runSummaryVersion int) (string, error) {
+func BuildTaskRunKey(taskID string) (string, error) {
 	if err := ValidateTaskID(taskID); err != nil {
 		return "", err
 	}
-	if runSummaryVersion < 1 {
-		return "", fmt.Errorf("run_summary_version must be >= 1: %d", runSummaryVersion)
-	}
-	return fmt.Sprintf("%s__rv%d", taskID, runSummaryVersion), nil
+	return strings.TrimSpace(taskID), nil
 }

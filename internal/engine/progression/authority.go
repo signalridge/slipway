@@ -87,7 +87,8 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		if err != nil {
 			return ReviewAuthority{}, err
 		}
-		layerBlockers = EvaluateReviewLayerBlockers(change, artifactReviewEvidence, &projection, false)
+		implementationReviewEvidence := passingSkills[SkillCodeQualityReview]
+		layerBlockers = EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, &projection, false)
 		blockers = append(blockers, layerBlockers...)
 	}
 	blockers = append(blockers, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)...)
@@ -179,22 +180,119 @@ func EvaluateReviewLayerBlockers(
 	projection *ArtifactProjection,
 	reviewAll bool,
 ) []model.ReasonCode {
+	return EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, model.VerificationRecord{}, projection, reviewAll)
+}
+
+func EvaluateReviewLayerBlockersFromEvidence(
+	change model.Change,
+	reviewEvidence []model.VerificationRecord,
+	projection *ArtifactProjection,
+	reviewAll bool,
+) []model.ReasonCode {
+	if len(reviewEvidence) == 0 || reviewEvidence[0].Verdict == "" {
+		return model.ReasonCodesFromSpecs([]string{"required_skill_missing:spec-compliance-review"})
+	}
+	artifactReviewEvidence := reviewEvidence[0]
+	implementationReviewEvidence := model.VerificationRecord{}
+	if len(reviewEvidence) > 1 {
+		implementationReviewEvidence = reviewEvidence[1]
+	}
+	return EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, projection, reviewAll)
+}
+
+func EvaluateReviewLayerBlockersFromNamedEvidence(
+	change model.Change,
+	artifactReviewEvidence model.VerificationRecord,
+	implementationReviewEvidence model.VerificationRecord,
+	projection *ArtifactProjection,
+	reviewAll bool,
+) []model.ReasonCode {
 	if artifactReviewEvidence.Verdict == "" {
 		return model.ReasonCodesFromSpecs([]string{"required_skill_missing:spec-compliance-review"})
 	}
+	return evaluateReviewLayerBlockersByEvidence(change, artifactReviewEvidence, implementationReviewEvidence, projection, reviewAll)
+}
 
-	requiredLayers := map[reviewengine.ReviewLayer]struct{}{}
-	for _, layer := range reviewengine.RequiredImplementationLayers(change.GuardrailDomain) {
-		requiredLayers[layer] = struct{}{}
+func RequiredReviewLayerTokensForSkill(
+	change model.Change,
+	projection *ArtifactProjection,
+	reviewAll bool,
+	skillName string,
+) []string {
+	requiredLayerNames := RequiredReviewLayerNamesForSkill(change, projection, reviewAll, skillName)
+	if len(requiredLayerNames) == 0 {
+		return nil
 	}
-	for _, artifactID := range artifactScopeForReview(projection, reviewAll) {
-		artifactName := reviewArtifactNameForLayers(artifactID)
-		for _, layer := range reviewengine.RequiredArtifactLayers(change.GuardrailDomain, artifactName) {
+	tokens := make([]string, 0, len(requiredLayerNames))
+	for _, layerName := range requiredLayerNames {
+		tokens = append(tokens, "layer:"+layerName+"=pass")
+	}
+	return stringutil.UniqueSorted(tokens)
+}
+
+func RequiredReviewLayerNamesForSkill(
+	change model.Change,
+	projection *ArtifactProjection,
+	reviewAll bool,
+	skillName string,
+) []string {
+	requiredLayers := requiredReviewLayersForSkill(change, projection, reviewAll, skillName)
+	if len(requiredLayers) == 0 {
+		return nil
+	}
+	layerNames := make([]string, 0, len(requiredLayers))
+	for layer := range requiredLayers {
+		layerNames = append(layerNames, string(layer))
+	}
+	return stringutil.UniqueSorted(layerNames)
+}
+
+func requiredReviewLayersForSkill(
+	change model.Change,
+	projection *ArtifactProjection,
+	reviewAll bool,
+	skillName string,
+) map[reviewengine.ReviewLayer]struct{} {
+	requiredLayers := map[reviewengine.ReviewLayer]struct{}{}
+	switch skillName {
+	case SkillSpecComplianceReview:
+		for _, artifactID := range artifactScopeForReview(projection, reviewAll) {
+			artifactName := reviewArtifactNameForLayers(artifactID)
+			for _, layer := range reviewengine.RequiredArtifactLayers(change.GuardrailDomain, artifactName) {
+				requiredLayers[layer] = struct{}{}
+			}
+		}
+	case SkillCodeQualityReview:
+		for _, layer := range reviewengine.RequiredImplementationLayers(change.GuardrailDomain) {
 			requiredLayers[layer] = struct{}{}
 		}
 	}
+	return requiredLayers
+}
 
-	outcomes := parseReviewLayerOutcomes(artifactReviewEvidence.References)
+func evaluateReviewLayerBlockersByEvidence(
+	change model.Change,
+	artifactReviewEvidence model.VerificationRecord,
+	implementationReviewEvidence model.VerificationRecord,
+	projection *ArtifactProjection,
+	reviewAll bool,
+) []model.ReasonCode {
+	requiredArtifactLayers := requiredReviewLayersForSkill(change, projection, reviewAll, SkillSpecComplianceReview)
+	requiredImplementationLayers := requiredReviewLayersForSkill(change, projection, reviewAll, SkillCodeQualityReview)
+	if implementationReviewEvidence.Verdict == "" {
+		requiredImplementationLayers = map[reviewengine.ReviewLayer]struct{}{}
+	}
+
+	blockers := make([]string, 0, len(requiredArtifactLayers)+len(requiredImplementationLayers))
+	blockers = append(blockers, reviewLayerBlockerSpecs(requiredArtifactLayers, parseReviewLayerOutcomes(artifactReviewEvidence.References))...)
+	blockers = append(blockers, reviewLayerBlockerSpecs(requiredImplementationLayers, parseReviewLayerOutcomes(implementationReviewEvidence.References))...)
+	return model.ReasonCodesFromSpecs(stringutil.UniqueSorted(blockers))
+}
+
+func reviewLayerBlockerSpecs(
+	requiredLayers map[reviewengine.ReviewLayer]struct{},
+	outcomes map[reviewengine.ReviewLayer]bool,
+) []string {
 	blockers := make([]string, 0, len(requiredLayers))
 	for layer := range requiredLayers {
 		passed, ok := outcomes[layer]
@@ -206,7 +304,7 @@ func EvaluateReviewLayerBlockers(
 			blockers = append(blockers, "review_layer_failed:"+string(layer))
 		}
 	}
-	return model.ReasonCodesFromSpecs(stringutil.UniqueSorted(blockers))
+	return blockers
 }
 
 // artifactScopeForReview maps the in-memory projection to the artifact IDs whose

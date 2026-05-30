@@ -79,9 +79,11 @@ func CodebaseMapDir(root string) string {
 	return filepath.Join(root, "artifacts", "codebase")
 }
 
-// EvidenceTasksDir returns the per-change task evidence directory for a given run version.
-func EvidenceTasksDir(root, slug string, runVersion int) string {
-	return filepath.Join(ChangeDir(root, slug), "evidence", "tasks", fmt.Sprintf("rv%d", runVersion))
+// EvidenceTasksDir returns the canonical per-change task evidence directory.
+// Individual evidence payloads carry run_summary_version; the path stays flat
+// so there is a single runtime evidence surface to inspect.
+func EvidenceTasksDir(root, slug string) string {
+	return filepath.Join(ChangeDir(root, slug), "evidence", "tasks")
 }
 
 func removePerChangeLocalRuntimeState(root, slug string) error {

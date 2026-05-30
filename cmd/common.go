@@ -713,29 +713,29 @@ func loadAuthoritativeWaveExecution(
 			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path": state.WaveEvidenceDir(root, change.Slug),
 			},
 		)
 	}
 	if len(plan.Waves) > 0 && len(runs) == 0 {
 		return nil, newStateIntegrityError(
 			"wave_runs_missing",
-			fmt.Sprintf("%s requires wave run evidence for %q, but none was found for rv%d", operation, change.Slug, runVersion),
+			fmt.Sprintf("%s requires wave run evidence for %q, but none was found for run_summary_version=%d", operation, change.Slug, runVersion),
 			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path": state.WaveEvidenceDir(root, change.Slug),
 			},
 		)
 	}
 	if len(runs) > 0 && len(runs) < len(plan.Waves) {
 		return nil, newStateIntegrityError(
 			"wave_runs_incomplete",
-			fmt.Sprintf("%s found incomplete wave run evidence for %q: %d of %d waves are present for rv%d", operation, change.Slug, len(runs), len(plan.Waves), runVersion),
+			fmt.Sprintf("%s found incomplete wave run evidence for %q: %d of %d waves are present for run_summary_version=%d", operation, change.Slug, len(runs), len(plan.Waves), runVersion),
 			"Run `slipway repair` to reconstruct the missing wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path": state.WaveEvidenceDir(root, change.Slug),
 			},
 		)
 	}
@@ -746,7 +746,7 @@ func loadAuthoritativeWaveExecution(
 			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path": state.WaveEvidenceDir(root, change.Slug),
 			},
 		)
 	}
@@ -756,11 +756,11 @@ func loadAuthoritativeWaveExecution(
 		}
 		return nil, newStateIntegrityError(
 			"wave_run_version_mismatch",
-			fmt.Sprintf("%s found wave evidence version drift for %q: wave %d points at rv%d, expected rv%d", operation, change.Slug, run.WaveIndex, run.RunSummaryVersion, runVersion),
+			fmt.Sprintf("%s found wave evidence version drift for %q: wave %d points at run_summary_version=%d, expected run_summary_version=%d", operation, change.Slug, run.WaveIndex, run.RunSummaryVersion, runVersion),
 			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path": state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path": state.WaveEvidenceDir(root, change.Slug),
 			},
 		)
 	}
@@ -771,7 +771,7 @@ func loadAuthoritativeWaveExecution(
 			"Run `slipway repair` to reconstruct wave execution evidence before continuing.",
 			change.Slug,
 			map[string]any{
-				"path":   state.WaveEvidenceDir(root, change.Slug, runVersion),
+				"path":   state.WaveEvidenceDir(root, change.Slug),
 				"issues": linkageIssues,
 			},
 		)

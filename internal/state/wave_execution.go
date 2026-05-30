@@ -157,12 +157,15 @@ func currentTaskPlanNodes(root string, change model.Change) (string, time.Time, 
 	return hash, info.ModTime().UTC(), taskPlan.Nodes(), nil
 }
 
-func WaveEvidenceDir(root, slug string, runVersion int) string {
-	return filepath.Join(ChangeDir(root, slug), "evidence", "waves", fmt.Sprintf("rv%d", runVersion))
+func WaveEvidenceDir(root, slug string) string {
+	return filepath.Join(ChangeDir(root, slug), "evidence", "waves")
 }
 
 func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
-	dir := WaveEvidenceDir(root, slug, runVersion)
+	if runVersion < 1 {
+		return nil, fmt.Errorf("run_version must be >= 1")
+	}
+	dir := WaveEvidenceDir(root, slug)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -181,6 +184,13 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 		if err != nil {
 			return nil, err
 		}
+		evidenceRunVersion, err := waveEvidenceRunVersion(raw)
+		if err != nil {
+			return nil, fmt.Errorf("classify wave run %q: %w", path, err)
+		}
+		if evidenceRunVersion != runVersion {
+			continue
+		}
 		var run model.WaveRun
 		decoder := yaml.NewDecoder(bytes.NewReader(raw))
 		decoder.KnownFields(true)
@@ -196,6 +206,19 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 		}
 	}
 	return runs, nil
+}
+
+func waveEvidenceRunVersion(raw []byte) (int, error) {
+	var payload struct {
+		RunSummaryVersion int `yaml:"run_summary_version"`
+	}
+	if err := yaml.Unmarshal(raw, &payload); err != nil {
+		return 0, fmt.Errorf("parse wave run: %w", err)
+	}
+	if payload.RunSummaryVersion < 1 {
+		return 0, fmt.Errorf("run_summary_version is required")
+	}
+	return payload.RunSummaryVersion, nil
 }
 
 // WaveTaskLinkageIssues reports wave-run/task-plan mismatches that can arise
@@ -287,7 +310,7 @@ func SaveWaveRuns(root, slug string, runVersion int, runs []model.WaveRun) error
 			return err
 		}
 	}
-	dir := WaveEvidenceDir(root, slug, runVersion)
+	dir := WaveEvidenceDir(root, slug)
 	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
@@ -312,7 +335,7 @@ func SaveWaveRuns(root, slug string, runVersion int, runs []model.WaveRun) error
 
 func ResetWaveExecution(root, slug string) error {
 	for _, path := range []string{
-		filepath.Join(ChangeDir(root, slug), "evidence", "waves"),
+		WaveEvidenceDir(root, slug),
 		filepath.Join(verificationDirPathForRead(root, slug), WavePlanFileName),
 	} {
 		if err := os.RemoveAll(path); err != nil {

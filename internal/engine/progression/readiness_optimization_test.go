@@ -45,6 +45,39 @@ func TestEvaluateGovernanceReadinessExposesPassingSkillsForActivePlanningSubStep
 	assert.NotContains(t, readiness.PassingSkills, "research-orchestration")
 }
 
+func TestRequiredReviewLayerTokensForSkillUsesArtifactScope(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("artifact-scoped-review-tokens")
+	change.GuardrailDomain = "external_api_contracts"
+
+	manifestOnly := &ArtifactProjection{
+		Nodes: []ArtifactProjectionNode{{
+			Name:  "change.yaml",
+			State: string(model.ArtifactLifecycleDraft),
+		}},
+	}
+	assert.ElementsMatch(t,
+		[]string{"layer:R0=pass"},
+		RequiredReviewLayerTokensForSkill(change, manifestOnly, false, SkillSpecComplianceReview),
+	)
+
+	decisionScope := &ArtifactProjection{
+		Nodes: []ArtifactProjectionNode{{
+			Name:  "decision.md",
+			State: string(model.ArtifactLifecycleDraft),
+		}},
+	}
+	assert.ElementsMatch(t,
+		[]string{"layer:R0=pass", "layer:R3=pass"},
+		RequiredReviewLayerTokensForSkill(change, decisionScope, false, SkillSpecComplianceReview),
+	)
+	assert.ElementsMatch(t,
+		[]string{"layer:IR1=pass", "layer:IR3=pass"},
+		RequiredReviewLayerTokensForSkill(change, decisionScope, false, SkillCodeQualityReview),
+	)
+}
+
 func TestEvaluateGovernanceReadinessSkipsGateEvaluationsUnlessRequested(t *testing.T) {
 	t.Parallel()
 
@@ -298,6 +331,125 @@ func TestEvaluateReviewLayerBlockersTreatsProjectedChangeYamlAsManifest(t *testi
 	assert.Empty(t, blockers, "projected change.yaml should keep manifest-only review requirements")
 }
 
+func TestEvaluateReviewLayerBlockersMergesImplementationReviewEvidence(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("merged-review-layers")
+	change.GuardrailDomain = string(model.GuardrailDomainExternalAPIContracts)
+	projection := &ArtifactProjection{
+		Nodes: []ArtifactProjectionNode{{
+			Name:     "decision.md",
+			State:    string(model.ArtifactLifecycleDraft),
+			Required: true,
+		}},
+	}
+	specEvidence := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		References: []string{"layer:R0=pass", "layer:R3=pass"},
+	}
+	codeEvidence := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		References: []string{"layer:IR1=pass", "layer:IR3=pass"},
+	}
+
+	assert.Contains(t,
+		model.ReasonSpecs(EvaluateReviewLayerBlockersFromEvidence(
+			change,
+			[]model.VerificationRecord{specEvidence, {Verdict: model.VerificationVerdictPass}},
+			projection,
+			false,
+		)),
+		"review_layer_missing:IR1",
+	)
+	assert.Empty(t,
+		EvaluateReviewLayerBlockersFromEvidence(change, []model.VerificationRecord{specEvidence, codeEvidence}, projection, false),
+	)
+}
+
+func TestEvaluateReviewLayerBlockersRequiresImplementationEvidenceProvenance(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("review-layer-provenance")
+	change.GuardrailDomain = string(model.GuardrailDomainExternalAPIContracts)
+	projection := &ArtifactProjection{
+		Nodes: []ArtifactProjectionNode{{
+			Name:     "decision.md",
+			State:    string(model.ArtifactLifecycleDraft),
+			Required: true,
+		}},
+	}
+	specEvidenceWithImplementationRefs := model.VerificationRecord{
+		Verdict: model.VerificationVerdictPass,
+		References: []string{
+			"layer:R0=pass",
+			"layer:R3=pass",
+			"layer:IR1=pass",
+			"layer:IR3=pass",
+		},
+	}
+	codeEvidenceWithoutRefs := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		References: nil,
+	}
+
+	blockers := model.ReasonSpecs(EvaluateReviewLayerBlockersFromEvidence(
+		change,
+		[]model.VerificationRecord{specEvidenceWithImplementationRefs, codeEvidenceWithoutRefs},
+		projection,
+		false,
+	))
+	assert.Contains(t, blockers, "review_layer_missing:IR1")
+	assert.Contains(t, blockers, "review_layer_missing:IR3")
+}
+
+func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("before\n"), 0o644))
+	gitForReadinessOptimizationTests(t, root, "add", "README.md")
+	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", "scope-drift")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("after\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "untracked.go"), []byte("package cmd\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".golangci.yml"), []byte("run:\n  timeout: 2m\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"), []byte("version: 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(state.LocalStateGitIgnoreBlock()), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n"), 0o644))
+
+	files := scopeContractWorkspaceChangedFiles(state.ResolvedChangePaths{
+		WorkspaceRoot:     root,
+		GovernedBundleDir: bundleDir,
+	})
+
+	assert.Contains(t, files, "README.md")
+	assert.Contains(t, files, ".golangci.yml")
+	assert.Contains(t, files, "cmd/untracked.go")
+	assert.NotContains(t, files, ".slipway.yaml")
+	assert.NotContains(t, files, ".gitignore")
+	assert.NotContains(t, files, "artifacts/changes/scope-drift/tasks.md")
+}
+
+func TestScopeContractUntrackedChangedFileKeepsRealRootDotfiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	assert.False(t, scopeContractUntrackedChangedFile(root, ".slipway.yaml"))
+	assert.True(t, scopeContractUntrackedChangedFile(root, ".golangci.yml"))
+	assert.True(t, scopeContractUntrackedChangedFile(root, ".gitignore"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(state.LocalStateGitIgnoreBlock()), 0o644))
+	assert.False(t, scopeContractUntrackedChangedFile(root, ".gitignore"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules/\n\n"+state.LocalStateGitIgnoreBlock()), 0o644))
+	assert.True(t, scopeContractUntrackedChangedFile(root, ".gitignore"))
+}
+
 type stubArtifactReadinessReader struct {
 	calls int
 }
@@ -375,4 +527,12 @@ func initGitWorkspaceForReadinessOptimizationTests(t *testing.T, root string) {
 		out, err := cmd.CombinedOutput()
 		require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 	}
+}
+
+func gitForReadinessOptimizationTests(t *testing.T, root string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 }

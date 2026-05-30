@@ -36,6 +36,22 @@ func TestEvaluateReportsScopeDriftDeterministically(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(report.Blockers), "scope_contract_drift:cmd/review.go,internal/secret.go")
 }
 
+func TestEvaluateWithChangedFilesIncludesWorkspaceDrift(t *testing.T) {
+	t.Parallel()
+
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
+		task("t-01", model.TaskKindCode, "cmd/validate.go"),
+	}}, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go")), []string{
+		"cmd/validate.go",
+		"cmd/untracked.go",
+	})
+
+	assert.Equal(t, StatusFail, report.Status)
+	assert.Equal(t, []string{"cmd/untracked.go"}, report.OutOfScopeFiles)
+	assert.Equal(t, []string{"cmd/untracked.go", "cmd/validate.go"}, report.ChangedFiles)
+	assert.Contains(t, model.ReasonSpecs(report.Blockers), "scope_contract_drift:cmd/untracked.go")
+}
+
 func TestEvaluateTreatsBareNonGlobTargetAsExactFileOnly(t *testing.T) {
 	t.Parallel()
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -44,12 +46,13 @@ type ArtifactProjection struct {
 }
 
 type GovernanceReadiness struct {
-	ExecutionSummary  *model.ExecutionSummary
-	EvidenceFreshness ctxpack.EvidenceFreshness
-	SummaryIssues     []model.ReasonCode
-	SignalSummary     *model.SignalSummary
-	ActiveControls    []model.ControlActivation
-	RequiredActions   []governance.RequiredAction
+	ExecutionSummary     *model.ExecutionSummary
+	EvidenceFreshness    ctxpack.EvidenceFreshness
+	FreshnessDiagnostics state.ExecutionFreshnessDiagnostics
+	SummaryIssues        []model.ReasonCode
+	SignalSummary        *model.SignalSummary
+	ActiveControls       []model.ControlActivation
+	RequiredActions      []governance.RequiredAction
 	// PassingSkills is intentionally scoped to the required skills for the
 	// requested workflow state and active planning sub-step. It is not a dump of
 	// every verification file found under verification/.
@@ -166,6 +169,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		return GovernanceReadiness{}, err
 	}
 	readiness.ExecutionSummary = execCtx.Summary
+	readiness.FreshnessDiagnostics = execCtx.Diagnostics
 	readiness.SummaryIssues = model.ReasonCodesFromSpecs(execCtx.Issues)
 	if state.ExecutionSummaryReady(execCtx.Summary) {
 		readiness.EvidenceFreshness = state.ExecutionSummaryFreshness(root, evaluationChange, execCtx.Summary)
@@ -250,7 +254,11 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 	}
 	if state.ExecutionSummaryReady(execCtx.Summary) {
-		scopeReport, err := scopecontract.EvaluateBundle(paths.GovernedBundleDir, execCtx.Summary)
+		scopeReport, err := scopecontract.EvaluateBundleWithChangedFiles(
+			paths.GovernedBundleDir,
+			execCtx.Summary,
+			scopeContractWorkspaceChangedFiles(paths),
+		)
 		if err != nil {
 			readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(scopecontract.ReasonScopeContractEvaluationFailed, err.Error()))
 			readiness.Diagnostics = append(readiness.Diagnostics, "scope_contract_evaluation_failed: "+err.Error())
@@ -595,6 +603,90 @@ func resolveArtifactEvaluationContext(root string, change model.Change, required
 		resolution:     ResolveChangeSchemaDiagnostics(change),
 		requiredPreset: requiredPreset,
 	}
+}
+
+func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []string {
+	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
+	if workspaceRoot == "" {
+		return nil
+	}
+	files := gitNameOnly(workspaceRoot, "diff", "--name-only", "HEAD", "--")
+	for _, file := range gitNameOnly(workspaceRoot, "ls-files", "--others", "--exclude-standard") {
+		if scopeContractUntrackedChangedFile(workspaceRoot, file) {
+			files = append(files, file)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	bundleRel := ""
+	if rel, err := filepath.Rel(workspaceRoot, paths.GovernedBundleDir); err == nil {
+		bundleRel = filepath.ToSlash(rel)
+	}
+	filtered := make([]string, 0, len(files))
+	for _, file := range files {
+		file = filepath.ToSlash(strings.TrimSpace(file))
+		file = strings.TrimPrefix(file, "./")
+		if file == "" {
+			continue
+		}
+		if file == "artifacts" || strings.HasPrefix(file, "artifacts/changes/") {
+			continue
+		}
+		if bundleRel != "" && bundleRel != "." && (file == bundleRel || strings.HasPrefix(file, bundleRel+"/")) {
+			continue
+		}
+		filtered = append(filtered, file)
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return stringutil.UniqueSorted(filtered)
+}
+
+func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {
+	file = filepath.ToSlash(strings.TrimSpace(file))
+	file = strings.TrimPrefix(file, "./")
+	if file == "" {
+		return false
+	}
+	if file == fsutil.ProjectConfigFileName {
+		return false
+	}
+	if file == ".gitignore" && scopeContractGeneratedOnlyGitIgnore(workspaceRoot) {
+		return false
+	}
+	if file == "artifacts" || strings.HasPrefix(file, "artifacts/changes/") {
+		return false
+	}
+	return true
+}
+
+func scopeContractGeneratedOnlyGitIgnore(workspaceRoot string) bool {
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore"))
+	if err != nil {
+		return false
+	}
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	return strings.TrimSpace(content) == strings.TrimSpace(state.LocalStateGitIgnoreBlock())
+}
+
+func gitNameOnly(workspaceRoot string, args ...string) []string {
+	cmd := exec.Command("git", append([]string{"-C", workspaceRoot}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(string(out), "\n")
+	files := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files
 }
 
 func gatePlanningSkillRecords(

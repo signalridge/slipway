@@ -253,8 +253,6 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 
 	oldTS := time.Now().UTC().Add(-3 * time.Second)
 	capturedAt := oldTS.Add(time.Second)
-	evidenceInputHash, err := state.ComputeTaskEvidenceInputHash(slug, 1, "task-01", "")
-	require.NoError(t, err)
 	writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
@@ -271,11 +269,11 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-01",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
-		"input_hash":          evidenceInputHash,
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-01"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-01.json")
+	taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-01.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskEvidencePath), 0o755))
 	require.NoError(t, os.WriteFile(taskEvidencePath, raw, 0o644))
 
@@ -468,6 +466,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		require.NoError(t, state.PersistScopeWorktreeMetadata(&bound, worktreeRoot, branch))
 		require.NoError(t, state.RelocateGovernedBundle(root, change, bound))
 		require.NoError(t, state.SaveChange(root, bound))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 		_, err = os.Stat(state.ConfigPath(worktreeRoot))
 		require.NoError(t, err)
@@ -491,6 +490,10 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		assert.NotContains(t, model.ReasonSpecs(view.Blockers), state.WorktreeReasonDedicatedRequired)
 		expectedSource := state.DisplayPath(root, filepath.Join(worktreeRoot, "artifacts", "changes", slug, "change.yaml"))
 		assert.Equal(t, expectedSource, view.SourceStateFile)
+		require.NotNil(t, view.FreshnessDiagnostics)
+		require.NotNil(t, view.FreshnessDiagnostics.PathAuthority)
+		assert.Equal(t, state.DisplayPath(root, worktreeRoot), view.FreshnessDiagnostics.PathAuthority.InvocationWorkspacePath)
+		assert.Equal(t, state.DisplayPath(root, worktreeRoot), view.FreshnessDiagnostics.PathAuthority.BoundWorkspacePath)
 	})
 }
 

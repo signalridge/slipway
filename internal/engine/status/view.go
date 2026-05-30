@@ -268,7 +268,7 @@ func buildEvidenceInventory(summary *model.ExecutionSummary, nonTask map[string]
 			if task.EvidenceRef == "" {
 				continue
 			}
-			key, err := model.BuildTaskRunKey(task.TaskID, summary.RunSummaryVersion)
+			key, err := model.BuildTaskRunKey(task.TaskID)
 			if err != nil {
 				continue
 			}

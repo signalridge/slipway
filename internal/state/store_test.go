@@ -25,6 +25,7 @@ func TestSaveLoadChangeRoundTrip(t *testing.T) {
 
 	loaded, err := LoadChange(root, "round-trip")
 	require.NoError(t, err)
+	assert.Equal(t, model.ChangeVersion, loaded.Version)
 	assert.Equal(t, st.Slug, loaded.Slug)
 	assert.Equal(t, st.CurrentState, loaded.CurrentState)
 	assert.NotNil(t, loaded.EvidenceRefs)
@@ -93,6 +94,7 @@ func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
 	// Runtime fields must now be IN change.yaml.
 	changeRaw, err := os.ReadFile(BundleChangeFilePath(root, change.Slug))
 	require.NoError(t, err)
+	assert.Contains(t, string(changeRaw), "version: 1")
 	assert.Contains(t, string(changeRaw), "artifacts:")
 	assert.Contains(t, string(changeRaw), "evidence_refs:")
 	assert.Contains(t, string(changeRaw), "last_auto_passed_states:")
@@ -106,6 +108,30 @@ func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
 	assert.Equal(t, change.LastAutoPassedStates, loaded.LastAutoPassedStates)
 	assert.Equal(t, change.ReviewIntentDriftFailures, loaded.ReviewIntentDriftFailures)
 	assert.True(t, change.InterruptedExecutionAt.Equal(loaded.InterruptedExecutionAt))
+}
+
+func TestLoadChangeRejectsArtifactLevelVersion(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	slug := "artifact-level-version"
+	path := BundleChangeFilePath(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`version: 1
+slug: artifact-level-version
+status: active
+current_state: S1_PLAN
+plan_substep: bundle
+artifacts:
+  intent:
+    version: 1
+    id: intent
+    state: draft
+`), 0o644))
+
+	_, err := LoadChange(root, slug)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "field version not found in type model.ArtifactState")
 }
 
 func TestRestoreChangeAuthorityIfNeededAcceptsExistingAuthority(t *testing.T) {

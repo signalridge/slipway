@@ -106,13 +106,15 @@ func makeHealthCmd() *cobra.Command {
 
 			// Repo health (default behavior preserved).
 			if showRepo {
-				report, err := state.CollectHealthReport(root)
+				report, err := state.CollectHealthReport(root, changeSlug)
 				if err != nil {
 					return err
 				}
 				view.Findings = normalizeHealthFindings(root, report.Findings)
-				view.Findings = append(view.Findings, agentContractHealthFindings(root, invocationWorkspaceRootFromCommand(cmd, root))...)
-				view.Findings = append(view.Findings, lifecycleEventHealthFindings(root)...)
+				globalFindings := agentContractHealthFindings(root, invocationWorkspaceRootFromCommand(cmd, root))
+				globalFindings = append(globalFindings, lifecycleEventHealthFindings(root)...)
+				classifyGlobalHealthImpact(globalFindings)
+				view.Findings = append(view.Findings, globalFindings...)
 				slices.SortFunc(view.Findings, func(a, b state.HealthFinding) int {
 					if a.Category != b.Category {
 						return strings.Compare(a.Category, b.Category)
@@ -779,6 +781,28 @@ func doctorResumeAction(root, changeSlug string) (*doctorAction, error) {
 		Command:    "slipway run --resume",
 		Repairable: false,
 	}, nil
+}
+
+// classifyGlobalHealthImpact sets the active-change blocking annotation for
+// global health findings (agent-contract and lifecycle findings whose Slug is a
+// tool/agent name rather than a change slug). The change-slug heuristic applied
+// inside state.CollectHealthReport does not fit them, so they are classified by
+// severity alone: error findings block governed handoffs for the active change
+// (fail-closed), warnings and below do not. Findings already carrying an
+// explicit impact are left untouched.
+func classifyGlobalHealthImpact(findings []state.HealthFinding) {
+	for i := range findings {
+		if strings.TrimSpace(findings[i].ActiveChangeImpact) != "" {
+			continue
+		}
+		if findings[i].Severity == model.ReasonSeverityError {
+			findings[i].ActiveChangeBlocking = true
+			findings[i].ActiveChangeImpact = "blocking_for_active_change"
+			continue
+		}
+		findings[i].ActiveChangeBlocking = false
+		findings[i].ActiveChangeImpact = "non_blocking_for_active_change"
+	}
 }
 
 func normalizeHealthFindings(root string, findings []state.HealthFinding) []state.HealthFinding {

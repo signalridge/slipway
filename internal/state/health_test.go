@@ -12,6 +12,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAnnotateActiveChangeImpactScopesSlugSpecificErrors(t *testing.T) {
+	findings := []HealthFinding{
+		{
+			Severity: model.ReasonSeverityError,
+			Category: "execution_summary",
+			Slug:     "other-change",
+			Message:  "other change is broken",
+		},
+		{
+			Severity: model.ReasonSeverityError,
+			Category: "execution_summary",
+			Slug:     "active-change",
+			Message:  "active change is broken",
+		},
+		{
+			Severity: model.ReasonSeverityError,
+			Category: "config",
+			Message:  "workspace config is broken",
+		},
+	}
+
+	annotateActiveChangeImpact(findings, "active-change")
+
+	assert.False(t, findings[0].ActiveChangeBlocking)
+	assert.Equal(t, "non_blocking_for_active_change", findings[0].ActiveChangeImpact)
+	assert.True(t, findings[1].ActiveChangeBlocking)
+	assert.Equal(t, "blocking_for_active_change", findings[1].ActiveChangeImpact)
+	assert.True(t, findings[2].ActiveChangeBlocking)
+	assert.Equal(t, "blocking_for_active_change", findings[2].ActiveChangeImpact)
+}
+
 func TestCollectHealthReportFindsBrokenConfig(t *testing.T) {
 	t.Parallel()
 

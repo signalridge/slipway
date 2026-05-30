@@ -13,7 +13,7 @@ import (
 func TestMapProgressionError_PassesThroughUnknownError(t *testing.T) {
 	t.Parallel()
 
-	original := errors.New("task_evidence_invalid: rv1/task-a.json")
+	original := errors.New("task_evidence_invalid: task-a.json")
 	assert.Same(t, original, mapProgressionError(original, "req-1"))
 }
 
