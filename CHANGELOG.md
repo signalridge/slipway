@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1](https://github.com/signalridge/slipway/compare/v0.3.0...v0.3.1) (2026-05-30)
+
+
+### Bug Fixes
+
+* **codebase-map:** stop fabricating repo context ([#19](https://github.com/signalridge/slipway/issues/19)) ([0f92e5d](https://github.com/signalridge/slipway/commit/0f92e5dde3fcf0925fd6b141a907662ee9ea5c19))
+* **toolgen:** harden find-polluter go list handling ([#22](https://github.com/signalridge/slipway/issues/22)) ([20ed30e](https://github.com/signalridge/slipway/commit/20ed30e86d9b7ed7ded44523f859634e970f9127))
+
 ## [0.3.0](https://github.com/signalridge/slipway/compare/v0.2.0...v0.3.0) (2026-05-30)
 
 
