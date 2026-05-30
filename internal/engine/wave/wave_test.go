@@ -33,14 +33,14 @@ func TestPlanWavesRejectsStaticConflictsInsideDeclaredWave(t *testing.T) {
 	assert.Contains(t, err.Error(), "static target conflict")
 }
 
-func TestPlanWavesRejectsReservedTaskIDDelimiter(t *testing.T) {
+func TestPlanWavesAllowsTaskIDThatLooksLikeLegacyRunSuffix(t *testing.T) {
 	t.Parallel()
 
-	_, err := PlanWaves([]Node{
-		{TaskID: "task-a__rvshadow", WaveIndex: 1, TaskKind: model.TaskKindCode},
+	plan, err := PlanWaves([]Node{
+		{TaskID: "task-a__legacy", WaveIndex: 1, TargetFiles: []string{"a.go"}, TaskKind: model.TaskKindCode},
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `task_id must not contain delimiter "__rv"`)
+	require.NoError(t, err)
+	require.Len(t, plan, 1)
 }
 
 func TestPlanWavesRejectsMissingWaveDeclarations(t *testing.T) {
@@ -120,7 +120,7 @@ func TestExecutionResultJSONUsesTaskResultsKey(t *testing.T) {
 
 	raw, err := json.Marshal(ExecutionResult{
 		TaskResults: map[string]model.TaskRun{
-			"task-a__rv1": {
+			"task-a": {
 				TaskID:            "task-a",
 				RunSummaryVersion: 1,
 				Verdict:           model.TaskVerdictPass,

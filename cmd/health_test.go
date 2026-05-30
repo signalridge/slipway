@@ -41,9 +41,39 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 			if finding.Category == "config" {
 				found = true
 				assert.True(t, finding.Repairable)
+				assert.True(t, finding.ActiveChangeBlocking)
+				assert.Equal(t, "blocking_for_active_change", finding.ActiveChangeImpact)
 			}
 		}
 		assert.True(t, found)
+	})
+}
+
+func TestHealthCommandMarksCodebaseMapWarningNonBlockingForActiveChange(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "codebase_map" {
+				continue
+			}
+			found = true
+			assert.False(t, finding.ActiveChangeBlocking)
+			assert.Equal(t, "non_blocking_for_active_change", finding.ActiveChangeImpact)
+			assert.Contains(t, finding.RepairHint, "slipway codebase-map")
+		}
+		assert.True(t, found, "expected missing codebase map health finding")
 	})
 }
 
@@ -492,6 +522,19 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "expected doctor to recommend pivot for wave plan drift")
+
+		foundFinding := false
+		for _, finding := range view.Findings {
+			if finding.Category != "wave_execution" || finding.Slug != slug {
+				continue
+			}
+			if strings.Contains(strings.Join(model.ReasonSpecs(finding.Reasons), "\n"), "wave_plan_drift") {
+				foundFinding = true
+				assert.True(t, finding.ActiveChangeBlocking)
+				assert.Equal(t, "blocking_for_active_change", finding.ActiveChangeImpact)
+			}
+		}
+		assert.True(t, foundFinding, "expected wave drift finding to be marked blocking")
 	})
 }
 
@@ -1348,4 +1391,35 @@ func TestHealthCommandGovernanceWithNoActiveChangeDoesNotRenderRepoHealthFallbac
 		assert.NotContains(t, out.String(), "Repo Health:")
 		assert.NotContains(t, out.String(), "Governance Health")
 	})
+}
+
+func TestClassifyGlobalHealthImpactBySeverity(t *testing.T) {
+	t.Parallel()
+
+	findings := []state.HealthFinding{
+		{Category: "agent_contract", Severity: model.ReasonSeverityError},
+		{Category: "lifecycle_event", Severity: model.ReasonSeverityWarning},
+		{
+			Category:             "codebase_map",
+			Severity:             model.ReasonSeverityError,
+			ActiveChangeImpact:   "non_blocking_for_active_change",
+			ActiveChangeBlocking: false,
+		},
+	}
+
+	classifyGlobalHealthImpact(findings)
+
+	// Error-severity global findings fail closed: they block governed handoffs
+	// for the active change.
+	assert.True(t, findings[0].ActiveChangeBlocking)
+	assert.Equal(t, "blocking_for_active_change", findings[0].ActiveChangeImpact)
+
+	// Warnings and below are advisory.
+	assert.False(t, findings[1].ActiveChangeBlocking)
+	assert.Equal(t, "non_blocking_for_active_change", findings[1].ActiveChangeImpact)
+
+	// A finding that already carries an explicit impact is left untouched even
+	// when its severity is error.
+	assert.False(t, findings[2].ActiveChangeBlocking)
+	assert.Equal(t, "non_blocking_for_active_change", findings[2].ActiveChangeImpact)
 }

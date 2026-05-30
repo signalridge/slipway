@@ -199,7 +199,7 @@ func TestBuildProjectionBuildsEvidenceInventoryAndDiagnostics(t *testing.T) {
 		RunSummaryVersion: 7,
 		OpenBlockers:      model.ReasonCodesFromSpecs([]string{"task:task-b:lint_failed"}),
 		Tasks: []model.ExecutionTaskSummary{
-			{TaskID: "task-a", Verdict: model.TaskVerdictPass, EvidenceRef: "artifacts/changes/inventory/evidence/tasks/rv7/task-a.json"},
+			{TaskID: "task-a", Verdict: model.TaskVerdictPass, EvidenceRef: "artifacts/changes/inventory/evidence/tasks/task-a.json"},
 			{TaskID: "task-b", Verdict: model.TaskVerdictFail},
 		},
 	}
@@ -216,7 +216,7 @@ func TestBuildProjectionBuildsEvidenceInventoryAndDiagnostics(t *testing.T) {
 	require.Len(t, projection.SummaryBlockers, 1)
 	assert.Equal(t, []string{"task:task-b:lint_failed"}, model.ReasonSpecs(projection.SummaryBlockers))
 	require.Len(t, projection.EvidenceInventory.TaskEvidence, 1)
-	assert.Equal(t, "task-a__rv7", projection.EvidenceInventory.TaskEvidence[0].Key)
+	assert.Equal(t, "task-a", projection.EvidenceInventory.TaskEvidence[0].Key)
 	assert.Equal(t, []EvidenceRef{
 		{Key: "artifact.tasks", Path: "artifacts/changes/inventory/tasks.md"},
 		{Key: "verification.execution-summary", Path: "artifacts/changes/inventory/verification/execution-summary.yaml"},

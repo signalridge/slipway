@@ -3,6 +3,7 @@ package cmd
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
@@ -129,6 +130,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 	}
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
+	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
 	timeline, timelineErr := buildStatusTimeline(root, change, 20)
@@ -172,7 +174,7 @@ func buildStatusViewBase(
 		SourceStateFile:  sourceStateFile,
 		EvidencePointers: buildEvidencePointers(projection.EvidenceInventory, collectSkillVerificationPointers(root, change.Slug)),
 		GateStatus:       projection.GateStatus,
-		ArtifactDAG:      mapArtifactDAGNodes(projection.ArtifactDAG),
+		ArtifactDAG:      mapArtifactDAGNodesForGateStatus(projection.ArtifactDAG, projection.GateStatus),
 	}
 	view.Narrative = buildStatusNarrative(view)
 	return view
@@ -441,17 +443,52 @@ func mapStatusProgress(progress *enginestatus.Progress) *statusProgress {
 }
 
 func mapArtifactDAGNodes(nodes []enginestatus.ArtifactNode) []artifactDAGNode {
+	return mapArtifactDAGNodesForGateStatus(nodes, nil)
+}
+
+func mapArtifactDAGNodesForGateStatus(nodes []enginestatus.ArtifactNode, gateStatus map[string]model.GateRecord) []artifactDAGNode {
 	if len(nodes) == 0 {
 		return nil
 	}
 	mapped := make([]artifactDAGNode, 0, len(nodes))
 	for _, node := range nodes {
+		blockingReason := artifactNodeBlockingReason(node, gateStatus)
 		mapped = append(mapped, artifactDAGNode{
-			Name:      node.Name,
-			State:     node.State,
-			DependsOn: append([]string(nil), node.DependsOn...),
-			Ready:     node.Ready,
+			Name:           node.Name,
+			State:          node.State,
+			DependsOn:      append([]string(nil), node.DependsOn...),
+			Ready:          node.Ready,
+			Blocking:       blockingReason != "",
+			BlockingReason: blockingReason,
 		})
 	}
 	return mapped
+}
+
+func artifactNodeBlockingReason(node enginestatus.ArtifactNode, gateStatus map[string]model.GateRecord) string {
+	if node.Ready {
+		return ""
+	}
+	gateIDs := make([]string, 0, len(gateStatus))
+	for gateID := range gateStatus {
+		gateIDs = append(gateIDs, gateID)
+	}
+	slices.Sort(gateIDs)
+	for _, gateID := range gateIDs {
+		record := gateStatus[gateID]
+		if record.Status != model.GateStatusBlocked {
+			continue
+		}
+		for _, reason := range record.ReasonCodes {
+			switch reason.Code {
+			case "artifact_not_ready":
+				return gateID
+			case "missing_required_artifact":
+				if strings.TrimSpace(reason.Detail) == "" || strings.TrimSpace(reason.Detail) == node.Name {
+					return gateID + ":" + reason.Code
+				}
+			}
+		}
+	}
+	return ""
 }

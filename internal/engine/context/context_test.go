@@ -14,21 +14,21 @@ func TestEvaluateEvidenceFreshness(t *testing.T) {
 
 	fresh := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{
-			EvidenceInputHash:      "abc",
-			CurrentInputHash:       "abc",
-			EvidenceTimestamp:      time.Now().UTC(),
-			LatestRelevantUpdateAt: time.Now().UTC().Add(-time.Second),
+			ExpectedStructuralInput: map[string]string{"task_id": "task-a"},
+			CurrentStructuralInput:  map[string]string{"task_id": "task-a"},
+			EvidenceTimestamp:       time.Now().UTC(),
+			LatestRelevantUpdateAt:  time.Now().UTC().Add(-time.Second),
 		},
 	})
 	assert.Equal(t, EvidenceFreshnessFresh, fresh)
 
-	staleByHash := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
+	staleByStructuralInput := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{
-			EvidenceInputHash: "abc",
-			CurrentInputHash:  "def",
+			ExpectedStructuralInput: map[string]string{"task_id": "task-a"},
+			CurrentStructuralInput:  map[string]string{"task_id": "task-b"},
 		},
 	})
-	assert.Equal(t, EvidenceFreshnessStale, staleByHash)
+	assert.Equal(t, EvidenceFreshnessStale, staleByStructuralInput)
 
 	staleByTime := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{

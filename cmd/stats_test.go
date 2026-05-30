@@ -73,8 +73,6 @@ REQ-001: Stats must treat execution-summary.yaml as the frozen execution evidenc
 `), 0o644))
 
 	now := time.Now().UTC()
-	inputHash, err := state.ComputeTaskEvidenceInputHash(slug, 1, "task-a", "")
-	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
 		Version:           model.ExecutionSummaryVersion,
 		RunSummaryVersion: 1,
@@ -82,7 +80,7 @@ REQ-001: Stats must treat execution-summary.yaml as the frozen execution evidenc
 		OverallVerdict:    model.ExecutionVerdictPass,
 		CompletedTasks:    []string{"task-a"},
 		Tasks: []model.ExecutionTaskSummary{
-			{TaskID: "task-a", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindCode, ChangedFiles: []string{"cmd/stats.go"}, EvidenceInputHash: inputHash, CapturedAt: now},
+			{TaskID: "task-a", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindCode, ChangedFiles: []string{"cmd/stats.go"}, CapturedAt: now},
 		},
 	}))
 	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{

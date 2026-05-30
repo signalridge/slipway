@@ -20,17 +20,27 @@ import (
 
 // TaskEvidencePayload is the parsed payload from a task evidence JSON file.
 type TaskEvidencePayload struct {
-	TaskID            string             `json:"task_id,omitempty"`
-	RunSummaryVersion int                `json:"run_summary_version,omitempty"`
-	TaskKind          model.TaskKind     `json:"task_kind,omitempty"`
-	Verdict           model.TaskVerdict  `json:"verdict,omitempty"`
-	ChangedFiles      []string           `json:"changed_files,omitempty"`
-	TargetFiles       []string           `json:"target_files,omitempty"`
-	EvidenceRef       string             `json:"evidence_ref,omitempty"`
-	Blockers          []model.ReasonCode `json:"blockers,omitempty"`
-	CapturedAt        string             `json:"captured_at,omitempty"`
-	InputHash         string             `json:"input_hash,omitempty"`
-	SessionID         string             `json:"session_id,omitempty"`
+	TaskID            string                             `json:"task_id,omitempty"`
+	RunSummaryVersion int                                `json:"run_summary_version,omitempty"`
+	TaskKind          model.TaskKind                     `json:"task_kind,omitempty"`
+	Verdict           model.TaskVerdict                  `json:"verdict,omitempty"`
+	ChangedFiles      []string                           `json:"changed_files,omitempty"`
+	TargetFiles       []string                           `json:"target_files,omitempty"`
+	EvidenceRef       string                             `json:"evidence_ref,omitempty"`
+	Blockers          []model.ReasonCode                 `json:"blockers,omitempty"`
+	CapturedAt        string                             `json:"captured_at,omitempty"`
+	FreshnessInputs   model.ExecutionTaskFreshnessInputs `json:"freshness_inputs,omitempty"`
+	InputHash         string                             `json:"input_hash,omitempty"`
+	SessionID         string                             `json:"session_id,omitempty"`
+}
+
+type TaskEvidenceRunVersionMismatchError struct {
+	Expected int
+	Got      int
+}
+
+func (e TaskEvidenceRunVersionMismatchError) Error() string {
+	return fmt.Sprintf("run_summary_version mismatch: expected=%d got=%d", e.Expected, e.Got)
 }
 
 // SyncGovernedWaveExecution synchronizes wave execution state for a governed change.
@@ -54,7 +64,7 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 	}
 	if len(tasks) == 0 {
 		blockers := []model.ReasonCode{
-			model.NewReasonCode("missing_task_evidence_for_run_summary", fmt.Sprintf("rv%d", record.RunVersion)),
+			model.NewReasonCode("missing_task_evidence_for_run_summary", fmt.Sprintf("run_summary_version=%d", record.RunVersion)),
 		}
 		blockers = append(blockers, model.ReasonCodesFromSpecs(parseIssues)...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
@@ -192,13 +202,17 @@ func LoadExecutionTasksFromEvidence(root, slug string, runSummaryVersion int) ([
 	if runSummaryVersion < 1 {
 		return nil, nil, fmt.Errorf("run_summary_version must be >= 1")
 	}
-	dir := state.EvidenceTasksDir(root, slug, runSummaryVersion)
+	dir := state.EvidenceTasksDir(root, slug)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return []model.ExecutionTaskSummary{}, nil, nil
 		}
 		return nil, nil, err
+	}
+	change, changeErr := state.LoadChange(root, slug)
+	if changeErr != nil {
+		change = model.NewChange(slug)
 	}
 
 	type candidate struct {
@@ -214,8 +228,24 @@ func LoadExecutionTasksFromEvidence(root, slug string, runSummaryVersion int) ([
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())
+		evidenceRunVersion, err := taskEvidenceRunVersion(path)
+		if err != nil {
+			issues = append(issues, "task_evidence_invalid:"+entry.Name()+":"+err.Error())
+			continue
+		}
+		if evidenceRunVersion != runSummaryVersion {
+			continue
+		}
 		task, capturedAt, sessionID, err := ParseTaskEvidence(root, path, runSummaryVersion)
 		if err != nil {
+			var versionMismatch TaskEvidenceRunVersionMismatchError
+			if errors.As(err, &versionMismatch) {
+				continue
+			}
+			issues = append(issues, "task_evidence_invalid:"+entry.Name()+":"+err.Error())
+			continue
+		}
+		if err := validateTaskEvidenceFreshnessInputs(change, runSummaryVersion, task); err != nil {
 			issues = append(issues, "task_evidence_invalid:"+entry.Name()+":"+err.Error())
 			continue
 		}
@@ -248,6 +278,51 @@ func LoadExecutionTasksFromEvidence(root, slug string, runSummaryVersion int) ([
 		return strings.Compare(a.TaskID, b.TaskID)
 	})
 	return tasks, stringutil.UniqueSorted(issues), nil
+}
+
+func taskEvidenceRunVersion(path string) (int, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	var payload struct {
+		RunSummaryVersion int `json:"run_summary_version"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return 0, fmt.Errorf("parse task evidence: %w", err)
+	}
+	if payload.RunSummaryVersion < 1 {
+		return 0, fmt.Errorf("run_summary_version is required")
+	}
+	return payload.RunSummaryVersion, nil
+}
+
+func validateTaskEvidenceFreshnessInputs(change model.Change, runSummaryVersion int, task model.ExecutionTaskSummary) error {
+	if strings.TrimSpace(task.EvidenceInputHash) != "" {
+		return fmt.Errorf("input_hash is not supported; use freshness_inputs")
+	}
+	if task.FreshnessInputs.IsZero() {
+		return fmt.Errorf("freshness_inputs is required")
+	}
+	expected := state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, task.TaskID)
+	if task.FreshnessInputs.Equal(expected) {
+		return nil
+	}
+	return fmt.Errorf("freshness_inputs mismatch: %s", taskFreshnessInputDiffSummary(expected, task.FreshnessInputs))
+}
+
+func taskFreshnessInputDiffSummary(expected, current model.ExecutionTaskFreshnessInputs) string {
+	expectedMap := expected.FieldMap()
+	currentMap := current.FieldMap()
+	fields := []string{"change_id", "run_summary_version", "task_id", "guardrail_domain"}
+	diffs := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if expectedMap[field] == currentMap[field] {
+			continue
+		}
+		diffs = append(diffs, fmt.Sprintf("%s expected=%q got=%q", field, expectedMap[field], currentMap[field]))
+	}
+	return strings.Join(diffs, ", ")
 }
 
 // ParseTaskEvidence parses a single task evidence file into an execution task summary.
@@ -286,11 +361,10 @@ func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (mo
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("run_summary_version is required")
 	}
 	if run.RunSummaryVersion != expectedRunSummaryVersion {
-		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf(
-			"run_summary_version mismatch: expected=%d got=%d",
-			expectedRunSummaryVersion,
-			run.RunSummaryVersion,
-		)
+		return model.ExecutionTaskSummary{}, time.Time{}, "", TaskEvidenceRunVersionMismatchError{
+			Expected: expectedRunSummaryVersion,
+			Got:      run.RunSummaryVersion,
+		}
 	}
 	if run.TaskKind == "" {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("task_kind is required")
@@ -321,16 +395,23 @@ func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (mo
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("captured_at must be RFC3339Nano: %w", err)
 	}
 	capturedAt = capturedAt.UTC()
+	if strings.TrimSpace(payload.InputHash) != "" {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("input_hash is not supported; use freshness_inputs")
+	}
+	payload.FreshnessInputs.Normalize()
+	if payload.FreshnessInputs.IsZero() {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("freshness_inputs is required")
+	}
 	task := model.ExecutionTaskSummary{
-		TaskID:            run.TaskID,
-		Verdict:           run.Verdict,
-		TaskKind:          run.TaskKind,
-		ChangedFiles:      append([]string(nil), run.ChangedFiles...),
-		TargetFiles:       append([]string(nil), run.TargetFiles...),
-		EvidenceRef:       strings.TrimSpace(run.EvidenceRef),
-		EvidenceInputHash: strings.TrimSpace(payload.InputHash),
-		Blockers:          append([]model.ReasonCode(nil), run.Blockers...),
-		CapturedAt:        capturedAt,
+		TaskID:          run.TaskID,
+		Verdict:         run.Verdict,
+		TaskKind:        run.TaskKind,
+		ChangedFiles:    append([]string(nil), run.ChangedFiles...),
+		TargetFiles:     append([]string(nil), run.TargetFiles...),
+		EvidenceRef:     strings.TrimSpace(run.EvidenceRef),
+		FreshnessInputs: payload.FreshnessInputs,
+		Blockers:        append([]model.ReasonCode(nil), run.Blockers...),
+		CapturedAt:      capturedAt,
 	}
 	task.Normalize()
 	if err := task.Validate(); err != nil {

@@ -13,44 +13,45 @@ import (
 )
 
 type statusView struct {
-	ExecutionMode             string                      `json:"execution_mode"`
-	Mode                      string                      `json:"mode,omitempty"`
-	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
-	Slug                      string                      `json:"slug,omitempty"`
-	QualityMode               string                      `json:"quality_mode,omitempty"`
-	WorkflowProfile           string                      `json:"workflow_profile,omitempty"`
-	WorkflowPreset            string                      `json:"workflow_preset,omitempty"`
-	SuggestedWorkflowPreset   string                      `json:"suggested_workflow_preset,omitempty"`
-	EffectiveWorkflowPreset   string                      `json:"effective_workflow_preset,omitempty"`
-	PresetConfirmationPending bool                        `json:"preset_confirmation_pending,omitempty"`
-	PresetUpgradeReasons      []string                    `json:"preset_upgrade_reasons,omitempty"`
-	GovernanceForecast        *governanceForecastView     `json:"governance_forecast,omitempty"`
-	AutoPassedStates          []model.AutoPassedState     `json:"auto_passed_states,omitempty"`
-	NeedsDiscovery            bool                        `json:"needs_discovery,omitempty"`
-	Phase                     model.UserPhase             `json:"phase,omitempty"`
-	LifecycleStatus           string                      `json:"lifecycle_status,omitempty"`
-	CurrentState              model.WorkflowState         `json:"current_state,omitempty"`
-	IntakeSubStep             model.IntakeSubStep         `json:"intake_substep,omitempty"`
-	PlanSubStep               model.PlanSubStep           `json:"plan_substep,omitempty"`
-	PlanningNote              string                      `json:"planning_note,omitempty"`
-	InterruptedExecutionAt    string                      `json:"interrupted_execution_at,omitempty"`
-	Narrative                 string                      `json:"narrative,omitempty"`
-	NextReadyActions          []string                    `json:"next_ready_actions,omitempty"`
-	SummaryBlockers           []model.ReasonCode          `json:"summary_blockers,omitempty"`
-	Blockers                  []model.ReasonCode          `json:"blockers,omitempty"`
-	GateStatus                map[string]model.GateRecord `json:"gate_status,omitempty"`
-	ContextDependencies       *model.ContextDependencies  `json:"context_dependencies,omitempty"`
-	SelectedPriorContext      []selectedPriorContextView  `json:"selected_prior_context,omitempty"`
-	UnresolvedDependencies    []unresolvedDependencyView  `json:"unresolved_dependencies,omitempty"`
-	Progress                  *statusProgress             `json:"progress,omitempty"`
-	ArtifactDAG               []artifactDAGNode           `json:"artifact_dag,omitempty"`
-	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
-	EvidencePointers          statusEvidencePointers      `json:"evidence_pointers,omitempty"`
-	EvidenceFreshness         string                      `json:"evidence_freshness"`
-	ScopeContract             *scopeContractView          `json:"scope_contract,omitempty"`
-	SourceStateFile           string                      `json:"source_state_file,omitempty"`
-	Timeline                  []statusTimelineEvent       `json:"timeline,omitempty"`
-	Diagnostics               []string                    `json:"diagnostics,omitempty"`
+	ExecutionMode             string                               `json:"execution_mode"`
+	Mode                      string                               `json:"mode,omitempty"`
+	HydrateReferences         []string                             `json:"hydrate_references,omitempty"`
+	Slug                      string                               `json:"slug,omitempty"`
+	QualityMode               string                               `json:"quality_mode,omitempty"`
+	WorkflowProfile           string                               `json:"workflow_profile,omitempty"`
+	WorkflowPreset            string                               `json:"workflow_preset,omitempty"`
+	SuggestedWorkflowPreset   string                               `json:"suggested_workflow_preset,omitempty"`
+	EffectiveWorkflowPreset   string                               `json:"effective_workflow_preset,omitempty"`
+	PresetConfirmationPending bool                                 `json:"preset_confirmation_pending,omitempty"`
+	PresetUpgradeReasons      []string                             `json:"preset_upgrade_reasons,omitempty"`
+	GovernanceForecast        *governanceForecastView              `json:"governance_forecast,omitempty"`
+	AutoPassedStates          []model.AutoPassedState              `json:"auto_passed_states,omitempty"`
+	NeedsDiscovery            bool                                 `json:"needs_discovery,omitempty"`
+	Phase                     model.UserPhase                      `json:"phase,omitempty"`
+	LifecycleStatus           string                               `json:"lifecycle_status,omitempty"`
+	CurrentState              model.WorkflowState                  `json:"current_state,omitempty"`
+	IntakeSubStep             model.IntakeSubStep                  `json:"intake_substep,omitempty"`
+	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
+	PlanningNote              string                               `json:"planning_note,omitempty"`
+	InterruptedExecutionAt    string                               `json:"interrupted_execution_at,omitempty"`
+	Narrative                 string                               `json:"narrative,omitempty"`
+	NextReadyActions          []string                             `json:"next_ready_actions,omitempty"`
+	SummaryBlockers           []model.ReasonCode                   `json:"summary_blockers,omitempty"`
+	Blockers                  []model.ReasonCode                   `json:"blockers,omitempty"`
+	GateStatus                map[string]model.GateRecord          `json:"gate_status,omitempty"`
+	ContextDependencies       *model.ContextDependencies           `json:"context_dependencies,omitempty"`
+	SelectedPriorContext      []selectedPriorContextView           `json:"selected_prior_context,omitempty"`
+	UnresolvedDependencies    []unresolvedDependencyView           `json:"unresolved_dependencies,omitempty"`
+	Progress                  *statusProgress                      `json:"progress,omitempty"`
+	ArtifactDAG               []artifactDAGNode                    `json:"artifact_dag,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
+	EvidencePointers          statusEvidencePointers               `json:"evidence_pointers,omitempty"`
+	EvidenceFreshness         string                               `json:"evidence_freshness"`
+	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	ScopeContract             *scopeContractView                   `json:"scope_contract,omitempty"`
+	SourceStateFile           string                               `json:"source_state_file,omitempty"`
+	Timeline                  []statusTimelineEvent                `json:"timeline,omitempty"`
+	Diagnostics               []string                             `json:"diagnostics,omitempty"`
 	// Governance (derived from governance_snapshot.yaml)
 	GovernanceSignals *governanceSignalView   `json:"governance_signals,omitempty"`
 	ActiveControls    []governanceControlView `json:"active_controls,omitempty"`
@@ -92,10 +93,12 @@ type governanceActionView struct {
 }
 
 type artifactDAGNode struct {
-	Name      string   `json:"name"`
-	State     string   `json:"state"`
-	DependsOn []string `json:"depends_on,omitempty"`
-	Ready     bool     `json:"ready"`
+	Name           string   `json:"name"`
+	State          string   `json:"state"`
+	DependsOn      []string `json:"depends_on,omitempty"`
+	Ready          bool     `json:"ready"`
+	Blocking       bool     `json:"blocking"`
+	BlockingReason string   `json:"blocking_reason,omitempty"`
 }
 
 type statusProgress struct {
@@ -329,6 +332,7 @@ func showStatusForChange(cmd *cobra.Command, root string, change model.Change, o
 		if err != nil {
 			return err
 		}
+		applyStatusInvocationWorkspacePath(cmd, root, &view)
 		view.Mode = requestedView
 		view.HydrateReferences = hydrateKeys
 		return printStatusView(cmd, root, view, outputFormat, hydrate)

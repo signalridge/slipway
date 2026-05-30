@@ -312,8 +312,9 @@ func scrubChangeRuntimeEvidenceRefs(change *model.Change) {
 	}
 }
 
-// Archived execution summaries must not retain machine-local runtime paths, but
-// archive-safe relative refs or inline text should survive.
+// Archived execution summaries must not retain machine-local runtime paths, and
+// refs into the pre-archive active bundle must point at the archived bundle.
+// Archive-safe relative refs or inline text survive unchanged.
 func scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir string) error {
 	path := filepath.Join(archiveDir, "verification", ExecutionSummaryFileName)
 	raw, err := os.ReadFile(path)
@@ -337,10 +338,11 @@ func scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir s
 
 	changed := false
 	for i := range summary.Tasks {
-		if !shouldScrubArchivedExecutionSummaryEvidenceRef(root, slug, summary.Tasks[i].EvidenceRef) {
+		rewritten, rewrite := archivedExecutionSummaryEvidenceRef(root, slug, summary.Tasks[i].EvidenceRef)
+		if !rewrite {
 			continue
 		}
-		summary.Tasks[i].EvidenceRef = ""
+		summary.Tasks[i].EvidenceRef = rewritten
 		changed = true
 	}
 	if !changed {
@@ -359,6 +361,35 @@ func scrubArchivedExecutionSummaryRuntimeEvidenceRefsAt(root, slug, archiveDir s
 		return err
 	}
 	return fsutil.WriteFileAtomic(path, scrubbed, 0o644)
+}
+
+func archivedExecutionSummaryEvidenceRef(root, slug, ref string) (string, bool) {
+	if shouldScrubArchivedExecutionSummaryEvidenceRef(root, slug, ref) {
+		return "", true
+	}
+	if rewritten, ok := rewriteActiveBundleEvidenceRefForArchive(slug, ref); ok {
+		return rewritten, rewritten != strings.TrimSpace(ref)
+	}
+	return ref, false
+}
+
+func rewriteActiveBundleEvidenceRefForArchive(slug, ref string) (string, bool) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || filepath.IsAbs(ref) {
+		return ref, false
+	}
+	pathPart, fragment, hasFragment := strings.Cut(ref, "#")
+	normalized := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(strings.TrimSpace(pathPart), "./")))
+	activePrefix := filepath.ToSlash(filepath.Join("artifacts", "changes", slug))
+	if normalized != activePrefix && !strings.HasPrefix(normalized, activePrefix+"/") {
+		return ref, false
+	}
+	archivedPrefix := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug))
+	rewritten := archivedPrefix + strings.TrimPrefix(normalized, activePrefix)
+	if hasFragment {
+		rewritten += "#" + fragment
+	}
+	return rewritten, true
 }
 
 func shouldScrubArchivedExecutionSummaryEvidenceRef(root, slug, ref string) bool {

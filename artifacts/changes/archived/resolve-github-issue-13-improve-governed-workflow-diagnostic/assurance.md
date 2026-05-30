@@ -1,0 +1,95 @@
+# Assurance
+## Project Context
+- Tech Stack: Go CLI
+- Conventions: structured JSON command surfaces, focused regression tests, governed Slipway artifacts
+- Test Command: go test ./...
+- Build Command: go build ./...
+- Languages: Go
+
+## Scope Summary
+Planned scope covers GitHub issue #13 end to end:
+- consistent actionable next-skill diagnostics across `next`, `validate`, and `run --diagnostics`;
+- explicit structural execution freshness inputs with no legacy hash freshness authority;
+- legacy hash-only summaries remain parseable only for stale diagnostics, not as a freshness authority;
+- freshness causality, operator repair mistake recovery, repair, status, health, path, resume, review-token, and confirmation-boundary diagnostics;
+- structured confirmation requirements that distinguish hard user-confirmation stops from command-required or evidence-continuation boundaries;
+- removal of redundant path/key encoding from task and wave execution evidence;
+- templates and docs for the changed CLI contracts.
+
+Out of scope:
+- retaining compatibility with old hash-only `execution-summary.yaml` task freshness;
+- retaining compatibility with pre-change runtime evidence shapes or task-run keys;
+- changing the underlying linked-worktree runtime evidence storage location;
+- weakening hard governance gates.
+
+## Verification Verdict
+Implementation and governed verification are complete through `done-ready`.
+Local verification passed after the final review fixes, M1/M3 remediation, low-risk
+diagnostic optimizations, and governed evidence synchronization:
+
+- targeted regression: `go test -count=1 ./cmd -run 'TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence|TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces|TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking|TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown|TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses'`
+- targeted regression: `go test -count=1 ./cmd -run 'TestReviewAllDoesNotTreatImplementationEvidenceAsArtifactEvidence|TestHealthCommandReportsRepairableFindings|TestHealthCommandDoctorUsesPivotForWavePlanDrift|TestRepairReportsUnreadableExecutionSummaryFinding'`
+- targeted regression: `go test ./cmd ./internal/state ./internal/model ./internal/engine/status -run 'TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary|TestNextHandoffViewUsesStructuredConfirmationRequirement|TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift|TestBuildUnrepairedDriftFindingsKeepsActionableTargets|TestArtifactDAGBlockingFlagDependsOnCurrentLifecycleGate|TestAnnotateActiveChangeImpactScopesSlugSpecificErrors|TestBuildTaskRunKey'`
+- targeted regression: `go test -count=1 ./internal/engine/progression -run 'TestLoadExecutionTasksFromEvidence'`
+- targeted regression: `go test -count=1 ./internal/state -run 'TestLoadWaveRunsIgnoresPreviousRunVersionEvidence|TestOrphanTaskEvidenceIgnoresPreviousRunVersionEvidence'`
+- targeted regression: `go test -count=1 ./cmd -run 'TestRepairPathAuthorityUsesLinkedWorktreeInvocationWorkspace'`
+- targeted regression: `go test -count=1 ./internal/engine/progression ./internal/state ./internal/engine/context`
+- focused post-review regression: `go test -count=1 ./internal/state ./internal/engine/progression ./internal/engine/scopecontract ./internal/model ./cmd`
+- `go test ./internal/engine/scopecontract ./internal/engine/progression ./internal/state ./cmd`
+- `go test ./internal/model ./internal/engine/context ./internal/state ./internal/engine/progression ./cmd`
+- `go test -count=1 ./...`
+- `go build ./...`
+- `go vet ./...`
+- `golangci-lint run`
+- `mkdocs build --strict`
+- `git diff --check`
+- literal legacy run-version path/key search returned no matches
+- `go run . validate --json`
+- `go run . next --json --diagnostics`
+
+Before archive, `validate --json` reported `evidence_freshness=fresh`,
+`scope_contract.status=pass`, and `G_ship=approved`; `next --json --diagnostics`
+reported no actionable `next_skill` when the display skill already had passing
+evidence. `slipway done --json` was then run and archived the change as
+terminal `status=done`. Post-archive `go run . validate --json` correctly
+reports no active change rather than stale active-governance state.
+
+## Evidence Index
+- `intent.md`: approved scope and user confirmation for no-compatibility design.
+- `research.md`: source inspection summary and issue #13 acceptance mapping.
+- `verification/intake-clarification.yaml`: scope clarification evidence.
+- `verification/research-orchestration.yaml`: research evidence.
+- `verification/plan-audit.yaml`: plan audit evidence.
+- `verification/wave-orchestration.yaml`: S2 wave execution evidence.
+- `.git/slipway/runtime/changes/resolve-github-issue-13-improve-governed-workflow-diagnostic/evidence/tasks/*.json`: task-level execution evidence for t-01 through t-05.
+- `verification/execution-summary.yaml`: generated by Slipway from wave evidence after S2 sync; archived copies rewrite active-bundle relative evidence refs to the archived bundle while scrubbing runtime-local refs.
+- `verification/spec-compliance-review.yaml`: R0/R3 spec and domain-review evidence.
+- `verification/code-quality-review.yaml`: IR1/IR3 independent implementation review evidence.
+- `verification/goal-verification.yaml`: final acceptance and external_api_contracts safety-baseline evidence.
+
+## Requirement Coverage
+- REQ-001: `t-02`, `t-05`
+- REQ-002: `t-01`, `t-05`
+- REQ-003: `t-01`, `t-03`, `t-05`
+- REQ-004: `t-02`, `t-04`, `t-05`
+- REQ-005: `t-03`, `t-05`
+- REQ-006: `t-03`, `t-05`
+- REQ-007: `t-03`, `t-05`
+- REQ-008: `t-03`, `t-05`
+- REQ-009: `t-03`, `t-05`
+- REQ-010: `t-02`, `t-04`, `t-05`
+- REQ-011: `t-04`, `t-05`
+- REQ-012: `t-01`, `t-02`, `t-03`, `t-04`, `t-05`
+
+## Residual Risks and Exceptions
+- Breaking JSON change is intentional: old `evidence_input_hash` consumers must regenerate evidence or update scripts.
+- Runtime evidence for this change lives in flat `evidence/tasks/*.json` and `evidence/waves/*.yaml`; readers admit only payloads whose `run_summary_version` matches the active execution summary, and malformed flat task evidence is reported as health/repair evidence debt instead of aborting those commands.
+- Generated adapter surfaces were not refreshed in this worktree; source templates and docs were updated and `mkdocs build --strict` passed.
+- Final closeout evidence is optional for this standard-preset change. `slipway run` warns it is available but not required before `done`.
+
+## Rollback Readiness
+Rollback is a normal git revert of this branch's code/template/doc changes. If rollback is needed after running the new binary locally, regenerate or repair local runtime execution evidence with the restored binary because the execution-summary freshness contract changes shape.
+
+## Archive Decision
+Archived with `slipway done --json`; tracked `change.yaml` records
+`status=done` and `current_state=DONE`.

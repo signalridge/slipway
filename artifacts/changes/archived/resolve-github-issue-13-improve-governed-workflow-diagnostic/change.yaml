@@ -1,0 +1,60 @@
+version: 1
+slug: resolve-github-issue-13-improve-governed-workflow-diagnostic
+description: 'Resolve GitHub issue #13: improve governed workflow diagnostics so source inspection is not required'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-05-29T15:49:40.72432Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-13-improve-governed-workflow-diagnostic
+artifact_schema: expanded
+remediation_sources:
+    - slug: ai-agent-install-prompt-and-slug-cap
+      path: artifacts/changes/archived/ai-agent-install-prompt-and-slug-cap
+      relation: remediates
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 010e03f14dc24767180ff1aa193cdfb5eba754a12f37c106765fe4930022d76a
+        updated_at: 2026-05-30T06:50:41Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 08491ab2c955fdb32ec0ddcc5f24680ebe94be5dc65b9b2d31e4956042b3f1dc
+        updated_at: 2026-05-29T16:06:01.806203334Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 45aa79e54a9f219f50d2c1a69f4ba8149538a5a3f22a75b04bf99ea5cb71b1d5
+        updated_at: 2026-05-29T16:15:48.258401337Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 7d545bd45f899345c66f14b097cdf046365a3004a882795b2ef6ffe61f790343
+        updated_at: 2026-05-29T16:14:29.201750435Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 3f8d8d4b89a24eb9e2c8e87e8fa67abc1eb225ac68809e28dc3631d398f06d85
+        updated_at: 2026-05-29T16:14:29.202203615Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b219d456196d4eab75ceec5e560548cfc3e13536cce58f915b11a44043b52fba
+        updated_at: 2026-05-30T06:10:25Z

@@ -285,7 +285,7 @@ func TestArchiveChangeDoneMovesEntireChangeDirIncludingEvidence(t *testing.T) {
 	require.NoError(t, os.MkdirAll(verifyDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(verifyDir, "plan-audit.yaml"), []byte("verdict: pass\n"), 0o644))
 
-	taskEvidenceDir := EvidenceTasksDir(root, slug, 1)
+	taskEvidenceDir := EvidenceTasksDir(root, slug)
 	require.NoError(t, os.MkdirAll(taskEvidenceDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(taskEvidenceDir, "t1.json"), []byte(`{"task":"t1"}`), 0o644))
 
@@ -307,7 +307,7 @@ func TestArchiveChangeDoneMovesEntireChangeDirIncludingEvidence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Archived changes no longer retain hidden runtime evidence trees.
-	_, err = os.Stat(filepath.Join(ChangeDir(root, slug), "evidence", "tasks", "rv1", "t1.json"))
+	_, err = os.Stat(filepath.Join(ChangeDir(root, slug), "evidence", "tasks", "t1.json"))
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 }
@@ -555,13 +555,19 @@ func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 				TaskID:      "task-a",
 				Verdict:     model.TaskVerdictPass,
 				TaskKind:    model.TaskKindCode,
-				EvidenceRef: filepath.ToSlash(filepath.Join(".git", "slipway", "runtime", "changes", slug, "evidence", "tasks", "rv1", "task-a.json")),
+				EvidenceRef: filepath.ToSlash(filepath.Join(".git", "slipway", "runtime", "changes", slug, "evidence", "tasks", "task-a.json")),
 			},
 			{
 				TaskID:      "task-b",
 				Verdict:     model.TaskVerdictPass,
 				TaskKind:    model.TaskKindDoc,
 				EvidenceRef: filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "task-b.md")),
+			},
+			{
+				TaskID:      "task-c",
+				Verdict:     model.TaskVerdictPass,
+				TaskKind:    model.TaskKindCode,
+				EvidenceRef: filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "verification", "wave-orchestration.yaml")) + "#task-c",
 			},
 		},
 	}
@@ -577,6 +583,7 @@ func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, scrubbed.Tasks[0].EvidenceRef)
 	require.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "task-b.md")), scrubbed.Tasks[1].EvidenceRef)
+	require.Equal(t, filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "verification", "wave-orchestration.yaml"))+"#task-c", scrubbed.Tasks[2].EvidenceRef)
 }
 
 func TestScrubArchivedExecutionSummaryMalformedSummaryRemovesFile(t *testing.T) {

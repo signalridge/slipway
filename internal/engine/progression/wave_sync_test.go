@@ -220,6 +220,16 @@ func TestParseTaskEvidenceRejectsCompatibilityFallbacks(t *testing.T) {
 			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"yesterday"}`,
 			wantErr: "captured_at must be RFC3339Nano",
 		},
+		{
+			name:    "legacy-input-hash",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z","input_hash":"legacy"}`,
+			wantErr: "input_hash is not supported",
+		},
+		{
+			name:    "missing-freshness-inputs",
+			payload: `{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test","captured_at":"2026-04-06T10:00:00Z"}`,
+			wantErr: "freshness_inputs is required",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,6 +242,75 @@ func TestParseTaskEvidenceRejectsCompatibilityFallbacks(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.wantErr)
 		})
 	}
+}
+
+func TestLoadExecutionTasksFromEvidenceRejectsFreshnessInputMismatch(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("freshness-mismatch")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = "external_api_contracts"
+	require.NoError(t, state.SaveChange(root, change))
+
+	inputs := state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a")
+	inputs.GuardrailDomain = "auth_authz"
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
+		"captured_at":         time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
+		"freshness_inputs":    inputs,
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	tasks, parseIssues, err := LoadExecutionTasksFromEvidence(root, change.Slug, 1)
+	require.NoError(t, err)
+	assert.Empty(t, tasks)
+	require.Len(t, parseIssues, 1)
+	assert.Contains(t, parseIssues[0], "freshness_inputs mismatch")
+	assert.Contains(t, parseIssues[0], "guardrail_domain")
+}
+
+func TestLoadExecutionTasksFromEvidenceIgnoresPreviousRunVersionEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("ignore-previous-run-evidence")
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeTaskEvidence := func(taskID string, runVersion int) {
+		t.Helper()
+		payload := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": runVersion,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"evidence_ref":        "test:" + taskID,
+			"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+			"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, runVersion, taskID),
+		}
+		raw, err := json.Marshal(payload)
+		require.NoError(t, err)
+		path := filepath.Join(state.EvidenceTasksDir(root, change.Slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, raw, 0o644))
+	}
+	writeTaskEvidence("task-a", 1)
+	writeTaskEvidence("task-b", 2)
+
+	tasks, parseIssues, err := LoadExecutionTasksFromEvidence(root, change.Slug, 2)
+	require.NoError(t, err)
+	assert.Empty(t, parseIssues)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "task-b", tasks[0].TaskID)
 }
 
 func TestBuildResumeCompletedTasks(t *testing.T) {
@@ -291,12 +370,13 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	if err != nil {
 		t.Fatalf("marshal task evidence: %v", err)
 	}
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
 		t.Fatalf("mkdir task dir: %v", err)
 	}
@@ -360,10 +440,11 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 
@@ -422,10 +503,11 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 
@@ -532,12 +614,13 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	if err != nil {
 		t.Fatalf("marshal task evidence: %v", err)
 	}
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
 		t.Fatalf("mkdir task dir: %v", err)
 	}
@@ -614,13 +697,14 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 			"blockers":            []string{},
 			"evidence_ref":        "test:" + taskID,
 			"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+			"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
 			"session_id":          sharedSessionID,
 		}
 		raw, err := json.Marshal(taskEvidence)
 		if err != nil {
 			t.Fatalf("marshal task evidence: %v", err)
 		}
-		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), taskID+".json")
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
 		if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
 			t.Fatalf("mkdir task dir: %v", err)
 		}
@@ -686,10 +770,11 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 
@@ -788,10 +873,11 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         firstEvidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 
@@ -841,10 +927,11 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         secondEvidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 2, "task-a"),
 	}
 	raw, err = json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath = filepath.Join(state.EvidenceTasksDir(root, slug, 2), "task-a.json")
+	taskPath = filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 	_, err = state.MaterializeWavePlan(root, change)
@@ -913,10 +1000,11 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug, 1), "task-a.json")
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 

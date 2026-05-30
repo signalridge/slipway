@@ -24,18 +24,32 @@ import (
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
 type repairSummary struct {
-	CleanedAtomicTemps        []string `json:"cleaned_atomic_temps,omitempty"`
-	ConfigBackupPath          string   `json:"config_backup_path,omitempty"`
-	StaleLockCleaned          bool     `json:"stale_lock_cleaned"`
-	WorktreeScopeRepairs      []string `json:"worktree_scope_repairs,omitempty"`
-	MaterializedWavePlans     []string `json:"materialized_wave_plans,omitempty"`
-	RecoveredWaveRuns         []string `json:"recovered_wave_runs,omitempty"`
-	ClearedCheckpoints        []string `json:"cleared_checkpoints,omitempty"`
-	RepairedCheckpoints       []string `json:"repaired_checkpoints,omitempty"`
-	PrunedTaskEvidence        []string `json:"pruned_task_evidence,omitempty"`
-	RebuiltExecutionSummaries []string `json:"rebuilt_execution_summaries,omitempty"`
-	NonRepairableFindings     []string `json:"non_repairable_findings,omitempty"`
-	Mode                      string   `json:"mode,omitempty"`
+	CleanedAtomicTemps        []string                                 `json:"cleaned_atomic_temps,omitempty"`
+	ConfigBackupPath          string                                   `json:"config_backup_path,omitempty"`
+	StaleLockCleaned          bool                                     `json:"stale_lock_cleaned"`
+	WorktreeScopeRepairs      []string                                 `json:"worktree_scope_repairs,omitempty"`
+	MaterializedWavePlans     []string                                 `json:"materialized_wave_plans,omitempty"`
+	RecoveredWaveRuns         []string                                 `json:"recovered_wave_runs,omitempty"`
+	ClearedCheckpoints        []string                                 `json:"cleared_checkpoints,omitempty"`
+	RepairedCheckpoints       []string                                 `json:"repaired_checkpoints,omitempty"`
+	PrunedTaskEvidence        []string                                 `json:"pruned_task_evidence,omitempty"`
+	RebuiltExecutionSummaries []string                                 `json:"rebuilt_execution_summaries,omitempty"`
+	NonRepairableFindings     []string                                 `json:"non_repairable_findings,omitempty"`
+	AppliedRepairs            []repairAppliedFinding                   `json:"applied_repairs,omitempty"`
+	UnrepairedDrift           []repairDriftFinding                     `json:"unrepaired_drift,omitempty"`
+	PathAuthority             map[string]*state.ExecutionPathAuthority `json:"path_authority,omitempty"`
+	Mode                      string                                   `json:"mode,omitempty"`
+}
+
+type repairAppliedFinding struct {
+	Kind   string `json:"kind"`
+	Target string `json:"target"`
+}
+
+type repairDriftFinding struct {
+	Reason     string `json:"reason"`
+	Target     string `json:"target"`
+	NextAction string `json:"next_action"`
 }
 
 func makeRepairCmd() *cobra.Command {
@@ -65,7 +79,9 @@ func makeRepairCmd() *cobra.Command {
 					Mode:             effectiveMode,
 				}
 
-				cleaned, err := fsutil.CleanupAtomicTempArtifacts(root)
+				repairCfg := loadRepairLockConfigAtRoot(root)
+				tempStaleAfter := time.Duration(repairCfg.Execution.LockStaleAfterSeconds) * time.Second
+				cleaned, err := fsutil.CleanupAtomicTempArtifactsOlderThan(root, tempStaleAfter, now)
 				if err != nil {
 					return err
 				}
@@ -138,6 +154,7 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.RebuiltExecutionSummaries = rebuiltSummaries
 				summary.NonRepairableFindings = append(summary.NonRepairableFindings, rebuildFindings...)
+				summary.NonRepairableFindings = dropRepairedExecutionSummaryFindings(summary.NonRepairableFindings, rebuiltSummaries)
 
 				for _, slug := range archivedSlugs {
 					if _, err := state.RepairArchivedTerminalStatus(root, slug); err != nil {
@@ -200,6 +217,14 @@ func makeRepairCmd() *cobra.Command {
 
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
+				summary.AppliedRepairs = buildAppliedRepairFindings(summary)
+				freshnessDrift, err := buildFreshnessRepairDriftFindings(root, allChanges)
+				if err != nil {
+					return err
+				}
+				summary.UnrepairedDrift = normalizeRepairDriftFindings(append(buildUnrepairedDriftFindings(summary.NonRepairableFindings), freshnessDrift...))
+				summary.PathAuthority = buildRepairPathAuthority(root, allChanges, summary)
+				applyRepairInvocationWorkspacePath(cmd, root, &summary)
 				if repairSummaryHasLifecycleActivity(summary) {
 					for _, ch := range activeChanges {
 						if err := appendCLILifecycleEvent(root, ch, state.LifecycleEvent{
@@ -262,6 +287,8 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
 	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
 	writeRepairSection("Non-repairable findings", summary.NonRepairableFindings)
+	writeRepairSection("Applied repairs", repairAppliedFindingStrings(summary.AppliedRepairs))
+	writeRepairSection("Unrepaired drift", repairDriftFindingStrings(summary.UnrepairedDrift))
 
 	if len(summary.CleanedAtomicTemps) == 0 &&
 		strings.TrimSpace(summary.ConfigBackupPath) == "" &&
@@ -273,11 +300,319 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.RepairedCheckpoints) == 0 &&
 		len(summary.PrunedTaskEvidence) == 0 &&
 		len(summary.RebuiltExecutionSummaries) == 0 &&
-		len(summary.NonRepairableFindings) == 0 {
+		len(summary.NonRepairableFindings) == 0 &&
+		len(summary.AppliedRepairs) == 0 &&
+		len(summary.UnrepairedDrift) == 0 {
 		writer.Writef("No repairs were needed\n")
 	}
 
 	return writer.Err()
+}
+
+func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
+	findings := []repairAppliedFinding{}
+	appendItems := func(kind string, targets []string) {
+		for _, target := range targets {
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			findings = append(findings, repairAppliedFinding{Kind: kind, Target: target})
+		}
+	}
+	appendItems("cleaned_atomic_temp", summary.CleanedAtomicTemps)
+	appendItems("worktree_scope_repair", summary.WorktreeScopeRepairs)
+	appendItems("materialized_wave_plan", summary.MaterializedWavePlans)
+	appendItems("recovered_wave_run", summary.RecoveredWaveRuns)
+	appendItems("cleared_checkpoint", summary.ClearedCheckpoints)
+	appendItems("repaired_checkpoint", summary.RepairedCheckpoints)
+	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
+	appendItems("rebuilt_execution_summary", summary.RebuiltExecutionSummaries)
+	if summary.StaleLockCleaned {
+		findings = append(findings, repairAppliedFinding{Kind: "stale_lock_cleaned", Target: "workspace"})
+	}
+	if strings.TrimSpace(summary.ConfigBackupPath) != "" {
+		findings = append(findings, repairAppliedFinding{Kind: "config_backup", Target: summary.ConfigBackupPath})
+	}
+	slices.SortFunc(findings, func(a, b repairAppliedFinding) int {
+		if a.Kind != b.Kind {
+			return strings.Compare(a.Kind, b.Kind)
+		}
+		return strings.Compare(a.Target, b.Target)
+	})
+	return findings
+}
+
+func buildUnrepairedDriftFindings(findings []string) []repairDriftFinding {
+	if len(findings) == 0 {
+		return nil
+	}
+	out := make([]repairDriftFinding, 0, len(findings))
+	for _, finding := range findings {
+		finding = strings.TrimSpace(finding)
+		if finding == "" {
+			continue
+		}
+		target := "workspace"
+		reason := finding
+		if before, after, ok := strings.Cut(finding, ": "); ok {
+			before = strings.TrimSpace(before)
+			after = strings.TrimSpace(after)
+			switch {
+			case before == "bundle directory exists without change.yaml":
+				target = filepath.ToSlash(filepath.Join("artifacts", "changes", after))
+				reason = before
+			case before != "" && !strings.Contains(before, " "):
+				target = before
+				reason = after
+			case after != "":
+				target = after
+				reason = before
+			}
+		}
+		out = append(out, repairDriftFinding{
+			Reason:     reason,
+			Target:     target,
+			NextAction: repairDriftNextAction(reason),
+		})
+	}
+	return out
+}
+
+func buildFreshnessRepairDriftFindings(root string, changes []model.Change) ([]repairDriftFinding, error) {
+	out := []repairDriftFinding{}
+	for _, change := range changes {
+		if change.Status != model.ChangeStatusActive || !state.ExecutionSummaryRelevantState(change.CurrentState) {
+			continue
+		}
+		summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+		if err != nil || !state.ExecutionSummaryReady(summary) {
+			continue
+		}
+		diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+		if diagnostics.Status != "stale" {
+			continue
+		}
+		target := ""
+		reason := state.StaleExecutionEvidenceBlockerToken
+		nextAction := strings.TrimSpace(diagnostics.NextAction)
+		if diagnostics.FirstStaleCause != nil {
+			if diagnostics.FirstStaleCause.EvidenceArtifact != "" {
+				target = diagnostics.FirstStaleCause.EvidenceArtifact
+			}
+			if diagnostics.FirstStaleCause.SourceArtifact != "" {
+				target = diagnostics.FirstStaleCause.SourceArtifact
+			}
+			if diagnostics.FirstStaleCause.Reason != "" {
+				reason = diagnostics.FirstStaleCause.Reason
+			}
+			if nextAction == "" {
+				nextAction = diagnostics.FirstStaleCause.NextAction
+			}
+		}
+		if (target == "" || reason == state.StaleExecutionEvidenceBlockerToken) && len(diagnostics.TaskInputDiffs) > 0 {
+			for _, diff := range diagnostics.TaskInputDiffs {
+				diffTarget := target
+				if diff.EvidencePath != "" {
+					diffTarget = diff.EvidencePath
+				}
+				diffReason := fmt.Sprintf("%s: task=%s field=%s expected=%s current=%s",
+					state.StaleExecutionEvidenceBlockerToken,
+					diff.TaskID,
+					diff.Field,
+					diff.Expected,
+					diff.Current,
+				)
+				diffNextAction := nextAction
+				if diff.NextAction != "" {
+					diffNextAction = diff.NextAction
+				}
+				if diffTarget == "" && diagnostics.PathAuthority != nil {
+					diffTarget = diagnostics.PathAuthority.VerificationPath
+				}
+				if diffNextAction == "" {
+					diffNextAction = "regenerate execution-summary.yaml from current wave-backed task evidence"
+				}
+				out = append(out, repairDriftFinding{
+					Reason:     diffReason,
+					Target:     diffTarget,
+					NextAction: diffNextAction,
+				})
+			}
+			continue
+		}
+		if target == "" && diagnostics.PathAuthority != nil {
+			target = diagnostics.PathAuthority.VerificationPath
+		}
+		if nextAction == "" {
+			nextAction = "regenerate execution-summary.yaml from current wave-backed task evidence"
+		}
+		out = append(out, repairDriftFinding{
+			Reason:     reason,
+			Target:     target,
+			NextAction: nextAction,
+		})
+	}
+	return normalizeRepairDriftFindings(out), nil
+}
+
+func normalizeRepairDriftFindings(findings []repairDriftFinding) []repairDriftFinding {
+	if len(findings) == 0 {
+		return nil
+	}
+	normalized := make([]repairDriftFinding, 0, len(findings))
+	for _, finding := range findings {
+		finding.Reason = strings.TrimSpace(finding.Reason)
+		finding.Target = strings.TrimSpace(finding.Target)
+		finding.NextAction = strings.TrimSpace(finding.NextAction)
+		if finding.Reason == "" {
+			continue
+		}
+		if finding.Target == "" {
+			finding.Target = "workspace"
+		}
+		if finding.NextAction == "" {
+			finding.NextAction = repairDriftNextAction(finding.Reason)
+		}
+		normalized = append(normalized, finding)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	slices.SortFunc(normalized, func(a, b repairDriftFinding) int {
+		if a.Target != b.Target {
+			return strings.Compare(a.Target, b.Target)
+		}
+		if a.Reason != b.Reason {
+			return strings.Compare(a.Reason, b.Reason)
+		}
+		return strings.Compare(a.NextAction, b.NextAction)
+	})
+	return slices.CompactFunc(normalized, func(a, b repairDriftFinding) bool {
+		return a.Target == b.Target && a.Reason == b.Reason && a.NextAction == b.NextAction
+	})
+}
+
+func buildRepairPathAuthority(root string, changes []model.Change, summary repairSummary) map[string]*state.ExecutionPathAuthority {
+	if len(changes) == 0 {
+		return nil
+	}
+	changesBySlug := map[string]model.Change{}
+	for _, change := range changes {
+		if strings.TrimSpace(change.Slug) == "" {
+			continue
+		}
+		changesBySlug[change.Slug] = change
+	}
+	targetSlugs := map[string]struct{}{}
+	addTarget := func(target string) {
+		slug := repairTargetSlug(target)
+		if slug == "" {
+			return
+		}
+		if _, ok := changesBySlug[slug]; !ok {
+			return
+		}
+		targetSlugs[slug] = struct{}{}
+	}
+	addTargets := func(targets []string) {
+		for _, target := range targets {
+			addTarget(target)
+		}
+	}
+
+	addTargets(summary.MaterializedWavePlans)
+	addTargets(summary.RecoveredWaveRuns)
+	addTargets(summary.ClearedCheckpoints)
+	addTargets(summary.RepairedCheckpoints)
+	addTargets(summary.PrunedTaskEvidence)
+	addTargets(summary.RebuiltExecutionSummaries)
+	for _, finding := range summary.UnrepairedDrift {
+		addTarget(finding.Target)
+		addTarget(finding.Reason)
+		for _, change := range changesBySlug {
+			if repairFindingMentionsSlug(finding, change.Slug) {
+				addTarget(change.Slug)
+			}
+		}
+	}
+	if len(targetSlugs) == 0 {
+		return nil
+	}
+
+	out := map[string]*state.ExecutionPathAuthority{}
+	for slug := range targetSlugs {
+		change := changesBySlug[slug]
+		out[slug] = state.ExecutionPathAuthorityDiagnostics(root, change, 0)
+	}
+	return out
+}
+
+func repairTargetSlug(target string) string {
+	target = filepath.ToSlash(strings.TrimSpace(target))
+	target = strings.TrimPrefix(target, "./")
+	if target == "" {
+		return ""
+	}
+	parts := strings.Split(target, "/")
+	for i := 0; i+2 < len(parts); i++ {
+		if parts[i] == "artifacts" && parts[i+1] == "changes" {
+			return strings.TrimSpace(parts[i+2])
+		}
+	}
+	return strings.TrimSpace(parts[0])
+}
+
+func repairFindingMentionsSlug(finding repairDriftFinding, slug string) bool {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return false
+	}
+	haystack := filepath.ToSlash(finding.Target + "\n" + finding.Reason + "\n" + finding.NextAction)
+	return strings.Contains(haystack, "/"+slug+"/") ||
+		strings.Contains(haystack, "changes/"+slug) ||
+		strings.Contains(haystack, slug+":") ||
+		haystack == slug
+}
+
+func repairDriftNextAction(reason string) string {
+	lower := strings.ToLower(reason)
+	switch {
+	case strings.Contains(lower, "wave plan"):
+		return "regenerate or rescope tasks.md and rerun wave orchestration"
+	case strings.Contains(lower, "execution summary"):
+		return "regenerate execution-summary.yaml from current wave-backed task evidence"
+	case strings.Contains(lower, "change authority"), strings.Contains(lower, "change.yaml"):
+		return "repair or replace the authoritative change.yaml before continuing"
+	default:
+		return "inspect the named artifact and rerun the owning Slipway command after correction"
+	}
+}
+
+func repairAppliedFindingStrings(findings []repairAppliedFinding) []string {
+	if len(findings) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		out = append(out, finding.Kind+": "+finding.Target)
+	}
+	return out
+}
+
+func repairDriftFindingStrings(findings []repairDriftFinding) []string {
+	if len(findings) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		target := finding.Target
+		if target == "" {
+			target = "workspace"
+		}
+		out = append(out, target+": "+finding.Reason+"; next_action="+finding.NextAction)
+	}
+	return out
 }
 
 func repairSummaryForHealthFinding(finding state.HealthFinding) string {
@@ -310,6 +645,36 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 	return ""
 }
 
+func dropRepairedExecutionSummaryFindings(findings []string, rebuiltSlugs []string) []string {
+	if len(findings) == 0 || len(rebuiltSlugs) == 0 {
+		return findings
+	}
+	rebuilt := map[string]struct{}{}
+	for _, slug := range rebuiltSlugs {
+		slug = strings.TrimSpace(slug)
+		if slug != "" {
+			rebuilt[slug] = struct{}{}
+		}
+	}
+	if len(rebuilt) == 0 {
+		return findings
+	}
+
+	filtered := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		slug, reason, ok := strings.Cut(strings.TrimSpace(finding), ": ")
+		if !ok || !strings.Contains(reason, "execution summary unreadable") {
+			filtered = append(filtered, finding)
+			continue
+		}
+		if _, repaired := rebuilt[strings.TrimSpace(slug)]; repaired {
+			continue
+		}
+		filtered = append(filtered, finding)
+	}
+	return filtered
+}
+
 func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, error) {
 	allChanges, _, err := state.ListChangesBestEffortWithIssues(root)
 	if err != nil {
@@ -337,8 +702,10 @@ func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, 
 			continue
 		}
 
+		backupPath := ""
 		if err != nil {
-			backupPath, backupErr := backupUnreadableExecutionSummary(root, change, now)
+			var backupErr error
+			backupPath, backupErr = backupUnreadableExecutionSummary(root, change, now)
 			if backupErr != nil {
 				findings = append(findings, fmt.Sprintf("%s: backup unreadable execution summary: %v", change.Slug, backupErr))
 				continue
@@ -349,15 +716,20 @@ func rebuildExecutionSummaries(root string, now time.Time) ([]string, []string, 
 			}
 		}
 
-		if _, syncErr := progression.SyncGovernedWaveExecution(root, change); syncErr != nil {
+		syncResult, syncErr := progression.SyncGovernedWaveExecution(root, change)
+		if syncErr != nil {
+			restoreUnreadableExecutionSummaryBackup(root, change, backupPath)
 			findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %v", change.Slug, syncErr))
 			continue
 		}
 
 		rebuiltSummary, loadErr := state.LoadOptionalRelevantExecutionSummary(root, change)
 		if loadErr != nil || !state.ExecutionSummaryReady(rebuiltSummary) {
+			restoreUnreadableExecutionSummaryBackup(root, change, backupPath)
 			if loadErr != nil {
 				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary still unreadable: %v", change.Slug, loadErr))
+			} else if len(syncResult.Blockers) > 0 {
+				findings = append(findings, fmt.Sprintf("%s: rebuild execution summary from task evidence: %s", change.Slug, strings.Join(model.ReasonSpecs(syncResult.Blockers), ",")))
 			} else {
 				findings = append(findings, fmt.Sprintf("%s: rebuilt execution summary is still incomplete", change.Slug))
 			}
@@ -392,4 +764,18 @@ func backupUnreadableExecutionSummary(root string, change model.Change, now time
 		return "", err
 	}
 	return backupPath, nil
+}
+
+func restoreUnreadableExecutionSummaryBackup(root string, change model.Change, backupPath string) {
+	backupPath = strings.TrimSpace(backupPath)
+	if backupPath == "" {
+		return
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return
+	}
+	summaryPath := filepath.Join(paths.GovernedBundleDir, "verification", state.ExecutionSummaryFileName)
+	_ = os.Remove(summaryPath)
+	_ = os.Rename(backupPath, summaryPath)
 }

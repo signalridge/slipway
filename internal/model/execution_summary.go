@@ -26,15 +26,63 @@ func (v ExecutionVerdict) IsValid() bool {
 }
 
 type ExecutionTaskSummary struct {
-	TaskID            string       `yaml:"task_id" json:"task_id"`
-	Verdict           TaskVerdict  `yaml:"verdict" json:"verdict"`
-	TaskKind          TaskKind     `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
-	ChangedFiles      []string     `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
-	TargetFiles       []string     `yaml:"target_files,omitempty" json:"target_files,omitempty"`
-	EvidenceRef       string       `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
+	TaskID          string                       `yaml:"task_id" json:"task_id"`
+	Verdict         TaskVerdict                  `yaml:"verdict" json:"verdict"`
+	TaskKind        TaskKind                     `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
+	ChangedFiles    []string                     `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
+	TargetFiles     []string                     `yaml:"target_files,omitempty" json:"target_files,omitempty"`
+	EvidenceRef     string                       `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
+	FreshnessInputs ExecutionTaskFreshnessInputs `yaml:"freshness_inputs,omitempty" json:"freshness_inputs,omitempty"`
+	// EvidenceInputHash is retained only so legacy hash-only summaries can be
+	// diagnosed as stale instead of failing to parse. It is no longer a
+	// freshness authority and new generated summaries should leave it empty.
 	EvidenceInputHash string       `yaml:"evidence_input_hash,omitempty" json:"evidence_input_hash,omitempty"`
 	Blockers          []ReasonCode `yaml:"blockers,omitempty" json:"blockers,omitempty"`
 	CapturedAt        time.Time    `yaml:"captured_at,omitempty" json:"captured_at,omitempty"`
+}
+
+type ExecutionTaskFreshnessInputs struct {
+	ChangeID          string `yaml:"change_id,omitempty" json:"change_id,omitempty"`
+	RunSummaryVersion int    `yaml:"run_summary_version,omitempty" json:"run_summary_version,omitempty"`
+	TaskID            string `yaml:"task_id,omitempty" json:"task_id,omitempty"`
+	GuardrailDomain   string `yaml:"guardrail_domain,omitempty" json:"guardrail_domain,omitempty"`
+}
+
+func (i *ExecutionTaskFreshnessInputs) Normalize() {
+	i.ChangeID = strings.TrimSpace(i.ChangeID)
+	i.TaskID = strings.TrimSpace(i.TaskID)
+	i.GuardrailDomain = strings.TrimSpace(i.GuardrailDomain)
+}
+
+func (i ExecutionTaskFreshnessInputs) Normalized() ExecutionTaskFreshnessInputs {
+	out := i
+	out.Normalize()
+	return out
+}
+
+func (i ExecutionTaskFreshnessInputs) IsZero() bool {
+	i = i.Normalized()
+	return i.ChangeID == "" &&
+		i.RunSummaryVersion == 0 &&
+		i.TaskID == "" &&
+		i.GuardrailDomain == ""
+}
+
+func (i ExecutionTaskFreshnessInputs) Equal(other ExecutionTaskFreshnessInputs) bool {
+	return i.Normalized() == other.Normalized()
+}
+
+func (i ExecutionTaskFreshnessInputs) FieldMap() map[string]string {
+	i = i.Normalized()
+	if i.IsZero() {
+		return map[string]string{}
+	}
+	return map[string]string{
+		"change_id":           i.ChangeID,
+		"run_summary_version": fmt.Sprintf("%d", i.RunSummaryVersion),
+		"task_id":             i.TaskID,
+		"guardrail_domain":    i.GuardrailDomain,
+	}
 }
 
 func (t *ExecutionTaskSummary) Normalize() {
@@ -50,6 +98,7 @@ func (t *ExecutionTaskSummary) Normalize() {
 	if !t.CapturedAt.IsZero() {
 		t.CapturedAt = t.CapturedAt.Round(0).UTC()
 	}
+	t.FreshnessInputs.Normalize()
 	slices.Sort(t.ChangedFiles)
 	slices.Sort(t.TargetFiles)
 	if len(t.Blockers) == 0 {
@@ -100,6 +149,7 @@ func (t ExecutionTaskSummary) Equal(other ExecutionTaskSummary) bool {
 		left.Verdict == right.Verdict &&
 		left.TaskKind == right.TaskKind &&
 		left.EvidenceRef == right.EvidenceRef &&
+		left.FreshnessInputs.Equal(right.FreshnessInputs) &&
 		left.EvidenceInputHash == right.EvidenceInputHash &&
 		left.CapturedAt.Equal(right.CapturedAt) &&
 		slices.Equal(left.ChangedFiles, right.ChangedFiles) &&

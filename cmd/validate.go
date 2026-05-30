@@ -14,33 +14,43 @@ import (
 )
 
 type validateView struct {
-	Slug                      string                      `json:"slug"`
-	QualityMode               string                      `json:"quality_mode,omitempty"`
-	WorkflowPreset            string                      `json:"workflow_preset,omitempty"`
-	SuggestedWorkflowPreset   string                      `json:"suggested_workflow_preset,omitempty"`
-	EffectiveWorkflowPreset   string                      `json:"effective_workflow_preset,omitempty"`
-	PresetConfirmationPending bool                        `json:"preset_confirmation_pending,omitempty"`
-	PresetUpgradeReasons      []string                    `json:"preset_upgrade_reasons,omitempty"`
-	GovernanceForecast        *governanceForecastView     `json:"governance_forecast,omitempty"`
-	NeedsDiscovery            bool                        `json:"needs_discovery,omitempty"`
-	Phase                     model.UserPhase             `json:"phase,omitempty"`
-	ExecutionMode             string                      `json:"execution_mode"`
-	CurrentState              model.WorkflowState         `json:"current_state"`
-	IntakeSubStep             model.IntakeSubStep         `json:"intake_substep,omitempty"`
-	PlanSubStep               model.PlanSubStep           `json:"plan_substep,omitempty"`
-	PlanningNote              string                      `json:"planning_note,omitempty"`
-	SkillsReady               map[string]string           `json:"skills_ready"`
-	Blockers                  []model.ReasonCode          `json:"blockers"`
-	CanAdvance                bool                        `json:"can_advance"`
-	GateStatus                map[string]string           `json:"gate_status,omitempty"`
-	GateDetails               map[string]model.GateRecord `json:"gate_details,omitempty"`
-	EvidenceFreshness         string                      `json:"evidence_freshness"`
-	RequirementsContract      *requirementsContractView   `json:"requirements_contract,omitempty"`
-	ScopeContract             *scopeContractView          `json:"scope_contract,omitempty"`
-	Diagnostics               []string                    `json:"diagnostics,omitempty"`
-	Mode                      string                      `json:"mode,omitempty"`
-	HydrateReferences         []string                    `json:"hydrate_references,omitempty"`
-	ArtifactAmendments        []artifact.AmendmentEvent   `json:"artifact_amendments,omitempty"`
+	Slug                      string                               `json:"slug"`
+	QualityMode               string                               `json:"quality_mode,omitempty"`
+	WorkflowPreset            string                               `json:"workflow_preset,omitempty"`
+	SuggestedWorkflowPreset   string                               `json:"suggested_workflow_preset,omitempty"`
+	EffectiveWorkflowPreset   string                               `json:"effective_workflow_preset,omitempty"`
+	PresetConfirmationPending bool                                 `json:"preset_confirmation_pending,omitempty"`
+	PresetUpgradeReasons      []string                             `json:"preset_upgrade_reasons,omitempty"`
+	GovernanceForecast        *governanceForecastView              `json:"governance_forecast,omitempty"`
+	NeedsDiscovery            bool                                 `json:"needs_discovery,omitempty"`
+	Phase                     model.UserPhase                      `json:"phase,omitempty"`
+	ExecutionMode             string                               `json:"execution_mode"`
+	CurrentState              model.WorkflowState                  `json:"current_state"`
+	IntakeSubStep             model.IntakeSubStep                  `json:"intake_substep,omitempty"`
+	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
+	PlanningNote              string                               `json:"planning_note,omitempty"`
+	SkillsReady               map[string]string                    `json:"skills_ready"`
+	Blockers                  []model.ReasonCode                   `json:"blockers"`
+	CanAdvance                bool                                 `json:"can_advance"`
+	GateStatus                map[string]string                    `json:"gate_status,omitempty"`
+	GateDetails               map[string]model.GateRecord          `json:"gate_details,omitempty"`
+	EvidenceFreshness         string                               `json:"evidence_freshness"`
+	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	ActionableNextSkill       *actionableNextSkillView             `json:"actionable_next_skill,omitempty"`
+	RequirementsContract      *requirementsContractView            `json:"requirements_contract,omitempty"`
+	ScopeContract             *scopeContractView                   `json:"scope_contract,omitempty"`
+	Diagnostics               []string                             `json:"diagnostics,omitempty"`
+	Mode                      string                               `json:"mode,omitempty"`
+	HydrateReferences         []string                             `json:"hydrate_references,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
+}
+
+type actionableNextSkillView struct {
+	Name             string   `json:"name"`
+	DisplayName      string   `json:"display_name,omitempty"`
+	BlockingName     string   `json:"blocking_name,omitempty"`
+	ResolutionReason string   `json:"resolution_reason,omitempty"`
+	RequiredTokens   []string `json:"required_tokens,omitempty"`
 }
 
 type requirementsContractView struct {
@@ -153,6 +163,7 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			applyValidateInvocationWorkspacePath(cmd, root, &view)
 			view.Mode = effectiveMode
 			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
 			return encodeJSONResponse(cmd, view)
@@ -250,6 +261,8 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.RequirementsContract = requirementsContract
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
+	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)
 	gateDetails := gateStatusFromEvaluations(readiness.GateEvaluations)
 	gateStatus := map[string]string{}
 	for name, gate := range gateDetails {
@@ -276,4 +289,29 @@ func buildScopeContractView(report *scopecontract.Report) *scopeContractView {
 		MissingChangedFileTasks: append([]string(nil), report.MissingChangedFileTasks...),
 		Blockers:                append([]model.ReasonCode(nil), report.Blockers...),
 	}
+}
+
+func buildActionableNextSkillView(change model.Change, readiness progression.GovernanceReadiness) *actionableNextSkillView {
+	displaySkill, _ := progression.ResolveNextSkill(change)
+	if displaySkill == "" {
+		return nil
+	}
+	actionableSkill := displaySkill
+	reason := ""
+	if resolved, resolvedReason := resolveActionableBlockingSkill(displaySkill, readiness.PassingSkills, readiness.Blockers); resolved != "" {
+		actionableSkill = resolved
+		reason = resolvedReason
+	} else if skillHasPassingEvidence(readiness.PassingSkills, displaySkill) {
+		return nil
+	}
+	view := &actionableNextSkillView{
+		Name:           actionableSkill,
+		RequiredTokens: progression.RequiredReviewLayerTokensForSkill(change, readiness.ArtifactProjection, false, actionableSkill),
+	}
+	if displaySkill != actionableSkill {
+		view.DisplayName = displaySkill
+		view.BlockingName = actionableSkill
+		view.ResolutionReason = reason
+	}
+	return view
 }

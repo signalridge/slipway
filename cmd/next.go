@@ -14,42 +14,51 @@ import (
 )
 
 type nextView struct {
-	Slug                      string                       `json:"slug"`
-	QualityMode               string                       `json:"quality_mode,omitempty"`
-	WorkflowProfile           string                       `json:"workflow_profile,omitempty"`
-	WorkflowPreset            string                       `json:"workflow_preset,omitempty"`
-	SuggestedWorkflowPreset   string                       `json:"suggested_workflow_preset,omitempty"`
-	EffectiveWorkflowPreset   string                       `json:"effective_workflow_preset,omitempty"`
-	PresetConfirmationPending bool                         `json:"preset_confirmation_pending,omitempty"`
-	PresetUpgradeReasons      []string                     `json:"preset_upgrade_reasons,omitempty"`
-	GovernanceForecast        *governanceForecastView      `json:"governance_forecast,omitempty"`
-	NeedsDiscovery            bool                         `json:"needs_discovery,omitempty"`
-	ComplexityLevel           string                       `json:"complexity_level,omitempty"`
-	GuardrailDomain           string                       `json:"guardrail_domain,omitempty"`
-	Phase                     model.UserPhase              `json:"phase"`
-	ExecutionMode             string                       `json:"execution_mode"`
-	CurrentState              model.WorkflowState          `json:"current_state"`
-	IntakeSubStep             model.IntakeSubStep          `json:"intake_substep,omitempty"`
-	PlanSubStep               model.PlanSubStep            `json:"plan_substep,omitempty"`
-	PlanningNote              string                       `json:"planning_note,omitempty"`
-	LifecycleStatus           string                       `json:"lifecycle_status"`
-	Advanced                  *progression.AdvanceSummary  `json:"advanced,omitempty"`
-	AutoTransitions           []progression.AdvanceSummary `json:"auto_transitions,omitempty"`
-	NextSkill                 *nextSkillView               `json:"next_skill"`
-	InputContext              nextContext                  `json:"input_context"`
-	ContextBudget             *contextBudget               `json:"context_budget,omitempty"`
-	Constraints               *agentConstraints            `json:"constraints,omitempty"`
-	GovernanceSignals         *governanceSignalView        `json:"governance_signals,omitempty"`
-	ActiveControls            []governanceControlView      `json:"active_controls,omitempty"`
-	RequiredActions           []governanceActionView       `json:"required_actions,omitempty"`
-	SkillEvidence             []skillEvidenceEntry         `json:"skill_evidence,omitempty"`
-	AutoPassEligible          []model.AutoPassedState      `json:"auto_pass_eligible,omitempty"`
-	ArtifactAmendments        []artifact.AmendmentEvent    `json:"artifact_amendments,omitempty"`
-	Warnings                  []string                     `json:"warnings,omitempty"`
-	Blockers                  []model.ReasonCode           `json:"blockers"`
-	Confirmation              bool                         `json:"confirmation_required"`
+	Slug                      string                               `json:"slug"`
+	QualityMode               string                               `json:"quality_mode,omitempty"`
+	WorkflowProfile           string                               `json:"workflow_profile,omitempty"`
+	WorkflowPreset            string                               `json:"workflow_preset,omitempty"`
+	SuggestedWorkflowPreset   string                               `json:"suggested_workflow_preset,omitempty"`
+	EffectiveWorkflowPreset   string                               `json:"effective_workflow_preset,omitempty"`
+	PresetConfirmationPending bool                                 `json:"preset_confirmation_pending,omitempty"`
+	PresetUpgradeReasons      []string                             `json:"preset_upgrade_reasons,omitempty"`
+	GovernanceForecast        *governanceForecastView              `json:"governance_forecast,omitempty"`
+	NeedsDiscovery            bool                                 `json:"needs_discovery,omitempty"`
+	ComplexityLevel           string                               `json:"complexity_level,omitempty"`
+	GuardrailDomain           string                               `json:"guardrail_domain,omitempty"`
+	Phase                     model.UserPhase                      `json:"phase"`
+	ExecutionMode             string                               `json:"execution_mode"`
+	CurrentState              model.WorkflowState                  `json:"current_state"`
+	IntakeSubStep             model.IntakeSubStep                  `json:"intake_substep,omitempty"`
+	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
+	PlanningNote              string                               `json:"planning_note,omitempty"`
+	LifecycleStatus           string                               `json:"lifecycle_status"`
+	Advanced                  *progression.AdvanceSummary          `json:"advanced,omitempty"`
+	AutoTransitions           []progression.AdvanceSummary         `json:"auto_transitions,omitempty"`
+	NextSkill                 *nextSkillView                       `json:"next_skill"`
+	InputContext              nextContext                          `json:"input_context"`
+	ContextBudget             *contextBudget                       `json:"context_budget,omitempty"`
+	Constraints               *agentConstraints                    `json:"constraints,omitempty"`
+	GovernanceSignals         *governanceSignalView                `json:"governance_signals,omitempty"`
+	ActiveControls            []governanceControlView              `json:"active_controls,omitempty"`
+	RequiredActions           []governanceActionView               `json:"required_actions,omitempty"`
+	SkillEvidence             []skillEvidenceEntry                 `json:"skill_evidence,omitempty"`
+	AutoPassEligible          []model.AutoPassedState              `json:"auto_pass_eligible,omitempty"`
+	ArtifactAmendments        []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
+	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	Warnings                  []string                             `json:"warnings,omitempty"`
+	Blockers                  []model.ReasonCode                   `json:"blockers"`
+	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
 
 	consumeActiveCheckpoint bool
+}
+
+type confirmationRequirement struct {
+	Required                     bool   `json:"required"`
+	Boundary                     string `json:"boundary"`
+	FreshConfirmationRequired    bool   `json:"fresh_confirmation_required"`
+	PriorAuthorizationSufficient bool   `json:"prior_authorization_sufficient"`
+	Reason                       string `json:"reason"`
 }
 
 type skillEvidenceEntry struct {
@@ -92,6 +101,10 @@ type contextBudgetBreakdown struct {
 
 type nextSkillView struct {
 	Name             string             `json:"name"`
+	DisplayName      string             `json:"display_name,omitempty"`
+	BlockingName     string             `json:"blocking_name,omitempty"`
+	ResolutionReason string             `json:"resolution_reason,omitempty"`
+	RequiredTokens   []string           `json:"required_tokens,omitempty"`
 	VerificationDir  string             `json:"verification_dir"`
 	State            string             `json:"state"`
 	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
@@ -115,9 +128,9 @@ type techniqueHint struct {
 }
 
 type reviewContextView struct {
-	RequiredArtifactLayers       []string `json:"required_artifact_layers"`
-	RequiredImplementationLayers []string `json:"required_implementation_layers"`
-	OptionalLayers               []string `json:"optional_layers"`
+	RequiredArtifactLayers       []string `json:"required_artifact_layers,omitempty"`
+	RequiredImplementationLayers []string `json:"required_implementation_layers,omitempty"`
+	OptionalLayers               []string `json:"optional_layers,omitempty"`
 }
 
 type nextContext struct {
@@ -245,6 +258,7 @@ func makeNextCmd() *cobra.Command {
 					if err != nil {
 						return err
 					}
+					applyNextInvocationWorkspacePath(cmd, root, &view)
 					return encodeJSONResponse(cmd, buildNextHandoffView(view))
 				}
 
@@ -253,6 +267,7 @@ func makeNextCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				applyNextInvocationWorkspacePath(cmd, root, &view)
 
 				if contextGuard {
 					return writeContextGuardHookMessages(cmd.OutOrStdout(), view)
@@ -287,9 +302,9 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 	}
 
 	view := nextView{
-		Slug:         ref.Slug,
-		Phase:        model.PhasePlanning,
-		Confirmation: true,
+		Slug:                    ref.Slug,
+		Phase:                   model.PhasePlanning,
+		ConfirmationRequirement: confirmationNoBoundary("initializing"),
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -312,6 +327,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		return nextView{}, err
 	}
 	finalize := func() (nextView, error) {
+		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
 		if err := consumeNextCheckpoint(root, governedChange, &view); err != nil {
 			return nextView{}, err
 		}
@@ -319,6 +335,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 	}
 	view.Phase = model.PhaseFor(view.CurrentState)
 	var nextSkillEvidence map[string]model.VerificationRecord
+	var nextSkillArtifactProjection *progression.ArtifactProjection
 	if governedChange != nil {
 		presetFields, err := buildWorkflowPresetView(root, *governedChange)
 		if err != nil {
@@ -346,10 +363,12 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		}
 		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
 		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
+		view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 		if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 			view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 		}
 		nextSkillEvidence = readiness.PassingSkills
+		nextSkillArtifactProjection = readiness.ArtifactProjection
 		applyReadinessToNextContext(&view, readiness)
 		applyGovernanceSurfaceToNext(readiness, &view)
 	}
@@ -363,6 +382,9 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		view.NextSkill = nil
 		view.Blockers = []model.ReasonCode{model.NewReasonCode("change_is_done", "")}
 		return finalize()
+	}
+	if err := projectDoneReadyForReadOnlyQuery(root, governedChange, &advanced); err != nil {
+		return nextView{}, err
 	}
 	if advanced.Action == "done_ready" {
 		view.NextSkill = nil
@@ -382,7 +404,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		}
 	}
 
-	if err := assembleSkillView(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence, autoSkipEvidence); err != nil {
+	if err := assembleSkillView(root, &view, ref, advanced, governedChange, execCtx, nextSkillEvidence, nextSkillArtifactProjection, autoSkipEvidence); err != nil {
 		return nextView{}, err
 	}
 
@@ -457,6 +479,27 @@ func shouldExposeAdvancedSummaryToCaller(summary progression.AdvanceSummary) boo
 	default:
 		return false
 	}
+}
+
+func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advanced *progression.AdvanceSummary) error {
+	if change == nil || advanced == nil || advanced.Action != "query" || change.CurrentState != model.StateS4Verify {
+		return nil
+	}
+	shipAuthority, err := progression.EvaluateShipAuthority(root, *change)
+	if err != nil {
+		return wrapGovernanceReadinessError("evaluate done-ready projection", change.Slug, err)
+	}
+	if shipAuthority.Result.Status != model.GateStatusApproved {
+		return nil
+	}
+	*advanced = progression.AdvanceSummary{
+		Action:    "done_ready",
+		FromState: model.StateS4Verify,
+		Reason:    "governance_gates_passed",
+		Message:   "Governance gates passed; run `slipway done` to finalize.",
+		Blockers:  []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
+	}
+	return nil
 }
 
 func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model.Change, execCtx *executionContext, view nextView) ([]string, error) {
@@ -542,7 +585,86 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 	view.GovernanceForecast = presetFields.GovernanceForecast
 	view.Blockers = []model.ReasonCode{model.NewReasonCode("preset_confirmation_required", "")}
 	view.NextSkill = nil
+	view.ConfirmationRequirement = confirmationHardStop("preset_confirmation_required")
 	return true, nil
+}
+
+func deriveConfirmationRequirement(view nextView) confirmationRequirement {
+	switch {
+	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
+		return confirmationHardStop("preset_confirmation_required")
+	case view.NextSkill != nil:
+		reason := "skill_handoff"
+		if strings.TrimSpace(view.NextSkill.BlockingName) != "" {
+			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.BlockingName)
+		} else if strings.TrimSpace(view.NextSkill.Name) != "" {
+			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.Name)
+		}
+		return confirmationHardStop(reason)
+	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
+		return confirmationHardStop("resume_checkpoint")
+	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
+		return confirmationCommandRequired("run_slipway_done_to_finalize")
+	case len(view.Blockers) > 0:
+		return confirmationCommandRequired("blocked_by_governance")
+	case len(view.AutoPassEligible) > 0:
+		return confirmationEvidenceContinuation("auto_pass_available")
+	default:
+		return confirmationNoBoundary("no_confirmation_boundary")
+	}
+}
+
+func hasReasonCode(reasons []model.ReasonCode, code string) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, reason := range reasons {
+		if reason.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func confirmationHardStop(reason string) confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     true,
+		Boundary:                     "hard_stop",
+		FreshConfirmationRequired:    true,
+		PriorAuthorizationSufficient: false,
+		Reason:                       strings.TrimSpace(reason),
+	}
+}
+
+func confirmationCommandRequired(reason string) confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     false,
+		Boundary:                     "command_required",
+		FreshConfirmationRequired:    false,
+		PriorAuthorizationSufficient: true,
+		Reason:                       strings.TrimSpace(reason),
+	}
+}
+
+func confirmationEvidenceContinuation(reason string) confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     false,
+		Boundary:                     "evidence_continuation",
+		FreshConfirmationRequired:    false,
+		PriorAuthorizationSufficient: true,
+		Reason:                       strings.TrimSpace(reason),
+	}
+}
+
+func confirmationNoBoundary(reason string) confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     false,
+		Boundary:                     "none",
+		FreshConfirmationRequired:    false,
+		PriorAuthorizationSufficient: true,
+		Reason:                       strings.TrimSpace(reason),
+	}
 }
 
 func writeNextHuman(w io.Writer, view nextView) error {
@@ -622,6 +744,17 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		writeLine("Next Skill: %s\n", view.NextSkill.Name)
 		writeLine("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
 		writeLine("  Evidence State: %s\n", view.NextSkill.State)
+		if len(view.NextSkill.RequiredTokens) > 0 {
+			writeLine("  Required Tokens: %s\n", strings.Join(view.NextSkill.RequiredTokens, ", "))
+		}
+		if view.NextSkill.ReviewContext != nil {
+			if len(view.NextSkill.ReviewContext.RequiredArtifactLayers) > 0 {
+				writeLine("  Required Artifact Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredArtifactLayers, ", "))
+			}
+			if len(view.NextSkill.ReviewContext.RequiredImplementationLayers) > 0 {
+				writeLine("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
+			}
+		}
 
 		if len(view.NextSkill.TechniqueHints) > 0 {
 			writeLine("\nTechnique Hints:\n")

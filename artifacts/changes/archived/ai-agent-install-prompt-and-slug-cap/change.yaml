@@ -1,3 +1,4 @@
+version: 1
 slug: ai-agent-install-prompt-and-slug-cap
 description: Add AI-agent installation guidance to README and docs/installation.md, modeled after comparable governed-delivery projects
 status: done

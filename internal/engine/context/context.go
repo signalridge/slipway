@@ -1,6 +1,7 @@
 package enginecontext
 
 import (
+	"reflect"
 	"time"
 )
 
@@ -19,10 +20,10 @@ const (
 )
 
 type EvidenceFreshnessInput struct {
-	EvidenceInputHash      string    `json:"evidence_input_hash"`
-	CurrentInputHash       string    `json:"current_input_hash"`
-	EvidenceTimestamp      time.Time `json:"evidence_timestamp"`
-	LatestRelevantUpdateAt time.Time `json:"latest_relevant_update_at"`
+	ExpectedStructuralInput map[string]string `json:"expected_structural_input,omitempty"`
+	CurrentStructuralInput  map[string]string `json:"current_structural_input,omitempty"`
+	EvidenceTimestamp       time.Time         `json:"evidence_timestamp"`
+	LatestRelevantUpdateAt  time.Time         `json:"latest_relevant_update_at"`
 }
 
 func EvaluateEvidenceFreshness(
@@ -38,9 +39,9 @@ func EvaluateEvidenceFreshness(
 
 	evaluated := false
 	for _, item := range inputs {
-		if item.EvidenceInputHash != "" && item.CurrentInputHash != "" {
+		if len(item.ExpectedStructuralInput) > 0 || len(item.CurrentStructuralInput) > 0 {
 			evaluated = true
-			if item.EvidenceInputHash != item.CurrentInputHash {
+			if !reflect.DeepEqual(item.ExpectedStructuralInput, item.CurrentStructuralInput) {
 				return EvidenceFreshnessStale
 			}
 		}

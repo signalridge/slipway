@@ -35,7 +35,10 @@ verification. Use fresh context; do not carry assumptions from Stage 1.
 
 ## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Verify `spec-compliance-review` exists with `verdict=pass`.
+Verify `spec-compliance-review` exists with `verdict=pass`. Read
+`next_skill.review_context.required_implementation_layers` for required review
+tokens and the top-level `confirmation_requirement` object for stop boundaries.
+Those fields are the source of truth for this handoff.
 Use `slipway-coding-discipline` as the baseline review posture for simplicity,
 small diffs, and goal-driven execution.
 
@@ -63,8 +66,15 @@ small diffs, and goal-driven execution.
 - config changes are reflected in docs
 - API contracts match between layers
 
-## Review Layer
-Record the outcome in `references` as `layer:QUALITY=pass|fail`.
+## Review Layers
+- `layer:IR1=pass|fail`: mandatory baseline implementation quality review.
+- `layer:IR3=pass|fail`: mandatory when
+  `review_context.required_implementation_layers` includes `IR3`, including
+  guardrail-domain contract review such as `external_api_contracts`.
+
+Do not use `layer:QUALITY=pass` as a gate-satisfying substitute. It may be a
+prose category in notes, but governance gates consume the exact `IR*` layer
+tokens.
 
 ## Write Verification
 ```yaml
@@ -74,7 +84,8 @@ blockers: []
 timestamp: "<ISO-8601-UTC>"
 run_version: 1
 references:
-  - "layer:QUALITY=pass"
+  - "layer:IR1=pass"
+  - "layer:IR3=pass" # include only when review_context requires IR3
 notes: |
   Gaps (code_to_artifact): <code patterns not reflected in artifacts>
   Gaps (artifact_to_code): <artifact expectations not met by code>
