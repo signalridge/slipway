@@ -53,6 +53,23 @@ CLI-detected repository facts. Baseline docs are useful starting context, not
 authored brownfield analysis; callers should refine them with source-backed
 findings before relying on them for planning or review.
 
+Codebase maps under `artifacts/codebase/` are git-tracked by default — durable
+brownfield context is meant to be reviewed and shared, not hidden as local-only
+state. Existing repositories auto-migrate the next time `slipway new`,
+`slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
+block (`next`/`run`/`status`/`repair` do not reconcile it); the `evidence/`,
+`events/`, `verification/`, and `.worktrees/` paths stay ignored.
+
+`next --json` and `run --json` include `input_context.codebase_map_status`
+(and per-doc `input_context.codebase_map_doc_states`) in the default,
+non-`--diagnostics` handoff so callers can tell whether the referenced map is
+durable. Values mirror the `slipway codebase-map` assessment (`missing`,
+`scaffold_only`, `baseline`, `partial`, `populated`); a missing map reports
+`"missing"` with each doc `missing` rather than an omitted field. When a
+map-consuming planning skill (research-orchestration or plan-audit) is next and
+the status is `scaffold_only` or `baseline`, `warnings` carries a non-blocking
+codebase-map advisory.
+
 ## Useful JSON Invocations
 
 ```bash

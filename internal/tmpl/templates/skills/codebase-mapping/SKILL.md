@@ -37,6 +37,13 @@ docs are not finished mapping work; refine them with file:line citations,
 module-boundary findings, and change-specific risks before treating the map as
 reviewed context.
 
+These documents are git-tracked by default: durable brownfield context is meant
+to be reviewed and shared, not hidden as local-only state. `next`/`run` surface
+`input_context.codebase_map_status` (and per-doc
+`input_context.codebase_map_doc_states`) so downstream hosts can tell whether the
+map is durable; a `scaffold_only` or `baseline` status means the map is
+non-durable and should be refined before it is consumed as reviewed context.
+
 ## Process
 
 ### 1. Resolve Output Paths

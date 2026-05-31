@@ -111,3 +111,19 @@ traces.
 when documents contain only CLI-detected repository facts. Treat baseline docs
 as a starting point awaiting source-backed verification, not as completed
 brownfield analysis.
+
+Codebase maps under `artifacts/codebase/` are git-tracked by default; durable
+brownfield context is reviewed and shared, not hidden as local-only state.
+Existing repositories auto-migrate the next time `slipway new`,
+`slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
+block. `evidence/`, `events/`, `verification/`, and `.worktrees/` stay ignored.
+
+`next --json` and `run --json` carry `input_context.codebase_map_status` (and
+per-doc `input_context.codebase_map_doc_states`) in the default compact handoff,
+without `--diagnostics`. Values mirror the `codebase-map` assessment (`missing`,
+`scaffold_only`, `baseline`, `partial`, `populated`); a missing map reports
+`"missing"` with per-doc `missing` states rather than an omitted field. Treat
+`scaffold_only`/`baseline` maps as non-durable. When research-orchestration or
+plan-audit is the next skill and the status is `scaffold_only` or `baseline`,
+`warnings` carries a non-blocking codebase-map advisory; inspect
+`codebase_map_doc_states` for `partial` maps, which get no whole-map advisory.

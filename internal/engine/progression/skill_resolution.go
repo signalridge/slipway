@@ -1,10 +1,6 @@
 package progression
 
 import (
-	"os"
-	"path/filepath"
-
-	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 )
 
@@ -73,26 +69,4 @@ func resolveS2Execute(change model.Change) (string, string) {
 		return SkillWorktreePreflight, string(model.StateS2Execute)
 	}
 	return SkillWaveOrchestration, string(model.StateS2Execute)
-}
-
-// HasEmptyCodebaseMap returns true if none of the expected codebase-map docs exist on disk.
-func HasEmptyCodebaseMap(root string, docs map[string]string) bool {
-	if len(docs) == 0 {
-		return true
-	}
-	for _, relPath := range docs {
-		absPath := resolveCodebaseMapDisplayPath(root, relPath)
-		data, err := os.ReadFile(absPath)
-		if err == nil && len(data) > 0 && !artifact.CodebaseMapDocIsScaffoldOnly(filepath.Base(absPath), string(data)) {
-			return false
-		}
-	}
-	return true
-}
-
-func resolveCodebaseMapDisplayPath(root, displayPath string) string {
-	if filepath.IsAbs(displayPath) {
-		return displayPath
-	}
-	return filepath.Join(root, displayPath)
 }

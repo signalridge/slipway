@@ -1,8 +1,6 @@
 package progression
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -133,36 +131,5 @@ func TestResolveNextSkill_S1Plan_Bundle_NoSkill(t *testing.T) {
 		if name != "" {
 			t.Errorf("ResolveNextSkill(%v, S1_PLAN/bundle) = %q, want empty", needsDiscovery, name)
 		}
-	}
-}
-
-func TestHasEmptyCodebaseMap(t *testing.T) {
-	t.Parallel()
-	if !HasEmptyCodebaseMap("/tmp", nil) {
-		t.Error("expected true for nil docs")
-	}
-	if !HasEmptyCodebaseMap("/tmp", map[string]string{}) {
-		t.Error("expected true for empty docs")
-	}
-	if !HasEmptyCodebaseMap("/tmp/nonexistent", map[string]string{"x": "nonexistent.md"}) {
-		t.Error("expected true for nonexistent files")
-	}
-
-	root := t.TempDir()
-	scaffold := filepath.Join(root, "artifacts", "codebase", "STACK.md")
-	if err := os.MkdirAll(filepath.Dir(scaffold), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(scaffold, []byte("# Stack\n\n- Languages:\n- Notes:\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if !HasEmptyCodebaseMap(root, map[string]string{"stack": "artifacts/codebase/STACK.md"}) {
-		t.Error("expected true for scaffold-only files")
-	}
-	if err := os.WriteFile(scaffold, []byte("# Stack\n\n- Languages: Go\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if HasEmptyCodebaseMap(root, map[string]string{"stack": "artifacts/codebase/STACK.md"}) {
-		t.Error("expected false for populated files")
 	}
 }
