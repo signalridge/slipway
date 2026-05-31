@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4](https://github.com/signalridge/slipway/compare/v0.3.3...v0.3.4) (2026-05-31)
+
+
+### Bug Fixes
+
+* **governance:** align review blockers with execution handoff ([#37](https://github.com/signalridge/slipway/issues/37)) ([5fffffd](https://github.com/signalridge/slipway/commit/5fffffd11b3861d46333fb2badc17e36652e7c00))
+
 ## [0.3.3](https://github.com/signalridge/slipway/compare/v0.3.2...v0.3.3) (2026-05-31)
 
 
