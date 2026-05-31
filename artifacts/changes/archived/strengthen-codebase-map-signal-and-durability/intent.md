@@ -2,11 +2,11 @@
 
 ## Project Context
 <!-- Auto-filled by InferProjectContext(); .slipway.yaml overrides -->
-- Tech Stack: 
+- Tech Stack:
 - Languages: Go
 - Test Command: go test ./...
 - Build Command: go build ./...
-- Conventions: 
+- Conventions:
 
 ## Summary
 strengthen codebase-map signal and durability

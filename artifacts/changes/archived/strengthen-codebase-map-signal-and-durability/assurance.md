@@ -16,64 +16,59 @@ uses the exact `scaffold_only` spelling in generated skill guidance, and adds a
 direct `run --json` baseline advisory assertion. No state-machine or gate changes.
 
 ## Verification Verdict
-Pending execution; **fresh plan-audit must pass before execution**. The stale
-round-2 plan-audit remains invalidated (`fail`, run_version 1), while the
-research-orchestration evidence has been refreshed against the round-3 bundle
-(`pass`, run_version 2) after resolving the field-shape unknown and aligning the
-cost / workspace-divergence findings across `research.md`, `decision.md`, and
-`requirements.md`. Acceptance is met when the handoff reports
-`codebase_map_status` on both `next` and `run`
-(including `"missing"` with doc states present for the no-map case), a root
-`--change` invocation is workspace-consistent (status and hint agree, no wrong-
-checkout read), the gitignore migration drops the codebase line while keeping
-evidence/events/verification ignored in both generated and checked-in blocks, the
-advisory fires for `scaffold_only`/`baseline` consumed by research/plan-audit
-(and not for `populated`/`partial`), the direct `run --json` surface carries the
-baseline advisory/status contract, RED→GREEN evidence is on record per code
-task, and `go build ./...` / `go test ./...` pass.
+Complete. The change reached `DONE` and was archived with the final implementation
+in `feat/strengthen-codebase-map-signal-and-durability`. The implementation
+meets the acceptance contract: the default `next` and `run` handoffs report
+`codebase_map_status` and `codebase_map_doc_states` (including `"missing"` with
+per-doc states for the no-map case), root `--change` handoff reads the bound
+worktree map consistently, the gitignore migration drops `/artifacts/codebase/`
+while preserving runtime proof ignores, and research/plan-audit get a
+non-blocking advisory for `scaffold_only`/`baseline` maps but not for
+`populated`/`partial` maps. Final verification for the archived branch includes
+`go build ./...`, `go test -count=1 ./...`, `git diff --check`, `git diff
+--cached --check`, `go run . status --json`, and `go run . validate --json`.
 
 ## Evidence Index
 - `research.md` — discovery, file:line references, alternatives.
 - `decision.md` — DEC-001..DEC-004 with REQ traceability.
 - `verification/` — per-skill evidence (intake, research, plan-audit, reviews).
-- Build/test: `go build ./...`, `go test ./...` (to be attached at goal
-  verification).
+- Build/test: `go build ./...`, `go test -count=1 ./...`, `git diff --check`,
+  and PR CI checks passed for the archived branch.
 
 ## Requirement Coverage
 (RED-first task graph; each behavior change is RED → GREEN → verify.)
 - `REQ-001` (git-track maps) → DEC-001; t-01 (RED migration + ignored→trackable
   flip), t-02 (GREEN including checked-in `.gitignore` migration), t-11 (verify
   `git check-ignore` + retained patterns).
-  Status: pending execution.
+  Status: complete.
 - `REQ-002` (handoff status field, both surfaces; no-map reports `"missing"`,
   not omitted) → DEC-002; t-03 (RED, asserts standard `next` view AND `run`/handoff
   projection next_handoff.go:216-221, plus the `missing` default), t-04 (GREEN),
-  t-10 (verify). Status: pending execution.
+  t-10 (verify). Status: complete.
 - `REQ-003` (engine advisory matrix) → DEC-003; t-05 (RED matrix:
   missing/scaffold_only/baseline/partial/populated, branches on status, gated on
   research/plan-audit, no double-signal), t-06 (GREEN), t-12 (verify). Status:
-  pending execution.
+  complete.
 - `REQ-004` (template guidance) → DEC-003/DEC-004; t-07 (RED templates_test.go),
-  t-08 (GREEN), t-12 (verify). Status: pending execution.
+  t-08 (GREEN), t-12 (verify). Status: complete.
 - `REQ-005` (docs) → DEC-004; t-09 (docs/commands.md, CLAUDE.md, codebase-mapping
   SKILL, plus README.md:198 and docs/operator-guide.md:15 "local-only by default"
-  corrections; toolgen_test.go:1001 backtick string preserved). Status: pending
-  execution.
+  corrections; toolgen_test.go:1001 backtick string preserved). Status: complete.
 - `REQ-006` (tests) → DEC-004; RED tasks t-01/t-03/t-05/t-07 (incl. the flipped
   `local_ignore_test.go` ignored→trackable assertion, both-surface status, and the
   `baseline` case `HasEmptyCodebaseMap` misses), direct `run --json` baseline
-  advisory/status coverage, and t-13 (suite health). Status: pending execution.
+  advisory/status coverage, and t-13 (suite health). Status: complete.
 - `REQ-007` (external_api_contracts guardrail) → DEC-004; additive-only
   `omitempty` contract, asserted by t-03/t-04 and verified by t-10, t-13. Status:
-  pending execution.
+  complete.
 - `REQ-008` (RED-first TDD discipline) → DEC-004; RED tasks t-01/t-03/t-05/t-07
   precede GREEN tasks t-02/t-04/t-06/t-08 in strictly earlier waves; t-13 verifies
-  RED→GREEN evidence per code task. Status: pending execution.
+  RED→GREEN evidence per code task. Status: complete.
 - `REQ-009` (workspace-consistent single-source assessment) → DEC-002/DEC-003;
   t-04 (helper assesses `paths.WorkspaceRoot`), t-05 (RED: root `--change`
   consistency), t-06 (GREEN: re-source the hint from `codebase_map_status`, drop
   the `HasEmptyCodebaseMap(root, …)` probe and delete the retired helper/test),
-  t-12 (verify). Status: pending execution.
+  t-12 (verify). Status: complete.
 
 ## Residual Risks and Exceptions
 - Auto-migration changes `git status` for repos with untracked maps (intended),
@@ -118,5 +113,5 @@ absence via `omitempty`. Verify with `go build ./... && go test ./...` and
 after rollback).
 
 ## Archive Decision
-Not ready to archive — change is in planning. Archive only after goal
-verification passes with fresh build/test evidence.
+Archived. `change.yaml` records `status: done` and `current_state: DONE`; no
+active governed change remains for this slug.
