@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
@@ -226,12 +227,28 @@ func assembleSkillViewWithOptions(
 		}
 	}
 
-	if governedChange != nil {
-		if model.WorkflowState(nextState) == model.StateS1Plan && progression.HasEmptyCodebaseMap(root, view.InputContext.CodebaseMapDocs) {
+	if governedChange != nil && model.WorkflowState(nextState) == model.StateS1Plan {
+		mapStatus := view.InputContext.CodebaseMapStatus
+		// Re-source the empty-map technique hint from the workspace-bound status
+		// field (REQ-009) rather than a second HasEmptyCodebaseMap(root, …) probe.
+		// The old probe re-joined worktree-relative doc paths against the
+		// invocation root, so under `slipway next --change <slug>` from the root
+		// checkout it read the wrong map and could contradict codebase_map_status.
+		// Reading the one AssessCodebaseMapDocs(paths.WorkspaceRoot) assessment
+		// keeps the hint, the status field, and the advisory consistent. The hint
+		// fires for missing/scaffold_only, matching the old probe's truth set.
+		if codebaseMapStatusHasNoDurableDocs(mapStatus) {
 			ns.TechniqueHints = append(ns.TechniqueHints, techniqueHint{
 				Name:   "slipway codebase-map",
 				Reason: "No durable codebase-map documents found. Run `slipway codebase-map` to establish brownfield context before planning.",
 			})
+		}
+		// Consume-time advisory: a map-consuming planning skill (research/plan-audit)
+		// is about to rely on a non-durable (scaffold_only/baseline) map. This adds
+		// consume-time framing on top of the hint and never blocks progression. It
+		// reaches both surfaces because the handoff projection copies view.Warnings.
+		if advisory := codebaseMapConsumeAdvisory(mapStatus, nextSkillName); advisory != "" {
+			view.Warnings = append(view.Warnings, advisory)
 		}
 	}
 
@@ -266,6 +283,45 @@ func assembleSkillViewWithOptions(
 	applyContextBudgetGuard(view)
 
 	return nil
+}
+
+// codebaseMapStatusHasNoDurableDocs reports whether a whole-map status means no
+// durable codebase-map documents exist (missing or scaffold_only), driving the
+// empty-map technique hint. baseline/partial/populated return false. This mirrors
+// the truth set of the retired progression.HasEmptyCodebaseMap probe without its
+// independent filesystem read (REQ-009).
+func codebaseMapStatusHasNoDurableDocs(status string) bool {
+	switch status {
+	case artifact.CodebaseMapStatusMissing, artifact.CodebaseMapStatusScaffoldOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// codebaseMapConsumeAdvisory returns a non-blocking consume-time advisory when a
+// map-consuming planning skill (research-orchestration or plan-audit) is next and
+// the codebase map is non-durable (scaffold_only or baseline). It returns "" for
+// populated/partial/missing maps and for non-consuming skills. The wording adds
+// consume-time framing rather than restating the empty-map hint's "no durable
+// docs" text, so for scaffold_only — where both the hint and the advisory fire —
+// the two stay complementary, not contradictory. partial intentionally carries no
+// whole-map advisory; its non-durable docs surface via codebase_map_doc_states.
+func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
+	switch nextSkillName {
+	case progression.SkillResearchOrchestration, progression.SkillPlanAudit:
+	default:
+		return ""
+	}
+	switch status {
+	case artifact.CodebaseMapStatusScaffoldOnly, artifact.CodebaseMapStatusBaseline:
+		return fmt.Sprintf(
+			"codebase_map_advisory: %s is consuming a non-durable codebase map (status: %s); refine artifacts/codebase with source-backed findings before relying on it as reviewed context, or inspect input_context.codebase_map_doc_states for per-doc gaps.",
+			nextSkillName, status,
+		)
+	default:
+		return ""
+	}
 }
 
 func resolveActionableBlockingSkill(
