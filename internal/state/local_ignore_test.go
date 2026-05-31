@@ -79,7 +79,6 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	require.NoError(t, err)
 
 	ignored := []string{
-		"artifacts/codebase/ARCHITECTURE.md",
 		"artifacts/changes/demo/evidence/governance/review.yaml",
 		"artifacts/changes/demo/events/lifecycle.jsonl",
 		"artifacts/changes/demo/verification/final-closeout.yaml",
@@ -93,6 +92,7 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	}
 
 	trackable := []string{
+		"artifacts/codebase/ARCHITECTURE.md",
 		"artifacts/changes/demo/change.yaml",
 		"artifacts/changes/demo/intent.md",
 		"artifacts/changes/demo/research.md",
@@ -105,6 +105,35 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	for _, rel := range trackable {
 		assertGitCheckIgnore(t, root, rel, false)
 	}
+}
+
+func TestEnsureLocalStateGitIgnoreMigratesCodebaseMapsToTracked(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	// A repository whose managed block predates git-tracked codebase maps: it
+	// still lists /artifacts/codebase/ alongside the proof directories.
+	legacyBlock := localStateGitIgnoreStart + "\n" +
+		"/artifacts/codebase/\n" +
+		"/artifacts/changes/**/evidence/\n" +
+		"/artifacts/changes/**/events/\n" +
+		"/artifacts/changes/**/verification/\n" +
+		"/.worktrees/\n" +
+		localStateGitIgnoreEnd + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules/\n\n"+legacyBlock), 0o644))
+
+	update, err := EnsureLocalStateGitIgnore(root)
+	require.NoError(t, err)
+	assert.True(t, update.Changed, "legacy managed block tracking /artifacts/codebase/ must be rewritten")
+
+	content, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	require.NoError(t, err)
+	got := string(content)
+	assert.NotContains(t, got, "/artifacts/codebase/", "codebase maps must no longer be git-ignored after migration")
+	assert.Contains(t, got, "/artifacts/changes/**/evidence/")
+	assert.Contains(t, got, "/artifacts/changes/**/events/")
+	assert.Contains(t, got, "/artifacts/changes/**/verification/")
+	assert.Contains(t, got, "/.worktrees/")
+	assert.Contains(t, got, "node_modules/")
 }
 
 func assertGitCheckIgnore(t *testing.T, root, rel string, wantIgnored bool) {

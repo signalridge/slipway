@@ -182,6 +182,30 @@ func TestPlanningAndDiscoveryTemplatesConsumeDurableCodebaseMap(t *testing.T) {
 	assert.Contains(t, content, "input_context.codebase_map_dir", "wave-orchestration/SKILL.md.tmpl missing durable codebase map reference")
 }
 
+func TestPlanningAndDiscoveryTemplatesTreatNonDurableCodebaseMapAsAdvisory(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"skills/research-orchestration/SKILL.md",
+		"skills/plan-audit/SKILL.md",
+	} {
+		content, err := Content(name)
+		require.NoError(t, err)
+		// The map-freshness status field is surfaced in the default handoff.
+		assert.Contains(t, content, "codebase_map_status",
+			"%s should reference the codebase_map_status freshness field", name)
+		// scaffold-only/baseline maps must be treated as non-durable, not as
+		// reviewed context.
+		assert.Contains(t, content, "scaffold-only",
+			"%s should call out scaffold-only maps as non-durable", name)
+		assert.Contains(t, content, "non-durable",
+			"%s should treat non-populated maps as non-durable context", name)
+		// partial maps get no whole-map advisory, so consumers must inspect the
+		// per-doc states to stay actionable (REQ-004).
+		assert.Contains(t, content, "codebase_map_doc_states",
+			"%s should direct consumers to inspect per-doc codebase_map_doc_states", name)
+	}
+}
+
 func TestContentReturnsArtifactTemplates(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{
