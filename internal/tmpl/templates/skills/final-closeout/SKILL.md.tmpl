@@ -35,6 +35,8 @@ Verify ALL of the following before producing closeout verification:
 - [ ] verification records match current `run_version`
 - [ ] every required governance skill has a passing verification record
 - [ ] full test suite runs green (not cached, not partial)
+- [ ] `validate --json` proves active-change freshness/readiness before `done`;
+      archived bundles are frozen records, not inputs to this active gate
 - [ ] blocker list is empty
 - [ ] `assurance.md` is complete on standard/strict preset
 - [ ] both review skills have passing verification
@@ -60,7 +62,8 @@ On light preset, skip this section — `assurance.md` is optional.
 - verification verdict with references
 - verification index
 - residual risks
-- archive decision with rationale
+- archive decision with rationale, including that active `validate --json`
+  proof was captured before `done`
 
 If any required section is empty or missing, closeout is blocked.
 

@@ -123,7 +123,9 @@ Check generated path changes before committing. Codex prompt files may be writte
 
 Before `done`:
 
-1. Confirm `go run . validate --json` reports the relevant gates approved.
+1. Confirm `go run . validate --json` reports the relevant active-change gates
+   approved. This is a pre-archive freshness/readiness gate, not a promise that
+   the same archived bundle can be revalidated after `done`.
 2. Confirm task evidence is fresh for the current run version.
 3. Confirm `git diff --check`.
 4. Stage intended files only.
@@ -131,3 +133,8 @@ Before `done`:
 6. Run `slipway done --json` when the change is done-ready.
 7. If `worktree_dirty_warning` is present, inspect or commit the listed source
    files before removing the worktree.
+
+After `done`, use the archived `change.yaml` and bundle contents as frozen
+project records. `validate --change <slug>` intentionally rejects archived
+slugs with `archived_change_not_validatable`; a read-only archived audit would be
+a separate command surface.

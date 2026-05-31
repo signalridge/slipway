@@ -237,6 +237,63 @@ func TestExecutionSummaryFreshnessDiagnosticsDetectsManualTaskTimestampDrift(t *
 	assert.Contains(t, diff.NextAction, "do not edit timestamps by hand")
 }
 
+func TestExecutionSummaryFreshnessIgnoresSummaryCapturedAtForPerTaskFreshness(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	change := saveActiveChangeForTest(t, root, "summary-captured-at-not-task-input")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	taskAAt := time.Date(2026, 5, 31, 1, 0, 0, 0, time.UTC)
+	taskBAt := taskAAt.Add(10 * time.Minute)
+	summaryCapturedAt := taskBAt.Add(30 * time.Minute)
+
+	taskEvidenceDir := EvidenceTasksDir(root, change.Slug)
+	require.NoError(t, os.MkdirAll(taskEvidenceDir, 0o755))
+	for taskID, capturedAt := range map[string]time.Time{
+		"task-a": taskAAt,
+		"task-b": taskBAt,
+	} {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(taskEvidenceDir, taskID+".json"),
+			[]byte(`{"run_summary_version":3,"captured_at":"`+capturedAt.Format(time.RFC3339Nano)+`"}`),
+			0o644,
+		))
+	}
+
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 3,
+		CapturedAt:        summaryCapturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a", "task-b"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:          "task-a",
+				Verdict:         model.TaskVerdictPass,
+				TaskKind:        model.TaskKindCode,
+				CapturedAt:      taskAAt,
+				FreshnessInputs: ExpectedExecutionTaskFreshnessInputs(change, 3, "task-a"),
+			},
+			{
+				TaskID:          "task-b",
+				Verdict:         model.TaskVerdictPass,
+				TaskKind:        model.TaskKindVerification,
+				CapturedAt:      taskBAt,
+				FreshnessInputs: ExpectedExecutionTaskFreshnessInputs(change, 3, "task-b"),
+			},
+		},
+	}
+
+	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ExecutionSummaryFreshness(root, change, summary))
+	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+	assert.Equal(t, "fresh", diagnostics.Status)
+	assert.Empty(t, diagnostics.StalePairs)
+	assert.Empty(t, diagnostics.TaskInputDiffs)
+}
+
 func TestTaskEvidenceCapturedAtIgnoresMismatchedRunVersion(t *testing.T) {
 	t.Parallel()
 
