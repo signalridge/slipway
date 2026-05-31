@@ -354,6 +354,9 @@ func executionSummaryFreshnessEvaluation(
 	}
 	inputs := collectTaskEvidenceFreshnessInputs(change, summary, latestRelevantUpdateAt, evidenceTimestamp)
 	if len(inputs) == 0 {
+		if latestRelevantUpdateAt.IsZero() {
+			latestRelevantUpdateAt = evidenceTimestamp
+		}
 		inputs = []ctxpack.EvidenceFreshnessInput{{
 			EvidenceTimestamp:      evidenceTimestamp,
 			LatestRelevantUpdateAt: latestRelevantUpdateAt,
@@ -726,14 +729,22 @@ func failClosedFreshnessUpdateAt(latest time.Time) time.Time {
 	return latest.Add(time.Nanosecond)
 }
 
-func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *model.ExecutionSummary) time.Time {
-	var latest time.Time
+func failClosedExecutionRelevantUpdateAt(latest time.Time, summary *model.ExecutionSummary) time.Time {
 	if summary != nil {
-		latest = summary.LatestRelevantUpdateAt().UTC()
-		if captured := summary.CapturedAt.UTC(); captured.After(latest) {
-			latest = captured
+		evidenceLatest := summary.LatestRelevantUpdateAt().UTC()
+		if evidenceLatest.After(latest) {
+			latest = evidenceLatest
 		}
 	}
+	return failClosedFreshnessUpdateAt(latest)
+}
+
+func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *model.ExecutionSummary) time.Time {
+	// This is the upstream baseline for per-task evidence freshness. Do not
+	// seed it from execution-summary.yaml or sibling task timestamps: the
+	// summary is downstream aggregate evidence, and each task evidence item must
+	// only be compared with its own structural inputs and upstream artifacts.
+	var latest time.Time
 	if strings.TrimSpace(root) == "" || strings.TrimSpace(change.Slug) == "" {
 		return latest
 	}
@@ -754,7 +765,7 @@ func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
-			return failClosedFreshnessUpdateAt(latest)
+			return failClosedExecutionRelevantUpdateAt(latest, summary)
 		}
 		modTime := info.ModTime().UTC()
 		if modTime.After(latest) {
@@ -770,7 +781,7 @@ func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *
 				latest = modTime
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {
-			return failClosedFreshnessUpdateAt(latest)
+			return failClosedExecutionRelevantUpdateAt(latest, summary)
 		}
 	}
 	return latest

@@ -1,0 +1,56 @@
+version: 1
+slug: fix-execution-summary-freshness-and-clarify-validate-diagnos
+description: fix execution-summary freshness and clarify validate diagnostics issues
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-31T05:47:54.884803Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-execution-summary-freshness-and-clarify-validate-diagnos
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 36af5519ec94151b4f4a5c7a2f60192ba3d02ab7951d56d32c97e55f50291ae9
+        updated_at: 2026-05-31T06:16:04.550456404Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 8900dfaed2e48a0b36bd0edd7f4f949db8e1874b0fa9078de91ce1ecc18f499e
+        updated_at: 2026-05-31T06:01:02.658237555Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 3ea3f18dadf044ed0ba68234ef83d05ff35b0da10bc52261394baa6ff1484eef
+        updated_at: 2026-05-31T05:50:26.698038724Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: fe3fcb2c8647eafbacce56ed1512798b2b92faf9f531e36c6dfcf59d8be3cf9f
+        updated_at: 2026-05-31T06:00:42.788237724Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 2206e9f198a63da3e26ef684f51b05f2aaba5ff087d4602e42dbcf98e8b6a0e5
+        updated_at: 2026-05-31T05:59:44.748845083Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: f5c664fadea30e06b0b899aaa70c4f78db1a7bbcd7ff40aaeab440e22bf9bafc
+        updated_at: 2026-05-31T06:07:41.314287434Z
