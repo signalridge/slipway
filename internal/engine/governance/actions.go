@@ -47,7 +47,12 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 			action.Satisfied = input.DomainReviewDone
 
 		case model.ControlIndependentReview:
-			action.Description = "run independent review before further execution"
+			// Independent review is a review-scope gate (S3/S4), so it runs on
+			// execution evidence — not before execution. Wording that says
+			// "before further execution" contradicts the gate and the review
+			// command (which requires an execution summary), misdirecting agents
+			// at the S2 handoff (issue #36, comment 1).
+			action.Description = "run independent review after wave execution produces execution evidence"
 			action.Satisfied = input.IndependentReviewDone
 
 		case model.ControlWorktreeIsolation:
