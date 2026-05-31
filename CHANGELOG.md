@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3](https://github.com/signalridge/slipway/compare/v0.3.2...v0.3.3) (2026-05-31)
+
+
+### Bug Fixes
+
+* **codebase-map:** strengthen freshness handoff ([#31](https://github.com/signalridge/slipway/issues/31)) ([6959d49](https://github.com/signalridge/slipway/commit/6959d49db17114fc1eb9c9b98879a5743178c20c))
+* **state:** ignore summary timestamp for task freshness ([#35](https://github.com/signalridge/slipway/issues/35)) ([f134f3c](https://github.com/signalridge/slipway/commit/f134f3c1f1ec34a4bbb103de675ec6618b857588))
+
 ## [0.3.2](https://github.com/signalridge/slipway/compare/v0.3.1...v0.3.2) (2026-05-30)
 
 
