@@ -71,11 +71,18 @@ func buildGovernanceSummaryView(view statusView) *governanceSummaryView {
 		requiredActions = append(requiredActions, description)
 	}
 
+	// required_actions is the full pending-obligation queue: every unsatisfied
+	// action, advisory or blocking. It must NOT feed blocked_by. An unsatisfied
+	// action only blocks when it is blocking-mode AND gates the current state —
+	// a determination already made authoritatively by RequiredActionBlockers
+	// (mode + state-scope filtered) and surfaced as governance_action_required
+	// blockers below. Deriving blocked_by from raw unsatisfied actions here
+	// reports advisory or not-yet-applicable controls (e.g. an advisory
+	// independent-review at S2) as blockers, contradicting the real gate.
 	for _, action := range view.RequiredActions {
 		if action.Satisfied {
 			continue
 		}
-		addControl(action.ControlID)
 		addAction(action.Description)
 	}
 	for _, blocker := range view.Blockers {

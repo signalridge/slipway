@@ -64,7 +64,12 @@ func TestStatusJSONResponseShapesGovernanceSummary(t *testing.T) {
 	assert.NotContains(t, payload, "required_actions")
 	summary, ok := payload["governance_summary"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, []any{"domain-review", "independent-review"}, summary["blocked_by"])
+	// blocked_by comes only from authoritative governance_action_required
+	// blockers. domain-review is one; independent-review is an unsatisfied
+	// blocking action but is NOT a governance_action_required blocker here, so
+	// it stays in required_actions (the pending queue) without inflating
+	// blocked_by.
+	assert.Equal(t, []any{"domain-review"}, summary["blocked_by"])
 	assert.Equal(t, []any{"record domain review evidence", "record independent review evidence"}, summary["required_actions"])
 	assert.Equal(t, []any{
 		"artifacts/changes/auth-change/change.yaml",
@@ -127,6 +132,54 @@ func TestStatusJSONResponseDoesNotTreatNonGovernanceBlockersAsGovernanceSummary(
 	assert.NotContains(t, payload, "governance_summary")
 	assert.NotContains(t, payload, "active_controls")
 	assert.NotContains(t, payload, "required_actions")
+}
+
+func TestStatusJSONResponseExcludesAdvisoryActionFromBlockedBy(t *testing.T) {
+	t.Parallel()
+
+	// Mirrors the Lattice S2 report (issue #36, comment 1): the real blocker is
+	// the missing execution host (wave-orchestration); independent-review is an
+	// unsatisfied review-scope action that does not gate S2. The pending action
+	// must surface as a required_action with post-execution wording, but must NOT
+	// be reported as blocked_by, since no governance_action_required blocker
+	// names it.
+	view := statusView{
+		ExecutionMode:     governedExecutionMode,
+		Slug:              "advisory-pending",
+		Phase:             model.PhaseBuilding,
+		LifecycleStatus:   string(model.ChangeStatusActive),
+		CurrentState:      model.StateS2Execute,
+		EvidenceFreshness: "fresh",
+		Blockers: []model.ReasonCode{
+			model.NewReasonCode("required_skill_missing", "wave-orchestration"),
+		},
+		ActiveControls: []governanceControlView{
+			{ControlID: "independent-review", Mode: "advisory", Scope: "review"},
+		},
+		RequiredActions: []governanceActionView{
+			{
+				ControlID:   "independent-review",
+				Mode:        "advisory",
+				Description: "run independent review after wave execution produces execution evidence",
+				Satisfied:   false,
+			},
+		},
+	}
+
+	raw, err := json.Marshal(buildStatusJSONResponse(view))
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	summary, ok := payload["governance_summary"].(map[string]any)
+	require.True(t, ok)
+	// Advisory independent-review is a pending action, not a blocker, and its
+	// wording must not claim it runs before execution.
+	assert.NotContains(t, summary, "blocked_by")
+	actions, ok := summary["required_actions"].([]any)
+	require.True(t, ok)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "run independent review after wave execution produces execution evidence", actions[0])
+	assert.NotContains(t, actions[0], "before further execution")
 }
 
 func TestStatusJSONResponseBuildsGovernanceSummaryFromGovernanceBlocker(t *testing.T) {
