@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -11,6 +12,40 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 )
+
+// codebaseMapStatusForContext returns the freshness status and per-doc states
+// for a change's codebase map, reusing artifact.AssessCodebaseMapDocs against
+// the bound worktree (paths.WorkspaceRoot) so the next/run handoff and the
+// consume-time advisory all read one assessment (REQ-009). It short-circuits to
+// "missing" when the worktree's codebase map directory is absent, skipping the
+// bounded repo walk AssessCodebaseMapDocs would otherwise run on every
+// next/run invocation. An absent map dir always assesses "missing", so the
+// short-circuit result is identical to the full assessment. docs supplies the
+// per-doc keys (the same short keys as codebase_map_docs) for the missing case.
+func codebaseMapStatusForContext(workspaceRoot string, docs map[string]string) (string, map[string]string) {
+	dir := state.CodebaseMapDir(workspaceRoot)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return artifact.CodebaseMapStatusMissing, missingCodebaseMapDocStates(docs)
+	}
+	assessment, err := artifact.AssessCodebaseMapDocs(workspaceRoot)
+	if err != nil {
+		// Never drop the default freshness signal: report the empty-map state
+		// rather than an omitted field when the assessment cannot complete.
+		return artifact.CodebaseMapStatusMissing, missingCodebaseMapDocStates(docs)
+	}
+	return assessment.Status, assessment.DocStates
+}
+
+func missingCodebaseMapDocStates(docs map[string]string) map[string]string {
+	if len(docs) == 0 {
+		return nil
+	}
+	states := make(map[string]string, len(docs))
+	for key := range docs {
+		states[key] = artifact.CodebaseMapStatusMissing
+	}
+	return states
+}
 
 // buildNextContextByMode populates change-specific fields on the view
 // (state, lifecycle, artifacts, checkpoints).
@@ -39,6 +74,7 @@ func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeRe
 		view.InputContext.ArtifactBundle = state.DisplayPath(root, paths.GovernedBundleDir)
 		view.InputContext.CodebaseMapDir = state.DisplayPath(paths.WorkspaceRoot, paths.CodebaseMapDir)
 		view.InputContext.CodebaseMapDocs = artifact.CodebaseMapDisplayDocs(paths.WorkspaceRoot, paths.CodebaseMapDir)
+		view.InputContext.CodebaseMapStatus, view.InputContext.CodebaseMapDocStates = codebaseMapStatusForContext(paths.WorkspaceRoot, view.InputContext.CodebaseMapDocs)
 		view.InputContext.HandoffContext = buildHandoffContext(root, change, paths)
 	} else {
 		return nil, nil, err

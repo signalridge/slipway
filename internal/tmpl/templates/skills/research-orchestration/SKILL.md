@@ -64,6 +64,18 @@ If `input_context.codebase_map_dir` already contains documents, read at least:
 - `TESTING.md`
 - `CONCERNS.md`
 
+Check `input_context.codebase_map_status` before treating the map as durable
+context. A `scaffold-only` or `baseline` status means the documents hold only
+template placeholders or CLI-detected facts: they are **non-durable** and MUST
+NOT be relied on as reviewed brownfield context. When `next`/`run` surfaces a
+codebase-map advisory for a non-durable map, record it as a research finding and
+refine the documents (file:line citations, module boundaries, change-specific
+risks) before depending on them.
+
+A `partial` map carries no whole-map advisory, so inspect
+`input_context.codebase_map_doc_states` and treat any per-doc `scaffold_only`,
+`baseline`, or `missing` entry as non-durable for that document.
+
 If the durable codebase map is missing or stale, run the
 `slipway-codebase-mapping` technique skill first and write the documents into
 `input_context.codebase_map_dir`.
