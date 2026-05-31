@@ -1,0 +1,20 @@
+version: 1
+slug: strengthen-codebase-map-signal-and-durability
+description: strengthen codebase-map signal and durability
+status: active
+current_state: S2_EXECUTE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-30T20:41:49.067339Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_path: /Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/strengthen-codebase-map-signal-and-durability
+worktree_branch: feat/strengthen-codebase-map-signal-and-durability
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
