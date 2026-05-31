@@ -16,8 +16,12 @@ const (
 	localStateGitIgnoreEnd   = "# End Slipway local state"
 )
 
+// localStateGitIgnorePatterns lists the Slipway-managed paths kept out of git.
+// Codebase maps under artifacts/codebase/ are intentionally NOT listed: they are
+// durable, source-backed context that should be git-tracked and reviewed.
+// Existing repositories auto-migrate when EnsureLocalStateGitIgnore next rewrites
+// the managed block (on `slipway new`/`codebase-map`/`init`).
 var localStateGitIgnorePatterns = []string{
-	"/artifacts/codebase/",
 	"/artifacts/changes/**/evidence/",
 	"/artifacts/changes/**/events/",
 	"/artifacts/changes/**/verification/",

@@ -43,12 +43,14 @@ type contextBudgetHandoff struct {
 }
 
 type nextHandoffContext struct {
-	WorkspaceRoot    string            `json:"workspace_root"`
-	ArtifactBundle   string            `json:"artifact_bundle,omitempty"`
-	ChangeAuthority  string            `json:"change_authority,omitempty"`
-	CodebaseMapDir   string            `json:"codebase_map_dir,omitempty"`
-	CodebaseMapDocs  map[string]string `json:"codebase_map_docs,omitempty"`
-	ResumeCheckpoint *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
+	WorkspaceRoot        string            `json:"workspace_root"`
+	ArtifactBundle       string            `json:"artifact_bundle,omitempty"`
+	ChangeAuthority      string            `json:"change_authority,omitempty"`
+	CodebaseMapDir       string            `json:"codebase_map_dir,omitempty"`
+	CodebaseMapDocs      map[string]string `json:"codebase_map_docs,omitempty"`
+	CodebaseMapStatus    string            `json:"codebase_map_status,omitempty"`
+	CodebaseMapDocStates map[string]string `json:"codebase_map_doc_states,omitempty"`
+	ResumeCheckpoint     *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
 }
 
 func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
@@ -170,6 +172,7 @@ func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef, r
 	view.InputContext.ArtifactBundle = state.DisplayPath(root, paths.GovernedBundleDir)
 	view.InputContext.CodebaseMapDir = state.DisplayPath(paths.WorkspaceRoot, paths.CodebaseMapDir)
 	view.InputContext.CodebaseMapDocs = artifact.CodebaseMapDisplayDocs(paths.WorkspaceRoot, paths.CodebaseMapDir)
+	view.InputContext.CodebaseMapStatus, view.InputContext.CodebaseMapDocStates = codebaseMapStatusForContext(paths.WorkspaceRoot, view.InputContext.CodebaseMapDocs)
 	view.InputContext.HandoffContext = &handoffContextView{
 		ChangeAuthority: state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml")),
 	}
@@ -214,12 +217,14 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		NextSkill:       nextSkill,
 		ContextBudget:   budget,
 		InputContext: nextHandoffContext{
-			WorkspaceRoot:    view.InputContext.WorkspaceRoot,
-			ArtifactBundle:   view.InputContext.ArtifactBundle,
-			ChangeAuthority:  changeAuthority,
-			CodebaseMapDir:   view.InputContext.CodebaseMapDir,
-			CodebaseMapDocs:  view.InputContext.CodebaseMapDocs,
-			ResumeCheckpoint: view.InputContext.ResumeCheckpoint,
+			WorkspaceRoot:        view.InputContext.WorkspaceRoot,
+			ArtifactBundle:       view.InputContext.ArtifactBundle,
+			ChangeAuthority:      changeAuthority,
+			CodebaseMapDir:       view.InputContext.CodebaseMapDir,
+			CodebaseMapDocs:      view.InputContext.CodebaseMapDocs,
+			CodebaseMapStatus:    view.InputContext.CodebaseMapStatus,
+			CodebaseMapDocStates: view.InputContext.CodebaseMapDocStates,
+			ResumeCheckpoint:     view.InputContext.ResumeCheckpoint,
 		},
 		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),
 		Blockers:         view.Blockers,

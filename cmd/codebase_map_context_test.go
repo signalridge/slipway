@@ -9,11 +9,85 @@ import (
 	"testing"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
+	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func decodeNextJSON(t *testing.T, args []string, v any) {
+	t.Helper()
+	var out bytes.Buffer
+	cmd := makeNextCmd()
+	cmd.SetArgs(args)
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Execute())
+	require.NoError(t, json.Unmarshal(out.Bytes(), v))
+}
+
+// writeScaffoldCodebaseMapDocs writes the full durable doc set with
+// non-substantive content so AssessCodebaseMapDocs classifies the whole map
+// scaffold_only regardless of detected baseline facts.
+func writeScaffoldCodebaseMapDocs(t *testing.T, root string) {
+	t.Helper()
+	dir := state.CodebaseMapDir(root)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	for _, name := range []string{
+		"STACK.md", "INTEGRATIONS.md", "ARCHITECTURE.md", "STRUCTURE.md",
+		"CONVENTIONS.md", "TESTING.md", "CONCERNS.md",
+	} {
+		body := "# " + strings.TrimSuffix(name, ".md") + "\n- Placeholder:\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+}
+
+func TestNextSurfacesScaffoldCodebaseMapStatusOnBothSurfaces(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		slug := createGovernedRequest(t, root, "L2", "surface scaffold codebase map status")
+		writeScaffoldCodebaseMapDocs(t, root)
+
+		// Standard next view (diagnostics) carries the freshness status field.
+		var fullView nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &fullView)
+		assert.Equal(t, slug, fullView.Slug)
+		assert.Equal(t, artifact.CodebaseMapStatusScaffoldOnly, fullView.InputContext.CodebaseMapStatus)
+		require.NotEmpty(t, fullView.InputContext.CodebaseMapDocStates)
+		assert.Equal(t, artifact.CodebaseMapStatusScaffoldOnly, fullView.InputContext.CodebaseMapDocStates["architecture"])
+
+		// Compact handoff/run projection must carry the same field — a next-only
+		// assertion would miss a forgotten projection copy at next_handoff.go.
+		var handoff nextHandoffView
+		decodeNextJSON(t, []string{"--json"}, &handoff)
+		assert.Equal(t, artifact.CodebaseMapStatusScaffoldOnly, handoff.InputContext.CodebaseMapStatus)
+		require.NotEmpty(t, handoff.InputContext.CodebaseMapDocStates)
+		assert.Equal(t, artifact.CodebaseMapStatusScaffoldOnly, handoff.InputContext.CodebaseMapDocStates["architecture"])
+	})
+}
+
+func TestNextReportsMissingCodebaseMapStatusNotOmitted(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		createGovernedRequest(t, root, "L2", "missing codebase map status")
+		require.NoError(t, os.RemoveAll(state.CodebaseMapDir(root)))
+
+		// No map present: the field must report the valid "missing" assessment
+		// with per-doc states, NOT an omitted/empty field (#27 empty-map case).
+		var fullView nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &fullView)
+		assert.Equal(t, artifact.CodebaseMapStatusMissing, fullView.InputContext.CodebaseMapStatus)
+		require.NotEmpty(t, fullView.InputContext.CodebaseMapDocStates)
+		assert.Equal(t, artifact.CodebaseMapStatusMissing, fullView.InputContext.CodebaseMapDocStates["architecture"])
+
+		var handoff nextHandoffView
+		decodeNextJSON(t, []string{"--json"}, &handoff)
+		assert.Equal(t, artifact.CodebaseMapStatusMissing, handoff.InputContext.CodebaseMapStatus)
+		require.NotEmpty(t, handoff.InputContext.CodebaseMapDocStates)
+	})
+}
 
 func TestNextIncludesDurableCodebaseMapPathsForGovernedRequests(t *testing.T) {
 	root := t.TempDir()

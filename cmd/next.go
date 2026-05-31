@@ -140,6 +140,8 @@ type nextContext struct {
 	ArtifactBundle         string                     `json:"artifact_bundle,omitempty"`
 	CodebaseMapDir         string                     `json:"codebase_map_dir,omitempty"`
 	CodebaseMapDocs        map[string]string          `json:"codebase_map_docs,omitempty"`
+	CodebaseMapStatus      string                     `json:"codebase_map_status,omitempty"`
+	CodebaseMapDocStates   map[string]string          `json:"codebase_map_doc_states,omitempty"`
 	ProjectContext         *model.ProjectContext      `json:"project_context,omitempty"`
 	HandoffContext         *handoffContextView        `json:"handoff_context,omitempty"`
 	ContextDependencies    *model.ContextDependencies `json:"context_dependencies,omitempty"`
