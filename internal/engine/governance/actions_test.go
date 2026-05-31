@@ -96,6 +96,27 @@ func TestAdvisoryActionsDoNotBlock(t *testing.T) {
 	assert.Empty(t, UnsatisfiedBlockingActions(actions))
 }
 
+func TestIndependentReviewActionDescribesPostExecutionTiming(t *testing.T) {
+	t.Parallel()
+	// Independent review is a review-scope gate (S3/S4): it runs on execution
+	// evidence, not before execution. The wording must not tell agents to run it
+	// "before further execution" at S2, which contradicts the gate and the
+	// review command's execution-summary requirement (issue #36, comment 1).
+	controls := []model.ControlActivation{
+		makeControl(model.ControlIndependentReview, model.ControlModeBlocking, model.ControlScopeReview),
+	}
+
+	actions := ResolveRequiredActions(RequiredActionsInput{
+		ActiveControls: controls,
+	})
+
+	if assert.Len(t, actions, 1) {
+		desc := actions[0].Description
+		assert.NotContains(t, desc, "before further execution")
+		assert.Contains(t, desc, "after wave execution")
+	}
+}
+
 func TestAdvisoryModeOverrideDoesNotBlock(t *testing.T) {
 	t.Parallel()
 	// Simulate independent-review activated as advisory via mode override.
