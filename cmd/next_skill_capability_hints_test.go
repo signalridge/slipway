@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -127,6 +128,64 @@ func TestNextChangeFromRootDerivesCodebaseMapStatusFromWorktree(t *testing.T) {
 		// The empty-map hint must agree with the status: no "no durable docs".
 		assert.False(t, hasNoDurableCodebaseMapHint(view),
 			"empty-map technique hint must not contradict a populated worktree status")
+	})
+}
+
+func warningsContainCodebaseMapAdvisory(warnings []string) bool {
+	for _, w := range warnings {
+		if strings.Contains(w, "codebase_map_advisory") {
+			return true
+		}
+	}
+	return false
+}
+
+// TestNextSurfacesCodebaseMapAdvisoryWarningEndToEnd drives a real next/run
+// invocation (not just the helper) to prove the consume-time advisory lands in
+// the surfaced warnings on BOTH the standard next view and the compact
+// run/handoff projection when research-orchestration consumes a scaffold_only
+// map. The technique hint and the advisory both fire here by design; the
+// advisory is the top-level warnings entry.
+func TestNextSurfacesCodebaseMapAdvisoryWarningEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		createGovernedRequest(t, root, "L2", "advisory warning surfaces end to end")
+		// createGovernedRequest lands at S1_PLAN/research, so research-orchestration
+		// is next; a scaffold_only map must trigger the consume-time advisory.
+		writeScaffoldCodebaseMapDocs(t, root)
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "research-orchestration", view.NextSkill.Name)
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"scaffold_only map consumed by research-orchestration should surface a codebase_map_advisory warning; got %v", view.Warnings)
+
+		var handoff nextHandoffView
+		decodeNextJSON(t, []string{"--json"}, &handoff)
+		assert.True(t, warningsContainCodebaseMapAdvisory(handoff.Warnings),
+			"run/handoff surface should carry the codebase_map_advisory warning; got %v", handoff.Warnings)
+	})
+}
+
+// TestNextOmitsCodebaseMapAdvisoryForPopulatedMap is the negative path: a
+// populated map consumed by research-orchestration must NOT add the advisory.
+func TestNextOmitsCodebaseMapAdvisoryForPopulatedMap(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		createGovernedRequest(t, root, "L2", "advisory absent for populated map")
+		writePopulatedCodebaseMapDocs(t, root)
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "research-orchestration", view.NextSkill.Name)
+		assert.False(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"populated map must not surface a codebase_map_advisory warning; got %v", view.Warnings)
+		assert.False(t, hasNoDurableCodebaseMapHint(view),
+			"populated map must not surface the empty-map technique hint")
 	})
 }
 
