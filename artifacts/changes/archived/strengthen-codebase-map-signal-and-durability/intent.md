@@ -258,3 +258,26 @@ research-orchestration evidence are invalidated and must be re-run. -->
    architecture finding); set to `fail` (run_version 1) so a fresh research/
    plan-audit pass is a precondition for execution. Mirrors the round-2 plan-audit
    invalidation.
+
+## Review Refinements (2026-05-31, round 4)
+<!-- Post-review hardening after implementation review. Scope remains issue #27:
+make the durability signal true in the actual repo, remove retired signal paths,
+and close the state-mutating run contract with direct coverage. -->
+1. **Checked-in `.gitignore` must match the new default.** Removing
+   `/artifacts/codebase/` from `LocalStateGitIgnoreBlock()` is insufficient if
+   this repository's managed `.gitignore` block still ignores it. The current
+   worktree must also be migrated and verified with `git check-ignore`.
+2. **Remove the retired exported probe.** Once the hint/advisory are re-sourced
+   from `codebase_map_status`, `progression.HasEmptyCodebaseMap` has no
+   production caller and only its own test. Delete both to avoid a misleading
+   public-looking orphan API.
+3. **Exact status spelling.** Generated planning/discovery guidance must say
+   `scaffold_only`, not the hyphenated prose spelling, because agent callers may
+   compare the JSON value literally.
+4. **Direct `run --json` coverage.** The compact projection is shared with
+   `next --json`, but `run` is the state-mutating surface; add a direct
+   `makeRunCmd` assertion covering a `baseline` map, advisory warning, status
+   field, and absent empty-map hint.
+5. **State change is intentional.** The local `change.yaml` state advanced to
+   `S4_VERIFY`; keep and commit it with the hardening changes so the governed
+   bundle reflects the actual lifecycle position.

@@ -39,7 +39,6 @@ site/
 openspec/
 
 # Slipway local state (managed)
-/artifacts/codebase/
 /artifacts/changes/**/evidence/
 /artifacts/changes/**/events/
 /artifacts/changes/**/verification/

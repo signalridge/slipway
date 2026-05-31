@@ -1,0 +1,56 @@
+version: 1
+slug: strengthen-codebase-map-signal-and-durability
+description: strengthen codebase-map signal and durability
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-05-30T20:41:49.067339Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/strengthen-codebase-map-signal-and-durability
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: cc9730e28b1faa2fa976d84e70c947464eb983f14193a3ce69b7393c99ce9d7c
+        updated_at: 2026-05-31T04:23:59.937872123Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 6328081e37a0b584c2064b89a3f701c5caf4b7e0d872727e022b51f3dc7c7bc0
+        updated_at: 2026-05-31T04:23:31.818635584Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 364dd21ef4c7de52c2b2c6d70ca95c6f538942190f44131f51bc60ae3364795c
+        updated_at: 2026-05-31T04:37:10.539588146Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 90dc0d54b2d8879e0204ec25d93f0fecfacbdc7489a74d0ecde5ef769a38e8be
+        updated_at: 2026-05-31T04:37:10.529702601Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 8ae0af7529158811b7f212bd89e124ba966a004277dfae1a766c29133d3dc648
+        updated_at: 2026-05-31T03:06:07.357848135Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 8d71bc72122d7cd450e07d9e8f5cb7f9f801ea1fc1ec26edd35bad32e38fca6c
+        updated_at: 2026-05-31T04:22:51.176116498Z

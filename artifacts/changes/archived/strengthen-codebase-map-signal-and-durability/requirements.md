@@ -12,8 +12,10 @@
 REQ-001: Slipway MUST NOT git-ignore `artifacts/codebase/` by default. The
 managed `.gitignore` block produced by `internal/state/local_ignore.go` MUST
 omit `/artifacts/codebase/` while continuing to ignore `evidence/`, `events/`,
-`verification/`, and `/.worktrees/`. Existing repositories MUST auto-migrate
-when the managed block is next rewritten.
+`verification/`, and `/.worktrees/`. The repository's checked-in `.gitignore`
+MUST also be migrated in this change so Slipway itself no longer contradicts
+the new default. Existing repositories MUST auto-migrate when the managed block
+is next rewritten.
 
 #### Scenario: Existing repo migrates
 GIVEN a repository whose `.gitignore` contains the legacy managed block with
@@ -24,6 +26,13 @@ managed block (the commands that call `EnsureLocalStateGitIgnore`; `next`/`run`/
 THEN `/artifacts/codebase/` is removed while the evidence/events/verification/
 worktree patterns remain, and `git check-ignore artifacts/codebase/ARCHITECTURE.md`
 exits non-zero.
+
+#### Scenario: Current repository is migrated
+GIVEN this Slipway repository after the change lands
+WHEN `git check-ignore artifacts/codebase/ARCHITECTURE.md` is run from the change
+worktree
+THEN the command exits non-zero because the checked-in managed `.gitignore` block
+no longer ignores `artifacts/codebase/`.
 
 ### Requirement: Surface map freshness in the default handoff
 REQ-002: `slipway next --json` and `slipway run --json` MUST include a
@@ -124,8 +133,11 @@ THEN no codebase-map advisory is added to `warnings`.
 ### Requirement: Template guidance
 REQ-004: The `research-orchestration` and `plan-audit` SKILL templates under
 `internal/tmpl/templates/skills/` MUST instruct consumers to treat
-scaffold-only/baseline maps as non-durable and to surface an advisory finding
-rather than relying on them as durable context. The guidance MUST also direct
+`scaffold_only`/`baseline` maps as non-durable and to surface an advisory finding
+rather than relying on them as durable context. The guidance MUST use the exact
+JSON status value `scaffold_only` (underscore), not the hyphenated prose
+spelling, because agents may compare the value literally. The guidance
+MUST also direct
 consumers to inspect the per-doc `codebase_map_doc_states` (not only the
 whole-map `codebase_map_status`), so that a `partial` map — which by REQ-003
 gets NO whole-map advisory — is still actionable via its individual
@@ -155,6 +167,8 @@ THEN the status field and the git-tracked default are described.
 ### Requirement: Test coverage
 REQ-006: The change MUST add/update tests covering: (a) the status field on
 **both** the standard `next` view and the compact `run`/handoff projection;
+(a2) direct `run --json` coverage for the state-mutating command surface, not
+only coverage inherited through the shared compact projection;
 (b) the gitignore migration (managed block rewritten, evidence/events/
 verification retained) — including **updating** the existing
 `TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords`
@@ -216,7 +230,9 @@ consume-time advisory (REQ-003), and the existing empty-map technique hint MUST
 all derive from a **single** `artifact.AssessCodebaseMapDocs(paths.WorkspaceRoot)`
 assessment bound to the change's worktree. The implementation MUST NOT retain the
 separate `progression.HasEmptyCodebaseMap(root, view.InputContext.CodebaseMapDocs)`
-filesystem probe at `cmd/next_skill_view.go:230` as an independent signal source.
+filesystem probe at `cmd/next_skill_view.go:230` as an independent signal source,
+and the retired exported helper plus its self-only test MUST be removed so no
+stale public-looking API remains.
 
 Rationale (verified): `assembleSkillViewWithOptions` receives the **invocation**
 `root` (`cmd/next_skill_view.go:69-70`), while `view.InputContext.CodebaseMapDocs`

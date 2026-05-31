@@ -10,7 +10,10 @@
 Strengthen codebase-map durability and freshness signal (issue #27): git-track
 `artifacts/codebase` by default, surface `codebase_map_status` in the default
 `next`/`run` handoff, and emit a non-blocking advisory when research/plan-audit
-consume a `scaffold_only`/`baseline` map. No state-machine or gate changes.
+consume a `scaffold_only`/`baseline` map. Post-review hardening also migrates
+the checked-in `.gitignore`, removes the retired `HasEmptyCodebaseMap` orphan,
+uses the exact `scaffold_only` spelling in generated skill guidance, and adds a
+direct `run --json` baseline advisory assertion. No state-machine or gate changes.
 
 ## Verification Verdict
 Pending execution; **fresh plan-audit must pass before execution**. The stale
@@ -23,10 +26,11 @@ cost / workspace-divergence findings across `research.md`, `decision.md`, and
 (including `"missing"` with doc states present for the no-map case), a root
 `--change` invocation is workspace-consistent (status and hint agree, no wrong-
 checkout read), the gitignore migration drops the codebase line while keeping
-evidence/events/verification ignored, the advisory fires for
-`scaffold_only`/`baseline` consumed by research/plan-audit (and not for
-`populated`/`partial`), RED→GREEN evidence is on record per code task, and
-`go build ./...` / `go test ./...` pass.
+evidence/events/verification ignored in both generated and checked-in blocks, the
+advisory fires for `scaffold_only`/`baseline` consumed by research/plan-audit
+(and not for `populated`/`partial`), the direct `run --json` surface carries the
+baseline advisory/status contract, RED→GREEN evidence is on record per code
+task, and `go build ./...` / `go test ./...` pass.
 
 ## Evidence Index
 - `research.md` — discovery, file:line references, alternatives.
@@ -38,7 +42,8 @@ evidence/events/verification ignored, the advisory fires for
 ## Requirement Coverage
 (RED-first task graph; each behavior change is RED → GREEN → verify.)
 - `REQ-001` (git-track maps) → DEC-001; t-01 (RED migration + ignored→trackable
-  flip), t-02 (GREEN), t-11 (verify `git check-ignore` + retained patterns).
+  flip), t-02 (GREEN including checked-in `.gitignore` migration), t-11 (verify
+  `git check-ignore` + retained patterns).
   Status: pending execution.
 - `REQ-002` (handoff status field, both surfaces; no-map reports `"missing"`,
   not omitted) → DEC-002; t-03 (RED, asserts standard `next` view AND `run`/handoff
@@ -56,8 +61,8 @@ evidence/events/verification ignored, the advisory fires for
   execution.
 - `REQ-006` (tests) → DEC-004; RED tasks t-01/t-03/t-05/t-07 (incl. the flipped
   `local_ignore_test.go` ignored→trackable assertion, both-surface status, and the
-  `baseline` case `HasEmptyCodebaseMap` misses) + t-13 (suite health). Status:
-  pending execution.
+  `baseline` case `HasEmptyCodebaseMap` misses), direct `run --json` baseline
+  advisory/status coverage, and t-13 (suite health). Status: pending execution.
 - `REQ-007` (external_api_contracts guardrail) → DEC-004; additive-only
   `omitempty` contract, asserted by t-03/t-04 and verified by t-10, t-13. Status:
   pending execution.
@@ -67,12 +72,13 @@ evidence/events/verification ignored, the advisory fires for
 - `REQ-009` (workspace-consistent single-source assessment) → DEC-002/DEC-003;
   t-04 (helper assesses `paths.WorkspaceRoot`), t-05 (RED: root `--change`
   consistency), t-06 (GREEN: re-source the hint from `codebase_map_status`, drop
-  the `HasEmptyCodebaseMap(root, …)` probe), t-12 (verify). Status: pending
-  execution.
+  the `HasEmptyCodebaseMap(root, …)` probe and delete the retired helper/test),
+  t-12 (verify). Status: pending execution.
 
 ## Residual Risks and Exceptions
 - Auto-migration changes `git status` for repos with untracked maps (intended),
   and only fires on `slipway new`/`codebase-map`/`init` — not on every command.
+  This repo's checked-in `.gitignore` is migrated directly by the change.
 - New handoff fields must remain additive/`omitempty`; the `run`/handoff surface
   needs the field added to the projection literal (next_handoff.go:216-221), not
   only the struct/builder — verified by a `run --json` test (t-03/t-10).
@@ -83,7 +89,8 @@ evidence/events/verification ignored, the advisory fires for
 - **Advisory predicate hazard:** `HasEmptyCodebaseMap` is `true` for
   `scaffold_only`/`missing` and `false` for `baseline` — the advisory must branch
   on `codebase_map_status`, or it will miss `baseline` and/or double-signal
-  `scaffold_only`. Covered by the t-05 matrix.
+  `scaffold_only`. Covered by the t-05 matrix; the retired helper is removed after
+  production no longer calls it.
 - **Workspace divergence on root `--change` (REQ-009):** the legacy
   `HasEmptyCodebaseMap(root, …)` hint probe reads the invocation checkout, not the
   bound worktree, so a root `--change` invocation can contradict the
@@ -107,7 +114,8 @@ evidence/events/verification ignored, the advisory fires for
 Revert the single change: restore `/artifacts/codebase/` to the managed gitignore
 block and drop the new JSON fields. No data migration; callers tolerate field
 absence via `omitempty`. Verify with `go build ./... && go test ./...` and
-`git check-ignore artifacts/codebase/ARCHITECTURE.md`.
+`git check-ignore artifacts/codebase/ARCHITECTURE.md` (expected ignored only
+after rollback).
 
 ## Archive Decision
 Not ready to archive — change is in planning. Archive only after goal

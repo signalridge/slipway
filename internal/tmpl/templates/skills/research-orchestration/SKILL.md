@@ -65,7 +65,7 @@ If `input_context.codebase_map_dir` already contains documents, read at least:
 - `CONCERNS.md`
 
 Check `input_context.codebase_map_status` before treating the map as durable
-context. A `scaffold-only` or `baseline` status means the documents hold only
+context. A `scaffold_only` or `baseline` status means the documents hold only
 template placeholders or CLI-detected facts: they are **non-durable** and MUST
 NOT be relied on as reviewed brownfield context. When `next`/`run` surfaces a
 codebase-map advisory for a non-durable map, record it as a research finding and

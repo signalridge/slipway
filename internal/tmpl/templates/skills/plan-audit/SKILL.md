@@ -34,7 +34,7 @@ gap. If scope remains ambiguous after reading the bundle, stop and return to
 intake clarification.
 
 Before auditing task targets against the map, check
-`input_context.codebase_map_status`. A `scaffold-only` or `baseline` status
+`input_context.codebase_map_status`. A `scaffold_only` or `baseline` status
 means the documents are **non-durable** (template placeholders or CLI-detected
 facts only); do not audit against them as if they were reviewed context. Record
 the consume-time codebase-map advisory that `next`/`run` emits as an advisory

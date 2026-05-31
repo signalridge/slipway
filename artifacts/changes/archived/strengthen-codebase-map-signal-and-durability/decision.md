@@ -31,10 +31,11 @@ Considered`.
 **Approach A**, confirmed by the user on 2026-05-30.
 
 - `DEC-001` — **Git-track maps by default.** Remove `/artifacts/codebase/` from
-  `localStateGitIgnorePatterns` in `internal/state/local_ignore.go`. Existing
-  repos auto-migrate because `EnsureLocalStateGitIgnore` rewrites the managed
-  block in place whenever it differs. `evidence/`, `events/`, `verification/`,
-  and `/.worktrees/` stay ignored. Implements `REQ-001`.
+  `localStateGitIgnorePatterns` in `internal/state/local_ignore.go` and migrate
+  this repository's checked-in `.gitignore` managed block in the same change.
+  Existing repos auto-migrate because `EnsureLocalStateGitIgnore` rewrites the
+  managed block in place whenever it differs. `evidence/`, `events/`,
+  `verification/`, and `/.worktrees/` stay ignored. Implements `REQ-001`.
 - `DEC-002` — **Surface freshness in the default handoff.** Add a
   `codebase_map_status` string and `codebase_map_doc_states` map to both
   `nextHandoffContext` (`cmd/next_handoff.go:45-52`) and `nextContext`
@@ -88,9 +89,12 @@ Considered`.
   design — different consumers — but the advisory wording adds consume-time
   framing rather than restating "no durable docs", so they are complementary, not
   contradictory. Update those two SKILL templates to treat non-populated maps as
-  non-durable AND to direct consumers to inspect per-doc `codebase_map_doc_states`
-  so a `partial` map (no whole-map advisory) stays actionable. Implements
-  `REQ-003`, `REQ-004`, and `REQ-009`.
+  non-durable, to use the exact `scaffold_only` JSON value, and to direct
+  consumers to inspect per-doc `codebase_map_doc_states` so a `partial` map (no
+  whole-map advisory) stays actionable. Remove the retired exported
+  `progression.HasEmptyCodebaseMap` helper and its self-only test after the hint
+  is re-sourced, so the old divergent probe cannot survive as a public-looking
+  orphan API. Implements `REQ-003`, `REQ-004`, and `REQ-009`.
 - `DEC-004` — **Docs + tests + guardrail compliance + RED-first discipline.**
   Document the new field and the git-tracked default in `docs/commands.md`,
   `CLAUDE.md`, and the codebase-mapping SKILL template; **correct the stale
@@ -102,7 +106,8 @@ Considered`.
   view and the `run`/handoff projection, the advisory **matrix** (incl. the
   `baseline` case `HasEmptyCodebaseMap` misses, and the flipped existing
   `TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords` assertion so
-  `artifacts/codebase/ARCHITECTURE.md` is trackable), and the template guidance
+  `artifacts/codebase/ARCHITECTURE.md` is trackable), direct `run --json`
+  coverage for the state-mutating surface, and the template guidance
   (`internal/tmpl/templates_test.go`). Keep the handoff JSON change
   additive/backward compatible per the `external_api_contracts` guardrail.
   Implements `REQ-005`, `REQ-006`, `REQ-007`, and `REQ-008`.
@@ -129,22 +134,27 @@ Considered`.
 - **gitignore:** `LocalStateGitIgnoreBlock()` output loses one line; the on-disk
   managed block is reconciled in place by `EnsureLocalStateGitIgnore`, which runs
   only on `slipway new`/`codebase-map`/`init` (not `next`/`run`/`status`/`repair`).
+  This repository's checked-in `.gitignore` managed block is migrated immediately
+  so Slipway no longer ignores its own `artifacts/codebase/` records.
   `internal/engine/progression/readiness.go:675-681`
   (`scopeContractGeneratedOnlyGitIgnore`) compares the on-disk block against the
   **live** block, so it stays self-consistent after the line is removed (no edit,
   but a coupling to keep in mind).
-- No state-machine, gate, or `progression` package signature changes.
+- No state-machine or gate changes. The only `progression` package surface
+  change is deleting the retired `HasEmptyCodebaseMap` helper after production
+  callers were moved to `codebase_map_status`.
 
 ## Rollout and Rollback
 
 - **Rollout:** ship as one change. The handoff begins reporting
   `codebase_map_status` immediately on the next `slipway next`/`run` (those read
-  the map fresh). The `.gitignore` migration is separate: the managed block is
-  rewritten to drop the codebase line the next time `slipway new`/`codebase-map`/
-  `init` runs (the commands that call `EnsureLocalStateGitIgnore`), since
-  `next`/`run`/`status`/`repair` do not reconcile it. No dedicated migration
-  command; in practice the relevant paths (`new`, `codebase-map`) are exactly the
-  ones an operator hits when creating a change or (re)generating a map.
+  the map fresh). The checked-in Slipway `.gitignore` is migrated in this change.
+  Existing downstream repositories auto-migrate the managed block the next time
+  `slipway new`/`codebase-map`/`init` runs (the commands that call
+  `EnsureLocalStateGitIgnore`), since `next`/`run`/`status`/`repair` do not
+  reconcile it. No dedicated migration command; in practice the relevant paths
+  (`new`, `codebase-map`) are exactly the ones an operator hits when creating a
+  change or (re)generating a map.
 - **Rollback:** revert the change. Restoring `/artifacts/codebase/` to
   `localStateGitIgnorePatterns` re-ignores maps on the next command; the new
   JSON fields disappear (callers tolerate their absence via `omitempty`). No data

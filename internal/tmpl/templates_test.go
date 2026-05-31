@@ -195,8 +195,10 @@ func TestPlanningAndDiscoveryTemplatesTreatNonDurableCodebaseMapAsAdvisory(t *te
 			"%s should reference the codebase_map_status freshness field", name)
 		// scaffold-only/baseline maps must be treated as non-durable, not as
 		// reviewed context.
-		assert.Contains(t, content, "scaffold-only",
-			"%s should call out scaffold-only maps as non-durable", name)
+		assert.Contains(t, content, "scaffold_only",
+			"%s should call out the exact scaffold_only status value as non-durable", name)
+		assert.NotContains(t, content, "`scaffold-only`",
+			"%s must not document a hyphenated status value that callers cannot compare", name)
 		assert.Contains(t, content, "non-durable",
 			"%s should treat non-populated maps as non-durable context", name)
 		// partial maps get no whole-map advisory, so consumers must inspect the

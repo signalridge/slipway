@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -75,6 +77,22 @@ func writePopulatedCodebaseMapDocs(t *testing.T, root string) {
 	}
 }
 
+// writeBaselineCodebaseMapDocs writes deterministic CLI-detected facts and the
+// full map set so AssessCodebaseMapDocs classifies the whole map as baseline.
+func writeBaselineCodebaseMapDocs(t *testing.T, root string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte(`module example.com/baseline
+
+go 1.26.3
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644))
+	_, err := artifact.EnsureCodebaseMapDocs(root)
+	require.NoError(t, err)
+	assessment, err := artifact.AssessCodebaseMapDocs(root)
+	require.NoError(t, err)
+	require.Equal(t, artifact.CodebaseMapStatusBaseline, assessment.Status)
+}
+
 func hasNoDurableCodebaseMapHint(view nextView) bool {
 	if view.NextSkill == nil {
 		return false
@@ -85,6 +103,29 @@ func hasNoDurableCodebaseMapHint(view nextView) bool {
 		}
 	}
 	return false
+}
+
+func handoffHasNoDurableCodebaseMapHint(view nextHandoffView) bool {
+	if view.NextSkill == nil {
+		return false
+	}
+	for _, hint := range view.NextSkill.TechniqueHints {
+		if strings.Contains(hint.Reason, "No durable codebase-map documents found") {
+			return true
+		}
+	}
+	return false
+}
+
+func decodeRunJSON(t *testing.T, root string, args []string, v any) {
+	t.Helper()
+	var out bytes.Buffer
+	cmd := commandForRoot(t, root, makeRunCmd())
+	cmd.SetArgs(args)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	require.NoError(t, cmd.Execute(), out.String())
+	require.NoError(t, json.Unmarshal(out.Bytes(), v), out.String())
 }
 
 // TestNextChangeFromRootDerivesCodebaseMapStatusFromWorktree exercises REQ-009:
@@ -166,6 +207,36 @@ func TestNextSurfacesCodebaseMapAdvisoryWarningEndToEnd(t *testing.T) {
 		decodeNextJSON(t, []string{"--json"}, &handoff)
 		assert.True(t, warningsContainCodebaseMapAdvisory(handoff.Warnings),
 			"run/handoff surface should carry the codebase_map_advisory warning; got %v", handoff.Warnings)
+	})
+}
+
+// TestRunSurfacesBaselineCodebaseMapStatusAndAdvisory closes the state-mutating
+// run contract directly: run --json must carry the same compact handoff status
+// fields and the baseline consume-time advisory, not only inherit coverage
+// transitively through next --json. run may advance from research to plan-audit
+// before returning, so the assertion is against the map-consuming planning
+// skills rather than one fixed sub-step.
+func TestRunSurfacesBaselineCodebaseMapStatusAndAdvisory(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "run surfaces baseline codebase map advisory")
+		writeBaselineCodebaseMapDocs(t, root)
+
+		var handoff nextHandoffView
+		decodeRunJSON(t, root, []string{"--json", "--change", slug}, &handoff)
+		assert.Equal(t, model.StateS1Plan, handoff.CurrentState)
+		require.NotNil(t, handoff.NextSkill)
+		assert.Contains(t,
+			[]string{progression.SkillResearchOrchestration, progression.SkillPlanAudit},
+			handoff.NextSkill.Name,
+		)
+		assert.Equal(t, artifact.CodebaseMapStatusBaseline, handoff.InputContext.CodebaseMapStatus)
+		require.NotEmpty(t, handoff.InputContext.CodebaseMapDocStates)
+		assert.True(t, warningsContainCodebaseMapAdvisory(handoff.Warnings),
+			"baseline map consumed by run/%s should surface a codebase_map_advisory warning; got %v", handoff.NextSkill.Name, handoff.Warnings)
+		assert.False(t, handoffHasNoDurableCodebaseMapHint(handoff),
+			"baseline map must not surface the empty-map technique hint")
 	})
 }
 

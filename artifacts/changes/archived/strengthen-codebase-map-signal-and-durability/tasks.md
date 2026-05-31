@@ -43,14 +43,15 @@ production edit, minimal change that flips RED→GREEN, refactor while green).
   - covers: [REQ-001, REQ-008]
 
 - [x] `t-02` **[GREEN]** Git-track codebase maps by default: remove
-  `/artifacts/codebase/` from `localStateGitIgnorePatterns`; keep
+  `/artifacts/codebase/` from `localStateGitIgnorePatterns` AND migrate this
+  repository's checked-in managed `.gitignore` block; keep
   evidence/events/verification/worktrees ignored. Existing repos auto-migrate via
   the `EnsureLocalStateGitIgnore` block rewrite, which runs only on `slipway new`/
   `codebase-map`/`init` (not `next`/`run`/`status`/`repair`). Minimal change that
   flips `t-01` RED→GREEN; capture GREEN evidence.
   - wave: 2
   - depends_on: [t-01]
-  - target_files: [internal/state/local_ignore.go]
+  - target_files: [internal/state/local_ignore.go, .gitignore]
   - task_kind: code
   - covers: [REQ-001, REQ-008]
 
@@ -111,6 +112,10 @@ production edit, minimal change that flips RED→GREEN, refactor while green).
   fires (status and hint agree). This exercises the path where the old
   `HasEmptyCodebaseMap(root, …)` probe reads the wrong checkout; it must drive the
   root `--change` invocation, not in-worktree. RED before `t-06`.
+  Post-review hardening: include a direct `run --json` assertion for the
+  state-mutating command surface, covering a `baseline` map consumed by
+  research-orchestration so the advisory and `codebase_map_status` contract are
+  not only tested through the shared compact `next --json` projection.
   - wave: 3
   - depends_on: [t-04]
   - target_files: [cmd/next_skill_capability_hints_test.go]
@@ -133,18 +138,21 @@ production edit, minimal change that flips RED→GREEN, refactor while green).
   `scaffold_only` is not double-signalled within a channel: the hint
   ("No durable…") and the advisory (consume-time framing) are complementary, not
   duplicate text. The projection already copies `view.Warnings`
-  (next_handoff.go:226), so no handoff-projection edit is needed. Minimal change
-  that flips `t-05` RED→GREEN.
+  (next_handoff.go:226), so no handoff-projection edit is needed. Remove the
+  retired exported `progression.HasEmptyCodebaseMap` helper and its self-only
+  test after the hint is re-sourced, so the old divergent probe cannot survive as
+  a public-looking orphan API. Minimal change that flips `t-05` RED→GREEN.
   - wave: 4
   - depends_on: [t-05]
-  - target_files: [cmd/next_skill_view.go]
+  - target_files: [cmd/next_skill_view.go, internal/engine/progression/skill_resolution.go, internal/engine/progression/skill_resolution_test.go]
   - task_kind: code
   - covers: [REQ-003, REQ-008, REQ-009]
 
 - [x] `t-07` **[RED]** Template-guidance assertions in
   `internal/tmpl/templates_test.go`: the regenerated research-orchestration and
-  plan-audit SKILL surfaces must contain the non-durable scaffold/baseline
-  handling guidance, **and** an instruction to inspect per-doc
+  plan-audit SKILL surfaces must contain the non-durable `scaffold_only`/
+  `baseline` handling guidance using the exact JSON status value, **and** an
+  instruction to inspect per-doc
   `codebase_map_doc_states` (not only whole-map `codebase_map_status`) so a
   `partial` map stays actionable (REQ-004). RED: fails before the templates are
   updated. Capture before `t-08`.
@@ -155,11 +163,11 @@ production edit, minimal change that flips RED→GREEN, refactor while green).
   - covers: [REQ-004, REQ-008]
 
 - [x] `t-08` **[GREEN]** Update research-orchestration and plan-audit SKILL
-  templates to treat scaffold-only/baseline maps as non-durable and to surface an
-  advisory finding rather than relying on them as durable context, AND to direct
-  consumers to inspect per-doc `codebase_map_doc_states` so a `partial` map (which
-  gets no whole-map advisory) is still actionable. Minimal change that flips
-  `t-07` RED→GREEN.
+  templates to treat `scaffold_only`/`baseline` maps as non-durable and to
+  surface an advisory finding rather than relying on them as durable context,
+  using the exact underscore status value, AND to direct consumers to inspect
+  per-doc `codebase_map_doc_states` so a `partial` map (which gets no whole-map
+  advisory) is still actionable. Minimal change that flips `t-07` RED→GREEN.
   - wave: 2
   - depends_on: [t-07]
   - target_files: [internal/tmpl/templates/skills/research-orchestration/SKILL.md, internal/tmpl/templates/skills/plan-audit/SKILL.md]
@@ -192,10 +200,11 @@ production edit, minimal change that flips RED→GREEN, refactor while green).
 
 - [x] `t-11` Verify the gitignore migration: after the managed block is rewritten,
   `/artifacts/codebase/` is gone while evidence/events/verification/worktrees
-  remain, and `git check-ignore artifacts/codebase/ARCHITECTURE.md` exits non-zero.
+  remain, and `git check-ignore artifacts/codebase/ARCHITECTURE.md` exits
+  non-zero in both the migration fixture and this repository worktree.
   - wave: 5
   - depends_on: [t-01, t-02]
-  - target_files: [internal/state/local_ignore.go, internal/state/local_ignore_test.go]
+  - target_files: [internal/state/local_ignore.go, internal/state/local_ignore_test.go, .gitignore]
   - task_kind: verification
   - covers: [REQ-001]
 
