@@ -139,102 +139,38 @@ func TestArchiveRemovesWorktreeBindingAndStripsPath(t *testing.T) {
 		"archived change.yaml must remain portable with no worktree path")
 }
 
-// TestLegacyChangeYamlWithWorktreePathStillResolves proves an existing active
-// change whose tracked change.yaml still carries a legacy worktree_path is not
-// rejected by strict decoding and still resolves its bound worktree — the legacy
-// value is ignored in favour of the location-based binding, and the field ages
-// out on the next save (Change.MarshalYAML drops it).
-func TestLegacyChangeYamlWithWorktreePathStillResolves(t *testing.T) {
+// TestTrackedChangeYamlWithWorktreePathIsRejected proves the field is
+// fail-closed on read: WorktreePath is yaml:"-", so a tracked change.yaml that
+// still carries a worktree_path is rejected by strict decoding rather than
+// silently tolerated. There is no migration shim — a stale field must be removed
+// (the next clean SaveChange never writes it again).
+func TestTrackedChangeYamlWithWorktreePathIsRejected(t *testing.T) {
 	t.Parallel()
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
-	change := model.NewChange("legacy-worktree-path")
+	change := model.NewChange("reject-worktree-path")
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
 	require.NoError(t, SaveChange(root, change))
 
-	// Rewrite the tracked bundle in the legacy shape (carrying worktree_path) and
-	// drop the git-local binding, so resolution must tolerate the legacy field
-	// and recover the worktree from the bundle location.
+	// Inject a stale worktree_path into the otherwise-clean tracked bundle.
 	bundlePath := BundleChangeFilePath(worktreeRoot, change.Slug)
 	raw, err := os.ReadFile(bundlePath)
 	require.NoError(t, err)
-	legacy := string(raw) + "worktree_path: " + worktreeRoot + "\n"
-	require.NoError(t, os.WriteFile(bundlePath, []byte(legacy), 0o644))
-	require.NoError(t, os.Remove(WorktreeBindingPath(root, change.Slug)))
+	require.NoError(t, os.WriteFile(bundlePath, appendLegacyWorktreePath(raw, worktreeRoot), 0o644))
 
-	loaded, err := LoadChange(root, change.Slug)
-	require.NoError(t, err, "a legacy change.yaml carrying worktree_path must still decode")
-	wantWorktree, err := NormalizePath(worktreeRoot)
-	require.NoError(t, err)
-	assert.Equal(t, wantWorktree, loaded.WorktreePath)
-}
-
-// TestLegacyWorktreePathDisambiguatesStaleSiblingWhenBindingMissing covers the
-// migration edge where the git-local binding is missing, but legacy active
-// change.yaml files still carry the old durable worktree_path field. The legacy
-// field is not persisted again, but it remains a one-time disambiguation signal
-// so stale sibling copies are not selected before the owning bundle.
-func TestLegacyWorktreePathDisambiguatesStaleSiblingWhenBindingMissing(t *testing.T) {
-	t.Parallel()
-
-	root := createRuntimeRepoLayout(t)
-	scopeRoot := filepath.Join(root, "services", "billing")
-	require.NoError(t, os.MkdirAll(scopeRoot, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(scopeRoot, ".slipway.yaml"), []byte("{}"), 0o644))
-
-	worktreeBase := t.TempDir()
-	staleWorktree := filepath.Join(worktreeBase, "aaa-stale")
-	owningWorktree := filepath.Join(worktreeBase, "bbb-owner")
-	runGit(t, root, "worktree", "add", staleWorktree, "-b", "aaa-stale")
-	runGit(t, root, "worktree", "add", owningWorktree, "-b", "bbb-owner")
-
-	staleScopeRoot := filepath.Join(staleWorktree, "services", "billing")
-	owningScopeRoot := filepath.Join(owningWorktree, "services", "billing")
-	for _, workspace := range []string{staleScopeRoot, owningScopeRoot} {
-		require.NoError(t, os.MkdirAll(workspace, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(workspace, ".slipway.yaml"), []byte("{}"), 0o644))
-	}
-	require.NoError(t, ensureScopeMarkerFile(WorkspaceScopeMarkerPath(staleScopeRoot)))
-
-	change := model.NewChange("legacy-disambiguates")
-	change.CurrentState = model.StateS2Execute
-	change.PlanSubStep = model.PlanSubStepNone
-	change.WorktreePath = owningWorktree
-	change.WorktreeBranch = "bbb-owner"
-	change.Description = "owning bundle"
-	require.NoError(t, SaveChange(scopeRoot, change))
-	require.NoError(t, os.Remove(WorktreeBindingPath(scopeRoot, change.Slug)))
-
-	ownerPath := BundleChangeFilePath(owningScopeRoot, change.Slug)
-	raw, err := os.ReadFile(ownerPath)
-	require.NoError(t, err)
-	legacyRaw := appendLegacyWorktreePath(raw, owningWorktree)
-	require.NoError(t, os.WriteFile(ownerPath, legacyRaw, 0o644))
-
-	staleCopy := change
-	staleCopy.Description = "stale sibling bundle"
-	staleRaw, err := yaml.Marshal(staleCopy)
-	require.NoError(t, err)
-	stalePath := BundleChangeFilePath(staleScopeRoot, change.Slug)
-	require.NoError(t, os.MkdirAll(filepath.Dir(stalePath), 0o755))
-	require.NoError(t, os.WriteFile(stalePath, appendLegacyWorktreePath(staleRaw, owningWorktree), 0o644))
-
-	loaded, err := LoadChange(scopeRoot, change.Slug)
-	require.NoError(t, err)
-	assert.Equal(t, "owning bundle", loaded.Description)
-	wantWorktree, err := NormalizePath(owningWorktree)
-	require.NoError(t, err)
-	assert.Equal(t, wantWorktree, loaded.WorktreePath)
+	_, err = LoadChange(root, change.Slug)
+	require.Error(t, err, "a tracked change.yaml carrying worktree_path must be rejected by strict decoding")
+	assert.Contains(t, err.Error(), "worktree_path")
 }
 
 // TestLoadChangeFailsClosedWhenBindingMissingAndLocationFallbackAmbiguous
-// covers the new-format edge where neither the git-local binding nor a legacy
-// worktree_path exists, and multiple same-slug bundle locations are visible. In
-// that state bundle location is no longer a unique authority, so loading must
-// fail closed instead of selecting whichever candidate sorts first.
+// covers the edge where the git-local binding is missing and multiple same-slug
+// bundle locations are visible. In that state bundle location is no longer a
+// unique authority, so loading must fail closed instead of selecting whichever
+// candidate sorts first.
 func TestLoadChangeFailsClosedWhenBindingMissingAndLocationFallbackAmbiguous(t *testing.T) {
 	t.Parallel()
 
