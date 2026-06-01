@@ -519,6 +519,7 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		markChangeReadyForDone(t, root, &change)
+		require.NoError(t, os.Remove(state.VerificationFilePath(root, slug, progression.SkillFinalCloseout)))
 		writeAssuranceMD(t, root, slug, validAssuranceContent())
 		// Refresh the summary after bundle mutations so full-closeout readiness
 		// uses the latest evidence window.
@@ -1481,6 +1482,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
+	change.WorkflowPreset = model.WorkflowPresetLight
 	change.CurrentState = model.StateS4Verify
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
@@ -1520,7 +1522,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S4_VERIFY")
 }
 
-func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPath(t *testing.T) {
+func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -1545,6 +1547,7 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
 	require.NoError(t, err)
@@ -1555,6 +1558,60 @@ func TestNextReturnsDoneReadyWithoutFinalCloseoutRequirementForStandardRequestPa
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "closeout_assurance_attestation_missing")
+}
+
+func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "standard closeout diagnostics contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.QualityMode = model.QualityModeStandard
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		writeShipReadyGovernedBundle(t, root, change)
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		cmd := commandForRoot(t, root, makeNextCmd())
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:final-closeout")
+
+		statusBySkill := map[string]skillEvidenceEntry{}
+		for _, entry := range view.SkillEvidence {
+			statusBySkill[entry.SkillName] = entry
+		}
+		require.Contains(t, statusBySkill, progression.SkillGoalVerification)
+		require.Contains(t, statusBySkill, progression.SkillFinalCloseout)
+		assert.True(t, statusBySkill[progression.SkillGoalVerification].HasEvidence)
+		assert.Equal(t, "passing", statusBySkill[progression.SkillGoalVerification].Status)
+		assert.False(t, statusBySkill[progression.SkillFinalCloseout].HasEvidence)
+		assert.Equal(t, "missing", statusBySkill[progression.SkillFinalCloseout].Status)
+	})
 }
 
 func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T) {

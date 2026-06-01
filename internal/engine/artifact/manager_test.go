@@ -370,6 +370,143 @@ One`
 	assert.Contains(t, blockers[0], "assurance_structure_invalid:")
 }
 
+// TestAssuranceStructureBlockersRejectsScaffold covers issue #47: a structurally
+// valid assurance.md whose sections still hold the template scaffold prose must
+// be rejected, with one blocker naming each scaffold section.
+func TestAssuranceStructureBlockersRejectsScaffold(t *testing.T) {
+	t.Parallel()
+
+	// The embedded template is itself the canonical all-scaffold document.
+	scaffold, err := TemplateContent("assurance.md")
+	require.NoError(t, err)
+
+	blockers := AssuranceStructureBlockers(scaffold)
+	require.NotEmpty(t, blockers, "all-scaffold assurance.md must be rejected")
+	for _, heading := range requiredSectionsForArtifact("assurance.md") {
+		assert.Contains(t, blockers, "assurance_section_placeholder:"+heading,
+			"scaffold section %q must be flagged", heading)
+	}
+	// Structure itself is valid; the rejection is purely the placeholder floor.
+	for _, b := range blockers {
+		assert.NotContains(t, b, "assurance_structure_invalid")
+	}
+}
+
+// TestAssuranceStructureBlockersPartialPlaceholder covers the partial case: only
+// the still-scaffold section is named; authored sections pass.
+func TestAssuranceStructureBlockersPartialPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	// Every section authored except Scope Summary, which is left as the verbatim
+	// template scaffold sentence.
+	content := `## Scope Summary
+Summarize delivered scope.
+
+## Verification Verdict
+All 42 tests pass; go build ./... is green.
+
+## Evidence Index
+- test: go test ./... (42/42)
+
+## Requirement Coverage
+REQ-001 -> t-01; REQ-002 -> t-02.
+
+## Residual Risks and Exceptions
+None; the change is behind the standard/strict gate only.
+
+## Rollback Readiness
+Single commit; git revert restores prior behavior.
+
+## Archive Decision
+Archived after a fresh validate --json freshness proof was captured before done.`
+
+	blockers := AssuranceStructureBlockers(content)
+	assert.Equal(t, []string{"assurance_section_placeholder:## Scope Summary"}, blockers)
+}
+
+// TestAssuranceStructureBlockersRejectsArchiveDecisionSeedSentence covers the
+// legacy one-sentence Archive Decision scaffold from issue #47. The current
+// template has grown additional guidance, but retaining only the original seed
+// sentence is still placeholder content.
+func TestAssuranceStructureBlockersRejectsArchiveDecisionSeedSentence(t *testing.T) {
+	t.Parallel()
+
+	content := `## Scope Summary
+Added a template-derived placeholder floor to assurance validation.
+
+## Verification Verdict
+go test ./... passes (full suite green).
+
+## Evidence Index
+- test: go test ./...
+
+## Requirement Coverage
+REQ-001..006 each mapped to t-01..t-05.
+
+## Residual Risks and Exceptions
+None beyond the documented light-preset exclusion.
+
+## Rollback Readiness
+Revert the single feature commit.
+
+## Archive Decision
+Record archive readiness decision.`
+
+	assert.Equal(t,
+		[]string{"assurance_section_placeholder:## Archive Decision"},
+		AssuranceStructureBlockers(content),
+	)
+}
+
+// TestAssuranceStructureBlockersAuthoredPasses covers the fully-authored case.
+func TestAssuranceStructureBlockersAuthoredPasses(t *testing.T) {
+	t.Parallel()
+
+	content := `## Scope Summary
+Added a template-derived placeholder floor to assurance validation.
+
+## Verification Verdict
+go test ./... passes (full suite green).
+
+## Evidence Index
+- test: go test ./...
+
+## Requirement Coverage
+REQ-001..006 each mapped to t-01..t-05.
+
+## Residual Risks and Exceptions
+None beyond the documented light-preset exclusion.
+
+## Rollback Readiness
+Revert the single feature commit.
+
+## Archive Decision
+Ready to archive; validate --json freshness proof captured before done.`
+
+	assert.Empty(t, AssuranceStructureBlockers(content))
+}
+
+// TestAssuranceSectionScaffoldDerivesFromTemplate is the template-drift safety
+// check: the detector's per-section scaffold MUST equal the embedded template's
+// section bodies, so detection follows the template instead of a hand-maintained
+// phrase list.
+func TestAssuranceSectionScaffoldDerivesFromTemplate(t *testing.T) {
+	t.Parallel()
+
+	scaffold := assuranceSectionScaffold()
+	require.NotEmpty(t, scaffold)
+
+	tmplContent, err := TemplateContent("assurance.md")
+	require.NoError(t, err)
+
+	for _, heading := range requiredSectionsForArtifact("assurance.md") {
+		body := normalizeAssuranceBody(strings.Join(markdownSectionLines(tmplContent, heading), "\n"))
+		require.NotEmpty(t, body, "template section %q must have scaffold body", heading)
+		assert.Equal(t, body, scaffold[heading],
+			"detector scaffold for %q must be derived from the template", heading)
+	}
+}
+
 func TestScaffoldGovernedBundleSeedsRequirementsDraft(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

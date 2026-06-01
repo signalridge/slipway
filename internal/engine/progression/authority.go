@@ -56,6 +56,12 @@ func loadRuntimeGovernanceInputs(root string, change model.Change) (runtimeGover
 	}, nil
 }
 
+// FinalCloseoutEvidenceRequired returns whether final-closeout is required as
+// S4 governance evidence for the resolved policy.
+func FinalCloseoutEvidenceRequired(policy governance.PresetPolicy) bool {
+	return policy.CloseoutRefreshRequired || policy.EffectivePreset != model.WorkflowPresetLight
+}
+
 func EvaluateReviewAuthority(root string, change model.Change) (ReviewAuthority, error) {
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
@@ -133,7 +139,18 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 		}
 	}
 	verifyPassingSkills := cloneVerificationRecords(readiness.PassingSkills)
+	// Assurance attestation is required on every standard/strict effective preset,
+	// matching the Layer 2 floor (AssuranceContractBlockers
+	// and the done gate) — NOT CloseoutRefreshRequired. The latter also trips for
+	// light + quality_mode=full, where assurance.md is optional and the closeout
+	// template instructs light to omit the reference; gating on it would block a
+	// valid light/full closeout and, conversely, miss a plain standard closeout
+	// (CloseoutRefreshRequired is false there). EffectivePreset keeps both layers
+	// consistent.
+	assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
+	attestationBlockers := closeoutAssuranceAttestationBlockers(verifyPassingSkills, assuranceRequired)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, attestationBlockers...)
 
 	manifestOK, manifestBlockers := ValidateChangeYamlR0(
 		filepath.Join(inputs.Paths.GovernedBundleDir, "change.yaml"),
@@ -142,13 +159,19 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	artifactReady := readiness.ArtifactReadiness.Ready
 	verificationReady := len(verifySkillBlockers) == 0 &&
 		len(reviewAuthority.Blockers) == 0 &&
-		ComputeVerificationReadiness(verifyPassingSkills, inputs.Policy.CloseoutRefreshRequired)
+		ComputeVerificationReadiness(verifyPassingSkills, FinalCloseoutEvidenceRequired(inputs.Policy))
 	requiredActions := cloneRequiredActions(readiness.RequiredActions)
 	requiredActionBlockers := model.ReasonCodesFromSpecs(governance.RequiredActionBlockers(change, requiredActions))
 	highRiskChecks := ExtractHighRiskChecks(verifyPassingSkills)
 
 	unresolved := append([]model.ReasonCode{}, readiness.Blockers...)
 	unresolved = append(unresolved, model.ReasonCodesFromSpecs(manifestBlockers)...)
+	// Surface the attestation blocker as an actionable G_ship reason — the same
+	// channel the Layer 2 placeholder blocker travels (readiness.Blockers). Left
+	// only in verifySkillBlockers it would flip verificationReady but EvaluateGShip
+	// would emit only the generic verification_evidence_missing, hiding the
+	// specific, actionable closeout_assurance_attestation_missing code.
+	unresolved = append(unresolved, attestationBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
@@ -172,6 +195,43 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 			highRiskChecks,
 		),
 	}, nil
+}
+
+// assuranceCompleteReference is the AI-driven closeout attestation: the host's
+// structured judgment, recorded in the final-closeout verification record, that
+// every required assurance section is genuinely authored rather than scaffold.
+const assuranceCompleteReference = "closeout:assurance_complete=pass"
+
+// closeoutAssuranceAttestationBlockers enforces Layer 1 of issue #47. When
+// assurance is required for the change's effective preset (standard/strict),
+// the passing final-closeout record must carry the assurance-complete
+// attestation. The kernel does not re-read assurance prose here; it only
+// requires the AI's attestation to be present, so a closeout cannot reach ship
+// without the host explicitly vouching for the assurance content. Missing
+// standard/strict final-closeout evidence is the same attestation failure as a
+// passing-but-unattested record. Light preset (assurance optional) is
+// unaffected.
+func closeoutAssuranceAttestationBlockers(passingSkills map[string]model.VerificationRecord, assuranceRequired bool) []model.ReasonCode {
+	if !assuranceRequired {
+		return nil
+	}
+	record, ok := passingSkills[SkillFinalCloseout]
+	if !ok {
+		return []model.ReasonCode{closeoutAssuranceAttestationMissingBlocker()}
+	}
+	for _, ref := range record.References {
+		if strings.TrimSpace(ref) == assuranceCompleteReference {
+			return nil
+		}
+	}
+	return []model.ReasonCode{closeoutAssuranceAttestationMissingBlocker()}
+}
+
+func closeoutAssuranceAttestationMissingBlocker() model.ReasonCode {
+	return model.NewReasonCode(
+		"closeout_assurance_attestation_missing",
+		"final-closeout must record "+assuranceCompleteReference+" on standard/strict",
+	)
 }
 
 func EvaluateReviewLayerBlockersFromNamedEvidence(

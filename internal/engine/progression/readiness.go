@@ -210,7 +210,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		evaluationChange,
 		effectiveState,
 		execCtx.LatestRunVersion,
-		policy.CloseoutRefreshRequired,
+		FinalCloseoutEvidenceRequired(policy),
 		planningSubSteps...,
 	)
 	if err != nil {
