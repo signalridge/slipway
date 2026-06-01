@@ -671,6 +671,84 @@ func TestNewJSONWithoutClassifierReportsSafeDegradeDefaults(t *testing.T) {
 	})
 }
 
+func TestNewJSONStdinRejectsInvalidGuardrailDomain(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		err := runNewJSONWithStdin(t, root,
+			`{"description":"probe","guardrail_domain":"data-integrity","needs_discovery":true,"complexity":"critical"}`)
+
+		var cliErr *CLIError
+		require.ErrorAs(t, err, &cliErr)
+		assert.Equal(t, "invalid_classification", cliErr.ErrorCode)
+		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+		assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
+		assert.Contains(t, cliErr.Remediation, "schema_data_migration")
+		assert.Equal(t, "schema_data_migration", cliErr.Details["suggestion"])
+		assert.Equal(t, "guardrail_domain", cliErr.Details["field"])
+
+		// Fail-closed: no governed change is created from a rejected assertion.
+		changes, listErr := state.ListChanges(root)
+		require.NoError(t, listErr)
+		assert.Empty(t, changes)
+	})
+}
+
+func TestNewJSONStdinRejectsGuardrailWithoutDiscovery(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		err := runNewJSONWithStdin(t, root,
+			`{"description":"probe","guardrail_domain":"auth_authz","needs_discovery":false}`)
+
+		var cliErr *CLIError
+		require.ErrorAs(t, err, &cliErr)
+		assert.Equal(t, "invalid_classification", cliErr.ErrorCode)
+		assert.Equal(t, "needs_discovery", cliErr.Details["field"])
+		// Cross-field violations carry a rule remediation, not an allowed set.
+		assert.NotContains(t, cliErr.Details, "allowed")
+
+		changes, listErr := state.ListChanges(root)
+		require.NoError(t, listErr)
+		assert.Empty(t, changes)
+	})
+}
+
+func TestNewJSONStdinAcceptsSchemaDataMigration(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		err := runNewJSONWithStdin(t, root,
+			`{"description":"catalog authority change","guardrail_domain":"schema_data_migration","needs_discovery":true,"complexity":"critical"}`)
+		require.NoError(t, err)
+
+		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
+		change, loadErr := state.LoadChange(root, slug)
+		require.NoError(t, loadErr)
+		assert.Equal(t, model.GuardrailDomainSchemaDataMigration, change.GuardrailDomain)
+		assert.Equal(t, "critical", change.ComplexityLevel)
+		assert.True(t, change.NeedsDiscovery)
+	})
+}
+
+func TestNewCommandHelpListsClassificationTokens(t *testing.T) {
+	t.Parallel()
+	long := makeNewCmd().Long
+	assert.Contains(t, long, "JSON stdin classification")
+	for _, token := range progression.ValidGuardrailDomains() {
+		if token == "" {
+			continue
+		}
+		assert.Contains(t, long, token)
+	}
+	for _, level := range progression.ValidComplexityLevels() {
+		assert.Contains(t, long, level)
+	}
+}
+
 func TestPresetKeepsPersistedProjectContextFromNewJSONInput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1572,6 +1650,38 @@ func singleChangeSlug(t *testing.T, dir string) string {
 	require.NoError(t, err)
 	require.Len(t, dirs, 1)
 	return dirs[0].Name()
+}
+
+// runNewJSONWithStdin runs `slipway new --json` with the given JSON piped on a
+// non-terminal stdin, returning the command error (nil on success). Stdin and
+// terminal-detection globals are restored on cleanup.
+func runNewJSONWithStdin(t *testing.T, root, jsonInput string) error {
+	t.Helper()
+	_ = root // workspace is selected by the caller via withWorkspace.
+
+	oldStdin := newCommandStdin
+	oldIsTerminal := newCommandIsTerminal
+	t.Cleanup(func() {
+		newCommandStdin = oldStdin
+		newCommandIsTerminal = oldIsTerminal
+	})
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
+
+	_, err = writer.WriteString(jsonInput)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	newCommandStdin = reader
+	newCommandIsTerminal = func(int) bool { return false }
+
+	var buf bytes.Buffer
+	cmd := makeNewCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--json"})
+	return cmd.Execute()
 }
 
 func TestSuggestWorkflowPreset_RespectsMinPreset(t *testing.T) {

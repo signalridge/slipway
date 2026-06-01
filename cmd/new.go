@@ -137,21 +137,8 @@ func makeNewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "new [description]",
 		Short: desc("new"),
-		Long: `Create a governed change starting at S0_INTAKE.
-
-This command creates a governed change and begins the intake-first workflow.
-Project context is auto-detected from lockfiles, scripts, and recent work for
-human-oriented CLI prompts. Lifecycle classification defaults to conservative
-safe-degrade values unless JSON stdin supplies explicit classification metadata.
-
-If no description is provided and stdin is a terminal, an interactive prompt
-displays inferred project context and asks for the description.
-
-Use --trivial to force complexity=trivial and minimize intake depth.
-Use --from-doc to seed intake from an existing document (PRD, RFC, etc.).
-Use --discuss to persist unresolved gray areas into context before execution.
-Use --full to require refreshed final-closeout evidence before ship.`,
-		Args: cobra.MaximumNArgs(1),
+		Long:  newCommandLong(),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			qualityMode := model.QualityModeStandard
 			if discuss {
@@ -188,8 +175,14 @@ Use --full to require refreshed final-closeout evidence before ship.`,
 					if description == "" && strings.TrimSpace(stdinInput.Description) != "" {
 						description = strings.TrimSpace(stdinInput.Description)
 					}
-					if classifier := buildStdinClassifier(stdinInput); classifier != nil {
-						cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+					if classification, ok := buildStdinClassification(stdinInput); ok {
+						if err := progression.ValidateClassification(classification); err != nil {
+							return newInvalidClassificationError(err)
+						}
+						cmd.SetContext(withIntentClassifierContext(
+							cmd.Context(),
+							stdinIntentClassifier{classification: classification},
+						))
 					}
 					cmd.SetContext(withStdinInputContext(cmd.Context(), &stdinInput))
 				}
@@ -712,9 +705,13 @@ func readStdinClassificationInput() (stdinClassificationInput, error) {
 	return input, nil
 }
 
-func buildStdinClassifier(input stdinClassificationInput) progression.IntentClassifier {
+// buildStdinClassification resolves explicit caller classification from JSON
+// stdin, applying safe defaults for omitted fields. ok is false when no
+// classification field was supplied at all, in which case the inference /
+// safe-degrade path is used instead.
+func buildStdinClassification(input stdinClassificationInput) (classification progression.IntentClassification, ok bool) {
 	if input.GuardrailDomain == nil && input.NeedsDiscovery == nil && input.Complexity == nil {
-		return nil
+		return progression.IntentClassification{}, false
 	}
 	c := progression.IntentClassification{
 		GuardrailDomain: "",
@@ -730,7 +727,99 @@ func buildStdinClassifier(input stdinClassificationInput) progression.IntentClas
 	if input.Complexity != nil {
 		c.Complexity = *input.Complexity
 	}
-	return stdinIntentClassifier{classification: c}
+	return c, true
+}
+
+// newInvalidClassificationError converts a classification validation failure on
+// the explicit JSON-stdin surface into an actionable invalid-usage error.
+// Explicit classification is a deliberate caller assertion, so an invalid value
+// is rejected — fail-closed for the guardrail signal — rather than being
+// silently safe-degraded the way a flaky inferred classification is.
+func newInvalidClassificationError(err error) *CLIError {
+	var ce *progression.ClassificationError
+	if !errors.As(err, &ce) {
+		return newInvalidUsageError(
+			"invalid_classification",
+			fmt.Sprintf("invalid classification: %s", err),
+			"Provide valid classification values on JSON stdin; see `slipway new --help`.",
+			nil,
+		)
+	}
+	details := map[string]any{"field": ce.Field}
+	var remediation string
+	switch {
+	case len(ce.Allowed) > 0:
+		details["allowed"] = ce.Allowed
+		remediation = fmt.Sprintf(
+			"Set %q to one of: %s.",
+			ce.Field,
+			strings.Join(quoteAll(ce.Allowed), ", "),
+		)
+		if ce.Suggest != "" {
+			details["suggestion"] = ce.Suggest
+			remediation += fmt.Sprintf(" Did you mean %q?", ce.Suggest)
+		}
+	default:
+		remediation = "A non-empty guardrail_domain requires needs_discovery=true and complexity >= complex."
+	}
+	return newInvalidUsageError("invalid_classification", ce.Error(), remediation, details)
+}
+
+func quoteAll(values []string) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = fmt.Sprintf("%q", v)
+	}
+	return out
+}
+
+// displayTokens renders a token list for help text, showing the empty token as
+// `""` so the "no sensitive domain" option is visible.
+func displayTokens(values []string) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		if v == "" {
+			out[i] = `""`
+			continue
+		}
+		out[i] = v
+	}
+	return out
+}
+
+// newCommandLong builds the `slipway new` long help text. The classification
+// token lists are sourced from progression so help, validation, and error
+// remediation never drift.
+func newCommandLong() string {
+	domains := strings.Join(displayTokens(progression.ValidGuardrailDomains()), " | ")
+	levels := strings.Join(progression.ValidComplexityLevels(), " | ")
+	return fmt.Sprintf(`Create a governed change starting at S0_INTAKE.
+
+This command creates a governed change and begins the intake-first workflow.
+Project context is auto-detected from lockfiles, scripts, and recent work for
+human-oriented CLI prompts. Lifecycle classification defaults to conservative
+safe-degrade values unless JSON stdin supplies explicit classification metadata.
+
+If no description is provided and stdin is a terminal, an interactive prompt
+displays inferred project context and asks for the description.
+
+Use --trivial to force complexity=trivial and minimize intake depth.
+Use --from-doc to seed intake from an existing document (PRD, RFC, etc.).
+Use --discuss to persist unresolved gray areas into context before execution.
+Use --full to require refreshed final-closeout evidence before ship.
+
+JSON stdin classification (requires --json):
+  Supply intent classification on stdin to override safe-degrade defaults:
+    {"description":"...","guardrail_domain":"<value>","needs_discovery":true,"complexity":"<value>"}
+
+  guardrail_domain: %s
+  complexity:       %s
+  needs_discovery:  true | false
+
+  Omitted fields safe-degrade to needs_discovery=true, complexity=complex. An
+  explicit invalid value is rejected with the valid set and a suggestion (a
+  flaky inferred classification still safe-degrades). A non-empty
+  guardrail_domain requires needs_discovery=true and complexity >= complex.`, domains, levels)
 }
 
 func mergeStdinProjectContext(ctx *model.ProjectContext, si *stdinClassificationInput) {

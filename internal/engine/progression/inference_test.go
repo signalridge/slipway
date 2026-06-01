@@ -2,6 +2,8 @@ package progression
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"testing"
 )
 
@@ -91,6 +93,124 @@ func TestValidateClassification(t *testing.T) {
 				t.Fatalf("unexpected validation error: %v", err)
 			}
 		})
+	}
+}
+
+func TestValidateClassificationReturnsTypedEnumError(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateClassification(IntentClassification{
+		GuardrailDomain: "data-integrity",
+		NeedsDiscovery:  true,
+		Complexity:      "critical",
+	})
+
+	var ce *ClassificationError
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected *ClassificationError, got %T (%v)", err, err)
+	}
+	if ce.Field != "guardrail_domain" {
+		t.Fatalf("expected field guardrail_domain, got %q", ce.Field)
+	}
+	if ce.Suggest != "schema_data_migration" {
+		t.Fatalf("expected suggestion schema_data_migration, got %q", ce.Suggest)
+	}
+	if !slices.Contains(ce.Allowed, "schema_data_migration") || !slices.Contains(ce.Allowed, "") {
+		t.Fatalf("expected allowed set to carry the valid tokens, got %v", ce.Allowed)
+	}
+}
+
+func TestValidateClassificationCrossFieldErrorHasReasonNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateClassification(IntentClassification{
+		GuardrailDomain: "auth_authz",
+		NeedsDiscovery:  false,
+		Complexity:      "complex",
+	})
+
+	var ce *ClassificationError
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected *ClassificationError, got %T (%v)", err, err)
+	}
+	if ce.Field != "needs_discovery" {
+		t.Fatalf("expected field needs_discovery, got %q", ce.Field)
+	}
+	if len(ce.Allowed) != 0 {
+		t.Fatalf("cross-field error should not carry an allowed set, got %v", ce.Allowed)
+	}
+	if ce.Reason == "" {
+		t.Fatal("expected a human-readable reason on the cross-field error")
+	}
+}
+
+func TestNearestAllowed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		allowed []string
+		want    string
+	}{
+		{
+			name:    "concept word maps via shared token",
+			value:   "data-integrity",
+			allowed: allowedGuardrailDomains,
+			want:    "schema_data_migration",
+		},
+		{
+			name:    "typo maps via edit distance",
+			value:   "auth_autz",
+			allowed: allowedGuardrailDomains,
+			want:    "auth_authz",
+		},
+		{
+			name:    "complexity typo",
+			value:   "critcal",
+			allowed: allowedComplexityLevels,
+			want:    "critical",
+		},
+		{
+			name:    "no close match returns empty",
+			value:   "zzzzzzzzzz",
+			allowed: allowedGuardrailDomains,
+			want:    "",
+		},
+		{
+			name:    "never suggests the empty token",
+			value:   "x",
+			allowed: allowedGuardrailDomains,
+			want:    "",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := nearestAllowed(tc.value, tc.allowed); got != tc.want {
+				t.Fatalf("nearestAllowed(%q) = %q, want %q", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidValueAccessorsReturnIndependentCopies(t *testing.T) {
+	t.Parallel()
+
+	domains := ValidGuardrailDomains()
+	if !slices.Equal(domains, allowedGuardrailDomains) {
+		t.Fatalf("ValidGuardrailDomains mismatch: %v", domains)
+	}
+	domains[0] = "mutated"
+	if allowedGuardrailDomains[0] == "mutated" {
+		t.Fatal("ValidGuardrailDomains must return a copy, not the backing slice")
+	}
+
+	levels := ValidComplexityLevels()
+	if !slices.Equal(levels, allowedComplexityLevels) {
+		t.Fatalf("ValidComplexityLevels mismatch: %v", levels)
 	}
 }
 
