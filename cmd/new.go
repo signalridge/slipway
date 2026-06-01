@@ -392,9 +392,6 @@ func createDirectGovernedChange(
 		if _, err := state.EnsureLocalStateGitIgnore(root); err != nil {
 			return err
 		}
-		if err := rejectIfConflictingChange(root); err != nil {
-			return err
-		}
 
 		slug, err := generateUniqueChangeSlug(description, func(s string) (bool, error) {
 			return state.ChangeSlugExists(root, s)
@@ -469,6 +466,10 @@ func createDirectGovernedChange(
 			} else {
 				change.SuggestedWorkflowPreset = suggested
 			}
+		}
+
+		if err := rejectIfConflictingChange(root, change); err != nil {
+			return err
 		}
 
 		worktreeBinding, err := state.EnsureDefaultWorktreeForChange(root, &change)
@@ -600,7 +601,7 @@ func generateUniqueChangeSlug(description string, slugExists func(string) (bool,
 
 	exists, err := slugExists(baseSlug)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("check change slug %q: %w", baseSlug, err)
 	}
 	if !exists {
 		return baseSlug, nil
@@ -618,7 +619,7 @@ func generateUniqueChangeSlug(description string, slugExists func(string) (bool,
 		candidate := candidateBase + suffix
 		exists, err := slugExists(candidate)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("check change slug %q: %w", candidate, err)
 		}
 		if !exists {
 			return candidate, nil

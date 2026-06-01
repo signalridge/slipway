@@ -1,0 +1,56 @@
+version: 1
+slug: fix-slipway-new-create-guard-scoping-for-issues-48-and-50
+description: 'Fix slipway new create guard scoping for issues #48 and #50'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-01T15:05:41.412933Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-slipway-new-create-guard-scoping-for-issues-48-and-50
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 'Address GitHub issues #48 and #50 about slipway new active-change guard and worktree scoping.'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 16933b9d9bcecd96b5176b13beac020653a254caf9c47d9ba702e16a9eee24a8
+        updated_at: 2026-06-01T15:53:55.776833586Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 31983de4524727c25283e3e1fda9880be43317d0e7eab0f374150ab96e16fdec
+        updated_at: 2026-06-01T15:17:39.888057081Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 025d7d7e9112e12605b0c8e9ef2db9acf936063c91946a61990debf69cc7199a
+        updated_at: 2026-06-01T15:08:08.316104028Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 26ee12b3792ad2ca90c1ec034cf949c2fa0d44cb8d87612418f221a56bf66048
+        updated_at: 2026-06-01T15:17:08.244352085Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 29665e5afa3ff51ffdf36ebd4bd31afc5a4cb2674926a19032a1b1f20020ab39
+        updated_at: 2026-06-01T15:15:29.942697363Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 1ffe7d2ed453836ad4732fb88e50e72e5a2feafca366870c944cd0de19ea5242
+        updated_at: 2026-06-01T15:23:19.996612706Z
