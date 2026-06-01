@@ -748,6 +748,26 @@ func TestReviewTemplatesRequireNegativePathAndToolchainEvidence(t *testing.T) {
 	assert.Contains(t, codeQuality, "toolchain_compat:pass")
 }
 
+// TestSpecComplianceReviewGuardsAgainstTestPresenceOverTrust pins the issue #44
+// review-fidelity guidance: spec-compliance-review must require that cited tests
+// exercise the literal requirement clause and must block when the implementation
+// narrows a clause without tightening the requirement prose, so review evidence
+// cannot over-trust the mere presence of (narrower) tests.
+func TestSpecComplianceReviewGuardsAgainstTestPresenceOverTrust(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+
+	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+	assert.Contains(t, specCompliance, "Test presence is not")
+	assert.Contains(t, specCompliance, "satisfied only in appearance")
+
+	specTrace, err := Content("skills/spec-trace/CHECKLIST.tmpl")
+	require.NoError(t, err)
+	assert.Contains(t, specTrace, "exercises the literal clause it maps to")
+}
+
 func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
 	t.Parallel()
 
