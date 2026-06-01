@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"text/template"
 	"unicode"
 	"unicode/utf8"
@@ -986,7 +987,103 @@ func AssuranceStructureBlockers(content string) []string {
 	if err != nil {
 		return []string{"assurance_structure_invalid:" + err.Error()}
 	}
-	return nil
+
+	// Deterministic placeholder floor (issue #47): a section can be structurally
+	// non-empty yet still hold only the generated scaffold prose. Such content
+	// is semantically blank and must not satisfy closeout. This blocker is the
+	// fail-closed counterpart to the AI-driven assurance attestation; it cannot
+	// be rubber-stamped because detection derives from the embedded template.
+	var blockers []string
+	for _, heading := range headings {
+		body := strings.Join(markdownSectionLines(content, heading), "\n")
+		if assuranceSectionLooksScaffold(heading, body) {
+			blockers = append(blockers, "assurance_section_placeholder:"+heading)
+		}
+	}
+	return blockers
+}
+
+// assuranceSectionScaffold lazily derives, from the embedded assurance.md
+// template, the normalized scaffold body for each required section. The
+// template is the single source of truth for what "unedited scaffold" looks
+// like, so detection cannot drift from the template wording the way a
+// hand-maintained phrase list does. Required-section bodies in the template
+// contain no template directives, so the raw content is sufficient.
+var assuranceSectionScaffold = sync.OnceValue(func() map[string]string {
+	scaffold := map[string]string{}
+	content, err := TemplateContent("assurance.md")
+	if err != nil {
+		return scaffold
+	}
+	for _, heading := range requiredSectionsForArtifact("assurance.md") {
+		body := normalizeAssuranceBody(strings.Join(markdownSectionLines(content, heading), "\n"))
+		if body != "" {
+			scaffold[heading] = body
+		}
+	}
+	return scaffold
+})
+
+// normalizeAssuranceBody collapses whitespace so detection is insensitive to
+// reflow, indentation, and trailing space.
+func normalizeAssuranceBody(body string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(body)), " ")
+}
+
+// assuranceSectionLooksScaffold reports whether a required assurance section
+// body is still template scaffold. Hybrid detection: an exact template-derived
+// match catches the verbatim scaffold, and containment checks catch cases where
+// the author appended prose without replacing the scaffold body or one of its
+// seed sentences. Empty bodies are not flagged here — the structure check owns
+// the empty case.
+//
+// The containment checks accept a false-positive tradeoff: authored prose that
+// embeds a scaffold seed sentence verbatim is rejected. Short section seeds are
+// more collision-prone, but the floor favors catching retained scaffold over
+// admitting boilerplate-only assurance.
+func assuranceSectionLooksScaffold(heading, body string) bool {
+	scaffold := assuranceSectionScaffold()[heading]
+	if scaffold == "" {
+		return false
+	}
+	norm := normalizeAssuranceBody(body)
+	if norm == "" {
+		return false
+	}
+	if norm == scaffold || strings.Contains(norm, scaffold) {
+		return true
+	}
+	for _, seed := range assuranceScaffoldSentences(scaffold) {
+		if seed == scaffold {
+			continue
+		}
+		if norm == seed || strings.Contains(norm, seed) {
+			return true
+		}
+	}
+	return false
+}
+
+// assuranceScaffoldSentences derives sentence-level scaffold seeds from a
+// normalized template section body. This catches older one-sentence scaffold
+// sections when the template later grows extra instructions.
+func assuranceScaffoldSentences(scaffold string) []string {
+	var sentences []string
+	start := 0
+	for i, r := range scaffold {
+		switch r {
+		case '.', '!', '?':
+			sentence := strings.TrimSpace(scaffold[start : i+1])
+			if sentence != "" {
+				sentences = append(sentences, sentence)
+			}
+			start = i + 1
+		}
+	}
+	if tail := strings.TrimSpace(scaffold[start:]); tail != "" {
+		sentences = append(sentences, tail)
+	}
+	return sentences
 }
 
 // renderTemplateWithFallback resolves a template using the following priority:

@@ -98,6 +98,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -148,6 +149,7 @@ func TestDoneJSONWarnsWhenWorktreeSourceChangesAreUncommitted(t *testing.T) {
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
@@ -189,6 +191,7 @@ func TestDoneJSONOmitsArchiveCommitRequiredForRepoScopedChange(t *testing.T) {
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
@@ -1422,6 +1425,9 @@ func markChangeReadyForDone(t *testing.T, root string, change *model.Change) {
 	writePassingWaveEvidence(t, root, change.Slug, 1)
 	writePassingReviewEvidencePack(t, root, change.Slug, 1)
 	writePassingGoalVerificationEvidence(t, root, change.Slug, 1)
+	if change.WorkflowPreset != model.WorkflowPresetLight {
+		writePassingFinalCloseoutEvidence(t, root, change.Slug, 1)
+	}
 }
 
 func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -1470,5 +1476,16 @@ func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSu
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
 		References: []string{"verification:pass"},
+	})
+}
+
+func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
+	t.Helper()
+	writeSkillVerification(t, root, slug, "final-closeout", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: runSummaryVersion,
+		References: []string{"closeout:assurance_complete=pass"},
 	})
 }

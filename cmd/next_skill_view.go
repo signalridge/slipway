@@ -115,7 +115,7 @@ func assembleSkillViewWithOptions(
 				*governedChange,
 				view.CurrentState,
 				latestRunVersion,
-				presetPolicy.CloseoutRefreshRequired,
+				progression.FinalCloseoutEvidenceRequired(presetPolicy),
 				planningSubSteps...,
 			)
 			if evalErr != nil {
@@ -459,7 +459,7 @@ func buildRequiredSkillEvidence(
 		registry,
 		change.NeedsDiscovery,
 		workflowState,
-		presetPolicy.CloseoutRefreshRequired,
+		progression.FinalCloseoutEvidenceRequired(presetPolicy),
 		planSubSteps...,
 	)
 	required = skill.FilterRequiredSkillsForWorkflowProfile(required, change.EffectiveWorkflowProfile())

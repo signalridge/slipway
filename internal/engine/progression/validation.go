@@ -467,10 +467,12 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 }
 
 // AssuranceContractBlockers validates the assurance.md body-first contract:
-// all required headings present, in order, with non-empty content.
-// Returns nil when the assurance artifact has not been authored yet (file
-// missing or at template-only state during early planning).
-// Enforcement begins at S3_REVIEW and later.
+// all required headings present, in order, with non-empty content, and — via
+// the shared artifact.AssuranceStructureBlockers floor — not still template
+// scaffold (issue #47). Returns nil before enforcement begins: light effective
+// preset (assurance optional), or states earlier than S3_REVIEW. Once enforcing
+// at S3_REVIEW and later, a missing file yields assurance_contract_missing and a
+// template-only/scaffold body is rejected per-section rather than passing.
 func AssuranceContractBlockers(root string, change model.Change) []string {
 	// Light effective preset: assurance.md is optional.
 	// Uses EffectivePreset so min_preset and guardrail-domain upgrades are respected.

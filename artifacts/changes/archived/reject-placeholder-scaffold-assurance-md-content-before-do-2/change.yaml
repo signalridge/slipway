@@ -1,0 +1,35 @@
+version: 1
+slug: reject-placeholder-scaffold-assurance-md-content-before-do-2
+description: 'Reject placeholder/scaffold assurance.md content before done so standard/strict changes cannot archive with boilerplate-only closeout sections (issue #47)'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-01T12:44:27.754537Z
+quality_mode: standard
+workflow_preset: light
+artifact_schema: core
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 4cbdf9742c7c184f71f9d1677b37d749bfa9eda771e9520ebecf912a602e999b
+        updated_at: 2026-06-01T14:03:57.75989216Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: b4a173178c5e596faf957f4dbbb3920866101fac419545e9f8838cbbe5e3d2e6
+        updated_at: 2026-06-01T14:40:54.400528372Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: d7c1720b25313498b1ad76b3485b49302b77c8f6c97cc99366bdf31f70fff021
+        updated_at: 2026-06-01T14:40:54.400701997Z
