@@ -5,6 +5,16 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1](https://github.com/signalridge/slipway/compare/v0.4.0...v0.4.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **#44:** record-timestamp stale_planning_evidence display + spec-compliance review fidelity ([#49](https://github.com/signalridge/slipway/issues/49)) ([0829d1e](https://github.com/signalridge/slipway/commit/0829d1e909f9bcbd91c9976ed1ed2effebad7b8c))
+* **governance:** enforce authored closeout assurance ([#54](https://github.com/signalridge/slipway/issues/54)) ([c79af6d](https://github.com/signalridge/slipway/commit/c79af6d08399c311c7cb34aa87b226feaba41579))
+* **new:** scope active change create guard ([#55](https://github.com/signalridge/slipway/issues/55)) ([72604ee](https://github.com/signalridge/slipway/commit/72604ee73a4bad4bc931f76cc7caf55e05d4b04a))
+* **state:** stop persisting absolute worktree_path in tracked change.yaml ([#46](https://github.com/signalridge/slipway/issues/46)) ([#51](https://github.com/signalridge/slipway/issues/51)) ([2def1b4](https://github.com/signalridge/slipway/commit/2def1b420828fad0c109fa61d2e511cb5902ad50))
+
 ## [0.4.0](https://github.com/signalridge/slipway/compare/v0.3.4...v0.4.0) (2026-06-01)
 
 
