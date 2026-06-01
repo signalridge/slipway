@@ -5,6 +5,23 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/signalridge/slipway/compare/v0.3.4...v0.4.0) (2026-06-01)
+
+
+### Features
+
+* **codebase-map:** nudge discovery-scoped changes off an empty map ([#41](https://github.com/signalridge/slipway/issues/41)) ([c52b647](https://github.com/signalridge/slipway/commit/c52b6474288b3aa2cce9a015b114f80487f52c8d))
+
+
+### Bug Fixes
+
+* **intake:** reject invalid stdin classification and surface valid tokens ([#43](https://github.com/signalridge/slipway/issues/43)) ([d8d56ad](https://github.com/signalridge/slipway/commit/d8d56adaef9c569ec2d560ea45c17e8b73a3446f))
+
+
+### Refactoring
+
+* **governance:** remove obsolete agent template surface ([#45](https://github.com/signalridge/slipway/issues/45)) ([66d3ecd](https://github.com/signalridge/slipway/commit/66d3ecda30b102702d708345af02f7d197cc06b2))
+
 ## [0.3.4](https://github.com/signalridge/slipway/compare/v0.3.3...v0.3.4) (2026-05-31)
 
 
