@@ -15,7 +15,6 @@ type Definition struct {
 	RunSummaryBound     bool                `json:"run_summary_bound"`
 	DiscoveryOnly       bool                `json:"discovery_only,omitempty"`
 	CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
-	AgentHint           string              `json:"agent_hint,omitempty"`
 	AllowedOperations   []string            `json:"allowed_operations,omitempty"`
 	RequiredOutputs     []string            `json:"required_outputs,omitempty"`
 	HardGate            string              `json:"hard_gate,omitempty"`
@@ -26,7 +25,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		Name:              "intake-clarification",
 		State:             model.StateS0Intake,
 		Mitigation:        "scope ambiguity and intent drift before planning",
-		AgentHint:         "slipway-planner",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record"},
 	},
@@ -36,7 +34,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		PlanSubStep:       model.PlanSubStepResearch,
 		Mitigation:        "insufficient technical research before plan bundling",
 		DiscoveryOnly:     true,
-		AgentHint:         "slipway-researcher",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record"},
 	},
@@ -45,7 +42,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		State:             model.StateS1Plan,
 		PlanSubStep:       model.PlanSubStepAudit,
 		Mitigation:        "stale or incomplete plan bundle",
-		AgentHint:         "slipway-auditor",
 		AllowedOperations: []string{"read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record"},
 		HardGate:          "G_plan",
@@ -55,7 +51,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		State:             model.StateS2Execute,
 		Mitigation:        "uncontrolled parallel execution drift",
 		RunSummaryBound:   true,
-		AgentHint:         "slipway-orchestrator",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_code", "run_tests", "write_evidence", "git_commit"},
 		RequiredOutputs:   []string{"evidence_record", "task_results", "changed_files"},
 	},
@@ -64,7 +59,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		State:             model.StateS3Review,
 		Mitigation:        "implementation divergence from spec",
 		RunSummaryBound:   true,
-		AgentHint:         "slipway-reviewer",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record", "review_findings"},
 	},
@@ -73,7 +67,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		State:             model.StateS3Review,
 		Mitigation:        "cross-artifact inconsistency and code quality gaps",
 		RunSummaryBound:   true,
-		AgentHint:         "slipway-reviewer",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record", "review_findings"},
 	},
@@ -82,7 +75,6 @@ var defaultGovernanceRegistry = map[string]Definition{
 		State:             model.StateS4Verify,
 		Mitigation:        "false completion claims",
 		RunSummaryBound:   true,
-		AgentHint:         "slipway-verifier",
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record"},
 		HardGate:          "G_ship",
@@ -93,17 +85,9 @@ var defaultGovernanceRegistry = map[string]Definition{
 		Mitigation:          "stale final evidence before governed ship decision",
 		RunSummaryBound:     true,
 		CloseoutConditional: true,
-		AgentHint:           "slipway-closer",
 		AllowedOperations:   []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"},
 		RequiredOutputs:     []string{"evidence_record"},
 	},
-}
-
-func AgentHintForSkillInRegistry(registry []Definition, name string) string {
-	if def, ok := LookupDefinitionInRegistry(registry, name); ok {
-		return def.AgentHint
-	}
-	return ""
 }
 
 // LookupDefinitionInRegistry returns the governance skill Definition from a loaded registry.

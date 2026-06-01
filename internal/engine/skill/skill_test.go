@@ -123,7 +123,6 @@ func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) 
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
 	assert.Equal(t, model.StateS2Execute, def.State)
-	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
 }
 
 func TestLoadGovernanceRegistrySkipsUnknownSkillID(t *testing.T) {
@@ -144,6 +143,19 @@ body
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
 	require.Len(t, registry, 8)
+}
+
+func TestLoadGovernanceRegistryRejectsMissingFrontmatterForKnownGeneratedSkill(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	skillDir := filepath.Join(root, ".claude", "skills", "slipway-wave-orchestration")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("body\n"), 0o644))
+
+	_, err := LoadGovernanceRegistry(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing frontmatter")
+	assert.Contains(t, err.Error(), "wave-orchestration")
 }
 
 func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
@@ -182,7 +194,6 @@ skill_id: wave-orchestration
 name: slipway-wave-orchestration
 description: "tampered"
 state: S9_DONE
-agent_hint: slipway-missing
 hard_gate: fake
 ---
 body
@@ -194,7 +205,6 @@ body
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
 	assert.Equal(t, model.StateS2Execute, def.State)
-	assert.Equal(t, "slipway-orchestrator", def.AgentHint)
 	assert.Equal(t, "uncontrolled parallel execution drift", def.Mitigation)
 }
 
@@ -257,59 +267,22 @@ body
 	assert.Contains(t, err.Error(), "slipway-wave-orchestration")
 }
 
-func TestLoadGovernanceRegistryAppliesConfiguredAgentMappings(t *testing.T) {
+func TestLoadGovernanceRegistryDoesNotReadRemovedAgentsConfig(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
 
-	cfg := model.DefaultConfig()
-	cfg.Agents.Mappings = map[string]string{}
-	cfg.Agents.Mappings["wave-orchestration"] = "slipway-reviewer"
-	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"), []byte(`
+agents:
+  mappings:
+    wave-orchestration: slipway-reviewer
+`), 0o644))
 
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
 
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
-	assert.Equal(t, "slipway-reviewer", def.AgentHint)
-}
-
-func TestLoadGovernanceRegistryRejectsUnknownConfiguredAgent(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
-
-	cfg := model.DefaultConfig()
-	cfg.Agents.Mappings = map[string]string{}
-	cfg.Agents.Mappings["wave-orchestration"] = "slipway-missing"
-	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
-
-	_, err := LoadGovernanceRegistry(root)
-	require.Error(t, err)
-
-	var regErr *GovernanceRegistryError
-	require.ErrorAs(t, err, &regErr)
-	assert.Contains(t, err.Error(), `unknown agent "slipway-missing"`)
-}
-
-func TestLoadGovernanceRegistryRejectsManualOnlyConfiguredAgent(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
-
-	cfg := model.DefaultConfig()
-	cfg.Agents.Mappings = map[string]string{}
-	cfg.Agents.Mappings["wave-orchestration"] = "slipway-executor"
-	require.NoError(t, model.SaveConfig(filepath.Join(root, ".slipway.yaml"), cfg))
-
-	_, err := LoadGovernanceRegistry(root)
-	require.Error(t, err)
-
-	var regErr *GovernanceRegistryError
-	require.ErrorAs(t, err, &regErr)
-	assert.Contains(t, err.Error(), `manual-only`)
+	assert.Equal(t, "uncontrolled parallel execution drift", def.Mitigation)
 }

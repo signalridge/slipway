@@ -104,21 +104,19 @@ func TestInitWorkspaceRefreshWithoutToolsCleanWorkspace(t *testing.T) {
 	assert.Contains(t, err.Error(), "no sentinelized adapters detected")
 }
 
-func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
+func TestInitWorkspaceWithToolsPreservesExistingConfig(t *testing.T) {
 	root := initGitRepo(t)
 	t.Setenv("CODEX_HOME", t.TempDir())
 
 	cfg := model.DefaultConfig()
-	cfg.Agents.Mappings = map[string]string{
-		"wave-orchestration": "slipway-executor",
-	}
+	cfg.Context.TechStack = "Go"
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
 	require.NoError(t, InitWorkspace(root, []string{"claude", "codex"}, false))
 
 	loaded, err := model.LoadConfig(state.ConfigPath(root))
 	require.NoError(t, err)
-	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
+	assert.Equal(t, "Go", loaded.Context.TechStack)
 	_, err = os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
 	require.NoError(t, err)
 
@@ -126,7 +124,7 @@ func TestInitWorkspaceWithToolsPreservesExistingAgentMappings(t *testing.T) {
 
 	loaded, err = model.LoadConfig(state.ConfigPath(root))
 	require.NoError(t, err)
-	assert.Equal(t, "slipway-executor", loaded.Agents.Mappings["wave-orchestration"])
+	assert.Equal(t, "Go", loaded.Context.TechStack)
 	_, err = os.Stat(filepath.Join(root, ".codex", "skills", "slipway-wave-orchestration", "SKILL.md"))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
@@ -214,23 +212,19 @@ func TestInitWorkspaceFromLinkedWorktreeRefreshesLocalScopeConfigMirror(t *testi
 
 	scopeCfg, err := model.LoadConfig(state.ConfigPath(root))
 	require.NoError(t, err)
-	scopeCfg.Agents.Mappings = map[string]string{
-		"wave-orchestration": "slipway-executor",
-	}
+	scopeCfg.Context.TechStack = "scope-go"
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), scopeCfg))
 
 	worktreeCfg, err := model.LoadConfig(state.ConfigPath(worktreeRoot))
 	require.NoError(t, err)
-	worktreeCfg.Agents.Mappings = map[string]string{
-		"wave-orchestration": "slipway-orchestrator",
-	}
+	worktreeCfg.Context.TechStack = "worktree-go"
 	require.NoError(t, model.SaveConfig(state.ConfigPath(worktreeRoot), worktreeCfg))
 
 	require.NoError(t, InitWorkspace(worktreeRoot, nil, false))
 
 	refreshed, err := model.LoadConfig(state.ConfigPath(worktreeRoot))
 	require.NoError(t, err)
-	assert.Equal(t, "slipway-executor", refreshed.Agents.Mappings["wave-orchestration"])
+	assert.Equal(t, "scope-go", refreshed.Context.TechStack)
 }
 
 func TestInitWorkspaceToolsAllAndNone(t *testing.T) {

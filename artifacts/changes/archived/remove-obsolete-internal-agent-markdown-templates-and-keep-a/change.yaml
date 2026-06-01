@@ -1,0 +1,58 @@
+version: 1
+slug: remove-obsolete-internal-agent-markdown-templates-and-keep-a
+description: remove obsolete internal agent markdown templates and agents config surface while preserving skill-first handoff
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-01T07:11:50.096495Z
+quality_mode: standard
+workflow_profile: meta
+workflow_preset: standard
+worktree_branch: feat/remove-obsolete-internal-agent-markdown-templates-and-keep-a
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: agent templates are no longer exported; governed handoff is skill-first through host SKILL.md surfaces
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 0245c14d90dc25ae7ba77a8bfbe6145894ee62beb6554f159a788e115809571a
+        updated_at: 2026-06-01T07:35:35.778458865Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 602ed514e648d201a65b053d2929b68f9e9830d5e6f7e729c8a62b2cb07244ae
+        updated_at: 2026-06-01T07:22:42.554846834Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 8ac95d47dc3eaa6fd318e2dd5e90e35e9aed6bab7db6b9c62549d628caf2ae93
+        updated_at: 2026-06-01T07:35:35.777494461Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 50dca1a2aaec4d150d1746cce1184b472fab4e5afcfd3d28a56923129f0ddd75
+        updated_at: 2026-06-01T07:22:42.552845521Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 9d5c3076afd9ea3ac0675d68bf33f5254b0fb50819454bfcc842e77d9444b8ff
+        updated_at: 2026-06-01T07:21:24.743929257Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 58818d17eea9e60403122c631be035d6559f666378d1925489d70a02afaa813f
+        updated_at: 2026-06-01T08:49:58.364537409Z

@@ -332,35 +332,16 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.NotContains(t, content, "Rationalization Red Flags")
 }
 
-func TestContentReturnsAgentDefinitions(t *testing.T) {
-	t.Parallel()
-	for _, name := range AgentNames() {
-		path := "agents/" + name + ".md"
-		content, err := Content(path)
-		require.NoError(t, err, "failed to load %s", path)
-		assert.NotEmpty(t, content, "%s is empty", path)
-		assert.Contains(t, content, "---", "%s missing frontmatter", path)
-		assert.Contains(t, content, "name: "+name, "%s missing name field", path)
-		assert.Contains(t, content, "agent_status:", "%s missing agent_status field", path)
-	}
-}
-
-func TestPlannerAgentIncludesIntakeClarificationBinding(t *testing.T) {
+func TestContentDoesNotExposeAgentDefinitions(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("agents/slipway-planner.md")
+	removedPath := path.Join("agents", "slipway-planner.md")
+	_, err := Content(removedPath)
+	require.Error(t, err)
+
+	matches, err := fs.Glob(TemplateFS(), path.Join("agents", "*.md"))
 	require.NoError(t, err)
-	assert.Contains(t, content, "intake-clarification")
-}
-
-func TestAgentNamesMatchesFiles(t *testing.T) {
-	t.Parallel()
-	names := AgentNames()
-	assert.Len(t, names, 11, "expected 11 agent definitions")
-	// Verify sorted
-	for i := 1; i < len(names); i++ {
-		assert.True(t, names[i-1] < names[i], "AgentNames not sorted: %s >= %s", names[i-1], names[i])
-	}
+	assert.Empty(t, matches)
 }
 
 func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
@@ -567,22 +548,6 @@ func TestWorktreePreflightDocumentsRepoLocalDefaultPath(t *testing.T) {
 	assert.Contains(t, content, "operator-supplied path")
 	assert.Contains(t, content, "cheapest deterministic baseline command")
 	assert.Contains(t, content, "final verification proves the completed change")
-}
-
-func TestAgentDefinitionFrontmatterNoRoutingFields(t *testing.T) {
-	t.Parallel()
-	for _, name := range AgentNames() {
-		path := "agents/" + name + ".md"
-		content, err := Content(path)
-		require.NoError(t, err, "failed to load %s", path)
-		parts := strings.SplitN(content, "---", 3)
-		require.Len(t, parts, 3, "%s missing frontmatter delimiters", path)
-		fm := parts[1]
-		assert.Contains(t, fm, "name:", "%s missing name in frontmatter", path)
-		assert.Contains(t, fm, "description:", "%s missing description in frontmatter", path)
-		assert.NotContains(t, fm, "state:", "%s frontmatter contains state field", path)
-		assert.NotContains(t, fm, "type:", "%s frontmatter contains type field", path)
-	}
 }
 
 func TestPartialsAreAvailableInRender(t *testing.T) {

@@ -16,15 +16,10 @@ type Config struct {
 	Defaults        ConfigDefaults        `yaml:"defaults" json:"defaults"`
 	Execution       ConfigExecution       `yaml:"execution" json:"execution"`
 	Governance      ConfigGovernance      `yaml:"governance,omitempty" json:"governance,omitempty"`
-	Agents          ConfigAgents          `yaml:"agents,omitempty" json:"agents,omitempty"`
 	Validation      ConfigValidation      `yaml:"validation,omitempty" json:"validation,omitempty"`
 	Context         ProjectContext        `yaml:"context,omitempty" json:"context,omitempty"`
 	CustomArtifacts []ArtifactDefinition  `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	UnknownTopLevel map[string]*yaml.Node `yaml:"-" json:"-"`
-}
-
-type ConfigAgents struct {
-	Mappings map[string]string `yaml:"mappings,omitempty" json:"mappings,omitempty"`
 }
 
 // ConfigGovernance holds governance-related configuration such as per-control
@@ -166,9 +161,6 @@ func (c *Config) Normalize() {
 	if c.UnknownTopLevel == nil {
 		c.UnknownTopLevel = map[string]*yaml.Node{}
 	}
-	if c.Agents.Mappings == nil {
-		c.Agents.Mappings = map[string]string{}
-	}
 	for i := range c.Governance.PolicyPacks {
 		if c.Governance.PolicyPacks[i].Mode == "" {
 			c.Governance.PolicyPacks[i].Mode = ControlModeAdvisory
@@ -216,14 +208,6 @@ func (c Config) Validate() error {
 	if err := c.Governance.Thresholds.Validate(); err != nil {
 		return err
 	}
-	for skillName, agentName := range c.Agents.Mappings {
-		if key := strings.TrimSpace(skillName); key == "" {
-			return fmt.Errorf("agents.mappings contains empty skill name")
-		}
-		if value := strings.TrimSpace(agentName); value == "" {
-			return fmt.Errorf("agents.mappings.%s: agent name is required", skillName)
-		}
-	}
 	return nil
 }
 
@@ -259,9 +243,7 @@ func ParseConfigYAML(data []byte) (Config, error) {
 				return Config{}, fmt.Errorf("decode governance: %w", err)
 			}
 		case "agents":
-			if err := decodeNodeStrict(value, &cfg.Agents); err != nil {
-				return Config{}, fmt.Errorf("decode agents: %w", err)
-			}
+			return Config{}, fmt.Errorf("top-level agents configuration has been removed; governed handoff is skill-based via next_skill.name and slipway-{name}/SKILL.md host skill surfaces")
 		case "validation":
 			if err := decodeNodeStrict(value, &cfg.Validation); err != nil {
 				return Config{}, fmt.Errorf("decode validation: %w", err)
@@ -313,14 +295,6 @@ func (c Config) ToYAML() ([]byte, error) {
 			return nil, err
 		}
 		appendMappingEntry(root, "governance", governanceNode)
-	}
-
-	if len(cfg.Agents.Mappings) > 0 {
-		agentsNode, err := encodeYAMLNode(cfg.Agents)
-		if err != nil {
-			return nil, err
-		}
-		appendMappingEntry(root, "agents", agentsNode)
 	}
 
 	if cfg.Validation.EnforceRFC2119 || cfg.Validation.EnforceRequirementScenarios {
