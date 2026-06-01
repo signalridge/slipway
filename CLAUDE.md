@@ -27,6 +27,15 @@ echo '{"guardrail_domain":"","needs_discovery":false,"complexity":"simple"}' | s
 Without classification fields or without stdin, safe fallback applies:
 `guardrail_domain=""`, `needs_discovery=true`, `complexity="complex"`.
 
+Only **omitted** fields safe-degrade. An **explicit but invalid** classification
+is rejected (exit 2, `error_code=invalid_classification`) with an actionable
+remediation listing the valid set and a nearest-match suggestion, rather than
+being silently dropped — this is fail-closed for the guardrail signal. Invalid
+means: an unrecognized `guardrail_domain` or `complexity` token, or a non-empty
+`guardrail_domain` paired with `needs_discovery=false` or a `complexity` below
+`complex`. `slipway new --help` lists the accepted tokens. (A flaky *inferred*
+classification, by contrast, still safe-degrades.)
+
 ### `guardrail_domain` values
 
 Classify **intent**, not keyword mention. If the change itself modifies the
