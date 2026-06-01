@@ -65,7 +65,19 @@ On light preset, skip this section — `assurance.md` is optional.
 - archive decision with rationale, including that active `validate --json`
   proof was captured before `done`
 
-If any required section is empty or missing, closeout is blocked.
+Judge each required section semantically, not structurally. For every section,
+decide whether the body is genuine, change-specific closeout content or merely
+the generated scaffold sentence — including the case where the seeded sentence
+was lightly reworded or padded but still says nothing concrete. A section that
+is structurally non-empty but semantically blank does NOT count as authored.
+
+If any required section is empty, missing, or still scaffold/boilerplate, closeout is blocked.
+
+Record the per-section judgment as evidence in the closeout references, one line
+per section you affirm as authored, e.g.
+`closeout:assurance_section:scope_summary=authored`. These per-section lines are
+your shown work; the aggregate `closeout:assurance_complete=pass` below is the
+required attestation the ship gate enforces on standard/strict.
 
 ## Write Verification
 Closeout must be performed independently from implementation.
@@ -81,11 +93,16 @@ references:
   - "closeout:test_suite=pass:N/N"
   - "closeout:reviewer_independence=pass"
   - "closeout:guardrail_baseline=pass"
+  - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
 notes: |
   <verification notes>
 ```
 
-On standard/strict preset, also add `closeout:assurance_complete=pass`.
+On standard/strict preset, `closeout:assurance_complete=pass` is REQUIRED: the
+ship gate blocks with `closeout_assurance_attestation_missing` if the passing
+final-closeout record omits it. Add it only after you have judged every required
+assurance section as genuinely authored (see Assurance Artifact Verification).
+On light preset, omit it — assurance is optional there.
 
 ## Present and Advance
 Show closeout summary with verification index. {{template "hard-gate"}}

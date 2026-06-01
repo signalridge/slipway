@@ -78,7 +78,7 @@ func TestPlanAuditTemplateDoesNotReintroduceLightPresetVerificationBlocker(t *te
 	assert.NotContains(t, content, "Every task needs explicit per-task verification fields before execution begins.")
 }
 
-func TestFinalCloseoutTemplateKeepsAssuranceReferenceConditional(t *testing.T) {
+func TestFinalCloseoutTemplateRequiresAssuranceAttestationOnStandardStrict(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
@@ -88,8 +88,13 @@ func TestFinalCloseoutTemplateKeepsAssuranceReferenceConditional(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "On standard/strict preset, also add `closeout:assurance_complete=pass`.")
-	assert.NotContains(t, content, "\n  - \"closeout:assurance_complete=pass\"\n")
+	// The attestation is now part of the closeout references list and is
+	// described as required on standard/strict — the ship gate enforces it via
+	// closeout_assurance_attestation_missing. Light preset still omits it.
+	assert.Contains(t, content, `- "closeout:assurance_complete=pass"`)
+	assert.Contains(t, content, "`closeout:assurance_complete=pass` is REQUIRED")
+	assert.Contains(t, content, "closeout_assurance_attestation_missing")
+	assert.Contains(t, content, "On light preset, omit it")
 }
 
 func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {

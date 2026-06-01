@@ -130,7 +130,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 
 	// 4. Skill evidence evaluation
 	nextSkillName, evidenceState := ResolveNextSkill(change)
-	closeoutRequired := presetPolicy.CloseoutRefreshRequired
+	closeoutRequired := FinalCloseoutEvidenceRequired(presetPolicy)
 
 	var passingSkills map[string]model.VerificationRecord
 	// worktree-preflight is not a governance skill; its gate is checked in
