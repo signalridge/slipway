@@ -23,6 +23,8 @@ func TestResolveActiveChangeRefReportsBoundElsewhereFromRoot(t *testing.T) {
 		change := model.NewChange("bound-change")
 		change.WorktreePath = worktreePath
 		require.NoError(t, state.SaveChange(root, change))
+		normalizedWorktreePath, normalizeErr := state.NormalizePath(worktreePath)
+		require.NoError(t, normalizeErr)
 
 		_, err := resolveActiveChangeRef(root, "")
 		cliErr := asCLIError(err)
@@ -30,9 +32,9 @@ func TestResolveActiveChangeRefReportsBoundElsewhereFromRoot(t *testing.T) {
 		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
 		assert.Equal(t, categoryPrecondition, cliErr.Category)
 		assert.Contains(t, cliErr.Message, "bound-change")
-		assert.Contains(t, cliErr.Message, worktreePath)
+		assert.Contains(t, cliErr.Message, normalizedWorktreePath)
 		assert.Contains(t, cliErr.Remediation, "--change bound-change")
-		assert.Contains(t, cliErr.Remediation, worktreePath)
+		assert.Contains(t, cliErr.Remediation, normalizedWorktreePath)
 	})
 }
 
