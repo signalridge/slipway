@@ -451,7 +451,12 @@ func TestLoadChangeFindsWorktreeBundleWithoutRegistryMirror(t *testing.T) {
 	loaded, err := LoadChange(root, "worktree-bundle")
 	require.NoError(t, err)
 	assert.Equal(t, model.StateS2Execute, loaded.CurrentState)
-	assert.Equal(t, worktreeRoot, loaded.WorktreePath)
+	// ChangeDir removal also drops the git-local worktree binding, so this
+	// exercises the location-inference fallback, which resolves to the canonical
+	// (symlink-resolved) worktree root.
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 }
 
 func TestLoadChangeSkipsMarkerlessSiblingWorktreeAtRepoRoot(t *testing.T) {
@@ -503,7 +508,12 @@ func TestLoadChangeFindsNestedScopeBundleInsideWorktree(t *testing.T) {
 	loaded, err := LoadChange(scopeRoot, change.Slug)
 	require.NoError(t, err)
 	assert.Equal(t, model.StateS2Execute, loaded.CurrentState)
-	assert.Equal(t, worktreeRoot, loaded.WorktreePath)
+	// ChangeDir removal also drops the git-local worktree binding, so this
+	// exercises the location-inference fallback, which resolves to the canonical
+	// (symlink-resolved) worktree root.
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 
 	_, err = os.Stat(filepath.Join(worktreeRoot, "services", "billing", "artifacts", "changes", change.Slug, "change.yaml"))
 	require.NoError(t, err)

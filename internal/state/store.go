@@ -369,6 +369,9 @@ func loadChangeFromCandidatesWithLoaderAndCandidate(
 	for _, candidate := range paths {
 		change, err := load(candidate.Path)
 		if err == nil {
+			if !candidate.Archived {
+				HydrateWorktreeBinding(root, candidate.WorkspaceRoot, &change)
+			}
 			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change, candidate.Archived) {
 				continue
 			}
@@ -510,6 +513,13 @@ func SaveChange(root string, st model.Change) error {
 		return err
 	}
 	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
+		return err
+	}
+	// Record the machine-local worktree binding in git-local runtime state.
+	// The tracked bundle above carries no absolute path (Change.MarshalYAML
+	// strips it); this runtime record is the authority for resolving the bound
+	// worktree, with the bundle's own location as a self-healing fallback.
+	if err := writeWorktreeBinding(root, st); err != nil {
 		return err
 	}
 	return nil

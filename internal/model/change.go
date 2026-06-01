@@ -260,6 +260,13 @@ func (c Change) EffectiveWorkflowProfile() WorkflowProfile {
 func (c Change) MarshalYAML() (interface{}, error) {
 	normalized := c
 	normalized.Normalize()
+	// WorktreePath is a machine-local absolute path and is never persisted to
+	// tracked change.yaml. The bound worktree is resolved at load time from the
+	// governed bundle's own location (SaveChange always writes the bundle under
+	// the bound worktree), so the path is redundant runtime state, not durable
+	// governance state. Zeroing it here makes every Change YAML write (active
+	// SaveChange, archive snapshot, repair rewrite) drop it through one chokepoint.
+	normalized.WorktreePath = ""
 	type alias Change
 	return alias(normalized), nil
 }
