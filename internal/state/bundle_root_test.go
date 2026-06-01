@@ -94,7 +94,9 @@ func TestRelocateGovernedBundleSeedsVisibleTargetAuthority(t *testing.T) {
 
 	loaded, err := LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, worktreeDir, loaded.WorktreePath)
+	wantWorktree, err := NormalizePath(worktreeDir)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 	assert.Equal(t, "bundle-visible-authority", loaded.WorktreeBranch)
 
 	_, err = os.Stat(filepath.Join(worktreeDir, ".slipway.yaml"))

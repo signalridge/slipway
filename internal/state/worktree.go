@@ -47,6 +47,77 @@ var worktreeListCache = struct {
 	entries: map[string]worktreeListCacheEntry{},
 }
 
+type worktreeBindingResolution int
+
+const (
+	worktreeBindingUnresolved worktreeBindingResolution = iota
+	worktreeBindingFromRuntime
+	worktreeBindingFromLocation
+)
+
+// HydrateWorktreeBinding resolves change.WorktreePath for an active governed
+// bundle that was loaded from a tracked change.yaml.
+//
+// The absolute worktree path is never persisted to tracked change.yaml; the
+// WorktreePath field is yaml:"-", so a tracked bundle that still carries
+// worktree_path is rejected by strict decoding before it ever reaches here.
+// Resolution authority, in order:
+//
+//  1. The git-local worktree-binding record (writeWorktreeBinding), which keeps
+//     a change's binding unambiguous even when a stale copy of the bundle exists
+//     in another workspace.
+//  2. Fallback: the bundle's own location. SaveChange always writes the bundle
+//     under changeWorkspaceRoot(root, change), which equals the bound worktree,
+//     so a bundle's location is a faithful, machine-local encoding of the
+//     binding. This makes resolution self-healing when the runtime record is
+//     missing (e.g. a fresh clone, or git-local state cleared).
+//
+// Callers must skip archived bundles, which are portable, terminal, and
+// intentionally unbound.
+func HydrateWorktreeBinding(projectRoot, workspaceRoot string, change *model.Change) worktreeBindingResolution {
+	if change == nil {
+		return worktreeBindingUnresolved
+	}
+	if binding, ok := readWorktreeBinding(projectRoot, change.Slug); ok {
+		change.WorktreePath = binding.WorktreePath
+		return worktreeBindingFromRuntime
+	}
+	if inferWorktreeBindingFromLocation(projectRoot, workspaceRoot, change) {
+		return worktreeBindingFromLocation
+	}
+	return worktreeBindingUnresolved
+}
+
+// inferWorktreeBindingFromLocation reconstructs the bound worktree from the
+// workspace root where the bundle physically lives. A bundle in the project's
+// own worktree (or a non-git context) is treated as unbound.
+func inferWorktreeBindingFromLocation(projectRoot, workspaceRoot string, change *model.Change) bool {
+	change.WorktreePath = ""
+
+	worktreeRoot, err := gitWorkspaceRoot(workspaceRoot)
+	if err != nil {
+		return false
+	}
+	projectWorktreeRoot, err := gitWorkspaceRoot(projectRoot)
+	if err != nil {
+		return false
+	}
+	normalizedWorktree, err := NormalizePath(worktreeRoot)
+	if err != nil {
+		return false
+	}
+	normalizedProject, err := NormalizePath(projectWorktreeRoot)
+	if err != nil {
+		return false
+	}
+	if normalizedWorktree == normalizedProject {
+		// Bundle lives in the project worktree itself, so it is unbound.
+		return false
+	}
+	change.WorktreePath = normalizedWorktree
+	return true
+}
+
 func PersistScopeWorktreeMetadata(change *model.Change, worktreePath, worktreeBranch string) error {
 	if change == nil {
 		return fmt.Errorf("change is required")

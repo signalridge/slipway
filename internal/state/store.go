@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	ErrNoActiveChange         = errors.New("no active change")
-	ErrMultipleActiveChanges  = errors.New("multiple active changes")
-	errMissingBundleAuthority = errors.New("change bundle missing authority file")
+	ErrNoActiveChange           = errors.New("no active change")
+	ErrMultipleActiveChanges    = errors.New("multiple active changes")
+	errMissingBundleAuthority   = errors.New("change bundle missing authority file")
+	errAmbiguousWorktreeBinding = errors.New("ambiguous worktree binding")
 )
 
 type BoundChangeRef struct {
@@ -366,10 +367,26 @@ func loadChangeFromCandidatesWithLoaderAndCandidate(
 	load func(string) (model.Change, error),
 ) (model.Change, bundleCandidate, error) {
 	var firstAuthorityErr error
+	var locationFallbackChange model.Change
+	var locationFallbackCandidate bundleCandidate
+	var locationFallbackSet bool
 	for _, candidate := range paths {
 		change, err := load(candidate.Path)
 		if err == nil {
+			resolution := worktreeBindingUnresolved
+			if !candidate.Archived {
+				resolution = HydrateWorktreeBinding(root, candidate.WorkspaceRoot, &change)
+			}
 			if !changeVisibleFromRoot(root, candidate.WorkspaceRoot, change, candidate.Archived) {
+				continue
+			}
+			if !candidate.Archived && resolution == worktreeBindingFromLocation {
+				if locationFallbackSet {
+					return model.Change{}, bundleCandidate{}, ambiguousWorktreeBindingError(change.Slug, locationFallbackCandidate, candidate)
+				}
+				locationFallbackChange = change
+				locationFallbackCandidate = candidate
+				locationFallbackSet = true
 				continue
 			}
 			return change, candidate, nil
@@ -391,10 +408,23 @@ func loadChangeFromCandidatesWithLoaderAndCandidate(
 		}
 		return model.Change{}, bundleCandidate{}, err
 	}
+	if locationFallbackSet {
+		return locationFallbackChange, locationFallbackCandidate, nil
+	}
 	if firstAuthorityErr != nil {
 		return model.Change{}, bundleCandidate{}, firstAuthorityErr
 	}
 	return model.Change{}, bundleCandidate{}, fs.ErrNotExist
+}
+
+func ambiguousWorktreeBindingError(slug string, first, second bundleCandidate) error {
+	return fmt.Errorf(
+		"%w for %q: runtime binding is missing and multiple bundle locations are visible (%s, %s); run `slipway repair` or remove the stale bundle copy",
+		errAmbiguousWorktreeBinding,
+		slug,
+		first.Path,
+		second.Path,
+	)
 }
 
 // LoadChange loads the active change state for the given slug from the canonical bundle paths.
@@ -510,6 +540,13 @@ func SaveChange(root string, st model.Change) error {
 		return err
 	}
 	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
+		return err
+	}
+	// Record the machine-local worktree binding in git-local runtime state.
+	// The tracked bundle above carries no absolute path (Change.MarshalYAML
+	// strips it); this runtime record is the authority for resolving the bound
+	// worktree, with the bundle's own location as a self-healing fallback.
+	if err := writeWorktreeBinding(root, st); err != nil {
 		return err
 	}
 	return nil
@@ -826,7 +863,9 @@ func restoreChangeAuthorityIfNeeded(root string, expected model.Change) error {
 		current, decodeErr := decodeAndValidateChange(raw)
 		if decodeErr == nil {
 			current.Normalize()
-			if reflect.DeepEqual(current, expected) {
+			expectedOnDisk := expected
+			expectedOnDisk.WorktreePath = ""
+			if reflect.DeepEqual(current, expectedOnDisk) {
 				return nil
 			}
 		}

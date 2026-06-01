@@ -38,7 +38,13 @@ type Change struct {
 	SuggestedWorkflowPreset WorkflowPreset  `yaml:"suggested_workflow_preset,omitempty" json:"suggested_workflow_preset,omitempty"`
 
 	// Worktree
-	WorktreePath   string `yaml:"worktree_path,omitempty" json:"worktree_path,omitempty"`
+	// WorktreePath is machine-local runtime state, resolved at load time from the
+	// git-local worktree binding (or, as a self-healing fallback, the bundle's own
+	// location). It is never persisted to the tracked change.yaml (yaml:"-"), so a
+	// tracked bundle that still carries worktree_path is rejected by strict
+	// decoding rather than tolerated — there is no migration shim. The JSON handoff
+	// surfaces still expose it as ephemeral runtime info.
+	WorktreePath   string `yaml:"-" json:"worktree_path,omitempty"`
 	WorktreeBranch string `yaml:"worktree_branch,omitempty" json:"worktree_branch,omitempty"`
 
 	// Governance
@@ -260,6 +266,9 @@ func (c Change) EffectiveWorkflowProfile() WorkflowProfile {
 func (c Change) MarshalYAML() (interface{}, error) {
 	normalized := c
 	normalized.Normalize()
+	// WorktreePath carries yaml:"-", so it is dropped from every Change YAML write
+	// (active SaveChange, archive snapshot, repair rewrite) without an explicit
+	// strip here.
 	type alias Change
 	return alias(normalized), nil
 }
