@@ -311,6 +311,20 @@ custom_block:
 	assert.Contains(t, string(out), "enabled: true")
 }
 
+func TestConfigRejectsRemovedAgentsSurface(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`
+agents:
+  mappings:
+    wave-orchestration: slipway-orchestrator
+`)
+
+	_, err := ParseConfigYAML(raw)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "top-level agents configuration has been removed")
+	assert.Contains(t, err.Error(), "next_skill.name")
+}
+
 func TestConfigGovernanceParsing(t *testing.T) {
 	t.Parallel()
 	raw := []byte(`

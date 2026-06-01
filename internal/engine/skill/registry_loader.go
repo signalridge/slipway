@@ -1,19 +1,13 @@
 package skill
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/fsutil"
-	"github.com/signalridge/slipway/internal/model"
-	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
-	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/signalridge/slipway/internal/toolgen"
 	"gopkg.in/yaml.v3"
 )
@@ -27,7 +21,7 @@ func (e *GovernanceRegistryError) Error() string {
 	if e == nil {
 		return ""
 	}
-	return fmt.Sprintf("parse skill frontmatter or registry config %q: %v", e.Path, e.Err)
+	return fmt.Sprintf("parse skill frontmatter %q: %v", e.Path, e.Err)
 }
 
 func (e *GovernanceRegistryError) Unwrap() error {
@@ -47,7 +41,7 @@ type governanceFrontMatter struct {
 func LoadGovernanceRegistry(root string) ([]Definition, error) {
 	// The Go registry is the routing authority. Generated SKILL.md files are an
 	// optional runtime overlay for adapter-facing prompt text only; they may not
-	// override workflow state, hard gates, or agent defaults.
+	// override workflow state, hard gates, or execution constraints.
 	definitions := defaultGovernanceRegistryMap()
 
 	dirs := candidateSkillDirs(root)
@@ -71,97 +65,7 @@ func LoadGovernanceRegistry(root string) ([]Definition, error) {
 		}
 	}
 
-	configPath, err := governanceConfigPath(root)
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := model.LoadConfig(configPath)
-	switch {
-	case err == nil:
-		if err := applyConfiguredAgentMappings(definitions, cfg.Agents.Mappings, configPath); err != nil {
-			return nil, err
-		}
-	case errors.Is(err, fs.ErrNotExist):
-		// Config is optional for governance registry overrides.
-	default:
-		return nil, &GovernanceRegistryError{Path: configPath, Err: err}
-	}
-
 	return definitionsToSortedSlice(definitions), nil
-}
-
-func governanceConfigPath(root string) (string, error) {
-	canonicalRoot, err := fsutil.ResolveCanonicalScopeRoot(root)
-	switch {
-	case err == nil:
-		return state.ConfigPath(canonicalRoot), nil
-	case errors.Is(err, fsutil.ErrProjectRootNotFound):
-		return state.ConfigPath(root), nil
-	default:
-		return "", err
-	}
-}
-
-func applyConfiguredAgentMappings(definitions map[string]Definition, mappings map[string]string, path string) error {
-	if len(mappings) == 0 {
-		return nil
-	}
-
-	validAgents := map[string]struct{}{}
-	for _, name := range tmpl.AgentNames() {
-		validAgents[name] = struct{}{}
-	}
-
-	for skillName, agentName := range mappings {
-		skillName = strings.TrimSpace(skillName)
-		agentName = strings.TrimSpace(agentName)
-
-		def, ok := definitions[skillName]
-		if !ok {
-			return &GovernanceRegistryError{
-				Path: path,
-				Err:  fmt.Errorf("agents.mappings.%s: unknown governance skill", skillName),
-			}
-		}
-		if _, ok := validAgents[agentName]; !ok {
-			return &GovernanceRegistryError{
-				Path: path,
-				Err:  fmt.Errorf("agents.mappings.%s: unknown agent %q", skillName, agentName),
-			}
-		}
-		status, err := configuredAgentStatus(agentName)
-		if err != nil {
-			return err
-		}
-		if status == "manual_only" {
-			return &GovernanceRegistryError{
-				Path: path,
-				Err:  fmt.Errorf("agents.mappings.%s: agent %q is manual-only and cannot be mapped to governance skills", skillName, agentName),
-			}
-		}
-		def.AgentHint = agentName
-		definitions[skillName] = def
-	}
-	return nil
-}
-
-func configuredAgentStatus(name string) (string, error) {
-	templatePath := filepath.ToSlash(filepath.Join("internal", "tmpl", "templates", "agents", name+".md"))
-	content, err := tmpl.Content("agents/" + name + ".md")
-	if err != nil {
-		return "", &GovernanceRegistryError{Path: templatePath, Err: err}
-	}
-	frontMatter, ok := extractFrontMatter(content)
-	if !ok {
-		return "", nil
-	}
-	var fm struct {
-		AgentStatus string `yaml:"agent_status"`
-	}
-	if err := yaml.Unmarshal([]byte(frontMatter), &fm); err != nil {
-		return "", &GovernanceRegistryError{Path: templatePath, Err: err}
-	}
-	return strings.TrimSpace(fm.AgentStatus), nil
 }
 
 func parseGovernanceSkillFromFile(
@@ -174,6 +78,12 @@ func parseGovernanceSkillFromFile(
 	}
 	frontmatterText, ok := extractFrontMatter(string(raw))
 	if !ok {
+		if bareID, ok := bareGovernanceIDFromOverlayPath(path, defaults); ok {
+			return Definition{}, false, &GovernanceRegistryError{
+				Path: path,
+				Err:  fmt.Errorf("missing frontmatter for governance overlay %q", bareID),
+			}
+		}
 		return Definition{}, false, nil
 	}
 	var fm governanceFrontMatter

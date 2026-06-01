@@ -538,81 +538,6 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 	})
 }
 
-func TestHealthCommandReportsInvalidAgentMapping(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		cfg := model.DefaultConfig()
-		cfg.Agents.Mappings = map[string]string{}
-		cfg.Agents.Mappings["wave-orchestration"] = "slipway-missing"
-		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
-
-		var out bytes.Buffer
-		cmd := commandForRoot(t, root, makeHealthCmd())
-		cmd.SetArgs([]string{"--json"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		var view healthView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-
-		found := false
-		for _, finding := range view.Findings {
-			if finding.Category != "agent_contract" {
-				continue
-			}
-			for _, reason := range finding.Reasons {
-				if reason.Code == "agent_mapping_invalid" {
-					found = true
-					assert.False(t, finding.Repairable)
-				}
-			}
-		}
-		assert.True(t, found, "expected invalid agent mapping finding")
-	})
-}
-
-func TestHealthCommandRejectsManualOnlyAgentMapping(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		cfg := model.DefaultConfig()
-		cfg.Agents.Mappings = map[string]string{}
-		cfg.Agents.Mappings["wave-orchestration"] = "slipway-executor"
-		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
-
-		var out bytes.Buffer
-		cmd := commandForRoot(t, root, makeHealthCmd())
-		cmd.SetArgs([]string{"--json"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		var view healthView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-
-		found := false
-		for _, finding := range view.Findings {
-			if finding.Category != "agent_contract" {
-				continue
-			}
-			for _, reason := range finding.Reasons {
-				if reason.Code == "agent_mapping_invalid" {
-					found = true
-					assert.Equal(t, model.ReasonSeverityError, finding.Severity)
-					assert.False(t, finding.Repairable)
-					assert.Contains(t, reason.Message, "manual-only")
-					assert.Contains(t, finding.RepairHint, "governance-mapped")
-				}
-			}
-		}
-		assert.True(t, found, "expected manual-only governance mapping rejection")
-	})
-}
-
 func TestHealthCommandReportsMissingHostSkillSurface(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -631,7 +556,7 @@ func TestHealthCommandReportsMissingHostSkillSurface(t *testing.T) {
 
 		found := false
 		for _, finding := range view.Findings {
-			if finding.Category != "agent_contract" || finding.Slug != "intake-clarification" {
+			if finding.Category != "skill_contract" || finding.Slug != "intake-clarification" {
 				continue
 			}
 			for _, reason := range finding.Reasons {
@@ -643,6 +568,151 @@ func TestHealthCommandReportsMissingHostSkillSurface(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "expected missing host skill surface finding")
+	})
+}
+
+func TestHealthCommandReportsInvalidHostSkillRegistry(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+		skillPath := filepath.Join(root, ".claude", "skills", "slipway-intake-clarification", "SKILL.md")
+		require.NoError(t, os.WriteFile(skillPath, []byte("---\nskill_id: [\n---\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "skill_contract" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "skill_registry_invalid" {
+					found = true
+					assert.Contains(t, finding.Message, "Governance skill registry is invalid")
+					assert.Contains(t, finding.RepairHint, "Inspect generated host skill surfaces")
+				}
+			}
+		}
+		assert.True(t, found, "expected invalid host skill registry finding")
+	})
+}
+
+func TestHealthCommandDoctorSkipsNonCommandSkillContractRepairHints(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+		skillPath := filepath.Join(root, ".claude", "skills", "slipway-intake-clarification", "SKILL.md")
+		require.NoError(t, os.WriteFile(skillPath, []byte("body\n"), 0o644))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json", "--doctor"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Doctor)
+
+		found := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category != "skill_contract" {
+				continue
+			}
+			found = true
+			assert.Empty(t, action.Command)
+			assert.False(t, action.Repairable)
+			assert.Contains(t, action.Summary, "Governance skill registry is invalid")
+		}
+		assert.True(t, found, "expected non-repairable skill contract doctor action")
+	})
+}
+
+func TestHealthCommandReportsInvalidHostSkillRegistryFromInvocationWorktree(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+
+	worktreeRoot := filepath.Join(t.TempDir(), "health-worktree")
+	runGit(t, root, "worktree", "add", worktreeRoot, "-b", "feat/health-worktree", "HEAD")
+	require.NoError(t, bootstrap.InitWorkspace(worktreeRoot, []string{"claude"}, false))
+
+	skillPath := filepath.Join(worktreeRoot, ".claude", "skills", "slipway-intake-clarification", "SKILL.md")
+	require.NoError(t, os.WriteFile(skillPath, []byte("body\n"), 0o644))
+
+	previousWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(worktreeRoot))
+	defer func() {
+		_ = os.Chdir(previousWD)
+	}()
+
+	var out bytes.Buffer
+	cmd := makeHealthCmd()
+	cmd.SetArgs([]string{"--json"})
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Execute())
+
+	var view healthView
+	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+	found := false
+	for _, finding := range view.Findings {
+		if finding.Category != "skill_contract" {
+			continue
+		}
+		for _, reason := range finding.Reasons {
+			if reason.Code == "skill_registry_invalid" {
+				found = true
+				assert.Contains(t, reason.Message, "missing frontmatter")
+				assert.Contains(t, reason.Message, "health-worktree")
+			}
+		}
+	}
+	assert.True(t, found, "expected invocation worktree skill registry finding")
+}
+
+func TestHealthCommandReportsUnreadableHostSkillSurface(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+		skillDir := filepath.Join(root, ".claude", "skills", "slipway-intake-clarification")
+		require.NoError(t, os.RemoveAll(skillDir))
+		require.NoError(t, os.WriteFile(skillDir, []byte("not a directory"), 0o644))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "skill_contract" || finding.Slug != "intake-clarification" {
+				continue
+			}
+			for _, reason := range finding.Reasons {
+				if reason.Code == "skill_prompt_surface_unreadable" {
+					found = true
+					assert.Contains(t, finding.Message, "unreadable host skill surface")
+					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
+				}
+			}
+		}
+		assert.True(t, found, "expected unreadable host skill surface finding")
 	})
 }
 
@@ -721,7 +791,7 @@ func TestHealthCommandReportsMissingHostSkillSurfaceForMultiAdapterWorkspace(t *
 
 		found := false
 		for _, finding := range view.Findings {
-			if finding.Category != "agent_contract" || finding.Slug != "intake-clarification" {
+			if finding.Category != "skill_contract" || finding.Slug != "intake-clarification" {
 				continue
 			}
 			for _, reason := range finding.Reasons {
@@ -771,36 +841,6 @@ func TestHealthCommandDoctorIncludesGovernanceFailuresWithoutExtraFlags(t *testi
 			}
 		}
 		assert.True(t, found, "expected governance worktree failure in doctor actions")
-	})
-}
-
-func TestHealthCommandDoctorSkipsNonCommandRepairHints(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		cfg := model.DefaultConfig()
-		cfg.Agents.Mappings = map[string]string{
-			"wave-orchestration": "slipway-missing",
-		}
-		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
-
-		var out bytes.Buffer
-		cmd := commandForRoot(t, root, makeHealthCmd())
-		cmd.SetArgs([]string{"--json", "--doctor"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		var view healthView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		require.NotNil(t, view.Doctor)
-
-		for _, action := range view.Doctor.Actions {
-			if action.Category == "agent_contract" {
-				assert.NotEqual(t, ".slipway.yaml", action.Command)
-			}
-		}
 	})
 }
 
@@ -1397,7 +1437,7 @@ func TestClassifyGlobalHealthImpactBySeverity(t *testing.T) {
 	t.Parallel()
 
 	findings := []state.HealthFinding{
-		{Category: "agent_contract", Severity: model.ReasonSeverityError},
+		{Category: "skill_contract", Severity: model.ReasonSeverityError},
 		{Category: "lifecycle_event", Severity: model.ReasonSeverityWarning},
 		{
 			Category:             "codebase_map",
