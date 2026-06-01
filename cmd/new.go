@@ -176,6 +176,8 @@ func makeNewCmd() *cobra.Command {
 						description = strings.TrimSpace(stdinInput.Description)
 					}
 					if classification, ok := buildStdinClassification(stdinInput); ok {
+						// Fail explicit JSON assertions before any change state is created;
+						// ResolveIntentClassification re-checks this defensively downstream.
 						if err := progression.ValidateClassification(classification); err != nil {
 							return newInvalidClassificationError(err)
 						}
@@ -368,6 +370,9 @@ func createDirectGovernedChange(
 	// Override complexity if --trivial flag is set
 	if trivial {
 		setup.ComplexityLevel = "trivial"
+	}
+	if err := validateChangeSetupClassification(setup); err != nil {
+		return newInvalidClassificationError(err)
 	}
 	setup.ArtifactSchema = model.DefaultArtifactSchemaForWorkflowProfile(workflowProfile, setup.NeedsDiscovery, setup.ArtifactSchema)
 
@@ -651,6 +656,14 @@ func classificationToChangeSetup(classification progression.IntentClassification
 		InitialSubStep:  model.PlanEntrySubStep(classification.NeedsDiscovery),
 		ComplexityLevel: classification.Complexity,
 	}
+}
+
+func validateChangeSetupClassification(setup model.ChangeSetup) error {
+	return progression.ValidateClassification(progression.IntentClassification{
+		GuardrailDomain: setup.GuardrailDomain,
+		NeedsDiscovery:  setup.NeedsDiscovery,
+		Complexity:      setup.ComplexityLevel,
+	})
 }
 
 func suggestWorkflowPreset(root string, setup model.ChangeSetup) (model.WorkflowPreset, error) {

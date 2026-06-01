@@ -716,6 +716,27 @@ func TestNewJSONStdinRejectsGuardrailWithoutDiscovery(t *testing.T) {
 	})
 }
 
+func TestNewJSONStdinRejectsGuardrailWithTrivialOverride(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		err := runNewJSONWithStdin(t, root,
+			`{"description":"probe","guardrail_domain":"auth_authz","needs_discovery":true,"complexity":"critical"}`,
+			"--trivial")
+
+		var cliErr *CLIError
+		require.ErrorAs(t, err, &cliErr)
+		assert.Equal(t, "invalid_classification", cliErr.ErrorCode)
+		assert.Equal(t, "complexity", cliErr.Details["field"])
+		assert.Contains(t, cliErr.Message, "requires complexity >= complex")
+
+		changes, listErr := state.ListChanges(root)
+		require.NoError(t, listErr)
+		assert.Empty(t, changes)
+	})
+}
+
 func TestNewJSONStdinAcceptsSchemaDataMigration(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -1653,9 +1674,10 @@ func singleChangeSlug(t *testing.T, dir string) string {
 }
 
 // runNewJSONWithStdin runs `slipway new --json` with the given JSON piped on a
-// non-terminal stdin, returning the command error (nil on success). Stdin and
-// terminal-detection globals are restored on cleanup.
-func runNewJSONWithStdin(t *testing.T, root, jsonInput string) error {
+// non-terminal stdin, returning the command error (nil on success). Extra args
+// are appended after --json. Stdin and terminal-detection globals are restored
+// on cleanup.
+func runNewJSONWithStdin(t *testing.T, root, jsonInput string, extraArgs ...string) error {
 	t.Helper()
 	_ = root // workspace is selected by the caller via withWorkspace.
 
@@ -1680,7 +1702,7 @@ func runNewJSONWithStdin(t *testing.T, root, jsonInput string) error {
 	var buf bytes.Buffer
 	cmd := makeNewCmd()
 	cmd.SetOut(&buf)
-	cmd.SetArgs([]string{"--json"})
+	cmd.SetArgs(append([]string{"--json"}, extraArgs...))
 	return cmd.Execute()
 }
 
