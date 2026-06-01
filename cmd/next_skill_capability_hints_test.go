@@ -61,6 +61,43 @@ func TestCodebaseMapStatusHasNoDurableDocs(t *testing.T) {
 	assert.False(t, codebaseMapStatusHasNoDurableDocs(artifact.CodebaseMapStatusPopulated))
 }
 
+// TestCodebaseMapDiscoveryAdvisoryMatrix pins the discovery-phase advisory. For a
+// discovery-scoped change (needs_discovery) it fires across every non-durable
+// status — including the fully missing map the consume-time advisory omits — when
+// a map-consuming planning skill is next, and routes to the slipway-codebase-mapping
+// skill. It is silent for populated/partial maps, for non-consuming skills, and
+// for every status when needs_discovery is false (a change that opted out of
+// discovery must not be nagged to map the repository).
+func TestCodebaseMapDiscoveryAdvisoryMatrix(t *testing.T) {
+	t.Parallel()
+	nonDurable := []string{
+		artifact.CodebaseMapStatusMissing,
+		artifact.CodebaseMapStatusScaffoldOnly,
+		artifact.CodebaseMapStatusBaseline,
+	}
+	for _, skillName := range []string{progression.SkillResearchOrchestration, progression.SkillPlanAudit} {
+		for _, status := range nonDurable {
+			advisory := codebaseMapDiscoveryAdvisory(status, skillName, true)
+			assert.NotEmpty(t, advisory,
+				"%s map for discovery change consumed by %s should warn", status, skillName)
+			assert.Contains(t, advisory, "slipway-codebase-mapping",
+				"discovery advisory must route to the mapping skill")
+			assert.Contains(t, advisory, "codebase_map_advisory")
+			// needs_discovery=false silences every status.
+			assert.Empty(t, codebaseMapDiscoveryAdvisory(status, skillName, false),
+				"%s map must not warn when needs_discovery is false", status)
+		}
+		// Durable maps never warn.
+		assert.Empty(t, codebaseMapDiscoveryAdvisory(artifact.CodebaseMapStatusPopulated, skillName, true))
+		assert.Empty(t, codebaseMapDiscoveryAdvisory(artifact.CodebaseMapStatusPartial, skillName, true))
+	}
+	// Non-consuming skills never receive the discovery advisory, even for a
+	// missing map on a discovery-scoped change.
+	for _, skillName := range []string{progression.SkillWaveOrchestration, progression.SkillIntakeClarification, ""} {
+		assert.Empty(t, codebaseMapDiscoveryAdvisory(artifact.CodebaseMapStatusMissing, skillName, true))
+	}
+}
+
 // writePopulatedCodebaseMapDocs writes the full durable doc set with
 // substantive, non-baseline content so AssessCodebaseMapDocs classifies the
 // whole map populated.
@@ -257,6 +294,65 @@ func TestNextOmitsCodebaseMapAdvisoryForPopulatedMap(t *testing.T) {
 			"populated map must not surface a codebase_map_advisory warning; got %v", view.Warnings)
 		assert.False(t, hasNoDurableCodebaseMapHint(view),
 			"populated map must not surface the empty-map technique hint")
+	})
+}
+
+// TestNextSurfacesMissingMapDiscoveryAdvisoryEndToEnd drives a real next
+// invocation for a discovery-scoped (L3) change with NO codebase map. The map is
+// missing — the case the consume-time advisory omits — so the broader discovery
+// advisory must fire, route to the slipway-codebase-mapping skill, and reach both
+// the standard view and the compact handoff projection. The empty-map technique
+// hint must also now point at the mapping skill rather than the scaffold command.
+func TestNextSurfacesMissingMapDiscoveryAdvisoryEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		// L3 => needs_discovery; lands at S1_PLAN/research with no map written.
+		createGovernedRequest(t, root, "L3", "missing map discovery advisory surfaces")
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "research-orchestration", view.NextSkill.Name)
+		require.Equal(t, artifact.CodebaseMapStatusMissing, view.InputContext.CodebaseMapStatus)
+
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"missing map on a discovery change should surface a codebase_map_advisory warning; got %v", view.Warnings)
+		assert.Contains(t, strings.Join(view.Warnings, "\n"), "slipway-codebase-mapping",
+			"discovery advisory must route the host to the mapping skill")
+
+		// The empty-map technique hint routes to the mapping skill now.
+		var hintName string
+		for _, hint := range view.NextSkill.TechniqueHints {
+			if strings.Contains(hint.Reason, "No durable codebase-map documents found") {
+				hintName = hint.Name
+			}
+		}
+		assert.Equal(t, "skill:codebase-mapping", hintName,
+			"empty-map hint should route to the mapping skill")
+
+		var handoff nextHandoffView
+		decodeNextJSON(t, []string{"--json"}, &handoff)
+		assert.True(t, warningsContainCodebaseMapAdvisory(handoff.Warnings),
+			"run/handoff surface should carry the discovery advisory; got %v", handoff.Warnings)
+	})
+}
+
+// TestNextOmitsDiscoveryAdvisoryForNonDiscoveryChange is the negative path: a
+// non-discovery (L2) change with a missing map must NOT surface a discovery
+// advisory — opting out of discovery means no nag to map the repository.
+func TestNextOmitsDiscoveryAdvisoryForNonDiscoveryChange(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		createGovernedRequest(t, root, "L2", "non-discovery change omits discovery advisory")
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, artifact.CodebaseMapStatusMissing, view.InputContext.CodebaseMapStatus)
+		assert.False(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"non-discovery change with a missing map must not surface a codebase_map_advisory; got %v", view.Warnings)
 	})
 }
 
