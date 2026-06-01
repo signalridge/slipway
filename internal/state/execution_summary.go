@@ -644,7 +644,7 @@ func stalePlanningEvidenceChain(root, bundleDir, executionSummaryArtifact string
 
 	pairs := []ExecutionFreshnessPair{}
 	for _, stagePath := range stagePaths {
-		stageCapturedAt := fileModTimeUTC(stagePath)
+		stageCapturedAt := stageEvidenceCapturedAt(stagePath)
 		pairs = append(pairs, ExecutionFreshnessPair{
 			SourceArtifact:     sourceArtifact,
 			EvidenceArtifact:   DisplayPath(root, stagePath),
@@ -678,12 +678,37 @@ func nextActionForPlanningStage(path string) string {
 	}
 }
 
-func fileModTimeUTC(path string) time.Time {
-	info, err := os.Stat(path)
+// stageEvidenceCapturedAt returns the captured timestamp embedded in a
+// planning-stage evidence record (plan-audit.yaml's verification timestamp or
+// wave-plan.yaml's generated_at).
+//
+// The embedded record timestamp — not the file mtime — is the semantic capture
+// time the staleness comparison treats as the evidence age. A record can be
+// rewritten after capture (e.g. adding DEC->REQ trace references) without
+// re-running the stage; that drifts the file mtime ahead of the real capture
+// time and makes a genuinely stale pair read as fresh. Reading the mtime here
+// is exactly the bug, so it is never consulted: an unreadable record or one
+// without an embedded timestamp reports a zero (unknown) capture time.
+func stageEvidenceCapturedAt(path string) time.Time {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return time.Time{}
 	}
-	return info.ModTime().UTC()
+	var record struct {
+		Timestamp   time.Time `yaml:"timestamp"`
+		GeneratedAt time.Time `yaml:"generated_at"`
+	}
+	if err := yaml.Unmarshal(raw, &record); err != nil {
+		return time.Time{}
+	}
+	switch filepath.Base(path) {
+	case planAuditFileName:
+		return record.Timestamp.UTC()
+	case WavePlanFileName:
+		return record.GeneratedAt.UTC()
+	default:
+		return time.Time{}
+	}
 }
 
 func normalizeFreshnessPairs(pairs []ExecutionFreshnessPair) []ExecutionFreshnessPair {

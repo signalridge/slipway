@@ -1,5 +1,8 @@
 ## Checklist
 - [ ] Spec-to-code: every acceptance signal cites a file:line or test.
+- [ ] Spec-to-code: each cited test exercises the literal clause it maps to, not
+      a narrower scenario; a clause narrowed in code without the requirement
+      prose being tightened is `drift`, not `covered`.
 - [ ] Spec-to-code: every skipped item has reviewer-accepted justification.
 - [ ] Code-to-spec: every non-trivial diff hunk cites the plan item it implements.
 - [ ] Code-to-spec: unlinked diff hunks are flagged as drift, not silently accepted.

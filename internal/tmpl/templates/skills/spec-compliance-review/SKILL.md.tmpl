@@ -47,7 +47,15 @@ implemented change stayed simple, surgical, and goal-driven.
 ## Required Checks
 ### Forward Alignment (Spec -> Code)
 - each spec requirement maps to concrete implementation
-- acceptance criteria are satisfied by tests
+- acceptance criteria are satisfied by tests that exercise the *literal*
+  requirement clause: open the cited test and confirm it asserts the clause's
+  behavior, not merely an adjacent or narrower scenario. Test presence is not
+  clause coverage — a green suite can pass while the clause stays unimplemented.
+- when the implementation intentionally narrows, defers, or reinterprets a
+  requirement clause (e.g. a documented fallback that skips a mandated check),
+  treat it as a forward-alignment gap, not a benign detail: either block the
+  code gap or require the requirement prose to be tightened to match the built
+  behavior. "Related tests exist" does not close this gap.
 - no spec requirement is silently dropped or deferred without explicit tracking
 
 ### Reverse Alignment (Code -> Spec)
@@ -126,6 +134,9 @@ After confirmation: proceed to code-quality-review.
 
 ## Block If
 - A spec requirement lacks implementation or an accepted skip justification.
+- A requirement clause is satisfied only in appearance: the cited tests cover a
+  narrower scenario than the clause states, or the implementation narrows the
+  clause without the requirement prose being tightened to match.
 - Code behavior is undocumented or contradicts the approved artifacts.
 - Locked decisions are violated.
 - Claimed-complete work is still stubbed, placeholder-only, or assertion-free.
