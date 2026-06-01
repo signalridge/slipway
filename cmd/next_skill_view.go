@@ -239,15 +239,21 @@ func assembleSkillViewWithOptions(
 		// fires for missing/scaffold_only, matching the old probe's truth set.
 		if codebaseMapStatusHasNoDurableDocs(mapStatus) {
 			ns.TechniqueHints = append(ns.TechniqueHints, techniqueHint{
-				Name:   "slipway codebase-map",
-				Reason: "No durable codebase-map documents found. Run `slipway codebase-map` to establish brownfield context before planning.",
+				Name:   "skill:codebase-mapping",
+				Reason: "No durable codebase-map documents found. Run the slipway-codebase-mapping skill to write source-backed artifacts/codebase/* documents before planning; `slipway codebase-map` only scaffolds the empty document set.",
 			})
 		}
-		// Consume-time advisory: a map-consuming planning skill (research/plan-audit)
-		// is about to rely on a non-durable (scaffold_only/baseline) map. This adds
-		// consume-time framing on top of the hint and never blocks progression. It
-		// reaches both surfaces because the handoff projection copies view.Warnings.
+		// Codebase-map advisories (non-blocking; surfaced via view.Warnings, which
+		// the compact handoff projection copies). The consume-time advisory takes
+		// priority for the map-consuming planning skills (research/plan-audit) when
+		// the map is scaffold_only/baseline. The broader discovery advisory covers
+		// the gap it leaves — chiefly a fully missing map for a discovery-scoped
+		// change — and routes the host to the slipway-codebase-mapping skill. The
+		// two are mutually exclusive, so at most one codebase_map_advisory fires and
+		// neither ever blocks progression.
 		if advisory := codebaseMapConsumeAdvisory(mapStatus, nextSkillName); advisory != "" {
+			view.Warnings = append(view.Warnings, advisory)
+		} else if advisory := codebaseMapDiscoveryAdvisory(mapStatus, nextSkillName, governedChange.NeedsDiscovery); advisory != "" {
 			view.Warnings = append(view.Warnings, advisory)
 		}
 	}
@@ -318,6 +324,37 @@ func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 		return fmt.Sprintf(
 			"codebase_map_advisory: %s is consuming a non-durable codebase map (status: %s); refine artifacts/codebase with source-backed findings before relying on it as reviewed context, or inspect input_context.codebase_map_doc_states for per-doc gaps.",
 			nextSkillName, status,
+		)
+	default:
+		return ""
+	}
+}
+
+// codebaseMapDiscoveryAdvisory returns a non-blocking discovery-phase advisory
+// nudging the host to populate a durable codebase map before planning. It fires
+// only for discovery-scoped changes (needs_discovery) while a planning skill that
+// consumes the map (research-orchestration or plan-audit) is next and the map is
+// non-durable. The call site gives the narrower consume-time advisory priority,
+// so in practice this carries the case that one omits: a fully missing map — the
+// "nothing but templates" state this nudge exists to break. It routes to the
+// slipway-codebase-mapping skill (which writes source-backed content) rather than
+// `slipway codebase-map` (which only scaffolds the document set). Non-discovery
+// changes get nothing: a change that opted out of discovery should not be nagged
+// to map the repository.
+func codebaseMapDiscoveryAdvisory(status, nextSkillName string, needsDiscovery bool) string {
+	if !needsDiscovery {
+		return ""
+	}
+	switch nextSkillName {
+	case progression.SkillResearchOrchestration, progression.SkillPlanAudit:
+	default:
+		return ""
+	}
+	switch status {
+	case artifact.CodebaseMapStatusMissing, artifact.CodebaseMapStatusScaffoldOnly, artifact.CodebaseMapStatusBaseline:
+		return fmt.Sprintf(
+			"codebase_map_advisory: no durable codebase map (status: %s) for this discovery-scoped change; run the slipway-codebase-mapping skill to write source-backed artifacts/codebase/* documents before %s consumes it for planning. Advisory only — this does not block progression.",
+			status, nextSkillName,
 		)
 	default:
 		return ""
