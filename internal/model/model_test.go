@@ -183,6 +183,10 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.Contains(t, string(raw), "evidence_refs:")
 	assert.Contains(t, string(raw), "review_intent_drift_failures:")
 	assert.Contains(t, string(raw), "interrupted_execution_at:")
+	// The machine-local absolute worktree path is never persisted to tracked
+	// change.yaml; the portable branch metadata still is.
+	assert.NotContains(t, string(raw), "worktree_path:")
+	assert.Contains(t, string(raw), "worktree_branch:")
 
 	var decoded Change
 	require.NoError(t, yaml.Unmarshal(raw, &decoded))
@@ -196,7 +200,7 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.Equal(t, change.CurrentState, decoded.CurrentState)
 	assert.True(t, change.CreatedAt.Equal(decoded.CreatedAt))
 	assert.Equal(t, change.GuardrailDomain, decoded.GuardrailDomain)
-	assert.Equal(t, change.WorktreePath, decoded.WorktreePath)
+	assert.Empty(t, decoded.WorktreePath, "worktree_path must not round-trip through tracked change.yaml")
 	assert.Equal(t, change.WorktreeBranch, decoded.WorktreeBranch)
 	assert.Equal(t, change.ArtifactSchema, decoded.ArtifactSchema)
 	assert.Equal(t, change.CustomArtifacts, decoded.CustomArtifacts)

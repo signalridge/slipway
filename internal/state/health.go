@@ -595,6 +595,7 @@ func hiddenBoundWorktreeDiagnostics(root string) (hiddenBoundWorktreeScan, error
 				})
 				continue
 			}
+			HydrateWorktreeBinding(root, workspaceRoot, &change)
 			boundWorkspace, err := scopeRootInWorkspace(root, change.WorktreePath)
 			if err != nil {
 				return hiddenBoundWorktreeScan{}, err

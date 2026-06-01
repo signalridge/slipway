@@ -220,6 +220,7 @@ func RepairBoundWorktreeScopeMetadata(root string) ([]string, error) {
 			if err != nil {
 				continue
 			}
+			HydrateWorktreeBinding(root, workspaceRoot, &change)
 			if strings.TrimSpace(change.WorktreePath) == "" {
 				continue
 			}
