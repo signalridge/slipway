@@ -488,6 +488,84 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 	assert.True(t, containsFreshnessChainEdge(diagnostics.DownstreamEvidenceChain, WavePlanFileName, ExecutionSummaryFileName))
 }
 
+// TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime is the
+// regression for issue #44: a planning-stage evidence record (plan-audit.yaml)
+// can be rewritten after capture (e.g. adding DEC->REQ trace references),
+// pushing its file mtime ahead of the source while its recorded capture
+// timestamp stays older. The diagnostic must report the embedded record
+// timestamp as evidence_captured_at — so the stale pair reads consistently
+// (source newer than evidence) — and surface the file mtime separately rather
+// than letting it masquerade as the capture time.
+func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	change := saveActiveChangeForTest(t, root, "planning-evidence-record-time")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir, err := GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	verifyDir := filepath.Join(bundleDir, "verification")
+	require.NoError(t, os.MkdirAll(verifyDir, 0o755))
+
+	// Mirror the issue #44 comment timeline (date shifted safely into the past):
+	//   plan-audit record    10:06:17  (embedded capture time — older than source)
+	//   decision.md          10:07:09  (source edited after the audit ran)
+	//   plan-audit file mtime 10:07:42 (file rewritten after capture)
+	summaryCapturedAt := time.Date(2026, 5, 29, 9, 0, 0, 0, time.UTC)
+	recordCapturedAt := time.Date(2026, 5, 29, 10, 6, 17, 0, time.UTC)
+	sourceUpdatedAt := time.Date(2026, 5, 29, 10, 7, 9, 0, time.UTC)
+	fileModifiedAt := time.Date(2026, 5, 29, 10, 7, 42, 0, time.UTC)
+
+	decisionPath := filepath.Join(bundleDir, "decision.md")
+	require.NoError(t, os.WriteFile(decisionPath, []byte("# Decision\n\nDEC-001 -> REQ-005\n"), 0o644))
+	require.NoError(t, os.Chtimes(decisionPath, sourceUpdatedAt, sourceUpdatedAt))
+
+	planAuditPath := filepath.Join(verifyDir, planAuditFileName)
+	planAuditBody := "verdict: pass\nblockers: []\nrun_version: 1\ntimestamp: " +
+		recordCapturedAt.Format(time.RFC3339) + "\n"
+	require.NoError(t, os.WriteFile(planAuditPath, []byte(planAuditBody), 0o644))
+	// The file is rewritten well after the audit was captured, drifting its
+	// mtime ahead of both the embedded timestamp and the source.
+	require.NoError(t, os.Chtimes(planAuditPath, fileModifiedAt, fileModifiedAt))
+
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        summaryCapturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:          "task-a",
+			Verdict:         model.TaskVerdictPass,
+			TaskKind:        model.TaskKindCode,
+			CapturedAt:      summaryCapturedAt,
+			FreshnessInputs: ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		}},
+	}
+
+	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+
+	assert.Equal(t, "stale", diagnostics.Status)
+	require.NotNil(t, diagnostics.FirstStaleCause)
+	cause := diagnostics.FirstStaleCause
+	assert.Contains(t, cause.SourceArtifact, "decision.md")
+	assert.Contains(t, cause.EvidenceArtifact, planAuditFileName)
+
+	// The fix: evidence_captured_at is the embedded record timestamp, and the
+	// (newer) file mtime is never consulted — so the pair is internally
+	// consistent (source newer than evidence), matching the stale verdict.
+	assert.Equal(t, recordCapturedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
+	assert.NotEqual(t, fileModifiedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
+	assert.Equal(t, sourceUpdatedAt.Format(time.RFC3339Nano), cause.SourceUpdatedAt)
+
+	// Sanity: as displayed, the stale pair no longer contradicts the verdict.
+	assert.Greater(t, cause.SourceUpdatedAt, cause.EvidenceCapturedAt,
+		"source should read newer than evidence for a stale pair")
+}
+
 func TestLoadExecutionSummaryReturnsErrorOnInvalidSummary(t *testing.T) {
 	t.Parallel()
 
