@@ -848,9 +848,9 @@ func errorsIsNotExist(err error) bool {
 	return err != nil && os.IsNotExist(err)
 }
 
-// rejectIfConflictingChange enforces the single-active-change contract before
-// creating a new change.
-func rejectIfConflictingChange(root string) error {
+// rejectIfConflictingChange enforces one active governed change per workspace
+// authority before creating a new change.
+func rejectIfConflictingChange(root string, nextChange model.Change) error {
 	allChanges, err := state.ListChangesForCreateGuard(root)
 	if err != nil {
 		return err
@@ -866,52 +866,149 @@ func rejectIfConflictingChange(root string) error {
 		return nil
 	}
 
-	currentWT, wtErr := currentWorktreeRoot()
-	if wtErr != nil {
-		return fmt.Errorf("cannot determine worktree for conflict check: %w", wtErr)
+	invocationWorkspace, err := createGuardInvocationWorkspaceRoot(root)
+	if err != nil {
+		return err
+	}
+	targetWorkspace, err := newChangeTargetWorkspaceRoot(root, nextChange)
+	if err != nil {
+		return err
 	}
 
-	ch := activeChanges[0]
-	if strings.TrimSpace(ch.WorktreePath) == "" {
-		remediation := "Run `slipway next` to bind the existing change to a dedicated worktree, or close it before creating a new change."
-		return newPreconditionError(
-			"active_change_exists",
-			fmt.Sprintf("active governed change %s is not yet bound to a worktree; finish, cancel, or bind it before creating a new one", ch.Slug),
-			remediation,
-			ch.Slug,
-			nil,
-		)
-	}
-
-	if currentWT != "" && ch.WorktreePath != "" {
-		normalizedCurrent, err1 := state.NormalizePath(currentWT)
-		normalizedExisting, err2 := state.NormalizePath(ch.WorktreePath)
-		if err1 == nil && err2 == nil && normalizedCurrent == normalizedExisting {
-			return newPreconditionError(
-				"active_change_exists",
-				fmt.Sprintf("active governed change %s is bound to this worktree; finish or cancel it before creating a new one", ch.Slug),
-				"Run `slipway done` or `slipway cancel` before creating a new change.",
-				ch.Slug,
-				nil,
-			)
+	for _, ch := range activeChanges {
+		existingWorkspace, err := existingChangeWorkspaceRoot(root, ch)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(ch.WorktreePath) != "" && pathsEqualForCreateGuard(existingWorkspace, invocationWorkspace) {
+			return boundWorktreeCreateConflict(root, ch)
+		}
+		if pathsEqualForCreateGuard(existingWorkspace, targetWorkspace) {
+			if strings.TrimSpace(ch.WorktreePath) == "" {
+				return unboundWorkspaceCreateConflict(ch)
+			}
+			return targetWorkspaceCreateConflict(root, ch, targetWorkspace)
 		}
 	}
 
+	return nil
+}
+
+func createGuardInvocationWorkspaceRoot(root string) (string, error) {
+	normalizedRoot := normalizePathForCompare(root)
+	currentWorktree, err := currentWorktreeRoot()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine worktree for conflict check: %w", err)
+	}
+	currentWorktree = normalizePathForCompare(currentWorktree)
+
+	projectWorktree, err := state.ResolveGitWorkspaceRoot(normalizedRoot)
+	if err != nil {
+		if strings.Contains(err.Error(), "not a git repository") {
+			return normalizedRoot, nil
+		}
+		return "", fmt.Errorf("resolve project worktree for create guard: %w", err)
+	}
+	projectWorktree = normalizePathForCompare(projectWorktree)
+
+	// Preserve nested Slipway scopes when the command runs from a sibling git worktree.
+	scopeRel, err := filepath.Rel(projectWorktree, normalizedRoot)
+	if err != nil {
+		return currentWorktree, nil
+	}
+	scopeRel = filepath.Clean(scopeRel)
+	if scopeRel == "." || scopeRel == "" {
+		return currentWorktree, nil
+	}
+	if scopeRel == ".." || strings.HasPrefix(scopeRel, ".."+string(filepath.Separator)) {
+		return currentWorktree, nil
+	}
+	return normalizePathForCompare(filepath.Join(currentWorktree, scopeRel)), nil
+}
+
+func newChangeTargetWorkspaceRoot(root string, change model.Change) (string, error) {
+	target := root
+	if change.NeedsDiscovery {
+		repoRoot, err := state.ResolveGitWorkspaceRoot(root)
+		if err != nil {
+			if !strings.Contains(err.Error(), "not a git repository") {
+				return "", fmt.Errorf("resolve git worktree for create guard: %w", err)
+			}
+		} else if gitWorkspaceHasHead(repoRoot) {
+			target = state.DefaultWorktreePath(repoRoot, change.Slug)
+		}
+	}
+	return normalizePathForCompare(target), nil
+}
+
+func existingChangeWorkspaceRoot(root string, ch model.Change) (string, error) {
+	workspaceRoot, err := state.WorkspaceRootForChange(root, ch)
+	if err != nil {
+		return "", fmt.Errorf("resolve active change workspace for create guard: %w", err)
+	}
+	return normalizePathForCompare(workspaceRoot), nil
+}
+
+func gitWorkspaceHasHead(repoRoot string) bool {
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD")
+	return cmd.Run() == nil
+}
+
+func normalizePathForCompare(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if normalized, err := state.NormalizePath(path); err == nil {
+		return normalized
+	}
+	return filepath.Clean(path)
+}
+
+func pathsEqualForCreateGuard(left, right string) bool {
+	return normalizePathForCompare(left) == normalizePathForCompare(right)
+}
+
+func unboundWorkspaceCreateConflict(ch model.Change) error {
+	return newPreconditionError(
+		"active_change_exists",
+		fmt.Sprintf("active governed change %s is already active in this workspace; finish or cancel it before creating another change here", ch.Slug),
+		"Run `slipway done` or `slipway cancel` for the existing change before creating a new change in this workspace.",
+		ch.Slug,
+		nil,
+	)
+}
+
+func boundWorktreeCreateConflict(root string, ch model.Change) error {
 	worktreeHint := strings.TrimSpace(state.DisplayPath(root, ch.WorktreePath))
 	if worktreeHint == "" {
 		worktreeHint = ch.WorktreePath
 	}
-	remediation := "Resume, finish, or cancel the existing change before creating a new change."
+	remediation := "Run `slipway done` or `slipway cancel` before creating a new change in this worktree."
 	if worktreeHint != "" {
 		remediation = fmt.Sprintf(
-			"Switch to %s to continue that change, or run `slipway done` / `slipway cancel` there before creating a new change.",
+			"Continue, finish, or cancel the active change in %s before creating a new change from that worktree.",
 			worktreeHint,
 		)
 	}
 	return newPreconditionError(
 		"active_change_exists",
-		fmt.Sprintf("active governed change %s already exists; finish or cancel it before creating a new one", ch.Slug),
+		fmt.Sprintf("active governed change %s is bound to this worktree; finish or cancel it before creating a new one", ch.Slug),
 		remediation,
+		ch.Slug,
+		nil,
+	)
+}
+
+func targetWorkspaceCreateConflict(root string, ch model.Change, targetWorkspace string) error {
+	targetHint := strings.TrimSpace(state.DisplayPath(root, targetWorkspace))
+	if targetHint == "" {
+		targetHint = targetWorkspace
+	}
+	return newPreconditionError(
+		"active_change_exists",
+		fmt.Sprintf("active governed change %s already owns target workspace %s; finish or cancel it before creating a new one there", ch.Slug, targetHint),
+		"Use a different workspace, or run `slipway done` / `slipway cancel` for the existing change before creating a new change there.",
 		ch.Slug,
 		nil,
 	)

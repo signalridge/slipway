@@ -1177,9 +1177,18 @@ func TestNewCommandRejectsWhenActiveChangeAlreadyExists(t *testing.T) {
 		initTestWorkspace(t, root)
 
 		existing := model.NewChange("existing-change")
+		existing.NeedsDiscovery = false
 		require.NoError(t, state.SaveChange(root, existing))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				NeedsDiscovery: false,
+				Complexity:     "simple",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"follow-up change"})
 		err := cmd.Execute()
 		require.Error(t, err)
@@ -1188,10 +1197,46 @@ func TestNewCommandRejectsWhenActiveChangeAlreadyExists(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "active_change_exists", cliErr.ErrorCode)
 		assert.Contains(t, cliErr.Remediation, "creating a new change")
+		assert.NotContains(t, cliErr.Remediation, "slipway next")
 	})
 }
 
-func TestNewCommandRejectsWhenHiddenBoundWorktreeActiveChangeExists(t *testing.T) {
+func TestNewCommandAllowsDiscoveryChangeWhenUnboundIntakeChangeOwnsRoot(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		runGit(t, root, "config", "user.email", "test@example.com")
+		runGit(t, root, "config", "user.name", "Test User")
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+
+		existing := model.NewChange("existing-unbound-intake")
+		existing.CurrentState = model.StateS0Intake
+		existing.IntakeSubStep = model.IntakeSubStepClarify
+		existing.NeedsDiscovery = false
+		existing.ComplexityLevel = "simple"
+		require.NoError(t, state.SaveChange(root, existing))
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				NeedsDiscovery: true,
+				Complexity:     "complex",
+			},
+		}
+
+		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"follow-up discovery change"})
+		require.NoError(t, cmd.Execute())
+
+		change, err := state.LoadChange(root, "follow-up-discovery-change")
+		require.NoError(t, err)
+		assert.NotEmpty(t, change.WorktreePath)
+		assert.NotEqual(t, root, change.WorktreePath)
+	})
+}
+
+func TestNewCommandAllowsBoundSiblingWorktreeActiveChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -1219,7 +1264,64 @@ func TestNewCommandRejectsWhenHiddenBoundWorktreeActiveChangeExists(t *testing.T
 		require.NoError(t, os.Remove(state.ConfigPath(worktreeRoot)))
 		require.NoError(t, os.Remove(state.WorkspaceScopeMarkerPath(worktreeRoot)))
 
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				NeedsDiscovery: true,
+				Complexity:     "complex",
+			},
+		}
+
 		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"follow-up change"})
+		require.NoError(t, cmd.Execute())
+
+		created, err := state.LoadChange(root, "follow-up-change")
+		require.NoError(t, err)
+		assert.NotEmpty(t, created.WorktreePath)
+		assert.NotEqual(t, bound.WorktreePath, created.WorktreePath)
+	})
+}
+
+func TestNewCommandRejectsWhenActiveChangeIsBoundToCurrentWorktree(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		runGit(t, root, "config", "user.email", "test@example.com")
+		runGit(t, root, "config", "user.name", "Test User")
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+
+		slug := createGovernedRequest(t, root, "L3", "existing current bound worktree change")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		branch := "feat/" + slug
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch, "HEAD")
+
+		bound := change
+		require.NoError(t, state.PersistScopeWorktreeMetadata(&bound, worktreeRoot, branch))
+		require.NoError(t, state.RelocateGovernedBundle(root, change, bound))
+		require.NoError(t, state.SaveChange(root, bound))
+
+		require.NoError(t, os.Chdir(worktreeRoot))
+		defer func() {
+			require.NoError(t, os.Chdir(root))
+		}()
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				NeedsDiscovery: true,
+				Complexity:     "complex",
+			},
+		}
+
+		cmd := makeNewCmd()
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
 		cmd.SetArgs([]string{"follow-up change"})
 		err = cmd.Execute()
 		require.Error(t, err)
@@ -1227,7 +1329,8 @@ func TestNewCommandRejectsWhenHiddenBoundWorktreeActiveChangeExists(t *testing.T
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "active_change_exists", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Remediation, "creating a new change")
+		assert.Contains(t, cliErr.Message, "bound to this worktree")
+		assert.Contains(t, cliErr.Remediation, "before creating a new change from that worktree")
 	})
 }
 
