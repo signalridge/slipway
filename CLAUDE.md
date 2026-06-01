@@ -125,5 +125,10 @@ without `--diagnostics`. Values mirror the `codebase-map` assessment (`missing`,
 `"missing"` with per-doc `missing` states rather than an omitted field. Treat
 `scaffold_only`/`baseline` maps as non-durable. When research-orchestration or
 plan-audit is the next skill and the status is `scaffold_only` or `baseline`,
-`warnings` carries a non-blocking codebase-map advisory; inspect
+`warnings` carries a non-blocking consume-time codebase-map advisory. For
+discovery-scoped changes (`needs_discovery`), a `missing` map at those same
+planning skills also carries a non-blocking discovery advisory routing the host
+to the `slipway-codebase-mapping` skill; both advisories share the
+`codebase_map_advisory:` prefix, at most one fires, and neither blocks
+progression. Non-discovery changes never receive the discovery advisory. Inspect
 `codebase_map_doc_states` for `partial` maps, which get no whole-map advisory.
