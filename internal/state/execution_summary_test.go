@@ -494,8 +494,8 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 // pushing its file mtime ahead of the source while its recorded capture
 // timestamp stays older. The diagnostic must report the embedded record
 // timestamp as evidence_captured_at — so the stale pair reads consistently
-// (source newer than evidence) — and surface the file mtime separately rather
-// than letting it masquerade as the capture time.
+// (source newer than evidence) — and never consult the file mtime, so the
+// drifted mtime can no longer masquerade as the capture time.
 func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *testing.T) {
 	t.Parallel()
 
