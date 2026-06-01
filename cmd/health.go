@@ -14,7 +14,6 @@ import (
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	"github.com/signalridge/slipway/internal/tmpl"
 	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/spf13/cobra"
 )
@@ -111,7 +110,7 @@ func makeHealthCmd() *cobra.Command {
 					return err
 				}
 				view.Findings = normalizeHealthFindings(root, report.Findings)
-				globalFindings := agentContractHealthFindings(root, invocationWorkspaceRootFromCommand(cmd, root))
+				globalFindings := skillContractHealthFindings(invocationWorkspaceRootFromCommand(cmd, root))
 				globalFindings = append(globalFindings, lifecycleEventHealthFindings(root)...)
 				classifyGlobalHealthImpact(globalFindings)
 				view.Findings = append(view.Findings, globalFindings...)
@@ -451,61 +450,20 @@ func writeHealthText(w io.Writer, view healthView) error {
 	return writer.Err()
 }
 
-func agentContractHealthFindings(root, workspaceRoot string) []state.HealthFinding {
-	registry, err := skill.LoadGovernanceRegistry(root)
+func skillContractHealthFindings(workspaceRoot string) []state.HealthFinding {
+	registry, err := skill.LoadGovernanceRegistry(workspaceRoot)
 	if err != nil {
 		return []state.HealthFinding{{
 			Severity:   model.ReasonSeverityError,
-			Category:   "agent_contract",
-			Message:    "Governance agent mapping is invalid",
+			Category:   "skill_contract",
+			Message:    "Governance skill registry is invalid",
 			Repairable: false,
-			RepairHint: "Edit `.slipway.yaml` so each governance skill points to a governance-mapped Slipway agent.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("agent_mapping_invalid", err.Error())},
+			RepairHint: "Inspect generated host skill surfaces, then rerun slipway health.",
+			Reasons:    []model.ReasonCode{model.NewReasonCode("skill_registry_invalid", err.Error())},
 		}}
 	}
 
-	validAgents := map[string]struct{}{}
-	missingTemplates := map[string]error{}
-	for _, name := range tmpl.AgentNames() {
-		validAgents[name] = struct{}{}
-		if _, err := tmpl.Content("agents/" + name + ".md"); err != nil {
-			missingTemplates[name] = err
-		}
-	}
-
 	findings := []state.HealthFinding{}
-	for _, def := range registry {
-		agentName := strings.TrimSpace(def.AgentHint)
-		if agentName == "" {
-			continue
-		}
-
-		if _, ok := validAgents[agentName]; !ok {
-			findings = append(findings, state.HealthFinding{
-				Severity:   model.ReasonSeverityError,
-				Category:   "agent_contract",
-				Slug:       def.Name,
-				Message:    fmt.Sprintf("Governance skill %q points to unknown agent %q", def.Name, agentName),
-				Repairable: false,
-				RepairHint: "Edit `.slipway.yaml` so each governance skill points to a governance-mapped Slipway agent.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("agent_mapping_unknown_agent", fmt.Sprintf("%s=%s", def.Name, agentName))},
-			})
-			continue
-		}
-		if _, missing := missingTemplates[agentName]; missing {
-			findings = append(findings, state.HealthFinding{
-				Severity:   model.ReasonSeverityError,
-				Category:   "agent_contract",
-				Slug:       def.Name,
-				Message:    fmt.Sprintf("Governance skill %q points to unavailable built-in governance agent %q", def.Name, agentName),
-				Repairable: false,
-				RepairHint: "Restore the missing built-in governance agent for this Slipway checkout, then rerun `slipway health`.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("agent_template_missing", fmt.Sprintf("%s=%s", def.Name, agentName))},
-			})
-			continue
-		}
-	}
-
 	detectedToolIDs := toolgen.DetectExistingTools(workspaceRoot)
 	if len(detectedToolIDs) == 0 {
 		return findings
@@ -526,29 +484,41 @@ func agentContractHealthFindings(root, workspaceRoot string) []state.HealthFindi
 		return findings
 	}
 
+	unreadableFinding := func(toolID, skillName, path string) state.HealthFinding {
+		return state.HealthFinding{
+			Severity:   model.ReasonSeverityError,
+			Category:   "skill_contract",
+			Slug:       skillName,
+			Message:    fmt.Sprintf("Governance skill %q points to unreadable host skill surface for %s", skillName, toolID),
+			Repairable: false,
+			RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace, then retry.", toolID),
+			Reasons: []model.ReasonCode{
+				model.NewReasonCode("skill_prompt_surface_unreadable", state.DisplayPath(workspaceRoot, path)),
+			},
+		}
+	}
+
 	for _, activeTool := range activeTools {
 		for _, def := range registry {
 			fullPath := filepath.Join(workspaceRoot, toolgen.SkillPath(activeTool, def.Name))
 			if _, err := os.Stat(fullPath); err == nil {
 				continue
 			} else if !errors.Is(err, os.ErrNotExist) {
-				findings = append(findings, state.HealthFinding{
-					Severity:   model.ReasonSeverityError,
-					Category:   "agent_contract",
-					Slug:       def.Name,
-					Message:    fmt.Sprintf("Governance skill %q points to unreadable host skill surface for %s", def.Name, activeTool.ID),
-					Repairable: false,
-					RepairHint: fmt.Sprintf("Run `slipway init --tools %s --refresh` to regenerate tool surfaces in the current workspace, then retry.", activeTool.ID),
-					Reasons: []model.ReasonCode{
-						model.NewReasonCode("skill_prompt_surface_unreadable", state.DisplayPath(workspaceRoot, fullPath)),
-					},
-				})
+				findings = append(findings, unreadableFinding(activeTool.ID, def.Name, fullPath))
+				continue
+			}
+
+			if info, err := os.Stat(filepath.Dir(fullPath)); err == nil && !info.IsDir() {
+				findings = append(findings, unreadableFinding(activeTool.ID, def.Name, fullPath))
+				continue
+			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+				findings = append(findings, unreadableFinding(activeTool.ID, def.Name, fullPath))
 				continue
 			}
 
 			findings = append(findings, state.HealthFinding{
 				Severity:   model.ReasonSeverityError,
-				Category:   "agent_contract",
+				Category:   "skill_contract",
 				Slug:       def.Name,
 				Message:    fmt.Sprintf("Governance skill %q points to missing host skill surface for %s", def.Name, activeTool.ID),
 				Repairable: false,

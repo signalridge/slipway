@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"slices"
 	"strings"
 	"text/template"
 )
 
 //go:embed templates/_partials/*.tmpl
-//go:embed templates/agents/*.md
 //go:embed templates/artifacts/*.md
 //go:embed templates/commands/*.tmpl
 //go:embed templates/hooks/*.tmpl
@@ -144,23 +142,4 @@ func newIncludeFunc(tRef **template.Template, includeStack *[]string) func(strin
 		}
 		return buf.String(), nil
 	}
-}
-
-// AgentNames returns the list of agent definition basenames (without extension).
-func AgentNames() []string {
-	names := []string{
-		"slipway-analyst",
-		"slipway-planner",
-		"slipway-auditor",
-		"slipway-orchestrator",
-		"slipway-reviewer",
-		"slipway-verifier",
-		"slipway-closer",
-		"slipway-executor",
-		"slipway-debugger",
-		"slipway-researcher",
-		"slipway-mapper",
-	}
-	slices.Sort(names)
-	return names
 }
