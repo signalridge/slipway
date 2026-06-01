@@ -429,7 +429,9 @@ func TestDeriveAndApplyWorktreeMetadataSeedsScopeMetadataForBoundWorktree(t *tes
 
 	loaded, err := state.LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	require.Equal(t, updated.WorktreePath, loaded.WorktreePath)
+	wantWorktree, err := state.NormalizePath(updated.WorktreePath)
+	require.NoError(t, err)
+	require.Equal(t, wantWorktree, loaded.WorktreePath)
 }
 
 func runGitForValidationTests(t *testing.T, dir string, args ...string) {

@@ -2,6 +2,7 @@ package state
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -23,7 +24,9 @@ const worktreeBindingFileName = "worktree-binding.yaml"
 // (see Change.MarshalYAML); resolution reads this runtime record instead, and
 // falls back to the bundle's own location when the record is absent.
 type worktreeBinding struct {
-	WorktreePath   string `yaml:"worktree_path"`
+	WorktreePath string `yaml:"worktree_path"`
+	// WorktreeBranch is diagnostic metadata. The portable branch authority stays
+	// in tracked change.yaml, so hydration only reads WorktreePath.
 	WorktreeBranch string `yaml:"worktree_branch,omitempty"`
 	// GitCommonDir records the repo identity at write time so a binding that was
 	// copied into a different repository checkout is ignored rather than trusted.
@@ -50,9 +53,13 @@ func writeWorktreeBinding(root string, change model.Change) error {
 		}
 		return nil
 	}
+	normalizedWorktreePath, err := NormalizePath(change.WorktreePath)
+	if err != nil {
+		return fmt.Errorf("normalize worktree binding path: %w", err)
+	}
 
 	binding := worktreeBinding{
-		WorktreePath:   change.WorktreePath,
+		WorktreePath:   normalizedWorktreePath,
 		WorktreeBranch: change.WorktreeBranch,
 		GitCommonDir:   gitCommonDirIdentity(root),
 	}
@@ -81,6 +88,11 @@ func readWorktreeBinding(root, slug string) (worktreeBinding, bool) {
 	if strings.TrimSpace(binding.WorktreePath) == "" {
 		return worktreeBinding{}, false
 	}
+	normalizedWorktreePath, err := NormalizePath(binding.WorktreePath)
+	if err != nil {
+		return worktreeBinding{}, false
+	}
+	binding.WorktreePath = normalizedWorktreePath
 	if recorded := strings.TrimSpace(binding.GitCommonDir); recorded != "" {
 		if current := gitCommonDirIdentity(root); current != "" && current != recorded {
 			// Binding belongs to a different repository checkout; do not trust it.

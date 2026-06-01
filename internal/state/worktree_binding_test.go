@@ -10,6 +10,7 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // TestSaveChangeOmitsWorktreePathFromTrackedBundle is the core acceptance check
@@ -59,7 +60,9 @@ func TestLoadChangeResolvesBoundWorktreeFromRepoRoot(t *testing.T) {
 
 	loaded, err := LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, worktreeRoot, loaded.WorktreePath)
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 }
 
 // TestFindActiveChangeFromInsideWorktreeResolves covers commands invoked from
@@ -78,7 +81,9 @@ func TestFindActiveChangeFromInsideWorktreeResolves(t *testing.T) {
 	resolved, err := FindActiveChangeForWorktree(worktreeRoot, worktreeRoot)
 	require.NoError(t, err)
 	assert.Equal(t, change.Slug, resolved.Slug)
-	assert.Equal(t, worktreeRoot, resolved.WorktreePath)
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, resolved.WorktreePath)
 }
 
 // TestResolutionRecoversWhenBindingMissing proves the design is self-healing:
@@ -165,6 +170,117 @@ func TestLegacyChangeYamlWithWorktreePathStillResolves(t *testing.T) {
 	wantWorktree, err := NormalizePath(worktreeRoot)
 	require.NoError(t, err)
 	assert.Equal(t, wantWorktree, loaded.WorktreePath)
+}
+
+// TestLegacyWorktreePathDisambiguatesStaleSiblingWhenBindingMissing covers the
+// migration edge where the git-local binding is missing, but legacy active
+// change.yaml files still carry the old durable worktree_path field. The legacy
+// field is not persisted again, but it remains a one-time disambiguation signal
+// so stale sibling copies are not selected before the owning bundle.
+func TestLegacyWorktreePathDisambiguatesStaleSiblingWhenBindingMissing(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	scopeRoot := filepath.Join(root, "services", "billing")
+	require.NoError(t, os.MkdirAll(scopeRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(scopeRoot, ".slipway.yaml"), []byte("{}"), 0o644))
+
+	worktreeBase := t.TempDir()
+	staleWorktree := filepath.Join(worktreeBase, "aaa-stale")
+	owningWorktree := filepath.Join(worktreeBase, "bbb-owner")
+	runGit(t, root, "worktree", "add", staleWorktree, "-b", "aaa-stale")
+	runGit(t, root, "worktree", "add", owningWorktree, "-b", "bbb-owner")
+
+	staleScopeRoot := filepath.Join(staleWorktree, "services", "billing")
+	owningScopeRoot := filepath.Join(owningWorktree, "services", "billing")
+	for _, workspace := range []string{staleScopeRoot, owningScopeRoot} {
+		require.NoError(t, os.MkdirAll(workspace, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(workspace, ".slipway.yaml"), []byte("{}"), 0o644))
+	}
+	require.NoError(t, ensureScopeMarkerFile(WorkspaceScopeMarkerPath(staleScopeRoot)))
+
+	change := model.NewChange("legacy-disambiguates")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorktreePath = owningWorktree
+	change.WorktreeBranch = "bbb-owner"
+	change.Description = "owning bundle"
+	require.NoError(t, SaveChange(scopeRoot, change))
+	require.NoError(t, os.Remove(WorktreeBindingPath(scopeRoot, change.Slug)))
+
+	ownerPath := BundleChangeFilePath(owningScopeRoot, change.Slug)
+	raw, err := os.ReadFile(ownerPath)
+	require.NoError(t, err)
+	legacyRaw := appendLegacyWorktreePath(raw, owningWorktree)
+	require.NoError(t, os.WriteFile(ownerPath, legacyRaw, 0o644))
+
+	staleCopy := change
+	staleCopy.Description = "stale sibling bundle"
+	staleRaw, err := yaml.Marshal(staleCopy)
+	require.NoError(t, err)
+	stalePath := BundleChangeFilePath(staleScopeRoot, change.Slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stalePath), 0o755))
+	require.NoError(t, os.WriteFile(stalePath, appendLegacyWorktreePath(staleRaw, owningWorktree), 0o644))
+
+	loaded, err := LoadChange(scopeRoot, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, "owning bundle", loaded.Description)
+	wantWorktree, err := NormalizePath(owningWorktree)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
+}
+
+// TestLoadChangeFailsClosedWhenBindingMissingAndLocationFallbackAmbiguous
+// covers the new-format edge where neither the git-local binding nor a legacy
+// worktree_path exists, and multiple same-slug bundle locations are visible. In
+// that state bundle location is no longer a unique authority, so loading must
+// fail closed instead of selecting whichever candidate sorts first.
+func TestLoadChangeFailsClosedWhenBindingMissingAndLocationFallbackAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	scopeRoot := filepath.Join(root, "services", "billing")
+	require.NoError(t, os.MkdirAll(scopeRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(scopeRoot, ".slipway.yaml"), []byte("{}"), 0o644))
+
+	worktreeBase := t.TempDir()
+	staleWorktree := filepath.Join(worktreeBase, "aaa-stale")
+	owningWorktree := filepath.Join(worktreeBase, "bbb-owner")
+	runGit(t, root, "worktree", "add", staleWorktree, "-b", "aaa-stale")
+	runGit(t, root, "worktree", "add", owningWorktree, "-b", "bbb-owner")
+
+	staleScopeRoot := filepath.Join(staleWorktree, "services", "billing")
+	owningScopeRoot := filepath.Join(owningWorktree, "services", "billing")
+	for _, workspace := range []string{staleScopeRoot, owningScopeRoot} {
+		require.NoError(t, os.MkdirAll(workspace, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(workspace, ".slipway.yaml"), []byte("{}"), 0o644))
+	}
+	require.NoError(t, ensureScopeMarkerFile(WorkspaceScopeMarkerPath(staleScopeRoot)))
+
+	change := model.NewChange("ambiguous-location-fallback")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorktreePath = owningWorktree
+	change.WorktreeBranch = "bbb-owner"
+	change.Description = "owning bundle"
+	require.NoError(t, SaveChange(scopeRoot, change))
+	require.NoError(t, os.Remove(WorktreeBindingPath(scopeRoot, change.Slug)))
+
+	staleCopy := change
+	staleCopy.Description = "stale sibling bundle"
+	staleRaw, err := yaml.Marshal(staleCopy)
+	require.NoError(t, err)
+	stalePath := BundleChangeFilePath(staleScopeRoot, change.Slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stalePath), 0o755))
+	require.NoError(t, os.WriteFile(stalePath, staleRaw, 0o644))
+
+	_, err = LoadChange(scopeRoot, change.Slug)
+	require.ErrorIs(t, err, errAmbiguousWorktreeBinding)
+	assert.Contains(t, err.Error(), change.Slug)
+}
+
+func appendLegacyWorktreePath(raw []byte, worktreePath string) []byte {
+	return []byte(string(raw) + "worktree_path: " + worktreePath + "\n")
 }
 
 // TestTrackedChangeBundlesOmitWorktreePath is a static repository hygiene guard:
