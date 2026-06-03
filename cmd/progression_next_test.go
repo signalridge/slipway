@@ -149,6 +149,41 @@ func TestNextS3ReviewWithPassingEvidenceReportsRunGuidance(t *testing.T) {
 	}
 }
 
+func TestNextStalePlanningEvidenceReportsRecoveryRunGuidance(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		state model.WorkflowState
+	}{
+		{name: "review", state: model.StateS3Review},
+		{name: "verify", state: model.StateS4Verify},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			slug, _ := prepareStalePlanningRecoveryFixture(t, root, tt.state)
+
+			view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+			require.NoError(t, err)
+
+			assert.Nil(t, view.NextSkill)
+			assert.Equal(t, tt.state, view.CurrentState)
+			reasons := model.ReasonSpecs(view.Blockers)
+			assert.Contains(t, reasons, "stale_planning_evidence")
+			assert.Contains(t, reasons, "run_slipway_run_to_advance:"+string(tt.state))
+			assert.Contains(t, reasons, "stale_planning_recovery_available:S1_PLAN/audit")
+			assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+
+			loaded, err := state.LoadChange(root, slug)
+			require.NoError(t, err)
+			assert.Equal(t, tt.state, loaded.CurrentState, "next must remain read-only")
+			assert.Equal(t, model.PlanSubStepNone, loaded.PlanSubStep)
+		})
+	}
+}
+
 func TestNextS0ConfirmWithoutApprovedSummaryDoesNotReportRunGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -3603,6 +3638,59 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task")
 	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
+}
+
+func prepareStalePlanningRecoveryFixture(t *testing.T, root string, currentState model.WorkflowState) (string, model.Change) {
+	t.Helper()
+	slug, change := prepareStalePlanningRecoveryBaseFixture(t, root, currentState)
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	staleTasksPath := filepath.Join(bundlePath, "tasks.md")
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` verify recovered planning chain
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/next.go", "cmd/run.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+	staleAt := time.Now().UTC().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(staleTasksPath, staleAt, staleAt))
+
+	return slug, change
+}
+
+func prepareStalePlanningRecoveryBaseFixture(t *testing.T, root string, currentState model.WorkflowState) (string, model.Change) {
+	t.Helper()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "stale planning recovery")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = currentState
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeShipReadyGovernedBundle(t, root, change)
+	writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC().Add(-2 * time.Second),
+		RunVersion: 0,
+		References: []string{"plan-audit:fixture"},
+	})
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+		"changed_files": []string{"cmd/done.go"},
+	})
+	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingFinalCloseoutEvidence(t, root, slug, 1)
+
+	return slug, change
 }
 
 func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion int, taskID string, payload map[string]any) {

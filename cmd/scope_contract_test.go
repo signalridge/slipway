@@ -26,6 +26,30 @@ func TestValidateIncludesScopeContractDriftReport(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
 }
 
+func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
+	t.Parallel()
+
+	root, slug := writeScopeContractDriftFixtureInState(t, model.StateS3Review)
+
+	validateView, err := buildValidateViewForSlug(root, slug)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(validateView.Blockers), "scope_contract_drift:cmd/review.go")
+	diagnostics := strings.Join(validateView.Diagnostics, "\n")
+	assert.Contains(t, diagnostics, "scope_contract_recovery_guidance")
+	assert.Contains(t, diagnostics, "tasks.md target_files")
+	assert.Contains(t, diagnostics, "stale_planning_evidence")
+	assert.Contains(t, diagnostics, "rescope remains S2_EXECUTE-only")
+
+	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(nextView.Blockers), "scope_contract_drift:cmd/review.go")
+	warnings := strings.Join(nextView.Warnings, "\n")
+	assert.Contains(t, warnings, "scope_contract_recovery_guidance")
+	assert.Contains(t, warnings, "tasks.md target_files")
+	assert.Contains(t, warnings, "stale_planning_evidence")
+	assert.Contains(t, warnings, "rescope remains S2_EXECUTE-only")
+}
+
 func TestStatusSurfacesScopeContractDriftBlocker(t *testing.T) {
 	t.Parallel()
 
@@ -57,6 +81,12 @@ func TestReviewFailsOnScopeContractDrift(t *testing.T) {
 func writeScopeContractDriftFixture(t *testing.T) (string, string) {
 	t.Helper()
 
+	return writeScopeContractDriftFixtureInState(t, model.StateS2Execute)
+}
+
+func writeScopeContractDriftFixtureInState(t *testing.T, workflowState model.WorkflowState) (string, string) {
+	t.Helper()
+
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
@@ -64,7 +94,7 @@ func writeScopeContractDriftFixture(t *testing.T) (string, string) {
 	slug := createGovernedRequest(t, root, "L2", "scope contract drift fixture")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = workflowState
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -78,24 +108,33 @@ func writeScopeContractDriftFixture(t *testing.T) (string, string) {
   - task_kind: code
   - covers: [REQ-001]
 `), 0o644))
+	plan, err := state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
+	summaryTasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{"cmd/review.go"},
+			TargetFiles:  []string{"cmd/validate.go"},
+			CapturedAt:   now,
+		},
+	}
 	writeExecutionSummary(t, root, slug, model.ExecutionSummary{
 		Version:           model.ExecutionSummaryVersion,
 		RunSummaryVersion: 1,
 		CapturedAt:        now,
 		OverallVerdict:    model.ExecutionVerdictPass,
 		CompletedTasks:    []string{"t-01"},
-		Tasks: []model.ExecutionTaskSummary{
-			{
-				TaskID:       "t-01",
-				Verdict:      model.TaskVerdictPass,
-				TaskKind:     model.TaskKindCode,
-				ChangedFiles: []string{"cmd/review.go"},
-				TargetFiles:  []string{"cmd/validate.go"},
-				CapturedAt:   now,
-			},
-		},
+		Tasks:             summaryTasks,
+	})
+	runs, err := state.BuildWaveRuns(plan, 1, summaryTasks)
+	require.NoError(t, err)
+	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
+	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+		"changed_files": []string{"cmd/review.go"},
 	})
 
 	return root, slug

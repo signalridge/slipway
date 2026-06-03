@@ -140,6 +140,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityWarning,
 		Message:  "Run `slipway run` to advance the workflow",
 	},
+	"pivot_state_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Pivot is not allowed from the current workflow state",
+	},
+	"rescope_state_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Rescope pivots are only allowed from S2_EXECUTE",
+	},
 	"scope_contract_changed_files_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract changed-files evidence is missing",
@@ -156,10 +164,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract is missing required target files",
 	},
-	"rescope_requires_s2_state": {
-		Severity: ReasonSeverityError,
-		Message:  "Rescope pivots are only allowed from S2_EXECUTE",
-	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Execution evidence is stale; rerun wave-orchestration for affected tasks",
@@ -167,6 +171,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"stale_planning_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Planning artifacts changed after execution evidence; rerun affected planning gates before refreshing execution evidence",
+	},
+	"stale_planning_recovery_available": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Stale planning evidence can be recovered by reopening planning audit",
 	},
 	"tasks_checklist_invalid_format": {
 		Severity: ReasonSeverityError,
