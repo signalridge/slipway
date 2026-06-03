@@ -607,6 +607,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 		return confirmationHardStop("resume_checkpoint")
 	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
 		return confirmationCommandRequired("run_slipway_done_to_finalize")
+	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
+		return confirmationCommandRequired("run_slipway_run_to_advance")
 	case len(view.Blockers) > 0:
 		return confirmationCommandRequired("blocked_by_governance")
 	case len(view.AutoPassEligible) > 0:

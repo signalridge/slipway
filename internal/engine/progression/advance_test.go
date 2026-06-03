@@ -675,6 +675,181 @@ Docs build
 	}
 }
 
+func TestAdvanceIntakeResearchDiscoveryEntersS1ResearchAndClearsStaleEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s0-research-enters-s1")
+	change.CurrentState = model.StateS0Intake
+	change.IntakeSubStep = model.IntakeSubStepResearch
+	change.PlanSubStep = model.PlanSubStepNone
+	change.NeedsDiscovery = true
+	change.ComplexityLevel = "complex"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intent := `# Intent
+
+## Summary
+Test S0 research handoff.
+
+## In Scope
+Clarify discovery before planning.
+
+## Out of Scope
+Skip direct execution.
+
+## Acceptance Signals
+S1 research must require fresh research evidence.
+
+## Open Questions
+- Which implementation path should be selected?
+`
+	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+		t.Fatalf("write intent.md: %v", err)
+	}
+	// Reaching S0_INTAKE/research implies intake clarification already passed;
+	// the machine-only research advance stays fail-closed on that evidence.
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  change.CreatedAt,
+		RunVersion: 0,
+		References: []string{"s0:clarify"},
+	})
+	writeVerificationForTest(t, root, change.Slug, SkillResearchOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  change.CreatedAt,
+		RunVersion: 0,
+		References: []string{"s0:stale"},
+	})
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Action != "advanced" {
+		t.Fatalf("expected advanced, got %+v", summary)
+	}
+	if summary.ToState != model.StateS1Plan || summary.ToSubStep != string(model.PlanSubStepResearch) {
+		t.Fatalf("expected S1_PLAN/research, got state=%s substep=%s", summary.ToState, summary.ToSubStep)
+	}
+	if summary.Reason != "open_questions_require_discovery" {
+		t.Fatalf("expected open_questions_require_discovery, got %s", summary.Reason)
+	}
+	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
+		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
+	}
+	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
+		t.Fatalf("expected research artifact to be scaffolded, got %+v", summary.SideEffects)
+	}
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
+		t.Fatalf("expected research.md to exist after S1 research handoff: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected stale research verification to be removed, err=%v", err)
+	}
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.CurrentState != model.StateS1Plan || reloaded.PlanSubStep != model.PlanSubStepResearch {
+		t.Fatalf("expected reloaded S1_PLAN/research, got state=%s substep=%s", reloaded.CurrentState, reloaded.PlanSubStep)
+	}
+	if reloaded.IntakeSubStep != model.IntakeSubStepNone {
+		t.Fatalf("expected intake substep cleared, got %s", reloaded.IntakeSubStep)
+	}
+
+	blocked, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected second advance error: %v", err)
+	}
+	if blocked.Action != "blocked" {
+		t.Fatalf("expected missing S1 research evidence to block, got %+v", blocked)
+	}
+	if !hasAdvanceReasonDetail(blocked.Blockers, "required_skill_missing", SkillResearchOrchestration) {
+		t.Fatalf("expected missing research-orchestration blocker, got %+v", blocked.Blockers)
+	}
+}
+
+func TestAdvanceIntakeResearchBlocksWhenIntakeClarificationEvidenceMissing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s0-research-missing-intake-evidence")
+	change.CurrentState = model.StateS0Intake
+	change.IntakeSubStep = model.IntakeSubStepResearch
+	change.PlanSubStep = model.PlanSubStepNone
+	change.NeedsDiscovery = true
+	change.ComplexityLevel = "complex"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intent := `# Intent
+
+## Summary
+Test S0 research fail-closed on missing intake evidence.
+
+## In Scope
+Clarify discovery before planning.
+
+## Out of Scope
+Skip direct execution.
+
+## Acceptance Signals
+Advance must block without intake-clarification evidence.
+
+## Open Questions
+- Which implementation path should be selected?
+`
+	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
+		t.Fatalf("write intent.md: %v", err)
+	}
+	// Intentionally omit intake-clarification evidence: the machine-only research
+	// advance must not bypass the intake gate even though no skill is surfaced.
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Action != "blocked" {
+		t.Fatalf("expected missing intake-clarification evidence to block, got %+v", summary)
+	}
+	if !hasAdvanceReasonDetail(summary.Blockers, "required_skill_missing", SkillIntakeClarification) {
+		t.Fatalf("expected missing intake-clarification blocker, got %+v", summary.Blockers)
+	}
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.CurrentState != model.StateS0Intake || reloaded.IntakeSubStep != model.IntakeSubStepResearch {
+		t.Fatalf("expected change to remain at S0_INTAKE/research, got state=%s substep=%s", reloaded.CurrentState, reloaded.IntakeSubStep)
+	}
+}
+
 func TestSectionNonEmptyPrefersCanonicalIntentSectionOverSummarySourceDocument(t *testing.T) {
 	t.Parallel()
 
@@ -1037,6 +1212,12 @@ func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *te
 	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
 		t.Fatalf("write intent.md: %v", err)
 	}
+	writeVerificationForTest(t, root, change.Slug, SkillResearchOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  change.CreatedAt,
+		RunVersion: 0,
+		References: []string{"s0-confirm:stale"},
+	})
 
 	summary, err := AdvanceGoverned(root, change.Slug)
 	if err != nil {
@@ -1051,8 +1232,25 @@ func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *te
 	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
 		t.Fatalf("expected scaffolded_research side effect, got %+v", summary.SideEffects)
 	}
+	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
+		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
+	}
 	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
 		t.Fatalf("expected research.md to exist after intake confirmation: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected stale research verification to be removed, err=%v", err)
+	}
+
+	blocked, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected second advance error: %v", err)
+	}
+	if blocked.Action != "blocked" {
+		t.Fatalf("expected missing S1 research evidence to block, got %+v", blocked)
+	}
+	if !hasAdvanceReasonDetail(blocked.Blockers, "required_skill_missing", SkillResearchOrchestration) {
+		t.Fatalf("expected missing research-orchestration blocker, got %+v", blocked.Blockers)
 	}
 }
 

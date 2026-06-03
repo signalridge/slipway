@@ -896,7 +896,9 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 			assert.False(t, strings.Contains(drift.Target, slug), "rebuilt stale summary must not remain unrepaired: %+v", drift)
 		}
 		require.Contains(t, summary.PathAuthority, slug)
-		assert.Contains(t, summary.PathAuthority[slug].TaskEvidencePath, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
+		taskEvidencePath := summary.PathAuthority[slug].TaskEvidencePath
+		assert.True(t, filepath.IsAbs(taskEvidencePath))
+		assert.True(t, strings.HasSuffix(taskEvidencePath, "/.git/slipway/runtime/changes/"+slug+"/evidence/tasks"), taskEvidencePath)
 
 		rebuilt, err := state.LoadExecutionSummary(root, slug)
 		require.NoError(t, err)

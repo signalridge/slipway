@@ -76,6 +76,18 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The requested pivot kind is invalid",
 	},
+	"intake_clarification_incomplete": {
+		Severity: ReasonSeverityError,
+		Message:  "Intake clarification is incomplete",
+	},
+	"intake_confirmation_incomplete": {
+		Severity: ReasonSeverityError,
+		Message:  "Intake confirmation is incomplete",
+	},
+	"intake_substep_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The intake substep is invalid",
+	},
 	"manifest_r0_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "The governed change manifest failed R0 validation",
@@ -91,6 +103,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"missing_worktree_path": {
 		Severity: ReasonSeverityError,
 		Message:  "The change is missing a bound worktree path",
+	},
+	"no_skill_required": {
+		Severity: ReasonSeverityInfo,
+		Message:  "No skill is required for the current workflow state",
 	},
 	"pivot_not_approved": {
 		Severity: ReasonSeverityError,
@@ -119,6 +135,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"required_skill_not_ready": {
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill is present but not ready",
+	},
+	"run_slipway_run_to_advance": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Run `slipway run` to advance the workflow",
 	},
 	"scope_contract_changed_files_missing": {
 		Severity: ReasonSeverityError,

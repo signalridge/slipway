@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -328,6 +329,10 @@ func evaluateGateReadiness(
 ) (map[gate.GateID]gate.GateEvaluation, *ShipAuthority, error) {
 	var result map[gate.GateID]gate.GateEvaluation
 	var err error
+	effectiveState := change.CurrentState
+	if opts.WorkflowStateOverride != nil && *opts.WorkflowStateOverride != "" {
+		effectiveState = *opts.WorkflowStateOverride
+	}
 	if opts.IncludeGateEvaluations {
 		planSkills, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
 		if err != nil {
@@ -336,7 +341,7 @@ func evaluateGateReadiness(
 		result = map[gate.GateID]gate.GateEvaluation{
 			gate.GatePlan: EvaluatePlanGate(root, change, planSkills),
 		}
-		if change.NeedsDiscovery {
+		if change.NeedsDiscovery && effectiveState != model.StateS0Intake {
 			scopeSkills, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
 			if err != nil {
 				return nil, nil, err
@@ -349,10 +354,6 @@ func evaluateGateReadiness(
 		}
 	}
 	shipReadiness := currentReadiness
-	effectiveState := change.CurrentState
-	if opts.WorkflowStateOverride != nil && *opts.WorkflowStateOverride != "" {
-		effectiveState = *opts.WorkflowStateOverride
-	}
 	needsVerifyRefresh := effectiveState != model.StateS4Verify
 	if !needsVerifyRefresh {
 		_, needsVerifyRefresh = currentReadiness.cachedReviewAuthority()
@@ -609,13 +610,42 @@ func resolveArtifactEvaluationContext(root string, change model.Change, required
 }
 
 func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []string {
+	return workspaceChangedFiles(paths, workspaceChangedFilesOptions{})
+}
+
+type workspaceChangedFilesOptions struct {
+	includeGovernedBundle bool
+	includeLocalState     bool
+	// exemptActiveBundleOnly narrows the governed-bundle dirty exemption to the
+	// active change's bundle. When false, every artifacts/changes/ path is
+	// exempted (scope-contract behavior). `done` archive sets this true so a
+	// dirty sibling or archived bundle is still reported in the non-blocking
+	// dirty advisory — only the active artifacts/changes/<slug>/ bundle is
+	// suppressed because `done` rewrites it into the archived record (REQ-004).
+	exemptActiveBundleOnly bool
+}
+
+// WorkspaceChangedFilesForDoneArchive returns Git-visible changed files that
+// `done` reports in its non-blocking dirty-worktree advisory (REQ-004). Archive
+// still completes; only the active governed bundle is exempted, because `done`
+// rewrites it into the archived bundle. Any other dirty governance artifact is
+// surfaced so the operator can commit it alongside the archived record.
+func WorkspaceChangedFilesForDoneArchive(paths state.ResolvedChangePaths) []string {
+	return workspaceChangedFiles(paths, workspaceChangedFilesOptions{
+		includeGovernedBundle:  false,
+		includeLocalState:      true,
+		exemptActiveBundleOnly: true,
+	})
+}
+
+func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChangedFilesOptions) []string {
 	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
 	if workspaceRoot == "" {
 		return nil
 	}
 	files := gitNameOnly(workspaceRoot, "diff", "--name-only", "HEAD", "--")
 	for _, file := range gitNameOnly(workspaceRoot, "ls-files", "--others", "--exclude-standard") {
-		if scopeContractUntrackedChangedFile(workspaceRoot, file) {
+		if opts.includeLocalState || scopeContractUntrackedChangedFile(workspaceRoot, file) {
 			files = append(files, file)
 		}
 	}
@@ -634,11 +664,16 @@ func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []strin
 		if file == "" {
 			continue
 		}
-		if file == "artifacts" || strings.HasPrefix(file, "artifacts/changes/") {
+		if opts.includeLocalState && generatedOnlyLocalStateChangedFile(workspaceRoot, file) {
 			continue
 		}
-		if bundleRel != "" && bundleRel != "." && (file == bundleRel || strings.HasPrefix(file, bundleRel+"/")) {
-			continue
+		if !opts.includeGovernedBundle {
+			if !opts.exemptActiveBundleOnly && (file == "artifacts" || strings.HasPrefix(file, "artifacts/changes/")) {
+				continue
+			}
+			if bundleRel != "" && bundleRel != "." && (file == bundleRel || strings.HasPrefix(file, bundleRel+"/")) {
+				continue
+			}
 		}
 		filtered = append(filtered, file)
 	}
@@ -646,12 +681,6 @@ func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []strin
 		return nil
 	}
 	return stringutil.UniqueSorted(filtered)
-}
-
-// WorkspaceChangedFiles returns implementation-side changed files for the
-// resolved workspace, excluding governed bundle files.
-func WorkspaceChangedFiles(paths state.ResolvedChangePaths) []string {
-	return scopeContractWorkspaceChangedFiles(paths)
 }
 
 func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {
@@ -672,13 +701,77 @@ func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {
 	return true
 }
 
+func generatedOnlyLocalStateChangedFile(workspaceRoot, file string) bool {
+	switch file {
+	case ".gitignore":
+		return generatedOnlyGitIgnoreChange(workspaceRoot)
+	case fsutil.ProjectConfigFileName:
+		return generatedOnlyProjectConfigChange(workspaceRoot)
+	default:
+		return false
+	}
+}
+
+func generatedOnlyGitIgnoreChange(workspaceRoot string) bool {
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore"))
+	if err != nil {
+		return false
+	}
+	content := normalizeLineEndings(string(raw))
+	headContent, ok := gitHeadFileContent(workspaceRoot, ".gitignore")
+	if !ok {
+		return strings.TrimSpace(content) == strings.TrimSpace(state.LocalStateGitIgnoreBlock())
+	}
+	expected, err := state.NormalizeLocalStateGitIgnoreContent(headContent)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(content) == strings.TrimSpace(normalizeLineEndings(expected))
+}
+
+func generatedOnlyProjectConfigChange(workspaceRoot string) bool {
+	if _, ok := gitHeadFileContent(workspaceRoot, fsutil.ProjectConfigFileName); ok {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, fsutil.ProjectConfigFileName))
+	if err != nil {
+		return false
+	}
+	cfg, err := model.ParseConfigYAML(raw)
+	if err != nil {
+		return false
+	}
+	current, err := cfg.ToYAML()
+	if err != nil {
+		return false
+	}
+	defaultConfig, err := model.DefaultConfig().ToYAML()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(bytes.TrimSpace(current), bytes.TrimSpace(defaultConfig))
+}
+
 func scopeContractGeneratedOnlyGitIgnore(workspaceRoot string) bool {
 	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore"))
 	if err != nil {
 		return false
 	}
-	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	content := normalizeLineEndings(string(raw))
 	return strings.TrimSpace(content) == strings.TrimSpace(state.LocalStateGitIgnoreBlock())
+}
+
+func normalizeLineEndings(content string) string {
+	return strings.ReplaceAll(content, "\r\n", "\n")
+}
+
+func gitHeadFileContent(workspaceRoot, file string) (string, bool) {
+	cmd := exec.Command("git", "-C", workspaceRoot, "show", "HEAD:"+filepath.ToSlash(file))
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
 }
 
 func gitNameOnly(workspaceRoot string, args ...string) []string {

@@ -13,7 +13,7 @@ func TestResolveNextSkill_S0Intake_SubSteps(t *testing.T) {
 		skill   string
 	}{
 		{model.IntakeSubStepClarify, SkillIntakeClarification},
-		{model.IntakeSubStepResearch, SkillIntakeClarification},
+		{model.IntakeSubStepResearch, ""},
 		{model.IntakeSubStepConfirm, ""},
 	}
 	for _, tt := range tests {

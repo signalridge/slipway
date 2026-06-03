@@ -46,6 +46,12 @@ func LocalStateGitIgnoreBlock() string {
 	return b.String()
 }
 
+// NormalizeLocalStateGitIgnoreContent returns content with the Slipway-managed
+// local-state block present and current, without writing it to disk.
+func NormalizeLocalStateGitIgnoreContent(current string) (string, error) {
+	return ensureLocalStateGitIgnoreBlock(current)
+}
+
 func EnsureLocalStateGitIgnore(root string) (GitIgnoreUpdate, error) {
 	workspaceRoot, err := NormalizePath(root)
 	if err != nil {
