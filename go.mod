@@ -1,6 +1,6 @@
 module github.com/signalridge/slipway
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/gofrs/flock v0.13.0
