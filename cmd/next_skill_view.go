@@ -197,6 +197,14 @@ func assembleSkillViewWithOptions(
 			blockers = append(blockers, advanced.Blockers...)
 		}
 		if len(blockers) == 0 {
+			if governedChange != nil {
+				canAdvance, advanceBlockers := noSkillStateAdvanceReadiness(root, *governedChange)
+				if len(advanceBlockers) > 0 {
+					blockers = append(blockers, advanceBlockers...)
+				} else if canAdvance {
+					blockers = append(blockers, model.NewReasonCode("run_slipway_run_to_advance", string(view.CurrentState)))
+				}
+			}
 			blockers = append(blockers, model.NewReasonCode("no_skill_required", string(view.CurrentState)))
 		}
 		view.Blockers = model.NormalizeReasonCodes(blockers)
@@ -549,6 +557,22 @@ func appendCatalogHints(
 		})
 	}
 	return existing
+}
+
+func noSkillStateAdvanceReadiness(root string, change model.Change) (bool, []model.ReasonCode) {
+	switch change.CurrentState {
+	case model.StateS0Intake:
+		blockers := progression.IntakeAdvanceBlockers(root, change)
+		return len(blockers) == 0, blockers
+	case model.StateS1Plan:
+		// S1 research reaches the no-skill branch only after its evidence passed
+		// and the display skill was cleared.
+		return change.PlanSubStep == model.PlanSubStepResearch || change.PlanSubStep == model.PlanSubStepValidate, nil
+	case model.StateS3Review:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func supportHintName(skillID string) string {

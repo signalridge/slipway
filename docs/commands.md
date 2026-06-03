@@ -102,9 +102,13 @@ before `done`; it is not a post-archive audit surface for frozen bundles.
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
 `done --json` archives done-ready worktree-bound changes even when source files
-are still uncommitted, but returns `worktree_dirty_warning` and
-`worktree_dirty_files` so operators do not delete a worktree while implementation
-changes are still only local.
+or non-active governance artifacts are still uncommitted, returning a
+non-blocking `worktree_dirty_warning` with `worktree_dirty_files` so operators
+commit those files together with the archived bundle. `done` never removes the
+worktree, and `git worktree remove` already refuses to drop a dirty worktree, so
+the advisory replaces a hard block. The active `artifacts/changes/<slug>/` bundle
+is excluded from the advisory because `done` rewrites it into
+`artifacts/changes/archived/<slug>/`; sibling or archived bundles are listed.
 
 ## Resume And Checkpoints
 

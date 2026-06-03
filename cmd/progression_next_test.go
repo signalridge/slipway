@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -78,7 +79,7 @@ func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 	})
 }
 
-func TestNextS0ResearchActionDoesNotRequestResearchMarkdown(t *testing.T) {
+func TestNextS0ResearchActionReportsRunGuidanceWithoutPrematureScopeGate(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -89,6 +90,12 @@ func TestNextS0ResearchActionDoesNotRequestResearchMarkdown(t *testing.T) {
 		require.NoError(t, err)
 		change.IntakeSubStep = model.IntakeSubStepResearch
 		require.NoError(t, state.SaveChange(root, change))
+		writeSkillVerification(t, root, slug, progression.SkillIntakeClarification, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 0,
+		})
 
 		cmd := commandForRoot(t, root, makeNextCmd())
 		cmd.SetArgs([]string{"--json", "--diagnostics"})
@@ -98,8 +105,11 @@ func TestNextS0ResearchActionDoesNotRequestResearchMarkdown(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillIntakeClarification, view.NextSkill.Name)
+		assert.Nil(t, view.NextSkill)
+		assert.NotContains(t, view.InputContext.GateStatus, string(gate.GateScope))
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S0_INTAKE")
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S0_INTAKE")
+		assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
 		require.NotEmpty(t, view.RequiredActions)
 		for _, action := range view.RequiredActions {
 			if action.ControlID == string(model.ControlResearch) {
@@ -107,6 +117,86 @@ func TestNextS0ResearchActionDoesNotRequestResearchMarkdown(t *testing.T) {
 				assert.Contains(t, action.Description, "S0 intake research questions")
 			}
 		}
+	})
+}
+
+func TestNextS3ReviewWithPassingEvidenceReportsRunGuidance(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "s3 run guidance")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	require.NoError(t, err)
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S3_REVIEW")
+	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	for _, blocker := range view.Blockers {
+		if blocker.Code == "no_skill_required" {
+			assert.NotEqual(t, model.ReasonSeverityError, blocker.Severity)
+		}
+	}
+}
+
+func TestNextS0ConfirmWithoutApprovedSummaryDoesNotReportRunGuidance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createIntakeChangeFixture(t, root, "confirm requires approved summary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.IntakeSubStep = model.IntakeSubStepConfirm
+		change.ComplexityLevel = "simple"
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte(`# Intent
+
+## Summary
+Clarified workflow diagnostic fix.
+
+## In Scope
+- Keep S0 confirm blocked until the user approves the summary.
+
+## Out of Scope
+- Do not advance planning before confirmation.
+
+## Acceptance Signals
+- next --json does not advertise slipway run before approval.
+
+## Open Questions
+<!-- none -->
+
+## Approved Summary
+<!-- pending user confirmation -->
+`)))
+		writeSkillVerification(t, root, slug, progression.SkillIntakeClarification, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 0,
+		})
+
+		view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+		require.NoError(t, err)
+		assert.Nil(t, view.NextSkill)
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "intake_confirmation_incomplete:intent.md requires non-empty 'Approved Summary'")
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S0_INTAKE")
+		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S0_INTAKE")
+		assert.NotEqual(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
 	})
 }
 
@@ -958,7 +1048,9 @@ func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T)
 		require.NotNil(t, nextDiag.FreshnessDiagnostics)
 		assert.Equal(t, "unknown", nextDiag.FreshnessDiagnostics.Status)
 		require.NotNil(t, nextDiag.FreshnessDiagnostics.PathAuthority)
-		assert.Contains(t, nextDiag.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath, ".git/slipway/runtime/changes/"+slug)
+		runtimePath := nextDiag.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath
+		assert.True(t, filepath.IsAbs(runtimePath))
+		assert.True(t, strings.HasSuffix(runtimePath, "/.git/slipway/runtime/changes/"+slug), runtimePath)
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
 		validateCmd.SetArgs([]string{"--json", "--change", slug})

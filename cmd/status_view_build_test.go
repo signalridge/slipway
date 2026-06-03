@@ -171,7 +171,9 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.EvidenceArtifact, "execution-summary.yaml")
 	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.NextAction, "rerun")
 	require.NotNil(t, view.FreshnessDiagnostics.PathAuthority)
-	assert.Contains(t, view.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath, ".git/slipway/runtime/changes/stale-execution-summary")
+	runtimePath := view.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath
+	assert.True(t, filepath.IsAbs(runtimePath))
+	assert.True(t, strings.HasSuffix(runtimePath, "/.git/slipway/runtime/changes/stale-execution-summary"), runtimePath)
 	assert.Contains(t, view.FreshnessDiagnostics.PathAuthority.GovernedBundlePath, "artifacts/changes/stale-execution-summary")
 }
 

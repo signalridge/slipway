@@ -99,6 +99,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		gitCommitAll(t, normalizedWT, "ship-ready bundle")
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -123,7 +124,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 	})
 }
 
-func TestDoneJSONWarnsWhenWorktreeSourceChangesAreUncommitted(t *testing.T) {
+func TestDoneJSONWarnsButArchivesWhenWorktreeChangesAreUncommitted(t *testing.T) {
 	root := t.TempDir()
 	initGitRepoForWorktreeTests(t, root)
 	withWorkspace(t, root, func() {
@@ -167,10 +168,166 @@ func TestDoneJSONWarnsWhenWorktreeSourceChangesAreUncommitted(t *testing.T) {
 		doneCmd.SetArgs([]string{"--json"})
 		require.NoError(t, doneCmd.Execute())
 
+		// Dirty source no longer blocks: `done` archives and surfaces a
+		// non-blocking advisory listing what to commit with the archived bundle.
 		var view doneView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Contains(t, view.WorktreeDirtyWarning, "uncommitted source changes")
+		assert.True(t, view.Archived)
+		assert.NotEmpty(t, view.WorktreeDirtyWarning)
 		assert.Contains(t, view.WorktreeDirtyFiles, "cmd/done.go")
+		assert.NotContains(t, view.WorktreeDirtyFiles, filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "intent.md")))
+		require.FileExists(t, filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug, "change.yaml"))
+	})
+}
+
+func TestDoneJSONAllowsUncommittedGovernedBundleArchive(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-worktree-bundle-dirty"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, normalizedWT, change)
+		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(normalizedWT))
+		defer func() {
+			_ = os.Chdir(previousWD)
+		}()
+
+		var out bytes.Buffer
+		doneCmd := makeDoneCmd()
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.True(t, view.Archived)
+		require.FileExists(t, filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug, "change.yaml"))
+		require.NoDirExists(t, filepath.Join(normalizedWT, "artifacts", "changes", slug))
+	})
+}
+
+func TestDoneJSONWarnsDirtyNonActiveChangeArtifact(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-nonactive-artifact-dirty"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, normalizedWT, change)
+		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+
+		// A sibling/archived change bundle left uncommitted is reported in the
+		// dirty advisory because only the active artifacts/changes/<slug>/ bundle
+		// is exempt — but it no longer blocks `done`.
+		siblingRel := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", "other-change", "change.yaml"))
+		siblingPath := filepath.Join(normalizedWT, filepath.FromSlash(siblingRel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(siblingPath), 0o755))
+		require.NoError(t, os.WriteFile(siblingPath, []byte("slug: other-change\n"), 0o644))
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(normalizedWT))
+		defer func() {
+			_ = os.Chdir(previousWD)
+		}()
+
+		var out bytes.Buffer
+		doneCmd := makeDoneCmd()
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.True(t, view.Archived)
+		assert.Contains(t, view.WorktreeDirtyFiles, siblingRel)
+		assert.NotContains(t, view.WorktreeDirtyFiles, filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "intent.md")))
+	})
+}
+
+func TestDoneAllReadyWarnsDirtyBoundWorktree(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "bulk-dirty-worktree"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS4Verify
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, normalizedWT, change)
+		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		gitCommitAll(t, normalizedWT, "ship-ready bundle")
+
+		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
+
+		view := archiveAllDoneReady(root)
+		assert.Empty(t, view.Failed)
+		require.Len(t, view.Archived, 1)
+		assert.Equal(t, slug, view.Archived[0].Slug)
+		assert.Equal(t, string(model.ChangeStatusDone), view.Archived[0].Status)
+		assert.NotEmpty(t, view.Archived[0].WorktreeDirtyWarning)
+		assert.Contains(t, view.Archived[0].WorktreeDirtyFiles, "cmd/done.go")
+		require.FileExists(t, filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug, "change.yaml"))
 	})
 }
 
@@ -1263,6 +1420,12 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+}
+
+func gitCommitAll(t *testing.T, dir, message string) {
+	t.Helper()
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", message)
 }
 
 func writeSkillVerification(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {
