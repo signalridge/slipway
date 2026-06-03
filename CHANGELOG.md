@@ -5,6 +5,24 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/signalridge/slipway/compare/v0.4.1...v0.5.0) (2026-06-03)
+
+
+### Features
+
+* **evidence:** add task ledger and closeout reuse ([#63](https://github.com/signalridge/slipway/issues/63)) ([d1a94aa](https://github.com/signalridge/slipway/commit/d1a94aa9c78c121804de47d501591148d1d993af))
+
+
+### Bug Fixes
+
+* **governance:** add stale planning recovery ([#64](https://github.com/signalridge/slipway/issues/64)) ([33642f9](https://github.com/signalridge/slipway/commit/33642f90a33511f12eb1a53c39389edeb5443a98))
+* **workflow:** issue [#53](https://github.com/signalridge/slipway/issues/53) tier 1 next/done diagnostics ([#60](https://github.com/signalridge/slipway/issues/60)) ([ce3fb2f](https://github.com/signalridge/slipway/commit/ce3fb2f211cd24a67e6ac6c9bebc8945e7a59507))
+
+
+### Dependencies
+
+* **actions:** bump the actions group with 2 updates ([#56](https://github.com/signalridge/slipway/issues/56)) ([f72fa41](https://github.com/signalridge/slipway/commit/f72fa411d587a493e33e0b9cad82ca51f83ddb75))
+
 ## [0.4.1](https://github.com/signalridge/slipway/compare/v0.4.0...v0.4.1) (2026-06-01)
 
 
