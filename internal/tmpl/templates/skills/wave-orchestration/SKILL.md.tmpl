@@ -64,6 +64,20 @@ after any checkpoint pause continue with a **fresh** subagent context.
 - For `task_kind=code`, enforce RED, then GREEN, then REFACTOR before accepting the result.
 - Detailed dispatch examples live in `references/executor-dispatch-reference.md`.
 
+## Task Evidence Ledger
+For every completed task, record runtime task evidence through the supported CLI
+before passing wave-orchestration. Do not hand-write files under
+`.git/slipway/runtime/changes/<slug>/evidence/tasks/`.
+
+```bash
+slipway evidence task --task-id "<task_id>" --run-summary-version "<run_version>" --task-kind "<task_kind>" --verdict pass --evidence-ref "<transcript-or-command-ref>" --changed-file "<path>" --target-file "<path>" --json
+```
+
+Use `--blocker <code[:detail]>` and a non-pass `--verdict` when a task is not
+complete. Slipway computes `freshness_inputs` and `captured_at` unless
+`--captured-at` is explicitly provided. A passing wave-orchestration record
+without task evidence blocks execution-summary generation.
+
 ## Guardrails
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
 - Auto-fix only issues directly blocking the current task and directly caused by the current task's change.
@@ -83,6 +97,9 @@ notes: |
   <verification notes>
 ```
 
+References should include the task evidence command outputs or stable refs for
+each recorded task.
+
 ## Present and Advance
 Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
 
@@ -91,10 +108,12 @@ After confirmation: `slipway next`
 ## DO NOT SKIP
 1. Dependency ordering before execution.
 2. File conflict detection after each wave.
-3. Post-execution verification.
+3. Runtime task evidence via `slipway evidence task`.
+4. Post-execution verification.
 
 ## Block If
 - Dependency ordering is incomplete or cyclic.
 - File conflicts remain unresolved after a wave.
 - Retry budget is exhausted.
 - A checkpoint resumes without a fresh subagent context.
+- Task evidence was not recorded through the supported CLI.

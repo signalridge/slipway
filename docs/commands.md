@@ -34,6 +34,7 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway validate` | query | Recompute evidence and gate readiness without advancing. |
 | `slipway review` | mutation | Run explicit artifact-code alignment review from execution onward. |
 | `slipway checkpoint` | mutation | Pause execution for a task-level human response. |
+| `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
 | `slipway pivot` | mutation | Reroute or rescope an active change from execution onward. |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
@@ -78,6 +79,7 @@ slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
+slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json
 slipway health --doctor --json
 ```
 
@@ -99,7 +101,12 @@ an archived terminal change, the command fails with
 active-readiness contract: `validate` proves the currently active governed state
 before `done`; it is not a post-archive audit surface for frozen bundles.
 
-`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
+`slipway evidence task` writes the flat runtime task JSON consumed by
+wave-orchestration sync. The command computes `freshness_inputs`, defaults
+`captured_at` to current UTC, validates task kind/verdict/blockers, and refuses
+unknown or path-unsafe task IDs instead of relying on hand-written JSON.
+
+`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
 `done --json` archives done-ready worktree-bound changes even when source files
 or non-active governance artifacts are still uncommitted, returning a

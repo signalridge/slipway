@@ -49,6 +49,7 @@ func taskEvidenceActionDetail(root, slug string, runSummaryVersion int) string {
 	if strings.TrimSpace(root) != "" && strings.TrimSpace(slug) != "" {
 		parts = append(parts, "task_evidence_path="+state.DisplayPath(root, state.EvidenceTasksDir(root, slug)))
 	}
+	parts = append(parts, "record_command=slipway evidence task")
 	parts = append(parts, "required_fields="+taskEvidenceRequiredFields)
 	return strings.Join(parts, "; ")
 }

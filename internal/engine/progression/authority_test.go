@@ -1,8 +1,12 @@
 package progression
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -192,4 +196,234 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 		assert.False(t, hasCode(ship.Result.ReasonCodes),
 			"light keeps assurance optional; no attestation reason in G_ship")
 	})
+}
+
+func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("ship-closeout-reuse")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS4Verify
+	require.NoError(t, state.SaveChange(root, change))
+
+	capturedAt := time.Now().UTC().Add(-time.Minute)
+	summary := closeoutReuseExecutionSummary(change, 1, capturedAt)
+	passing := passingCloseoutReuseRecords(1)
+	assert.Empty(t, closeoutGoalVerificationReuseBlockers(root, change, passing, nil, summary))
+
+	mismatchedGoal := passingCloseoutReuseRecords(1)
+	mismatchedGoal[SkillGoalVerification] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 2,
+	}
+	blockers := closeoutGoalVerificationReuseBlockers(root, change, mismatchedGoal, nil, summary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "goal-verification run_version mismatch")
+
+	missingRunReference := passingCloseoutReuseRecords(1)
+	missingRunReference[SkillFinalCloseout] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{
+			closeoutGoalVerificationReuseReference,
+			assuranceCompleteReference,
+		},
+	}
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, missingRunReference, nil, summary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, closeoutGoalVerificationReuseRunVersionPrefix)
+
+	staleGoalProof := passingCloseoutReuseRecords(1)
+	staleGoalSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC())
+	staleGoalProof[SkillGoalVerification] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  staleGoalSummary.LatestRelevantUpdateAt().Add(-time.Nanosecond),
+		RunVersion: 1,
+	}
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, staleGoalProof, nil, staleGoalSummary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "goal-verification timestamp")
+
+	predatingCloseout := passingCloseoutReuseRecords(1)
+	predatingCloseout[SkillFinalCloseout] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  predatingCloseout[SkillGoalVerification].Timestamp.Add(-time.Second),
+		RunVersion: 1,
+		References: []string{
+			closeoutGoalVerificationReuseReference,
+			closeoutGoalVerificationReuseRunVersionPrefix + "1",
+			assuranceCompleteReference,
+		},
+	}
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, predatingCloseout, nil, summary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "final-closeout timestamp")
+
+	refreshedReview := passingCloseoutReuseRecords(1)
+	refreshedGoalAt := refreshedReview[SkillGoalVerification].Timestamp.UTC()
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, refreshedReview, closeoutReuseReviewRecords(
+		1,
+		refreshedGoalAt.Add(-time.Second),
+		refreshedGoalAt.Add(time.Nanosecond),
+	), summary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "latest review evidence")
+
+	changedContent := passingCloseoutReuseRecords(1)
+	changedGoalAt := changedContent[SkillGoalVerification].Timestamp.UTC()
+	targetRel := "internal/reuse-target.go"
+	targetPath := filepath.Join(root, targetRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(targetPath), 0o755))
+	require.NoError(t, os.WriteFile(targetPath, []byte("package internal\n"), 0o644))
+	require.NoError(t, os.Chtimes(targetPath, changedGoalAt.Add(time.Second), changedGoalAt.Add(time.Second)))
+	contentSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{targetRel})
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, contentSummary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "current content state")
+
+	verificationPattern := "artifacts/changes/" + change.Slug + "/verification/**"
+	verificationPath := filepath.Join(root, "artifacts", "changes", change.Slug, "verification", "final-closeout.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
+	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: pass\n"), 0o644))
+	require.NoError(t, os.Chtimes(verificationPath, changedGoalAt.Add(time.Second), changedGoalAt.Add(time.Second)))
+	verificationPatternSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{verificationPattern})
+	assert.Empty(t, closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, verificationPatternSummary))
+
+	unmatchedGlobSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{"internal/no-such-closeout-reuse-*.go"})
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, unmatchedGlobSummary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "current content state cannot be resolved")
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\nupdated after closeout proof\n"), 0o644))
+	staleSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(-time.Hour))
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, passing, nil, staleSummary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "freshness must be fresh")
+}
+
+func TestBuildShipAuthoritySurfacesCloseoutReuseBlocker(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("ship-closeout-reuse-blocked")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS4Verify
+	require.NoError(t, state.SaveChange(root, change))
+
+	passing := passingCloseoutReuseRecords(1)
+	passing[SkillGoalVerification] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 2,
+	}
+	ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
+		ExecutionSummary:  closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(time.Minute)),
+		ArtifactReadiness: ArtifactReadiness{Ready: true},
+		PassingSkills:     passing,
+		ReviewSurface:     &ReviewAuthority{},
+	})
+	require.NoError(t, err)
+	assert.True(t, hasAdvanceReasonCode(ship.VerifySkillBlockers, "closeout_goal_verification_reuse_invalid"))
+	assert.True(t, hasAdvanceReasonCode(ship.Result.ReasonCodes, "closeout_goal_verification_reuse_invalid"))
+}
+
+func closeoutReuseExecutionSummary(change model.Change, runVersion int, capturedAt time.Time) *model.ExecutionSummary {
+	return closeoutReuseExecutionSummaryWithFiles(change, runVersion, capturedAt, nil, nil)
+}
+
+func closeoutReuseExecutionSummaryWithFiles(
+	change model.Change,
+	runVersion int,
+	capturedAt time.Time,
+	changedFiles []string,
+	targetFiles []string,
+) *model.ExecutionSummary {
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: runVersion,
+		CapturedAt:        capturedAt.UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "t-01",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: append([]string(nil), changedFiles...),
+				TargetFiles:  append([]string(nil), targetFiles...),
+				EvidenceRef:  "test:t-01",
+				CapturedAt:   capturedAt.UTC(),
+			},
+		},
+	}
+	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
+	summary.SyncDerivedFields()
+	return &summary
+}
+
+func closeoutReuseReviewRecords(runVersion int, specTimestamp time.Time, codeTimestamp time.Time) map[string]model.VerificationRecord {
+	return map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  specTimestamp.UTC(),
+			RunVersion: runVersion,
+			References: []string{"layer:R0=pass"},
+		},
+		SkillCodeQualityReview: {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  codeTimestamp.UTC(),
+			RunVersion: runVersion,
+			References: []string{"layer:IR1=pass"},
+		},
+	}
+}
+
+func passingCloseoutReuseRecords(runVersion int) map[string]model.VerificationRecord {
+	now := time.Now().UTC()
+	return map[string]model.VerificationRecord{
+		SkillGoalVerification: {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  now,
+			RunVersion: runVersion,
+		},
+		SkillFinalCloseout: {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  now.Add(time.Second),
+			RunVersion: runVersion,
+			References: []string{
+				closeoutGoalVerificationReuseReference,
+				closeoutGoalVerificationReuseRunVersionPrefix + strconv.Itoa(runVersion),
+				assuranceCompleteReference,
+			},
+		},
+	}
 }

@@ -1,11 +1,12 @@
 {{define "fresh-evidence-checklist"}}- [ ] Current `run_version` matches the latest execution run for this change.
 - [ ] Every pass claim cites a command or transcript captured after the latest relevant code change.
 - [ ] Evidence references, timestamps, and reports come from the same freshness window.
-- [ ] Reused earlier proof is called out by prior `run_version`; it is never presented as fresh evidence.
+- [ ] Reused earlier proof is accepted only when the current `run_version`, freshness inputs, and content state still match; otherwise rerun proof.
 {{end}}
 
 {{define "fresh-evidence-minimum-record"}}- current `run_version`
 - reproducible command or transcript reference
 - timestamp from the same freshness window
+- explicit reuse attestation when a governed skill reuses earlier proof
 - blocker when proof is stale or missing (`stale_verification_evidence` / `missing_fresh_run`)
 {{end}}

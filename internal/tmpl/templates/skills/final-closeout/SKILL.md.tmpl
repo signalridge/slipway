@@ -16,8 +16,9 @@ rest on stale evidence.
 
 ## Workflow Outline
 1. Re-read the verification index and closeout prerequisites.
-2. Re-run the proving commands and confirm freshness, completeness, and assurance.
-3. Write the closeout verdict and wait for approval.
+2. Re-run the proving commands, or validate the goal-verification reuse branch.
+3. Confirm freshness, completeness, and assurance.
+4. Write the closeout verdict and wait for approval.
 
 ## When This Runs
 Only when governed closeout refresh is required. `slipway next` returns `next_skill: final-closeout`.
@@ -35,6 +36,8 @@ Verify ALL of the following before producing closeout verification:
 - [ ] verification records match current `run_version`
 - [ ] every required governance skill has a passing verification record
 - [ ] full test suite runs green (not cached, not partial)
+- [ ] if reusing goal-verification proof, reuse is for the current run_version
+      and active content state
 - [ ] `validate --json` proves active-change freshness/readiness before `done`;
       archived bundles are frozen records, not inputs to this active gate
 - [ ] blocker list is empty
@@ -53,6 +56,26 @@ Apply all of the following before passing closeout:
 
 Minimum record:
 {{template "fresh-evidence-minimum-record"}}
+
+## Goal-Verification Reuse Branch
+You may avoid rerunning duplicate full-suite proof only when goal-verification is
+already fresh for the current run_version and current content state. Before
+using this branch:
+
+1. Run `slipway validate --json`.
+2. Confirm the latest execution summary is fresh and its run_summary_version
+   matches goal-verification.
+3. Confirm goal-verification was captured at or after the latest execution
+   evidence in `execution-summary.yaml`.
+4. Confirm no governed artifact, task evidence, review evidence, or source
+   content changed after goal-verification.
+5. Record BOTH references in final-closeout:
+   - `closeout:goal_verification_reuse=pass`
+   - `closeout:goal_verification_reuse_run_version=<current run_version>`
+
+If any check fails, rerun the normal closeout proof instead. The ship gate
+rejects reuse when the final-closeout record, goal-verification record, and
+execution-summary.yaml do not agree on the same fresh run_version.
 
 ## Assurance Artifact Verification
 On light preset, skip this section — `assurance.md` is optional.
@@ -91,6 +114,8 @@ run_version: 1
 references:
   - "closeout:evidence_freshness=pass"
   - "closeout:test_suite=pass:N/N"
+  - "closeout:goal_verification_reuse=pass"              # only when using the reuse branch
+  - "closeout:goal_verification_reuse_run_version=1"     # only when using the reuse branch
   - "closeout:reviewer_independence=pass"
   - "closeout:guardrail_baseline=pass"
   - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
@@ -110,11 +135,12 @@ Show closeout summary with verification index. {{template "hard-gate"}}
 After confirmation: `slipway next`
 
 ## DO NOT SKIP
-1. Full test suite pass.
+1. Full test suite pass, unless the validated reuse branch applies.
 2. Verification freshness check for all prior skills.
 3. Assurance artifact completeness on standard/strict preset.
 
 ## Block If
 - Any required verification is stale, missing, or not passing.
 - Full-suite proof, reviewer independence, or guardrail recheck is missing.
+- Goal-verification reuse lacks the two required closeout reuse references.
 - Required assurance sections are empty or boilerplate-only.

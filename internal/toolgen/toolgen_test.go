@@ -94,8 +94,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 18 commands (5 core + 9 situational + 4 diagnostics).
-	assert.Len(t, commandRegistry, 18)
+	// Verify registry has 19 commands (5 core + 10 situational + 4 diagnostics).
+	assert.Len(t, commandRegistry, 19)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -128,10 +128,10 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 5, core, "expected 5 core commands")
-	assert.Equal(t, 9, sit, "expected 9 situational commands")
+	assert.Equal(t, 10, sit, "expected 10 situational commands")
 	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
 	assert.Equal(t, 6, query, "expected 6 query commands")
-	assert.Equal(t, 12, mutation, "expected 12 mutation commands")
+	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
 	ids := commandIDs()
