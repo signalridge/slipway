@@ -12,6 +12,12 @@ All routed commands support `--json` when structured output is useful.
 | `slipway status` | query | Show lifecycle state, blockers, progress, and next actions. |
 | `slipway done` | mutation | Finalize a done-ready change and archive it. |
 
+When an S3/S4 change has stale planning evidence, `slipway next` remains
+read-only and reports recovery guidance. `slipway run` is the mutating recovery
+path: it reopens `S1_PLAN/audit`, clears stale planning and downstream review /
+verification files, preserves runtime execution evidence, and returns the
+side effects in JSON and human-readable output.
+
 ## Creation Options
 
 ```bash

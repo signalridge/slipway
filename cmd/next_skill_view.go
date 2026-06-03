@@ -165,6 +165,22 @@ func assembleSkillViewWithOptions(
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
 	}
+	if governedChange != nil && progression.StalePlanningRecoveryAvailable(*governedChange, blockersForResolution) {
+		nextSkillName = ""
+		nextState = string(model.StateS1Plan)
+		view.Blockers = appendReasonCodes(
+			view.Blockers,
+			[]model.ReasonCode{
+				model.NewReasonCode("stale_planning_recovery_available", progression.StalePlanningRecoveryTarget),
+				model.NewReasonCode("run_slipway_run_to_advance", string(governedChange.CurrentState)),
+			},
+		)
+		view.Warnings = append(view.Warnings, "stale_planning_recovery_available: run `slipway run` to reopen S1_PLAN/audit, then refresh plan-audit, wave-plan, and execution-summary evidence in order.")
+		blockersForResolution = append([]model.ReasonCode(nil), view.Blockers...)
+		if advanced.Action == "blocked" {
+			blockersForResolution = append(blockersForResolution, advanced.Blockers...)
+		}
+	}
 	if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
 		nextSkillName = actionableSkill
 		blockingResolution = true

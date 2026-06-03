@@ -709,6 +709,20 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		if view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready" {
 			writeLine("\nAdvanced: %s -> %s (%s)\n", view.Advanced.FromState, view.Advanced.ToState, view.Advanced.Message)
 		}
+		if len(view.Advanced.SideEffects) > 0 {
+			heading := "Side Effects:"
+			if view.Advanced.RecoveryOnly {
+				heading = "Recovery Side Effects:"
+			}
+			writeLine("%s\n", heading)
+			for _, effect := range view.Advanced.SideEffects {
+				if effect.Detail != "" {
+					writeLine("  - %s: %s\n", effect.Kind, effect.Detail)
+				} else {
+					writeLine("  - %s\n", effect.Kind)
+				}
+			}
+		}
 		if len(view.Advanced.AutoPassedStates) > 0 {
 			writeLine("Auto-Passed:\n")
 			for _, state := range view.Advanced.AutoPassedStates {

@@ -82,6 +82,8 @@ type GovernanceReadinessOptions struct {
 	IncludeShipSurface        bool
 }
 
+const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: in S3/S4, fix tasks.md target_files or execution scope first; if the planning artifact changes, stale_planning_evidence recovery reopens S1_PLAN/audit via `slipway run`; pivot --rescope remains S2_EXECUTE-only."
+
 type ArtifactReadinessReader interface {
 	Evaluate(root string, change model.Change) (ArtifactReadiness, error)
 }
@@ -271,6 +273,9 @@ func evaluateGovernanceReadinessBaseWithReaders(
 			readiness.ScopeContract = &cloned
 			readiness.Blockers = append(readiness.Blockers, scopeReport.Blockers...)
 			readiness.Diagnostics = append(readiness.Diagnostics, scopeReport.Diagnostics...)
+			if scopeContractNeedsRecoveryGuidance(effectiveState, scopeReport) {
+				readiness.Diagnostics = append(readiness.Diagnostics, scopeContractRecoveryGuidanceDiagnostic)
+			}
 		}
 	}
 
@@ -301,6 +306,13 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readiness.Blockers = model.NormalizeReasonCodes(readiness.Blockers)
 	readiness.Diagnostics = stringutil.UniqueSorted(readiness.Diagnostics)
 	return readiness, nil
+}
+
+func scopeContractNeedsRecoveryGuidance(state model.WorkflowState, report scopecontract.Report) bool {
+	if state != model.StateS3Review && state != model.StateS4Verify {
+		return false
+	}
+	return len(report.Blockers) > 0
 }
 
 func (r GovernanceReadiness) cachedReviewAuthority() (ReviewAuthority, bool) {

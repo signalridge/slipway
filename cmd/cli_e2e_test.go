@@ -125,7 +125,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		pivotPayload := decodeJSONMap(t, stderr)
-		assert.Equal(t, "pivot_state_invalid", pivotPayload["error_code"])
+		assert.Equal(t, "rescope_state_invalid", pivotPayload["error_code"])
 
 		stdout, stderr, err = runRootCommandIn(root, []string{"review", "--json"})
 		require.Error(t, err)
