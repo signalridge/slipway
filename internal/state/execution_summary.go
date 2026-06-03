@@ -435,10 +435,10 @@ func ExecutionPathAuthorityDiagnostics(root string, change model.Change, runSumm
 	}
 	out := &ExecutionPathAuthority{
 		InvocationWorkspacePath: DisplayPath(root, root),
-		GitCommonDirPath:        DisplayPath(root, GitCommonDir(root)),
-		RuntimeEvidencePath:     DisplayPath(root, ChangeDir(root, slug)),
+		GitCommonDirPath:        absolutePathForDiagnostics(GitCommonDir(root)),
+		RuntimeEvidencePath:     absolutePathForDiagnostics(ChangeDir(root, slug)),
 	}
-	out.TaskEvidencePath = DisplayPath(root, EvidenceTasksDir(root, slug))
+	out.TaskEvidencePath = absolutePathForDiagnostics(EvidenceTasksDir(root, slug))
 	if paths, err := ResolveChangePaths(root, change); err == nil {
 		out.BoundWorkspacePath = DisplayPath(root, paths.WorkspaceRoot)
 		out.GovernedBundlePath = DisplayPath(root, paths.GovernedBundleDir)
@@ -446,6 +446,13 @@ func ExecutionPathAuthorityDiagnostics(root string, change model.Change, runSumm
 		out.ChangeAuthorityPath = DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
 	}
 	return out
+}
+
+func absolutePathForDiagnostics(path string) string {
+	if normalized, err := NormalizePath(path); err == nil {
+		return filepath.ToSlash(normalized)
+	}
+	return filepath.ToSlash(filepath.Clean(path))
 }
 
 func taskFreshnessInputDiffs(root string, change model.Change, summary *model.ExecutionSummary) []ExecutionTaskInputDifference {

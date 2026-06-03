@@ -35,7 +35,8 @@ func resolveS0Intake(change model.Change) (string, string) {
 	case model.IntakeSubStepClarify:
 		return SkillIntakeClarification, string(model.StateS0Intake)
 	case model.IntakeSubStepResearch:
-		return SkillIntakeClarification, string(model.StateS0Intake)
+		// Machine-only step: advances discovery-scoped intake into S1_PLAN/research.
+		return "", ""
 	case model.IntakeSubStepConfirm:
 		// Machine-only step: confirms approved summary presence.
 		return "", ""

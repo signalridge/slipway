@@ -187,7 +187,9 @@ tasks:
 	assert.Equal(t, "change_id", ctx.Diagnostics.TaskInputDiffs[0].Field)
 	assert.Contains(t, ctx.Diagnostics.TaskInputDiffs[0].Current, "legacy evidence_input_hash=wrong-content-hash")
 	require.NotNil(t, ctx.Diagnostics.PathAuthority)
-	assert.Contains(t, ctx.Diagnostics.PathAuthority.RuntimeEvidencePath, ".git/slipway/runtime/changes/"+change.Slug)
+	runtimePath := ctx.Diagnostics.PathAuthority.RuntimeEvidencePath
+	assert.True(t, filepath.IsAbs(runtimePath))
+	assert.True(t, strings.HasSuffix(runtimePath, "/.git/slipway/runtime/changes/"+change.Slug), runtimePath)
 	assert.Contains(t, ctx.Diagnostics.NextAction, "regenerate")
 }
 

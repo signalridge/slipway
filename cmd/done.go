@@ -90,8 +90,14 @@ func markChangeDone(change *model.Change) {
 	change.CurrentState = model.StateDone
 }
 
-const doneWorktreeDirtyWarning = "worktree has uncommitted source changes; commit or review these files before removing the worktree"
+const doneWorktreeDirtyWarning = "worktree has uncommitted non-bundle changes; commit them together with the archived bundle before removing the worktree"
 
+// doneWorktreeDirtyState reports uncommitted non-bundle worktree changes as a
+// non-blocking advisory. `done` proceeds and archives — premature worktree
+// deletion is already refused by `git worktree remove` on a dirty tree — but the
+// returned warning and file list tell the operator what to commit alongside the
+// archived bundle. The active governed bundle is exempt because `done` rewrites
+// it; sibling or archived bundles are reported (see WorkspaceChangedFilesForDoneArchive).
 func doneWorktreeDirtyState(root string, change model.Change) (string, []string) {
 	if strings.TrimSpace(change.WorktreePath) == "" {
 		return "", nil
@@ -100,7 +106,7 @@ func doneWorktreeDirtyState(root string, change model.Change) (string, []string)
 	if err != nil {
 		return "", nil
 	}
-	files := progression.WorkspaceChangedFiles(paths)
+	files := progression.WorkspaceChangedFilesForDoneArchive(paths)
 	if len(files) == 0 {
 		return "", nil
 	}
@@ -281,6 +287,7 @@ func makeDoneCmd() *cobra.Command {
 						nil,
 					)
 				}
+				worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 				if err := reconcileDoneFilesystemState(root, &change); err != nil {
 					return err
 				}
@@ -294,7 +301,6 @@ func makeDoneCmd() *cobra.Command {
 				if shipBlocked {
 					return shipGateBlockedError(change, shipEval)
 				}
-				worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 				beforeChange := change
 				markChangeDone(&change)
 				change.RemediationSources = mergeArchiveReferences(
@@ -449,6 +455,7 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 	if !action.CanFinalizeDone(change.CurrentState) {
 		return newDoneBulkSkipped(slug, string(change.CurrentState), "not_done_ready")
 	}
+	worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 	if err := reconcileDoneFilesystemState(root, &change); err != nil {
 		return newDoneBulkFailed(slug, "artifact_reconcile_failed", err.Error())
 	}
@@ -467,7 +474,6 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 			append([]model.ReasonCode(nil), shipEval.ReasonCodes...),
 		)
 	}
-	worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
 	beforeChange := change
 	markChangeDone(&change)
 

@@ -29,10 +29,15 @@ go run . status --json
 
 Avoid deciding readiness from `main...HEAD` alone. Pair branch comparisons with direct worktree status and diff checks.
 After `slipway done`, Git-safe archived records remain in the owning worktree; commit or merge them before removing that worktree.
-When a worktree-bound change still has uncommitted source changes, `done --json`
-archives the governed bundle but returns `worktree_dirty_warning` and
-`worktree_dirty_files` so the operator can commit or inspect the source diff
-before deleting the worktree.
+When a worktree-bound change still has uncommitted source or non-active
+governance changes, `done --json` archives anyway and returns a non-blocking
+`worktree_dirty_warning` with `worktree_dirty_files` so the operator commits
+those files together with the archived bundle. `done` does not remove the
+worktree, and `git worktree remove` refuses to drop a dirty worktree, so the
+advisory is sufficient. The active `artifacts/changes/<slug>/` bundle is excluded
+from the advisory because `done` rewrites it into
+`artifacts/changes/archived/<slug>/`; a dirty sibling or archived bundle is
+listed in the advisory.
 
 ## Health And Repair
 
@@ -130,9 +135,11 @@ Before `done`:
 3. Confirm `git diff --check`.
 4. Stage intended files only.
 5. Confirm `git diff --cached --check`.
-6. Run `slipway done --json` when the change is done-ready.
-7. If `worktree_dirty_warning` is present, inspect or commit the listed source
-   files before removing the worktree.
+6. Run `slipway done --json` when the change is done-ready. The active change
+   bundle does not need a pre-`done` commit.
+7. If `worktree_dirty_warning` is returned, the change is already archived;
+   commit the listed `worktree_dirty_files` together with the archived bundle
+   before removing the worktree.
 
 After `done`, use the archived `change.yaml` and bundle contents as frozen
 project records. `validate --change <slug>` intentionally rejects archived

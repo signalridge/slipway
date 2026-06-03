@@ -437,6 +437,83 @@ func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle
 	assert.NotContains(t, files, "artifacts/changes/scope-drift/tasks.md")
 }
 
+func TestWorkspaceChangedFilesForDoneArchiveExcludesBundleAndGeneratedLocalState(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("before\n"), 0o644))
+	gitForReadinessOptimizationTests(t, root, "add", "README.md")
+	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", "done-dirty")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("after\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "untracked.go"), []byte("package cmd\n"), 0o644))
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(state.LocalStateGitIgnoreBlock()), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n"), 0o644))
+
+	files := WorkspaceChangedFilesForDoneArchive(state.ResolvedChangePaths{
+		WorkspaceRoot:     root,
+		GovernedBundleDir: bundleDir,
+	})
+
+	assert.Contains(t, files, "README.md")
+	assert.Contains(t, files, "cmd/untracked.go")
+	assert.NotContains(t, files, "artifacts/changes/done-dirty/tasks.md")
+	assert.NotContains(t, files, ".gitignore")
+	assert.NotContains(t, files, ".slipway.yaml")
+}
+
+func TestWorkspaceChangedFilesForDoneArchiveKeepsRealLocalGovernanceFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("before\n"), 0o644))
+	gitForReadinessOptimizationTests(t, root, "add", "README.md")
+	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", "done-dirty")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("node_modules/\n\n"+state.LocalStateGitIgnoreBlock()), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"), []byte("context:\n  tech_stack: Go\n"), 0o644))
+
+	files := WorkspaceChangedFilesForDoneArchive(state.ResolvedChangePaths{
+		WorkspaceRoot:     root,
+		GovernedBundleDir: bundleDir,
+	})
+
+	assert.Contains(t, files, ".gitignore")
+	assert.Contains(t, files, ".slipway.yaml")
+}
+
+func TestWorkspaceChangedFilesForDoneArchiveSkipsManagedGitIgnoreMigration(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	legacyGitIgnore := "build/\n\n" +
+		"# Slipway local state (managed)\n" +
+		"/old-slipway-local-state/\n" +
+		"# End Slipway local state\n\n" +
+		"dist/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(legacyGitIgnore), 0o644))
+	gitForReadinessOptimizationTests(t, root, "add", ".gitignore")
+	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
+	_, err := state.EnsureLocalStateGitIgnore(root)
+	require.NoError(t, err)
+
+	files := WorkspaceChangedFilesForDoneArchive(state.ResolvedChangePaths{
+		WorkspaceRoot:     root,
+		GovernedBundleDir: filepath.Join(root, "artifacts", "changes", "done-dirty"),
+	})
+
+	assert.NotContains(t, files, ".gitignore")
+}
+
 func TestScopeContractUntrackedChangedFileKeepsRealRootDotfiles(t *testing.T) {
 	t.Parallel()
 
