@@ -17,10 +17,18 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         version = if (self ? shortRev) then self.shortRev else "dev";
+        go_1_26_4 = pkgs.go_1_26.overrideAttrs (finalAttrs: previousAttrs: {
+          version = "1.26.4";
+          src = pkgs.fetchurl {
+            url = "https://go.dev/dl/go${finalAttrs.version}.src.tar.gz";
+            hash = "sha256-T2aKMvv8ETLmqIH7lowvHa2mMUkqM5IRc1+7JVpCYC0=";
+          };
+        });
+        buildGoModule = pkgs.buildGoModule.override { go = go_1_26_4; };
       in
       {
         packages = {
-          slipway = pkgs.buildGoModule {
+          slipway = buildGoModule {
             pname = "slipway";
             inherit version;
             src = ./.;
@@ -57,7 +65,7 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            go
+            go_1_26_4
             gopls
             golangci-lint
             goreleaser
