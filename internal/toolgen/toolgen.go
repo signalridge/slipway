@@ -158,7 +158,7 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Situational (9)
+	// Situational (10)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
@@ -181,6 +181,9 @@ var commandRegistry = []CommandDef{
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime evidence for governed execution", Tier: "situational",
+		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE with a materialized wave plan."}},
 	// Diagnostics (4) — CLI-only, no generated prompt surfaces
 	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics",
 		Arguments:     "[--preview] [--json]",
@@ -303,6 +306,7 @@ var workflowSupportingCommandIDs = []string{
 	"review",
 	"validate",
 	"repair",
+	"evidence",
 	"init",
 	"cancel",
 	"checkpoint",

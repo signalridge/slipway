@@ -999,6 +999,43 @@ func TestRepairDoesNotRewriteReadyButStaleExecutionSummaryWhenTaskEvidenceInvali
 	})
 }
 
+func TestRepairReportsMissingRuntimeTaskEvidenceWithCommandHint(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair reports missing task evidence source")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingWaveEvidence(t, root, slug, 1)
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+		assert.NotContains(t, summary.RebuiltExecutionSummaries, slug)
+
+		found := false
+		for _, drift := range summary.UnrepairedDrift {
+			if drift.Target != slug || !strings.Contains(drift.Reason, "missing_task_evidence_for_run_summary") {
+				continue
+			}
+			found = true
+			assert.Contains(t, drift.Reason, "record_command=slipway evidence task")
+			assert.Contains(t, drift.Reason, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
+		}
+		assert.True(t, found, "expected repair to report missing runtime task evidence for %s", slug)
+	})
+}
+
 func TestRepairDoesNotRebuildWhenPlanningEvidenceIsStale(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

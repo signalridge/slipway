@@ -683,6 +683,27 @@ func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) 
 		"wave-orchestration skill missing checkpoint type guidance")
 	assert.Contains(t, content, "IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION",
 		"wave-orchestration skill missing top-level IRON LAW")
+	assert.Contains(t, content, "slipway evidence task",
+		"wave-orchestration skill must route task evidence through the supported CLI")
+	assert.Contains(t, content, "Do not hand-write files under",
+		"wave-orchestration skill must forbid manual runtime task JSON edits")
+}
+
+func TestFinalCloseoutSkillDocumentsGoalVerificationReuseContract(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+		"ToolID":  "claude",
+		"Trigger": "/slipway:final-closeout",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "## Goal-Verification Reuse Branch")
+	assert.Contains(t, content, "closeout:goal_verification_reuse=pass")
+	assert.Contains(t, content, "closeout:goal_verification_reuse_run_version=<current run_version>")
+	assert.Contains(t, content, "slipway validate --json")
+	assert.Contains(t, content, "captured at or after the latest execution")
+	assert.Contains(t, content, "current `run_version`, freshness inputs, and content state still match")
 }
 
 func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {

@@ -36,15 +36,13 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 		"run":      makeRunCmd(),
 		"abort":    makeAbortCmd(),
 		"repair":   makeRepairCmd(),
+		"evidence": makeEvidenceCmd(),
 	}
 
 	// Collect registered flags per command.
 	cmdFlags := map[string]map[string]bool{}
 	for name, cmd := range cmds {
-		flags := map[string]bool{}
-		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			flags[f.Name] = true
-		})
+		flags := collectCommandFlags(cmd)
 		// Always allow -h/--help (inherited from Cobra).
 		flags["help"] = true
 		cmdFlags[name] = flags
@@ -104,6 +102,22 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func collectCommandFlags(cmd *cobra.Command) map[string]bool {
+	flags := map[string]bool{}
+	if cmd == nil {
+		return flags
+	}
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		flags[f.Name] = true
+	})
+	for _, child := range cmd.Commands() {
+		for flagName := range collectCommandFlags(child) {
+			flags[flagName] = true
+		}
+	}
+	return flags
 }
 
 func TestDoneAllReadyFlagUsageMatchesBulkBehavior(t *testing.T) {
