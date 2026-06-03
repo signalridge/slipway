@@ -27,7 +27,10 @@ func TestValidatePivotPreconditionsRejectsNonPivotState(t *testing.T) {
 		model.StateS1Plan,
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pivot is allowed only in S1_PLAN reroute or S2/S3/S4")
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
+	assert.Contains(t, err.Error(), "rescope requires governed S2_EXECUTE")
 }
 
 func TestValidatePivotPreconditionsRejectsRescopeOutsideExecute(t *testing.T) {

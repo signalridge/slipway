@@ -951,7 +951,7 @@ func TestPivotStateBoundaryRejected(t *testing.T) {
 		require.Error(t, err)
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "pivot_state_invalid", cliErr.ErrorCode)
+		assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
 		assert.Equal(t, categoryGovernanceBlocked, cliErr.Category)
 		assert.Equal(t, exitCodeGovernanceBlocked, cliErr.ExitCode)
 	})
@@ -1031,6 +1031,28 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			require.FileExists(t, taskEvidencePath)
 		})
 	}
+}
+
+func TestRunStalePlanningRecoveryHumanOutputListsSideEffects(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--change", slug})
+	var buf bytes.Buffer
+	runCmd.SetOut(&buf)
+	require.NoError(t, runCmd.Execute())
+
+	stdout := buf.String()
+	assert.Contains(t, stdout, "Advanced: S3_REVIEW -> S1_PLAN")
+	assert.Contains(t, stdout, "Recovery Side Effects:")
+	assert.Contains(t, stdout, "cleared_stale_planning_evidence")
+	assert.Contains(t, stdout, "cleared_stale_downstream_verification")
+	assert.Contains(t, stdout, "preserved_runtime_execution_evidence")
+	assert.Contains(t, stdout, "artifacts/changes/"+slug+"/verification/plan-audit.yaml")
+	assert.Contains(t, stdout, "artifacts/changes/"+slug+"/verification/spec-compliance-review.yaml")
 }
 
 func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *testing.T) {
@@ -1226,7 +1248,7 @@ func TestPivotRescopeRejectedAtIntakeState(t *testing.T) {
 		require.Error(t, err)
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "pivot_state_invalid", cliErr.ErrorCode)
+		assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
 		assert.Equal(t, categoryGovernanceBlocked, cliErr.Category)
 		assert.Equal(t, exitCodeGovernanceBlocked, cliErr.ExitCode)
 	})

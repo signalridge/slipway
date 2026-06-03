@@ -98,6 +98,10 @@ flowchart LR
 ```
 
 The primary lifecycle commands are `slipway new`, `slipway next`, `slipway run`, `slipway status`, and `slipway done`.
+If planning evidence drifts after execution or review, `slipway next` reports
+the recovery path without mutating state, while `slipway run` can reopen
+planning, clear stale planning/downstream verification evidence, and preserve
+runtime execution evidence for ordered refresh.
 
 ## Install
 

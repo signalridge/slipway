@@ -18,7 +18,7 @@
 - [x] `t-02` Add pivot gate/precondition parity regressions.
   - wave: 1
   - depends_on: []
-  - target_files: ["internal/engine/gate/gate_test.go", "cmd/pivot_validation_test.go"]
+  - target_files: ["internal/engine/gate/gate_test.go", "cmd/pivot_validation_test.go", "cmd/cli_e2e_test.go"]
   - task_kind: test
   - covers: [REQ-005]
 
@@ -32,7 +32,7 @@
 - [x] `t-04` Surface actionable read-only recovery guidance in `next` JSON/handoff output.
   - wave: 2
   - depends_on: [t-01]
-  - target_files: ["cmd/next_skill_view.go", "internal/engine/progression/readiness.go"]
+  - target_files: ["cmd/next_skill_view.go", "cmd/next.go", "internal/engine/progression/readiness.go", "README.md", "CLAUDE.md", "docs/commands.md"]
   - task_kind: code
   - covers: [REQ-002, REQ-007]
 

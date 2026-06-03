@@ -105,7 +105,7 @@ All routed commands support `--json` for structured output:
 - `slipway next --json` — query next step as a handoff-only JSON surface (read-only, does not advance state)
 - `slipway next --json --no-auto-pass` — query next step, reporting `auto_pass_eligible` instead of auto-passing
 - `slipway next --json --diagnostics` — include governance/readiness diagnostics in the next-step view
-- `slipway run --json` — advance to next step and return the handoff-only JSON surface (the only state-mutating execution surface)
+- `slipway run --json` — advance to next step and return the handoff-only JSON surface (the only state-mutating execution surface); when S3/S4 planning evidence is stale, `run` can reopen S1 plan-audit, clear stale planning/downstream verification evidence, and preserve runtime execution evidence for ordered refresh
 - `slipway run --json --diagnostics` — include transition traces and governance/readiness diagnostics in the returned run view
 - `slipway status --json` — check current state
 
