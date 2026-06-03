@@ -1,0 +1,56 @@
+version: 1
+slug: complete-issue-53-tier-2-evidence-contract-and-closeout-reus
+description: 'Complete issue #53 Tier 2 evidence contract and closeout reuse fixes'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-03T02:26:57.838898Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/complete-issue-53-tier-2-evidence-contract-and-closeout-reus
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 'Issue #53 Tier 1 workflow and diagnostic fixes merged in PR #60; Tier 2 targets task evidence contract and final-closeout reuse from issuecomment-4604547893.'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 4a119b3ad86ceba067357fc4bcc2cd27f4716467904469f7312d5b1913d21e28
+        updated_at: 2026-06-03T03:19:28.531225232Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: efc61ea062bffb0a24cc71a9686e36afa9c91b53bfa8b6ca32d5501d07451c67
+        updated_at: 2026-06-03T02:33:46.124528327Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 72fe27f70cb27ce6d81f84fe314754c07278084c5034b9299077d414f29d8edf
+        updated_at: 2026-06-03T02:34:28.262102937Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: bc7bce3a4822100dba26b503b1716e98723828fc5e2e6eb3d056c2279d43e352
+        updated_at: 2026-06-03T02:33:46.124227243Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: a7c11b4d659f06e95c34e50e29f8cae16da026e8a7ac8bde40759092336aef9d
+        updated_at: 2026-06-03T02:32:00.202615554Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 5babefe47b530692ae6c3bdae6fbbcb79e963c7f74037c3be5f5084244fa8844
+        updated_at: 2026-06-03T03:02:53.691381203Z

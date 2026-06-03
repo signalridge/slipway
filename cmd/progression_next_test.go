@@ -3600,6 +3600,7 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	}
 	require.NotEmpty(t, missingEvidenceBlocker)
 	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
+	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task")
 	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
 }

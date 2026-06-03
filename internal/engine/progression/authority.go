@@ -1,9 +1,13 @@
 package progression
 
 import (
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
+	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	reviewengine "github.com/signalridge/slipway/internal/engine/review"
@@ -149,8 +153,10 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	// consistent.
 	assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
 	attestationBlockers := closeoutAssuranceAttestationBlockers(verifyPassingSkills, assuranceRequired)
+	reuseBlockers := closeoutGoalVerificationReuseBlockers(root, change, verifyPassingSkills, reviewAuthority.PassingSkills, readiness.ExecutionSummary)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, attestationBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, reuseBlockers...)
 
 	manifestOK, manifestBlockers := ValidateChangeYamlR0(
 		filepath.Join(inputs.Paths.GovernedBundleDir, "change.yaml"),
@@ -172,6 +178,7 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	// would emit only the generic verification_evidence_missing, hiding the
 	// specific, actionable closeout_assurance_attestation_missing code.
 	unresolved = append(unresolved, attestationBlockers...)
+	unresolved = append(unresolved, reuseBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
@@ -201,6 +208,9 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 // structured judgment, recorded in the final-closeout verification record, that
 // every required assurance section is genuinely authored rather than scaffold.
 const assuranceCompleteReference = "closeout:assurance_complete=pass"
+
+const closeoutGoalVerificationReuseReference = "closeout:goal_verification_reuse=pass"
+const closeoutGoalVerificationReuseRunVersionPrefix = "closeout:goal_verification_reuse_run_version="
 
 // closeoutAssuranceAttestationBlockers enforces Layer 1 of issue #47. When
 // assurance is required for the change's effective preset (standard/strict),
@@ -232,6 +242,242 @@ func closeoutAssuranceAttestationMissingBlocker() model.ReasonCode {
 		"closeout_assurance_attestation_missing",
 		"final-closeout must record "+assuranceCompleteReference+" on standard/strict",
 	)
+}
+
+func closeoutGoalVerificationReuseBlockers(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	reviewPassingSkills map[string]model.VerificationRecord,
+	summary *model.ExecutionSummary,
+) []model.ReasonCode {
+	closeoutRecord, ok := passingSkills[SkillFinalCloseout]
+	if !ok || !closeoutRecord.IsPassing() {
+		return nil
+	}
+	if !referencesContain(closeoutRecord.References, closeoutGoalVerificationReuseReference) {
+		return nil
+	}
+	reuseRunVersion, ok, err := closeoutGoalVerificationReuseRunVersion(closeoutRecord.References)
+	if err != nil {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(err.Error())}
+	}
+	if !ok {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"final-closeout must record " + closeoutGoalVerificationReuseRunVersionPrefix + "<run_version>",
+		)}
+	}
+	if reuseRunVersion < 1 {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("reuse run_version must be >= 1")}
+	}
+
+	goalRecord, ok := passingSkills[SkillGoalVerification]
+	if !ok || !goalRecord.IsPassing() {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"goal-verification must be passing before final-closeout can reuse it",
+		)}
+	}
+	if goalRecord.RunVersion != reuseRunVersion {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			fmtReuseRunMismatch("goal-verification", reuseRunVersion, goalRecord.RunVersion),
+		)}
+	}
+	if closeoutRecord.RunVersion != reuseRunVersion {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			fmtReuseRunMismatch("final-closeout", reuseRunVersion, closeoutRecord.RunVersion),
+		)}
+	}
+	if !state.ExecutionSummaryReady(summary) {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"execution-summary.yaml must be ready before final-closeout can reuse goal-verification",
+		)}
+	}
+	if summary.RunSummaryVersion != reuseRunVersion {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			fmtReuseRunMismatch("execution-summary", reuseRunVersion, summary.RunSummaryVersion),
+		)}
+	}
+	latestExecutionEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
+	if !latestExecutionEvidenceAt.IsZero() && goalRecord.Timestamp.UTC().Before(latestExecutionEvidenceAt) {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"goal-verification timestamp must be at or after latest execution evidence",
+		)}
+	}
+	if blocker := closeoutGoalVerificationReuseReviewBlocker(reviewPassingSkills, goalRecord.Timestamp.UTC()); blocker != nil {
+		return []model.ReasonCode{*blocker}
+	}
+	if blocker := closeoutGoalVerificationReuseContentBlocker(root, change, summary, goalRecord.Timestamp.UTC()); blocker != nil {
+		return []model.ReasonCode{*blocker}
+	}
+	if !goalRecord.Timestamp.IsZero() && closeoutRecord.Timestamp.UTC().Before(goalRecord.Timestamp.UTC()) {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"final-closeout timestamp must not predate reused goal-verification",
+		)}
+	}
+	freshness := state.ExecutionSummaryFreshness(root, change, summary)
+	if freshness != ctxpack.EvidenceFreshnessFresh {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
+			"execution-summary freshness must be fresh, got " + string(freshness),
+		)}
+	}
+	return nil
+}
+
+func closeoutGoalVerificationReuseReviewBlocker(
+	reviewPassingSkills map[string]model.VerificationRecord,
+	goalTimestamp time.Time,
+) *model.ReasonCode {
+	if goalTimestamp.IsZero() {
+		blocker := closeoutGoalVerificationReuseInvalidBlocker("goal-verification timestamp is required for final-closeout reuse")
+		return &blocker
+	}
+	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
+		record, ok := reviewPassingSkills[skillName]
+		if !ok || !record.IsPassing() || record.Timestamp.IsZero() {
+			continue
+		}
+		if record.Timestamp.UTC().After(goalTimestamp) {
+			blocker := closeoutGoalVerificationReuseInvalidBlocker(
+				"goal-verification timestamp must be at or after latest review evidence: " + skillName,
+			)
+			return &blocker
+		}
+	}
+	return nil
+}
+
+func closeoutGoalVerificationReuseContentBlocker(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	goalTimestamp time.Time,
+) *model.ReasonCode {
+	if goalTimestamp.IsZero() {
+		blocker := closeoutGoalVerificationReuseInvalidBlocker("goal-verification timestamp is required for final-closeout reuse")
+		return &blocker
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state cannot be resolved: " + err.Error())
+		return &blocker
+	}
+	for _, rel := range closeoutGoalVerificationReuseContentPaths(change, summary) {
+		candidates, ok, err := closeoutGoalVerificationReuseWorkspacePaths(paths.WorkspaceRoot, rel)
+		if err != nil {
+			blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state cannot be resolved for " + rel + ": " + err.Error())
+			return &blocker
+		}
+		if !ok {
+			blocker := closeoutGoalVerificationReuseInvalidBlocker("execution-summary content path must be workspace-relative: " + rel)
+			return &blocker
+		}
+		for _, path := range candidates {
+			info, err := os.Stat(path)
+			if err != nil {
+				blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state is unavailable for " + rel + ": " + err.Error())
+				return &blocker
+			}
+			if info.ModTime().UTC().After(goalTimestamp) {
+				blocker := closeoutGoalVerificationReuseInvalidBlocker(
+					"goal-verification timestamp must be at or after current content state: " + rel,
+				)
+				return &blocker
+			}
+		}
+	}
+	return nil
+}
+
+func closeoutGoalVerificationReuseContentPaths(change model.Change, summary *model.ExecutionSummary) []string {
+	if summary == nil {
+		return nil
+	}
+	paths := []string{}
+	appendPaths := func(values []string) {
+		for _, path := range values {
+			trimmed := strings.TrimSpace(filepath.ToSlash(path))
+			if trimmed == "" {
+				continue
+			}
+			if closeoutGoalVerificationReuseSkipsContentPath(change, trimmed) {
+				continue
+			}
+			paths = append(paths, trimmed)
+		}
+	}
+	for _, task := range summary.Tasks {
+		appendPaths(task.ChangedFiles)
+		appendPaths(task.TargetFiles)
+	}
+	return stringutil.UniqueSorted(paths)
+}
+
+func closeoutGoalVerificationReuseSkipsContentPath(change model.Change, rel string) bool {
+	trimmed := strings.Trim(strings.TrimSpace(filepath.ToSlash(rel)), "/")
+	verificationDir := "artifacts/changes/" + strings.TrimSpace(change.Slug) + "/verification"
+	return trimmed == verificationDir || strings.HasPrefix(trimmed, verificationDir+"/")
+}
+
+func closeoutGoalVerificationReuseWorkspacePaths(workspaceRoot, rel string) ([]string, bool, error) {
+	trimmed := strings.TrimSpace(filepath.ToSlash(rel))
+	if trimmed == "" {
+		return nil, false, nil
+	}
+	if strings.HasPrefix(trimmed, "/") {
+		return nil, false, nil
+	}
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return nil, false, nil
+		}
+	}
+	if strings.ContainsAny(trimmed, "*?[") {
+		matches, err := filepath.Glob(filepath.Join(workspaceRoot, filepath.FromSlash(trimmed)))
+		if err != nil {
+			return nil, true, err
+		}
+		if len(matches) == 0 {
+			return nil, true, os.ErrNotExist
+		}
+		return stringutil.UniqueSorted(matches), true, nil
+	}
+	return []string{filepath.Join(workspaceRoot, filepath.FromSlash(trimmed))}, true, nil
+}
+
+func closeoutGoalVerificationReuseRunVersion(references []string) (int, bool, error) {
+	for _, ref := range references {
+		trimmed := strings.TrimSpace(ref)
+		if !strings.HasPrefix(trimmed, closeoutGoalVerificationReuseRunVersionPrefix) {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(trimmed, closeoutGoalVerificationReuseRunVersionPrefix))
+		if raw == "" {
+			return 0, true, strconv.ErrSyntax
+		}
+		runVersion, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, true, err
+		}
+		return runVersion, true, nil
+	}
+	return 0, false, nil
+}
+
+func referencesContain(references []string, needle string) bool {
+	for _, ref := range references {
+		if strings.TrimSpace(ref) == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func closeoutGoalVerificationReuseInvalidBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode("closeout_goal_verification_reuse_invalid", detail)
+}
+
+func fmtReuseRunMismatch(subject string, expected, got int) string {
+	return subject + " run_version mismatch: expected=" + strconv.Itoa(expected) + " got=" + strconv.Itoa(got)
 }
 
 func EvaluateReviewLayerBlockersFromNamedEvidence(

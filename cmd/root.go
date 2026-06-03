@@ -56,6 +56,7 @@ var helpGroups = []commandGroup{
 			{Name: "cancel", Description: desc("cancel")},
 			{Name: "repair", Description: desc("repair")},
 			{Name: "checkpoint", Description: desc("checkpoint")},
+			{Name: "evidence", Description: desc("evidence")},
 		},
 	},
 	{
@@ -166,6 +167,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makePivotCmd())
 	cmd.AddCommand(makeRepairCmd())
 	cmd.AddCommand(makeCheckpointCmd())
+	cmd.AddCommand(makeEvidenceCmd())
 	cmd.SetHelpCommand(&cobra.Command{
 		Use:   "help [command]",
 		Short: "Show help for a command",
