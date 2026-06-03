@@ -90,12 +90,17 @@ func EvaluateGPivot(kind PivotKind, approved bool, state model.WorkflowState) Ga
 	if !approved {
 		reasonCodes = append(reasonCodes, model.NewReasonCode("pivot_not_approved", ""))
 	}
-	if kind == PivotKindRescope {
+	switch kind {
+	case PivotKindReroute:
 		switch state {
 		case model.StateS1Plan, model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
-			// OK: rescope valid from S1_PLAN or later
+			// OK: reroute is available from planning through verification.
 		default:
-			reasonCodes = append(reasonCodes, model.NewReasonCode("rescope_requires_s1_or_later", string(state)))
+			reasonCodes = append(reasonCodes, model.NewReasonCode("pivot_state_invalid", string(state)))
+		}
+	case PivotKindRescope:
+		if state != model.StateS2Execute {
+			reasonCodes = append(reasonCodes, model.NewReasonCode("rescope_state_invalid", string(state)))
 		}
 	}
 

@@ -957,7 +957,234 @@ func TestPivotStateBoundaryRejected(t *testing.T) {
 	})
 }
 
-func TestPivotRescopeRejectedOutsideS6(t *testing.T) {
+func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		state model.WorkflowState
+	}{
+		{name: "review", state: model.StateS3Review},
+		{name: "verify", state: model.StateS4Verify},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			slug, _ := prepareStalePlanningRecoveryFixture(t, root, tt.state)
+
+			verificationDir := state.VerificationDir(root, slug)
+			planAuditPath := filepath.Join(verificationDir, progression.SkillPlanAudit+".yaml")
+			wavePlanPath := filepath.Join(verificationDir, state.WavePlanFileName)
+			executionSummaryPath := state.ExecutionSummaryPathForRead(root, slug)
+			waveOrchestrationPath := filepath.Join(verificationDir, progression.SkillWaveOrchestration+".yaml")
+			specReviewPath := filepath.Join(verificationDir, progression.SkillSpecComplianceReview+".yaml")
+			codeReviewPath := filepath.Join(verificationDir, progression.SkillCodeQualityReview+".yaml")
+			goalVerificationPath := filepath.Join(verificationDir, progression.SkillGoalVerification+".yaml")
+			finalCloseoutPath := filepath.Join(verificationDir, progression.SkillFinalCloseout+".yaml")
+			waveRunPath := filepath.Join(state.WaveEvidenceDir(root, slug), "wave-01.yaml")
+			taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
+
+			require.FileExists(t, planAuditPath)
+			require.FileExists(t, wavePlanPath)
+			require.FileExists(t, executionSummaryPath)
+			require.FileExists(t, waveOrchestrationPath)
+			require.FileExists(t, specReviewPath)
+			require.FileExists(t, codeReviewPath)
+			require.FileExists(t, goalVerificationPath)
+			require.FileExists(t, finalCloseoutPath)
+			require.FileExists(t, waveRunPath)
+			require.FileExists(t, taskEvidencePath)
+
+			runCmd := commandForRoot(t, root, makeRunCmd())
+			runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+			var buf bytes.Buffer
+			runCmd.SetOut(&buf)
+			require.NoError(t, runCmd.Execute())
+
+			var view nextView
+			require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+			require.NotNil(t, view.Advanced)
+			assert.Equal(t, "advanced", view.Advanced.Action)
+			assert.Equal(t, tt.state, view.Advanced.FromState)
+			assert.Equal(t, model.StateS1Plan, view.Advanced.ToState)
+			assert.Equal(t, string(model.PlanSubStepAudit), view.Advanced.ToSubStep)
+			assert.True(t, view.Advanced.RecoveryOnly)
+			assert.Equal(t, "stale_planning_recovery_started", view.Advanced.Reason)
+			require.NotNil(t, view.NextSkill)
+			assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
+
+			recovered, err := state.LoadChange(root, slug)
+			require.NoError(t, err)
+			assert.Equal(t, model.StateS1Plan, recovered.CurrentState)
+			assert.Equal(t, model.PlanSubStepAudit, recovered.PlanSubStep)
+
+			require.NoFileExists(t, planAuditPath)
+			require.NoFileExists(t, wavePlanPath)
+			require.NoFileExists(t, executionSummaryPath)
+			require.FileExists(t, waveOrchestrationPath)
+			require.NoFileExists(t, specReviewPath)
+			require.NoFileExists(t, codeReviewPath)
+			require.NoFileExists(t, goalVerificationPath)
+			require.NoFileExists(t, finalCloseoutPath)
+			require.FileExists(t, waveRunPath)
+			require.FileExists(t, taskEvidencePath)
+		})
+	}
+}
+
+func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryBaseFixture(t, root, model.StateS4Verify)
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	requirementsPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+	rawRequirements, err := os.ReadFile(requirementsPath)
+	require.NoError(t, err)
+	require.NoError(t, writeBundleArtifactFile(
+		bundlePath,
+		slug,
+		"requirements.md",
+		append(rawRequirements, []byte("\nAdditional context changed after review.\n")...),
+	))
+	staleAt := time.Now().UTC().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(requirementsPath, staleAt, staleAt))
+
+	// Simulate the operator refreshing task evidence after recovery while keeping
+	// the same run_version. Old review/verify evidence must not become reusable
+	// just because the rebuilt execution summary has the same run_version.
+	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+		"changed_files": []string{"cmd/done.go"},
+		"captured_at":   staleAt.Add(time.Second).Format(time.RFC3339Nano),
+	})
+
+	recoveryCmd := commandForRoot(t, root, makeRunCmd())
+	recoveryCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var recoveryBuf bytes.Buffer
+	recoveryCmd.SetOut(&recoveryBuf)
+	require.NoError(t, recoveryCmd.Execute())
+
+	var recoveryView nextView
+	require.NoError(t, json.Unmarshal(recoveryBuf.Bytes(), &recoveryView))
+	require.NotNil(t, recoveryView.Advanced)
+	assert.Equal(t, "stale_planning_recovery_started", recoveryView.Advanced.Reason)
+	require.NotNil(t, recoveryView.NextSkill)
+	assert.Equal(t, progression.SkillPlanAudit, recoveryView.NextSkill.Name)
+
+	writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  staleAt.Add(2 * time.Second),
+		RunVersion: 0,
+		References: []string{"plan-audit:refreshed"},
+	})
+
+	advanceCmd := commandForRoot(t, root, makeRunCmd())
+	advanceCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var advanceBuf bytes.Buffer
+	advanceCmd.SetOut(&advanceBuf)
+	require.NoError(t, advanceCmd.Execute())
+
+	var advanceView nextView
+	require.NoError(t, json.Unmarshal(advanceBuf.Bytes(), &advanceView))
+	assert.Equal(t, model.StateS2Execute, advanceView.CurrentState)
+	require.NotNil(t, advanceView.NextSkill)
+	assert.Equal(t, progression.SkillWaveOrchestration, advanceView.NextSkill.Name)
+
+	syncCmd := commandForRoot(t, root, makeRunCmd())
+	syncCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var syncBuf bytes.Buffer
+	syncCmd.SetOut(&syncBuf)
+	require.NoError(t, syncCmd.Execute())
+
+	var syncView nextView
+	require.NoError(t, json.Unmarshal(syncBuf.Bytes(), &syncView))
+	assert.Equal(t, model.StateS3Review, syncView.CurrentState)
+	require.NotNil(t, syncView.NextSkill)
+	assert.Equal(t, progression.SkillSpecComplianceReview, syncView.NextSkill.Name)
+	reasons := model.ReasonSpecs(syncView.Blockers)
+	assert.Contains(t, reasons, "required_skill_missing:"+progression.SkillSpecComplianceReview)
+	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
+}
+
+func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var recoveryBuf bytes.Buffer
+	runCmd.SetOut(&recoveryBuf)
+	require.NoError(t, runCmd.Execute())
+
+	recovered, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS1Plan, recovered.CurrentState)
+	assert.Equal(t, model.PlanSubStepAudit, recovered.PlanSubStep)
+	require.NoFileExists(t, filepath.Join(state.VerificationDir(root, slug), progression.SkillPlanAudit+".yaml"))
+	require.NoFileExists(t, filepath.Join(state.VerificationDir(root, slug), state.WavePlanFileName))
+	require.NoFileExists(t, state.ExecutionSummaryPathForRead(root, slug))
+
+	blockedCmd := commandForRoot(t, root, makeRunCmd())
+	blockedCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var blockedBuf bytes.Buffer
+	blockedCmd.SetOut(&blockedBuf)
+	require.NoError(t, blockedCmd.Execute())
+
+	var blockedView nextView
+	require.NoError(t, json.Unmarshal(blockedBuf.Bytes(), &blockedView))
+	require.NotNil(t, blockedView.Advanced)
+	assert.Equal(t, "blocked", blockedView.Advanced.Action)
+	assert.Contains(t, model.ReasonSpecs(blockedView.Blockers), "required_skill_missing:plan-audit")
+	require.NoFileExists(t, filepath.Join(state.VerificationDir(root, slug), state.WavePlanFileName))
+	require.NoFileExists(t, state.ExecutionSummaryPathForRead(root, slug))
+
+	writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC().Add(3 * time.Second),
+		RunVersion: 0,
+		References: []string{"plan-audit:refreshed"},
+	})
+
+	advanceCmd := commandForRoot(t, root, makeRunCmd())
+	advanceCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var advanceBuf bytes.Buffer
+	advanceCmd.SetOut(&advanceBuf)
+	require.NoError(t, advanceCmd.Execute())
+
+	var advanceView nextView
+	require.NoError(t, json.Unmarshal(advanceBuf.Bytes(), &advanceView))
+	require.NotNil(t, advanceView.Advanced)
+	assert.Equal(t, "advanced", advanceView.Advanced.Action)
+	assert.Equal(t, model.StateS2Execute, advanceView.CurrentState)
+	require.NotNil(t, advanceView.NextSkill)
+	assert.Equal(t, progression.SkillWaveOrchestration, advanceView.NextSkill.Name)
+	require.FileExists(t, filepath.Join(state.VerificationDir(root, slug), state.WavePlanFileName))
+	require.NoFileExists(t, state.ExecutionSummaryPathForRead(root, slug))
+
+	syncCmd := commandForRoot(t, root, makeRunCmd())
+	syncCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var syncBuf bytes.Buffer
+	syncCmd.SetOut(&syncBuf)
+	require.NoError(t, syncCmd.Execute())
+
+	var syncView nextView
+	require.NoError(t, json.Unmarshal(syncBuf.Bytes(), &syncView))
+	require.NotNil(t, syncView.Advanced)
+	assert.Equal(t, "blocked", syncView.Advanced.Action)
+	assert.Contains(t, model.ReasonSpecs(syncView.Blockers), "tasks_plan_changed_since_task_evidence:t-01")
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(summary.OpenBlockers), "tasks_plan_changed_since_task_evidence:t-01")
+}
+
+func TestPivotRescopeRejectedOutsideS2(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()

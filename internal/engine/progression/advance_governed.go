@@ -96,6 +96,9 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if err != nil {
 		return AdvanceSummary{}, err
 	}
+	if stalePlanningRecoveryIssueAvailable(change, executionSummaryCtx.Issues) {
+		return beginStalePlanningRecovery(root, &change, fromState)
+	}
 	if len(executionSummaryCtx.Issues) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)), nil
 	}
@@ -414,6 +417,115 @@ func computeNextPlanSubStep(current model.PlanSubStep) model.PlanSubStep {
 		return model.PlanSubStepNone
 	}
 	return planSubStepOrder[idx+1]
+}
+
+func beginStalePlanningRecovery(root string, change *model.Change, fromState model.WorkflowState) (AdvanceSummary, error) {
+	if change == nil {
+		return AdvanceSummary{}, fmt.Errorf("change is required for stale planning recovery")
+	}
+	paths, err := state.ResolveChangePaths(root, *change)
+	if err != nil {
+		return AdvanceSummary{}, err
+	}
+
+	verificationDir := filepath.Join(paths.GovernedBundleDir, "verification")
+	planningEvidenceFiles := []string{
+		filepath.Join(verificationDir, SkillPlanAudit+".yaml"),
+		filepath.Join(verificationDir, state.WavePlanFileName),
+		filepath.Join(verificationDir, state.ExecutionSummaryFileName),
+	}
+	downstreamVerificationFiles := []string{
+		filepath.Join(verificationDir, SkillSpecComplianceReview+".yaml"),
+		filepath.Join(verificationDir, SkillCodeQualityReview+".yaml"),
+		filepath.Join(verificationDir, SkillGoalVerification+".yaml"),
+		filepath.Join(verificationDir, SkillFinalCloseout+".yaml"),
+	}
+	sideEffects := make([]SideEffect, 0, len(planningEvidenceFiles)+len(downstreamVerificationFiles)+1)
+	for _, path := range planningEvidenceFiles {
+		removed, err := removeFileIfExists(path)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if removed {
+			sideEffects = append(sideEffects, SideEffect{
+				Kind:   "cleared_stale_planning_evidence",
+				Detail: state.DisplayPath(root, path),
+			})
+		}
+	}
+	for _, path := range downstreamVerificationFiles {
+		removed, err := removeFileIfExists(path)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if removed {
+			sideEffects = append(sideEffects, SideEffect{
+				Kind:   "cleared_stale_downstream_verification",
+				Detail: state.DisplayPath(root, path),
+			})
+		}
+	}
+	sideEffects = append(sideEffects, SideEffect{
+		Kind:   "preserved_runtime_execution_evidence",
+		Detail: state.DisplayPath(root, state.ChangeDir(root, change.Slug)),
+	})
+
+	cleared := change.TransitionTo(model.StateS1Plan)
+	if change.PlanSubStep != model.PlanSubStepAudit {
+		change.AdvancePlanSubStep(model.PlanSubStepAudit)
+		cleared = append(cleared, "plan_substep")
+	}
+	if change.ClearAutoPassHistory() {
+		cleared = append(cleared, "last_auto_passed_states")
+	}
+	if change.ClearActiveCheckpoint() {
+		cleared = append(cleared, "active_checkpoint")
+	}
+	if change.ResetPlanAuditIterations() {
+		cleared = append(cleared, "plan_audit_iterations")
+	}
+	if change.ClearEvidenceRef(SkillPlanAudit) {
+		cleared = append(cleared, "evidence_refs."+SkillPlanAudit)
+	}
+	if change.ClearEvidenceRef(planAuditLastCheckerFeedbackKey) {
+		cleared = append(cleared, "evidence_refs."+planAuditLastCheckerFeedbackKey)
+	}
+	for _, skillName := range []string{
+		SkillSpecComplianceReview,
+		SkillCodeQualityReview,
+		SkillGoalVerification,
+		SkillFinalCloseout,
+	} {
+		if change.ClearEvidenceRef(skillName) {
+			cleared = append(cleared, "evidence_refs."+skillName)
+		}
+	}
+
+	if err := state.SaveChange(root, *change); err != nil {
+		return AdvanceSummary{}, err
+	}
+
+	return AdvanceSummary{
+		Action:        "advanced",
+		FromState:     fromState,
+		ToState:       model.StateS1Plan,
+		ToSubStep:     string(model.PlanSubStepAudit),
+		Reason:        "stale_planning_recovery_started",
+		SideEffects:   sideEffects,
+		RecoveryOnly:  true,
+		ClearedFields: stringutil.UniqueSorted(cleared),
+		Message:       "Reopened S1_PLAN/audit for stale planning evidence recovery.",
+	}, nil
+}
+
+func removeFileIfExists(path string) (bool, error) {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func ensureGovernedBundleScaffolded(root string, change *model.Change) error {

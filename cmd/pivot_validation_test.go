@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidatePivotPreconditionsRejectsAdmissionRescope(t *testing.T) {
+func TestValidatePivotPreconditionsAllowsRescopeOnlyAtExecute(t *testing.T) {
 	t.Parallel()
 
 	err := validatePivotPreconditions(
@@ -22,7 +22,6 @@ func TestValidatePivotPreconditionsRejectsAdmissionRescope(t *testing.T) {
 func TestValidatePivotPreconditionsRejectsNonPivotState(t *testing.T) {
 	t.Parallel()
 
-	// S1_PLAN rescope is rejected because S1_PLAN is not a pivot state for rescope
 	err := validatePivotPreconditions(
 		string(gate.PivotKindRescope),
 		model.StateS1Plan,
@@ -31,22 +30,32 @@ func TestValidatePivotPreconditionsRejectsNonPivotState(t *testing.T) {
 	assert.Contains(t, err.Error(), "pivot is allowed only in S1_PLAN reroute or S2/S3/S4")
 }
 
-func TestValidatePivotPreconditionsAllowsGovernedRescopeInS5(t *testing.T) {
+func TestValidatePivotPreconditionsRejectsRescopeOutsideExecute(t *testing.T) {
 	t.Parallel()
 
-	err := validatePivotPreconditions(
-		string(gate.PivotKindRescope),
-		model.StateS2Execute,
-	)
-	require.NoError(t, err)
+	for _, state := range []model.WorkflowState{model.StateS3Review, model.StateS4Verify} {
+		err := validatePivotPreconditions(
+			string(gate.PivotKindRescope),
+			state,
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "rescope requires governed S2_EXECUTE")
+	}
 }
 
-func TestValidatePivotPreconditionsAllowsGovernedRerouteInS4(t *testing.T) {
+func TestValidatePivotPreconditionsAllowsGovernedRerouteInS1ThroughS4(t *testing.T) {
 	t.Parallel()
 
-	err := validatePivotPreconditions(
-		string(gate.PivotKindReroute),
+	for _, state := range []model.WorkflowState{
 		model.StateS1Plan,
-	)
-	require.NoError(t, err)
+		model.StateS2Execute,
+		model.StateS3Review,
+		model.StateS4Verify,
+	} {
+		err := validatePivotPreconditions(
+			string(gate.PivotKindReroute),
+			state,
+		)
+		require.NoError(t, err, "state %s", state)
+	}
 }

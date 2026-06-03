@@ -88,21 +88,42 @@ func TestGuardrailHighRiskChecks(t *testing.T) {
 
 func TestEvaluateGPivot(t *testing.T) {
 	t.Parallel()
-	eval := EvaluateGPivot(PivotKindReroute, true, model.StateS3Review)
-	assert.Equal(t, model.GateStatusApproved, eval.Status)
 
-	eval = EvaluateGPivot(PivotKindRescope, false, model.StateS2Execute)
+	eval := EvaluateGPivot(PivotKindRescope, false, model.StateS2Execute)
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "pivot_not_approved"))
 
-	// Rescope from S3_REVIEW is now valid (rescope valid from S1_PLAN or later)
-	eval = EvaluateGPivot(PivotKindRescope, true, model.StateS3Review)
+	for _, state := range []model.WorkflowState{
+		model.StateS1Plan,
+		model.StateS2Execute,
+		model.StateS3Review,
+		model.StateS4Verify,
+	} {
+		eval := EvaluateGPivot(PivotKindReroute, true, state)
+		assert.Equal(t, model.GateStatusApproved, eval.Status, "reroute state %s", state)
+		assert.Empty(t, eval.ReasonCodes, "reroute state %s", state)
+	}
+
+	for _, state := range []model.WorkflowState{
+		model.StateS0Intake,
+		model.StateDone,
+	} {
+		eval := EvaluateGPivot(PivotKindReroute, true, state)
+		assert.Equal(t, model.GateStatusBlocked, eval.Status, "reroute state %s", state)
+		assert.True(t, hasGateReasonCode(eval.ReasonCodes, "pivot_state_invalid"), "reroute state %s", state)
+	}
+
+	eval = EvaluateGPivot(PivotKindRescope, true, model.StateS2Execute)
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 	assert.Empty(t, eval.ReasonCodes)
 
-	// Rescope from S0_INTAKE is blocked (requires S1_PLAN or later)
-	eval = EvaluateGPivot(PivotKindRescope, true, model.StateS0Intake)
-	assert.Equal(t, model.GateStatusBlocked, eval.Status)
-	require.NotEmpty(t, eval.ReasonCodes)
-	assert.Equal(t, "rescope_requires_s1_or_later", eval.ReasonCodes[0].Code)
+	for _, state := range []model.WorkflowState{
+		model.StateS1Plan,
+		model.StateS3Review,
+		model.StateS4Verify,
+	} {
+		eval := EvaluateGPivot(PivotKindRescope, true, state)
+		assert.Equal(t, model.GateStatusBlocked, eval.Status, "rescope state %s", state)
+		assert.True(t, hasGateReasonCode(eval.ReasonCodes, "rescope_state_invalid"), "rescope state %s", state)
+	}
 }
