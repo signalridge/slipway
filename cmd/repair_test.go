@@ -435,15 +435,15 @@ func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing
   - target_files: ["cmd/repair.go"]
   - task_kind: code
 `)))
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"changed_files": []string{"cmd/repair.go"},
+			"target_files":  []string{"cmd/repair.go"},
+		})
 		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
-		})
-		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
-			"changed_files": []string{"cmd/repair.go"},
-			"target_files":  []string{"cmd/repair.go"},
 		})
 
 		summaryPath := executionSummaryPathForTest(root, slug)
@@ -847,8 +847,6 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
   - target_files: ["docs/commands.md"]
   - task_kind: code
 `)))
-		writePassingWaveEvidence(t, root, slug, 1)
-
 		runtimeCapturedAt := time.Now().UTC()
 		summaryCapturedAt := runtimeCapturedAt.Add(time.Hour)
 		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
@@ -859,6 +857,7 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 			"task_id":     "t-02",
 			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
 		})
+		writePassingWaveEvidence(t, root, slug, 1)
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
 			Version:           model.ExecutionSummaryVersion,
 			RunSummaryVersion: 1,

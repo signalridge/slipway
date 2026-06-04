@@ -60,7 +60,7 @@ Run the following scans against all claimed target files. Any real hit is a bloc
 grep -rn 'TODO\|FIXME\|HACK\|XXX\|PLACEHOLDER\|NotImplemented\|not implemented' <target_files>
 grep -rn 'panic(".*implement\|panic(".*todo\|return nil, nil' <target_files>
 grep -rn 'return ""$\|return 0$\|return false$' <target_files>
-grep -Pzo '\{\s*\n\s*\}' <target_files>
+perl -0ne 'print "$ARGV\n" if /\{\s*\n\s*\}/' <target_files>
 ```
 
 Also block:

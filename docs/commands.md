@@ -95,10 +95,21 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 
 - `next_skill.display_name`, `next_skill.blocking_name`, and `next_skill.resolution_reason` when the conceptual stage differs from the actionable missing skill.
 - `next_skill.review_context.required_artifact_layers` and `next_skill.review_context.required_implementation_layers`, which map to exact gate tokens such as `layer:R0=pass`, `layer:R3=pass`, `layer:IR1=pass`, and `layer:IR3=pass`.
-- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, and whether the current boundary is a command-only or evidence-continuation step.
+- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, whether `--resume-response` is supported at this stop (`resume_response_supported`), the next operator action as human prose (`next_action`), a machine-readable `next_action_kind` (`skill_handoff` | `checkpoint_resume` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`), and the exact `next_command` to run when one is runnable as-is. `next_command` is empty for stops that need operator-supplied input — notably `checkpoint_resume`, which requires a `--resume-response` argument and is therefore signaled by `resume_response_supported` rather than an exact command. Branch on `next_action_kind`/`next_command`; treat `next_action` as display prose only.
 - `freshness_diagnostics`, which reports stale source/evidence pairs, field-level execution input mismatches, path authority, and the next regeneration action.
 
-`validate --json` mirrors actionable review handoff through `actionable_next_skill`, including `required_tokens` for the exact layer references the actionable skill must supply. `status --json` includes `freshness_diagnostics` when execution evidence is known stale and marks each `artifact_dag` node with `blocking` plus `blocking_reason` so draft planning artifacts are not mistaken for current review blockers.
+`validate --json` is the active-readiness authority: it answers whether the
+current governed state can advance now and mirrors actionable review handoff
+through `actionable_next_skill`, including `required_tokens` for the exact layer
+references the actionable skill must supply. `run --json` is the mutating
+transition surface: `advanced` reports what this invocation changed, while
+`blockers` reports the current stop condition after any transition. A successful
+advance can therefore be followed by error-severity blockers for the next
+required skill. `health --governance --json` is diagnostic health feedback; use
+it to inspect controls and traceability details, not as the lifecycle authority
+for whether `run` just advanced.
+
+`status --json` includes `freshness_diagnostics` when execution evidence is known stale and marks each `artifact_dag` node with `blocking` plus `blocking_reason` so draft planning artifacts are not mistaken for current review blockers.
 
 `validate --change <slug>` selects an explicit active change. If the slug names
 an archived terminal change, the command fails with

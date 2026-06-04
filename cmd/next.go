@@ -59,6 +59,10 @@ type confirmationRequirement struct {
 	FreshConfirmationRequired    bool   `json:"fresh_confirmation_required"`
 	PriorAuthorizationSufficient bool   `json:"prior_authorization_sufficient"`
 	Reason                       string `json:"reason"`
+	ResumeResponseSupported      bool   `json:"resume_response_supported"`
+	NextAction                   string `json:"next_action,omitempty"`
+	NextActionKind               string `json:"next_action_kind,omitempty"`
+	NextCommand                  string `json:"next_command,omitempty"`
 }
 
 type skillEvidenceEntry struct {
@@ -595,6 +599,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 	switch {
 	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
 		return confirmationHardStop("preset_confirmation_required")
+	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
+		return confirmationHardStop("resume_checkpoint")
 	case view.NextSkill != nil:
 		reason := "skill_handoff"
 		if strings.TrimSpace(view.NextSkill.BlockingName) != "" {
@@ -603,8 +609,6 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.Name)
 		}
 		return confirmationHardStop(reason)
-	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
-		return confirmationHardStop("resume_checkpoint")
 	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
 		return confirmationCommandRequired("run_slipway_done_to_finalize")
 	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
@@ -632,22 +636,34 @@ func hasReasonCode(reasons []model.ReasonCode, code string) bool {
 }
 
 func confirmationHardStop(reason string) confirmationRequirement {
+	reason = strings.TrimSpace(reason)
+	resumeResponseSupported := reason == "resume_checkpoint"
+	kind, command := hardStopNextActionKind(reason, resumeResponseSupported)
 	return confirmationRequirement{
 		Required:                     true,
 		Boundary:                     "hard_stop",
 		FreshConfirmationRequired:    true,
 		PriorAuthorizationSufficient: false,
-		Reason:                       strings.TrimSpace(reason),
+		Reason:                       reason,
+		ResumeResponseSupported:      resumeResponseSupported,
+		NextAction:                   hardStopNextAction(reason, resumeResponseSupported),
+		NextActionKind:               kind,
+		NextCommand:                  command,
 	}
 }
 
 func confirmationCommandRequired(reason string) confirmationRequirement {
+	reason = strings.TrimSpace(reason)
+	kind, command := commandBoundaryNextActionKind(reason)
 	return confirmationRequirement{
 		Required:                     false,
 		Boundary:                     "command_required",
 		FreshConfirmationRequired:    false,
 		PriorAuthorizationSufficient: true,
-		Reason:                       strings.TrimSpace(reason),
+		Reason:                       reason,
+		NextAction:                   commandBoundaryNextAction(reason),
+		NextActionKind:               kind,
+		NextCommand:                  command,
 	}
 }
 
@@ -658,6 +674,8 @@ func confirmationEvidenceContinuation(reason string) confirmationRequirement {
 		FreshConfirmationRequired:    false,
 		PriorAuthorizationSufficient: true,
 		Reason:                       strings.TrimSpace(reason),
+		NextAction:                   "continue with eligible evidence",
+		NextActionKind:               "none",
 	}
 }
 
@@ -668,6 +686,70 @@ func confirmationNoBoundary(reason string) confirmationRequirement {
 		FreshConfirmationRequired:    false,
 		PriorAuthorizationSufficient: true,
 		Reason:                       strings.TrimSpace(reason),
+		NextAction:                   "no action required",
+		NextActionKind:               "none",
+	}
+}
+
+func hardStopNextAction(reason string, resumeResponseSupported bool) string {
+	if resumeResponseSupported {
+		return "resume pending checkpoint with slipway run --resume-response"
+	}
+	if skillName, ok := strings.CutPrefix(reason, "skill_handoff:"); ok && strings.TrimSpace(skillName) != "" {
+		return "complete governance skill handoff: " + strings.TrimSpace(skillName)
+	}
+	switch reason {
+	case "preset_confirmation_required":
+		return "confirm workflow preset before continuing"
+	default:
+		return "complete required confirmation before continuing"
+	}
+}
+
+func commandBoundaryNextAction(reason string) string {
+	switch reason {
+	case "run_slipway_done_to_finalize":
+		return "run slipway done to finalize"
+	case "run_slipway_run_to_advance":
+		return "run slipway run to advance"
+	case "blocked_by_governance":
+		return "resolve governance blockers before continuing"
+	default:
+		return "run the command indicated by blockers"
+	}
+}
+
+// hardStopNextActionKind returns the machine-readable action kind and, when one
+// applies, the exact command to run for a hard-stop boundary. Callers branch on
+// next_action_kind rather than parsing the human-readable next_action prose.
+// next_command is populated only when it is runnable as-is; checkpoint resume
+// requires an operator-supplied response argument, so it leaves next_command
+// empty and is signaled by resume_response_supported instead.
+func hardStopNextActionKind(reason string, resumeResponseSupported bool) (kind, command string) {
+	switch {
+	case resumeResponseSupported:
+		return "checkpoint_resume", ""
+	case reason == "preset_confirmation_required":
+		return "preset_confirmation", ""
+	case strings.HasPrefix(reason, "skill_handoff"):
+		return "skill_handoff", ""
+	default:
+		return "confirmation", ""
+	}
+}
+
+// commandBoundaryNextActionKind mirrors commandBoundaryNextAction as a
+// machine-readable kind plus the exact command for command-boundary stops.
+func commandBoundaryNextActionKind(reason string) (kind, command string) {
+	switch reason {
+	case "run_slipway_done_to_finalize":
+		return "command", "slipway done"
+	case "run_slipway_run_to_advance":
+		return "command", "slipway run"
+	case "blocked_by_governance":
+		return "blocker_resolution", ""
+	default:
+		return "command", ""
 	}
 }
 

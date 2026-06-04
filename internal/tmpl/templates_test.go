@@ -328,6 +328,8 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.Contains(t, content, "Query the next governed host without advancing lifecycle state.")
 	assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
 	assert.Contains(t, content, "Treat the default JSON as an action contract")
+	assert.Contains(t, content, "confirmation_requirement.resume_response_supported")
+	assert.Contains(t, content, "confirmation_requirement.next_action")
 	assert.Contains(t, content, "`context_budget` appears only when `guard_action` is `warn` or `stop`")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
 	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
@@ -516,6 +518,17 @@ func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {
 	assert.Contains(t, content, "do not write structured maps under `references`")
 }
 
+func TestGoalVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	require.NoError(t, err)
+
+	assert.NotContains(t, content, "grep -P")
+	assert.Contains(t, content, "perl -0ne")
+	assert.Contains(t, content, `\{\s*\n\s*\}`)
+}
+
 func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
 	t.Parallel()
 
@@ -614,6 +627,10 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"run command missing returned-view context guard guidance")
 	assert.Contains(t, content, "Use `slipway run --json --diagnostics` only for full readiness fields",
 		"run command missing diagnostics boundary guidance")
+	assert.Contains(t, content, "`advanced` reports the mutation performed by this invocation",
+		"run command missing advanced/blockers boundary guidance")
+	assert.Contains(t, content, "confirmation_requirement.resume_response_supported",
+		"run command missing resume-response capability guidance")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>",
 		"run command missing governance health handoff")
 

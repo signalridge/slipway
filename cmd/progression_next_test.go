@@ -1955,6 +1955,10 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.True(t, handoff.FreshConfirmationRequired)
 	assert.False(t, handoff.PriorAuthorizationSufficient)
 	assert.Equal(t, "skill_handoff:code-quality-review", handoff.Reason)
+	assert.False(t, handoff.ResumeResponseSupported)
+	assert.Equal(t, "complete governance skill handoff: code-quality-review", handoff.NextAction)
+	assert.Equal(t, "skill_handoff", handoff.NextActionKind)
+	assert.Empty(t, handoff.NextCommand)
 
 	doneReady := deriveConfirmationRequirement(nextView{
 		Blockers: []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
@@ -1964,6 +1968,47 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.False(t, doneReady.FreshConfirmationRequired)
 	assert.True(t, doneReady.PriorAuthorizationSufficient)
 	assert.Equal(t, "run_slipway_done_to_finalize", doneReady.Reason)
+	assert.False(t, doneReady.ResumeResponseSupported)
+	assert.Equal(t, "run slipway done to finalize", doneReady.NextAction)
+	assert.Equal(t, "command", doneReady.NextActionKind)
+	assert.Equal(t, "slipway done", doneReady.NextCommand)
+
+	checkpoint := deriveConfirmationRequirement(nextView{
+		InputContext: nextContext{
+			ResumeCheckpoint: &resumeCheckpoint{
+				PausedTaskID:    "task-02",
+				PausedWaveIndex: 2,
+				CheckpointType:  string(model.CheckpointHumanVerify),
+			},
+		},
+	})
+	assert.True(t, checkpoint.Required)
+	assert.Equal(t, "hard_stop", checkpoint.Boundary)
+	assert.True(t, checkpoint.FreshConfirmationRequired)
+	assert.False(t, checkpoint.PriorAuthorizationSufficient)
+	assert.Equal(t, "resume_checkpoint", checkpoint.Reason)
+	assert.True(t, checkpoint.ResumeResponseSupported)
+	assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", checkpoint.NextAction)
+	assert.Equal(t, "checkpoint_resume", checkpoint.NextActionKind)
+	// next_command stays empty: checkpoint resume needs an operator-supplied
+	// response argument, so it is signaled via resume_response_supported.
+	assert.Empty(t, checkpoint.NextCommand)
+
+	checkpointWithSkill := deriveConfirmationRequirement(nextView{
+		NextSkill: &nextSkillView{Name: progression.SkillWaveOrchestration},
+		InputContext: nextContext{
+			ResumeCheckpoint: &resumeCheckpoint{
+				PausedTaskID:    "task-02",
+				PausedWaveIndex: 2,
+				CheckpointType:  string(model.CheckpointHumanVerify),
+			},
+		},
+	})
+	assert.Equal(t, "resume_checkpoint", checkpointWithSkill.Reason)
+	assert.True(t, checkpointWithSkill.ResumeResponseSupported)
+	assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", checkpointWithSkill.NextAction)
+	assert.Equal(t, "checkpoint_resume", checkpointWithSkill.NextActionKind)
+	assert.Empty(t, checkpointWithSkill.NextCommand)
 }
 
 func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
@@ -1992,7 +2037,11 @@ func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &payload))
 	assert.NotContains(t, payload, "confirmation_required")
 	require.Contains(t, payload, "confirmation_requirement")
-	require.Equal(t, "hard_stop", payload["confirmation_requirement"].(map[string]any)["boundary"])
+	confirmation := payload["confirmation_requirement"].(map[string]any)
+	require.Equal(t, "hard_stop", confirmation["boundary"])
+	assert.Equal(t, false, confirmation["resume_response_supported"])
+	assert.Equal(t, "complete governance skill handoff: code-quality-review", confirmation["next_action"])
+	assert.Equal(t, "skill_handoff", confirmation["next_action_kind"])
 }
 
 func TestNextHandoffViewOutputsMinimalWarnBudget(t *testing.T) {
@@ -3131,6 +3180,11 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 		assert.Equal(t, "task-02", view.InputContext.ResumeCheckpoint.PausedTaskID)
 		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
 		assert.Empty(t, view.InputContext.ResumeCheckpoint.UserResponsePayload)
+		assert.True(t, view.ConfirmationRequirement.Required)
+		assert.Equal(t, "hard_stop", view.ConfirmationRequirement.Boundary)
+		assert.Equal(t, "resume_checkpoint", view.ConfirmationRequirement.Reason)
+		assert.True(t, view.ConfirmationRequirement.ResumeResponseSupported)
+		assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", view.ConfirmationRequirement.NextAction)
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -3565,13 +3619,6 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
-	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 1,
-		References: []string{"task:evidence"},
-	})
 	writeTaskEvidenceFile(t, root, slug, 1, "task-a", map[string]any{
 		"task_id":             "task-a",
 		"run_summary_version": 1,
@@ -3581,6 +3628,13 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"task:evidence"},
 	})
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks

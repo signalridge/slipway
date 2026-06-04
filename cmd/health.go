@@ -183,7 +183,11 @@ func makeHealthCmd() *cobra.Command {
 						if err != nil {
 							return err
 						}
-						snap, err = governance.RecomputeGovernanceSnapshot(root, latest, paths.GovernedBundleDir)
+						// Governance health reports current artifact/control state. Use
+						// preview so stale resolved controls are not carried forward by
+						// the core monotonic recompute path used during lifecycle
+						// advancement.
+						snap, err = governance.PreviewGovernanceSnapshot(root, latest, paths.GovernedBundleDir)
 						if err != nil {
 							// Snapshot recompute failed: degrade gracefully with diagnostic.
 							govReport = governance.CollectGovernanceHealth(root, latest)
@@ -421,6 +425,9 @@ func writeHealthText(w io.Writer, view healthView) error {
 		writer.Writef("\nGovernance Health (active change: %s):\n", view.Governance.Slug)
 		for _, check := range view.Governance.Checks {
 			writer.Writef("  %-28s %s - %s\n", check.Name+":", check.Status, check.Message)
+			for _, gap := range check.TraceabilityGaps {
+				writer.Writef("    - %s [%s] blocking=%t: %s\n", gap.ID, gap.Type, gap.Blocking, gap.Issue)
+			}
 		}
 		if view.Governance.Healthy {
 			writer.Writef("\nOverall: HEALTHY\n")

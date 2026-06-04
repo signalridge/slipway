@@ -341,6 +341,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	root := t.TempDir()
 
 	slug := "wave-sync"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
@@ -349,7 +350,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	record := model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  recordedAt,
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
@@ -369,7 +370,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 		"changed_files":       []string{"cmd/next.go"},
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
-		"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+		"captured_at":         recordedAt.Format(time.RFC3339Nano),
 		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
@@ -401,6 +402,125 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	if len(summary.Tasks) != 1 || summary.Tasks[0].TaskID != "task-a" {
 		t.Fatalf("expected persisted execution task summary, got %+v", summary.Tasks)
 	}
+}
+
+func TestSyncGovernedWaveExecutionRejectsWaveEvidenceOlderThanTaskEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "wave-sync-stale-wave-record"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+`)
+
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go"},
+		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         recordedAt.Add(time.Hour).Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.False(t, result.Updated)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "wave_orchestration_stale_task_evidence", "task-a"))
+	assert.Contains(t, waveReasonMessage(result.Blockers, "wave_orchestration_stale_task_evidence"),
+		"rerun wave-orchestration", "stale task-evidence blocker must carry an actionable remediation")
+
+	_, err = state.LoadExecutionSummary(root, slug)
+	require.Error(t, err)
+}
+
+func TestSyncGovernedWaveExecutionSurfacesParseIssuesAlongsideStaleEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "wave-sync-stale-and-invalid"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+`)
+
+	// Valid evidence captured after the wave record -> staleness.
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go"},
+		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         recordedAt.Add(time.Hour).Format(time.RFC3339Nano),
+		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	tasksDir := state.EvidenceTasksDir(root, slug)
+	require.NoError(t, os.MkdirAll(tasksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tasksDir, "task-a.json"), raw, 0o644))
+
+	// A second evidence file that fails to parse -> parse issue that must not be
+	// masked by the staleness early return.
+	require.NoError(t, os.WriteFile(filepath.Join(tasksDir, "task-b.json"), []byte("{not valid json"), 0o644))
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "wave_orchestration_stale_task_evidence", "task-a"),
+		"stale blocker must still be reported")
+	assert.True(t, hasReasonCodeWithCode(result.Blockers, "task_evidence_invalid"),
+		"invalid task evidence must not be masked by the stale blocker")
+}
+
+func hasReasonCodeWithCode(reasons []model.ReasonCode, code string) bool {
+	for _, reason := range reasons {
+		if reason.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *testing.T) {
@@ -670,11 +790,11 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 	record := model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
 		RunVersion: 1,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
-	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
 
 - [ ] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
@@ -686,6 +806,8 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
   - wave: 2
   - task_kind: code
 `)
+	tasksAt := record.Timestamp.Add(-time.Minute)
+	require.NoError(t, os.Chtimes(tasksPath, tasksAt, tasksAt))
 
 	sharedSessionID := "session-shared"
 	for _, taskID := range []string{"task-a", "task-b"} {
@@ -696,7 +818,7 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 			"verdict":             "pass",
 			"blockers":            []string{},
 			"evidence_ref":        "test:" + taskID,
-			"captured_at":         time.Now().UTC().Format(time.RFC3339Nano),
+			"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
 			"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
 			"session_id":          sharedSessionID,
 		}
@@ -1040,4 +1162,13 @@ func hasWaveReasonCode(reasons []model.ReasonCode, code, detail string) bool {
 		}
 	}
 	return false
+}
+
+func waveReasonMessage(reasons []model.ReasonCode, code string) string {
+	for _, reason := range reasons {
+		if reason.Code == code {
+			return reason.Message
+		}
+	}
+	return ""
 }

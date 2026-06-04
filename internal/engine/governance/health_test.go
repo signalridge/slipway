@@ -364,6 +364,51 @@ func TestRecomputeGovernanceSnapshotUsesTasksChecklistTargetFilesPreExecution(t 
 	assert.Contains(t, controlIDs, model.ControlWorktreeIsolation)
 }
 
+func TestRecomputeGovernanceSnapshotPreservesExistingControlsWithoutCurrentCandidate(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "monotonic-recompute-controls"
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", slug), 0o755))
+	require.NoError(t, SaveSnapshot(root, slug, model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Summary: model.SignalSummary{
+			BlastRadius: model.SignalLevelHigh,
+		},
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			{
+				ControlID:    model.ControlIndependentReview,
+				Mode:         model.ControlModeBlocking,
+				Scope:        model.ControlScopeReview,
+				Active:       true,
+				TriggeredBy:  []string{"blast_radius=high"},
+				PolicySource: model.BuiltinPolicySource,
+			},
+		},
+		ComputedAt: time.Now().UTC().Add(-time.Hour),
+	}))
+
+	change := model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepBundle,
+	}
+
+	snap, err := RecomputeGovernanceSnapshot(root, change, filepath.Join(root, "artifacts", "changes", slug))
+	require.NoError(t, err)
+	assert.Equal(t, model.SignalLevelLow, snap.Summary.BlastRadius)
+
+	var controlIDs []model.ControlID
+	for _, control := range snap.ActiveControls {
+		controlIDs = append(controlIDs, control.ControlID)
+	}
+	assert.Contains(t, controlIDs, model.ControlIndependentReview,
+		"core recompute must preserve existing active controls unless an explicit deactivation path clears them")
+}
+
 func TestRecomputeGovernanceSnapshotRecoversFromUnreadableExistingSnapshot(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
