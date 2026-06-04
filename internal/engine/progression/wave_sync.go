@@ -113,19 +113,17 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 		return WaveSyncResult{}, err
 	}
 
-	tasksPlanHash, tasksPlanUpdatedAt, err := state.CurrentTasksPlanState(root, change)
+	tasksPlanHash, err := state.CurrentTasksPlanState(root, change)
 	if err != nil {
 		return WaveSyncResult{}, err
 	}
+	previousTasksPlanHash := strings.TrimSpace(wavePlan.TasksPlanHash)
 	existingSummary, err := state.LoadOptionalExecutionSummary(root, change.Slug)
 	if err != nil {
 		return WaveSyncResult{}, err
 	}
-	previousTasksPlanHash := ""
-	if existingSummary != nil {
-		previousTasksPlanHash = strings.TrimSpace(existingSummary.TasksPlanHash)
-	}
-	planDriftBlockers := tasksPlanChangedSinceTaskEvidenceBlockers(previousTasksPlanHash, tasks, tasksPlanHash, tasksPlanUpdatedAt)
+	planDriftBlockers := tasksPlanChangedSinceTaskEvidenceBlockers(previousTasksPlanHash, tasks, tasksPlanHash)
+	planDriftBlockers = append(planDriftBlockers, taskEvidencePlanHashBlockers(previousTasksPlanHash, tasks)...)
 	executionSummary := BuildExecutionSummary(record.RunVersion, tasks, record.Timestamp, &record)
 	if len(planDriftBlockers) == 0 {
 		executionSummary.TasksPlanHash = tasksPlanHash
@@ -351,10 +349,12 @@ func validateTaskEvidenceFreshnessInputs(change model.Change, runSummaryVersion 
 		return fmt.Errorf("freshness_inputs is required")
 	}
 	expected := state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, task.TaskID)
-	if task.FreshnessInputs.Equal(expected) {
+	current := task.FreshnessInputs
+	current.TasksPlanHash = ""
+	if current.Equal(expected) {
 		return nil
 	}
-	return fmt.Errorf("freshness_inputs mismatch: %s", taskFreshnessInputDiffSummary(expected, task.FreshnessInputs))
+	return fmt.Errorf("freshness_inputs mismatch: %s", taskFreshnessInputDiffSummary(expected, current))
 }
 
 func taskFreshnessInputDiffSummary(expected, current model.ExecutionTaskFreshnessInputs) string {
@@ -554,11 +554,10 @@ func tasksPlanChangedSinceTaskEvidenceBlockers(
 	previousHash string,
 	tasks []model.ExecutionTaskSummary,
 	currentHash string,
-	tasksPlanUpdatedAt time.Time,
 ) []string {
 	currentHash = strings.TrimSpace(currentHash)
 	previousHash = strings.TrimSpace(previousHash)
-	if currentHash == "" || tasksPlanUpdatedAt.IsZero() || len(tasks) == 0 {
+	if currentHash == "" || previousHash == "" || len(tasks) == 0 {
 		return nil
 	}
 	if previousHash == currentHash && previousHash != "" {
@@ -567,10 +566,30 @@ func tasksPlanChangedSinceTaskEvidenceBlockers(
 
 	staleTasks := make([]string, 0, len(tasks))
 	for _, task := range tasks {
-		capturedAt := task.CapturedAt.UTC()
-		if capturedAt.IsZero() || capturedAt.Before(tasksPlanUpdatedAt) {
-			staleTasks = append(staleTasks, task.TaskID)
+		staleTasks = append(staleTasks, task.TaskID)
+	}
+	slices.Sort(staleTasks)
+	blockers := make([]string, 0, len(staleTasks))
+	for _, taskID := range staleTasks {
+		blockers = append(blockers, "tasks_plan_changed_since_task_evidence:"+taskID)
+	}
+	return blockers
+}
+
+func taskEvidencePlanHashBlockers(
+	expectedPlanHash string,
+	tasks []model.ExecutionTaskSummary,
+) []string {
+	expectedPlanHash = strings.TrimSpace(expectedPlanHash)
+	if expectedPlanHash == "" || len(tasks) == 0 {
+		return nil
+	}
+	staleTasks := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if strings.TrimSpace(task.FreshnessInputs.TasksPlanHash) == expectedPlanHash {
+			continue
 		}
+		staleTasks = append(staleTasks, task.TaskID)
 	}
 	slices.Sort(staleTasks)
 	blockers := make([]string, 0, len(staleTasks))

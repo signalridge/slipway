@@ -44,10 +44,13 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 
 		var view evidenceTaskView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		wavePlan, err := state.LoadWavePlanForChange(root, change)
+		require.NoError(t, err)
+		expectedFreshnessInputs := state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01", wavePlan.TasksPlanHash)
 		assert.Equal(t, slug, view.Slug)
 		assert.Equal(t, "t-01", view.TaskID)
 		assert.True(t, view.Recorded)
-		assert.True(t, view.FreshnessInputs.Equal(state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01")))
+		assert.True(t, view.FreshnessInputs.Equal(expectedFreshnessInputs))
 
 		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
 		raw, err := os.ReadFile(taskEvidencePath)
@@ -66,7 +69,7 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 		assert.Equal(t, []string{"cmd/evidence.go"}, task.TargetFiles)
 		assert.True(t, capturedAt.Equal(parsedAt))
 		assert.Equal(t, "session-a", sessionID)
-		assert.True(t, task.FreshnessInputs.Equal(state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01")))
+		assert.True(t, task.FreshnessInputs.Equal(expectedFreshnessInputs))
 
 		writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -83,7 +86,7 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 		require.Len(t, summary.Tasks, 1)
 		assert.Equal(t, "t-01", summary.Tasks[0].TaskID)
 		assert.Equal(t, model.TaskVerdictPass, summary.Tasks[0].Verdict)
-		assert.True(t, summary.Tasks[0].FreshnessInputs.Equal(state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01")))
+		assert.True(t, summary.Tasks[0].FreshnessInputs.Equal(expectedFreshnessInputs))
 	})
 }
 

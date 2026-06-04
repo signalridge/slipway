@@ -14,6 +14,7 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestRepairRejectsPlainGitRepoWithoutSlipwayMarkers(t *testing.T) {
@@ -435,9 +436,12 @@ func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing
   - target_files: ["cmd/repair.go"]
   - task_kind: code
 `)))
+		tasksPlanHash, err := state.CurrentTasksPlanState(root, change)
+		require.NoError(t, err)
 		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
-			"changed_files": []string{"cmd/repair.go"},
-			"target_files":  []string{"cmd/repair.go"},
+			"changed_files":    []string{"cmd/repair.go"},
+			"target_files":     []string{"cmd/repair.go"},
+			"freshness_inputs": state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01", tasksPlanHash),
 		})
 		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -847,6 +851,8 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
   - target_files: ["docs/commands.md"]
   - task_kind: code
 `)))
+		wavePlan, err := state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 		runtimeCapturedAt := time.Now().UTC()
 		summaryCapturedAt := runtimeCapturedAt.Add(time.Hour)
 		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
@@ -858,11 +864,12 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 			"captured_at": runtimeCapturedAt.Format(time.RFC3339Nano),
 		})
 		writePassingWaveEvidence(t, root, slug, 1)
-		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
+		staleSummary := model.ExecutionSummary{
 			Version:           model.ExecutionSummaryVersion,
 			RunSummaryVersion: 1,
 			CapturedAt:        summaryCapturedAt,
 			OverallVerdict:    model.ExecutionVerdictPass,
+			TasksPlanHash:     wavePlan.TasksPlanHash,
 			CompletedTasks:    []string{"t-01", "t-02"},
 			Tasks: []model.ExecutionTaskSummary{{
 				TaskID:          "t-01",
@@ -870,16 +877,22 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 				TaskKind:        model.TaskKindCode,
 				ChangedFiles:    []string{"cmd/repair.go"},
 				CapturedAt:      summaryCapturedAt,
-				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01"),
+				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01", "previous-task-plan-hash"),
 			}, {
 				TaskID:          "t-02",
 				Verdict:         model.TaskVerdictPass,
 				TaskKind:        model.TaskKindCode,
 				ChangedFiles:    []string{"docs/commands.md"},
 				CapturedAt:      summaryCapturedAt,
-				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-02"),
+				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-02", "previous-task-plan-hash"),
 			}},
-		})
+		}
+		staleSummary.Normalize()
+		rawSummary, err := yaml.Marshal(staleSummary)
+		require.NoError(t, err)
+		summaryPath := executionSummaryPathForTest(root, slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
+		require.NoError(t, fsutil.WriteFileAtomic(summaryPath, rawSummary, 0o644))
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
@@ -1060,6 +1073,8 @@ REQ-001: Original requirement.
   - target_files: ["cmd/repair.go"]
   - task_kind: code
 `)))
+		wavePlan, err := state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
 		writePassingWaveEvidence(t, root, slug, 1)
 
 		capturedAt := time.Now().UTC()
@@ -1071,20 +1086,25 @@ REQ-001: Original requirement.
 			RunSummaryVersion: 1,
 			CapturedAt:        capturedAt,
 			OverallVerdict:    model.ExecutionVerdictPass,
+			TasksPlanHash:     wavePlan.TasksPlanHash,
 			CompletedTasks:    []string{"t-01"},
 			Tasks: []model.ExecutionTaskSummary{{
-				TaskID:          "t-01",
-				Verdict:         model.TaskVerdictPass,
-				TaskKind:        model.TaskKindCode,
-				ChangedFiles:    []string{"cmd/repair.go"},
-				CapturedAt:      capturedAt,
-				FreshnessInputs: state.ExpectedExecutionTaskFreshnessInputs(change, 1, "t-01"),
+				TaskID:       "t-01",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"cmd/repair.go"},
+				CapturedAt:   capturedAt,
 			}},
 		})
 
-		requirementsPath := filepath.Join(bundlePath, "requirements.md")
-		stalePlanningAt := capturedAt.Add(time.Hour)
-		require.NoError(t, os.Chtimes(requirementsPath, stalePlanningAt, stalePlanningAt))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` preserve changed planning drift
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/repair.go", "cmd/run.go"]
+  - task_kind: code
+`)))
 
 		var out bytes.Buffer
 		cmd := makeRepairCmd()
@@ -1098,7 +1118,7 @@ REQ-001: Original requirement.
 
 		foundPlanningDrift := false
 		for _, drift := range summary.UnrepairedDrift {
-			if strings.Contains(drift.Target, "requirements.md") &&
+			if strings.Contains(drift.Target, "tasks.md") &&
 				strings.Contains(drift.Reason, state.StalePlanningEvidenceBlockerToken) {
 				foundPlanningDrift = true
 				assert.Contains(t, drift.NextAction, "plan-audit")

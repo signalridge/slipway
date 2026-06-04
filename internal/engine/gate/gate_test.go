@@ -79,11 +79,33 @@ func TestEvaluateGShip(t *testing.T) {
 	assert.Equal(t, "artifact_not_ready", eval.ReasonCodes[0].Code)
 }
 
+func TestEvaluateGShipMissingVerificationEvidenceRoutesS4Recovery(t *testing.T) {
+	t.Parallel()
+
+	eval := EvaluateGShip(model.NewChange("slug"), true, false, true, nil, nil)
+	require.NotEmpty(t, eval.ReasonCodes)
+	reason := findGateReasonCode(t, eval.ReasonCodes, "verification_evidence_missing")
+	assert.Contains(t, reason.Message, "goal-verification")
+	assert.Contains(t, reason.Message, "final-closeout")
+}
+
 func TestGuardrailHighRiskChecks(t *testing.T) {
 	t.Parallel()
 	required := RequiredHighRiskChecks("security_credentials")
 	require.Equal(t, []string{"security_credentials.safety_baseline"}, required)
 	assert.True(t, IsRegisteredCheckID("security_credentials.safety_baseline"))
+}
+
+func findGateReasonCode(t *testing.T, reasons []model.ReasonCode, code string) model.ReasonCode {
+	t.Helper()
+
+	for _, reason := range reasons {
+		if reason.Code == code {
+			return reason
+		}
+	}
+	require.Failf(t, "reason code not found", "missing %s in %#v", code, reasons)
+	return model.ReasonCode{}
 }
 
 func TestEvaluateGPivot(t *testing.T) {

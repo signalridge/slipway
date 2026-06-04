@@ -90,7 +90,11 @@ func SaveWavePlan(root, slug string, plan model.WavePlan) error {
 }
 
 func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, error) {
-	hash, generatedAt, nodes, err := currentTaskPlanNodes(root, change)
+	return MaterializeWavePlanAt(root, change, time.Now().UTC())
+}
+
+func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
+	hash, nodes, err := currentTaskPlanNodes(root, change)
 	if err != nil {
 		return model.WavePlan{}, err
 	}
@@ -100,7 +104,7 @@ func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, erro
 	}
 	plan := model.WavePlan{
 		Version:       model.WavePlanVersion,
-		GeneratedAt:   generatedAt,
+		GeneratedAt:   generatedAt.UTC(),
 		TasksPlanHash: hash,
 		TotalTasks:    len(nodes),
 		Waves:         make([]model.WavePlanWave, len(waves)),
@@ -127,34 +131,30 @@ func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, erro
 	return plan, nil
 }
 
-func CurrentTasksPlanState(root string, change model.Change) (string, time.Time, error) {
-	hash, updatedAt, _, err := currentTaskPlanNodes(root, change)
-	return hash, updatedAt, err
+func CurrentTasksPlanState(root string, change model.Change) (string, error) {
+	hash, _, err := currentTaskPlanNodes(root, change)
+	return hash, err
 }
 
-func currentTaskPlanNodes(root string, change model.Change) (string, time.Time, []wave.Node, error) {
+func currentTaskPlanNodes(root string, change model.Change) (string, []wave.Node, error) {
 	bundleDir, err := GovernedBundleDir(root, change)
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", nil, err
 	}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	info, err := os.Stat(tasksPath)
-	if err != nil {
-		return "", time.Time{}, nil, err
-	}
 	raw, err := os.ReadFile(tasksPath)
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", nil, err
 	}
 	hash, err := wave.TaskPlanSemanticHash(string(raw))
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", nil, err
 	}
 	taskPlan, err := wave.ParseTaskPlan(string(raw))
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", nil, err
 	}
-	return hash, info.ModTime().UTC(), taskPlan.Nodes(), nil
+	return hash, taskPlan.Nodes(), nil
 }
 
 func WaveEvidenceDir(root, slug string) string {

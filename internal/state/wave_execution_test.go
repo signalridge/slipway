@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,4 +82,32 @@ func TestOrphanTaskEvidenceReportsMalformedEvidenceAndContinues(t *testing.T) {
 	require.Len(t, issues, 1)
 	assert.Equal(t, filepath.Join(dir, "task-b.json"), issues[0].Path)
 	assert.Contains(t, issues[0].Err.Error(), "parse task evidence")
+}
+
+func TestMaterializeWavePlanGeneratedAtUsesMaterializationTime(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-generated-at")
+	bundleDir, err := GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` prove generated_at boundary
+  - wave: 1
+  - target_files: ["internal/state/wave_execution.go"]
+  - task_kind: test
+  - acceptance: generated_at is materialization time
+`), 0o644))
+
+	tasksMTime := time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC)
+	materializedAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
+	require.NoError(t, os.Chtimes(tasksPath, tasksMTime, tasksMTime))
+
+	plan, err := MaterializeWavePlanAt(root, change, materializedAt)
+	require.NoError(t, err)
+	assert.True(t, materializedAt.Equal(plan.GeneratedAt))
+	assert.False(t, tasksMTime.Equal(plan.GeneratedAt))
 }

@@ -9,6 +9,8 @@ const (
 	SkillWaveOrchestration     = "wave-orchestration"
 	SkillSpecComplianceReview  = "spec-compliance-review"
 	SkillCodeQualityReview     = "code-quality-review"
+	SkillSecurityReview        = "security-review"
+	SkillIndependentReview     = "independent-review"
 	SkillGoalVerification      = "goal-verification"
 	SkillFinalCloseout         = "final-closeout"
 )

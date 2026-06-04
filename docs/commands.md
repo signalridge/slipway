@@ -16,7 +16,9 @@ When an S3/S4 change has stale planning evidence, `slipway next` remains
 read-only and reports recovery guidance. `slipway run` is the mutating recovery
 path: it reopens `S1_PLAN/audit`, clears stale planning and downstream review /
 verification files, preserves runtime execution evidence, and returns the
-side effects in JSON and human-readable output.
+side effects in JSON and human-readable output. Planning freshness is keyed on
+semantic `tasks_plan_hash`; `wave-plan.yaml` `generated_at` is materialization
+time for display/audit and is not a freshness authority.
 
 ## Creation Options
 
@@ -122,6 +124,23 @@ before `done`; it is not a post-archive audit surface for frozen bundles.
 wave-orchestration sync. The command computes `freshness_inputs`, defaults
 `captured_at` to current UTC, validates task kind/verdict/blockers, and refuses
 unknown or path-unsafe task IDs instead of relying on hand-written JSON.
+`freshness_inputs` includes the current wave-plan `tasks_plan_hash` so task
+evidence cannot be reused after `tasks.md` semantically changes.
+
+Accepted governance skill evidence is additionally bound by
+`verification/evidence-digests.yaml`, an engine-owned local file that records the
+content digest of the inputs each passing skill certified. The entry also stores
+the accepted verification verdict timestamp so a newer host re-run verdict can
+replace a stale digest during mutating advancement. Read-only commands only
+compare the stored digest with current inputs; mutating advancement paths stamp
+or guarded-backfill the file. Diff-class review digests certify the current
+working diff (`git diff HEAD` plus non-ignored untracked reviewable files,
+excluding Slipway governed/runtime artifacts under `artifacts/changes/**`), so
+a commit between review and finalization can make read-only projections report
+the review stale until the next mutating advancement restamps or the review is
+run again against the new diff boundary. Legacy changes without the file are
+backfilled only when no certified artifact is newer than the accepted verdict;
+otherwise the skill is reported stale and must be re-run.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 

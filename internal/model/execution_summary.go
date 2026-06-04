@@ -46,12 +46,14 @@ type ExecutionTaskFreshnessInputs struct {
 	RunSummaryVersion int    `yaml:"run_summary_version,omitempty" json:"run_summary_version,omitempty"`
 	TaskID            string `yaml:"task_id,omitempty" json:"task_id,omitempty"`
 	GuardrailDomain   string `yaml:"guardrail_domain,omitempty" json:"guardrail_domain,omitempty"`
+	TasksPlanHash     string `yaml:"tasks_plan_hash,omitempty" json:"tasks_plan_hash,omitempty"`
 }
 
 func (i *ExecutionTaskFreshnessInputs) Normalize() {
 	i.ChangeID = strings.TrimSpace(i.ChangeID)
 	i.TaskID = strings.TrimSpace(i.TaskID)
 	i.GuardrailDomain = strings.TrimSpace(i.GuardrailDomain)
+	i.TasksPlanHash = strings.TrimSpace(i.TasksPlanHash)
 }
 
 func (i ExecutionTaskFreshnessInputs) Normalized() ExecutionTaskFreshnessInputs {
@@ -65,7 +67,8 @@ func (i ExecutionTaskFreshnessInputs) IsZero() bool {
 	return i.ChangeID == "" &&
 		i.RunSummaryVersion == 0 &&
 		i.TaskID == "" &&
-		i.GuardrailDomain == ""
+		i.GuardrailDomain == "" &&
+		i.TasksPlanHash == ""
 }
 
 func (i ExecutionTaskFreshnessInputs) Equal(other ExecutionTaskFreshnessInputs) bool {
@@ -77,12 +80,16 @@ func (i ExecutionTaskFreshnessInputs) FieldMap() map[string]string {
 	if i.IsZero() {
 		return map[string]string{}
 	}
-	return map[string]string{
+	fields := map[string]string{
 		"change_id":           i.ChangeID,
 		"run_summary_version": fmt.Sprintf("%d", i.RunSummaryVersion),
 		"task_id":             i.TaskID,
 		"guardrail_domain":    i.GuardrailDomain,
 	}
+	if i.TasksPlanHash != "" {
+		fields["tasks_plan_hash"] = i.TasksPlanHash
+	}
+	return fields
 }
 
 func (t *ExecutionTaskSummary) Normalize() {

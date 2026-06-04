@@ -1613,7 +1613,6 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	change.CurrentState = model.StateS4Verify
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
@@ -1663,7 +1662,6 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 	change.CurrentState = model.StateS4Verify
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
@@ -3735,6 +3733,7 @@ func prepareStalePlanningRecoveryBaseFixture(t *testing.T, root string, currentS
 		RunVersion: 0,
 		References: []string{"plan-audit:fixture"},
 	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillPlanAudit)
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
 	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
@@ -3770,7 +3769,11 @@ func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion in
 	if _, ok := payload["freshness_inputs"]; !ok {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		payload["freshness_inputs"] = state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, taskID)
+		tasksPlanHash := ""
+		if wavePlan, err := state.LoadWavePlanForChange(root, change); err == nil {
+			tasksPlanHash = wavePlan.TasksPlanHash
+		}
+		payload["freshness_inputs"] = state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, taskID, tasksPlanHash)
 	}
 	dir := state.EvidenceTasksDir(root, slug)
 	require.NoError(t, os.MkdirAll(dir, 0o755))

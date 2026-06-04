@@ -296,6 +296,34 @@ func TestExecutionSummaryFreshnessIgnoresSummaryCapturedAtForPerTaskFreshness(t 
 	assert.Empty(t, diagnostics.TaskInputDiffs)
 }
 
+func TestExecutionSummaryFreshnessTreatsReadySummaryWithoutTasksAsUnknown(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "ready-summary-without-tasks")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	summary := model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		OpenBlockers:      []model.ReasonCode{testReason("session_isolation_warning", "session_id=abc:shared_by=task-a,task-b")},
+	}
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, summary))
+	loaded, err := LoadExecutionSummary(root, change.Slug)
+	require.NoError(t, err)
+	require.True(t, ExecutionSummaryReady(&loaded))
+
+	assert.Equal(t, ctxpack.EvidenceFreshnessUnknown, ExecutionSummaryFreshness(root, change, &loaded))
+	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessUnknown), diagnostics.Status)
+	assert.Empty(t, diagnostics.TaskInputDiffs)
+	assert.Empty(t, diagnostics.StalePairs)
+}
+
 func TestTaskEvidenceCapturedAtIgnoresMismatchedRunVersion(t *testing.T) {
 	t.Parallel()
 
@@ -349,6 +377,7 @@ func TestExecutionSummaryFreshnessDiagnosticsPrefersPlanningSourceAsFirstCause(t
 		RunSummaryVersion: 2,
 		CapturedAt:        capturedAt,
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-a"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:            "task-a",
@@ -422,7 +451,7 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	require.NotNil(t, diagnostics.FirstStaleCause)
 	assert.Equal(t, StalePlanningEvidenceBlockerToken, diagnostics.FirstStaleCause.Reason)
 	assert.Contains(t, diagnostics.FirstStaleCause.SourceArtifact, "tasks.md")
-	assert.Equal(t, sourceUpdatedAt.Format(time.RFC3339Nano), diagnostics.FirstStaleCause.SourceUpdatedAt)
+	assert.Empty(t, diagnostics.FirstStaleCause.SourceUpdatedAt)
 	assert.Equal(t, capturedAt.Format(time.RFC3339Nano), diagnostics.FirstStaleCause.EvidenceCapturedAt)
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
@@ -469,6 +498,7 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 		RunSummaryVersion: 1,
 		CapturedAt:        capturedAt,
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-a"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:          "task-a",
@@ -490,15 +520,7 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 	assert.True(t, containsFreshnessChainEdge(diagnostics.DownstreamEvidenceChain, WavePlanFileName, ExecutionSummaryFileName))
 }
 
-// TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime is the
-// regression for issue #44: a planning-stage evidence record (plan-audit.yaml)
-// can be rewritten after capture (e.g. adding DEC->REQ trace references),
-// pushing its file mtime ahead of the source while its recorded capture
-// timestamp stays older. The diagnostic must report the embedded record
-// timestamp as evidence_captured_at — so the stale pair reads consistently
-// (source newer than evidence) — and never consult the file mtime, so the
-// drifted mtime can no longer masquerade as the capture time.
-func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *testing.T) {
+func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampForPlanningStage(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeRepoLayout(t)
@@ -512,18 +534,12 @@ func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *
 	verifyDir := filepath.Join(bundleDir, "verification")
 	require.NoError(t, os.MkdirAll(verifyDir, 0o755))
 
-	// Mirror the issue #44 comment timeline (date shifted safely into the past):
-	//   plan-audit record    10:06:17  (embedded capture time — older than source)
-	//   decision.md          10:07:09  (source edited after the audit ran)
-	//   plan-audit file mtime 10:07:42 (file rewritten after capture)
 	summaryCapturedAt := time.Date(2026, 5, 29, 9, 0, 0, 0, time.UTC)
 	recordCapturedAt := time.Date(2026, 5, 29, 10, 6, 17, 0, time.UTC)
-	sourceUpdatedAt := time.Date(2026, 5, 29, 10, 7, 9, 0, time.UTC)
 	fileModifiedAt := time.Date(2026, 5, 29, 10, 7, 42, 0, time.UTC)
 
-	decisionPath := filepath.Join(bundleDir, "decision.md")
-	require.NoError(t, os.WriteFile(decisionPath, []byte("# Decision\n\nDEC-001 -> REQ-005\n"), 0o644))
-	require.NoError(t, os.Chtimes(decisionPath, sourceUpdatedAt, sourceUpdatedAt))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte("# Tasks\n\n- [ ] `task-a` current task plan\n"), 0o644))
 
 	planAuditPath := filepath.Join(verifyDir, planAuditFileName)
 	planAuditBody := "verdict: pass\nblockers: []\nrun_version: 1\ntimestamp: " +
@@ -538,6 +554,7 @@ func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *
 		RunSummaryVersion: 1,
 		CapturedAt:        summaryCapturedAt,
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-a"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:          "task-a",
@@ -553,19 +570,80 @@ func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampNotFileMtime(t *
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)
 	cause := diagnostics.FirstStaleCause
-	assert.Contains(t, cause.SourceArtifact, "decision.md")
+	assert.Contains(t, cause.SourceArtifact, "tasks.md")
 	assert.Contains(t, cause.EvidenceArtifact, planAuditFileName)
 
 	// The fix: evidence_captured_at is the embedded record timestamp, and the
-	// (newer) file mtime is never consulted — so the pair is internally
-	// consistent (source newer than evidence), matching the stale verdict.
+	// (newer) file mtime is never consulted.
 	assert.Equal(t, recordCapturedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
 	assert.NotEqual(t, fileModifiedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
-	assert.Equal(t, sourceUpdatedAt.Format(time.RFC3339Nano), cause.SourceUpdatedAt)
+	assert.Empty(t, cause.SourceUpdatedAt)
+}
 
-	// Sanity: as displayed, the stale pair no longer contradicts the verdict.
-	assert.Greater(t, cause.SourceUpdatedAt, cause.EvidenceCapturedAt,
-		"source should read newer than evidence for a stale pair")
+func TestExecutionSummaryFreshnessDiagnosticsDoesNotUseWavePlanGeneratedAt(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	change := saveActiveChangeForTest(t, root, "planning-wave-generated-at-display-only")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir, err := GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	verifyDir := filepath.Join(bundleDir, "verification")
+	require.NoError(t, os.MkdirAll(verifyDir, 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(bundleDir, "tasks.md"),
+		[]byte("# Tasks\n\n- [ ] `task-a` current task plan\n"),
+		0o644,
+	))
+
+	planAuditCapturedAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
+	waveGeneratedAt := time.Date(2026, 5, 29, 10, 5, 0, 0, time.UTC)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(verifyDir, planAuditFileName),
+		[]byte("verdict: pass\nblockers: []\nrun_version: 1\ntimestamp: "+planAuditCapturedAt.Format(time.RFC3339)+"\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(verifyDir, WavePlanFileName),
+		[]byte("version: 1\ngenerated_at: "+waveGeneratedAt.Format(time.RFC3339)+"\ntasks_plan_hash: previous-task-plan-hash\nwaves: []\n"),
+		0o644,
+	))
+
+	summaryCapturedAt := time.Date(2026, 5, 29, 9, 0, 0, 0, time.UTC)
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        summaryCapturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:          "task-a",
+			Verdict:         model.TaskVerdictPass,
+			TaskKind:        model.TaskKindCode,
+			CapturedAt:      summaryCapturedAt,
+			FreshnessInputs: ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a", "previous-task-plan-hash"),
+		}},
+	}
+
+	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+	require.Equal(t, "stale", diagnostics.Status)
+
+	var waveToSummary *ExecutionFreshnessPair
+	for i := range diagnostics.DownstreamEvidenceChain {
+		pair := &diagnostics.DownstreamEvidenceChain[i]
+		if strings.Contains(pair.SourceArtifact, WavePlanFileName) && strings.Contains(pair.EvidenceArtifact, ExecutionSummaryFileName) {
+			waveToSummary = pair
+			break
+		}
+	}
+	require.NotNil(t, waveToSummary)
+	assert.Empty(t, waveToSummary.SourceUpdatedAt)
+	assert.NotEqual(t, waveGeneratedAt.Format(time.RFC3339Nano), waveToSummary.SourceUpdatedAt)
 }
 
 func TestLoadExecutionSummaryReturnsErrorOnInvalidSummary(t *testing.T) {
@@ -601,6 +679,7 @@ func TestLoadExecutionSummaryRejectsUnknownFields(t *testing.T) {
 		RunSummaryVersion: 1,
 		CapturedAt:        time.Now().UTC(),
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-a"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:     "task-a",
@@ -922,6 +1001,7 @@ func TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable(t *te
 		RunSummaryVersion: 1,
 		CapturedAt:        time.Now().UTC(),
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-01"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:     "task-01",
@@ -946,7 +1026,7 @@ func TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable(t *te
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
 	require.NoError(t, err)
-	assert.Contains(t, ctx.Issues, StaleExecutionEvidenceBlockerToken)
+	assert.Contains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
 }
 
 func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
@@ -960,7 +1040,7 @@ func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
 
 	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n\n- [ ] `task-01` updated plan\n"), 0o644))
 
 	capturedAt := time.Now().UTC().Add(-time.Second)
 	summary := model.ExecutionSummary{
@@ -968,6 +1048,7 @@ func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
 		RunSummaryVersion: 1,
 		CapturedAt:        capturedAt,
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     "previous-task-plan-hash",
 		CompletedTasks:    []string{"task-01"},
 		Tasks: []model.ExecutionTaskSummary{{
 			TaskID:     "task-01",
@@ -977,7 +1058,6 @@ func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
 		}},
 	}
 	require.NoError(t, SaveExecutionSummary(root, change.Slug, summary))
-	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "intent.md"), time.Now().UTC(), time.Now().UTC()))
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
 	require.NoError(t, err)

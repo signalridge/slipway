@@ -27,6 +27,7 @@ func TestEvaluateGovernanceReadinessExposesPassingSkillsForActivePlanningSubStep
 	change.CurrentState = model.StateS1Plan
 	change.PlanSubStep = model.PlanSubStepAudit
 	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
 	writeVerificationForTest(t, root, change.Slug, "plan-audit", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,

@@ -140,6 +140,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill is present but not ready",
 	},
+	"required_skill_stale": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governance skill certified inputs that changed; rerun the skill to re-certify the named artifact",
+	},
 	"run_slipway_run_to_advance": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Run `slipway run` to advance the workflow",
@@ -186,7 +190,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"verification_evidence_missing": {
 		Severity: ReasonSeverityError,
-		Message:  "Required verification evidence is missing",
+		Message:  "Required verification evidence is missing; in S4_VERIFY recovery, rerun goal-verification, then rerun final-closeout",
 	},
 	"wave_orchestration_run_summary_version_invalid": {
 		Severity: ReasonSeverityError,
