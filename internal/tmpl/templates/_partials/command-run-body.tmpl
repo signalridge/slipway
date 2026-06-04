@@ -18,6 +18,8 @@ slipway run --resume-response "<response>" --json
 - If an active checkpoint exists, plain `run` is rejected and `--resume-response` is required.
 - If resumable non-checkpoint execution exists, plain `run` is rejected and `--resume` is required.
 - `run` reuses the same `next --json` contract for the returned next-skill / blocker surface.
+- `advanced` reports the mutation performed by this invocation; `blockers` reports the current stop condition after that mutation. A successful advance can still return error-severity blockers for the next required skill.
+- `confirmation_requirement.resume_response_supported` is true only when `--resume-response` can be used for the current stop; otherwise branch on `confirmation_requirement.next_action_kind` and run `confirmation_requirement.next_command` when present (`next_action` is human prose, not a contract to parse).
 - Treat default JSON as the action contract. Use `slipway run --json --diagnostics` only for full readiness fields.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.
 - Do not expect inline policy-pack prose in default JSON; read policy-pack content only by path from diagnostics or config.

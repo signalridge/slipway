@@ -92,6 +92,12 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 		blockers = append(blockers, model.ReasonCodesFromSpecs(parseIssues)...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
 	}
+	if staleBlockers := waveRecordStaleTaskEvidenceBlockers(record, tasks); len(staleBlockers) > 0 {
+		// Surface parse issues alongside staleness so invalid task evidence is
+		// not masked when both conditions hold at the same time.
+		staleBlockers = append(staleBlockers, model.ReasonCodesFromSpecs(parseIssues)...)
+		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(staleBlockers)}, nil
+	}
 
 	wavePlan, err := state.LoadWavePlanForChange(root, change)
 	if err != nil {
@@ -218,6 +224,23 @@ func LatestPassingWaveEvidence(root, slug string) (model.VerificationRecord, boo
 		return model.VerificationRecord{}, false, nil
 	}
 	return rec, true, nil
+}
+
+func waveRecordStaleTaskEvidenceBlockers(
+	record model.VerificationRecord,
+	tasks []model.ExecutionTaskSummary,
+) []model.ReasonCode {
+	if record.Timestamp.IsZero() || len(tasks) == 0 {
+		return nil
+	}
+	recordedAt := record.Timestamp.UTC()
+	blockers := []model.ReasonCode{}
+	for _, task := range tasks {
+		if task.CapturedAt.UTC().After(recordedAt) {
+			blockers = append(blockers, model.NewReasonCode("wave_orchestration_stale_task_evidence", task.TaskID))
+		}
+	}
+	return model.NormalizeReasonCodes(blockers)
 }
 
 // LoadExecutionTasksFromEvidence loads task execution summaries from evidence files for a specific version.
