@@ -91,15 +91,24 @@ Planning evidence remains authoritative after S1.
 `)))
 	writeAssuranceMD(t, root, slug, validAssuranceContent())
 
+	sourceAt := time.Date(2026, 6, 4, 10, 0, 0, 0, time.UTC)
+	planAuditAt := sourceAt.Add(time.Hour)
+	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md", "tasks.md"} {
+		path := filepath.Join(bundlePath, rel)
+		require.NoError(t, os.Chtimes(path, sourceAt, sourceAt))
+	}
+	assurancePath := filepath.Join(bundlePath, "assurance.md")
+	require.NoError(t, os.Chtimes(assurancePath, planAuditAt.Add(time.Hour), planAuditAt.Add(time.Hour)))
+
 	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
 		Blockers:  []model.ReasonCode{},
-		Timestamp: time.Now().UTC(),
+		Timestamp: planAuditAt,
 	})
 	writeSkillVerification(t, root, slug, "research-orchestration", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
 		Blockers:  []model.ReasonCode{},
-		Timestamp: time.Now().UTC().Add(time.Second),
+		Timestamp: planAuditAt,
 	})
 
 	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)

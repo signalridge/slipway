@@ -1124,9 +1124,107 @@ Not ready.
 				found = true
 				assert.Equal(t, "FAIL", check.Status)
 				assert.Contains(t, check.Message, "blocking traceability gaps")
+				require.NotEmpty(t, check.TraceabilityGaps)
+				foundGapDetails := false
+				for _, gap := range check.TraceabilityGaps {
+					if gap.ID == "update auth middleware" && gap.Type == "task" {
+						foundGapDetails = true
+						assert.Contains(t, gap.Issue, "task covers no requirement")
+						assert.True(t, gap.Blocking)
+					}
+				}
+				assert.True(t, foundGapDetails, "expected actionable task traceability gap details")
 			}
 		}
 		assert.True(t, found, "expected traceability_coherence check")
+	})
+}
+
+func TestHealthCommandGovernanceRecomputeDropsResolvedClarificationControl(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "health resolved clarification")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepBundle
+		change.ArtifactSchema = model.ArtifactSchemaExpanded
+		change.NeedsDiscovery = true
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(`# Intent
+INT-001: stabilize auth middleware
+## Open Questions
+(none)
+`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+### Requirement: auth stability
+REQ-001: Preserve auth middleware behavior. Traces to INT-001.
+`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+- [ ] update auth middleware
+  covers: [REQ-001]
+`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(`# Decision
+## Alternatives Considered
+### Option A
+Patch the current middleware.
+
+## Selected Approach
+Choose Option A.
+`), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte(`# Assurance
+## Requirement Coverage
+REQ-001: pending
+`), 0o644))
+
+		require.NoError(t, governance.SaveSnapshot(root, slug, model.GovernanceSnapshot{
+			Version: model.GovernanceSnapshotVersion,
+			Summary: model.SignalSummary{
+				BlastRadius: model.SignalLevelLow,
+			},
+			Traceability: model.TraceabilitySummary{
+				Status: model.TraceabilityStatusFail,
+				Gaps: []model.TraceabilityGap{
+					{ID: "INT-001", Type: "intent", Issue: "blocking open questions remain unresolved", Blocking: true},
+				},
+			},
+			ActiveControls: []model.ControlActivation{
+				{
+					ControlID:    model.ControlClarification,
+					Mode:         model.ControlModeBlocking,
+					Scope:        model.ControlScopeDiscovery,
+					Active:       true,
+					TriggeredBy:  []string{"traceability: blocking open questions remain unresolved"},
+					PolicySource: model.BuiltinPolicySource,
+				},
+			},
+			ComputedAt: time.Now().UTC().Add(-time.Hour),
+		}))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json", "--governance", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Governance)
+
+		found := false
+		for _, check := range view.Governance.Checks {
+			if check.Name == "signal_control_coherence" {
+				found = true
+				assert.Equal(t, "OK", check.Status)
+				assert.NotContains(t, check.Message, "clarification")
+			}
+		}
+		assert.True(t, found, "expected signal_control_coherence check")
 	})
 }
 

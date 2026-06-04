@@ -16,9 +16,10 @@ import (
 
 // GovernanceHealthCheck represents one governance health diagnostic.
 type GovernanceHealthCheck struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"` // OK, WARN, FAIL
-	Message string `json:"message"`
+	Name             string                  `json:"name"`
+	Status           string                  `json:"status"` // OK, WARN, FAIL
+	Message          string                  `json:"message"`
+	TraceabilityGaps []model.TraceabilityGap `json:"traceability_gaps,omitempty"`
 }
 
 // GovernanceHealthReport contains all governance health checks for a change.
@@ -268,15 +269,17 @@ func checkTraceabilityCoherence(snap model.GovernanceSnapshot) GovernanceHealthC
 		}
 	case model.TraceabilityStatusWarning:
 		return GovernanceHealthCheck{
-			Name:    "traceability_coherence",
-			Status:  "WARN",
-			Message: snap.Traceability.Message,
+			Name:             "traceability_coherence",
+			Status:           "WARN",
+			Message:          snap.Traceability.Message,
+			TraceabilityGaps: snap.Traceability.Gaps,
 		}
 	default:
 		return GovernanceHealthCheck{
-			Name:    "traceability_coherence",
-			Status:  "FAIL",
-			Message: snap.Traceability.Message,
+			Name:             "traceability_coherence",
+			Status:           "FAIL",
+			Message:          snap.Traceability.Message,
+			TraceabilityGaps: snap.Traceability.Gaps,
 		}
 	}
 }

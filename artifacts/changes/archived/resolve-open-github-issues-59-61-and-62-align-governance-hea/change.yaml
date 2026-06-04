@@ -1,0 +1,58 @@
+version: 1
+slug: resolve-open-github-issues-59-61-and-62-align-governance-hea
+description: 'resolve open GitHub issues #59, #61, and #62: align governance health freshness and diagnostics, hard-stop confirmation behavior, and portable goal-verification placeholder scans'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-06-03T14:50:47.214664Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-open-github-issues-59-61-and-62-align-governance-hea
+artifact_schema: expanded
+project_context:
+    tech_stack: Go CLI
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 'Current main includes issue #53 Tier 1/Tier 2/Tier 3 governance fixes; this change targets still-open issues #59, #61, and #62.'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 0e753c3b6a71c9f3bc7ba31d48514cc954ff4d293db38e2280ebd00eb68e12c8
+        updated_at: 2026-06-03T18:31:44.938104446Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 1caae15f4b9fb20096a9eeab5afcdff7023e9102d8652f45a90d0ac4b988b7db
+        updated_at: 2026-06-03T18:30:09.297783289Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 9190948b4f85c9f0a75e38aeeff620f930e172f4f06210db9497859937220030
+        updated_at: 2026-06-03T18:30:53.645324516Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: fe24b5496913c2ec87f12936bd7a98f089dc1497cff8e2aa7d803edf0d62620b
+        updated_at: 2026-06-03T18:29:19.255696804Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: ea1a05288712eb693b1e5b33bac0e8974b47eeb57aaed9c4869ce82d6f25742d
+        updated_at: 2026-06-03T15:26:35.729469582Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 0a52fe5c26704587dce1a2af8fbd9a330a65f568dbd75ab6e975f65ece89e101
+        updated_at: 2026-06-04T03:22:58.934499111Z

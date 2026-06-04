@@ -96,6 +96,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required discovery evidence is missing",
 	},
+	"missing_task_evidence_for_run_summary": {
+		Severity: ReasonSeverityError,
+		Message:  "Task evidence is missing for the recorded run summary; rerun wave-orchestration to capture task evidence",
+	},
 	"missing_worktree_branch": {
 		Severity: ReasonSeverityError,
 		Message:  "The change is missing a bound worktree branch",
@@ -183,6 +187,18 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"verification_evidence_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Required verification evidence is missing",
+	},
+	"wave_orchestration_run_summary_version_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The wave run-summary version is invalid; rerun wave-orchestration to produce a versioned run summary",
+	},
+	"wave_orchestration_stale_task_evidence": {
+		Severity: ReasonSeverityError,
+		Message:  "Task evidence was captured after the wave verification record; rerun wave-orchestration to refresh the wave record",
+	},
+	"wave_plan_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The wave plan is missing; materialize the wave plan from tasks.md before wave execution",
 	},
 }
 

@@ -1115,6 +1115,14 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 	require.NotNil(t, advanceView.NextSkill)
 	assert.Equal(t, progression.SkillWaveOrchestration, advanceView.NextSkill.Name)
 
+	writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  staleAt.Add(3 * time.Second),
+		RunVersion: 1,
+		References: []string{"wave-orchestration:refreshed"},
+	})
+
 	syncCmd := commandForRoot(t, root, makeRunCmd())
 	syncCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 	var syncBuf bytes.Buffer
@@ -1124,11 +1132,18 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 	var syncView nextView
 	require.NoError(t, json.Unmarshal(syncBuf.Bytes(), &syncView))
 	assert.Equal(t, model.StateS3Review, syncView.CurrentState)
+	require.NotNil(t, syncView.Advanced)
+	assert.Equal(t, "advanced", syncView.Advanced.Action)
+	assert.Equal(t, model.StateS2Execute, syncView.Advanced.FromState)
+	assert.Equal(t, model.StateS3Review, syncView.Advanced.ToState)
 	require.NotNil(t, syncView.NextSkill)
 	assert.Equal(t, progression.SkillSpecComplianceReview, syncView.NextSkill.Name)
 	reasons := model.ReasonSpecs(syncView.Blockers)
 	assert.Contains(t, reasons, "required_skill_missing:"+progression.SkillSpecComplianceReview)
 	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
+	assert.Equal(t, "skill_handoff:"+progression.SkillSpecComplianceReview, syncView.ConfirmationRequirement.Reason)
+	assert.False(t, syncView.ConfirmationRequirement.ResumeResponseSupported)
+	assert.Equal(t, "complete governance skill handoff: "+progression.SkillSpecComplianceReview, syncView.ConfirmationRequirement.NextAction)
 }
 
 func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
@@ -1199,7 +1214,30 @@ func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
 	require.NoError(t, json.Unmarshal(syncBuf.Bytes(), &syncView))
 	require.NotNil(t, syncView.Advanced)
 	assert.Equal(t, "blocked", syncView.Advanced.Action)
-	assert.Contains(t, model.ReasonSpecs(syncView.Blockers), "tasks_plan_changed_since_task_evidence:t-01")
+	assert.Contains(t, model.ReasonSpecs(syncView.Blockers), "wave_orchestration_stale_task_evidence:t-01")
+
+	_, err = state.LoadExecutionSummary(root, slug)
+	require.Error(t, err)
+
+	writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC().Add(4 * time.Second),
+		RunVersion: 1,
+		References: []string{"wave-orchestration:refreshed"},
+	})
+
+	resyncCmd := commandForRoot(t, root, makeRunCmd())
+	resyncCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var resyncBuf bytes.Buffer
+	resyncCmd.SetOut(&resyncBuf)
+	require.NoError(t, resyncCmd.Execute())
+
+	var resyncView nextView
+	require.NoError(t, json.Unmarshal(resyncBuf.Bytes(), &resyncView))
+	require.NotNil(t, resyncView.Advanced)
+	assert.Equal(t, "blocked", resyncView.Advanced.Action)
+	assert.Contains(t, model.ReasonSpecs(resyncView.Blockers), "tasks_plan_changed_since_task_evidence:t-01")
 
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)

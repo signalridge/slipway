@@ -256,6 +256,33 @@ func TestNormalizeReasonCodesSortsGateReasons(t *testing.T) {
 	assert.Equal(t, "verification_evidence_missing", reasonCodes[1].Code)
 }
 
+func TestWaveReasonCodesCarryRemediation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		code            string
+		detail          string
+		messageContains string
+	}{
+		{"wave_orchestration_stale_task_evidence", "task-a", "rerun wave-orchestration to refresh the wave record"},
+		{"wave_orchestration_run_summary_version_invalid", "", "rerun wave-orchestration to produce a versioned run summary"},
+		{"missing_task_evidence_for_run_summary", "", "rerun wave-orchestration to capture task evidence"},
+		{"wave_plan_missing", "slug-a", "materialize the wave plan from tasks.md"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.code, func(t *testing.T) {
+			t.Parallel()
+			reason := NewReasonCode(tc.code, tc.detail)
+			assert.Equal(t, ReasonSeverityError, reason.Severity)
+			assert.Contains(t, reason.Message, tc.messageContains,
+				"wave reason code %q must carry an actionable remediation, not a humanized fallback", tc.code)
+			if tc.detail != "" {
+				assert.Contains(t, reason.Message, tc.detail)
+			}
+		})
+	}
+}
+
 func TestPhaseForMapsWorkflowStates(t *testing.T) {
 	t.Parallel()
 
