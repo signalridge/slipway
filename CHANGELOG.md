@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1](https://github.com/signalridge/slipway/compare/v0.5.0...v0.5.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **governance:** align health, confirmation, and portable scan ([#59](https://github.com/signalridge/slipway/issues/59), [#61](https://github.com/signalridge/slipway/issues/61), [#62](https://github.com/signalridge/slipway/issues/62)) ([#68](https://github.com/signalridge/slipway/issues/68)) ([5ee33e5](https://github.com/signalridge/slipway/commit/5ee33e5c4683fb6cac848b82f4553e5b9069ba2d))
+* **governance:** stamp evidence freshness digests ([#74](https://github.com/signalridge/slipway/issues/74)) ([4483e74](https://github.com/signalridge/slipway/commit/4483e749e9038e0346b52e246a4b635ad3578226))
+
 ## [0.5.0](https://github.com/signalridge/slipway/compare/v0.4.1...v0.5.0) (2026-06-03)
 
 
