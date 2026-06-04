@@ -321,7 +321,7 @@ func TestAdvanceGovernedWritesLifecycleEvent(t *testing.T) {
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
-		Timestamp:  change.CreatedAt,
+		Timestamp:  time.Now().UTC(),
 		RunVersion: 0,
 	})
 
@@ -367,6 +367,13 @@ func TestAdvanceGovernedWritesLifecycleEvent(t *testing.T) {
 	if evidenceEvent.EvidenceRefs[SkillIntakeClarification] == "" {
 		t.Fatalf("expected evidence ref for %s, got %+v", SkillIntakeClarification, evidenceEvent.EvidenceRefs)
 	}
+	digests, err := state.LoadEvidenceDigestsForChange(root, change)
+	if err != nil {
+		t.Fatalf("load evidence digests: %v", err)
+	}
+	if digests.Skills[SkillIntakeClarification].Inputs["intent.md"] == "" {
+		t.Fatalf("expected intake-clarification digest for intent.md, got %+v", digests.Skills[SkillIntakeClarification])
+	}
 }
 
 func TestAdvanceGoverned_UsesLightPlanAuditBudget(t *testing.T) {
@@ -393,9 +400,10 @@ func TestAdvanceGoverned_UsesLightPlanAuditBudget(t *testing.T) {
 			t.Fatalf("write %s: %v", file, err)
 		}
 	}
+	evidenceAt := time.Now().UTC()
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
-		Timestamp:  change.CreatedAt,
+		Timestamp:  evidenceAt,
 		RunVersion: 0,
 	})
 
@@ -467,7 +475,7 @@ func TestAdvanceIntake_ClarifyBlocksOnMissingSections(t *testing.T) {
 	// Provide skill evidence so the test reaches section validation
 	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
-		Timestamp:  change.CreatedAt,
+		Timestamp:  time.Now().UTC(),
 		RunVersion: 0,
 	})
 
@@ -519,7 +527,7 @@ func TestAdvanceIntake_ClarifyToConfirm(t *testing.T) {
 	// Write intake-clarification evidence so skill check passes.
 	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
-		Timestamp:  change.CreatedAt,
+		Timestamp:  time.Now().UTC(),
 		RunVersion: 0,
 	})
 
@@ -654,7 +662,7 @@ Docs build
 
 			writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
 				Verdict:    model.VerificationVerdictPass,
-				Timestamp:  change.CreatedAt,
+				Timestamp:  time.Now().UTC(),
 				RunVersion: 0,
 			})
 
@@ -723,7 +731,7 @@ S1 research must require fresh research evidence.
 	// the machine-only research advance stays fail-closed on that evidence.
 	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
-		Timestamp:  change.CreatedAt,
+		Timestamp:  time.Now().UTC(),
 		RunVersion: 0,
 		References: []string{"s0:clarify"},
 	})

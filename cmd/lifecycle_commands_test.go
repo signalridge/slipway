@@ -100,6 +100,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 		gitCommitAll(t, normalizedWT, "ship-ready bundle")
+		refreshPassingSkillDigestsForTest(t, normalizedWT, slug)
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -146,14 +147,14 @@ func TestDoneJSONWarnsButArchivesWhenWorktreeChangesAreUncommitted(t *testing.T)
 
 		writeShipReadyGovernedBundle(t, normalizedWT, change)
 		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
+
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writePassingFinalCloseoutEvidence(t, root, slug, 1)
-
-		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -316,9 +317,13 @@ func TestDoneAllReadyWarnsDirtyBoundWorktree(t *testing.T) {
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 		gitCommitAll(t, normalizedWT, "ship-ready bundle")
+		refreshPassingSkillDigestsForTest(t, normalizedWT, slug)
 
 		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 		view := archiveAllDoneReady(root)
 		assert.Empty(t, view.Failed)
@@ -1699,6 +1704,7 @@ func writeAssuranceMD(t *testing.T, root, slug, content string) {
 	dir := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "assurance.md"), []byte(content), 0o644))
+	refreshPassingSkillDigestsForTest(t, root, slug)
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -1898,6 +1904,7 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 		RunVersion: runSummaryVersion,
 		References: []string{fmt.Sprintf("run_summary_version=%d", runSummaryVersion)},
 	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillWaveOrchestration)
 }
 
 func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -1916,6 +1923,7 @@ func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryV
 		RunVersion: runSummaryVersion,
 		References: []string{"layer:IR1=pass", "layer:IR3=pass", "layer:QUALITY=pass"},
 	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillSpecComplianceReview, progression.SkillCodeQualityReview)
 }
 
 func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -1927,6 +1935,7 @@ func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSu
 		RunVersion: runSummaryVersion,
 		References: []string{"verification:pass"},
 	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillGoalVerification)
 }
 
 func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -1938,4 +1947,37 @@ func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSumma
 		RunVersion: runSummaryVersion,
 		References: []string{"closeout:assurance_complete=pass"},
 	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillFinalCloseout)
+}
+
+func refreshPassingSkillDigestsForTest(t *testing.T, root, slug string, skillNames ...string) {
+	t.Helper()
+
+	change, err := state.LoadChange(root, slug)
+	if err != nil {
+		return
+	}
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	require.NoError(t, err)
+
+	if len(skillNames) == 0 {
+		skillNames = []string{
+			progression.SkillWaveOrchestration,
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillSecurityReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillFinalCloseout,
+		}
+	}
+	for _, skillName := range skillNames {
+		rec, err := state.LoadVerification(root, slug, skillName)
+		if err != nil || !rec.IsPassing() {
+			continue
+		}
+		if err := progression.StampEvidenceDigestForSkill(root, change, skillName, rec, summary); err != nil {
+			continue
+		}
+	}
 }

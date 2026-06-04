@@ -98,7 +98,7 @@ Planning evidence remains authoritative after S1.
 		require.NoError(t, os.Chtimes(path, sourceAt, sourceAt))
 	}
 	assurancePath := filepath.Join(bundlePath, "assurance.md")
-	require.NoError(t, os.Chtimes(assurancePath, planAuditAt.Add(time.Hour), planAuditAt.Add(time.Hour)))
+	require.NoError(t, os.Chtimes(assurancePath, sourceAt, sourceAt))
 
 	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
@@ -177,8 +177,8 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
+		change.GuardrailDomain = "schema_data_migration"
+		require.NoError(t, state.SaveChange(root, change))
 
 		statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
 

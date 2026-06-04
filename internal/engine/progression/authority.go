@@ -211,6 +211,11 @@ const assuranceCompleteReference = "closeout:assurance_complete=pass"
 
 const closeoutGoalVerificationReuseReference = "closeout:goal_verification_reuse=pass"
 const closeoutGoalVerificationReuseRunVersionPrefix = "closeout:goal_verification_reuse_run_version="
+const s4VerificationRecoveryRemediation = "rerun goal-verification, then rerun final-closeout"
+
+func S4VerificationRecoveryRemediation() string {
+	return s4VerificationRecoveryRemediation
+}
 
 // closeoutAssuranceAttestationBlockers enforces Layer 1 of issue #47. When
 // assurance is required for the change's effective preset (standard/strict),
@@ -306,9 +311,6 @@ func closeoutGoalVerificationReuseBlockers(
 	if blocker := closeoutGoalVerificationReuseReviewBlocker(reviewPassingSkills, goalRecord.Timestamp.UTC()); blocker != nil {
 		return []model.ReasonCode{*blocker}
 	}
-	if blocker := closeoutGoalVerificationReuseContentBlocker(root, change, summary, goalRecord.Timestamp.UTC()); blocker != nil {
-		return []model.ReasonCode{*blocker}
-	}
 	if !goalRecord.Timestamp.IsZero() && closeoutRecord.Timestamp.UTC().Before(goalRecord.Timestamp.UTC()) {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
 			"final-closeout timestamp must not predate reused goal-verification",
@@ -319,6 +321,16 @@ func closeoutGoalVerificationReuseBlockers(
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
 			"execution-summary freshness must be fresh, got " + string(freshness),
 		)}
+	}
+	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, goalRecord, summary); err != nil {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification digest cannot be evaluated: " + err.Error())}
+	} else if len(blockers) > 0 {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification inputs changed: " + strings.Join(blockers, ","))}
+	}
+	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillFinalCloseout, closeoutRecord, summary); err != nil {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout digest cannot be evaluated: " + err.Error())}
+	} else if len(blockers) > 0 {
+		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout inputs changed: " + strings.Join(blockers, ","))}
 	}
 	return nil
 }
@@ -341,48 +353,6 @@ func closeoutGoalVerificationReuseReviewBlocker(
 				"goal-verification timestamp must be at or after latest review evidence: " + skillName,
 			)
 			return &blocker
-		}
-	}
-	return nil
-}
-
-func closeoutGoalVerificationReuseContentBlocker(
-	root string,
-	change model.Change,
-	summary *model.ExecutionSummary,
-	goalTimestamp time.Time,
-) *model.ReasonCode {
-	if goalTimestamp.IsZero() {
-		blocker := closeoutGoalVerificationReuseInvalidBlocker("goal-verification timestamp is required for final-closeout reuse")
-		return &blocker
-	}
-	paths, err := state.ResolveChangePaths(root, change)
-	if err != nil {
-		blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state cannot be resolved: " + err.Error())
-		return &blocker
-	}
-	for _, rel := range closeoutGoalVerificationReuseContentPaths(change, summary) {
-		candidates, ok, err := closeoutGoalVerificationReuseWorkspacePaths(paths.WorkspaceRoot, rel)
-		if err != nil {
-			blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state cannot be resolved for " + rel + ": " + err.Error())
-			return &blocker
-		}
-		if !ok {
-			blocker := closeoutGoalVerificationReuseInvalidBlocker("execution-summary content path must be workspace-relative: " + rel)
-			return &blocker
-		}
-		for _, path := range candidates {
-			info, err := os.Stat(path)
-			if err != nil {
-				blocker := closeoutGoalVerificationReuseInvalidBlocker("current content state is unavailable for " + rel + ": " + err.Error())
-				return &blocker
-			}
-			if info.ModTime().UTC().After(goalTimestamp) {
-				blocker := closeoutGoalVerificationReuseInvalidBlocker(
-					"goal-verification timestamp must be at or after current content state: " + rel,
-				)
-				return &blocker
-			}
 		}
 	}
 	return nil
@@ -473,11 +443,22 @@ func referencesContain(references []string, needle string) bool {
 }
 
 func closeoutGoalVerificationReuseInvalidBlocker(detail string) model.ReasonCode {
-	return model.NewReasonCode("closeout_goal_verification_reuse_invalid", detail)
+	return model.NewReasonCode("closeout_goal_verification_reuse_invalid", appendS4VerificationRecovery(detail))
 }
 
 func fmtReuseRunMismatch(subject string, expected, got int) string {
 	return subject + " run_version mismatch: expected=" + strconv.Itoa(expected) + " got=" + strconv.Itoa(got)
+}
+
+func appendS4VerificationRecovery(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return s4VerificationRecoveryRemediation
+	}
+	if strings.Contains(detail, "goal-verification") && strings.Contains(detail, "final-closeout") {
+		return detail
+	}
+	return detail + "; " + s4VerificationRecoveryRemediation
 }
 
 func EvaluateReviewLayerBlockersFromNamedEvidence(

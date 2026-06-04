@@ -243,24 +243,18 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, closeoutGoalVerificationReuseRunVersionPrefix)
 
-	staleGoalProof := passingCloseoutReuseRecords(1)
-	staleGoalSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC())
-	staleGoalProof[SkillGoalVerification] = model.VerificationRecord{
+	executionAfterGoal := passingCloseoutReuseRecords(1)
+	goalAt := time.Now().UTC().Add(-2 * time.Minute)
+	executionAfterGoal[SkillGoalVerification] = model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  staleGoalSummary.LatestRelevantUpdateAt().Add(-time.Nanosecond),
+		Timestamp:  goalAt,
 		RunVersion: 1,
 	}
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, staleGoalProof, nil, staleGoalSummary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "goal-verification timestamp")
-
-	predatingCloseout := passingCloseoutReuseRecords(1)
-	predatingCloseout[SkillFinalCloseout] = model.VerificationRecord{
+	executionAfterGoal[SkillFinalCloseout] = model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  predatingCloseout[SkillGoalVerification].Timestamp.Add(-time.Second),
+		Timestamp:  goalAt.Add(time.Minute),
 		RunVersion: 1,
 		References: []string{
 			closeoutGoalVerificationReuseReference,
@@ -268,21 +262,60 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 			assuranceCompleteReference,
 		},
 	}
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, predatingCloseout, nil, summary)
+	executionAfterGoalSummary := closeoutReuseExecutionSummary(change, 1, goalAt.Add(time.Hour))
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, executionAfterGoal, nil, executionAfterGoalSummary)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "final-closeout timestamp")
+	assert.Contains(t, blockers[0].Detail, "latest execution evidence")
 
-	refreshedReview := passingCloseoutReuseRecords(1)
-	refreshedGoalAt := refreshedReview[SkillGoalVerification].Timestamp.UTC()
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, refreshedReview, closeoutReuseReviewRecords(
-		1,
-		refreshedGoalAt.Add(-time.Second),
-		refreshedGoalAt.Add(time.Nanosecond),
-	), summary)
+	reviewAfterGoal := passingCloseoutReuseRecords(1)
+	goalAt = time.Now().UTC()
+	reviewAfterGoal[SkillGoalVerification] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  goalAt,
+		RunVersion: 1,
+	}
+	reviewAfterGoal[SkillFinalCloseout] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  goalAt.Add(3 * time.Second),
+		RunVersion: 1,
+		References: []string{
+			closeoutGoalVerificationReuseReference,
+			closeoutGoalVerificationReuseRunVersionPrefix + "1",
+			assuranceCompleteReference,
+		},
+	}
+	reviewRecords := closeoutReuseReviewRecords(1, goalAt.Add(time.Second), goalAt.Add(2*time.Second))
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, reviewAfterGoal, reviewRecords, summary)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, "latest review evidence")
+
+	closeoutBeforeGoal := passingCloseoutReuseRecords(1)
+	goalAt = time.Now().UTC()
+	closeoutBeforeGoal[SkillGoalVerification] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  goalAt,
+		RunVersion: 1,
+	}
+	closeoutBeforeGoal[SkillFinalCloseout] = model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  goalAt.Add(-time.Second),
+		RunVersion: 1,
+		References: []string{
+			closeoutGoalVerificationReuseReference,
+			closeoutGoalVerificationReuseRunVersionPrefix + "1",
+			assuranceCompleteReference,
+		},
+	}
+	blockers = closeoutGoalVerificationReuseBlockers(root, change, closeoutBeforeGoal, nil, summary)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "final-closeout timestamp")
 
 	changedContent := passingCloseoutReuseRecords(1)
 	changedGoalAt := changedContent[SkillGoalVerification].Timestamp.UTC()
@@ -290,32 +323,21 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 	targetPath := filepath.Join(root, targetRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(targetPath), 0o755))
 	require.NoError(t, os.WriteFile(targetPath, []byte("package internal\n"), 0o644))
-	require.NoError(t, os.Chtimes(targetPath, changedGoalAt.Add(time.Second), changedGoalAt.Add(time.Second)))
 	contentSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{targetRel})
+	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillGoalVerification, changedContent[SkillGoalVerification], contentSummary))
+	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillFinalCloseout, changedContent[SkillFinalCloseout], contentSummary))
+	require.NoError(t, os.WriteFile(targetPath, []byte("package internal\nconst changed = true\n"), 0o644))
 	blockers = closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, contentSummary)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "current content state")
-
-	verificationPattern := "artifacts/changes/" + change.Slug + "/verification/**"
-	verificationPath := filepath.Join(root, "artifacts", "changes", change.Slug, "verification", "final-closeout.yaml")
-	require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
-	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: pass\n"), 0o644))
-	require.NoError(t, os.Chtimes(verificationPath, changedGoalAt.Add(time.Second), changedGoalAt.Add(time.Second)))
-	verificationPatternSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{verificationPattern})
-	assert.Empty(t, closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, verificationPatternSummary))
-
-	unmatchedGlobSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{"internal/no-such-closeout-reuse-*.go"})
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, unmatchedGlobSummary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "current content state cannot be resolved")
+	assert.Contains(t, blockers[0].Detail, targetRel)
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\nupdated after closeout proof\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n\n- [ ] `task-a` updated plan\n"), 0o644))
 	staleSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(-time.Hour))
+	staleSummary.TasksPlanHash = "previous-task-plan-hash"
 	blockers = closeoutGoalVerificationReuseBlockers(root, change, passing, nil, staleSummary)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
@@ -350,6 +372,15 @@ func TestBuildShipAuthoritySurfacesCloseoutReuseBlocker(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasAdvanceReasonCode(ship.VerifySkillBlockers, "closeout_goal_verification_reuse_invalid"))
 	assert.True(t, hasAdvanceReasonCode(ship.Result.ReasonCodes, "closeout_goal_verification_reuse_invalid"))
+}
+
+func TestCloseoutGoalVerificationReuseInvalidBlockerRoutesS4Recovery(t *testing.T) {
+	t.Parallel()
+
+	blocker := closeoutGoalVerificationReuseInvalidBlocker("assurance.md changed after reused proof")
+	assert.Contains(t, blocker.Detail, "goal-verification")
+	assert.Contains(t, blocker.Detail, "final-closeout")
+	assert.Contains(t, blocker.Detail, "assurance.md")
 }
 
 func closeoutReuseExecutionSummary(change model.Change, runVersion int, capturedAt time.Time) *model.ExecutionSummary {

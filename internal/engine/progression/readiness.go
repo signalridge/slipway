@@ -346,21 +346,30 @@ func evaluateGateReadiness(
 		effectiveState = *opts.WorkflowStateOverride
 	}
 	if opts.IncludeGateEvaluations {
-		planSkills, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
+		planSkills, planSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
 		if err != nil {
 			return nil, nil, err
 		}
+		planEval := EvaluatePlanGate(root, change, planSkills)
+		planEval.ReasonCodes = model.NormalizeReasonCodes(append(planEval.ReasonCodes, model.ReasonCodesFromSpecs(planSkillBlockers)...))
+		if len(planEval.ReasonCodes) > 0 {
+			planEval.Status = model.GateStatusBlocked
+		}
 		result = map[gate.GateID]gate.GateEvaluation{
-			gate.GatePlan: EvaluatePlanGate(root, change, planSkills),
+			gate.GatePlan: planEval,
 		}
 		if change.NeedsDiscovery && effectiveState != model.StateS0Intake {
-			scopeSkills, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
+			scopeSkills, scopeSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
 			if err != nil {
 				return nil, nil, err
 			}
 			scopeEval, err := EvaluateScopeGate(root, change, scopeSkills)
 			if err != nil {
 				return nil, nil, err
+			}
+			scopeEval.ReasonCodes = model.NormalizeReasonCodes(append(scopeEval.ReasonCodes, model.ReasonCodesFromSpecs(scopeSkillBlockers)...))
+			if len(scopeEval.ReasonCodes) > 0 {
+				scopeEval.Status = model.GateStatusBlocked
 			}
 			result[gate.GateScope] = scopeEval
 		}
@@ -807,12 +816,12 @@ func gatePlanningSkillRecords(
 	root string,
 	change model.Change,
 	planSubStep model.PlanSubStep,
-) (map[string]model.VerificationRecord, error) {
+) (map[string]model.VerificationRecord, []string, error) {
 	var subSteps []model.PlanSubStep
 	if planSubStep != model.PlanSubStepNone {
 		subSteps = []model.PlanSubStep{planSubStep}
 	}
-	passingSkills, _, err := EvaluateRequiredSkillsForChange(
+	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChange(
 		root,
 		change,
 		model.StateS1Plan,
@@ -821,9 +830,9 @@ func gatePlanningSkillRecords(
 		subSteps...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return passingSkills, nil
+	return passingSkills, skillBlockers, nil
 }
 
 func cloneChangeForProjection(change model.Change) model.Change {

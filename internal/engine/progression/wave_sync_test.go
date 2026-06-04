@@ -30,6 +30,19 @@ func writeTasksAndMaterializeWavePlan(t *testing.T, root string, change model.Ch
 	return tasksPath
 }
 
+func expectedTaskFreshnessInputsForWavePlan(
+	t *testing.T,
+	root string,
+	change model.Change,
+	runSummaryVersion int,
+	taskID string,
+) model.ExecutionTaskFreshnessInputs {
+	t.Helper()
+	wavePlan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+	return state.ExpectedExecutionTaskFreshnessInputs(change, runSummaryVersion, taskID, wavePlan.TasksPlanHash)
+}
+
 func TestCollectNonPassTaskBlockers_AllPass(t *testing.T) {
 	t.Parallel()
 	runs := map[string]model.TaskRun{
@@ -118,7 +131,7 @@ func TestBuildExecutionSummaryPreservesDistinctTaskBlockerDetails(t *testing.T) 
 	assert.Len(t, summary.OpenBlockers, 2)
 }
 
-func TestTasksPlanChangedSinceTaskEvidenceBlockersTracksOnlyStaleTasks(t *testing.T) {
+func TestTasksPlanChangedSinceTaskEvidenceBlockersTracksAllTasksWhenHashChanges(t *testing.T) {
 	t.Parallel()
 
 	tasksPlanUpdatedAt := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
@@ -139,10 +152,10 @@ func TestTasksPlanChangedSinceTaskEvidenceBlockersTracksOnlyStaleTasks(t *testin
 			},
 		},
 		"current-hash",
-		tasksPlanUpdatedAt,
 	)
 
 	assert.Equal(t, []string{
+		"tasks_plan_changed_since_task_evidence:fresh-task",
 		"tasks_plan_changed_since_task_evidence:missing-capture",
 		"tasks_plan_changed_since_task_evidence:stale-task",
 	}, blockers)
@@ -165,12 +178,9 @@ func TestTasksPlanChangedSinceTaskEvidenceBlockersAppliesOnFirstExecution(t *tes
 			},
 		},
 		"current-hash",
-		tasksPlanUpdatedAt,
 	)
 
-	assert.Equal(t, []string{
-		"tasks_plan_changed_since_task_evidence:stale-task",
-	}, blockers)
+	assert.Empty(t, blockers)
 }
 
 func TestParseTaskEvidenceRejectsCompatibilityFallbacks(t *testing.T) {
@@ -371,7 +381,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         recordedAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	if err != nil {
@@ -439,7 +449,7 @@ func TestSyncGovernedWaveExecutionRejectsWaveEvidenceOlderThanTaskEvidence(t *te
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         recordedAt.Add(time.Hour).Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -494,7 +504,7 @@ func TestSyncGovernedWaveExecutionSurfacesParseIssuesAlongsideStaleEvidence(t *t
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         recordedAt.Add(time.Hour).Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -560,7 +570,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -573,7 +583,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
-	matching.TasksPlanHash, _, err = state.CurrentTasksPlanState(root, change)
+	matching.TasksPlanHash, err = state.CurrentTasksPlanState(root, change)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
@@ -623,7 +633,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -636,7 +646,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
-	matching.TasksPlanHash, _, err = state.CurrentTasksPlanState(root, change)
+	matching.TasksPlanHash, err = state.CurrentTasksPlanState(root, change)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
@@ -676,7 +686,7 @@ func TestCurrentTasksPlanHashUsesSemanticTaskPlanHash(t *testing.T) {
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasks), 0o644))
 
-	got, _, err := state.CurrentTasksPlanState(root, change)
+	got, err := state.CurrentTasksPlanState(root, change)
 	require.NoError(t, err)
 	want, err := wave.TaskPlanSemanticHash(tasks)
 	require.NoError(t, err)
@@ -734,7 +744,7 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	if err != nil {
@@ -819,7 +829,7 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 			"blockers":            []string{},
 			"evidence_ref":        "test:" + taskID,
 			"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
-			"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
+			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
 			"session_id":          sharedSessionID,
 		}
 		raw, err := json.Marshal(taskEvidence)
@@ -892,7 +902,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -995,7 +1005,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         firstEvidenceAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -1041,6 +1051,8 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		RunVersion: 2,
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
 
 	taskEvidence = map[string]any{
 		"task_id":             "task-a",
@@ -1049,15 +1061,13 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         secondEvidenceAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 2, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 2, "task-a"),
 	}
 	raw, err = json.Marshal(taskEvidence)
 	require.NoError(t, err)
 	taskPath = filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
-	_, err = state.MaterializeWavePlan(root, change)
-	require.NoError(t, err)
 
 	result, err = SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
@@ -1122,7 +1132,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 		"verdict":             "pass",
 		"evidence_ref":        "test:task-a",
 		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
 	}
 	raw, err := json.Marshal(taskEvidence)
 	require.NoError(t, err)
@@ -1152,7 +1162,9 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "tasks_plan_changed_since_task_evidence", "task-a"))
-	assert.Empty(t, summary.TasksPlanHash, "first sync must not bind stale evidence to the current tasks hash")
+	currentHash, err := wave.TaskPlanSemanticHash(updatedTasks)
+	require.NoError(t, err)
+	assert.NotEqual(t, currentHash, summary.TasksPlanHash, "first sync must not bind stale evidence to the current tasks hash")
 }
 
 func hasWaveReasonCode(reasons []model.ReasonCode, code, detail string) bool {

@@ -155,9 +155,8 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 		},
 	}))
 
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n\nUpdated after execution.\n"), 0o644))
+	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
+	require.NoError(t, state.SaveChange(root, change))
 
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
@@ -167,9 +166,10 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 	require.NotNil(t, view.FreshnessDiagnostics)
 	assert.Equal(t, "stale", view.FreshnessDiagnostics.Status)
 	require.NotNil(t, view.FreshnessDiagnostics.FirstStaleCause)
-	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.SourceArtifact, "artifacts/changes/stale-execution-summary")
-	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.EvidenceArtifact, "execution-summary.yaml")
-	assert.Contains(t, view.FreshnessDiagnostics.FirstStaleCause.NextAction, "rerun")
+	require.NotEmpty(t, view.FreshnessDiagnostics.TaskInputDiffs)
+	assert.Equal(t, "task-a", view.FreshnessDiagnostics.TaskInputDiffs[0].TaskID)
+	assert.Equal(t, "guardrail_domain", view.FreshnessDiagnostics.TaskInputDiffs[0].Field)
+	assert.Contains(t, view.FreshnessDiagnostics.TaskInputDiffs[0].NextAction, "regenerate")
 	require.NotNil(t, view.FreshnessDiagnostics.PathAuthority)
 	runtimePath := view.FreshnessDiagnostics.PathAuthority.RuntimeEvidencePath
 	assert.True(t, filepath.IsAbs(runtimePath))

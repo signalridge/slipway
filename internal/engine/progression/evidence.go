@@ -23,7 +23,7 @@ func EvaluateRequiredSkillsForChange(
 ) (map[string]model.VerificationRecord, []string, error) {
 	return evaluateRequiredSkills(
 		root,
-		change.Slug,
+		change,
 		change.NeedsDiscovery,
 		change.EffectiveWorkflowProfile(),
 		workflowState,
@@ -45,7 +45,7 @@ func activePlanningSubStepsForState(change model.Change, workflowState model.Wor
 
 func evaluateRequiredSkills(
 	root string,
-	slug string,
+	change model.Change,
 	needsDiscovery bool,
 	workflowProfile model.WorkflowProfile,
 	workflowState model.WorkflowState,
@@ -95,7 +95,7 @@ func evaluateRequiredSkills(
 		}
 
 		if def.RunSummaryBound && latestRunSummaryVersion < 1 {
-			blockers = append(blockers, "required_skill_not_ready:"+runSummaryMissingDetail(root, slug, skillName))
+			blockers = append(blockers, "required_skill_not_ready:"+runSummaryMissingDetail(root, change.Slug, skillName))
 			continue
 		}
 
@@ -118,6 +118,15 @@ func evaluateRequiredSkills(
 			default:
 				blockers = append(blockers, "required_skill_not_ready:"+skillName)
 			}
+			continue
+		}
+
+		digestBlockers, err := skillDigestFreshnessBlockers(root, change, skillName, rec)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(digestBlockers) > 0 {
+			blockers = append(blockers, digestBlockers...)
 			continue
 		}
 

@@ -32,6 +32,14 @@ func verificationReadPathForTest(root, slug, skillName string) string {
 func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion int, taskIDs ...string) {
 	t.Helper()
 	now := time.Now().UTC()
+	workspaceRoot := root
+	var change *model.Change
+	if loaded, err := state.LoadChange(root, slug); err == nil {
+		change = &loaded
+		if paths, err := state.ResolveChangePaths(root, loaded); err == nil && paths.WorkspaceRoot != "" {
+			workspaceRoot = paths.WorkspaceRoot
+		}
+	}
 	targetsByTaskID := plannedTargetsByTaskID(t, root, slug)
 	tasks := make([]model.ExecutionTaskSummary, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
@@ -39,6 +47,9 @@ func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion in
 		changedFiles := append([]string(nil), targetFiles...)
 		if len(changedFiles) == 0 {
 			changedFiles = []string{"cmd/placeholder.go"}
+		}
+		for _, rel := range changedFiles {
+			ensureExecutionSummaryInputFile(t, workspaceRoot, rel)
 		}
 		tasks = append(tasks, model.ExecutionTaskSummary{
 			TaskID:       taskID,
@@ -57,7 +68,26 @@ func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion in
 		CompletedTasks:    append([]string(nil), taskIDs...),
 		Tasks:             tasks,
 	}
+	if change != nil {
+		if hash, err := state.CurrentTasksPlanState(root, *change); err == nil {
+			summary.TasksPlanHash = hash
+		}
+	}
 	writeExecutionSummary(t, root, slug, summary)
+	refreshPassingSkillDigestsForTest(t, root, slug)
+}
+
+func ensureExecutionSummaryInputFile(t *testing.T, root, rel string) {
+	t.Helper()
+	if rel == "" || filepath.IsAbs(rel) {
+		return
+	}
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("// test fixture input\n"), 0o644))
 }
 
 func plannedTargetsByTaskID(t *testing.T, root, slug string) map[string][]string {
