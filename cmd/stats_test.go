@@ -140,9 +140,8 @@ func TestStatsMarksStaleRunSummaryWhenExecutionEvidenceDrifts(t *testing.T) {
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
 
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n\nUpdated after execution."), 0o644))
+	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
+	require.NoError(t, state.SaveChange(root, change))
 
 	view, err := buildStatsView(root, time.Now().UTC())
 	require.NoError(t, err)

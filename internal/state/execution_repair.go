@@ -158,7 +158,7 @@ func wavePlanRepairBlockedReason(root string, change model.Change, summary *mode
 		return "", nil
 	}
 
-	currentHash, tasksUpdatedAt, nodes, err := currentTaskPlanNodes(root, change)
+	currentHash, nodes, err := currentTaskPlanNodes(root, change)
 	if err != nil {
 		return "", err
 	}
@@ -183,22 +183,6 @@ func wavePlanRepairBlockedReason(root string, change model.Change, summary *mode
 	summaryHash := strings.TrimSpace(summary.TasksPlanHash)
 	if summaryHash != "" && currentHash != "" && summaryHash != currentHash {
 		return fmt.Sprintf("current tasks.md hash %q no longer matches execution summary hash %q", currentHash, summaryHash), nil
-	}
-
-	if summaryHash != "" || currentHash == "" || tasksUpdatedAt.IsZero() {
-		return "", nil
-	}
-
-	staleTasks := make([]string, 0, len(summary.Tasks))
-	for _, task := range summary.Tasks {
-		capturedAt := task.CapturedAt.UTC()
-		if capturedAt.IsZero() || capturedAt.Before(tasksUpdatedAt) {
-			staleTasks = append(staleTasks, task.TaskID)
-		}
-	}
-	slices.Sort(staleTasks)
-	if len(staleTasks) > 0 {
-		return fmt.Sprintf("current tasks.md changed after execution evidence was captured for: %s", strings.Join(staleTasks, ", ")), nil
 	}
 
 	return "", nil

@@ -483,9 +483,17 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	// Write execution summary first.
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
-	// Modify a bundle artifact after execution to trigger staleness.
+	// Modify the semantic task plan after execution to trigger planning staleness.
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Modified intent\n\nPost-execution change."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` validate stale planning evidence
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/validate.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`), 0o644))
 
 	view, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)

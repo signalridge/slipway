@@ -1,6 +1,7 @@
 package state
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -240,6 +241,10 @@ func TestTrackedChangeBundlesOmitWorktreePath(t *testing.T) {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(toplevel, rel))
+		if errors.Is(err, os.ErrNotExist) {
+			t.Logf("skipping tracked change.yaml deleted in this worktree: %s", rel)
+			continue
+		}
 		require.NoError(t, err)
 		assert.NotContainsf(t, string(raw), "worktree_path:",
 			"tracked %s must not persist a machine-local worktree_path", rel)

@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,6 +63,12 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// 1. S0_INTAKE: lightweight path — no bundle, no worktree, no wave sync.
 	if fromState == model.StateS0Intake {
 		return advanceIntake(root, &change, fromState)
+	}
+
+	if stale, err := stalePlanningRecoveryNeededForPlanAuditDigest(root, change); err != nil {
+		return AdvanceSummary{}, err
+	} else if stale {
+		return beginStalePlanningRecovery(root, &change, fromState)
 	}
 
 	// 2. Bundle precondition check.
@@ -156,7 +163,15 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		if len(skillBlockers) > 0 {
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(skillBlockers)), nil
 		}
+		stampResult, err := stampPassingSkillDigests(root, change, passingSkills)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if len(stampResult.Blockers) > 0 {
+			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers)), nil
+		}
 		preTransitionSideEffects = append(preTransitionSideEffects, skillEvidenceSideEffects(passingSkills)...)
+		preTransitionSideEffects = append(preTransitionSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	}
 	preTransitionSkillEvidence := skillEvidenceTraceFromPassing(root, change, passingSkills)
 
@@ -253,16 +268,27 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 
 	if fromState == model.StateS4Verify {
-		shipResult, err := EvaluateShipGate(root, change)
+		shipAuthority, err := EvaluateShipAuthority(root, change)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		if shipResult.Status == model.GateStatusBlocked {
-			summary := blockedAdvanceSummary(fromState, shipResult.ReasonCodes)
+		if shipAuthority.Result.Status == model.GateStatusBlocked {
+			summary := blockedAdvanceSummary(fromState, shipAuthority.Result.ReasonCodes)
 			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
 			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
 			return saveChangeAndReturn(root, change, summary)
 		}
+		stampResult, err := stampPassingSkillDigests(root, change, shipAuthorityPassingSkills(shipAuthority))
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if len(stampResult.Blockers) > 0 {
+			summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
+			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+			return saveChangeAndReturn(root, change, summary)
+		}
+		preTransitionSideEffects = append(preTransitionSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	}
 
 	// 7. State transition
@@ -368,6 +394,17 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		ClearedFields: cleared,
 		Message:       fmt.Sprintf("Advanced to %s.", toState),
 	}, nil
+}
+
+func shipAuthorityPassingSkills(shipAuthority ShipAuthority) map[string]model.VerificationRecord {
+	passing := map[string]model.VerificationRecord{}
+	for skillName, record := range shipAuthority.ReviewAuthority.PassingSkills {
+		passing[skillName] = record
+	}
+	for skillName, record := range shipAuthority.VerifyPassingSkills {
+		passing[skillName] = record
+	}
+	return passing
 }
 
 func applyPendingWorktreePreflight(root string, change *model.Change, fromState model.WorkflowState) ([]string, error) {
@@ -526,6 +563,32 @@ func removeFileIfExists(path string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func stalePlanningRecoveryNeededForPlanAuditDigest(root string, change model.Change) (bool, error) {
+	if !stalePlanningRecoveryState(change.CurrentState) {
+		return false, nil
+	}
+	record, err := state.LoadVerification(root, change.Slug, SkillPlanAudit)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !record.IsPassing() {
+		return false, nil
+	}
+	blockers, err := skillDigestFreshnessBlockers(root, change, SkillPlanAudit, record)
+	if err != nil {
+		return false, err
+	}
+	for _, blocker := range blockers {
+		if strings.HasPrefix(blocker, "required_skill_stale:"+SkillPlanAudit+":") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func ensureGovernedBundleScaffolded(root string, change *model.Change) error {
@@ -740,6 +803,23 @@ func derivedAdvanceLifecycleEvents(root string, change model.Change, base state.
 		event.Diagnostics = skillEvidenceDiagnostics(evidence)
 		derived = append(derived, event)
 	}
+	for _, sideEffect := range summary.SideEffects {
+		if sideEffect.Kind != digestBackfilledFromLegacyVerdictEvent {
+			continue
+		}
+		skillID := strings.TrimSpace(sideEffect.Detail)
+		if skillID == "" {
+			continue
+		}
+		event := lifecycleDerivedEvent(base, digestBackfilledFromLegacyVerdictEvent, "", skillID)
+		event.Result = "recorded"
+		event.Reason = "legacy_verdict_digest_backfilled"
+		event.EvidenceRefs = map[string]string{
+			"evidence-digests": state.DisplayPath(root, state.EvidenceDigestsPathForRead(root, change.Slug)),
+		}
+		event.Diagnostics = []string{"skill=" + skillID}
+		derived = append(derived, event)
+	}
 	return derived
 }
 
@@ -854,6 +934,25 @@ func skillEvidenceSideEffects(passingSkills map[string]model.VerificationRecord)
 	for _, skillName := range names {
 		sideEffects = append(sideEffects, SideEffect{
 			Kind:   "skill_evidence_recorded",
+			Detail: skillName,
+		})
+	}
+	return sideEffects
+}
+
+func digestBackfilledSideEffects(skillNames []string) []SideEffect {
+	if len(skillNames) == 0 {
+		return nil
+	}
+	skillNames = stringutil.UniqueSorted(skillNames)
+	sideEffects := make([]SideEffect, 0, len(skillNames))
+	for _, skillName := range skillNames {
+		skillName = strings.TrimSpace(skillName)
+		if skillName == "" {
+			continue
+		}
+		sideEffects = append(sideEffects, SideEffect{
+			Kind:   digestBackfilledFromLegacyVerdictEvent,
 			Detail: skillName,
 		})
 	}

@@ -283,6 +283,18 @@ func TestWaveReasonCodesCarryRemediation(t *testing.T) {
 	}
 }
 
+func TestRequiredSkillStaleCarriesRemediation(t *testing.T) {
+	t.Parallel()
+
+	reason := ReasonCodeFromSpec("required_skill_stale:plan-audit:tasks.md")
+
+	assert.Equal(t, "required_skill_stale", reason.Code)
+	assert.Equal(t, "plan-audit:tasks.md", reason.Detail)
+	assert.Equal(t, ReasonSeverityError, reason.Severity)
+	assert.Contains(t, reason.Message, "rerun the skill to re-certify the named artifact")
+	assert.Contains(t, reason.Message, "plan-audit:tasks.md")
+}
+
 func TestPhaseForMapsWorkflowStates(t *testing.T) {
 	t.Parallel()
 

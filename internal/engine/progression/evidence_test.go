@@ -51,6 +51,7 @@ func TestEvaluateRequiredSkills_PassingEvidenceIsReturned(t *testing.T) {
 	change := model.NewChange(slug)
 	change.CurrentState = model.StateS1Plan
 	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
 	rec := model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,

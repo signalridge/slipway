@@ -327,7 +327,7 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 		return findings, nil
 	}
 
-	if currentHash, _, err := CurrentTasksPlanState(root, change); err == nil &&
+	if currentHash, err := CurrentTasksPlanState(root, change); err == nil &&
 		strings.TrimSpace(plan.TasksPlanHash) != "" &&
 		currentHash != strings.TrimSpace(plan.TasksPlanHash) {
 		findings = append(findings, HealthFinding{

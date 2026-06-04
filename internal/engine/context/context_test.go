@@ -30,13 +30,13 @@ func TestEvaluateEvidenceFreshness(t *testing.T) {
 	})
 	assert.Equal(t, EvidenceFreshnessStale, staleByStructuralInput)
 
-	staleByTime := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
+	timestampOnly := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{
 			EvidenceTimestamp:      time.Now().UTC().Add(-2 * time.Minute),
 			LatestRelevantUpdateAt: time.Now().UTC().Add(-time.Minute),
 		},
 	})
-	assert.Equal(t, EvidenceFreshnessStale, staleByTime)
+	assert.Equal(t, EvidenceFreshnessUnknown, timestampOnly)
 
 	unknownInsufficient := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{},

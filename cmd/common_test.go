@@ -357,13 +357,13 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 	assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
-func TestProjectFreshnessTracksBundleArtifactMTime(t *testing.T) {
+func TestProjectFreshnessTracksTasksPlanHash(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "freshness tracks bundle artifact mtime")
+	slug := createGovernedRequest(t, root, "L2", "freshness tracks tasks plan hash")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Execute
@@ -371,7 +371,15 @@ func TestProjectFreshnessTracksBundleArtifactMTime(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte("# Requirements\n\n- keep evidence fresh\n")))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` keep evidence fresh
+  - wave: 1
+  - target_files: ["cmd/placeholder.go"]
+  - task_kind: code
+`)))
+	hash, err := state.CurrentTasksPlanState(root, change)
+	require.NoError(t, err)
 
 	oldTS := time.Now().UTC().Add(-5 * time.Second)
 	capturedAt := oldTS.Add(time.Second)
@@ -387,29 +395,53 @@ func TestProjectFreshnessTracksBundleArtifactMTime(t *testing.T) {
 		RunSummaryVersion: 1,
 		CapturedAt:        capturedAt,
 		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     hash,
 		CompletedTasks:    []string{"task-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "task-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{"cmd/placeholder.go"},
+			TargetFiles:  []string{"cmd/placeholder.go"},
+			CapturedAt:   capturedAt,
+		}},
 	}
+	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
+	summary.SyncDerivedFields()
 	writeExecutionSummary(t, root, slug, summary)
 
 	assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, nil))
 
-	laterTS := capturedAt.Add(2 * time.Second)
-	require.NoError(t, os.Chtimes(filepath.Join(bundlePath, "requirements.md"), laterTS, laterTS))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`task-01`"+` changed evidence plan
+  - wave: 1
+  - target_files: ["cmd/placeholder.go"]
+  - task_kind: code
+`)))
 
 	assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, nil))
 }
 
 func TestProjectFreshnessIgnoresNonFreshnessBlockers(t *testing.T) {
 	root := t.TempDir()
+	change := model.NewChange("freshness-scope")
 	summary := model.ExecutionSummary{
 		Version:           model.ExecutionSummaryVersion,
 		RunSummaryVersion: 1,
 		CapturedAt:        time.Now().UTC(),
 		OverallVerdict:    model.ExecutionVerdictPass,
 		CompletedTasks:    []string{"task-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-01",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
 	}
+	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
+	summary.SyncDerivedFields()
 
-	change := model.NewChange("freshness-scope")
 	assert.Equal(t, "fresh", projectFreshnessForExecMode(root, change, &summary, []model.ReasonCode{model.NewReasonCode("required_skill_missing", "")}))
 	assert.Equal(t, "stale", projectFreshnessForExecMode(root, change, &summary, []model.ReasonCode{model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, "")}))
 }

@@ -1,0 +1,57 @@
+version: 1
+slug: fix-issues-59-66-67-together-under-one-thesis-governance-sig
+description: 'Resolve the critical core of #66, #70, and #67 under one thesis: governance signals must not be lossily projected to a scalar (timestamp/mtime/opaque blocker) at the consume boundary; name the specific artifact and the supported remediation. #66 plus #70: rebind skill-evidence and stale-planning-chain freshness to engine-owned content digests in gitignored verification/evidence-digests.yaml; VerificationRecord and change.yaml schemas stay unchanged; the engine stamps digests only at mutating verdict acceptance during slipway run; plan-audit includes assurance.md; tasks.md uses TaskPlanSemanticHash; steady-state freshness does not consume filesystem mtime or wall-clock timestamps. Legacy file-absent migration uses a one-time verdict-timestamp safety gate before silent backfill. #70: wave-plan.generated_at becomes display/audit materialization time only and is not a freshness input. #67: S4 post-review remediation routes to goal-verification plus final-closeout, naming changed artifacts when digest diagnostics are available. #59 traceability legibility is split into a separate quick PR and #59 stays open with a per-item ledger; #71 is out of scope.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-06-04T06:01:11.843543Z
+guardrail_domain: schema_data_migration
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-issues-59-66-67-together-under-one-thesis-governance-sig
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 4927bb442619a2ed2eaa1dcee0cf51b2a316905babc6676d79e15e56bd201f52
+        updated_at: 2026-06-04T17:25:32.002316192Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 17902cbff2aacea2281973b354f07ee2acdf2de7beb3fc85292021838cbbc9d2
+        updated_at: 2026-06-04T17:25:32.00180906Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 735d3a519fd2d7f360d45a36f1e40b21daee7dfae625c6969bbfca54a983f707
+        updated_at: 2026-06-04T16:18:28.487154902Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 4f9c8757ead19a2c08b5b0f6b00bc6b5db08239de36d6d4e0be07aec5bbd60b9
+        updated_at: 2026-06-04T17:25:32.001242177Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: f19de81bbf83e941c448dff2f717f7f46d543b0b6df05552a32e518c97ef28a7
+        updated_at: 2026-06-04T16:18:49.515850161Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 87c8b3cbd1153a38c345a3ffb1ab7af6d82e113bdccf854794bec543f2e88911
+        updated_at: 2026-06-04T16:25:03.072556715Z

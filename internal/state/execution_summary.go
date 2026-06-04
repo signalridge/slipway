@@ -13,7 +13,6 @@ import (
 	"time"
 
 	ctxpack "github.com/signalridge/slipway/internal/engine/context"
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -309,12 +308,17 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 	return stringutil.UniqueSorted(blockers)
 }
 
-func ExpectedExecutionTaskFreshnessInputs(change model.Change, runSummaryVersion int, taskID string) model.ExecutionTaskFreshnessInputs {
+func ExpectedExecutionTaskFreshnessInputs(change model.Change, runSummaryVersion int, taskID string, tasksPlanHash ...string) model.ExecutionTaskFreshnessInputs {
+	planHash := ""
+	if len(tasksPlanHash) > 0 {
+		planHash = strings.TrimSpace(tasksPlanHash[0])
+	}
 	return model.ExecutionTaskFreshnessInputs{
 		ChangeID:          strings.TrimSpace(change.Slug),
 		RunSummaryVersion: runSummaryVersion,
 		TaskID:            strings.TrimSpace(taskID),
 		GuardrailDomain:   strings.TrimSpace(change.GuardrailDomain),
+		TasksPlanHash:     planHash,
 	}.Normalized()
 }
 
@@ -323,7 +327,7 @@ func ApplyExecutionSummaryFreshnessInputs(summary *model.ExecutionSummary, chang
 		return
 	}
 	for i := range summary.Tasks {
-		summary.Tasks[i].FreshnessInputs = ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, summary.Tasks[i].TaskID)
+		summary.Tasks[i].FreshnessInputs = ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, summary.Tasks[i].TaskID, summary.TasksPlanHash)
 	}
 }
 
@@ -333,7 +337,7 @@ func ExecutionSummaryFreshness(root string, change model.Change, summary *model.
 	}
 
 	evidenceTimestamp := summary.CapturedAt.UTC()
-	latestRelevantUpdateAt := latestExecutionRelevantUpdateAt(root, change, summary)
+	latestRelevantUpdateAt := time.Time{}
 	evidenceArtifact := executionSummaryEvidenceArtifact(root, change)
 	freshness, _, _ := executionSummaryFreshnessEvaluation(root, change, summary, evidenceArtifact, latestRelevantUpdateAt, evidenceTimestamp)
 	return freshness
@@ -354,13 +358,7 @@ func executionSummaryFreshnessEvaluation(
 	}
 	inputs := collectTaskEvidenceFreshnessInputs(change, summary, latestRelevantUpdateAt, evidenceTimestamp)
 	if len(inputs) == 0 {
-		if latestRelevantUpdateAt.IsZero() {
-			latestRelevantUpdateAt = evidenceTimestamp
-		}
-		inputs = []ctxpack.EvidenceFreshnessInput{{
-			EvidenceTimestamp:      evidenceTimestamp,
-			LatestRelevantUpdateAt: latestRelevantUpdateAt,
-		}}
+		return ctxpack.EvidenceFreshnessUnknown, nil, nil
 	}
 	return ctxpack.EvaluateEvidenceFreshness(true, inputs), nil, nil
 }
@@ -384,7 +382,7 @@ func ExecutionSummaryFreshnessDiagnostics(root string, change model.Change, summ
 
 	diagnostics.PathAuthority = ExecutionPathAuthorityDiagnostics(root, change, summary.RunSummaryVersion)
 	evidenceTimestamp := summary.CapturedAt.UTC()
-	latestRelevantUpdateAt := latestExecutionRelevantUpdateAt(root, change, summary)
+	latestRelevantUpdateAt := time.Time{}
 	evidenceArtifact := executionSummaryEvidenceArtifact(root, change)
 	freshness, taskInputDiffs, planningPairs := executionSummaryFreshnessEvaluation(root, change, summary, evidenceArtifact, latestRelevantUpdateAt, evidenceTimestamp)
 	diagnostics.Status = string(freshness)
@@ -461,7 +459,7 @@ func taskFreshnessInputDiffs(root string, change model.Change, summary *model.Ex
 	}
 	diffs := []ExecutionTaskInputDifference{}
 	for _, task := range summary.Tasks {
-		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID).FieldMap()
+		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID, summary.TasksPlanHash).FieldMap()
 		current := task.FreshnessInputs.FieldMap()
 		evidencePath := taskEvidenceDisplayPath(root, change.Slug, summary.RunSummaryVersion, task.TaskID)
 		if evidencePath == "" {
@@ -470,7 +468,7 @@ func taskFreshnessInputDiffs(root string, change model.Change, summary *model.Ex
 		if task.FreshnessInputs.IsZero() {
 			current = map[string]string{}
 		}
-		fields := []string{"change_id", "run_summary_version", "task_id", "guardrail_domain"}
+		fields := []string{"change_id", "run_summary_version", "task_id", "guardrail_domain", "tasks_plan_hash"}
 		for _, field := range fields {
 			if expected[field] == current[field] {
 				continue
@@ -559,46 +557,20 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 		return nil
 	}
 
-	latestEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
-	if captured := summary.CapturedAt.UTC(); captured.After(latestEvidenceAt) {
-		latestEvidenceAt = captured
-	}
-
 	sources := []stalePlanningSource{}
-	appendIfNewer := func(rel string) {
-		path := filepath.Join(bundleDir, rel)
-		info, err := os.Stat(path)
-		if err != nil {
-			return
-		}
-		updatedAt := info.ModTime().UTC()
-		if !updatedAt.After(latestEvidenceAt) {
-			return
-		}
-		sources = append(sources, stalePlanningSource{
-			path:       path,
-			updatedAt:  updatedAt,
-			nextAction: "rerun plan-audit and wave-orchestration before repairing downstream execution evidence",
-		})
-	}
-	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md"} {
-		appendIfNewer(rel)
-	}
-
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	tasksPlanHashMismatch := false
-	if currentHash, updatedAt, err := CurrentTasksPlanState(root, change); err == nil {
+	if currentHash, err := CurrentTasksPlanState(root, change); err == nil {
 		if strings.TrimSpace(summary.TasksPlanHash) != "" && currentHash != strings.TrimSpace(summary.TasksPlanHash) {
-			tasksPlanHashMismatch = true
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,
-				updatedAt:  updatedAt,
 				nextAction: "regenerate wave-plan.yaml and execution-summary.yaml from the current tasks.md plan",
 			})
 		}
-	}
-	if !tasksPlanHashMismatch && isTasksPlanFreshnessRelevant(tasksPath, summary) {
-		appendIfNewer("tasks.md")
+	} else if strings.TrimSpace(summary.TasksPlanHash) != "" {
+		sources = append(sources, stalePlanningSource{
+			path:       tasksPath,
+			nextAction: "restore readable tasks.md, then regenerate wave-plan.yaml and execution-summary.yaml",
+		})
 	}
 
 	slices.SortFunc(sources, func(a, b stalePlanningSource) int {
@@ -613,7 +585,7 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 
 	pairs := []ExecutionFreshnessPair{}
 	for _, source := range sources {
-		pairs = append(pairs, stalePlanningEvidenceChain(root, bundleDir, evidenceArtifact, latestEvidenceAt, source)...)
+		pairs = append(pairs, stalePlanningEvidenceChain(root, bundleDir, evidenceArtifact, summary.CapturedAt.UTC(), source)...)
 	}
 	return pairs
 }
@@ -686,8 +658,9 @@ func nextActionForPlanningStage(path string) string {
 }
 
 // stageEvidenceCapturedAt returns the captured timestamp embedded in a
-// planning-stage evidence record (plan-audit.yaml's verification timestamp or
-// wave-plan.yaml's generated_at).
+// planning-stage evidence record when that timestamp is part of the evidence
+// contract. wave-plan.yaml's generated_at is display/audit metadata only, so it
+// intentionally does not participate in freshness diagnostics.
 //
 // The embedded record timestamp — not the file mtime — is the semantic capture
 // time the staleness comparison treats as the evidence age. A record can be
@@ -702,8 +675,7 @@ func stageEvidenceCapturedAt(path string) time.Time {
 		return time.Time{}
 	}
 	var record struct {
-		Timestamp   time.Time `yaml:"timestamp"`
-		GeneratedAt time.Time `yaml:"generated_at"`
+		Timestamp time.Time `yaml:"timestamp"`
 	}
 	if err := yaml.Unmarshal(raw, &record); err != nil {
 		return time.Time{}
@@ -711,8 +683,6 @@ func stageEvidenceCapturedAt(path string) time.Time {
 	switch filepath.Base(path) {
 	case planAuditFileName:
 		return record.Timestamp.UTC()
-	case WavePlanFileName:
-		return record.GeneratedAt.UTC()
 	default:
 		return time.Time{}
 	}
@@ -754,71 +724,6 @@ func formatFreshnessTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-func failClosedFreshnessUpdateAt(latest time.Time) time.Time {
-	if latest.IsZero() {
-		return time.Unix(0, 1).UTC()
-	}
-	return latest.Add(time.Nanosecond)
-}
-
-func failClosedExecutionRelevantUpdateAt(latest time.Time, summary *model.ExecutionSummary) time.Time {
-	if summary != nil {
-		evidenceLatest := summary.LatestRelevantUpdateAt().UTC()
-		if evidenceLatest.After(latest) {
-			latest = evidenceLatest
-		}
-	}
-	return failClosedFreshnessUpdateAt(latest)
-}
-
-func latestExecutionRelevantUpdateAt(root string, change model.Change, summary *model.ExecutionSummary) time.Time {
-	// This is the upstream baseline for per-task evidence freshness. Do not
-	// seed it from execution-summary.yaml or sibling task timestamps: the
-	// summary is downstream aggregate evidence, and each task evidence item must
-	// only be compared with its own structural inputs and upstream artifacts.
-	var latest time.Time
-	if strings.TrimSpace(root) == "" || strings.TrimSpace(change.Slug) == "" {
-		return latest
-	}
-
-	bundleDir, err := GovernedBundleDir(root, change)
-	if err != nil {
-		return latest
-	}
-
-	for _, path := range []string{
-		filepath.Join(bundleDir, "intent.md"),
-		filepath.Join(bundleDir, "requirements.md"),
-		filepath.Join(bundleDir, "research.md"),
-		filepath.Join(bundleDir, "decision.md"),
-	} {
-		info, err := os.Stat(path)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return failClosedExecutionRelevantUpdateAt(latest, summary)
-		}
-		modTime := info.ModTime().UTC()
-		if modTime.After(latest) {
-			latest = modTime
-		}
-	}
-
-	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	if isTasksPlanFreshnessRelevant(tasksPath, summary) {
-		if info, err := os.Stat(tasksPath); err == nil {
-			modTime := info.ModTime().UTC()
-			if modTime.After(latest) {
-				latest = modTime
-			}
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return failClosedExecutionRelevantUpdateAt(latest, summary)
-		}
-	}
-	return latest
-}
-
 func collectTaskEvidenceFreshnessInputs(
 	change model.Change,
 	summary *model.ExecutionSummary,
@@ -835,7 +740,7 @@ func collectTaskEvidenceFreshnessInputs(
 		if evidenceTs.IsZero() {
 			evidenceTs = defaultEvidenceTimestamp
 		}
-		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID)
+		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID, summary.TasksPlanHash)
 		inputs = append(inputs, ctxpack.EvidenceFreshnessInput{
 			ExpectedStructuralInput: expected.FieldMap(),
 			CurrentStructuralInput:  task.FreshnessInputs.FieldMap(),
@@ -844,19 +749,4 @@ func collectTaskEvidenceFreshnessInputs(
 		})
 	}
 	return inputs
-}
-
-func isTasksPlanFreshnessRelevant(tasksPath string, summary *model.ExecutionSummary) bool {
-	if summary == nil || strings.TrimSpace(summary.TasksPlanHash) == "" {
-		return true
-	}
-	raw, err := os.ReadFile(tasksPath)
-	if err != nil {
-		return true
-	}
-	currentHash, err := wave.TaskPlanSemanticHash(string(raw))
-	if err != nil {
-		return true
-	}
-	return currentHash != strings.TrimSpace(summary.TasksPlanHash)
 }

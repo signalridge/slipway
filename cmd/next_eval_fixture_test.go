@@ -71,7 +71,7 @@ Docs render.
 				writeSkillVerification(t, root, slug, progression.SkillIntakeClarification, model.VerificationRecord{
 					Verdict:    model.VerificationVerdictPass,
 					Blockers:   []model.ReasonCode{},
-					Timestamp:  time.Date(2026, 5, 24, 1, 2, 3, 0, time.UTC),
+					Timestamp:  time.Now().UTC(),
 					RunVersion: 0,
 				})
 				return slug

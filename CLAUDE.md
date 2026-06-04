@@ -127,6 +127,26 @@ Existing repositories auto-migrate the next time `slipway new`,
 `slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
 block. `evidence/`, `events/`, `verification/`, and `.worktrees/` stay ignored.
 
+`verification/evidence-digests.yaml` is engine-owned local state, not host skill
+evidence. Slipway writes it when mutating advancement accepts passing skill
+evidence, then read-only commands compare the stored input digests with current
+content. Each digest entry records the accepted verification verdict timestamp
+so a newer re-run verdict can replace a stale digest during mutating
+advancement; that timestamp is not the freshness signal. Do not hand-edit
+`verification/<skill>.yaml` to add digest fields. Legacy changes without the
+digest file are backfilled only after the verdict timestamp safety gate passes;
+otherwise the skill must be re-run. Diff-class review digests certify the
+current working diff (`git diff HEAD` plus non-ignored untracked reviewable
+files, excluding Slipway governed/runtime artifacts under
+`artifacts/changes/**`), so committing reviewed changes before finalization can
+make read-only commands report the review stale until mutating advancement
+restamps or the review is run again at the new diff boundary.
+
+`wave-plan.yaml` `generated_at` is display/audit materialization time. Planning
+freshness keys on semantic `tasks_plan_hash`, and runtime task evidence records
+that hash in `freshness_inputs` so old task evidence is not reused after a real
+`tasks.md` plan change.
+
 `next --json` and `run --json` carry `input_context.codebase_map_status` (and
 per-doc `input_context.codebase_map_doc_states`) in the default compact handoff,
 without `--diagnostics`. Values mirror the `codebase-map` assessment (`missing`,

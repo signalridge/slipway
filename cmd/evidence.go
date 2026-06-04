@@ -75,10 +75,14 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return err
 				}
 				if change.CurrentState != model.StateS2Execute {
+					remediation := "Record task evidence only during wave execution."
+					if change.CurrentState == model.StateS4Verify {
+						remediation = progression.S4VerificationRecoveryRemediation()
+					}
 					return newInvalidUsageError(
 						"evidence_task_wrong_state",
 						fmt.Sprintf("task evidence requires S2_EXECUTE state, current: %s", change.CurrentState),
-						"Record task evidence only during wave execution.",
+						remediation,
 						nil,
 					)
 				}
@@ -242,7 +246,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					EvidenceRef:       evidenceRef,
 					Blockers:          blockers,
 					CapturedAt:        capturedAt.Format(time.RFC3339Nano),
-					FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID),
+					FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
 					SessionID:         strings.TrimSpace(sessionID),
 				}
 

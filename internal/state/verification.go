@@ -284,7 +284,7 @@ func listVerificationsInDir(dir string) (map[string]model.VerificationRecord, er
 		if !strings.HasSuffix(name, ".yaml") {
 			continue
 		}
-		if name == ExecutionSummaryFileName || name == WavePlanFileName {
+		if name == ExecutionSummaryFileName || name == WavePlanFileName || name == EvidenceDigestsFileName {
 			continue
 		}
 		skillName := strings.TrimSuffix(name, ".yaml")

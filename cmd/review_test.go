@@ -290,45 +290,9 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 REQ-001: The system must preserve governed verify-state when review prerequisites remain valid.
 `), 0o644))
 
-		now := time.Now().UTC()
-		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        now,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "t-01",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindVerification,
-					ChangedFiles: []string{"cmd/review.go"},
-					CapturedAt:   now,
-				},
-			},
-		})
-		materializeWaveExecutionForSummary(t, root, slug)
-
-		writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  now,
-			RunVersion: 1,
-		})
-		writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  now.Add(time.Second),
-			RunVersion: 1,
-			References: []string{"layer:R0=pass", "layer:R3=pass"},
-		})
-		writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  now.Add(2 * time.Second),
-			RunVersion: 1,
-			References: []string{"layer:IR1=pass", "layer:IR3=pass"},
-		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
@@ -618,9 +582,17 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)
 
-		// Write a bundle artifact AFTER the summary to make evidence stale.
+		// Change the semantic task plan after the summary to make planning evidence stale.
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "intent.md"), []byte("# Intent (modified after execution)\n\nUpdated intent."), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` review should fail on stale evidence
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/review.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`), 0o644))
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
