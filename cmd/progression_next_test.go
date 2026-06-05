@@ -929,6 +929,90 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 	})
 }
 
+func TestRequiredSkillStaleIsActionableAndSetExtractsSkillNames(t *testing.T) {
+	t.Parallel()
+
+	// required_skill_stale is now an actionable required-skill blocker, so the
+	// stale skill is routed/surfaced as the next skill.
+	assert.True(t, isRequiredSkillBlocker("required_skill_stale"))
+
+	blockers := []model.ReasonCode{
+		model.NewReasonCode("required_skill_stale", "plan-audit:assurance.md"),
+		model.NewReasonCode("required_skill_stale", "goal-verification:run_version"),
+		model.NewReasonCode("required_skill_missing", "wave-orchestration"),
+	}
+	stale := requiredSkillStaleSet(blockers)
+	assert.True(t, stale["plan-audit"], "skill name is the first segment of the detail")
+	assert.True(t, stale["goal-verification"])
+	assert.NotContains(t, stale, "wave-orchestration", "non-stale blockers are excluded")
+}
+
+func TestBuildRequiredSkillEvidenceMarksDigestDriftedSkillStale(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "stale evidence status surface")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepAudit
+		require.NoError(t, state.SaveChange(root, change))
+
+		// Precomputed path: plan-audit has a passing verdict but a digest-drift
+		// blocker, so the evidence view must report "stale" (not "passing").
+		passing := map[string]model.VerificationRecord{
+			progression.SkillPlanAudit: {Verdict: model.VerificationVerdictPass},
+		}
+		stale := map[string]bool{progression.SkillPlanAudit: true}
+		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, passing, stale)
+		require.NoError(t, err)
+
+		byName := map[string]skillEvidenceEntry{}
+		for _, e := range evidence {
+			byName[e.SkillName] = e
+		}
+		require.Contains(t, byName, progression.SkillPlanAudit)
+		assert.Equal(t, "stale", byName[progression.SkillPlanAudit].Status)
+		assert.True(t, byName[progression.SkillPlanAudit].HasEvidence)
+	})
+}
+
+func TestBuildRequiredSkillEvidenceNonPrecomputedMarksDigestDriftedSkillStale(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "non-precomputed stale evidence status")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepAudit
+		require.NoError(t, state.SaveChange(root, change))
+
+		// A passing plan-audit verdict on disk; the non-precomputed path reads it.
+		writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+			Verdict:   model.VerificationVerdictPass,
+			Blockers:  []model.ReasonCode{},
+			Timestamp: time.Now().UTC(),
+		})
+
+		// precomputedPassingSkills == nil forces the non-precomputed path.
+		stale := map[string]bool{progression.SkillPlanAudit: true}
+		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, nil, stale)
+		require.NoError(t, err)
+
+		byName := map[string]skillEvidenceEntry{}
+		for _, e := range evidence {
+			byName[e.SkillName] = e
+		}
+		require.Contains(t, byName, progression.SkillPlanAudit)
+		assert.Equal(t, "stale", byName[progression.SkillPlanAudit].Status, "digest drift is stale even when the recorded verdict passes")
+	})
+}
+
 func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testing.T) {
 	t.Parallel()
 

@@ -228,7 +228,11 @@ func makeRepairCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				summary.UnrepairedDrift = normalizeRepairDriftFindings(append(buildUnrepairedDriftFindings(summary.NonRepairableFindings), freshnessDrift...))
+				digestDrift, err := buildGovernanceDigestDriftFindings(root, allChanges)
+				if err != nil {
+					return err
+				}
+				summary.UnrepairedDrift = normalizeRepairDriftFindings(append(append(buildUnrepairedDriftFindings(summary.NonRepairableFindings), freshnessDrift...), digestDrift...))
 				summary.PathAuthority = buildRepairPathAuthority(root, allChanges, summary)
 				applyRepairInvocationWorkspacePath(cmd, root, &summary)
 				if repairSummaryHasLifecycleActivity(summary) {
@@ -382,7 +386,7 @@ func buildUnrepairedDriftFindings(findings []string) []repairDriftFinding {
 		out = append(out, repairDriftFinding{
 			Reason:     reason,
 			Target:     target,
-			NextAction: repairDriftNextAction(reason),
+			NextAction: repairDriftNextAction(reason, target),
 		})
 	}
 	return out
@@ -481,7 +485,7 @@ func normalizeRepairDriftFindings(findings []repairDriftFinding) []repairDriftFi
 			finding.Target = "workspace"
 		}
 		if finding.NextAction == "" {
-			finding.NextAction = repairDriftNextAction(finding.Reason)
+			finding.NextAction = repairDriftNextAction(finding.Reason, finding.Target)
 		}
 		normalized = append(normalized, finding)
 	}
@@ -584,9 +588,14 @@ func repairFindingMentionsSlug(finding repairDriftFinding, slug string) bool {
 		haystack == slug
 }
 
-func repairDriftNextAction(reason string) string {
+func repairDriftNextAction(reason, target string) string {
 	lower := strings.ToLower(reason)
 	switch {
+	case strings.Contains(lower, "evidence digest"), strings.Contains(lower, "required_skill_stale"):
+		// For digest/stale drift the target is the governance skill, so route to
+		// the same restamp guidance the main digest-drift path emits — a single
+		// source of truth that always carries the required --skill.
+		return governanceDigestRestampNextAction(target)
 	case strings.Contains(lower, "wave plan"):
 		return "regenerate or rescope tasks.md and rerun wave orchestration"
 	case strings.Contains(lower, "execution summary"):
@@ -596,6 +605,60 @@ func repairDriftNextAction(reason string) string {
 	default:
 		return "inspect the named artifact and rerun the owning Slipway command after correction"
 	}
+}
+
+// buildGovernanceDigestDriftFindings surfaces governance-skill evidence-digest
+// drift (`required_skill_stale`) as a non-repairable finding routed at
+// `slipway evidence restamp`. repair does not mutate engine-owned digests: the
+// operator either restamps (Tier 0, when the verdict still holds) or re-runs the
+// named host skill. This closes the "repair is a dead-end for stale digests" gap
+// without adding the full P1 recovery surface.
+func buildGovernanceDigestDriftFindings(root string, changes []model.Change) ([]repairDriftFinding, error) {
+	out := []repairDriftFinding{}
+	for _, change := range changes {
+		if change.Status != model.ChangeStatusActive {
+			continue
+		}
+		readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{})
+		if err != nil {
+			// repair is best-effort diagnostics; skip a change whose readiness
+			// cannot be evaluated rather than failing the whole repair pass.
+			continue
+		}
+		staleSkills := []string{}
+		seen := map[string]bool{}
+		for _, blocker := range readiness.Blockers {
+			if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
+				continue
+			}
+			skillName := blockerSkillName(blocker.Detail)
+			if skillName == "" || seen[skillName] {
+				continue
+			}
+			seen[skillName] = true
+			staleSkills = append(staleSkills, skillName)
+		}
+		slices.Sort(staleSkills)
+		for _, skillName := range staleSkills {
+			out = append(out, repairDriftFinding{
+				Reason:     fmt.Sprintf("%s: evidence digest for governance skill %q is stale", change.Slug, skillName),
+				Target:     skillName,
+				NextAction: governanceDigestRestampNextAction(skillName),
+			})
+		}
+	}
+	return out, nil
+}
+
+func governanceDigestRestampNextAction(skillName string) string {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" {
+		// No skill in hand: never emit a bare `restamp --dry-run`, which fails
+		// `evidence_restamp_skill_required`. Keep the placeholder explicit so a
+		// copied command is obviously incomplete rather than silently invalid.
+		return "run `slipway evidence restamp --skill <skill> --dry-run` to assess a Tier-0 restamp; repair does not mutate engine-owned evidence digests — re-run the named host skill if the restamp refuses"
+	}
+	return fmt.Sprintf("run `slipway evidence restamp --skill %s --dry-run` to assess a Tier-0 restamp; repair does not mutate engine-owned evidence digests — re-run the %s host skill if the restamp refuses", skillName, skillName)
 }
 
 func repairAppliedFindingStrings(findings []repairAppliedFinding) []string {

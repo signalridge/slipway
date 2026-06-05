@@ -1001,6 +1001,31 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			require.FileExists(t, waveRunPath)
 			require.FileExists(t, taskEvidencePath)
 
+			// Stamp evidence digests for the skills recovery clears, plus
+			// wave-orchestration (whose record recovery preserves).
+			refreshPassingSkillDigestsForTest(t, root, slug,
+				progression.SkillPlanAudit,
+				progression.SkillSpecComplianceReview,
+				progression.SkillCodeQualityReview,
+				progression.SkillGoalVerification,
+				progression.SkillFinalCloseout,
+				progression.SkillWaveOrchestration,
+			)
+			preChange, err := state.LoadChange(root, slug)
+			require.NoError(t, err)
+			preDigests, err := state.LoadEvidenceDigestsForChange(root, preChange)
+			require.NoError(t, err)
+			for _, skillName := range []string{
+				progression.SkillPlanAudit,
+				progression.SkillSpecComplianceReview,
+				progression.SkillCodeQualityReview,
+				progression.SkillGoalVerification,
+				progression.SkillFinalCloseout,
+				progression.SkillWaveOrchestration,
+			} {
+				require.Contains(t, preDigests.Skills, skillName, "fixture should stamp a digest for %s", skillName)
+			}
+
 			runCmd := commandForRoot(t, root, makeRunCmd())
 			runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 			var buf bytes.Buffer
@@ -1034,6 +1059,20 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			require.NoFileExists(t, finalCloseoutPath)
 			require.FileExists(t, waveRunPath)
 			require.FileExists(t, taskEvidencePath)
+
+			// Digest prune: a digest entry never outlives its verification record.
+			postDigests, err := state.LoadEvidenceDigestsForChange(root, recovered)
+			require.NoError(t, err)
+			for _, skillName := range []string{
+				progression.SkillPlanAudit,
+				progression.SkillSpecComplianceReview,
+				progression.SkillCodeQualityReview,
+				progression.SkillGoalVerification,
+				progression.SkillFinalCloseout,
+			} {
+				assert.NotContains(t, postDigests.Skills, skillName, "stale-planning recovery must prune the %s digest with its record", skillName)
+			}
+			assert.Contains(t, postDigests.Skills, progression.SkillWaveOrchestration, "wave-orchestration record is preserved, so its digest must remain")
 		})
 	}
 }

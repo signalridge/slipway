@@ -1,0 +1,57 @@
+version: 1
+slug: recovery-ux-p0-issue-83-break-the-input-digest-missing-deadl
+description: 'Recovery UX P0 (issue #83): break the input_digest_missing deadlock via Tier-0 digest backfill, prune digest entries on stale-planning recovery, decouple assurance.md from the plan-audit digest, surface required_skill_stale as an actionable blocker with a stale evidence status, add a minimal Tier-0 evidence restamp --dry-run, and route repair at the recovery path'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-05T09:14:22.413654Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/recovery-ux-p0-issue-83-break-the-input-digest-missing-deadl
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: '71f3521 feat(skills): generalized test-design + language-aware capability routing; 31e9bda fix(governance): harden Open Questions detection'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 42bbc8a6681acab71c1d462ad8f6e007771c6be571ded3479386c9282e407cdc
+        updated_at: 2026-06-05T12:06:56.111630375Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 8225c95b07497539efbe388936fc382ac016be81dfd5b179814a1d826888edf2
+        updated_at: 2026-06-05T11:58:48.544187211Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 4c28f02dbdf66599a87f190b67db2c099d85f6b3eee9bbf02ee005bbeaa7a0ab
+        updated_at: 2026-06-05T11:58:58.898119107Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 0652b6e4ca902f3d38187d9fa7d8f085569f921d4be80f848c7280bea40cc670
+        updated_at: 2026-06-05T11:58:31.226620364Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 1bb25ca8b5812727cd5c56adcbf08f5553b8e0f5a8a7d9985f0403257b15b9d3
+        updated_at: 2026-06-05T11:59:09.316759192Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 9a2de9fc7281ab397a4dabb11a713c039adac209d9da30f78abb9d85e7053be4
+        updated_at: 2026-06-05T11:58:39.422165868Z

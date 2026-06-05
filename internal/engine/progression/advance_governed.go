@@ -466,39 +466,43 @@ func beginStalePlanningRecovery(root string, change *model.Change, fromState mod
 	}
 
 	verificationDir := filepath.Join(paths.GovernedBundleDir, "verification")
-	planningEvidenceFiles := []string{
-		filepath.Join(verificationDir, SkillPlanAudit+".yaml"),
-		filepath.Join(verificationDir, state.WavePlanFileName),
-		filepath.Join(verificationDir, state.ExecutionSummaryFileName),
+	// Skill records carry a skill name so their evidence-digest entry is pruned
+	// alongside the deleted record (no zombie digests). wave-plan.yaml and
+	// execution-summary.yaml are artifacts, not skill records: wave-orchestration's
+	// own record is preserved here, so its digest is left intact.
+	planningEvidenceFiles := []recoveryEvidenceFile{
+		{path: filepath.Join(verificationDir, SkillPlanAudit+".yaml"), skill: SkillPlanAudit},
+		{path: filepath.Join(verificationDir, state.WavePlanFileName)},
+		{path: filepath.Join(verificationDir, state.ExecutionSummaryFileName)},
 	}
-	downstreamVerificationFiles := []string{
-		filepath.Join(verificationDir, SkillSpecComplianceReview+".yaml"),
-		filepath.Join(verificationDir, SkillCodeQualityReview+".yaml"),
-		filepath.Join(verificationDir, SkillGoalVerification+".yaml"),
-		filepath.Join(verificationDir, SkillFinalCloseout+".yaml"),
+	downstreamVerificationFiles := []recoveryEvidenceFile{
+		{path: filepath.Join(verificationDir, SkillSpecComplianceReview+".yaml"), skill: SkillSpecComplianceReview},
+		{path: filepath.Join(verificationDir, SkillCodeQualityReview+".yaml"), skill: SkillCodeQualityReview},
+		{path: filepath.Join(verificationDir, SkillGoalVerification+".yaml"), skill: SkillGoalVerification},
+		{path: filepath.Join(verificationDir, SkillFinalCloseout+".yaml"), skill: SkillFinalCloseout},
 	}
 	sideEffects := make([]SideEffect, 0, len(planningEvidenceFiles)+len(downstreamVerificationFiles)+1)
-	for _, path := range planningEvidenceFiles {
-		removed, err := removeFileIfExists(path)
+	for _, ev := range planningEvidenceFiles {
+		removed, err := clearRecoveryEvidence(root, *change, ev)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
 		if removed {
 			sideEffects = append(sideEffects, SideEffect{
 				Kind:   "cleared_stale_planning_evidence",
-				Detail: state.DisplayPath(root, path),
+				Detail: state.DisplayPath(root, ev.path),
 			})
 		}
 	}
-	for _, path := range downstreamVerificationFiles {
-		removed, err := removeFileIfExists(path)
+	for _, ev := range downstreamVerificationFiles {
+		removed, err := clearRecoveryEvidence(root, *change, ev)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
 		if removed {
 			sideEffects = append(sideEffects, SideEffect{
 				Kind:   "cleared_stale_downstream_verification",
-				Detail: state.DisplayPath(root, path),
+				Detail: state.DisplayPath(root, ev.path),
 			})
 		}
 	}
@@ -563,6 +567,40 @@ func removeFileIfExists(path string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// recoveryEvidenceFile pairs a verification artifact path with the skill that
+// owns it. The skill is empty for non-skill artifacts (wave-plan.yaml,
+// execution-summary.yaml), which have no evidence-digest entry of their own.
+type recoveryEvidenceFile struct {
+	path  string
+	skill string
+}
+
+// clearRecoveryEvidence deletes a recovery evidence file. When the file is a
+// skill verification record, its evidence-digest entry is pruned in the same
+// step so a digest never outlives its record.
+func clearRecoveryEvidence(root string, change model.Change, ev recoveryEvidenceFile) (bool, error) {
+	if strings.TrimSpace(ev.skill) != "" {
+		return removeVerificationRecordAndDigest(root, change, ev.path, ev.skill)
+	}
+	return removeFileIfExists(ev.path)
+}
+
+// removeVerificationRecordAndDigest deletes a skill's verification record file
+// and, when the file existed, prunes its evidence-digest entry so a digest entry
+// never outlives the record it certifies.
+func removeVerificationRecordAndDigest(root string, change model.Change, path, skillName string) (bool, error) {
+	removed, err := removeFileIfExists(path)
+	if err != nil {
+		return false, err
+	}
+	if removed {
+		if err := pruneEvidenceDigestForSkill(root, change, skillName); err != nil {
+			return false, err
+		}
+	}
+	return removed, nil
 }
 
 func stalePlanningRecoveryNeededForPlanAuditDigest(root string, change model.Change) (bool, error) {

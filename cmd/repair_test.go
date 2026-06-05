@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -1126,6 +1127,83 @@ REQ-001: Original requirement.
 		}
 		assert.True(t, foundPlanningDrift, "expected stale planning evidence to remain unrepaired")
 	})
+}
+
+func TestRepairRoutesStaleGovernanceDigestToEvidenceRestamp(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "repair routes stale digest to restamp")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepAudit
+		require.NoError(t, state.SaveChange(root, change))
+
+		verdictAt := time.Now().UTC().Add(-time.Hour)
+		rec := model.VerificationRecord{
+			Verdict:   model.VerificationVerdictPass,
+			Blockers:  []model.ReasonCode{},
+			Timestamp: verdictAt,
+		}
+		writeSkillVerification(t, root, slug, progression.SkillPlanAudit, rec)
+		require.NoError(t, progression.StampEvidenceDigestForSkill(root, change, progression.SkillPlanAudit, rec, nil))
+
+		// Drift a plan-audit input after the verdict so its digest goes stale.
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		requirementsPath := filepath.Join(bundlePath, "requirements.md")
+		require.NoError(t, os.WriteFile(requirementsPath, []byte("# Requirements\nREQ-001 changed after verdict\n"), 0o644))
+		afterVerdict := verdictAt.Add(time.Hour)
+		require.NoError(t, os.Chtimes(requirementsPath, afterVerdict, afterVerdict))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		found := false
+		for _, drift := range summary.UnrepairedDrift {
+			if drift.Target == progression.SkillPlanAudit && strings.Contains(drift.Reason, "evidence digest") {
+				found = true
+				assert.Contains(t, drift.NextAction, "evidence restamp")
+				assert.Contains(t, drift.NextAction, "--skill plan-audit")
+			}
+		}
+		assert.True(t, found, "expected repair to route the stale plan-audit digest at slipway evidence restamp")
+	})
+}
+
+func TestRepairDriftNextActionDigestGuidanceAlwaysCarriesSkill(t *testing.T) {
+	t.Parallel()
+
+	// A digest/stale next-action must never emit a bare `restamp --dry-run`:
+	// without --skill the command fails evidence_restamp_skill_required, so a
+	// user copying the guidance verbatim would hit an invalid-usage dead-end.
+	cases := []struct {
+		name   string
+		reason string
+		target string
+		want   string
+	}{
+		{name: "required_skill_stale with skill target", reason: "required_skill_stale: plan-audit:requirements.md", target: "plan-audit", want: "--skill plan-audit"},
+		{name: "evidence digest reason with skill target", reason: `slug: evidence digest for governance skill "research-orchestration" is stale`, target: "research-orchestration", want: "--skill research-orchestration"},
+		{name: "digest reason without a known skill", reason: "required_skill_stale drift", target: "", want: "--skill <skill>"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := repairDriftNextAction(tc.reason, tc.target)
+			assert.Contains(t, got, tc.want)
+			assert.Contains(t, got, "--dry-run")
+			assert.NotContains(t, got, "restamp --dry-run", "guidance must never drop the required --skill")
+		})
+	}
 }
 
 func TestRepairPathAuthorityUsesLinkedWorktreeInvocationWorkspace(t *testing.T) {

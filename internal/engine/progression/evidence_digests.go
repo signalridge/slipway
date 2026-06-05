@@ -126,6 +126,118 @@ func stampEvidenceDigestForSkill(
 	return state.SaveEvidenceDigests(root, change.Slug, next)
 }
 
+// Tier-0 evidence-restamp refusal reasons.
+const (
+	EvidenceRestampReasonNoEvidence        = "no_passing_evidence"
+	EvidenceRestampReasonVerdictNotPassing = "verdict_not_passing"
+	EvidenceRestampReasonInputsChanged     = "inputs_changed_after_verdict"
+	EvidenceRestampReasonInputsUnavailable = "input_digest_unavailable"
+)
+
+// EvidenceRestampOutcome reports the result of a Tier-0 evidence-restamp attempt.
+type EvidenceRestampOutcome struct {
+	Skill         string   // skill whose digest was assessed
+	Eligible      bool     // Tier-0 safe: verdict passing + inputs unchanged after verdict
+	Stamped       bool     // digest was written (always false in dry-run)
+	DryRun        bool     // assessment only; no state mutated
+	Reason        string   // refusal reason, set when !Eligible
+	ChangedInputs []string // inputs that changed after the verdict, when refused for drift
+	RerunSkill    string   // host skill to re-run when not eligible
+}
+
+// RestampEvidenceDigestTier0 records the engine-owned input digest for a skill
+// when (and only when) the recorded verdict is still passing and the certified
+// inputs did not change after the verdict — Tier 0, provably safe. It never
+// fabricates a pass: a missing or non-passing verdict, or any input changed
+// after the verdict, is refused, and the caller is told which host skill to
+// re-run. With dryRun the eligibility is assessed without writing the digest.
+func RestampEvidenceDigestTier0(root string, change model.Change, skillName string, dryRun bool) (EvidenceRestampOutcome, error) {
+	skillName = strings.TrimSpace(skillName)
+	outcome := EvidenceRestampOutcome{Skill: skillName, DryRun: dryRun, RerunSkill: skillName}
+	if skillName == "" {
+		return outcome, fmt.Errorf("skill name is required")
+	}
+	record, err := state.LoadVerification(root, change.Slug, skillName)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			outcome.Reason = EvidenceRestampReasonNoEvidence
+			return outcome, nil
+		}
+		return outcome, err
+	}
+	if !record.IsPassing() {
+		outcome.Reason = EvidenceRestampReasonVerdictNotPassing
+		return outcome, nil
+	}
+	if err := ensureDigestInputsAvailableForRestamp(root, change, skillName); err != nil {
+		if digestStampUnavailable(err) {
+			outcome.Reason = EvidenceRestampReasonInputsUnavailable
+			return outcome, nil
+		}
+		return outcome, err
+	}
+	// Tier-0 safety: refuse if any certified input changed after the verdict.
+	changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
+	if err != nil {
+		if digestStampUnavailable(err) {
+			outcome.Reason = EvidenceRestampReasonInputsUnavailable
+			return outcome, nil
+		}
+		return outcome, err
+	}
+	if len(changedAfterVerdict) > 0 {
+		outcome.Reason = EvidenceRestampReasonInputsChanged
+		outcome.ChangedInputs = changedAfterVerdict
+		return outcome, nil
+	}
+	outcome.Eligible = true
+	if dryRun {
+		return outcome, nil
+	}
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	if err != nil {
+		return outcome, err
+	}
+	if err := stampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
+		if digestStampUnavailable(err) {
+			outcome.Eligible = false
+			outcome.Reason = EvidenceRestampReasonInputsUnavailable
+			return outcome, nil
+		}
+		return outcome, err
+	}
+	outcome.Stamped = true
+	return outcome, nil
+}
+
+func ensureDigestInputsAvailableForRestamp(root string, change model.Change, skillName string) error {
+	_, err := digestInputArtifactPaths(root, change, skillName)
+	return err
+}
+
+// pruneEvidenceDigestForSkill removes a skill's entry from evidence-digests.yaml
+// when present. It is the digest half of removing a verification record, so a
+// digest entry never outlives the record it certifies.
+func pruneEvidenceDigestForSkill(root string, change model.Change, skillName string) error {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" {
+		return nil
+	}
+	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
+	if err != nil {
+		return err
+	}
+	if digests == nil {
+		return nil
+	}
+	digests.Normalize()
+	if _, ok := digests.Skills[skillName]; !ok {
+		return nil
+	}
+	delete(digests.Skills, skillName)
+	return state.SaveEvidenceDigests(root, change.Slug, *digests)
+}
+
 func skillDigestFreshnessBlockers(
 	root string,
 	change model.Change,
@@ -161,16 +273,22 @@ func skillDigestFreshnessBlockersWithSummary(
 	}
 
 	if !hasStored {
+		// No stored digest entry yet. If the skill was never recorded and a digest
+		// file already exists for other skills, there is nothing to be stale about.
 		if digests != nil {
 			recorded, err := lifecycleHasRecordedSkillEvidence(root, change, skillName)
 			if err != nil {
 				return nil, err
 			}
-			if recorded {
-				return []string{"required_skill_stale:" + strings.TrimSpace(skillName) + ":input_digest_missing"}, nil
+			if !recorded {
+				return nil, nil
 			}
-			return nil, nil
 		}
+		// Tier-0: a recorded (or legacy file-absent) orphan is healable when its
+		// certified inputs did not change after the verdict; only report stale, with
+		// the specific changed inputs, when they genuinely did. Unifying the
+		// digests==nil and digests!=nil branches here means a missing digest entry no
+		// longer deadlocks on the generic input_digest_missing token.
 		changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
 		if err != nil {
 			return nil, err
@@ -260,10 +378,11 @@ func stampPassingSkillDigests(
 			if recorded, err := lifecycleHasRecordedSkillEvidence(root, change, skillName); err != nil {
 				return skillDigestStampResult{}, err
 			} else if recorded && !digestChecked {
-				if existingDigests != nil {
-					result.Blockers = append(result.Blockers, "required_skill_stale:"+skillName+":input_digest_missing")
-					continue
-				}
+				// Tier-0 backfill: a recorded orphan with no digest entry is healable
+				// when its certified inputs did not change after the verdict; only block,
+				// with the specific changed inputs, when they genuinely did. This applies
+				// whether or not a digest file already exists for other skills, so a
+				// missing entry no longer deadlocks on input_digest_missing.
 				changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
 				if err != nil {
 					if digestStampUnavailable(err) {
@@ -455,7 +574,11 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 		return err
 	}
 	seenAny := false
-	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md", "assurance.md"} {
+	// assurance.md is intentionally excluded: plan-audit (S1) never audits the
+	// assurance contract — AssuranceContractBlockers enforces it only at S3_REVIEW
+	// and later — so a late assurance.md edit must not retroactively stale the
+	// plan-audit digest. assurance.md remains an input to the final-closeout digest.
+	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md"} {
 		path := filepath.Join(bundleDir, rel)
 		if _, err := os.Stat(path); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
