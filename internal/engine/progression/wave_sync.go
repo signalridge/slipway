@@ -66,8 +66,18 @@ func (e TaskEvidenceRunVersionMismatchError) Error() string {
 	return fmt.Sprintf("run_summary_version mismatch: expected=%d got=%d", e.Expected, e.Got)
 }
 
+// PreviewGovernedWaveExecution reports the same blockers as wave execution sync
+// without materializing execution summaries or mutating task checkboxes.
+func PreviewGovernedWaveExecution(root string, change model.Change) (WaveSyncResult, error) {
+	return evaluateGovernedWaveExecution(root, change, false)
+}
+
 // SyncGovernedWaveExecution synchronizes wave execution state for a governed change.
 func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult, error) {
+	return evaluateGovernedWaveExecution(root, change, true)
+}
+
+func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool) (WaveSyncResult, error) {
 	record, found, err := LatestPassingWaveEvidence(root, change.Slug)
 	if err != nil {
 		return WaveSyncResult{}, err
@@ -118,10 +128,6 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 		return WaveSyncResult{}, err
 	}
 	previousTasksPlanHash := strings.TrimSpace(wavePlan.TasksPlanHash)
-	existingSummary, err := state.LoadOptionalExecutionSummary(root, change.Slug)
-	if err != nil {
-		return WaveSyncResult{}, err
-	}
 	planDriftBlockers := tasksPlanChangedSinceTaskEvidenceBlockers(previousTasksPlanHash, tasks, tasksPlanHash)
 	planDriftBlockers = append(planDriftBlockers, taskEvidencePlanHashBlockers(previousTasksPlanHash, tasks)...)
 	executionSummary := BuildExecutionSummary(record.RunVersion, tasks, record.Timestamp, &record)
@@ -133,6 +139,18 @@ func SyncGovernedWaveExecution(root string, change model.Change) (WaveSyncResult
 	if len(parseIssues) > 0 || len(planDriftBlockers) > 0 {
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
 		executionSummary.SyncDerivedFields()
+	}
+	if !mutate {
+		runs := executionSummary.TaskRunMap()
+		blockers := model.ReasonCodesFromSpecs(parseIssues)
+		blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
+		blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
+		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
+	}
+
+	existingSummary, err := state.LoadOptionalExecutionSummary(root, change.Slug)
+	if err != nil {
+		return WaveSyncResult{}, err
 	}
 	existingWaveRuns, err := state.LoadOptionalWaveRuns(root, change.Slug, record.RunVersion)
 	if err != nil {

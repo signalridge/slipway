@@ -1,0 +1,58 @@
+version: 1
+slug: fix-issue-72-align-read-only-s2-task-evidence-diagnostics-wi
+description: 'Fix issue #72: align read-only S2 task-evidence diagnostics with run diagnostics so present-but-stale or plan-mismatched task evidence is not reported as run_summary_missing'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-04T19:16:00.620427Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-issue-72-align-read-only-s2-task-evidence-diagnostics-wi
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 'Current main 4483e74; issue #72 reproduced on read-only validate/status with wave-orchestration:run_summary_missing while run --diagnostics reports task evidence drift.'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 69d3c26aea5b6c32afaa527c83ab22738a3a4097902f88bd961bf9a61c1b1035
+        updated_at: 2026-06-05T02:03:29.737757045Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 91c5a43ee26cd0d51e704174909b696bc2b6a94ab72c479532e39141cb1559c8
+        updated_at: 2026-06-05T01:56:11.994788662Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: cfb951260f4cda3a756f05bbb14d880142b92227c472bb268a81f6db232e77ba
+        updated_at: 2026-06-05T01:57:27.350806853Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: e171bc97e7777e2d2d68e0bdbfa24248716ba8133f01940abd2d5d498e412720
+        updated_at: 2026-06-05T01:56:11.994641954Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 02203d1293efc3e63f8be37ec89af78a5ba9f18a45bb3c63ed0a93c03854cf83
+        updated_at: 2026-06-05T01:56:11.994435162Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 64ad4a96634bec544bbd05d3012cc3e9cfdaba88dcfde022448a4dac83386895
+        updated_at: 2026-06-05T01:59:34.217610356Z
