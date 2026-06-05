@@ -47,6 +47,9 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_required_artifact:decision.md")
 		require.NotEmpty(t, view.Blockers)
 		assert.Equal(t, "missing_required_artifact", view.Blockers[0].Code)
+		require.NotNil(t, view.Recovery)
+		assert.Contains(t, recoveryStepCodes(view.Recovery), "missing_required_artifact")
+		assert.NotEmpty(t, view.Recovery.PrimaryCommand)
 	})
 }
 
@@ -422,6 +425,9 @@ REQ-001: The system must authenticate requests.
 	view, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_dependency_unknown:t-01->t-99")
+	require.NotNil(t, view.Recovery)
+	assert.Contains(t, recoveryStepCodes(view.Recovery), "plan_dimension_dependency_unknown")
+	assert.NotEmpty(t, view.Recovery.PrimaryCommand)
 }
 
 func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {

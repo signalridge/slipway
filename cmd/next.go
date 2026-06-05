@@ -48,6 +48,7 @@ type nextView struct {
 	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
 	Warnings                  []string                             `json:"warnings,omitempty"`
 	Blockers                  []model.ReasonCode                   `json:"blockers"`
+	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
 	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
 
 	consumeActiveCheckpoint bool
@@ -329,6 +330,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 	if pending, err := checkPresetPendingEarlyReturn(root, ref, &view); err != nil {
 		return nextView{}, err
 	} else if pending {
+		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
 	}
 
@@ -341,6 +343,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		if err := consumeNextCheckpoint(root, governedChange, &view); err != nil {
 			return nextView{}, err
 		}
+		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
 	}
 	view.Phase = model.PhaseFor(view.CurrentState)

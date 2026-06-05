@@ -1,0 +1,57 @@
+version: 1
+slug: recovery-ux-p1-issue-84-prefix-aware-blocker-parser-parsedbl
+description: 'Recovery UX P1 (issue #84): prefix-aware blocker parser (ParsedBlocker with Code/Subject/Detail/Raw), a code/prefix-family remediation vocabulary table parallel to canonicalReasonDefinitions, a top-level read-only recovery object carrying grouped recovery.steps[] remediation and command on next/run/validate JSON while blockers[] remains ReasonCode, compact handoff preserving the primary recovery command, and canonical messages for internal prefix tokens such as required_skill_stale:* and tasks_plan_changed_since_task_evidence:*'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-05T12:19:40.220532Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/recovery-ux-p1-issue-84-prefix-aware-blocker-parser-parsedbl
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+    recent_work: 'P0 #83 recovery tier-0 restamp merged via #87 (6d65fcc)'
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: b5e1dbff6308bccf3858978c6b8cb637edfcc685a358dcf05a91a9be69a789cb
+        updated_at: 2026-06-05T16:21:16.304908193Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 7ed81782fa66329b15e47b477a2df9516b965b6e7224d1ff2209640e64389342
+        updated_at: 2026-06-05T12:38:02.939530672Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: ad7b1038e3eeaaa0cc662fcb585ccd8bfd9e51ab3598ed1a5fd6e92f490aa7a4
+        updated_at: 2026-06-05T16:08:01.312941794Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8797e6f61ce4272a5c6516a4102cc7ac5a4c66a9487c5010fc7b82080cb8b321
+        updated_at: 2026-06-05T16:08:01.313314944Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 2accba2e1b8744bf72924ac68f704eb57e0d0b5db19d33df8e4dd56972a91eaf
+        updated_at: 2026-06-05T16:08:24.529903538Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: bfedda9f26e82f9978c09def585aa1cc41ba1b371aaea573e4bebc3a82a7f68c
+        updated_at: 2026-06-05T16:04:00.783571718Z

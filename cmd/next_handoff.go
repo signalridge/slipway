@@ -20,6 +20,7 @@ type nextHandoffView struct {
 	InputContext     nextHandoffContext      `json:"input_context"`
 	AutoPassEligible []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
 	Blockers         []model.ReasonCode      `json:"blockers"`
+	Recovery         *model.RecoverySummary  `json:"recovery,omitempty"`
 	Warnings         []string                `json:"warnings,omitempty"`
 	Confirmation     confirmationRequirement `json:"confirmation_requirement"`
 }
@@ -228,6 +229,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		},
 		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),
 		Blockers:         view.Blockers,
+		Recovery:         model.BuildRecovery(view.Blockers),
 		Warnings:         view.Warnings,
 		Confirmation:     view.ConfirmationRequirement,
 	}
