@@ -31,7 +31,154 @@ func makeEvidenceCmd() *cobra.Command {
 		Short: desc("evidence"),
 	}
 	cmd.AddCommand(makeEvidenceTaskCmd())
+	cmd.AddCommand(makeEvidenceRestampCmd())
 	return cmd
+}
+
+type evidenceRestampView struct {
+	Slug          string   `json:"slug"`
+	Skill         string   `json:"skill"`
+	Eligible      bool     `json:"eligible"`
+	Stamped       bool     `json:"stamped"`
+	DryRun        bool     `json:"dry_run"`
+	Reason        string   `json:"reason,omitempty"`
+	ChangedInputs []string `json:"changed_inputs,omitempty"`
+	RerunSkill    string   `json:"rerun_skill,omitempty"`
+	Message       string   `json:"message"`
+}
+
+// makeEvidenceRestampCmd exposes the minimal Tier-0 evidence-digest restamp.
+// It stamps a skill's engine-owned digest only when the recorded verdict is
+// still passing and the certified inputs did not change after the verdict;
+// otherwise it refuses and names the host skill to re-run. It never edits the
+// digest file directly and never fabricates a pass.
+func makeEvidenceRestampCmd() *cobra.Command {
+	var (
+		jsonOutput bool
+		changeSlug string
+		skillName  string
+		dryRun     bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "restamp",
+		Short: "Restamp a governance skill's engine-owned evidence digest (Tier 0 only)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			root, err := projectRootFromCommand(cmd)
+			if err != nil {
+				return err
+			}
+			skillName = strings.TrimSpace(skillName)
+			if skillName == "" {
+				return newInvalidUsageError(
+					"evidence_restamp_skill_required",
+					"--skill is required",
+					"Pass the governance skill whose evidence digest should be restamped, e.g. --skill plan-audit.",
+					nil,
+				)
+			}
+			ref, err := resolveActiveChangeRef(root, changeSlug)
+			if err != nil {
+				return err
+			}
+
+			run := func() error {
+				change, err := loadActiveChange(
+					root,
+					ref.Slug,
+					"cannot restamp evidence for governed status %q",
+					"Evidence digests can only be restamped for an active governed change.",
+				)
+				if err != nil {
+					return err
+				}
+				outcome, err := progression.RestampEvidenceDigestTier0(root, change, skillName, dryRun)
+				if err != nil {
+					return err
+				}
+				if outcome.Stamped {
+					if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+						Command:     "evidence restamp",
+						EventType:   "evidence_digest.restamped",
+						Action:      "restamped",
+						Result:      "stamped",
+						BeforeState: change.CurrentState,
+						AfterState:  change.CurrentState,
+						Diagnostics: []string{"skill=" + outcome.Skill, "tier=0"},
+					}); err != nil {
+						return err
+					}
+				}
+				return renderEvidenceRestampOutcome(cmd, change.Slug, outcome, jsonOutput)
+			}
+
+			// --dry-run is read-only and must not contend for the change lock.
+			if dryRun {
+				return run()
+			}
+			return withChangeStateLock(root, ref.Slug, "evidence restamp", run)
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
+	cmd.Flags().StringVar(&skillName, "skill", "", "Governance skill whose evidence digest should be restamped (required)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Assess Tier-0 eligibility without writing the digest")
+
+	return cmd
+}
+
+func renderEvidenceRestampOutcome(cmd *cobra.Command, slug string, outcome progression.EvidenceRestampOutcome, jsonOutput bool) error {
+	view := evidenceRestampView{
+		Slug:          slug,
+		Skill:         outcome.Skill,
+		Eligible:      outcome.Eligible,
+		Stamped:       outcome.Stamped,
+		DryRun:        outcome.DryRun,
+		Reason:        outcome.Reason,
+		ChangedInputs: outcome.ChangedInputs,
+		Message:       evidenceRestampMessage(outcome),
+	}
+	if !outcome.Eligible {
+		view.RerunSkill = outcome.RerunSkill
+	}
+	if jsonOutput {
+		return encodeJSONResponse(cmd, view)
+	}
+	writer := newFormatWriter(cmd.OutOrStdout())
+	writer.Writef("%s\n", view.Message)
+	return writer.Err()
+}
+
+func evidenceRestampMessage(outcome progression.EvidenceRestampOutcome) string {
+	switch {
+	case outcome.Stamped:
+		return fmt.Sprintf("Restamped the Tier-0 evidence digest for %q.", outcome.Skill)
+	case outcome.Eligible && outcome.DryRun:
+		return fmt.Sprintf("%q is Tier-0 eligible: the verdict is passing and inputs are unchanged after the verdict. Re-run without --dry-run to restamp.", outcome.Skill)
+	default:
+		return evidenceRestampRefusalMessage(outcome)
+	}
+}
+
+func evidenceRestampRefusalMessage(outcome progression.EvidenceRestampOutcome) string {
+	rerun := outcome.RerunSkill
+	if strings.TrimSpace(rerun) == "" {
+		rerun = outcome.Skill
+	}
+	switch outcome.Reason {
+	case progression.EvidenceRestampReasonNoEvidence:
+		return fmt.Sprintf("Refused: no passing %q evidence is recorded. Run the %q host skill first.", outcome.Skill, rerun)
+	case progression.EvidenceRestampReasonVerdictNotPassing:
+		return fmt.Sprintf("Refused: the recorded %q verdict is not passing. Re-run the %q host skill.", outcome.Skill, rerun)
+	case progression.EvidenceRestampReasonInputsChanged:
+		return fmt.Sprintf("Refused: %q inputs changed after the verdict (%s). Re-run the %q host skill to re-certify.", outcome.Skill, strings.Join(outcome.ChangedInputs, ", "), rerun)
+	case progression.EvidenceRestampReasonInputsUnavailable:
+		return fmt.Sprintf("Refused: %q digest inputs are unavailable. Re-run the %q host skill.", outcome.Skill, rerun)
+	default:
+		return fmt.Sprintf("Refused: %q is not Tier-0 eligible. Re-run the %q host skill.", outcome.Skill, rerun)
+	}
 }
 
 func makeEvidenceTaskCmd() *cobra.Command {
