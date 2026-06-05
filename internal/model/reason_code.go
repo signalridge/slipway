@@ -44,6 +44,18 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The governed change is missing a frozen artifact schema",
 	},
+	"assurance_structure_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The assurance artifact structure is invalid",
+	},
+	"closeout_assurance_attestation_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The final-closeout assurance attestation is missing",
+	},
+	"closeout_goal_verification_reuse_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Final-closeout cannot reuse the recorded goal-verification evidence",
+	},
 	"dedicated_worktree_branch_mismatch": {
 		Severity: ReasonSeverityError,
 		Message:  "The bound worktree branch does not match the recorded change branch",
@@ -63,6 +75,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"execution_interrupted": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Governed execution was interrupted",
+	},
+	"governance_action_required": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governance control must be satisfied before continuing",
+	},
+	"governed_bundle_path_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed bundle path is invalid",
 	},
 	"high_risk_check_failed": {
 		Severity: ReasonSeverityError,
@@ -96,6 +116,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required discovery evidence is missing",
 	},
+	"missing_required_artifact": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governed artifact is missing",
+	},
 	"missing_task_evidence_for_run_summary": {
 		Severity: ReasonSeverityError,
 		Message:  "Task evidence is missing for the recorded run summary; rerun wave-orchestration to capture task evidence",
@@ -112,17 +136,113 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityInfo,
 		Message:  "No skill is required for the current workflow state",
 	},
+	"non_pass_task": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed task did not pass",
+	},
 	"pivot_not_approved": {
 		Severity: ReasonSeverityError,
 		Message:  "The requested pivot is not approved",
+	},
+	"plan_audit_budget_exhausted": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan audit exhausted its checker iteration budget",
+	},
+	"plan_audit_evidence_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan audit evidence is missing",
 	},
 	"plan_audit_failed": {
 		Severity: ReasonSeverityError,
 		Message:  "Plan audit did not pass",
 	},
+	"plan_audit_iteration": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan audit checker iteration is in progress",
+	},
 	"plan_audit_stalled": {
 		Severity: ReasonSeverityError,
 		Message:  "Plan audit feedback did not improve",
+	},
+	"plan_checker_feedback_required": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan checker feedback must be incorporated before continuing",
+	},
+	"plan_checker_loop_terminated": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan checker loop terminated before plan audit could pass",
+	},
+	"plan_dimension_completeness_missing_objective": {
+		Severity: ReasonSeverityError,
+		Message:  "A task is missing a concrete objective",
+	},
+	"plan_dimension_execution_missing_wave": {
+		Severity: ReasonSeverityError,
+		Message:  "A task is missing an execution wave",
+	},
+	"plan_dimension_key_links_missing_target_files": {
+		Severity: ReasonSeverityError,
+		Message:  "A code task is missing target files",
+	},
+	"plan_dimension_scope_invalid_target": {
+		Severity: ReasonSeverityError,
+		Message:  "A task target file entry is invalid",
+	},
+	"plan_dimension_scope_out_of_bounds_target": {
+		Severity: ReasonSeverityError,
+		Message:  "A task target file is outside the repository",
+	},
+	"plan_dimension_dependency_self_reference": {
+		Severity: ReasonSeverityError,
+		Message:  "A task dependency references itself",
+	},
+	"plan_dimension_dependency_unknown": {
+		Severity: ReasonSeverityError,
+		Message:  "A task dependency references an unknown task",
+	},
+	"plan_dimension_dependency_cycle_detected": {
+		Severity: ReasonSeverityError,
+		Message:  "Task dependencies contain a cycle",
+	},
+	"plan_dimension_execution_invalid_wave_plan": {
+		Severity: ReasonSeverityError,
+		Message:  "The task wave plan is invalid",
+	},
+	"plan_dimension_coverage_spec_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Requirement coverage input is unreadable",
+	},
+	"plan_dimension_coverage_requirements_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Requirement coverage input is invalid",
+	},
+	"plan_dimension_coverage_requirement_id_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A requirement is missing an explicit ID",
+	},
+	"plan_dimension_coverage_unknown_requirement": {
+		Severity: ReasonSeverityError,
+		Message:  "A task covers an unknown requirement",
+	},
+	"plan_dimension_coverage_missing_requirement": {
+		Severity: ReasonSeverityError,
+		Message:  "A requirement has no task coverage",
+	},
+	"preset_confirmation_required": {
+		Severity: ReasonSeverityError,
+		Message:  "Workflow preset confirmation is required before continuing",
+	},
+	"required_artifact_schema_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governed artifact is missing from the artifact schema",
+	},
+	"required_artifact_dependency_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governed artifact dependency is missing",
+	},
+	"required_artifact_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governed artifact is unreadable",
 	},
 	"required_skill_blockers_present": {
 		Severity: ReasonSeverityError,
@@ -144,6 +264,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill certified inputs that changed; rerun the skill to re-certify the named artifact",
 	},
+	"research_structure_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The research artifact structure is invalid",
+	},
+	"run_slipway_done_to_finalize": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Run `slipway done` to finalize the governed change",
+	},
 	"run_slipway_run_to_advance": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Run `slipway run` to advance the workflow",
@@ -155,6 +283,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"rescope_state_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Rescope pivots are only allowed from S2_EXECUTE",
+	},
+	"review_layer_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Required review layer evidence is missing",
+	},
+	"review_layer_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Required review layer evidence did not pass",
 	},
 	"scope_contract_changed_files_missing": {
 		Severity: ReasonSeverityError,
@@ -172,6 +308,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract is missing required target files",
 	},
+	"ship_gate_blocked": {
+		Severity: ReasonSeverityError,
+		Message:  "The ship gate blocked finalization",
+	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Execution evidence is stale; rerun wave-orchestration for affected tasks",
@@ -188,6 +328,34 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The governed tasks checklist format is invalid",
 	},
+	"tasks_checklist_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed tasks checklist is missing",
+	},
+	"tasks_checklist_path_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed tasks checklist path is invalid",
+	},
+	"tasks_checklist_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed tasks checklist is unreadable",
+	},
+	"tasks_checklist_empty": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed tasks checklist has no tasks",
+	},
+	"tasks_checklist_task_id_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed task checklist entry is missing a task ID",
+	},
+	"tasks_checklist_duplicate_task_id": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed tasks checklist contains a duplicate task ID",
+	},
+	"tasks_plan_changed_since_task_evidence": {
+		Severity: ReasonSeverityError,
+		Message:  "The tasks plan changed after this task's evidence was captured; rerun wave-orchestration for the affected task",
+	},
 	"verification_evidence_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Required verification evidence is missing; in S4_VERIFY recovery, rerun goal-verification, then rerun final-closeout",
@@ -203,6 +371,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"wave_plan_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The wave plan is missing; materialize the wave plan from tasks.md before wave execution",
+	},
+	"worktree_validation_error": {
+		Severity: ReasonSeverityError,
+		Message:  "Worktree validation failed",
+	},
+	"worktree_metadata_persist_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Worktree metadata could not be persisted",
 	},
 }
 

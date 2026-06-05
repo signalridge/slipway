@@ -116,6 +116,26 @@ JSON is intentionally compact; use `--diagnostics` for gate status, artifact
 status, skill evidence, context-budget details, wave plans, and transition
 traces.
 
+When a state carries a known recovery-relevant blocker — or a ready-to-advance/
+finalize next action — `next --json`, `run --json`, and `validate --json` carry a
+read-only `recovery` object, and so does a governance-blocked `CLIError`.
+`recovery.primary_command` and `recovery.primary_action` name the single
+highest-priority next action (selected by a static stage-priority rule, not a
+dependency planner), and `recovery.steps[]` carries one entry per actionable
+`(code, subject)` group with its parsed `code`/`subject`, the sorted `details[]`
+the group spans, a `remediation` string, a `command`, and a `recovery_class`;
+blockers that share a code and subject but differ only in detail (one stale skill
+across many artifacts) collapse into a single step. The field is additive and `omitempty` —
+derived from the blockers, never written to evidence, and absent only when no
+listed blocker maps to a remediation — and is presentation only: it never alters
+which blockers apply or any gate decision. The `primary_command` is always a
+public surface valid in the current state (e.g. plan-audit budget exhaustion in
+S1 routes to `slipway pivot --reroute`, never the S2_EXECUTE-only rescope). The
+same blocker vocabulary backs every surface through one parser, so `validate`,
+the compact `next`/`run` handoff, and `CLIError` describe the same blocker
+identically. The dependency-ordered recovery planner and a first-class
+`slipway recover` command are not part of this surface.
+
 `next_skill.technique_hints` may include exported `skill:*` hints and optional
 `capability:*` hints. `capability:language-testing` is a host-resolution hint:
 when `skill:test-design` is present and Slipway detects one or more project

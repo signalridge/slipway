@@ -631,7 +631,7 @@ func buildGovernanceDigestDriftFindings(root string, changes []model.Change) ([]
 			if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
 				continue
 			}
-			skillName := blockerSkillName(blocker.Detail)
+			skillName := blockerSkillName(blocker)
 			if skillName == "" || seen[skillName] {
 				continue
 			}

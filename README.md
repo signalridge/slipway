@@ -175,6 +175,17 @@ slipway done --json
 ```
 
 `next`, `status`, and `validate` are read-only inspection surfaces. `run`, `new`, `preset`, `checkpoint`, `repair`, `cancel`, `abort`, and `done` can mutate local governed state.
+The blocked/stale `next` and `validate` views, the `run --json` handoff, and
+governance-blocked `CLIError` envelopes carry an additive, read-only `recovery`
+object whenever a listed blocker — or a ready-to-advance/finalize next action —
+maps to a known remediation: a `primary_command` / `primary_action` (the single
+highest-priority next action) plus `steps[]` — one entry per `(code, subject)`
+group, with `code`, `subject`, the collected `details`, `remediation`, and
+`command`, so one skill's many stale artifacts surface as a single step. The
+object is derived from the blockers and never
+written to evidence; it is `omitempty` (absent only when no listed blocker has a
+recovery vocabulary) and presentation-only — it never changes which blockers
+apply or any gate decision.
 Diagnostic JSON uses explicit review and freshness contracts: review evidence
 must record exact layer tokens such as `layer:R0=pass` or `layer:IR1=pass`, and
 execution freshness is based on structural task inputs plus semantic

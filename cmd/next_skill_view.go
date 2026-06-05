@@ -413,7 +413,7 @@ func resolveActionableBlockingSkill(
 		if !isRequiredSkillBlocker(blocker.Code) {
 			continue
 		}
-		skillName := blockerSkillName(blocker.Detail)
+		skillName := blockerSkillName(blocker)
 		if skillName == "" || skillName == current {
 			continue
 		}
@@ -431,7 +431,7 @@ func hasRequiredSkillBlockerFor(blockers []model.ReasonCode, skillName string) b
 		if !isRequiredSkillBlocker(blocker.Code) {
 			continue
 		}
-		if blockerSkillName(blocker.Detail) == skillName {
+		if blockerSkillName(blocker) == skillName {
 			return true
 		}
 	}
@@ -456,30 +456,27 @@ func isRequiredSkillBlocker(code string) bool {
 }
 
 // requiredSkillStaleSet collects the skills carrying a required_skill_stale
-// digest-drift blocker, keyed by skill name (the first segment of the blocker
-// detail, e.g. "plan-audit" from "plan-audit:assurance.md").
+// digest-drift blocker, keyed by the parsed blocker subject (e.g. "plan-audit"
+// from "required_skill_stale:plan-audit:assurance.md").
 func requiredSkillStaleSet(blockers []model.ReasonCode) map[string]bool {
 	out := map[string]bool{}
 	for _, blocker := range blockers {
 		if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
 			continue
 		}
-		if name := blockerSkillName(blocker.Detail); name != "" {
+		if name := blockerSkillName(blocker); name != "" {
 			out[name] = true
 		}
 	}
 	return out
 }
 
-func blockerSkillName(detail string) string {
-	detail = strings.TrimSpace(detail)
-	if detail == "" {
-		return ""
-	}
-	if before, _, ok := strings.Cut(detail, ":"); ok {
-		return strings.TrimSpace(before)
-	}
-	return detail
+// blockerSkillName returns the skill-name subject of a required-skill blocker,
+// delegating to model.ParseBlocker so prefix-token decomposition lives in one
+// place (the blocker subject, e.g. "plan-audit" from
+// "required_skill_stale:plan-audit:assurance.md").
+func blockerSkillName(blocker model.ReasonCode) string {
+	return model.ParseBlocker(blocker).Subject
 }
 
 func buildRequiredSkillEvidence(
