@@ -133,7 +133,13 @@ func assembleSkillViewWithOptions(
 	}
 
 	if options.IncludeSkillEvidence && evidenceMap != nil {
-		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills)
+		staleSkills := requiredSkillStaleSet(view.Blockers)
+		if advanced.Action == "blocked" {
+			for skillName := range requiredSkillStaleSet(advanced.Blockers) {
+				staleSkills[skillName] = true
+			}
+		}
+		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills, staleSkills)
 		if err != nil {
 			return wrapRequiredSkillsEvaluationError("evaluate required skill evidence", ref.Slug, err)
 		}
@@ -442,11 +448,27 @@ func skillHasPassingEvidence(evidenceMap map[string]model.VerificationRecord, sk
 
 func isRequiredSkillBlocker(code string) bool {
 	switch strings.TrimSpace(code) {
-	case "required_skill_missing", "required_skill_not_ready", "required_skill_not_passed", "required_skill_blockers_present":
+	case "required_skill_missing", "required_skill_not_ready", "required_skill_not_passed", "required_skill_blockers_present", "required_skill_stale":
 		return true
 	default:
 		return false
 	}
+}
+
+// requiredSkillStaleSet collects the skills carrying a required_skill_stale
+// digest-drift blocker, keyed by skill name (the first segment of the blocker
+// detail, e.g. "plan-audit" from "plan-audit:assurance.md").
+func requiredSkillStaleSet(blockers []model.ReasonCode) map[string]bool {
+	out := map[string]bool{}
+	for _, blocker := range blockers {
+		if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
+			continue
+		}
+		if name := blockerSkillName(blocker.Detail); name != "" {
+			out[name] = true
+		}
+	}
+	return out
 }
 
 func blockerSkillName(detail string) string {
@@ -466,6 +488,7 @@ func buildRequiredSkillEvidence(
 	workflowState model.WorkflowState,
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
+	staleSkills map[string]bool,
 ) ([]skillEvidenceEntry, error) {
 	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
@@ -508,6 +531,12 @@ func buildRequiredSkillEvidence(
 				entry.Verdict = rec.Verdict
 				entry.Status = "passing"
 			}
+			// A digest-drift blocker supersedes missing/passing: the recorded
+			// verdict exists but its certified inputs are stale.
+			if staleSkills[skillName] {
+				entry.HasEvidence = true
+				entry.Status = "stale"
+			}
 			evidence = append(evidence, entry)
 		}
 		return evidence, nil
@@ -544,6 +573,11 @@ func buildRequiredSkillEvidence(
 			}
 		} else if rec.IsPassing() {
 			entry.Status = "passing"
+		}
+		// Digest drift (certified inputs changed after the verdict) is stale even
+		// when the recorded verdict itself passes.
+		if staleSkills[skillName] {
+			entry.Status = "stale"
 		}
 		evidence = append(evidence, entry)
 	}
