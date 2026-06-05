@@ -1,0 +1,500 @@
+package model
+
+import (
+	"encoding/json"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseBlockerSegments(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		spec    string
+		code    string
+		subject string
+		detail  string
+		raw     string
+	}{
+		{
+			name:    "three segment stale token",
+			spec:    "required_skill_stale:plan-audit:assurance.md",
+			code:    "required_skill_stale",
+			subject: "plan-audit",
+			detail:  "assurance.md",
+			raw:     "required_skill_stale:plan-audit:assurance.md",
+		},
+		{
+			name:    "two segment task token",
+			spec:    "tasks_plan_changed_since_task_evidence:t-03",
+			code:    "tasks_plan_changed_since_task_evidence",
+			subject: "t-03",
+			detail:  "",
+			raw:     "tasks_plan_changed_since_task_evidence:t-03",
+		},
+		{
+			name:    "bare token",
+			spec:    "plan_audit_failed",
+			code:    "plan_audit_failed",
+			subject: "",
+			detail:  "",
+			raw:     "plan_audit_failed",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := ParseBlockerSpec(tc.spec)
+			assert.Equal(t, tc.code, got.Code)
+			assert.Equal(t, tc.subject, got.Subject)
+			assert.Equal(t, tc.detail, got.Detail)
+			assert.Equal(t, tc.raw, got.Raw)
+		})
+	}
+}
+
+func TestParseBlockerIsSingleDecompositionPoint(t *testing.T) {
+	t.Parallel()
+
+	// ParseBlocker must accept an already-split ReasonCode and re-derive the same
+	// segments, so callers can route either a spec string or a ReasonCode through
+	// the one parser.
+	rc := NewReasonCode("required_skill_stale", "plan-audit:assurance.md")
+	got := ParseBlocker(rc)
+	assert.Equal(t, "plan-audit", got.Subject)
+	assert.Equal(t, "assurance.md", got.Detail)
+}
+
+func TestRemediationTableEntriesAreComplete(t *testing.T) {
+	t.Parallel()
+
+	for code, rem := range blockerRemediations {
+		_, hasCanonical := canonicalReasonDefinitions[code]
+		assert.Truef(t, hasCanonical, "recovery code %q must have a canonical reason message", code)
+		assert.NotEmptyf(t, strings.TrimSpace(rem.Remediation), "remediation for %q must be non-empty", code)
+		assert.NotEmptyf(t, strings.TrimSpace(string(rem.Class)), "recovery class for %q must be non-empty", code)
+		assert.Lessf(t, recoveryClassRank(rem.Class), len(recoveryClassPriority),
+			"remediation class %q for %q must be in recoveryClassPriority", rem.Class, code)
+	}
+}
+
+func TestRecoveryRelevantTokensResolveToRemediation(t *testing.T) {
+	t.Parallel()
+
+	// Every recovery-relevant family named in the requirements must render a
+	// non-empty remediation. This is derived from canonical reason codes so adding
+	// a new scope_contract_*/plan_audit_*/wave_* code without remediation goes red.
+	for _, code := range recoveryRelevantCanonicalCodes() {
+		rc := NewReasonCode(code, sampleRecoveryDetail(code))
+		step, ok := recoveryStepFor(rc)
+		require.Truef(t, ok, "token %q must produce a recovery step", rc.Key())
+		assert.NotEmptyf(t, strings.TrimSpace(step.Remediation), "token %q must produce a remediation", rc.Key())
+		assert.NotEmptyf(t, strings.TrimSpace(step.Command), "token %q must produce a command", rc.Key())
+		assert.NotContainsf(t, step.Remediation, "{", "token %q remediation must not leak a placeholder", rc.Key())
+		assert.NotContainsf(t, step.Command, "{", "token %q command must not leak a placeholder", rc.Key())
+	}
+}
+
+func TestInScopeProducedBlockersResolveToCanonicalRecovery(t *testing.T) {
+	t.Parallel()
+
+	// This list is intentionally derived from known validate/next/run/done
+	// producers, not from canonicalReasonDefinitions. It catches a real blocker
+	// that can reach an in-scope user surface before it is added to the canonical
+	// reason and remediation tables.
+	for _, spec := range inScopeProducedRecoverySpecs() {
+		rc := ReasonCodeFromSpec(spec)
+		_, hasCanonical := canonicalReasonDefinitions[rc.Code]
+		assert.Truef(t, hasCanonical, "produced blocker %q must have a canonical reason message", rc.Code)
+
+		step, ok := recoveryStepFor(rc)
+		require.Truef(t, ok, "produced blocker %q must produce a recovery step", rc.Key())
+		assert.NotEmptyf(t, strings.TrimSpace(step.Remediation), "produced blocker %q must produce a remediation", rc.Key())
+		assert.NotEmptyf(t, strings.TrimSpace(step.Command), "produced blocker %q must produce a command", rc.Key())
+		assert.NotContainsf(t, step.Remediation, "{", "produced blocker %q remediation must not leak a placeholder", rc.Key())
+		assert.NotContainsf(t, step.Command, "{", "produced blocker %q command must not leak a placeholder", rc.Key())
+		assert.NotEqualf(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+			"produced blocker %q must not render through humanize fallthrough", rc.Key())
+	}
+}
+
+func inScopeProducedRecoverySpecs() []string {
+	return []string{
+		"research_structure_invalid:section \"Findings\" must have non-empty content",
+		"non_pass_task:t-01",
+		"closeout_goal_verification_reuse_invalid:goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout",
+		"worktree_metadata_persist_failed:permission denied",
+	}
+}
+
+func recoveryRelevantCanonicalCodes() []string {
+	exact := map[string]bool{
+		"assurance_structure_invalid":              true,
+		"artifact_not_ready":                       true,
+		"artifact_schema_missing":                  true,
+		"closeout_assurance_attestation_missing":   true,
+		"closeout_goal_verification_reuse_invalid": true,
+		"dedicated_worktree_branch_mismatch":       true,
+		"dedicated_worktree_metadata_required":     true,
+		"dedicated_worktree_path_invalid":          true,
+		"dedicated_worktree_required":              true,
+		"governance_action_required":               true,
+		"governed_bundle_path_invalid":             true,
+		"high_risk_check_failed":                   true,
+		"high_risk_check_missing":                  true,
+		"intake_clarification_incomplete":          true,
+		"intake_confirmation_incomplete":           true,
+		"intake_substep_invalid":                   true,
+		"manifest_r0_invalid":                      true,
+		"missing_discovery_evidence":               true,
+		"missing_required_artifact":                true,
+		"missing_task_evidence_for_run_summary":    true,
+		"missing_worktree_branch":                  true,
+		"missing_worktree_path":                    true,
+		"non_pass_task":                            true,
+		"preset_confirmation_required":             true,
+		"research_structure_invalid":               true,
+		"run_slipway_done_to_finalize":             true,
+		"run_slipway_run_to_advance":               true,
+		"ship_gate_blocked":                        true,
+		"tasks_checklist_invalid_format":           true,
+		"verification_evidence_missing":            true,
+		"worktree_metadata_persist_failed":         true,
+		"worktree_validation_error":                true,
+	}
+	prefixes := []string{
+		"plan_audit_",
+		"plan_checker_",
+		"plan_dimension_",
+		"required_artifact_",
+		"required_skill_",
+		"review_layer_",
+		"scope_contract_",
+		"stale_execution_",
+		"stale_planning_",
+		"tasks_checklist_",
+		"tasks_plan_",
+		"wave_",
+	}
+	codes := make([]string, 0, len(canonicalReasonDefinitions))
+	for code := range canonicalReasonDefinitions {
+		if exact[code] || hasAnyPrefix(code, prefixes) {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	return codes
+}
+
+func hasAnyPrefix(code string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(code, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func sampleRecoveryDetail(code string) string {
+	switch code {
+	case "assurance_structure_invalid":
+		return "missing required Evidence section: closeout:assurance_complete=pass"
+	case "closeout_assurance_attestation_missing":
+		return "final-closeout must record closeout:assurance_complete=pass on standard/strict"
+	case "closeout_goal_verification_reuse_invalid":
+		return "goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout"
+	case "governance_action_required":
+		return "domain-review:run domain-aware review"
+	case "governed_bundle_path_invalid":
+		return "../outside"
+	case "high_risk_check_failed", "high_risk_check_missing":
+		return "sast"
+	case "missing_required_artifact", "required_artifact_schema_missing", "required_artifact_unreadable":
+		return "decision.md"
+	case "required_artifact_dependency_missing":
+		return "decision.md->requirements.md"
+	case "missing_task_evidence_for_run_summary":
+		return "run_summary_version=1"
+	case "non_pass_task":
+		return "t-01"
+	case "plan_audit_budget_exhausted":
+		return "checker iteration budget exhausted before plan audit passed (rescope is S2_EXECUTE-only)"
+	case "plan_audit_iteration":
+		return "1/2"
+	case "plan_checker_feedback_required":
+		return "rerun_plan_audit_with_blocker_feedback"
+	case "plan_dimension_scope_out_of_bounds_target":
+		return "t-01:../outside.go"
+	case "plan_dimension_dependency_unknown", "plan_dimension_coverage_unknown_requirement":
+		return "t-01->t-99"
+	case "plan_dimension_coverage_missing_requirement", "plan_dimension_coverage_requirement_id_missing":
+		return "REQ-001"
+	case "review_layer_missing", "review_layer_failed":
+		return "IR1"
+	case "required_skill_stale":
+		return "plan-audit:assurance.md"
+	case "required_skill_blockers_present", "required_skill_missing", "required_skill_not_passed", "required_skill_not_ready":
+		return "plan-audit"
+	case "research_structure_invalid":
+		return "section \"Findings\" must have non-empty content"
+	case "ship_gate_blocked":
+		return "required_skill_missing:final-closeout"
+	case "scope_contract_changed_files_missing", "scope_contract_missing", "wave_orchestration_stale_task_evidence":
+		return "t-01"
+	case "scope_contract_drift":
+		return "cmd/next.go"
+	case "tasks_checklist_duplicate_task_id":
+		return "t-01"
+	case "tasks_checklist_task_id_missing":
+		return "index_0"
+	case "tasks_plan_changed_since_task_evidence":
+		return "t-03"
+	case "worktree_validation_error":
+		return "missing branch"
+	case "worktree_metadata_persist_failed":
+		return "permission denied"
+	case "wave_plan_missing":
+		return "change-slug"
+	default:
+		return ""
+	}
+}
+
+func TestRecoveryStepFillsSubjectIntoCommand(t *testing.T) {
+	t.Parallel()
+
+	rc := ReasonCodeFromSpec("required_skill_stale:plan-audit:assurance.md")
+	step, ok := recoveryStepFor(rc)
+	require.True(t, ok)
+	assert.Contains(t, step.Command, "--skill plan-audit", "command must interpolate the subject")
+	assert.NotContains(t, step.Remediation, "{subject}")
+	assert.NotContains(t, step.Remediation, "{detail}")
+}
+
+func TestRecoveryStepFallsBackWhenSubjectMissing(t *testing.T) {
+	t.Parallel()
+
+	// A subjectless stale token must not emit a command with an empty placeholder.
+	rc := ReasonCodeFromSpec("required_skill_stale")
+	step, ok := recoveryStepFor(rc)
+	require.True(t, ok)
+	assert.NotContains(t, step.Command, "{subject}")
+	assert.Equal(t, "slipway run", step.Command, "must fall back when the subject is missing")
+}
+
+func TestBuildRecoveryNilOnCleanState(t *testing.T) {
+	t.Parallel()
+
+	// Informational, non-actionable blockers must not produce a recovery object.
+	blockers := []ReasonCode{NewReasonCode("no_skill_required", "S1_PLAN")}
+	assert.Nil(t, BuildRecovery(blockers))
+	assert.Nil(t, BuildRecovery(nil))
+}
+
+func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
+	t.Parallel()
+
+	// reopen_planning (root-most) must win over refresh_execution (later stage),
+	// regardless of blocker order.
+	blockers := []ReasonCode{
+		NewReasonCode("stale_execution_evidence", ""),
+		NewReasonCode("stale_planning_evidence", ""),
+		NewReasonCode("no_skill_required", "S2_EXECUTE"),
+	}
+	got := BuildRecovery(blockers)
+	require.NotNil(t, got)
+	assert.Equal(t, RecoveryClassReopenPlanning, got.RecoveryClass)
+	assert.NotEmpty(t, got.PrimaryCommand)
+	for _, step := range got.Steps {
+		assert.NotEqual(t, "no_skill_required", step.Code, "informational blocker must not appear as a step")
+	}
+}
+
+func TestRecoveryTokensUseCanonicalMessages(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{
+		"governance_action_required:domain-review:run domain-aware review",
+		"preset_confirmation_required",
+		"tasks_plan_changed_since_task_evidence:t-03",
+	}
+	for _, spec := range specs {
+		rc := ReasonCodeFromSpec(spec)
+		assert.NotEqualf(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+			"message for %q must be canonical, not the humanize fallthrough", spec)
+	}
+}
+
+func TestReasonCodeJSONShapeHasNoPresentationFields(t *testing.T) {
+	t.Parallel()
+
+	// Read-only/additive invariant: the persisted ReasonCode must not gain
+	// recovery/remediation presentation fields.
+	rc := NewReasonCode("required_skill_stale", "plan-audit:assurance.md")
+	raw, err := json.Marshal(rc)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(raw, &m))
+	got := make([]string, 0, len(m))
+	for k := range m {
+		got = append(got, k)
+	}
+	sort.Strings(got)
+	assert.Equal(t, []string{"code", "detail", "message", "severity"}, got,
+		"ReasonCode JSON must carry no presentation fields")
+}
+
+func TestPlanAuditRecoveryDoesNotRecommendRescopeInS1(t *testing.T) {
+	t.Parallel()
+
+	// rescope is S2_EXECUTE-only (gate.EvaluateGPivot), but these blockers are
+	// produced on the S1 plan-audit path. The recovery command must therefore not
+	// hand the operator a `pivot --rescope` the gate will reject; reroute is valid
+	// from S1 through S4.
+	for _, code := range []string{"plan_audit_budget_exhausted", "plan_checker_loop_terminated"} {
+		rc := NewReasonCode(code, "")
+		step, ok := recoveryStepFor(rc)
+		require.Truef(t, ok, "%s must produce a recovery step", code)
+		assert.Equalf(t, "slipway pivot --reroute", step.Command, "%s must recommend reroute, not rescope", code)
+		assert.NotContainsf(t, step.Command, "rescope", "%s command must not point at S1-invalid rescope", code)
+		assert.NotContainsf(t, step.Remediation, "--rescope", "%s remediation must not point at S1-invalid rescope", code)
+	}
+}
+
+func TestCloseoutAttestationMissingResolvesToRecovery(t *testing.T) {
+	t.Parallel()
+
+	// closeout_assurance_attestation_missing is a real G_ship blocker but was not
+	// canonicalized or in the remediation table, so BuildRecovery silently skipped
+	// it on real S4 output. It must now render a step with a remediation/command.
+	rc := NewReasonCode("closeout_assurance_attestation_missing",
+		"final-closeout must record closeout:assurance_complete=pass on standard/strict")
+	step, ok := recoveryStepFor(rc)
+	require.True(t, ok, "closeout_assurance_attestation_missing must produce a recovery step")
+	assert.NotEmpty(t, step.Remediation)
+	assert.NotEmpty(t, step.Command)
+	assert.Contains(t, step.Remediation, "final-closeout")
+	assert.NotContains(t, step.Remediation, "{", "static remediation must not leak a placeholder")
+	assert.Empty(t, step.Subject, "opaque prose detail must not become a synthetic subject")
+	assert.Equal(t,
+		[]string{"final-closeout must record closeout:assurance_complete=pass on standard/strict"},
+		step.Details,
+		"the colon-bearing attestation token must stay intact in Details")
+	// Canonical message, not the humanizeReasonCode fallthrough.
+	assert.NotEqual(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+		"message must be the written canonical sentence")
+}
+
+func TestBuildRecoveryCoversRealValidationAndShipBlockers(t *testing.T) {
+	t.Parallel()
+
+	blockers := []ReasonCode{
+		NewReasonCode("missing_required_artifact", "decision.md"),
+		NewReasonCode("plan_dimension_dependency_unknown", "t-01->t-99"),
+		NewReasonCode("review_layer_missing", "IR1"),
+		NewReasonCode("tasks_checklist_empty", ""),
+	}
+	got := BuildRecovery(blockers)
+	require.NotNil(t, got)
+	assert.ElementsMatch(t,
+		[]string{
+			"missing_required_artifact",
+			"plan_dimension_dependency_unknown",
+			"review_layer_missing",
+			"tasks_checklist_empty",
+		},
+		recoveryCodes(got.Steps),
+		"real validate/done blockers must not be silently skipped")
+}
+
+func TestBuildRecoveryPrioritizesVerificationBeforeCloseout(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("closeout_assurance_attestation_missing",
+			"final-closeout must record closeout:assurance_complete=pass on standard/strict"),
+		NewReasonCode("closeout_goal_verification_reuse_invalid",
+			"goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout"),
+		NewReasonCode("verification_evidence_missing", "goal-verification"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, RecoveryClassRerunSkill, got.RecoveryClass)
+	assert.Contains(t, got.PrimaryAction, "goal-verification",
+		"goal-verification recovery must precede final-closeout when both S4 blockers are present")
+}
+
+func TestReadyStatesSurfaceAdvanceRecovery(t *testing.T) {
+	t.Parallel()
+
+	// A ready-to-advance or ready-to-finalize state is not blocked, but its single
+	// trustworthy next action is still surfaced as the primary command, and the two
+	// ready advisories are handled symmetrically.
+	advance := BuildRecovery([]ReasonCode{
+		NewReasonCode("run_slipway_run_to_advance", "S2_EXECUTE"),
+		NewReasonCode("no_skill_required", "S2_EXECUTE"),
+	})
+	require.NotNil(t, advance)
+	assert.Equal(t, "slipway run", advance.PrimaryCommand)
+	assert.Equal(t, RecoveryClassAdvance, advance.RecoveryClass)
+
+	finalize := BuildRecovery([]ReasonCode{NewReasonCode("run_slipway_done_to_finalize", "")})
+	require.NotNil(t, finalize)
+	assert.Equal(t, "slipway done", finalize.PrimaryCommand)
+}
+
+func TestBuildRecoveryGroupsBlockersByCodeAndSubject(t *testing.T) {
+	t.Parallel()
+
+	// Many stale artifacts under one skill must collapse into a single step that
+	// lists the artifacts in Details, not N near-identical restamp steps; a second
+	// skill stays a distinct step.
+	blockers := []ReasonCode{
+		NewReasonCode("required_skill_stale", "code-quality-review:CLAUDE.md"),
+		NewReasonCode("required_skill_stale", "code-quality-review:README.md"),
+		NewReasonCode("required_skill_stale", "code-quality-review:cmd/next.go"),
+		NewReasonCode("required_skill_stale", "code-quality-review:CLAUDE.md"), // duplicate
+		NewReasonCode("required_skill_stale", "plan-audit:tasks.md"),
+	}
+	got := BuildRecovery(blockers)
+	require.NotNil(t, got)
+	require.Len(t, got.Steps, 2, "one step per (code, subject), not per blocker")
+
+	var cqr *RecoveryStep
+	for i := range got.Steps {
+		if got.Steps[i].Subject == "code-quality-review" {
+			cqr = &got.Steps[i]
+		}
+	}
+	require.NotNil(t, cqr, "the code-quality-review group must be one step")
+	assert.Equal(t, []string{"CLAUDE.md", "README.md", "cmd/next.go"}, cqr.Details,
+		"details are de-duplicated and sorted")
+	assert.Contains(t, cqr.Command, "--skill code-quality-review")
+	assert.NotContains(t, cqr.Remediation, "{", "remediation must not embed a per-detail placeholder")
+}
+
+func TestGovernanceActionRemediationStaysCleanWithoutDetail(t *testing.T) {
+	t.Parallel()
+
+	// A subjectless/detailless token must not leak the artifacts of an empty
+	// placeholder substitution (empty quotes, dangling separator, double space).
+	step, ok := recoveryStepFor(NewReasonCode("governance_action_required", ""))
+	require.True(t, ok)
+	assert.NotContains(t, step.Remediation, "''")
+	assert.NotContains(t, step.Remediation, ": .")
+	assert.NotContains(t, step.Remediation, "  ")
+	assert.NotContains(t, step.Remediation, "{")
+}
+
+func recoveryCodes(steps []RecoveryStep) []string {
+	codes := make([]string, 0, len(steps))
+	for _, step := range steps {
+		codes = append(codes, step.Code)
+	}
+	return codes
+}

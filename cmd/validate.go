@@ -31,6 +31,7 @@ type validateView struct {
 	PlanningNote              string                               `json:"planning_note,omitempty"`
 	SkillsReady               map[string]string                    `json:"skills_ready"`
 	Blockers                  []model.ReasonCode                   `json:"blockers"`
+	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
 	CanAdvance                bool                                 `json:"can_advance"`
 	GateStatus                map[string]string                    `json:"gate_status,omitempty"`
 	GateDetails               map[string]model.GateRecord          `json:"gate_details,omitempty"`
@@ -112,6 +113,7 @@ func buildValidateViewBase(
 		PlanningNote:  planningNote(change.CurrentState, change.PlanSubStep),
 		SkillsReady:   skillsReady,
 		Blockers:      model.NormalizeReasonCodes(blockers),
+		Recovery:      buildValidateRecovery(blockers, nil),
 		CanAdvance:    len(blockers) == 0,
 		Diagnostics:   diagnostics,
 		EvidenceFreshness: projectFreshnessForExecMode(
@@ -121,6 +123,14 @@ func buildValidateViewBase(
 			blockers,
 		),
 	}
+}
+
+func buildValidateRecovery(blockers []model.ReasonCode, gateDetails map[string]model.GateRecord) *model.RecoverySummary {
+	all := append([]model.ReasonCode(nil), blockers...)
+	for _, gate := range gateDetails {
+		all = append(all, gate.ReasonCodes...)
+	}
+	return model.BuildRecovery(all)
 }
 
 func makeValidateCmd() *cobra.Command {
@@ -270,6 +280,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	}
 	view.GateStatus = gateStatus
 	view.GateDetails = gateDetails
+	view.Recovery = buildValidateRecovery(view.Blockers, gateDetails)
 	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 	}

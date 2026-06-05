@@ -586,6 +586,9 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
 		assert.Contains(t, strings.ToLower(cliErr.Message), "review_layer_missing:ir1")
+		require.NotNil(t, cliErr.Recovery)
+		assert.Contains(t, recoveryStepCodes(cliErr.Recovery), "review_layer_missing")
+		assert.NotEmpty(t, cliErr.Recovery.PrimaryCommand)
 
 		_, loadErr := state.LoadChange(root, slug)
 		require.NoError(t, loadErr)
