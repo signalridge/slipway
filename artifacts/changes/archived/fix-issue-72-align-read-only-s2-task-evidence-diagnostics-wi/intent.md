@@ -6,7 +6,7 @@
 - Languages: Go
 - Test Command: go test ./...
 - Build Command: go build ./...
-- Conventions: 
+- Conventions:
 
 ## Summary
 Fix issue #72: align read-only S2 task-evidence diagnostics with run diagnostics so present-but-stale or plan-mismatched task evidence is not reported as run_summary_missing

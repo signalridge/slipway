@@ -342,10 +342,13 @@ func refineS2WaveExecutionSkillBlockers(
 	}
 
 	previewBlockers := model.NormalizeReasonCodes(preview.Blockers)
-	if wavePreviewHasSpecificTaskEvidenceBlockers(previewBlockers) {
+	if wavePreviewHasReplacementBlockers(previewBlockers) {
 		return filterWaveRunSummaryMissingSkillBlockers(skillBlockers), previewBlockers, nil
 	}
-	return skillBlockers, previewBlockers, nil
+	if missingDetail, ok := missingTaskEvidencePreviewDetail(previewBlockers); ok {
+		return enrichWaveRunSummaryMissingSkillBlockers(skillBlockers, missingDetail), nil, nil
+	}
+	return skillBlockers, nil, nil
 }
 
 func hasWaveRunSummaryMissingSkillBlocker(blockers []model.ReasonCode) bool {
@@ -368,12 +371,45 @@ func filterWaveRunSummaryMissingSkillBlockers(blockers []model.ReasonCode) []mod
 	return filtered
 }
 
+func enrichWaveRunSummaryMissingSkillBlockers(blockers []model.ReasonCode, detail string) []model.ReasonCode {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return blockers
+	}
+	enriched := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if isWaveRunSummaryMissingSkillBlocker(blocker) {
+			enriched = append(enriched, model.NewReasonCode(
+				blocker.Code,
+				SkillWaveOrchestration+":run_summary_missing; "+detail,
+			))
+			continue
+		}
+		enriched = append(enriched, blocker)
+	}
+	return enriched
+}
+
 func isWaveRunSummaryMissingSkillBlocker(blocker model.ReasonCode) bool {
 	return blocker.Code == "required_skill_not_ready" &&
 		strings.HasPrefix(strings.TrimSpace(blocker.Detail), SkillWaveOrchestration+":run_summary_missing")
 }
 
-func wavePreviewHasSpecificTaskEvidenceBlockers(blockers []model.ReasonCode) bool {
+func missingTaskEvidencePreviewDetail(blockers []model.ReasonCode) (string, bool) {
+	for _, blocker := range blockers {
+		if blocker.Code != "missing_task_evidence_for_run_summary" {
+			continue
+		}
+		detail := strings.TrimSpace(blocker.Detail)
+		if detail == "" {
+			continue
+		}
+		return detail, true
+	}
+	return "", false
+}
+
+func wavePreviewHasReplacementBlockers(blockers []model.ReasonCode) bool {
 	for _, blocker := range blockers {
 		if blocker.Code == "missing_task_evidence_for_run_summary" {
 			continue

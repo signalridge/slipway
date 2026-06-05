@@ -3658,22 +3658,7 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 
 func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	ensureTestGitRepo(t, root)
-	initTestWorkspace(t, root)
-	slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
-	change, err := state.LoadChange(root, slug)
-	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, state.SaveChange(root, change))
-
-	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 1,
-	})
+	root, slug := prepareMissingTaskEvidenceForWaveRunSummaryFixture(t)
 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
 	require.NoError(t, err)
@@ -3690,6 +3675,38 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task")
 	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
+}
+
+func TestReadOnlyS2DiagnosticsKeepSingleRunSummaryMissingForAbsentTaskEvidence(t *testing.T) {
+	t.Parallel()
+	root, slug := prepareMissingTaskEvidenceForWaveRunSummaryFixture(t)
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+	var nextDiag nextView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextDiag))
+	assertSingleRunSummaryMissingTaskEvidenceBlocker(t, "next", nextDiag.Blockers, slug)
+
+	validateCmd := commandForRoot(t, root, makeValidateCmd())
+	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	var validateOut bytes.Buffer
+	validateCmd.SetOut(&validateOut)
+	require.NoError(t, validateCmd.Execute())
+	var validate validateView
+	require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+	assertSingleRunSummaryMissingTaskEvidenceBlocker(t, "validate", validate.Blockers, slug)
+
+	statusCmd := commandForRoot(t, root, makeStatusCmd())
+	statusCmd.SetArgs([]string{"--json", "--change", slug})
+	var statusOut bytes.Buffer
+	statusCmd.SetOut(&statusOut)
+	require.NoError(t, statusCmd.Execute())
+	var status statusView
+	require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+	assertSingleRunSummaryMissingTaskEvidenceBlocker(t, "status", status.Blockers, slug)
 }
 
 func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *testing.T) {
@@ -3772,6 +3789,45 @@ func assertReadOnlyS2TaskEvidenceDriftBlockers(t *testing.T, surface string, blo
 	for _, spec := range specs {
 		assert.NotContains(t, spec, "wave-orchestration:run_summary_missing", surface)
 	}
+}
+
+func assertSingleRunSummaryMissingTaskEvidenceBlocker(t *testing.T, surface string, blockers []model.ReasonCode, slug string) {
+	t.Helper()
+	specs := model.ReasonSpecs(blockers)
+	matches := []string{}
+	for _, spec := range specs {
+		assert.NotContains(t, spec, "missing_task_evidence_for_run_summary", surface)
+		if strings.HasPrefix(spec, "required_skill_not_ready:wave-orchestration:run_summary_missing") {
+			matches = append(matches, spec)
+		}
+	}
+	require.Len(t, matches, 1, surface)
+	missingEvidenceBlocker := matches[0]
+	assert.Contains(t, missingEvidenceBlocker, "run_summary_version=1", surface)
+	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks", surface)
+	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task", surface)
+	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs", surface)
+}
+
+func prepareMissingTaskEvidenceForWaveRunSummaryFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+	})
+	return root, slug
 }
 
 func prepareStalePlanningRecoveryFixture(t *testing.T, root string, currentState model.WorkflowState) (string, model.Change) {

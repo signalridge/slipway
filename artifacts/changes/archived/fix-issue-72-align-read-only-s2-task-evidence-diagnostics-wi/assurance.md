@@ -13,24 +13,25 @@ change does not address release lag, does not mutate Lattice artifacts, does
 not reopen issue #71, and does not redesign unrelated readiness behavior.
 
 ## Verification Verdict
-Implementation and governance proof passes. Focused command and progression
-tests pass, full workspace tests pass, build succeeds, diff whitespace check
-passes, S3 reviews pass, execution evidence is fresh, and active validation is
-ready to be refreshed again after goal-verification and final-closeout evidence.
+Implementation verification passes. Focused command and progression tests cover
+the plan-drift path, the true-missing task-evidence path, and the read-only
+non-materialization contract; full workspace tests, vet, build, and diff
+whitespace checks are clean. This bundle is archived with `status=done`, so
+active `validate --change` commands intentionally reject it as archived; future
+inspection should use this archived evidence record or validate a new active
+change.
 
 ## Evidence Index
-- Passed: `go test ./cmd -run 'TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing|TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary|TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary'`
-- Passed: `go test ./internal/engine/progression -run 'TestSyncGovernedWaveExecution|TestEvaluateGovernanceReadiness'`
-- Passed: `go test -count=1 ./cmd -run 'TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing|TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary|TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary'`
+- Passed: `go test -count=1 ./cmd -run 'TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary|TestReadOnlyS2DiagnosticsKeepSingleRunSummaryMissingForAbsentTaskEvidence|TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing|TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary'`
 - Passed: `go test -count=1 ./internal/engine/progression -run 'TestSyncGovernedWaveExecution|TestEvaluateGovernanceReadiness'`
 - Passed: `go test -count=1 ./...`
+- Passed: `go vet ./internal/engine/progression/... ./cmd/...`
 - Passed: `go build ./...`
-- Passed: `git diff --check`
-- Passed: `go run . validate --json --change fix-issue-72-align-read-only-s2-task-evidence-diagnostics-wi` through S3 review and S4 entry; final active validation will be refreshed after S4 evidence records.
+- Passed: `git diff --check origin/main`
 
 ## Requirement Coverage
 - REQ-001: covered by `t-01`, `t-02`, and `t-03`; focused command regression asserts specific task-plan drift blockers.
-- REQ-002: covered by `t-02` and `t-03`; existing missing task-evidence regression remains in the focused command suite.
+- REQ-002: covered by `t-02` and `t-03`; the true-missing task-evidence regression keeps one compatible `run_summary_missing` blocker and enriches it with the concrete run summary version and task evidence path.
 - REQ-003: covered by `t-01` and `t-02`; regression asserts read-only commands do not create `execution-summary.yaml`.
 - REQ-004: covered by `t-02` and existing progression sync tests.
 - REQ-005: covered by `t-04`; final closeout refreshes full proof.
@@ -47,6 +48,6 @@ and `progression_next_test.go`. No schema migration or runtime cleanup is
 required.
 
 ## Archive Decision
-Not ready to archive until wave execution evidence, domain review,
-goal-verification, final-closeout, and final active `validate --json` proof are
-recorded. Active validation must be captured before any `done` archive step.
+Archived as done. Active governance commands no longer validate this slug
+because it has moved under `artifacts/changes/archived/`; the durable closeout
+record is this archived bundle plus the branch-level verification listed above.
