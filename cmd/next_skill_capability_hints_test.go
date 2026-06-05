@@ -428,10 +428,13 @@ func TestAppendCatalogHintsAttachesHydrateReferencesOnWaveHost(t *testing.T) {
 	require.NotEmpty(t, hints)
 
 	var rootCauseHint *techniqueHint
+	var testDesignHint *techniqueHint
 	for i := range hints {
-		if hints[i].Name == "skill:root-cause-tracing" {
+		switch hints[i].Name {
+		case "skill:root-cause-tracing":
 			rootCauseHint = &hints[i]
-			break
+		case "skill:test-design":
+			testDesignHint = &hints[i]
 		}
 	}
 	require.NotNil(t, rootCauseHint, "expected root-cause-tracing support hint on wave-orchestration host")
@@ -441,4 +444,14 @@ func TestAppendCatalogHintsAttachesHydrateReferencesOnWaveHost(t *testing.T) {
 		"root-cause-tracing/root-cause-tracing.md",
 	}, rootCauseHint.HydrateReferences)
 	assert.True(t, slices.IsSorted(rootCauseHint.HydrateReferences), "hydrate references should be stable-sorted")
+
+	require.NotNil(t, testDesignHint, "expected test-design support hint on wave-orchestration host")
+	assert.Equal(t, []string{
+		"test-design/behavior-vs-implementation.md",
+		"test-design/case-enumeration.md",
+		"test-design/property-reasoning.md",
+		"test-design/test-data.md",
+		"test-design/test-doubles.md",
+	}, testDesignHint.HydrateReferences)
+	assert.True(t, slices.IsSorted(testDesignHint.HydrateReferences), "hydrate references should be stable-sorted")
 }
