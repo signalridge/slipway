@@ -127,6 +127,9 @@ such a skill exists. Language detection uses `project_context.languages` first;
 only when that list is empty does it fall back to `artifacts/codebase/STACK.md`,
 and the two sources are not merged. Because this is advisory technique metadata,
 not a governance control, `disabled_controls` does not suppress it.
+The live authoring hint is emitted from `wave-orchestration`; `tdd-governance`
+consumes the related frozen-test RED-proof guidance through its exported
+SKILL.md, not through `technique_hints`.
 
 `codebase-map --json` can report `status: "baseline"` with `baseline_docs`
 when documents contain only CLI-detected repository facts. Treat baseline docs

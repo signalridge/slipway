@@ -21,9 +21,11 @@ func TestTestDesignTemplatesStayLanguageNeutral(t *testing.T) {
 	}
 	bannedTokens := []string{
 		"t.Run",
+		"#[test]",
 		"pytest",
 		"def test_",
 		"describe(",
+		"it(",
 		"expect(",
 		"@Test",
 	}
@@ -62,6 +64,7 @@ func TestTestDesignReferencesTeachCoreJudgmentTopics(t *testing.T) {
 	text := corpus.String()
 
 	assert.Contains(t, text, "test double")
+	assert.Contains(t, text, "test level")
 	assert.Contains(t, text, "fake")
 	assert.Contains(t, text, "mock")
 	assert.Contains(t, text, "behavior")
@@ -69,10 +72,19 @@ func TestTestDesignReferencesTeachCoreJudgmentTopics(t *testing.T) {
 	assert.Contains(t, text, "equivalence")
 	assert.Contains(t, text, "boundary")
 	assert.Contains(t, text, "decision table")
+	assert.Contains(t, text, "impossible")
+	assert.Contains(t, text, "uncovered")
 	assert.Contains(t, text, "oracle")
 	assert.Contains(t, text, "property")
 	assert.Contains(t, text, "invariant")
 	assert.Contains(t, text, "generator")
+	assert.Contains(t, text, "stronger properties")
+	assert.Contains(t, text, "stateful")
+	assert.Contains(t, text, "command sequences")
+	assert.Contains(t, text, "interchangeable")
+	assert.Contains(t, text, "design signal")
 	assert.Contains(t, text, "fixture")
+	assert.Contains(t, text, "masked")
+	assert.Contains(t, text, "secrets")
 	assert.Contains(t, text, "shared mutable")
 }

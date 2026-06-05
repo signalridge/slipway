@@ -2,7 +2,14 @@
 
 Use the smallest data that still represents the behavior. Prefer realistic shape
 over production volume. Never use production data, credentials, personal data,
-or hardcoded environment-specific identifiers.
+or hardcoded environment-specific identifiers. Also assert that secrets and
+personal data never appear in outputs, logs, or error messages; their absence is
+itself an oracle for redaction and privacy boundaries.
+
+When sensitive examples must be masked, preserve the format the behavior relies
+on. A masked identifier should still satisfy required length, category, checksum,
+ordering, or parser constraints; otherwise state that format is irrelevant to
+the oracle.
 
 Factories centralize defaults. Builders make important variations readable.
 Fixtures are useful for stable shared examples, but keep them immutable and

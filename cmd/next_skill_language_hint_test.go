@@ -69,6 +69,19 @@ func TestAppendLanguageTestingHintsFallsBackToStackWhenProjectContextMissing(t *
 	assert.Equal(t, []string{"Go", "Python"}, collectHintLanguages(collectLanguageTestingHints(hints)))
 }
 
+func TestAppendLanguageTestingHintsFallsBackToBoundWorktreeStack(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	worktreeRoot := filepath.Join(t.TempDir(), "bound-worktree")
+	writeStackLanguages(t, worktreeRoot, "- Languages: Go\n")
+
+	change := &model.Change{WorktreePath: worktreeRoot}
+	hints := appendLanguageTestingHints(seedTestDesignHints(), root, change)
+
+	assert.Equal(t, []string{"Go"}, collectHintLanguages(collectLanguageTestingHints(hints)))
+}
+
 func TestAppendLanguageTestingHintsOmitsEmptyStackLanguages(t *testing.T) {
 	t.Parallel()
 

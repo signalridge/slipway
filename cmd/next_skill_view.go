@@ -643,7 +643,7 @@ func appendLanguageTestingHints(existing []techniqueHint, root string, governedC
 
 	languages := normalizeLanguageHints(governedChange.ProjectContext.Languages)
 	if len(languages) == 0 {
-		languages = stackLanguageHints(root)
+		languages = stackLanguageHints(languageHintStackRoot(root, *governedChange))
 	}
 	if len(languages) == 0 {
 		return existing
@@ -683,6 +683,14 @@ func hasTestDesignHint(hints []techniqueHint) bool {
 		}
 	}
 	return false
+}
+
+func languageHintStackRoot(root string, governedChange model.Change) string {
+	workspaceRoot, err := state.WorkspaceRootForChange(root, governedChange)
+	if err != nil || strings.TrimSpace(workspaceRoot) == "" {
+		return root
+	}
+	return workspaceRoot
 }
 
 func stackLanguageHints(root string) []string {
