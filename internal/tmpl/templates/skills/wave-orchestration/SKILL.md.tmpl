@@ -61,6 +61,11 @@ after any checkpoint pause continue with a **fresh** subagent context.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - Outputs: `changed_files`, `test_summary`, and `evidence_ref`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
+- For test-bearing work, isolate the `task_kind=test` test-authoring step from
+  the `task_kind=code` implementation step: give the test-authoring executor
+  only the spec, acceptance criteria, and public API signatures, never the implementation;
+  freeze those tests before dispatching the later implementation task that names
+  the test task in `depends_on`.
 - For `task_kind=code`, enforce RED, then GREEN, then REFACTOR before accepting the result.
 - Detailed dispatch examples live in `references/executor-dispatch-reference.md`.
 

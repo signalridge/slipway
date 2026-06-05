@@ -57,6 +57,10 @@ git log --format="%H %ai" --diff-filter=AM -- <impl_file>
 Same-commit test and implementation is not automatic test-first proof. Require
 earlier evidence or fail the task.
 
+For isolation-structured work, the frozen test-authoring commit is the RED proof
+for the later implementation task. Verify that commit precedes the
+implementation commit and that the implementation task depends on it.
+
 ## Test Quality Assessment
 Tests must be meaningful, not ceremonial:
 - assert behavior, not only "no error"
