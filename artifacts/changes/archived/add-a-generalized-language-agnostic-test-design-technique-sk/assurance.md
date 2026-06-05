@@ -17,17 +17,29 @@ testing skills; changing `tdd-governance`/`coverage-analysis` semantics; binding
 the hints at `goal-verification`; any wave-plan model/hash/evidence change.
 
 ## Verification Verdict
-Pending S2 execution and S4 verification. Planned gates: binding-compare +
-size-budget + golden-manifest gates (Part A), `cmd` hint tests incl. per-language
-emission, ProjectContext-over-STACK precedence, disabled_controls independence,
-and next/run parity (Part B), template-content + generalized-only guard tests
-(Part A/C), and a final `go build ./...` + `go test -count=1 ./...`.
+Implementation, review, and S4 verification pass on the active worktree. The
+change is additive and is verified by the Part A registry/template/toolgen gates,
+the Part B `cmd` language-hint tests, the Part C rendered-template isolation
+tests, fresh full-suite commands, and governed review records. Before `done`, the
+final-closeout record must cite an active `go run . validate --json` result for
+this same bundle so archive/ship readiness is based on live state, not archived
+records.
 
 ## Evidence Index
-To be populated during execution from `verification/*.yaml` and task evidence:
-- `verification/wave-orchestration.yaml` + per-task evidence (task-001..task-007)
-- `verification/spec-compliance-review.yaml`, `code-quality-review.yaml`
-- `verification/goal-verification.yaml`, `final-closeout.yaml`
+Primary execution evidence:
+- `verification/wave-orchestration.yaml` plus task evidence `task-001` through
+  `task-007`, including the RED commits for template/content tests and Part B
+  language-hint tests, the GREEN implementation commits, and the final
+  `go build ./...` / `go test -count=1 ./...` task evidence.
+- `verification/spec-compliance-review.yaml`: requirements-to-code trace passes,
+  including scope-contract recovery for `internal/engine/capability/resolver_test.go`.
+- `verification/code-quality-review.yaml`: independent quality review passes with
+  focused tests, `git diff --check`, and placeholder/secrets scans classified.
+- `verification/goal-verification.yaml`: S4 acceptance criteria verification
+  against REQ-001 through REQ-012, fresh build/full-suite output, and target-file
+  stub scan.
+- `verification/final-closeout.yaml`: final ship-gate refresh, assurance
+  attestation, active `validate --json` proof, and full-suite confirmation.
 
 ## Requirement Coverage
 - REQ-002, REQ-008, REQ-009, REQ-010 → task-001 (RED: generalized-only guard +
@@ -74,6 +86,9 @@ clean (each part is isolated to its own files). Verification after rollback:
 `go build ./...` && `go test -count=1 ./...`.
 
 ## Archive Decision
-Pending. Archive readiness will be recorded at closeout after an active
-`validate --json` freshness/readiness proof is captured before `done`. This
-bundle is not yet revalidated through the active validate gate.
+Archive after final-closeout passes and before/through `slipway done`; do not
+archive from stale review or task evidence alone. The archive rationale is that
+the change is additive, every REQ maps to a completed task and review record,
+the fresh build/test suite is green, scope contract is pass, and final-closeout
+must capture active `go run . validate --json` proof immediately before `done` so
+the frozen bundle records live ship readiness.
