@@ -5,6 +5,20 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/signalridge/slipway/compare/v0.5.1...v0.6.0) (2026-06-05)
+
+
+### Features
+
+* **skills:** generalized test-design technique + language-aware capability routing ([#82](https://github.com/signalridge/slipway/issues/82)) ([71f3521](https://github.com/signalridge/slipway/commit/71f3521f71a91e64361d3ae03bd098a3dec7a3af))
+
+
+### Bug Fixes
+
+* **governance:** add recovery UX tier-0 restamp ([#87](https://github.com/signalridge/slipway/issues/87)) ([6d65fcc](https://github.com/signalridge/slipway/commit/6d65fccdb49c132f0c4e6754b4ae7822f0122b2f))
+* **governance:** align S2 task evidence diagnostics ([#77](https://github.com/signalridge/slipway/issues/77)) ([7ec3002](https://github.com/signalridge/slipway/commit/7ec3002d8cfba2fa969cdfc52bf9db6e5e1ceda3))
+* **governance:** harden Open Questions detection against continuations and resolution markers ([#79](https://github.com/signalridge/slipway/issues/79)) ([31e9bda](https://github.com/signalridge/slipway/commit/31e9bda64b179b99bc6d0ae577b21059aeee27a3))
+
 ## [0.5.1](https://github.com/signalridge/slipway/compare/v0.5.0...v0.5.1) (2026-06-04)
 
 
