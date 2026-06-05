@@ -125,6 +125,52 @@ Copied source.
 `,
 			want: false,
 		},
+		{
+			name: "resolved checklist wraps across lines",
+			content: `## Open Questions
+- [x] Part C mechanism — RESOLVED: Option A keeps the change to SKILL.md prose
+  only, anchored on the existing task_kind=test->code + depends_on model, so
+  no parser or hash change is needed.
+`,
+			want: false,
+		},
+		{
+			name: "uppercase RESOLVED prose is documentation",
+			content: `## Open Questions
+All intake questions RESOLVED during research; see research.md.
+`,
+			want: false,
+		},
+		{
+			name: "lowercase resolved prose is documentation",
+			content: `## Open Questions
+Domain classification resolved: verification.
+`,
+			want: false,
+		},
+		{
+			name: "unresolved prose still blocks",
+			content: `## Open Questions
+Adapter layout is still unresolved.
+`,
+			want: true,
+		},
+		{
+			name: "nested unchecked checklist still blocks",
+			content: `## Open Questions
+- [x] Parent question — RESOLVED.
+  - [ ] Nested follow-up still open.
+`,
+			want: true,
+		},
+		{
+			name: "resolved checklist continuation with question mark does not block",
+			content: `## Open Questions
+- [x] Which host emits the hint — RESOLVED: wave-orchestration only. Why not
+  tdd-governance? Because it is ExportOnlyExtra and never a next-skill.
+`,
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
