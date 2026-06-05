@@ -206,7 +206,7 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 		expected = append(expected, name)
 	}
 	assert.ElementsMatch(t, expected, got)
-	assert.Len(t, got, 22, "host skill count should stay within the slim exported surface target")
+	assert.Len(t, got, 23, "host skill count should stay within the slim exported surface target")
 }
 
 func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testing.T) {

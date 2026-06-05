@@ -22,6 +22,8 @@ func defaultSkills() []Skill {
 		coverageAnalysis(),
 		propertyTesting(),
 		mutationTesting(),
+		// B6 test-design
+		testDesign(),
 		// B5 repair/CI + ops
 		ciTriage(),
 		reviewCommentTriage(),

@@ -204,11 +204,17 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			want: resolutionSnapshot{
 				supports: []supportSnapshot{
 					{skillID: "root-cause-tracing", kind: AttachmentProcedure},
+					{skillID: "test-design", kind: AttachmentProcedure},
 				},
 				hydrate: []string{
 					"root-cause-tracing/condition-based-waiting.md",
 					"root-cause-tracing/hypothesis-testing.md",
 					"root-cause-tracing/root-cause-tracing.md",
+					"test-design/behavior-vs-implementation.md",
+					"test-design/case-enumeration.md",
+					"test-design/property-reasoning.md",
+					"test-design/test-data.md",
+					"test-design/test-doubles.md",
 				},
 			},
 		},

@@ -127,6 +127,10 @@ type skillConstraints struct {
 
 type techniqueHint struct {
 	Name              string   `json:"name"`
+	Kind              string   `json:"kind,omitempty"`
+	Capability        string   `json:"capability,omitempty"`
+	Language          string   `json:"language,omitempty"`
+	Optional          bool     `json:"optional,omitempty"`
 	Reason            string   `json:"reason"`
 	HydrateReferences []string `json:"hydrate_references,omitempty"`
 }
