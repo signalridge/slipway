@@ -116,6 +116,18 @@ JSON is intentionally compact; use `--diagnostics` for gate status, artifact
 status, skill evidence, context-budget details, wave plans, and transition
 traces.
 
+`next_skill.technique_hints` may include exported `skill:*` hints and optional
+`capability:*` hints. `capability:language-testing` is a host-resolution hint:
+when `skill:test-design` is present and Slipway detects one or more project
+languages, it emits one optional hint per language with
+`kind: "capability"`, `capability: "language-testing"`, and `language: "<name>"`.
+The caller or host may map that capability to its own installed language testing
+skill; Slipway does not vendor language-specific test idioms or require that
+such a skill exists. Language detection uses `project_context.languages` first;
+only when that list is empty does it fall back to `artifacts/codebase/STACK.md`,
+and the two sources are not merged. Because this is advisory technique metadata,
+not a governance control, `disabled_controls` does not suppress it.
+
 `codebase-map --json` can report `status: "baseline"` with `baseline_docs`
 when documents contain only CLI-detected repository facts. Treat baseline docs
 as a starting point awaiting source-backed verification, not as completed
