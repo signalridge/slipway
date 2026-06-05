@@ -221,7 +221,19 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 	readiness.PassingSkills = cloneVerificationRecords(passingSkills)
 	readiness.SkillBlockers = model.ReasonCodesFromSpecs(skillBlockers)
+	var wavePreviewBlockers []model.ReasonCode
+	readiness.SkillBlockers, wavePreviewBlockers, err = refineS2WaveExecutionSkillBlockers(
+		root,
+		evaluationChange,
+		effectiveState,
+		execCtx.Summary,
+		readiness.SkillBlockers,
+	)
+	if err != nil {
+		return GovernanceReadiness{}, err
+	}
 	readiness.Blockers = append(readiness.Blockers, readiness.SkillBlockers...)
+	readiness.Blockers = append(readiness.Blockers, wavePreviewBlockers...)
 	if effectiveState == model.StateS2Execute && evaluationChange.NeedsDiscovery && strings.TrimSpace(evaluationChange.WorktreePath) == "" {
 		derivation, err := DeriveWorktreeBlockers(root, evaluationChange, passingSkills)
 		if err != nil {
@@ -306,6 +318,105 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readiness.Blockers = model.NormalizeReasonCodes(readiness.Blockers)
 	readiness.Diagnostics = stringutil.UniqueSorted(readiness.Diagnostics)
 	return readiness, nil
+}
+
+func refineS2WaveExecutionSkillBlockers(
+	root string,
+	change model.Change,
+	effectiveState model.WorkflowState,
+	summary *model.ExecutionSummary,
+	skillBlockers []model.ReasonCode,
+) ([]model.ReasonCode, []model.ReasonCode, error) {
+	if effectiveState != model.StateS2Execute ||
+		state.ExecutionSummaryReady(summary) ||
+		!hasWaveRunSummaryMissingSkillBlocker(skillBlockers) {
+		return skillBlockers, nil, nil
+	}
+
+	preview, err := PreviewGovernedWaveExecution(root, change)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(preview.Blockers) == 0 {
+		return skillBlockers, nil, nil
+	}
+
+	previewBlockers := model.NormalizeReasonCodes(preview.Blockers)
+	if wavePreviewHasReplacementBlockers(previewBlockers) {
+		return filterWaveRunSummaryMissingSkillBlockers(skillBlockers), previewBlockers, nil
+	}
+	if missingDetail, ok := missingTaskEvidencePreviewDetail(previewBlockers); ok {
+		return enrichWaveRunSummaryMissingSkillBlockers(skillBlockers, missingDetail), nil, nil
+	}
+	return skillBlockers, nil, nil
+}
+
+func hasWaveRunSummaryMissingSkillBlocker(blockers []model.ReasonCode) bool {
+	for _, blocker := range blockers {
+		if isWaveRunSummaryMissingSkillBlocker(blocker) {
+			return true
+		}
+	}
+	return false
+}
+
+func filterWaveRunSummaryMissingSkillBlockers(blockers []model.ReasonCode) []model.ReasonCode {
+	filtered := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if isWaveRunSummaryMissingSkillBlocker(blocker) {
+			continue
+		}
+		filtered = append(filtered, blocker)
+	}
+	return filtered
+}
+
+func enrichWaveRunSummaryMissingSkillBlockers(blockers []model.ReasonCode, detail string) []model.ReasonCode {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return blockers
+	}
+	enriched := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if isWaveRunSummaryMissingSkillBlocker(blocker) {
+			enriched = append(enriched, model.NewReasonCode(
+				blocker.Code,
+				SkillWaveOrchestration+":run_summary_missing; "+detail,
+			))
+			continue
+		}
+		enriched = append(enriched, blocker)
+	}
+	return enriched
+}
+
+func isWaveRunSummaryMissingSkillBlocker(blocker model.ReasonCode) bool {
+	return blocker.Code == "required_skill_not_ready" &&
+		strings.HasPrefix(strings.TrimSpace(blocker.Detail), SkillWaveOrchestration+":run_summary_missing")
+}
+
+func missingTaskEvidencePreviewDetail(blockers []model.ReasonCode) (string, bool) {
+	for _, blocker := range blockers {
+		if blocker.Code != "missing_task_evidence_for_run_summary" {
+			continue
+		}
+		detail := strings.TrimSpace(blocker.Detail)
+		if detail == "" {
+			continue
+		}
+		return detail, true
+	}
+	return "", false
+}
+
+func wavePreviewHasReplacementBlockers(blockers []model.ReasonCode) bool {
+	for _, blocker := range blockers {
+		if blocker.Code == "missing_task_evidence_for_run_summary" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func scopeContractNeedsRecoveryGuidance(state model.WorkflowState, report scopecontract.Report) bool {
