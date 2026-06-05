@@ -1,0 +1,56 @@
+version: 1
+slug: add-a-generalized-language-agnostic-test-design-technique-sk
+description: 'Add a generalized language-agnostic test-design technique skill (layer 2: test-double strategy, behavior-vs-implementation, formal case enumeration, property reasoning, test-data discipline), a language-aware capability hint that routes the host to its own installed language testing skill, and a wave-orchestration Dispatch-Contract rule isolating the test-authoring step from implementation (issue 73, Parts A+B+C). Slipway owns the universal judgment layer and routes to the language layer without vendoring language idiom.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-05T04:52:42.50025Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/add-a-generalized-language-agnostic-test-design-technique-sk
+artifact_schema: expanded
+project_context:
+    tech_stack: Go
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 9d8ae7200a2cf53d5fa7e107cfac438a3e72f34a457a7d6ce106623661200575
+        updated_at: 2026-06-05T07:29:53.226767822Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 048c25848ceeea33884dfd962604dc9e7e2cf5a8b3733ffe8eeae7204d05082c
+        updated_at: 2026-06-05T06:37:22.566514721Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 7fc2556d714e134bff273f7ce3b7f3b913c7da5a1dfbbfd4b88ff77cabcb5116
+        updated_at: 2026-06-05T06:02:31.071579632Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 911220d62aa6769bbdcdb0ecbbf39f0fbaa4125d0d5cafa600a491e91acfc1d9
+        updated_at: 2026-06-05T06:37:12.249757461Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: d92d343f345cba3cca6cfbcdc99dd7b198774a96f107da37a09fa9f2e3c946c3
+        updated_at: 2026-06-05T06:44:04.134612285Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b947fb282edb70922dcd191976c6e7f8943b2505c4e0c267bf69cd8e333ec033
+        updated_at: 2026-06-05T07:15:45.831488799Z

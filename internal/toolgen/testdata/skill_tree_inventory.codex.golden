@@ -34,10 +34,16 @@ slipway-spec-compliance-review/SKILL.md	skill_md	non-exec
 slipway-spec-trace/SKILL.md	skill_md	non-exec
 slipway-tdd-governance/SKILL.md	skill_md	non-exec
 slipway-tdd-governance/references/tdd-evidence-patterns.md	reference	non-exec
+slipway-test-design/SKILL.md	skill_md	non-exec
+slipway-test-design/references/behavior-vs-implementation.md	reference	non-exec
+slipway-test-design/references/case-enumeration.md	reference	non-exec
+slipway-test-design/references/property-reasoning.md	reference	non-exec
+slipway-test-design/references/test-data.md	reference	non-exec
+slipway-test-design/references/test-doubles.md	reference	non-exec
 slipway-wave-orchestration/SKILL.md	skill_md	non-exec
 slipway-wave-orchestration/references/executor-dispatch-reference.md	reference	non-exec
 slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:24f6bfe11cede23dbe48e8882a437b5366f4988fd44ef081ed4a1d70df49ad02
+# inventory_sha256:80308ced30eda109b99027586d1640173847fca2df62e6bb2ae97ccf605619d9

@@ -370,6 +370,7 @@ var hostSkillExportAllowlist = map[string]struct{}{
 	"security-review":    {},
 	"spec-trace":         {},
 	"coverage-analysis":  {},
+	"test-design":        {},
 	"coding-discipline":  {},
 	"git-recovery":       {},
 	"codebase-mapping":   {},

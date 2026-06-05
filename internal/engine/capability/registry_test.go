@@ -28,6 +28,7 @@ func TestDefaultRegistryLoadsFoundationSkills(t *testing.T) {
 		"security-review",
 		"spec-trace",
 		"supply-chain-audit",
+		"test-design",
 		"threat-modeling",
 		"variant-analysis",
 	}

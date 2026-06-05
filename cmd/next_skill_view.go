@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,6 +36,13 @@ var handoffSkillViewOptions = assembleSkillViewOptions{
 	IncludeContextBudget: true,
 	IncludeAgentContext:  false,
 }
+
+const (
+	testDesignTechniqueHintName = "skill:test-design"
+	languageTestingHintName     = "capability:language-testing"
+	languageTestingCapability   = "language-testing"
+	techniqueHintKindCapability = "capability"
+)
 
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
 // review context, constraints, and context budget, then applies guards.
@@ -287,6 +295,7 @@ func assembleSkillViewWithOptions(
 	// ResolveNextSkill; only enriches TechniqueHints.
 	ns.TechniqueHints = appendCatalogHints(ns.TechniqueHints, nextSkillName, governedChange, view)
 	ns.TechniqueHints = appendWorkflowProfileTechniqueHints(ns.TechniqueHints, nextSkillName, governedChange)
+	ns.TechniqueHints = appendLanguageTestingHints(ns.TechniqueHints, root, governedChange)
 
 	if options.IncludeReviewContext && (nextSkillName == progression.SkillSpecComplianceReview || nextSkillName == progression.SkillCodeQualityReview) {
 		ns.ReviewContext = buildReviewContext(governedChange, artifactProjection, false, nextSkillName)
@@ -625,4 +634,94 @@ func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill str
 		addHint("spec-trace", "[workflow-profile:meta] preserve generated-surface and schema compatibility for Slipway governance changes")
 	}
 	return existing
+}
+
+func appendLanguageTestingHints(existing []techniqueHint, root string, governedChange *model.Change) []techniqueHint {
+	if governedChange == nil || !hasTestDesignHint(existing) {
+		return existing
+	}
+
+	languages := normalizeLanguageHints(governedChange.ProjectContext.Languages)
+	if len(languages) == 0 {
+		languages = stackLanguageHints(languageHintStackRoot(root, *governedChange))
+	}
+	if len(languages) == 0 {
+		return existing
+	}
+
+	seen := map[string]struct{}{}
+	for _, hint := range existing {
+		if hint.Name == languageTestingHintName && hint.Language != "" {
+			seen[strings.ToLower(hint.Language)] = struct{}{}
+		}
+	}
+	for _, language := range languages {
+		key := strings.ToLower(language)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		existing = append(existing, techniqueHint{
+			Name:       languageTestingHintName,
+			Kind:       techniqueHintKindCapability,
+			Capability: languageTestingCapability,
+			Language:   language,
+			Optional:   true,
+			Reason: fmt.Sprintf(
+				"[idiom:%s] If an installed language testing skill exists, use it for idiomatic test APIs, framework conventions, and assertion style.",
+				language,
+			),
+		})
+	}
+	return existing
+}
+
+func hasTestDesignHint(hints []techniqueHint) bool {
+	for _, hint := range hints {
+		if hint.Name == testDesignTechniqueHintName {
+			return true
+		}
+	}
+	return false
+}
+
+func languageHintStackRoot(root string, governedChange model.Change) string {
+	workspaceRoot, err := state.WorkspaceRootForChange(root, governedChange)
+	if err != nil || strings.TrimSpace(workspaceRoot) == "" {
+		return root
+	}
+	return workspaceRoot
+}
+
+func stackLanguageHints(root string) []string {
+	data, err := os.ReadFile(filepath.Join(state.CodebaseMapDir(root), "STACK.md"))
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- Languages:") {
+			continue
+		}
+		return normalizeLanguageHints(strings.Split(strings.TrimSpace(strings.TrimPrefix(line, "- Languages:")), ","))
+	}
+	return nil
+}
+
+func normalizeLanguageHints(values []string) []string {
+	languages := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		language := strings.TrimSpace(value)
+		if language == "" {
+			continue
+		}
+		key := strings.ToLower(language)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		languages = append(languages, language)
+	}
+	return languages
 }
