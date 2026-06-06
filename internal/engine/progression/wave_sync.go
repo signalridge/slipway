@@ -159,14 +159,26 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
 		executionSummary.SyncDerivedFields()
 	}
+	// Make incomplete-execution blockers durable in the summary's OpenBlockers so
+	// read-only readiness (validate/next/status) surfaces them too. Once a
+	// "ready" summary exists, refineS2WaveExecutionSkillBlockers short-circuits
+	// the preview path, so a returned-only blocker would vanish from read-only
+	// surfaces after the partial summary is written (issue #95 REQ-001).
+	// Suppressed under plan-drift, which owns its own remediation.
+	var incompleteBlockers []model.ReasonCode
+	if len(planDriftBlockers) == 0 {
+		incompleteBlockers = IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
+		if len(incompleteBlockers) > 0 {
+			executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, incompleteBlockers...))
+			executionSummary.SyncDerivedFields()
+		}
+	}
 	if !mutate {
 		runs := executionSummary.TaskRunMap()
 		blockers := model.ReasonCodesFromSpecs(parseIssues)
 		blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 		blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
-		if len(planDriftBlockers) == 0 {
-			blockers = append(blockers, IncompleteExecutionTaskBlockers(wavePlan, runs)...)
-		}
+		blockers = append(blockers, incompleteBlockers...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
 	}
 
@@ -207,9 +219,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	blockers := model.ReasonCodesFromSpecs(parseIssues)
 	blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 	blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
-	if len(planDriftBlockers) == 0 {
-		blockers = append(blockers, IncompleteExecutionTaskBlockers(wavePlan, runs)...)
-	}
+	blockers = append(blockers, incompleteBlockers...)
 	return WaveSyncResult{
 		Updated:  updated,
 		Blockers: model.NormalizeReasonCodes(blockers),

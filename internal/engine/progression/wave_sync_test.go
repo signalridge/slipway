@@ -464,6 +464,96 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	}
 }
 
+func TestSyncGovernedWaveExecution_PersistsIncompleteExecutionBlockerInSummary(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	slug := "wave-sync-incomplete"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	})
+	// Plan has three tasks; evidence is recorded for only the first two.
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`task-a`"+` A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+
+- [ ] `+"`task-b`"+` B
+  - target_files: ["cmd/run.go"]
+  - wave: 1
+  - task_kind: code
+
+- [ ] `+"`task-c`"+` C
+  - target_files: ["cmd/status.go"]
+  - wave: 1
+  - task_kind: code
+`)
+
+	writeTaskEvidence := func(taskID string) {
+		t.Helper()
+		ev := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"changed_files":       []string{"cmd/next.go"},
+			"blockers":            []string{},
+			"evidence_ref":        "test:" + taskID,
+			"captured_at":         recordedAt.Format(time.RFC3339Nano),
+			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(ev)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	}
+	writeTaskEvidence("task-a")
+	writeTaskEvidence("task-b")
+
+	hasIncomplete := func(blockers []model.ReasonCode) bool {
+		for _, b := range blockers {
+			if b.Code == "incomplete_execution_task" && b.Detail == "task-c" {
+				return true
+			}
+		}
+		return false
+	}
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	// The mutating sync returns the incomplete blocker (gates the advance)...
+	require.True(t, hasIncomplete(result.Blockers), "sync must return incomplete_execution_task:task-c, got %+v", result.Blockers)
+
+	// ...and it must be DURABLE in the saved summary's OpenBlockers so read-only
+	// readiness (which surfaces summary OpenBlockers via SummaryIssues) reports
+	// it too even though the summary is otherwise "ready" (issue #95 REQ-001).
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	require.True(t, hasIncomplete(summary.OpenBlockers),
+		"incomplete_execution_task must persist in the saved summary OpenBlockers, got %+v", summary.OpenBlockers)
+	assert.Equal(t, model.ExecutionVerdictFail, summary.OverallVerdict)
+
+	// End-to-end: read-only readiness must surface the durable blocker too — this
+	// is exactly the path that previously dropped it once the partial summary was
+	// written (refineS2WaveExecutionSkillBlockers short-circuits the preview).
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.NoError(t, err)
+	assert.True(t, hasIncomplete(readiness.Blockers),
+		"read-only readiness must surface incomplete_execution_task:task-c, got %+v", readiness.Blockers)
+}
+
 func TestSyncGovernedWaveExecutionRejectsWaveEvidenceOlderThanTaskEvidence(t *testing.T) {
 	t.Parallel()
 
