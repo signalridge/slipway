@@ -1570,3 +1570,147 @@ func TestClassifyGlobalHealthImpactBySeverity(t *testing.T) {
 	assert.False(t, findings[2].ActiveChangeBlocking)
 	assert.Equal(t, "non_blocking_for_active_change", findings[2].ActiveChangeImpact)
 }
+
+// TestGovernanceDoctorActionsSuppressNonBlockingTraceabilityWarning pins the
+// doctor-synthesis contract for issue #92: a traceability_coherence check whose
+// gaps are all non-blocking (advisory, e.g. pre-review assurance coverage) must
+// NOT become a doctor action, while a check with a blocking gap still does.
+func TestGovernanceDoctorActionsSuppressNonBlockingTraceabilityWarning(t *testing.T) {
+	t.Parallel()
+
+	const assuranceIssue = "requirement missing assurance coverage verdict"
+
+	advisory := &governance.GovernanceHealthReport{
+		Slug: "stage-aware",
+		Checks: []governance.GovernanceHealthCheck{{
+			Name:    "traceability_coherence",
+			Status:  "WARN",
+			Message: "1 traceability warnings",
+			TraceabilityGaps: []model.TraceabilityGap{{
+				ID:       "REQ-002",
+				Type:     "assurance",
+				Issue:    assuranceIssue,
+				Blocking: false,
+			}},
+		}},
+	}
+	for _, action := range governanceDoctorActions(advisory) {
+		assert.NotEqual(t, "governance_traceability_coherence", action.Category,
+			"a non-blocking traceability warning must not become a doctor action (#92)")
+	}
+
+	blocking := &governance.GovernanceHealthReport{
+		Slug: "stage-aware",
+		Checks: []governance.GovernanceHealthCheck{{
+			Name:    "traceability_coherence",
+			Status:  "FAIL",
+			Message: "1 blocking traceability gaps",
+			TraceabilityGaps: []model.TraceabilityGap{{
+				ID:       "REQ-002",
+				Type:     "assurance",
+				Issue:    assuranceIssue,
+				Blocking: true,
+			}},
+		}},
+	}
+	found := false
+	for _, action := range governanceDoctorActions(blocking) {
+		if action.Category == "governance_traceability_coherence" {
+			found = true
+			assert.False(t, action.Repairable)
+		}
+	}
+	assert.True(t, found, "a blocking traceability gap must still surface as a doctor action")
+}
+
+// TestHealthCommandDoctorTracksAssuranceCoverageBlockingState is the end-to-end
+// regression for #92: at S2_EXECUTE incomplete assurance coverage is an advisory
+// WARN with no doctor action, while at S3_REVIEW the same gap fails closed and
+// surfaces a doctor action. The bundle is authored so the assurance gap is the
+// only traceability gap, so the WARN/FAIL difference is attributable to the
+// stage-aware rule alone.
+func TestHealthCommandDoctorTracksAssuranceCoverageBlockingState(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		state      model.WorkflowState
+		wantStatus string
+		wantAction bool
+	}{
+		{"S2 assurance pending is advisory", model.StateS2Execute, "WARN", false},
+		{"S3 assurance pending blocks", model.StateS3Review, "FAIL", true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			withCommandWorkspace(t, root, func() {
+				initTestWorkspace(t, root)
+
+				slug := createGovernedRequest(t, root, "L2", "assurance stage-aware doctor")
+				change, err := state.LoadChange(root, slug)
+				require.NoError(t, err)
+				change.CurrentState = tc.state
+				change.ArtifactSchema = model.ArtifactSchemaExpanded
+				require.NoError(t, state.SaveChange(root, change))
+
+				bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(`# Intent
+INT-001: stabilize the surface
+## Open Questions
+(none)
+`), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+### Requirement: First
+REQ-001: First requirement. Traces to INT-001.
+### Requirement: Second
+REQ-002: Second requirement. Traces to INT-001.
+`), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+- [ ] `+"`t-01`"+` do the work
+  covers: [REQ-001, REQ-002]
+`), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte(`# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+`), 0o644))
+
+				// Persist a snapshot at the change's current state so the health
+				// command has authoritative governance state to report even if
+				// it skips recompute for the (non-dedicated) worktree binding.
+				_, err = governance.RecomputeGovernanceSnapshot(root, change, bundleDir)
+				require.NoError(t, err)
+
+				var out bytes.Buffer
+				cmd := commandForRoot(t, root, makeHealthCmd())
+				cmd.SetArgs([]string{"--json", "--governance", "--doctor", "--change", slug})
+				cmd.SetOut(&out)
+				require.NoError(t, cmd.Execute())
+
+				var view healthView
+				require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+				require.NotNil(t, view.Governance)
+				require.NotNil(t, view.Doctor)
+
+				var traceStatus string
+				for _, c := range view.Governance.Checks {
+					if c.Name == "traceability_coherence" {
+						traceStatus = c.Status
+					}
+				}
+				assert.Equal(t, tc.wantStatus, traceStatus,
+					"assurance coverage gap should be the only traceability gap")
+
+				hasTraceAction := false
+				for _, action := range view.Doctor.Actions {
+					if action.Category == "governance_traceability_coherence" {
+						hasTraceAction = true
+					}
+				}
+				assert.Equal(t, tc.wantAction, hasTraceAction,
+					"doctor traceability action presence must track blocking state (#92)")
+			})
+		})
+	}
+}

@@ -842,3 +842,97 @@ func writePlanningTasksChecklist(t *testing.T, bundleDir, content string) {
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(content), 0o644))
 }
+
+// TestTraceabilityCoherenceHealthIsStageAware proves that health.go threads the
+// change's lifecycle state into traceability evaluation, so an incomplete
+// per-requirement assurance coverage is a non-blocking WARN during S2 execution
+// (issue #92) but still fails closed at S3 review. Uses the standard preset so
+// the light-preset audit-gap downgrade does not mask the distinction.
+func TestTraceabilityCoherenceHealthIsStageAware(t *testing.T) {
+	t.Parallel()
+
+	writeBundle := func(t *testing.T) (root, slug, bundleDir string) {
+		t.Helper()
+		root = t.TempDir()
+		slug = "stage-aware-health"
+		bundleDir = filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+		writeFile(t, filepath.Join(bundleDir, "intent.md"), `INT-001: Intent`)
+		writeFile(t, resolveTestArtifact(bundleDir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+### Requirement: Something Else
+REQ-002: Something else. INT-001
+`)
+		writeFile(t, filepath.Join(bundleDir, "tasks.md"), `# Tasks
+- [ ] `+"`t-01`"+` first task
+  covers: [REQ-001, REQ-002]
+`)
+		writeFile(t, filepath.Join(bundleDir, "assurance.md"), `# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+`)
+		return root, slug, bundleDir
+	}
+
+	traceCheck := func(t *testing.T, report GovernanceHealthReport) GovernanceHealthCheck {
+		t.Helper()
+		for _, c := range report.Checks {
+			if c.Name == "traceability_coherence" {
+				return c
+			}
+		}
+		t.Fatal("traceability_coherence check not found")
+		return GovernanceHealthCheck{}
+	}
+
+	const assuranceIssue = "requirement missing assurance coverage verdict"
+
+	t.Run("S2_EXECUTE reports WARN, not a blocking incident", func(t *testing.T) {
+		t.Parallel()
+		root, slug, bundleDir := writeBundle(t)
+		change := model.Change{
+			Slug:           slug,
+			CurrentState:   model.StateS2Execute,
+			WorkflowPreset: model.WorkflowPresetStandard,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+		}
+		snap, err := PreviewGovernanceSnapshot(root, change, bundleDir)
+		require.NoError(t, err)
+		report := CollectGovernanceHealthWithSnapshot(root, change, snap)
+
+		check := traceCheck(t, report)
+		assert.Equal(t, "WARN", check.Status)
+		// The gap is still reported, but as advisory — it must not be the thing
+		// that drives governance unhealthy. Other bare-tempdir checks (e.g.
+		// worktree_binding) may FAIL for reasons unrelated to #92, so assert the
+		// assurance gap specifically does not produce a traceability FAIL rather
+		// than asserting the whole report is healthy.
+		assert.True(t, hasGapIssue(check.TraceabilityGaps, assuranceIssue), "assurance gap should still be reported")
+		assert.False(t, hasBlockingGapIssue(check.TraceabilityGaps, assuranceIssue), "assurance gap must be non-blocking before review")
+		for _, c := range report.Checks {
+			if c.Status == "FAIL" {
+				assert.NotEqual(t, "traceability_coherence", c.Name,
+					"incomplete assurance coverage must not drive traceability FAIL at S2")
+			}
+		}
+	})
+
+	t.Run("S3_REVIEW fails closed", func(t *testing.T) {
+		t.Parallel()
+		root, slug, bundleDir := writeBundle(t)
+		change := model.Change{
+			Slug:           slug,
+			CurrentState:   model.StateS3Review,
+			WorkflowPreset: model.WorkflowPresetStandard,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+		}
+		snap, err := PreviewGovernanceSnapshot(root, change, bundleDir)
+		require.NoError(t, err)
+		report := CollectGovernanceHealthWithSnapshot(root, change, snap)
+
+		check := traceCheck(t, report)
+		assert.Equal(t, "FAIL", check.Status)
+		assert.True(t, hasBlockingGapIssue(check.TraceabilityGaps, assuranceIssue), "assurance gap must fail closed at review")
+	})
+}

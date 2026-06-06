@@ -27,9 +27,31 @@ type TraceabilityInput struct {
 	BundleDir  string
 	Slug       string
 	SchemaName model.ArtifactSchemaName
+	// LifecycleState is the change's current workflow state. It makes
+	// closeout-time checks (per-requirement assurance coverage verdicts)
+	// stage-aware: before S3_REVIEW those gaps are advisory because the
+	// assurance verdicts are authored during review/verify, while at and after
+	// S3_REVIEW they remain blocking. An empty/unknown state stays fail-closed
+	// (blocking).
+	LifecycleState model.WorkflowState
 	// ArtifactNames maps logical names (e.g., "intent.md") to their resolved paths.
 	// When nil, default artifact resolution is used.
 	ArtifactResolver func(artifactName string) string
+}
+
+// assuranceVerdictsExpectedLater reports whether the change is still before the
+// review phase, where per-requirement assurance coverage verdicts have not yet
+// been authored. For those states, a missing assurance verdict is expected and
+// must not be a blocking traceability incident. Any other state — including an
+// empty/unknown state — is treated as at/after review, keeping the assurance
+// gaps fail-closed.
+func assuranceVerdictsExpectedLater(state model.WorkflowState) bool {
+	switch state {
+	case model.StateS0Intake, model.StateS1Plan, model.StateS2Execute:
+		return true
+	default:
+		return false
+	}
 }
 
 // EvaluateTraceability derives a traceability summary by scanning artifact content.
@@ -209,13 +231,17 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	}
 
 	// Check: assurance must include per-requirement coverage verdicts.
+	// These verdicts are authored during review/verify, so before S3_REVIEW a
+	// missing verdict is expected and reported as a non-blocking warning; at and
+	// after review (and for an unknown state) it fails closed.
+	assuranceBlocking := !assuranceVerdictsExpectedLater(input.LifecycleState)
 	if strings.TrimSpace(assuranceContent) != "" && len(requireIDs) > 0 {
 		if len(assuranceREQs) == 0 {
 			gaps = append(gaps, model.TraceabilityGap{
 				ID:       "assurance",
 				Type:     "assurance",
 				Issue:    "assurance verifies no requirement IDs",
-				Blocking: true,
+				Blocking: assuranceBlocking,
 			})
 		} else {
 			assuredREQs := map[string]bool{}
@@ -236,7 +262,7 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 					ID:       fullReqID,
 					Type:     "assurance",
 					Issue:    "requirement missing assurance coverage verdict",
-					Blocking: true,
+					Blocking: assuranceBlocking,
 				})
 			}
 		}

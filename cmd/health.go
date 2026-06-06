@@ -656,6 +656,17 @@ func governanceDoctorActions(report *governance.GovernanceHealthReport) []doctor
 			continue
 		}
 
+		// A traceability_coherence check that carries only non-blocking gaps is
+		// advisory, not an incident: e.g. per-requirement assurance coverage
+		// verdicts that are authored later during review (#92). It needs no
+		// repair now and has no command to offer, so surfacing it as a
+		// non-repairable doctor action would re-create the false "blocking
+		// incident" friction that contradicts validate/next. FAIL traceability
+		// (at least one blocking gap) still surfaces unchanged.
+		if check.Name == "traceability_coherence" && !traceabilityCheckHasBlockingGap(check) {
+			continue
+		}
+
 		action := doctorAction{
 			Priority:   governanceDoctorPriority(check.Status),
 			Category:   "governance_" + check.Name,
@@ -670,6 +681,19 @@ func governanceDoctorActions(report *governance.GovernanceHealthReport) []doctor
 		actions = append(actions, action)
 	}
 	return actions
+}
+
+// traceabilityCheckHasBlockingGap reports whether a traceability_coherence
+// check carries at least one blocking gap. A WARN check with only advisory
+// gaps (e.g. pre-review assurance coverage verdicts, #92) has none, so it must
+// not be promoted into a non-repairable doctor action.
+func traceabilityCheckHasBlockingGap(check governance.GovernanceHealthCheck) bool {
+	for _, gap := range check.TraceabilityGaps {
+		if gap.Blocking {
+			return true
+		}
+	}
+	return false
 }
 
 func governanceDoctorPriority(status string) int {
