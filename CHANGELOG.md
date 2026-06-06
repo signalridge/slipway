@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/signalridge/slipway/compare/v0.7.0...v0.8.0) (2026-06-06)
+
+
+### Features
+
+* **recovery:** generalize stale-evidence re-walk to earliest affected authority ([#98](https://github.com/signalridge/slipway/issues/98)) ([#99](https://github.com/signalridge/slipway/issues/99)) ([81e699b](https://github.com/signalridge/slipway/commit/81e699b77b7bf03175ca320d662a1fac1e860206))
+
 ## [0.7.0](https://github.com/signalridge/slipway/compare/v0.6.0...v0.7.0) (2026-06-05)
 
 
