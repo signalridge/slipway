@@ -61,16 +61,26 @@ extra top-level files expecting downstream consumers to discover them.
 
 ## When stale or invalid
 
-Treat the map as stale (rerun required) when:
+Staleness is a host-AI semantic relevance judgment, not an engine fingerprint.
+The `codebase_map_status` only reports content presence (`populated`,
+`baseline`, `scaffold_only`, `missing`) — it cannot tell whether a populated map
+was authored for *this* change. So when you consume a `populated` (or `partial`)
+map, judge its relevance yourself:
 
-- The last-modified timestamp on any document is older than the most
-  recent significant change to the relevant code area (git mtime on the
-  matching directory > doc mtime).
-- The entry points named in `STRUCTURE.md` no longer exist or have been
-  renamed.
-- The dependencies named in `STACK.md` do not match the lockfile.
-- A file is empty or contains only the scaffold template (starts with a
-  heading and has bullets with no content).
+- Re-read the populated documents and ask whether their affected seams, blast
+  radius, module boundaries, and concerns still describe the area **this** change
+  touches. A map authored for a prior, unrelated change reads `populated` but is
+  not relevant.
+- If a section no longer matches the current scope, **re-author it in place** in
+  `artifacts/codebase/<DOC>.md`. The assessment re-reads the files on every run,
+  so an inline edit is the refresh — there is no engine staleness flag to clear
+  and no command that overwrites your authored content.
+- A file that is empty or holds only the scaffold template is non-durable
+  (`scaffold_only`), not stale — fill it from source.
+
+Do not rely on file mtimes, entry-point renames, or lockfile drift as staleness
+signals: those are mechanical proxies that miss the real question — does the map
+describe the change in front of you?
 
 Partial output — one or two docs filled, the rest empty — is not stale, it
 is unfinished. Complete the set before handing off to a planning or review

@@ -299,6 +299,8 @@ func assembleSkillViewWithOptions(
 			view.Warnings = append(view.Warnings, advisory)
 		} else if advisory := codebaseMapDiscoveryAdvisory(mapStatus, nextSkillName, governedChange.NeedsDiscovery); advisory != "" {
 			view.Warnings = append(view.Warnings, advisory)
+		} else if advisory := codebaseMapRelevanceAdvisory(mapStatus, nextSkillName); advisory != "" {
+			view.Warnings = append(view.Warnings, advisory)
 		}
 	}
 
@@ -368,6 +370,33 @@ func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 	case artifact.CodebaseMapStatusScaffoldOnly, artifact.CodebaseMapStatusBaseline:
 		return fmt.Sprintf(
 			"codebase_map_advisory: %s is consuming a non-durable codebase map (status: %s); refine artifacts/codebase with source-backed findings before relying on it as reviewed context, or inspect input_context.codebase_map_doc_states for per-doc gaps.",
+			nextSkillName, status,
+		)
+	default:
+		return ""
+	}
+}
+
+// codebaseMapRelevanceAdvisory returns a non-blocking consume-time advisory when
+// a map-consuming planning skill (research-orchestration or plan-audit) is next
+// and the codebase map is durable (populated or partial). The map status reflects
+// content presence, not scope relevance — a map authored for a prior change still
+// reads `populated` — so Slipway cannot tell whether the map matches THIS change.
+// The engine only surfaces the trigger; the host AI owns the semantic relevance
+// judgment and the inline refresh (re-author the relevant docs in artifacts/codebase
+// in place; the assessment re-reads them on every run). It complements the
+// non-durable consume advisory, which owns scaffold_only/baseline, so at most one
+// codebase_map_advisory fires.
+func codebaseMapRelevanceAdvisory(status, nextSkillName string) string {
+	switch nextSkillName {
+	case progression.SkillResearchOrchestration, progression.SkillPlanAudit:
+	default:
+		return ""
+	}
+	switch status {
+	case artifact.CodebaseMapStatusPopulated, artifact.CodebaseMapStatusPartial:
+		return fmt.Sprintf(
+			"codebase_map_advisory: %s is consuming a codebase map whose status (%s) reflects content presence, not scope relevance — it may have been authored for a prior change. Judge whether its affected seams, blast radius, and concerns match THIS change's scope, and re-author any stale sections in artifacts/codebase inline before relying on it. Advisory only — this does not block progression.",
 			nextSkillName, status,
 		)
 	default:

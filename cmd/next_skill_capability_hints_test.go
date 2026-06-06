@@ -50,6 +50,31 @@ func TestCodebaseMapConsumeAdvisoryMatrix(t *testing.T) {
 	assert.NotContains(t, advisory, "No durable codebase-map documents found")
 }
 
+// TestCodebaseMapRelevanceAdvisoryMatrix pins #80: the relevance advisory fires
+// for durable (populated/partial) maps consumed by research-orchestration or
+// plan-audit, is absent for non-consuming skills, and does not fire for the
+// non-durable statuses owned by the consume advisory.
+func TestCodebaseMapRelevanceAdvisoryMatrix(t *testing.T) {
+	t.Parallel()
+	for _, skillName := range []string{progression.SkillResearchOrchestration, progression.SkillPlanAudit} {
+		for _, status := range []string{artifact.CodebaseMapStatusPopulated, artifact.CodebaseMapStatusPartial} {
+			adv := codebaseMapRelevanceAdvisory(status, skillName)
+			assert.NotEmpty(t, adv, "%s consumed by %s should surface a relevance advisory", status, skillName)
+			assert.Contains(t, adv, "reflects content presence, not scope relevance")
+			assert.Contains(t, adv, "does not block progression")
+		}
+		// Non-durable statuses belong to the consume advisory, not this one.
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusScaffoldOnly, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusBaseline, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusMissing, skillName))
+	}
+	// Non-consuming skills never receive the relevance advisory.
+	for _, skillName := range []string{progression.SkillWaveOrchestration, progression.SkillIntakeClarification, ""} {
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPopulated, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPartial, skillName))
+	}
+}
+
 // TestCodebaseMapStatusHasNoDurableDocs pins the empty-map technique-hint set:
 // it fires for missing/scaffold_only and not for baseline/partial/populated.
 func TestCodebaseMapStatusHasNoDurableDocs(t *testing.T) {
@@ -277,21 +302,31 @@ func TestRunSurfacesBaselineCodebaseMapStatusAndAdvisory(t *testing.T) {
 	})
 }
 
-// TestNextOmitsCodebaseMapAdvisoryForPopulatedMap is the negative path: a
-// populated map consumed by research-orchestration must NOT add the advisory.
-func TestNextOmitsCodebaseMapAdvisoryForPopulatedMap(t *testing.T) {
+// TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap is the #80 path: a
+// populated map consumed by research-orchestration surfaces a non-blocking
+// relevance advisory (status reflects content presence, not scope relevance).
+func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "advisory absent for populated map")
+		createGovernedRequest(t, root, "L2", "relevance advisory for populated map")
 		writePopulatedCodebaseMapDocs(t, root)
 
 		var view nextView
 		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
 		require.NotNil(t, view.NextSkill)
 		require.Equal(t, "research-orchestration", view.NextSkill.Name)
-		assert.False(t, warningsContainCodebaseMapAdvisory(view.Warnings),
-			"populated map must not surface a codebase_map_advisory warning; got %v", view.Warnings)
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"populated map must surface a codebase_map_advisory relevance warning; got %v", view.Warnings)
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "reflects content presence, not scope relevance") {
+				found = true
+			}
+		}
+		assert.True(t, found,
+			"populated map advisory must be the relevance framing; got %v", view.Warnings)
+		// The advisory stays non-blocking and the empty-map technique hint is absent.
 		assert.False(t, hasNoDurableCodebaseMapHint(view),
 			"populated map must not surface the empty-map technique hint")
 	})
