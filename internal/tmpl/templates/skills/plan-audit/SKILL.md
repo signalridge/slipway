@@ -38,17 +38,17 @@ Before auditing task targets against the map, check
 means the documents are **non-durable** (template placeholders or CLI-detected
 facts only); do not audit against them as if they were reviewed context. Record
 the consume-time codebase-map advisory that `next`/`run` emits as an advisory
-gap rather than treating the map as complete brownfield analysis. A `partial`
-map gets no whole-map advisory, so inspect
+gap rather than treating the map as complete brownfield analysis.
+
+A `populated` or `partial` status reflects content presence, not scope
+relevance — a map authored for a prior change still reads `populated`. When
+`next`/`run` emits the codebase-map relevance advisory (it fires for `populated`
+and `partial`), judge whether the map matches this change's scope (affected
+seams, blast radius, concerns) before auditing task targets against it, and
+re-author stale sections in `artifacts/codebase` inline if it does not.
+Populated is not the same as relevant. For a `partial` map, also inspect
 `input_context.codebase_map_doc_states` and treat any per-doc `scaffold_only`,
 `baseline`, or `missing` entry as non-durable for that document.
-
-A `populated` status reflects content presence, not scope relevance — a map
-authored for a prior change still reads `populated`. When `next`/`run` emits the
-codebase-map relevance advisory, judge whether the map matches this change's
-scope (affected seams, blast radius, concerns) before auditing task targets
-against it, and re-author stale sections in `artifacts/codebase` inline if it
-does not. Populated is not the same as relevant.
 
 Use `slipway-coding-discipline` as the execution-shape bar: plans should stay
 simple, goal-scoped, and sliced for surgical implementation.

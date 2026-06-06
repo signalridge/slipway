@@ -9,10 +9,10 @@
 ## Requirements
 
 ### Requirement: Populated codebase map surfaces a non-blocking relevance self-check advisory
-REQ-001: When a map-consuming planning skill (research-orchestration or plan-audit) is next and the codebase map status is `populated` (or `partial`), `slipway next`/`run` MUST surface a non-blocking advisory stating that the status reflects content presence, not scope relevance, and prompting the host to judge whether the map matches the current change and refresh stale sections inline. The advisory MUST be a `warnings` entry (never a blocker) and MUST NOT change any existing JSON field shape.
+REQ-001: When a durable-map consumer (research-orchestration or plan-audit at S1_PLAN, or wave-orchestration at S2_EXECUTE) is next and the codebase map status is `populated` (or `partial`), `slipway next`/`run` MUST surface a non-blocking advisory stating that the status reflects content presence, not scope relevance, and prompting the host to judge whether the map matches the current change and refresh stale sections inline. The advisory MUST fire independent of lifecycle state (so the issue #80 wave-orchestration handoff is covered), MUST be a `warnings` entry (never a blocker), and MUST NOT change any existing JSON field shape.
 
-#### Scenario: Populated map consumed by a planning skill warns about relevance
-GIVEN a `populated` codebase map and the next skill is research-orchestration or plan-audit
+#### Scenario: Populated map consumed by a durable-map consumer warns about relevance
+GIVEN a `populated` codebase map and the next skill is research-orchestration, plan-audit, or wave-orchestration
 WHEN `slipway next --json` is rendered
 THEN a non-blocking `warnings` advisory is present that names the populated status, states it reflects content presence rather than scope relevance, and prompts a host relevance self-check + inline refresh.
 

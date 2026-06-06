@@ -8,7 +8,7 @@
 
 ## Task List
 
-- [x] `t-01` Engine relevance-advisory trigger: add `codebaseMapRelevanceAdvisory(status, nextSkillName)` in `cmd/next_skill_view.go` that fires for `CodebaseMapStatusPopulated`/`CodebaseMapStatusPartial` under research-orchestration/plan-audit, wired as a branch in the existing mutually-exclusive advisory chain and routed through non-blocking `view.Warnings`; the wording states status reflects content presence not scope relevance and prompts a host relevance self-check + inline refresh.
+- [x] `t-01` Engine relevance-advisory trigger: add `codebaseMapRelevanceAdvisory(status, nextSkillName)` in `cmd/next_skill_view.go` that fires for `CodebaseMapStatusPopulated`/`CodebaseMapStatusPartial` under all durable-map consumers (research-orchestration, plan-audit, AND wave-orchestration), surfaced independent of lifecycle state (not gated to S1_PLAN) so the issue #80 wave-orchestration handoff is covered, and routed through non-blocking `view.Warnings`; the wording states status reflects content presence not scope relevance and prompts a host relevance self-check + inline refresh.
   - wave: 1
   - depends_on: []
   - target_files: [cmd/next_skill_view.go, cmd/next_skill_capability_hints_test.go]
@@ -20,11 +20,11 @@
 - [x] `t-02` Skill + reference-doc guidance: instruct the host to treat a `populated` map as present-not-verified-relevant, judge it against the current change scope, and re-author stale sections inline; rewrite the codebase-map reference staleness section to that host-AI semantic relevance judgment, removing the git-mtime/entry-point/lockfile fingerprint heuristics.
   - wave: 1
   - depends_on: []
-  - target_files: [internal/tmpl/templates/skills/research-orchestration/SKILL.md, internal/tmpl/templates/skills/plan-audit/SKILL.md, internal/tmpl/templates/skills/codebase-mapping/SKILL.md, internal/tmpl/templates/skills/context-assembly/references/codebase-map.md]
+  - target_files: [internal/tmpl/templates/skills/research-orchestration/SKILL.md, internal/tmpl/templates/skills/plan-audit/SKILL.md, internal/tmpl/templates/skills/codebase-mapping/SKILL.md, internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl, internal/tmpl/templates/skills/context-assembly/references/codebase-map.md]
   - task_kind: code
   - covers: [REQ-002, REQ-003]
   - evidence: verdict
-  - acceptance: research-orchestration, plan-audit, and codebase-mapping skills instruct the populated-map self-check + inline refresh; the reference doc defines staleness as host-AI semantic relevance with inline re-author and contains no mtime/entry-point/lockfile staleness rule.
+  - acceptance: research-orchestration, plan-audit, codebase-mapping, AND wave-orchestration skills instruct the populated-map self-check + inline refresh; plan-audit no longer says `partial` gets no whole-map advisory; the reference doc defines staleness as host-AI semantic relevance with inline re-author, routes `slipway codebase-map` only to missing/scaffold/baseline scaffolding (not the stale-populated no-op), and contains no mtime/entry-point/lockfile staleness rule.
 
 - [x] `t-03` Proof + generated-surface alignment: `go build ./...`, `go vet ./...`, `go test ./...`, `go test ./internal/toolgen/...`, `golangci-lint run`, and `go run . init --refresh --tools all` followed by a diff review confirming only the intended skill/reference additions; confirm the advisory is additive (public JSON field shape unchanged) and non-blocking.
   - wave: 2

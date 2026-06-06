@@ -56,7 +56,13 @@ func TestCodebaseMapConsumeAdvisoryMatrix(t *testing.T) {
 // non-durable statuses owned by the consume advisory.
 func TestCodebaseMapRelevanceAdvisoryMatrix(t *testing.T) {
 	t.Parallel()
-	for _, skillName := range []string{progression.SkillResearchOrchestration, progression.SkillPlanAudit} {
+	// All durable-map consumers — including wave-orchestration (S2), the exact
+	// handoff issue #80 reproduces — receive the relevance advisory.
+	for _, skillName := range []string{
+		progression.SkillResearchOrchestration,
+		progression.SkillPlanAudit,
+		progression.SkillWaveOrchestration,
+	} {
 		for _, status := range []string{artifact.CodebaseMapStatusPopulated, artifact.CodebaseMapStatusPartial} {
 			adv := codebaseMapRelevanceAdvisory(status, skillName)
 			assert.NotEmpty(t, adv, "%s consumed by %s should surface a relevance advisory", status, skillName)
@@ -69,7 +75,7 @@ func TestCodebaseMapRelevanceAdvisoryMatrix(t *testing.T) {
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusMissing, skillName))
 	}
 	// Non-consuming skills never receive the relevance advisory.
-	for _, skillName := range []string{progression.SkillWaveOrchestration, progression.SkillIntakeClarification, ""} {
+	for _, skillName := range []string{progression.SkillIntakeClarification, progression.SkillGoalVerification, ""} {
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPopulated, skillName))
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPartial, skillName))
 	}
@@ -329,6 +335,41 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap(t *testing.T) {
 		// The advisory stays non-blocking and the empty-map technique hint is absent.
 		assert.False(t, hasNoDurableCodebaseMapHint(view),
 			"populated map must not surface the empty-map technique hint")
+	})
+}
+
+// TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration is the exact
+// issue #80 live reproduction: at S2_EXECUTE the next skill is wave-orchestration
+// and a populated (stale prior-change) map must still surface the non-blocking
+// relevance advisory — the advisory is not gated to S1 planning skills.
+func TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		slug := createGovernedRequest(t, root, "L2", "relevance advisory at wave-orchestration")
+		writePopulatedCodebaseMapDocs(t, root)
+
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.NeedsDiscovery = false
+		require.NoError(t, state.SaveChange(root, change))
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "wave-orchestration", view.NextSkill.Name)
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"populated map consumed at wave-orchestration (S2) must surface the relevance advisory; got %v", view.Warnings)
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "reflects content presence, not scope relevance") {
+				found = true
+			}
+		}
+		assert.True(t, found,
+			"wave-orchestration advisory must be the relevance framing; got %v", view.Warnings)
 	})
 }
 

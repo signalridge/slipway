@@ -299,7 +299,17 @@ func assembleSkillViewWithOptions(
 			view.Warnings = append(view.Warnings, advisory)
 		} else if advisory := codebaseMapDiscoveryAdvisory(mapStatus, nextSkillName, governedChange.NeedsDiscovery); advisory != "" {
 			view.Warnings = append(view.Warnings, advisory)
-		} else if advisory := codebaseMapRelevanceAdvisory(mapStatus, nextSkillName); advisory != "" {
+		}
+	}
+
+	// Codebase-map relevance self-check (#80): a populated/partial map reflects
+	// content presence, not scope relevance, and can be consumed stale at any
+	// durable-map consumer — including wave-orchestration at S2_EXECUTE, the exact
+	// handoff issue #80 reproduces — so this fires independent of lifecycle state.
+	// It is disjoint by status from the S1 consume/discovery advisories above
+	// (those own scaffold_only/baseline/missing), so it never double-fires.
+	if governedChange != nil {
+		if advisory := codebaseMapRelevanceAdvisory(view.InputContext.CodebaseMapStatus, nextSkillName); advisory != "" {
 			view.Warnings = append(view.Warnings, advisory)
 		}
 	}
@@ -377,19 +387,22 @@ func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 	}
 }
 
-// codebaseMapRelevanceAdvisory returns a non-blocking consume-time advisory when
-// a map-consuming planning skill (research-orchestration or plan-audit) is next
-// and the codebase map is durable (populated or partial). The map status reflects
-// content presence, not scope relevance — a map authored for a prior change still
-// reads `populated` — so Slipway cannot tell whether the map matches THIS change.
-// The engine only surfaces the trigger; the host AI owns the semantic relevance
-// judgment and the inline refresh (re-author the relevant docs in artifacts/codebase
-// in place; the assessment re-reads them on every run). It complements the
-// non-durable consume advisory, which owns scaffold_only/baseline, so at most one
-// codebase_map_advisory fires.
+// codebaseMapRelevanceAdvisory returns a non-blocking advisory when a durable-map
+// consumer is next and the codebase map is durable (populated or partial). The
+// consumers are research-orchestration and plan-audit (S1_PLAN) and
+// wave-orchestration (S2_EXECUTE) — the same set the codebase-mapping skill names
+// as SHOULD-consume — so the advisory fires at the exact handoff issue #80
+// reproduces: a stale populated map consumed at wave-orchestration. The map status
+// reflects content presence, not scope relevance — a map authored for a prior
+// change still reads `populated` — so Slipway cannot tell whether the map matches
+// THIS change. The engine only surfaces the trigger; the host AI owns the semantic
+// relevance judgment and the inline refresh (re-author the relevant docs in
+// artifacts/codebase in place; the assessment re-reads them on every run). It is
+// disjoint by status from the non-durable consume advisory (scaffold_only/baseline),
+// so at most one codebase_map_advisory fires.
 func codebaseMapRelevanceAdvisory(status, nextSkillName string) string {
 	switch nextSkillName {
-	case progression.SkillResearchOrchestration, progression.SkillPlanAudit:
+	case progression.SkillResearchOrchestration, progression.SkillPlanAudit, progression.SkillWaveOrchestration:
 	default:
 		return ""
 	}

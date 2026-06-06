@@ -31,6 +31,14 @@ If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
 Use them to align execution with directory conventions, test infrastructure,
 and known risk hotspots.
 
+`input_context.codebase_map_status` reflects content **presence, not scope
+relevance** — a map authored for a prior change still reads `populated`. When
+`next`/`run` surfaces a codebase-map relevance advisory, judge whether the map
+matches **this** change's scope before relying on it for execution targeting, and
+re-author any stale sections in `artifacts/codebase` inline (the assessment
+re-reads them) rather than executing against a stale map. Populated is not the
+same as relevant; this is advisory and never blocks execution.
+
 If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
 when `freshness` is `fresh`; stale checkpoints require rerunning everything.
 Carry `checkpoint_type` and any `user_response_payload` into evidence.

@@ -78,6 +78,57 @@ func TestPlanAuditTemplateDoesNotReintroduceLightPresetVerificationBlocker(t *te
 	assert.NotContains(t, content, "Every task needs explicit per-task verification fields before execution begins.")
 }
 
+// TestCodebaseMapRelevanceGuidanceInSkills pins issue #80: the durable-map
+// consumer skills carry the populated/partial relevance self-check, the stale
+// "no whole-map advisory" prose is gone, and the reference defines staleness as a
+// host-AI semantic relevance judgment rather than the rejected git-mtime/lockfile
+// fingerprint heuristics. Guards against a future `init --refresh` regressing it.
+func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
+	t.Parallel()
+
+	// Collapse line-wrapping whitespace so multi-word phrases match regardless of
+	// where the 79-column prose wrap falls.
+	norm := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+	for _, path := range []string{
+		"skills/research-orchestration/SKILL.md",
+		"skills/plan-audit/SKILL.md",
+	} {
+		content, err := Content(path)
+		require.NoError(t, err, path)
+		flat := norm(content)
+		assert.Contains(t, flat, "not scope relevance", path)
+		assert.Contains(t, flat, "Populated is not the same as relevant", path)
+		assert.NotContains(t, flat, "no whole-map advisory", path)
+	}
+
+	// wave-orchestration (rendered) is a durable-map consumer and must carry the
+	// relevance self-check — the exact handoff issue #80 reproduces.
+	wave, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:wave-orchestration",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+	flatWave := norm(wave)
+	assert.Contains(t, flatWave, "not scope relevance")
+	assert.Contains(t, flatWave, "Populated is not the same as relevant")
+
+	mapping, err := Content("skills/codebase-mapping/SKILL.md")
+	require.NoError(t, err)
+	assert.Contains(t, norm(mapping), "re-author the change-relevant documents in place")
+
+	// The reference defines staleness as host-AI semantic relevance, not the
+	// rejected fingerprint heuristics, and no longer routes stale populated docs
+	// to the `slipway codebase-map` no-op.
+	ref, err := Content("skills/context-assembly/references/codebase-map.md")
+	require.NoError(t, err)
+	flatRef := norm(ref)
+	assert.Contains(t, flatRef, "host-AI semantic relevance judgment")
+	assert.NotContains(t, flatRef, "git mtime on the matching directory")
+	assert.NotContains(t, flatRef, "do not match the lockfile")
+}
+
 func TestFinalCloseoutTemplateRequiresAssuranceAttestationOnStandardStrict(t *testing.T) {
 	t.Parallel()
 

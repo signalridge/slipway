@@ -44,10 +44,13 @@ extra top-level files expecting downstream consumers to discover them.
 ## Assembly procedure (method-first)
 
 1. Restate the intake question in one sentence before reading anything.
-2. Invoke `slipway codebase-map` if the artifact directory is missing,
-   scaffold-only, or stale. The command is idempotent; reruns populate missing
+2. Invoke `slipway codebase-map` only to **scaffold** a missing, scaffold-only,
+   or baseline document set. The command is idempotent; reruns populate missing
    or scaffold-only files with deterministic baseline repository facts and do
-   not overwrite hand-authored substantive content.
+   not overwrite hand-authored substantive content — so it cannot refresh a
+   `populated` document. For a `populated`/`partial` map that no longer matches
+   the current change (semantically stale), do not rerun the command; re-author
+   the affected documents inline instead (see "When stale or invalid").
    - `status: baseline` means the documents contain CLI-detected facts only.
      Treat them as a starting point awaiting authored verification, not as
      completed brownfield analysis.
