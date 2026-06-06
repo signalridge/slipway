@@ -385,3 +385,54 @@ THEN the system returns 401.
 	assert.Empty(t, RequirementSubstanceBlockers(oneComplete),
 		"at least one complete scenario must satisfy the gate")
 }
+
+func TestRequirementSubstanceBlockersRequiresNonEmptyBDDSteps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "empty step lines",
+			content: `# Requirements
+### Requirement: Auth
+REQ-001: The system MUST authenticate requests before serving protected routes.
+
+#### Scenario: Empty BDD skeleton
+GIVEN
+WHEN
+THEN
+`,
+		},
+		{
+			name: "blank step content",
+			content: "# Requirements\n" +
+				"### Requirement: Auth\n" +
+				"REQ-001: The system MUST authenticate requests before serving protected routes.\n\n" +
+				"#### Scenario: Blank BDD skeleton\n" +
+				"GIVEN   \n" +
+				"WHEN:\n" +
+				"THEN :\n",
+		},
+		{
+			name: "keywords in prose",
+			content: `# Requirements
+### Requirement: Auth
+REQ-001: The system MUST authenticate requests before serving protected routes.
+
+#### Scenario: Keywords in prose only
+This paragraph mentions GIVEN, WHEN, and THEN without defining acceptance steps.
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			blockers := RequirementSubstanceBlockers(tt.content)
+			require.NotEmpty(t, blockers, "non-substantive BDD skeleton must not satisfy the scenario gate")
+			assert.Contains(t, strings.Join(blockers, "; "), "no concrete #### Scenario")
+		})
+	}
+}

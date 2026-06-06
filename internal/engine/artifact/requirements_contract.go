@@ -209,19 +209,50 @@ func scenarioSegments(scenarioText string) []string {
 }
 
 // hasConcreteScenario reports whether a requirement has at least one real
-// acceptance scenario: a single "#### Scenario" segment that carries GIVEN, WHEN
-// and THEN and is not placeholder/tautology prose. The completeness check is
-// per-scenario so GIVEN/WHEN/THEN scattered across separate scenarios does not
-// count, and a placeholder scenario is rejected via the requirements-specific
-// matcher (issue #91).
+// acceptance scenario: a single "#### Scenario" segment that carries non-empty
+// GIVEN, WHEN, and THEN step lines and is not placeholder/tautology prose. The
+// completeness check is per-scenario so GIVEN/WHEN/THEN scattered across
+// separate scenarios does not count, and a placeholder scenario is rejected via
+// the requirements-specific matcher (issue #91).
 func hasConcreteScenario(block requirementSubstanceBlock) bool {
 	for _, segment := range scenarioSegments(block.scenarioText) {
 		if LooksLikeRequirementsPlaceholder(segment) {
 			continue
 		}
-		if strings.Contains(segment, "GIVEN") &&
-			strings.Contains(segment, "WHEN") &&
-			strings.Contains(segment, "THEN") {
+		if scenarioSegmentHasConcreteSteps(segment) {
+			return true
+		}
+	}
+	return false
+}
+
+func scenarioSegmentHasConcreteSteps(segment string) bool {
+	return scenarioStepHasContent(segment, "GIVEN") &&
+		scenarioStepHasContent(segment, "WHEN") &&
+		scenarioStepHasContent(segment, "THEN")
+}
+
+func scenarioStepHasContent(segment, keyword string) bool {
+	for _, line := range strings.Split(segment, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) <= len(keyword) {
+			continue
+		}
+		if !strings.HasPrefix(strings.ToUpper(trimmed), keyword) {
+			continue
+		}
+
+		rest := trimmed[len(keyword):]
+		switch rest[0] {
+		case ' ', '\t', ':':
+		default:
+			continue
+		}
+		rest = strings.TrimSpace(rest)
+		if strings.HasPrefix(rest, ":") {
+			rest = strings.TrimSpace(rest[1:])
+		}
+		if rest != "" {
 			return true
 		}
 	}
