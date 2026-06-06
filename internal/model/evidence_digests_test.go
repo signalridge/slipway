@@ -11,7 +11,6 @@ func TestEvidenceFreshnessComparesNamedInputDigests(t *testing.T) {
 	t.Parallel()
 
 	stored := SkillDigest{
-		RunVersion: 1,
 		Inputs: map[string]string{
 			"assurance.md": "sha256:assurance-a",
 			"tasks.md":     "sha256:tasks-a",

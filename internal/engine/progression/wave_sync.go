@@ -118,16 +118,35 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		}
 		return WaveSyncResult{}, err
 	}
+	tasksPlanHash, err := state.CurrentTasksPlanStructuralState(root, change)
+	if err != nil {
+		return WaveSyncResult{}, err
+	}
+	currentScopeHash, err := state.CurrentTasksPlanScopeState(root, change)
+	if err != nil {
+		return WaveSyncResult{}, err
+	}
+	previousTasksPlanHash := wavePlanStructuralHash(wavePlan)
+	previousScopeHash := strings.TrimSpace(wavePlan.TasksPlanScopeHash)
+	// Re-materialize the wave-plan in place when the structure is unchanged but the
+	// scope (target_files) drifted. An empty previousScopeHash is treated as drift
+	// too, so a plan that predates the scope-hash field backfills it on first touch
+	// instead of carrying stale target_files until some later rebuild — the
+	// structural-equality precondition keeps this a scope-compatible rebuild.
+	if mutate && previousTasksPlanHash != "" && previousTasksPlanHash == strings.TrimSpace(tasksPlanHash) &&
+		currentScopeHash != "" && previousScopeHash != currentScopeHash {
+		materialized, err := state.MaterializeWavePlan(root, change)
+		if err != nil {
+			return WaveSyncResult{}, err
+		}
+		wavePlan = materialized
+		previousTasksPlanHash = wavePlanStructuralHash(wavePlan)
+	}
 	waveRuns, err := state.BuildWaveRuns(wavePlan, record.RunVersion, tasks)
 	if err != nil {
 		return WaveSyncResult{}, err
 	}
 
-	tasksPlanHash, err := state.CurrentTasksPlanState(root, change)
-	if err != nil {
-		return WaveSyncResult{}, err
-	}
-	previousTasksPlanHash := strings.TrimSpace(wavePlan.TasksPlanHash)
 	planDriftBlockers := tasksPlanChangedSinceTaskEvidenceBlockers(previousTasksPlanHash, tasks, tasksPlanHash)
 	planDriftBlockers = append(planDriftBlockers, taskEvidencePlanHashBlockers(previousTasksPlanHash, tasks)...)
 	executionSummary := BuildExecutionSummary(record.RunVersion, tasks, record.Timestamp, &record)
@@ -225,6 +244,17 @@ func syncCompletedTaskCheckboxes(root string, change model.Change, runs map[stri
 		return false, err
 	}
 	return true, nil
+}
+
+func wavePlanStructuralHash(plan model.WavePlan) string {
+	plan.Normalize()
+	if strings.TrimSpace(plan.EffectiveStructuralHash) != "" {
+		return strings.TrimSpace(plan.EffectiveStructuralHash)
+	}
+	if strings.TrimSpace(plan.TasksPlanStructuralHash) != "" {
+		return strings.TrimSpace(plan.TasksPlanStructuralHash)
+	}
+	return strings.TrimSpace(plan.TasksPlanHash)
 }
 
 // LatestPassingWaveEvidence returns the latest passing wave-orchestration verification record.

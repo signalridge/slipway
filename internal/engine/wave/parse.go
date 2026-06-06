@@ -79,6 +79,26 @@ func ApplyCompletedTaskCheckboxes(content string, completed map[string]bool) (st
 }
 
 func TaskPlanSemanticHash(content string) (string, error) {
+	return taskPlanHash(content, taskPlanHashSemantic)
+}
+
+func TaskPlanStructuralHash(content string) (string, error) {
+	return taskPlanHash(content, taskPlanHashStructural)
+}
+
+func TaskPlanScopeHash(content string) (string, error) {
+	return taskPlanHash(content, taskPlanHashScope)
+}
+
+type taskPlanHashMode string
+
+const (
+	taskPlanHashSemantic   taskPlanHashMode = "semantic"
+	taskPlanHashStructural taskPlanHashMode = "structural"
+	taskPlanHashScope      taskPlanHashMode = "scope"
+)
+
+func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 	plan, err := ParseTaskPlan(content)
 	if err != nil {
 		return "", err
@@ -86,21 +106,36 @@ func TaskPlanSemanticHash(content string) (string, error) {
 
 	tasks := make([]any, 0, len(plan.Tasks))
 	for _, task := range plan.Tasks {
-		tasks = append(tasks, map[string]any{
-			"task_id":         task.TaskID,
-			"objective":       strings.TrimSpace(task.Objective),
-			"wave":            task.WaveIndex,
-			"depends_on":      append([]string(nil), task.DependsOn...),
-			"target_files":    append([]string(nil), task.TargetFiles...),
-			"task_kind":       task.TaskKind.String(),
-			"covers":          append([]string(nil), task.Covers...),
-			"evidence":        strings.TrimSpace(task.Evidence),
-			"acceptance":      strings.TrimSpace(task.Acceptance),
-			"checkpoint_type": strings.TrimSpace(task.CheckpointType),
-		})
+		entry := map[string]any{
+			"task_id": task.TaskID,
+			"wave":    task.WaveIndex,
+		}
+		switch mode {
+		case taskPlanHashStructural:
+			entry["objective"] = strings.TrimSpace(task.Objective)
+			entry["depends_on"] = append([]string(nil), task.DependsOn...)
+			entry["task_kind"] = task.TaskKind.String()
+			entry["covers"] = append([]string(nil), task.Covers...)
+			entry["evidence"] = strings.TrimSpace(task.Evidence)
+			entry["acceptance"] = strings.TrimSpace(task.Acceptance)
+			entry["checkpoint_type"] = strings.TrimSpace(task.CheckpointType)
+		case taskPlanHashScope:
+			entry["target_files"] = append([]string(nil), task.TargetFiles...)
+		default:
+			entry["objective"] = strings.TrimSpace(task.Objective)
+			entry["depends_on"] = append([]string(nil), task.DependsOn...)
+			entry["target_files"] = append([]string(nil), task.TargetFiles...)
+			entry["task_kind"] = task.TaskKind.String()
+			entry["covers"] = append([]string(nil), task.Covers...)
+			entry["evidence"] = strings.TrimSpace(task.Evidence)
+			entry["acceptance"] = strings.TrimSpace(task.Acceptance)
+			entry["checkpoint_type"] = strings.TrimSpace(task.CheckpointType)
+		}
+		tasks = append(tasks, entry)
 	}
 	return model.ComputeInputHash(map[string]any{
 		"format": string(plan.Format),
+		"mode":   string(mode),
 		"tasks":  tasks,
 	})
 }

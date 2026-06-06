@@ -518,6 +518,45 @@ func TestDoneQuickFullRevalidatesShipGateBeforeArchive(t *testing.T) {
 	})
 }
 
+func TestDoneShipGateBlockedSurfacesStaleEvidenceRecovery(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "done surfaces stale recovery")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		markChangeReadyForDone(t, root, &change)
+
+		// Stale the final-closeout authority by mutating one of its certified
+		// inputs (assurance.md) after evidence was stamped. Structure stays valid
+		// so the block comes from the ship gate, not artifact validation.
+		assurancePath := filepath.Join(root, "artifacts", "changes", slug, "assurance.md")
+		require.NoError(t, os.WriteFile(assurancePath, []byte(validAssuranceContent()+"\n\nMutated after closeout was stamped.\n"), 0o644))
+
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
+		err = doneCmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
+
+		// REQ-008 parity: done's recovery payload names the same reopen action
+		// (`slipway run`) and the same token that next/validate/status surface.
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand)
+		foundStaleToken := false
+		for _, r := range cliErr.Reasons {
+			if r.Code == "stale_evidence_recovery_available" {
+				foundStaleToken = true
+			}
+		}
+		assert.True(t, foundStaleToken, "done recovery must surface stale_evidence_recovery_available")
+	})
+}
+
 func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 	t.Parallel()
 
@@ -1004,8 +1043,7 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			require.FileExists(t, waveRunPath)
 			require.FileExists(t, taskEvidencePath)
 
-			// Stamp evidence digests for the skills recovery clears, plus
-			// wave-orchestration (whose record recovery preserves).
+			// Stamp evidence digests for the target and downstream skills recovery clears.
 			refreshPassingSkillDigestsForTest(t, root, slug,
 				progression.SkillPlanAudit,
 				progression.SkillSpecComplianceReview,
@@ -1043,7 +1081,7 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			assert.Equal(t, model.StateS1Plan, view.Advanced.ToState)
 			assert.Equal(t, string(model.PlanSubStepAudit), view.Advanced.ToSubStep)
 			assert.True(t, view.Advanced.RecoveryOnly)
-			assert.Equal(t, "stale_planning_recovery_started", view.Advanced.Reason)
+			assert.Equal(t, "stale_evidence_recovery_started", view.Advanced.Reason)
 			require.NotNil(t, view.NextSkill)
 			assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
 
@@ -1055,7 +1093,7 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 			require.NoFileExists(t, planAuditPath)
 			require.NoFileExists(t, wavePlanPath)
 			require.NoFileExists(t, executionSummaryPath)
-			require.FileExists(t, waveOrchestrationPath)
+			require.NoFileExists(t, waveOrchestrationPath)
 			require.NoFileExists(t, specReviewPath)
 			require.NoFileExists(t, codeReviewPath)
 			require.NoFileExists(t, goalVerificationPath)
@@ -1072,10 +1110,10 @@ func TestRunStalePlanningEvidenceReopensPlanAuditAndPreservesRuntimeEvidence(t *
 				progression.SkillCodeQualityReview,
 				progression.SkillGoalVerification,
 				progression.SkillFinalCloseout,
+				progression.SkillWaveOrchestration,
 			} {
-				assert.NotContains(t, postDigests.Skills, skillName, "stale-planning recovery must prune the %s digest with its record", skillName)
+				assert.NotContains(t, postDigests.Skills, skillName, "stale evidence recovery must prune the %s digest with its record", skillName)
 			}
-			assert.Contains(t, postDigests.Skills, progression.SkillWaveOrchestration, "wave-orchestration record is preserved, so its digest must remain")
 		})
 	}
 }
@@ -1095,10 +1133,11 @@ func TestRunStalePlanningRecoveryHumanOutputListsSideEffects(t *testing.T) {
 	stdout := buf.String()
 	assert.Contains(t, stdout, "Advanced: S3_REVIEW -> S1_PLAN")
 	assert.Contains(t, stdout, "Recovery Side Effects:")
-	assert.Contains(t, stdout, "cleared_stale_planning_evidence")
-	assert.Contains(t, stdout, "cleared_stale_downstream_verification")
+	assert.Contains(t, stdout, "cleared_stale_verification")
+	assert.Contains(t, stdout, "cleared_stale_generated_evidence")
 	assert.Contains(t, stdout, "preserved_runtime_execution_evidence")
 	assert.Contains(t, stdout, "artifacts/changes/"+slug+"/verification/plan-audit.yaml")
+	assert.Contains(t, stdout, "artifacts/changes/"+slug+"/verification/wave-orchestration.yaml")
 	assert.Contains(t, stdout, "artifacts/changes/"+slug+"/verification/spec-compliance-review.yaml")
 }
 
@@ -1138,7 +1177,7 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 	var recoveryView nextView
 	require.NoError(t, json.Unmarshal(recoveryBuf.Bytes(), &recoveryView))
 	require.NotNil(t, recoveryView.Advanced)
-	assert.Equal(t, "stale_planning_recovery_started", recoveryView.Advanced.Reason)
+	assert.Equal(t, "stale_evidence_recovery_started", recoveryView.Advanced.Reason)
 	require.NotNil(t, recoveryView.NextSkill)
 	assert.Equal(t, progression.SkillPlanAudit, recoveryView.NextSkill.Name)
 
@@ -1261,7 +1300,7 @@ func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
 	require.NoError(t, json.Unmarshal(syncBuf.Bytes(), &syncView))
 	require.NotNil(t, syncView.Advanced)
 	assert.Equal(t, "blocked", syncView.Advanced.Action)
-	assert.Contains(t, model.ReasonSpecs(syncView.Blockers), "wave_orchestration_stale_task_evidence:t-01")
+	assert.Contains(t, model.ReasonSpecs(syncView.Blockers), "required_skill_missing:"+progression.SkillWaveOrchestration)
 
 	_, err = state.LoadExecutionSummary(root, slug)
 	require.Error(t, err)

@@ -1,198 +1,67 @@
-# Slipway
+# Slipway Agent Principles
 
-Governance CLI for AI-assisted software delivery.
+Slipway is the lifecycle authority for governed work. This file is not a
+command manual, classification guide, JSON reference, or recovery cookbook. It
+sets the principles an AI agent must follow when working in this repository.
 
-## Build & Test
+## Lifecycle Authority
 
-```bash
-go build ./...
-go test ./...
-```
+- Treat the current worktree's Slipway CLI as the source of truth.
+- Use the Slipway behavior produced by the current worktree, not stale installed
+  binaries, remembered flows, or copied recipes.
+- Let Slipway decide lifecycle state, readiness, recovery, and next governed
+  handoff. Do not infer those from source code, artifact guesses, or old chat
+  context.
+- If a public surface is ambiguous, insufficient, or requires command guessing,
+  treat that as a product defect to fix.
 
-## Creating a Governed Change
+## Self-Optimization Loop
 
-`slipway new` accepts intent classification via JSON stdin when `--json` is set.
-This lets the AI caller provide classification directly instead of Slipway inferring it.
+- When the workflow exposes friction, improve the system so the next agent does
+  not hit the same friction.
+- Prefer fixing the kernel, generated skills, command surfaces, docs, or
+  evidence contracts over teaching a one-off workaround.
+- A recovery that only works because the agent knows private sequencing is not a
+  valid recovery; make the public surface carry the next action.
+- A validation failure that is technically correct but operationally unclear is
+  still a product problem.
+- Do not normalize manual digest edits, timestamp edits, source-inspection
+  recovery, or hidden host knowledge. Remove the need for them.
 
-```bash
-echo '{"description":"add OAuth login flow","guardrail_domain":"auth_authz","needs_discovery":true,"complexity":"critical","test_cmd":"go test ./...","build_cmd":"go build ./...","languages":["Go"]}' | slipway new --json
-```
+## Evidence Discipline
 
-Positional arg for description also works alongside stdin classification:
+- No completion claim is valid without fresh evidence from the current worktree.
+- Passing tests are useful evidence, but they do not replace governed readiness.
+- Governed evidence must be produced by the owning stage and accepted by the
+  lifecycle. Do not forge, restamp, or hand-edit engine-owned freshness state.
+- If evidence becomes stale, re-enter the owning lifecycle stage through the
+  public Slipway flow.
+- If a stale state cannot be resolved through that public flow, fix Slipway
+  before claiming progress.
 
-```bash
-echo '{"guardrail_domain":"","needs_discovery":false,"complexity":"simple"}' | slipway new --json "fix typo in readme"
-```
+## Change Discipline
 
-Without classification fields or without stdin, safe fallback applies:
-`guardrail_domain=""`, `needs_discovery=true`, `complexity="complex"`.
+- Keep changes scoped to the current governed objective.
+- Remove obsolete surfaces instead of preserving compatibility for behavior that
+  the objective intentionally retires.
+- Keep code, generated skills, docs, and agent instructions aligned as one
+  product surface.
+- Preserve unrelated local work.
+- Prefer the smallest clean design that makes the requested end state true.
 
-Only **omitted** fields safe-degrade. An **explicit but invalid** classification
-is rejected (exit 2, `error_code=invalid_classification`) with an actionable
-remediation listing the valid set and a nearest-match suggestion, rather than
-being silently dropped — this is fail-closed for the guardrail signal. Invalid
-means: an unrecognized `guardrail_domain` or `complexity` token, or a non-empty
-`guardrail_domain` paired with `needs_discovery=false` or a `complexity` below
-`complex`. `slipway new --help` lists the accepted tokens. (A flaky *inferred*
-classification, by contrast, still safe-degrades.)
+## Review And Safety
 
-### `guardrail_domain` values
+- Sensitive-domain work must fail closed to rerun, review, and explicit
+  evidence. It must not gain bypass, force-close, or private attestation paths.
+- Review public CLI, JSON, generated skills, and docs as external contracts when
+  behavior changes.
+- A clean implementation is not enough if the governed bundle, recovery
+  guidance, or final closeout remains unclear.
 
-Classify **intent**, not keyword mention. If the change itself modifies the
-behavior described below, use that domain. If text merely mentions the topic
-(docs, error messages, test fixtures), use empty string.
+## Agent Instruction Boundary
 
-| Value | When to use |
-|---|---|
-| `""` (empty) | No sensitive domain applies |
-| `auth_authz` | Modifies authentication, authorization, sessions, RBAC |
-| `security_credentials` | Handles credentials, tokens, secrets, key rotation |
-| `privacy_pii` | Handles personal data, privacy boundaries, redaction |
-| `financial_flows` | Alters payment, billing, ledger, money movement |
-| `schema_data_migration` | Alters schema shape, migration behavior |
-| `irreversible_operations` | Introduces hard deletes, permanent purge, destructive ops |
-| `external_api_contracts` | Alters externally consumed API or webhook contracts |
-
-### `complexity` values
-
-| Value | When to use |
-|---|---|
-| `trivial` | Tiny and low-risk (typo, one-liner) |
-| `simple` | Bounded implementation, low coordination |
-| `complex` | Multi-step, ambiguous, or coordination-heavy |
-| `critical` | High-risk, severe impact if wrong |
-
-### `needs_discovery`
-
-Set `true` when the codebase is unfamiliar, the scope is uncertain, or the
-change requires investigation before planning. When `guardrail_domain` is
-non-empty, prefer `true`.
-
-### Project context fields (optional)
-
-Provide caller-owned project metadata for `slipway new --json`. Omitted fields
-remain empty; Slipway does not auto-infer missing project context on JSON
-surfaces.
-
-| Field | Type | Description |
-|---|---|---|
-| `tech_stack` | string | e.g. `"Go"`, `"Go, Node.js"` |
-| `test_cmd` | string | e.g. `"go test ./..."` |
-| `build_cmd` | string | e.g. `"go build ./..."` |
-| `languages` | string[] | e.g. `["Go", "TypeScript"]` |
-| `recent_work` | string | Recent commit summary |
-
-### Control overrides (optional)
-
-| Field | Type | Description |
-|---|---|---|
-| `disabled_controls` | string[] | Controls to disable for this change |
-
-Available control IDs: `clarification`, `research`, `domain_review`,
-`independent_review`, `worktree_isolation`, `rollback_required`.
-
-Guardrail-domain protections (`domain_review`, `rollback_required` for
-sensitive domains) are fail-closed and cannot be disabled via this field.
-
-## Routed Commands
-
-All routed commands support `--json` for structured output:
-
-- `slipway review --json` — review current change
-- `slipway validate --json` — validate governance state
-- `slipway repair --json` — repair local integrity issues
-- `slipway codebase-map --json` — create or refresh advisory repo-scoped context under `artifacts/codebase`
-- `slipway next --json` — query next step as a handoff-only JSON surface (read-only, does not advance state)
-- `slipway next --json --no-auto-pass` — query next step, reporting `auto_pass_eligible` instead of auto-passing
-- `slipway next --json --diagnostics` — include governance/readiness diagnostics in the next-step view
-- `slipway run --json` — advance to next step and return the handoff-only JSON surface (the only state-mutating execution surface); when S3/S4 planning evidence is stale, `run` can reopen S1 plan-audit, clear stale planning/downstream verification evidence, and preserve runtime execution evidence for ordered refresh
-- `slipway run --json --diagnostics` — include transition traces and governance/readiness diagnostics in the returned run view
-- `slipway status --json` — check current state
-
-JSON output from `next` includes `next_skill.name` as the governed host
-handoff. The caller derives its own SKILL.md path using local tool
-conventions such as `.claude/skills/slipway-{name}/SKILL.md`. Default `next`
-JSON is intentionally compact; use `--diagnostics` for gate status, artifact
-status, skill evidence, context-budget details, wave plans, and transition
-traces.
-
-When a state carries a known recovery-relevant blocker — or a ready-to-advance/
-finalize next action — `next --json`, `run --json`, and `validate --json` carry a
-read-only `recovery` object, and so does a governance-blocked `CLIError`.
-`recovery.primary_command` and `recovery.primary_action` name the single
-highest-priority next action (selected by a static stage-priority rule, not a
-dependency planner), and `recovery.steps[]` carries one entry per actionable
-`(code, subject)` group with its parsed `code`/`subject`, the sorted `details[]`
-the group spans, a `remediation` string, a `command`, and a `recovery_class`;
-blockers that share a code and subject but differ only in detail (one stale skill
-across many artifacts) collapse into a single step. The field is additive and `omitempty` —
-derived from the blockers, never written to evidence, and absent only when no
-listed blocker maps to a remediation — and is presentation only: it never alters
-which blockers apply or any gate decision. The `primary_command` is always a
-public surface valid in the current state (e.g. plan-audit budget exhaustion in
-S1 routes to `slipway pivot --reroute`, never the S2_EXECUTE-only rescope). The
-same blocker vocabulary backs every surface through one parser, so `validate`,
-the compact `next`/`run` handoff, and `CLIError` describe the same blocker
-identically. The dependency-ordered recovery planner and a first-class
-`slipway recover` command are not part of this surface.
-
-`next_skill.technique_hints` may include exported `skill:*` hints and optional
-`capability:*` hints. `capability:language-testing` is a host-resolution hint:
-when `skill:test-design` is present and Slipway detects one or more project
-languages, it emits one optional hint per language with
-`kind: "capability"`, `capability: "language-testing"`, and `language: "<name>"`.
-The caller or host may map that capability to its own installed language testing
-skill; Slipway does not vendor language-specific test idioms or require that
-such a skill exists. Language detection uses `project_context.languages` first;
-only when that list is empty does it fall back to `artifacts/codebase/STACK.md`,
-and the two sources are not merged. Because this is advisory technique metadata,
-not a governance control, `disabled_controls` does not suppress it.
-The live authoring hint is emitted from `wave-orchestration`; `tdd-governance`
-consumes the related frozen-test RED-proof guidance through its exported
-SKILL.md, not through `technique_hints`.
-
-`codebase-map --json` can report `status: "baseline"` with `baseline_docs`
-when documents contain only CLI-detected repository facts. Treat baseline docs
-as a starting point awaiting source-backed verification, not as completed
-brownfield analysis.
-
-Codebase maps under `artifacts/codebase/` are git-tracked by default; durable
-brownfield context is reviewed and shared, not hidden as local-only state.
-Existing repositories auto-migrate the next time `slipway new`,
-`slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
-block. `evidence/`, `events/`, `verification/`, and `.worktrees/` stay ignored.
-
-`verification/evidence-digests.yaml` is engine-owned local state, not host skill
-evidence. Slipway writes it when mutating advancement accepts passing skill
-evidence, then read-only commands compare the stored input digests with current
-content. Each digest entry records the accepted verification verdict timestamp
-so a newer re-run verdict can replace a stale digest during mutating
-advancement; that timestamp is not the freshness signal. Do not hand-edit
-`verification/<skill>.yaml` to add digest fields. Legacy changes without the
-digest file are backfilled only after the verdict timestamp safety gate passes;
-otherwise the skill must be re-run. Diff-class review digests certify the
-current working diff (`git diff HEAD` plus non-ignored untracked reviewable
-files, excluding Slipway governed/runtime artifacts under
-`artifacts/changes/**`), so committing reviewed changes before finalization can
-make read-only commands report the review stale until mutating advancement
-restamps or the review is run again at the new diff boundary.
-
-`wave-plan.yaml` `generated_at` is display/audit materialization time. Planning
-freshness keys on semantic `tasks_plan_hash`, and runtime task evidence records
-that hash in `freshness_inputs` so old task evidence is not reused after a real
-`tasks.md` plan change.
-
-`next --json` and `run --json` carry `input_context.codebase_map_status` (and
-per-doc `input_context.codebase_map_doc_states`) in the default compact handoff,
-without `--diagnostics`. Values mirror the `codebase-map` assessment (`missing`,
-`scaffold_only`, `baseline`, `partial`, `populated`); a missing map reports
-`"missing"` with per-doc `missing` states rather than an omitted field. Treat
-`scaffold_only`/`baseline` maps as non-durable. When research-orchestration or
-plan-audit is the next skill and the status is `scaffold_only` or `baseline`,
-`warnings` carries a non-blocking consume-time codebase-map advisory. For
-discovery-scoped changes (`needs_discovery`), a `missing` map at those same
-planning skills also carries a non-blocking discovery advisory routing the host
-to the `slipway-codebase-mapping` skill; both advisories share the
-`codebase_map_advisory:` prefix, at most one fires, and neither blocks
-progression. Non-discovery changes never receive the discovery advisory. Inspect
-`codebase_map_doc_states` for `partial` maps, which get no whole-map advisory.
+- Keep this file principle-only.
+- Put detailed command syntax, field lists, examples, and generated references
+  in the surfaces that own them.
+- If this file starts to explain a specific procedure, move that procedure into
+  the appropriate CLI/help/generated-skill surface instead.

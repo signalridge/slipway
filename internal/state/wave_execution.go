@@ -94,7 +94,7 @@ func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, erro
 }
 
 func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
-	hash, nodes, err := currentTaskPlanNodes(root, change)
+	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	if err != nil {
 		return model.WavePlan{}, err
 	}
@@ -103,11 +103,15 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 		return model.WavePlan{}, err
 	}
 	plan := model.WavePlan{
-		Version:       model.WavePlanVersion,
-		GeneratedAt:   generatedAt.UTC(),
-		TasksPlanHash: hash,
-		TotalTasks:    len(nodes),
-		Waves:         make([]model.WavePlanWave, len(waves)),
+		Version:                 model.WavePlanVersion,
+		GeneratedAt:             generatedAt.UTC(),
+		TasksPlanHash:           hashes.Structural,
+		TasksPlanStructuralHash: hashes.Structural,
+		TasksPlanScopeHash:      hashes.Scope,
+		TasksPlanSemanticHash:   hashes.Semantic,
+		EffectiveStructuralHash: hashes.Structural,
+		TotalTasks:              len(nodes),
+		Waves:                   make([]model.WavePlanWave, len(waves)),
 	}
 	for i, plannedWave := range waves {
 		tasks := make([]model.WavePlanTask, len(plannedWave.Nodes))
@@ -132,29 +136,63 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 }
 
 func CurrentTasksPlanState(root string, change model.Change) (string, error) {
-	hash, _, err := currentTaskPlanNodes(root, change)
-	return hash, err
+	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
+	return hashes.Semantic, err
+}
+
+func CurrentTasksPlanStructuralState(root string, change model.Change) (string, error) {
+	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
+	return hashes.Structural, err
+}
+
+func CurrentTasksPlanScopeState(root string, change model.Change) (string, error) {
+	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
+	return hashes.Scope, err
 }
 
 func currentTaskPlanNodes(root string, change model.Change) (string, []wave.Node, error) {
+	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
+	return hashes.Semantic, nodes, err
+}
+
+type currentTaskPlanHashes struct {
+	Semantic   string
+	Structural string
+	Scope      string
+}
+
+func currentTaskPlanHashesAndNodes(root string, change model.Change) (currentTaskPlanHashes, []wave.Node, error) {
 	bundleDir, err := GovernedBundleDir(root, change)
 	if err != nil {
-		return "", nil, err
+		return currentTaskPlanHashes{}, nil, err
 	}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
 	raw, err := os.ReadFile(tasksPath)
 	if err != nil {
-		return "", nil, err
+		return currentTaskPlanHashes{}, nil, err
 	}
-	hash, err := wave.TaskPlanSemanticHash(string(raw))
+	content := string(raw)
+	semanticHash, err := wave.TaskPlanSemanticHash(content)
 	if err != nil {
-		return "", nil, err
+		return currentTaskPlanHashes{}, nil, err
 	}
-	taskPlan, err := wave.ParseTaskPlan(string(raw))
+	structuralHash, err := wave.TaskPlanStructuralHash(content)
 	if err != nil {
-		return "", nil, err
+		return currentTaskPlanHashes{}, nil, err
 	}
-	return hash, taskPlan.Nodes(), nil
+	scopeHash, err := wave.TaskPlanScopeHash(content)
+	if err != nil {
+		return currentTaskPlanHashes{}, nil, err
+	}
+	taskPlan, err := wave.ParseTaskPlan(content)
+	if err != nil {
+		return currentTaskPlanHashes{}, nil, err
+	}
+	return currentTaskPlanHashes{
+		Semantic:   semanticHash,
+		Structural: structuralHash,
+		Scope:      scopeHash,
+	}, taskPlan.Nodes(), nil
 }
 
 func WaveEvidenceDir(root, slug string) string {

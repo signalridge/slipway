@@ -22,7 +22,6 @@ func TestSaveLoadEvidenceDigestsRoundTripAndListVerificationsSkipsStore(t *testi
 		Version: model.EvidenceDigestsVersion,
 		Skills: map[string]model.SkillDigest{
 			"plan-audit": {
-				RunVersion: 0,
 				Inputs: map[string]string{
 					"assurance.md": "sha256:assurance",
 					"tasks.md":     "sha256:tasks",

@@ -130,6 +130,18 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 	}
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
+	if staleTarget, ok, err := progression.StaleEvidenceRecoveryAvailable(root, change, view.Blockers); err != nil {
+		return statusView{}, err
+	} else if ok {
+		view.Blockers = appendReasonCodes(
+			view.Blockers,
+			[]model.ReasonCode{
+				model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
+				model.NewReasonCode("run_slipway_run_to_advance", string(change.CurrentState)),
+			},
+		)
+	}
+	view.Recovery = model.BuildRecovery(view.Blockers)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)

@@ -16,9 +16,9 @@ type EvidenceDigests struct {
 }
 
 type SkillDigest struct {
-	RunVersion       int               `yaml:"run_version" json:"run_version"`
 	VerdictTimestamp time.Time         `yaml:"verdict_timestamp,omitempty" json:"verdict_timestamp,omitempty"`
 	Inputs           map[string]string `yaml:"inputs" json:"inputs"`
+	LegacyRunVersion int               `yaml:"run_version,omitempty" json:"-"`
 }
 
 func (d *EvidenceDigests) Normalize() {
@@ -61,6 +61,7 @@ func (d EvidenceDigests) Validate() error {
 }
 
 func (d *SkillDigest) Normalize() {
+	d.LegacyRunVersion = 0
 	if !d.VerdictTimestamp.IsZero() {
 		d.VerdictTimestamp = d.VerdictTimestamp.UTC()
 	}
@@ -80,9 +81,6 @@ func (d *SkillDigest) Normalize() {
 
 func (d SkillDigest) Validate() error {
 	var errs []string
-	if d.RunVersion < 0 {
-		errs = append(errs, "run_version must be >= 0")
-	}
 	for name, digest := range d.Inputs {
 		if strings.TrimSpace(name) == "" {
 			errs = append(errs, "input name is required")

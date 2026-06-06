@@ -131,6 +131,20 @@ func relevantWaveExecutionState(state model.WorkflowState) bool {
 func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSummary) (*model.WavePlan, bool, string, error) {
 	plan, err := LoadOptionalWavePlanForChange(root, change)
 	if err == nil && plan != nil {
+		planChanged, blockedReason, err := wavePlanRepairDrift(root, change, *plan, summary)
+		if err != nil {
+			return nil, false, "", err
+		}
+		if strings.TrimSpace(blockedReason) != "" {
+			return plan, false, blockedReason, nil
+		}
+		if planChanged {
+			materialized, materializeErr := MaterializeWavePlan(root, change)
+			if materializeErr != nil {
+				return nil, false, "", fmt.Errorf("wave plan stale and could not be rematerialized: %w", materializeErr)
+			}
+			return &materialized, true, "", nil
+		}
 		return plan, false, "", nil
 	}
 	unreadable := err != nil
@@ -150,7 +164,40 @@ func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSu
 }
 
 func wavePlanRepairHint() string {
-	return "Run `slipway pivot --rescope` or restore the historical tasks.md before rerunning `slipway repair`."
+	return "Run `slipway run` to reopen the owning planning stage or rebuild compatible generated evidence; restore the historical tasks.md only if recovering an old execution boundary."
+}
+
+func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, summary *model.ExecutionSummary) (bool, string, error) {
+	currentStructuralHash, err := CurrentTasksPlanStructuralState(root, change)
+	if err != nil {
+		return false, "", err
+	}
+	currentScopeHash, err := CurrentTasksPlanScopeState(root, change)
+	if err != nil {
+		return false, "", err
+	}
+	plan.Normalize()
+	planStructuralHash := strings.TrimSpace(plan.EffectiveStructuralHash)
+	if planStructuralHash == "" {
+		planStructuralHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+	}
+	if planStructuralHash == "" {
+		planStructuralHash = strings.TrimSpace(plan.TasksPlanHash)
+	}
+	if planStructuralHash != "" && currentStructuralHash != "" && planStructuralHash != currentStructuralHash {
+		if ExecutionSummaryReady(summary) {
+			return false, fmt.Sprintf("current tasks.md structural hash %q no longer matches wave plan hash %q", currentStructuralHash, planStructuralHash), nil
+		}
+		return true, "", nil
+	}
+	// Structure matched above; a scope drift (including a plan that predates the
+	// scope-hash field, where planScopeHash is empty) rebuilds in place to refresh
+	// target_files and backfill the scope hash rather than reusing a stale plan.
+	planScopeHash := strings.TrimSpace(plan.TasksPlanScopeHash)
+	if currentScopeHash != "" && planScopeHash != currentScopeHash {
+		return true, "", nil
+	}
+	return false, "", nil
 }
 
 func wavePlanRepairBlockedReason(root string, change model.Change, summary *model.ExecutionSummary) (string, error) {
@@ -158,7 +205,11 @@ func wavePlanRepairBlockedReason(root string, change model.Change, summary *mode
 		return "", nil
 	}
 
-	currentHash, nodes, err := currentTaskPlanNodes(root, change)
+	currentHash, err := CurrentTasksPlanStructuralState(root, change)
+	if err != nil {
+		return "", err
+	}
+	_, nodes, err := currentTaskPlanNodes(root, change)
 	if err != nil {
 		return "", err
 	}
@@ -182,7 +233,7 @@ func wavePlanRepairBlockedReason(root string, change model.Change, summary *mode
 
 	summaryHash := strings.TrimSpace(summary.TasksPlanHash)
 	if summaryHash != "" && currentHash != "" && summaryHash != currentHash {
-		return fmt.Sprintf("current tasks.md hash %q no longer matches execution summary hash %q", currentHash, summaryHash), nil
+		return fmt.Sprintf("current tasks.md structural hash %q no longer matches execution summary hash %q", currentHash, summaryHash), nil
 	}
 
 	return "", nil
