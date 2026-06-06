@@ -197,6 +197,14 @@ var commandRegistry = []CommandDef{
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
+	{ID: "instructions", Class: CommandClassQuery, Description: "Show the template and authoring guidance for a governed artifact", Tier: "diagnostics",
+		Arguments: "<artifact> [--json]",
+		// instructions reads embedded artifact templates only — it needs no
+		// `.slipway.yaml` and no active change. Declare that explicitly so the
+		// generated command-reference does not leak the catch-all default
+		// prerequisites (run `slipway init` / an active change), which would be
+		// false for this prereq-free surface (issue #91).
+		Prerequisites: []string{"None — reads embedded artifact templates; no `slipway init` or active change required."}},
 }
 
 // commandRegistryMap provides O(1) lookup by command ID.
@@ -315,7 +323,7 @@ var workflowSupportingCommandIDs = []string{
 	"abort",
 }
 
-var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "codebase-map"}
+var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "codebase-map", "instructions"}
 
 type workflowSkillData struct {
 	ToolID             string

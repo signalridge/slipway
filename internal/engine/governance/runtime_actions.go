@@ -265,6 +265,12 @@ func artifactSectionHasSubstantiveContent(root string, change model.Change, arti
 	if normalizeSectionBody(body) == normalizeSectionBody(templateBody) {
 		return false
 	}
+	// This runtime helper is only invoked for decision.md and assurance.md (via
+	// hasRollbackDocumentation), so the placeholder gate stays scoped to
+	// decision.md. requirements.md/tasks.md substance is NOT gated here — it is
+	// enforced by the governed validation path (the progression substance gate
+	// and the validate requirements/tasks contracts), so generalizing this gate
+	// to those artifacts would be dead, unreachable code (issue #91).
 	if artifactName == "decision.md" && artifact.LooksLikeTemplatePlaceholder(body) {
 		return false
 	}

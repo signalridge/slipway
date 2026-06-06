@@ -46,7 +46,12 @@ INT-001: validate gate status reuse
 `)))
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte(`# Requirements
 ### Requirement: StableGateStatus
-REQ-001: Planning gate evidence must remain visible after execution.
+REQ-001: Planning gate evidence MUST remain visible after execution.
+
+#### Scenario: Planning gate stays visible post-execution
+GIVEN a change with planning-stage gate evidence
+WHEN status, validate, and next read gate state after execution
+THEN the planning gate remains visible and consistent.
 `)))
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "decision.md", []byte(`# Decision
 ## Alternatives Considered

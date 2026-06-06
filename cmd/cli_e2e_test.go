@@ -334,8 +334,12 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		require.NoError(t, err)
 
 		// Write requirements.md flat in bundle.
-		reqContent := "# Requirements\n\n### Requirement: Token Auth\nREQ-001: The system MUST support token-based authentication.\n"
+		reqContent := "# Requirements\n\n### Requirement: Token Auth\nREQ-001: The system MUST support token-based authentication.\n\n#### Scenario: Token authenticates a request\nGIVEN a valid token\nWHEN a request presents it\nTHEN the request is authenticated.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
+
+		// Write a substantive tasks.md so the tasks_contract surfaces as valid.
+		tasksContent := "# Tasks\n\n## Task List\n\n- [ ] `t-01` Implement token-based authentication for protected routes\n  - wave: 1\n  - target_files: [\"cmd/root.go\"]\n  - covers: [REQ-001]\n"
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksContent), 0o644))
 
 		stdout, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
 		require.NoError(t, err)
@@ -347,6 +351,9 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		assert.Equal(t, slug, view.Slug)
 		assert.Equal(t, "valid", view.RequirementsContract.Status)
 		assert.Contains(t, view.RequirementsContract.Message, "validated")
+		require.NotNil(t, view.TasksContract)
+		assert.Equal(t, "valid", view.TasksContract.Status)
+		assert.Contains(t, view.TasksContract.Message, "validated")
 
 		// Verify no published directory is created.
 		_, err = os.Stat(filepath.Join(root, "artifacts", "requirements", slug))
@@ -416,7 +423,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
-		require.NoError(t, os.WriteFile(specPath, []byte("## Requirements\n\n### Requirement: ReviewE2E\n\nREQ-001: The system MUST support review from the CLI.\n"), 0o644))
+		require.NoError(t, os.WriteFile(specPath, []byte("## Requirements\n\n### Requirement: ReviewE2E\n\nREQ-001: The system MUST support review from the CLI.\n\n#### Scenario: Review runs from the CLI\nGIVEN a governed change ready for review\nWHEN the reviewer runs the CLI review command\nTHEN the review result is produced.\n"), 0o644))
 
 		// Write tasks.md covering that requirement.
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte("# Tasks\n\n- [ ] `t-01` implement review e2e\n  - wave: 1\n  - depends_on: []\n  - target_files: [\"cmd/review.go\"]\n  - task_kind: code\n  - covers: [REQ-001]\n"), 0o644))
@@ -492,7 +499,7 @@ func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
 		require.NoError(t, err)
 		bundleDir, err := state.GovernedBundleDir(root, change)
 		require.NoError(t, err)
-		reqContent := "# Requirements\n\n## Requirements\n\n### Requirement: Token Rotation\nREQ-001: The system MUST rotate tokens on schedule.\n"
+		reqContent := "# Requirements\n\n## Requirements\n\n### Requirement: Token Rotation\nREQ-001: The system MUST rotate tokens on schedule.\n\n#### Scenario: Tokens rotate on schedule\nGIVEN a token nearing expiry\nWHEN the rotation schedule runs\nTHEN a fresh token is issued.\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
 		validateOut := bytes.NewBuffer(nil)
