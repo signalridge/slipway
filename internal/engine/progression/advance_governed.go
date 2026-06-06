@@ -1,7 +1,6 @@
 package progression
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,15 +59,15 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 
+	if target, ok, err := staleReopenTarget(root, change); err != nil {
+		return AdvanceSummary{}, err
+	} else if ok {
+		return reopenToStaleStage(root, &change, target, fromState)
+	}
+
 	// 1. S0_INTAKE: lightweight path — no bundle, no worktree, no wave sync.
 	if fromState == model.StateS0Intake {
 		return advanceIntake(root, &change, fromState)
-	}
-
-	if stale, err := stalePlanningRecoveryNeededForPlanAuditDigest(root, change); err != nil {
-		return AdvanceSummary{}, err
-	} else if stale {
-		return beginStalePlanningRecovery(root, &change, fromState)
 	}
 
 	// 2. Bundle precondition check.
@@ -103,8 +102,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if err != nil {
 		return AdvanceSummary{}, err
 	}
-	if stalePlanningRecoveryIssueAvailable(change, executionSummaryCtx.Issues) {
-		return beginStalePlanningRecovery(root, &change, fromState)
+	if target := staleReopenFromReasonCodes(change, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)); target.SkillName != "" {
+		return reopenToStaleStage(root, &change, target, fromState)
 	}
 	if len(executionSummaryCtx.Issues) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)), nil
@@ -171,7 +170,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers)), nil
 		}
 		preTransitionSideEffects = append(preTransitionSideEffects, skillEvidenceSideEffects(passingSkills)...)
-		preTransitionSideEffects = append(preTransitionSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	}
 	preTransitionSkillEvidence := skillEvidenceTraceFromPassing(root, change, passingSkills)
 
@@ -288,7 +286,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
 			return saveChangeAndReturn(root, change, summary)
 		}
-		preTransitionSideEffects = append(preTransitionSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	}
 
 	// 7. State transition
@@ -456,109 +453,6 @@ func computeNextPlanSubStep(current model.PlanSubStep) model.PlanSubStep {
 	return planSubStepOrder[idx+1]
 }
 
-func beginStalePlanningRecovery(root string, change *model.Change, fromState model.WorkflowState) (AdvanceSummary, error) {
-	if change == nil {
-		return AdvanceSummary{}, fmt.Errorf("change is required for stale planning recovery")
-	}
-	paths, err := state.ResolveChangePaths(root, *change)
-	if err != nil {
-		return AdvanceSummary{}, err
-	}
-
-	verificationDir := filepath.Join(paths.GovernedBundleDir, "verification")
-	// Skill records carry a skill name so their evidence-digest entry is pruned
-	// alongside the deleted record (no zombie digests). wave-plan.yaml and
-	// execution-summary.yaml are artifacts, not skill records: wave-orchestration's
-	// own record is preserved here, so its digest is left intact.
-	planningEvidenceFiles := []recoveryEvidenceFile{
-		{path: filepath.Join(verificationDir, SkillPlanAudit+".yaml"), skill: SkillPlanAudit},
-		{path: filepath.Join(verificationDir, state.WavePlanFileName)},
-		{path: filepath.Join(verificationDir, state.ExecutionSummaryFileName)},
-	}
-	downstreamVerificationFiles := []recoveryEvidenceFile{
-		{path: filepath.Join(verificationDir, SkillSpecComplianceReview+".yaml"), skill: SkillSpecComplianceReview},
-		{path: filepath.Join(verificationDir, SkillCodeQualityReview+".yaml"), skill: SkillCodeQualityReview},
-		{path: filepath.Join(verificationDir, SkillGoalVerification+".yaml"), skill: SkillGoalVerification},
-		{path: filepath.Join(verificationDir, SkillFinalCloseout+".yaml"), skill: SkillFinalCloseout},
-	}
-	sideEffects := make([]SideEffect, 0, len(planningEvidenceFiles)+len(downstreamVerificationFiles)+1)
-	for _, ev := range planningEvidenceFiles {
-		removed, err := clearRecoveryEvidence(root, *change, ev)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if removed {
-			sideEffects = append(sideEffects, SideEffect{
-				Kind:   "cleared_stale_planning_evidence",
-				Detail: state.DisplayPath(root, ev.path),
-			})
-		}
-	}
-	for _, ev := range downstreamVerificationFiles {
-		removed, err := clearRecoveryEvidence(root, *change, ev)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if removed {
-			sideEffects = append(sideEffects, SideEffect{
-				Kind:   "cleared_stale_downstream_verification",
-				Detail: state.DisplayPath(root, ev.path),
-			})
-		}
-	}
-	sideEffects = append(sideEffects, SideEffect{
-		Kind:   "preserved_runtime_execution_evidence",
-		Detail: state.DisplayPath(root, state.ChangeDir(root, change.Slug)),
-	})
-
-	cleared := change.TransitionTo(model.StateS1Plan)
-	if change.PlanSubStep != model.PlanSubStepAudit {
-		change.AdvancePlanSubStep(model.PlanSubStepAudit)
-		cleared = append(cleared, "plan_substep")
-	}
-	if change.ClearAutoPassHistory() {
-		cleared = append(cleared, "last_auto_passed_states")
-	}
-	if change.ClearActiveCheckpoint() {
-		cleared = append(cleared, "active_checkpoint")
-	}
-	if change.ResetPlanAuditIterations() {
-		cleared = append(cleared, "plan_audit_iterations")
-	}
-	if change.ClearEvidenceRef(SkillPlanAudit) {
-		cleared = append(cleared, "evidence_refs."+SkillPlanAudit)
-	}
-	if change.ClearEvidenceRef(planAuditLastCheckerFeedbackKey) {
-		cleared = append(cleared, "evidence_refs."+planAuditLastCheckerFeedbackKey)
-	}
-	for _, skillName := range []string{
-		SkillSpecComplianceReview,
-		SkillCodeQualityReview,
-		SkillGoalVerification,
-		SkillFinalCloseout,
-	} {
-		if change.ClearEvidenceRef(skillName) {
-			cleared = append(cleared, "evidence_refs."+skillName)
-		}
-	}
-
-	if err := state.SaveChange(root, *change); err != nil {
-		return AdvanceSummary{}, err
-	}
-
-	return AdvanceSummary{
-		Action:        "advanced",
-		FromState:     fromState,
-		ToState:       model.StateS1Plan,
-		ToSubStep:     string(model.PlanSubStepAudit),
-		Reason:        "stale_planning_recovery_started",
-		SideEffects:   sideEffects,
-		RecoveryOnly:  true,
-		ClearedFields: stringutil.UniqueSorted(cleared),
-		Message:       "Reopened S1_PLAN/audit for stale planning evidence recovery.",
-	}, nil
-}
-
 func removeFileIfExists(path string) (bool, error) {
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
@@ -601,32 +495,6 @@ func removeVerificationRecordAndDigest(root string, change model.Change, path, s
 		}
 	}
 	return removed, nil
-}
-
-func stalePlanningRecoveryNeededForPlanAuditDigest(root string, change model.Change) (bool, error) {
-	if !stalePlanningRecoveryState(change.CurrentState) {
-		return false, nil
-	}
-	record, err := state.LoadVerification(root, change.Slug, SkillPlanAudit)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	if !record.IsPassing() {
-		return false, nil
-	}
-	blockers, err := skillDigestFreshnessBlockers(root, change, SkillPlanAudit, record)
-	if err != nil {
-		return false, err
-	}
-	for _, blocker := range blockers {
-		if strings.HasPrefix(blocker, "required_skill_stale:"+SkillPlanAudit+":") {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func ensureGovernedBundleScaffolded(root string, change *model.Change) error {
@@ -841,23 +709,6 @@ func derivedAdvanceLifecycleEvents(root string, change model.Change, base state.
 		event.Diagnostics = skillEvidenceDiagnostics(evidence)
 		derived = append(derived, event)
 	}
-	for _, sideEffect := range summary.SideEffects {
-		if sideEffect.Kind != digestBackfilledFromLegacyVerdictEvent {
-			continue
-		}
-		skillID := strings.TrimSpace(sideEffect.Detail)
-		if skillID == "" {
-			continue
-		}
-		event := lifecycleDerivedEvent(base, digestBackfilledFromLegacyVerdictEvent, "", skillID)
-		event.Result = "recorded"
-		event.Reason = "legacy_verdict_digest_backfilled"
-		event.EvidenceRefs = map[string]string{
-			"evidence-digests": state.DisplayPath(root, state.EvidenceDigestsPathForRead(root, change.Slug)),
-		}
-		event.Diagnostics = []string{"skill=" + skillID}
-		derived = append(derived, event)
-	}
 	return derived
 }
 
@@ -972,25 +823,6 @@ func skillEvidenceSideEffects(passingSkills map[string]model.VerificationRecord)
 	for _, skillName := range names {
 		sideEffects = append(sideEffects, SideEffect{
 			Kind:   "skill_evidence_recorded",
-			Detail: skillName,
-		})
-	}
-	return sideEffects
-}
-
-func digestBackfilledSideEffects(skillNames []string) []SideEffect {
-	if len(skillNames) == 0 {
-		return nil
-	}
-	skillNames = stringutil.UniqueSorted(skillNames)
-	sideEffects := make([]SideEffect, 0, len(skillNames))
-	for _, skillName := range skillNames {
-		skillName = strings.TrimSpace(skillName)
-		if skillName == "" {
-			continue
-		}
-		sideEffects = append(sideEffects, SideEffect{
-			Kind:   digestBackfilledFromLegacyVerdictEvent,
 			Detail: skillName,
 		})
 	}

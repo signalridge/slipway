@@ -1,0 +1,56 @@
+version: 1
+slug: recovery-ux-p2-98-generalize-automatic-re-walk-to-the-earlie
+description: 'Recovery UX P2 (#98): generalize automatic re-walk to the earliest affected authority. slipway run reopens the earliest stale stage, clears that stage and downstream evidence, preserves runtime task evidence, and routes the existing skill. Remove the recover/Tier-2/restamp escape-hatch; keep content-hash freshness and the #89 structural/scope hash split. Supersedes #85; eliminates dead-ends #81/#89/#90/#96/#97.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-06-06T05:10:32.296921Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/recovery-ux-p2-98-generalize-automatic-re-walk-to-the-earlie
+artifact_schema: expanded
+project_context:
+    test_cmd: go test ./...
+    build_cmd: go build ./...
+    languages:
+        - Go
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: e01754d9c05bfee1a7e2ff7ef32e354cffb9c818a09a59d90e963d8a386ac82b
+        updated_at: 2026-06-06T10:18:02.823198596Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: ed8c6cd6b0383980cc2ceaccf93446b0043649feb9aff077bcbea2f7133cbfad
+        updated_at: 2026-06-06T08:55:42.135365844Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: e625da13100d9bbe1ab71bb00ae2e48b46d160d9f2991a81d00f81fe0cdd4abb
+        updated_at: 2026-06-06T08:55:27.694171946Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: e5f89a57a6f7a8df1ca81ed26ffe4c5e72f2185b15b9e6ef075d9dc6c2805b26
+        updated_at: 2026-06-06T08:53:30.589124574Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 0735651e2060314e100e1043fd6b32e378b8326e832faa16feb4217dd216512c
+        updated_at: 2026-06-06T08:55:57.172356739Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: f3a74ff78bc9f79756a8d20ee33cdc66f66f368af2d2694869344ca9fae405dd
+        updated_at: 2026-06-06T10:23:44.549649911Z

@@ -583,7 +583,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
-	matching.TasksPlanHash, err = state.CurrentTasksPlanState(root, change)
+	matching.TasksPlanHash, err = state.CurrentTasksPlanStructuralState(root, change)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
@@ -646,7 +646,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	require.Empty(t, parseIssues)
 
 	matching := BuildExecutionSummary(1, tasks, capturedAt, &record)
-	matching.TasksPlanHash, err = state.CurrentTasksPlanState(root, change)
+	matching.TasksPlanHash, err = state.CurrentTasksPlanStructuralState(root, change)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
@@ -667,7 +667,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	assert.Equal(t, infoBefore.ModTime(), infoAfter.ModTime())
 }
 
-func TestCurrentTasksPlanHashUsesSemanticTaskPlanHash(t *testing.T) {
+func TestCurrentTasksPlanStructuralHashIgnoresTargetFiles(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -686,11 +686,17 @@ func TestCurrentTasksPlanHashUsesSemanticTaskPlanHash(t *testing.T) {
 `
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasks), 0o644))
 
-	got, err := state.CurrentTasksPlanState(root, change)
+	got, err := state.CurrentTasksPlanStructuralState(root, change)
 	require.NoError(t, err)
-	want, err := wave.TaskPlanSemanticHash(tasks)
+	want, err := wave.TaskPlanStructuralHash(tasks)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
+
+	scope, err := state.CurrentTasksPlanScopeState(root, change)
+	require.NoError(t, err)
+	scopeWant, err := wave.TaskPlanScopeHash(tasks)
+	require.NoError(t, err)
+	assert.Equal(t, scopeWant, scope)
 }
 
 func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *testing.T) {
@@ -891,7 +897,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
   - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
-	initialHash, err := wave.TaskPlanSemanticHash(initialTasks)
+	initialHash, err := wave.TaskPlanStructuralHash(initialTasks)
 	require.NoError(t, err)
 
 	evidenceAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
@@ -964,6 +970,96 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 	assert.Equal(t, initialHash, summary.TasksPlanHash)
 }
 
+func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "wave-sync-scope-only"
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+
+	initialTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Implement task A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+`
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
+	initialStructuralHash, err := wave.TaskPlanStructuralHash(initialTasks)
+	require.NoError(t, err)
+	initialScopeHash, err := wave.TaskPlanScopeHash(initialTasks)
+	require.NoError(t, err)
+
+	evidenceAt := record.Timestamp
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go"},
+		"target_files":        []string{"cmd/next.go"},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	scopeOnlyTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Implement task A
+  - target_files: ["cmd/status.go"]
+  - wave: 1
+  - task_kind: code
+`
+	require.NoError(t, os.WriteFile(tasksPath, []byte(scopeOnlyTasks), 0o644))
+	scopeOnlyAt := evidenceAt.Add(2 * time.Minute)
+	require.NoError(t, os.Chtimes(tasksPath, scopeOnlyAt, scopeOnlyAt))
+	updatedStructuralHash, err := wave.TaskPlanStructuralHash(scopeOnlyTasks)
+	require.NoError(t, err)
+	updatedScopeHash, err := wave.TaskPlanScopeHash(scopeOnlyTasks)
+	require.NoError(t, err)
+	require.Equal(t, initialStructuralHash, updatedStructuralHash)
+	require.NotEqual(t, initialScopeHash, updatedScopeHash)
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.False(t, hasWaveReasonCode(result.Blockers, "tasks_plan_changed_since_task_evidence", "task-a"))
+
+	wavePlan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, updatedStructuralHash, wavePlan.TasksPlanHash)
+	assert.Equal(t, updatedStructuralHash, wavePlan.TasksPlanStructuralHash)
+	assert.Equal(t, updatedScopeHash, wavePlan.TasksPlanScopeHash)
+	require.Len(t, wavePlan.Waves, 1)
+	require.Len(t, wavePlan.Waves[0].Tasks, 1)
+	assert.Equal(t, []string{"cmd/status.go"}, wavePlan.Waves[0].Tasks[0].TargetFiles)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, updatedStructuralHash, summary.TasksPlanHash)
+	assert.Empty(t, summary.OpenBlockers)
+
+	currentTasksRaw, err := os.ReadFile(tasksPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(currentTasksRaw), "- [x] `task-a` Implement task A")
+	assert.Contains(t, string(currentTasksRaw), `target_files: ["cmd/status.go"]`)
+}
+
 func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -994,7 +1090,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
   - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
-	initialHash, err := wave.TaskPlanSemanticHash(initialTasks)
+	initialHash, err := wave.TaskPlanStructuralHash(initialTasks)
 	require.NoError(t, err)
 
 	firstEvidenceAt := record.Timestamp
@@ -1084,7 +1180,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, recoveredTasks, string(currentTasksRaw))
 
-	updatedHash, err := wave.TaskPlanSemanticHash(updatedTasks)
+	updatedHash, err := wave.TaskPlanStructuralHash(updatedTasks)
 	require.NoError(t, err)
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
@@ -1162,7 +1258,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "tasks_plan_changed_since_task_evidence", "task-a"))
-	currentHash, err := wave.TaskPlanSemanticHash(updatedTasks)
+	currentHash, err := wave.TaskPlanStructuralHash(updatedTasks)
 	require.NoError(t, err)
 	assert.NotEqual(t, currentHash, summary.TasksPlanHash, "first sync must not bind stale evidence to the current tasks hash")
 }

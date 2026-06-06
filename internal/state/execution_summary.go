@@ -559,7 +559,7 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 
 	sources := []stalePlanningSource{}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	if currentHash, err := CurrentTasksPlanState(root, change); err == nil {
+	if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil {
 		if strings.TrimSpace(summary.TasksPlanHash) != "" && currentHash != strings.TrimSpace(summary.TasksPlanHash) {
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,

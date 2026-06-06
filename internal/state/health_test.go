@@ -356,7 +356,7 @@ func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
 			if reason.Code == "wave_plan_drift" {
 				found = true
 				assert.False(t, finding.Repairable)
-				assert.Contains(t, finding.RepairHint, "slipway pivot --rescope")
+				assert.Contains(t, finding.RepairHint, "slipway run")
 			}
 		}
 	}

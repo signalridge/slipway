@@ -280,10 +280,10 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		runPayload := decodeJSONMap(t, stdout)
-		assert.Equal(t, "S2_EXECUTE", runPayload["current_state"])
+		assert.Equal(t, "S1_PLAN", runPayload["current_state"])
 		nextSkill, ok := runPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in resumed run output")
-		assert.Equal(t, "wave-orchestration", nextSkill["name"])
+		assert.Equal(t, "plan-audit", nextSkill["name"])
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)

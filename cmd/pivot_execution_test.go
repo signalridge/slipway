@@ -248,7 +248,7 @@ User approved this on 2026-04-01.
 	assert.False(t, strings.Contains(content, "User approved this on 2026-04-01"), "old approval text should be removed")
 }
 
-func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing.T) {
+func TestExecuteGovernedPivotClearsDerivedRuntimeEvidenceAndPreservesTaskEvidence(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -288,6 +288,11 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 	runtimeEvidence := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(runtimeEvidence), 0o755))
 	require.NoError(t, os.WriteFile(runtimeEvidence, []byte(`{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test:task-a","captured_at":"2026-04-06T10:01:00Z"}`), 0o644))
+	waveEvidence := filepath.Join(state.ChangeDir(root, slug), "evidence", "waves", "wave-01.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(waveEvidence), 0o755))
+	require.NoError(t, os.WriteFile(waveEvidence, []byte("wave_index: 1\n"), 0o644))
+	scratchPath := filepath.Join(state.ChangeDir(root, slug), "scratch.txt")
+	require.NoError(t, os.WriteFile(scratchPath, []byte("runtime scratch"), 0o644))
 	pidPath := state.TaskPIDFilePath(root, slug)
 	require.NoError(t, os.MkdirAll(filepath.Dir(pidPath), 0o755))
 	require.NoError(t, os.WriteFile(pidPath, []byte(`{"task-a":123}`), 0o644))
@@ -298,12 +303,59 @@ func TestExecuteGovernedPivotClearsExecutionSummaryAndRuntimeEvidence(t *testing
 	_, err = state.LoadExecutionSummary(root, slug)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, os.ErrNotExist), "execution summary should be removed")
-	_, err = os.Stat(state.ChangeDir(root, slug))
-	assert.True(t, os.IsNotExist(err), "runtime evidence directory should be removed")
+	_, err = os.Stat(runtimeEvidence)
+	assert.NoError(t, err, "runtime task evidence should be preserved")
+	_, err = os.Stat(waveEvidence)
+	assert.True(t, os.IsNotExist(err), "derived wave evidence should be removed")
+	_, err = os.Stat(scratchPath)
+	assert.True(t, os.IsNotExist(err), "runtime scratch state should be removed")
 	_, err = os.Stat(pidPath)
 	assert.True(t, os.IsNotExist(err), "task PID registry should be removed")
 	_, err = os.Stat(state.WavePlanPathForRead(root, slug))
 	assert.True(t, os.IsNotExist(err), "wave plan should be removed")
+}
+
+func TestExecuteGovernedPivotRescopePreservesTaskEvidence(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "rescope preserves task evidence")
+
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n## Summary\nRescope.\n## In Scope\nAll.\n## Out of Scope\nNone.\n## Approved Summary\nApproved 2026-04-01.\n"), 0o644))
+
+	now := time.Now().UTC()
+	require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        now,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{TaskID: "task-a", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindCode, CapturedAt: now},
+		},
+	}))
+	runtimeEvidence := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(runtimeEvidence), 0o755))
+	require.NoError(t, os.WriteFile(runtimeEvidence, []byte(`{"task_id":"task-a","run_summary_version":1,"task_kind":"code","verdict":"pass","evidence_ref":"test:task-a","captured_at":"2026-04-06T10:01:00Z"}`), 0o644))
+
+	view, err := executeGovernedPivot(root, slug, string(gate.PivotKindRescope))
+	require.NoError(t, err)
+	assert.Equal(t, string(model.StateS0Intake), view.CurrentState)
+
+	// Rescope reopens intake but must preserve compatible runtime task evidence,
+	// consistent with the stale-evidence reopen primitive (#96).
+	_, err = os.Stat(runtimeEvidence)
+	assert.NoError(t, err, "rescope must preserve runtime task evidence")
 }
 
 func TestExecuteGovernedPivotClearsWorktreeOwnedExecutionSummary(t *testing.T) {

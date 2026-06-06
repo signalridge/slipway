@@ -10,11 +10,15 @@ import (
 const WavePlanVersion = 1
 
 type WavePlan struct {
-	Version       int            `yaml:"version" json:"version"`
-	GeneratedAt   time.Time      `yaml:"generated_at" json:"generated_at"`
-	TasksPlanHash string         `yaml:"tasks_plan_hash,omitempty" json:"tasks_plan_hash,omitempty"`
-	TotalTasks    int            `yaml:"total_tasks" json:"total_tasks"`
-	Waves         []WavePlanWave `yaml:"waves,omitempty" json:"waves,omitempty"`
+	Version                 int            `yaml:"version" json:"version"`
+	GeneratedAt             time.Time      `yaml:"generated_at" json:"generated_at"`
+	TasksPlanHash           string         `yaml:"tasks_plan_hash,omitempty" json:"tasks_plan_hash,omitempty"`
+	TasksPlanStructuralHash string         `yaml:"tasks_plan_structural_hash,omitempty" json:"tasks_plan_structural_hash,omitempty"`
+	TasksPlanScopeHash      string         `yaml:"tasks_plan_scope_hash,omitempty" json:"tasks_plan_scope_hash,omitempty"`
+	TasksPlanSemanticHash   string         `yaml:"tasks_plan_semantic_hash,omitempty" json:"tasks_plan_semantic_hash,omitempty"`
+	EffectiveStructuralHash string         `yaml:"effective_structural_hash,omitempty" json:"effective_structural_hash,omitempty"`
+	TotalTasks              int            `yaml:"total_tasks" json:"total_tasks"`
+	Waves                   []WavePlanWave `yaml:"waves,omitempty" json:"waves,omitempty"`
 }
 
 type WavePlanWave struct {
@@ -41,6 +45,19 @@ func (p *WavePlan) Normalize() {
 		p.GeneratedAt = p.GeneratedAt.Round(0).UTC()
 	}
 	p.TasksPlanHash = strings.TrimSpace(p.TasksPlanHash)
+	p.TasksPlanStructuralHash = strings.TrimSpace(p.TasksPlanStructuralHash)
+	p.TasksPlanScopeHash = strings.TrimSpace(p.TasksPlanScopeHash)
+	p.TasksPlanSemanticHash = strings.TrimSpace(p.TasksPlanSemanticHash)
+	p.EffectiveStructuralHash = strings.TrimSpace(p.EffectiveStructuralHash)
+	if p.TasksPlanStructuralHash == "" {
+		p.TasksPlanStructuralHash = p.TasksPlanHash
+	}
+	if p.EffectiveStructuralHash == "" {
+		p.EffectiveStructuralHash = p.TasksPlanStructuralHash
+	}
+	if p.TasksPlanHash == "" {
+		p.TasksPlanHash = p.EffectiveStructuralHash
+	}
 	total := 0
 	for i := range p.Waves {
 		p.Waves[i].Normalize(i + 1)

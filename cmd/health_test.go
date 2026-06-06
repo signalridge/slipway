@@ -122,6 +122,15 @@ func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 		change.CurrentState = model.StateS2Execute
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` repairable wave artifact
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/repair.go"]
+  - task_kind: code
+`)))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
 		var out bytes.Buffer
@@ -417,10 +426,10 @@ func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 			if strings.Contains(strings.ToLower(action.Summary), "cannot be safely reconstructed") {
 				found = true
 				assert.False(t, action.Repairable)
-				assert.Equal(t, "slipway pivot --rescope", action.Command)
+				assert.Equal(t, "slipway run", action.Command)
 			}
 		}
-		assert.True(t, found, "expected doctor to block auto-repair for drifted wave-plan reconstruction")
+		assert.True(t, found, "expected doctor to route drifted wave-plan reconstruction through run")
 	})
 }
 
@@ -518,10 +527,10 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 			if strings.Contains(strings.ToLower(action.Summary), "wave plan drift") {
 				found = true
 				assert.False(t, action.Repairable)
-				assert.Equal(t, "slipway pivot --rescope", action.Command)
+				assert.Equal(t, "slipway run", action.Command)
 			}
 		}
-		assert.True(t, found, "expected doctor to recommend pivot for wave plan drift")
+		assert.True(t, found, "expected doctor to recommend run for wave plan drift")
 
 		foundFinding := false
 		for _, finding := range view.Findings {

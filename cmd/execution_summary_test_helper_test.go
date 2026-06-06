@@ -69,7 +69,7 @@ func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion in
 		Tasks:             tasks,
 	}
 	if change != nil {
-		if hash, err := state.CurrentTasksPlanState(root, *change); err == nil {
+		if hash, err := state.CurrentTasksPlanStructuralState(root, *change); err == nil {
 			summary.TasksPlanHash = hash
 		}
 	}

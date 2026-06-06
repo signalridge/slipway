@@ -67,7 +67,6 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers)), nil
 		}
 		evidenceSideEffects = append(evidenceSideEffects, skillEvidenceSideEffects(passingSkills)...)
-		evidenceSideEffects = append(evidenceSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	}
 
 	if blockers := intakeClarificationBlockers(*change, intentContent); len(blockers) > 0 {
@@ -139,7 +138,6 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers)), nil
 	}
 	evidenceSideEffects := append([]SideEffect{}, skillEvidenceSideEffects(passingSkills)...)
-	evidenceSideEffects = append(evidenceSideEffects, digestBackfilledSideEffects(stampResult.BackfilledSkills)...)
 	evidenceTraces := skillEvidenceTraceFromPassing(root, *change, passingSkills)
 
 	fromSub := string(change.IntakeSubStep)

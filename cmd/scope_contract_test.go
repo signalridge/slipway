@@ -37,8 +37,8 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	diagnostics := strings.Join(validateView.Diagnostics, "\n")
 	assert.Contains(t, diagnostics, "scope_contract_recovery_guidance")
 	assert.Contains(t, diagnostics, "tasks.md target_files")
-	assert.Contains(t, diagnostics, "stale_planning_evidence")
-	assert.Contains(t, diagnostics, "rescope remains S2_EXECUTE-only")
+	assert.Contains(t, diagnostics, "stale_evidence")
+	assert.Contains(t, diagnostics, "slipway run")
 
 	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
 	require.NoError(t, err)
@@ -46,8 +46,8 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	warnings := strings.Join(nextView.Warnings, "\n")
 	assert.Contains(t, warnings, "scope_contract_recovery_guidance")
 	assert.Contains(t, warnings, "tasks.md target_files")
-	assert.Contains(t, warnings, "stale_planning_evidence")
-	assert.Contains(t, warnings, "rescope remains S2_EXECUTE-only")
+	assert.Contains(t, warnings, "stale_evidence")
+	assert.Contains(t, warnings, "slipway run")
 }
 
 func TestStatusSurfacesScopeContractDriftBlocker(t *testing.T) {
