@@ -73,6 +73,56 @@ func TestCollectNonPassTaskBlockers_Empty(t *testing.T) {
 	}
 }
 
+func incompleteTestWavePlan() model.WavePlan {
+	return model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Tasks: []model.WavePlanTask{{TaskID: "t1"}, {TaskID: "t2"}}},
+			{WaveIndex: 2, Tasks: []model.WavePlanTask{{TaskID: "t3"}}},
+		},
+	}
+}
+
+func TestIncompleteExecutionTaskBlockers_MissingPlannedTaskBlocks(t *testing.T) {
+	t.Parallel()
+	// Evidence recorded only for the early tasks; t3 was planned but never run.
+	runs := map[string]model.TaskRun{
+		"t1": {TaskID: "t1", Verdict: model.TaskVerdictPass},
+		"t2": {TaskID: "t2", Verdict: model.TaskVerdictPass},
+	}
+	blockers := IncompleteExecutionTaskBlockers(incompleteTestWavePlan(), runs)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "incomplete_execution_task", blockers[0].Code)
+	assert.Equal(t, "t3", blockers[0].Detail)
+}
+
+func TestIncompleteExecutionTaskBlockers_AllRecordedNoBlock(t *testing.T) {
+	t.Parallel()
+	// Presence in runs is what matters here; a recorded-but-failing task is
+	// reported by CollectNonPassTaskBlockers, not this check.
+	runs := map[string]model.TaskRun{
+		"t1": {TaskID: "t1", Verdict: model.TaskVerdictPass},
+		"t2": {TaskID: "t2", Verdict: model.TaskVerdictPass},
+		"t3": {TaskID: "t3", Verdict: model.TaskVerdictPass},
+	}
+	assert.Empty(t, IncompleteExecutionTaskBlockers(incompleteTestWavePlan(), runs))
+}
+
+func TestIncompleteExecutionTaskBlockers_MultipleMissingSorted(t *testing.T) {
+	t.Parallel()
+	blockers := IncompleteExecutionTaskBlockers(incompleteTestWavePlan(), map[string]model.TaskRun{
+		"t2": {TaskID: "t2", Verdict: model.TaskVerdictPass},
+	})
+	require.Len(t, blockers, 2)
+	assert.Equal(t, "t1", blockers[0].Detail)
+	assert.Equal(t, "t3", blockers[1].Detail)
+}
+
+func TestIncompleteExecutionTaskBlockers_EmptyPlan(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, IncompleteExecutionTaskBlockers(model.WavePlan{}, map[string]model.TaskRun{}))
+}
+
 func TestBuildExecutionSummarySyncsDerivedFieldsAndWaveBlockers(t *testing.T) {
 	t.Parallel()
 

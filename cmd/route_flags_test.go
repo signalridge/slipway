@@ -30,7 +30,6 @@ func TestValidateFocus_AcceptsPublicAliases(t *testing.T) {
 		{"validate", "sast"},
 		{"validate", "property"},
 		{"validate", "mutation"},
-		{"repair", "sast"},
 	}
 	for _, tc := range cases {
 		if err := validateFocus(tc.command, tc.alias); err != nil {
@@ -63,6 +62,26 @@ func TestValidateFocus_RejectsLegacySecondOpinion(t *testing.T) {
 	cliErr := asCLIError(err)
 	if cliErr == nil || cliErr.ErrorCode != "unknown_route_mode" {
 		t.Fatalf("expected unknown_route_mode, got %v", err)
+	}
+}
+
+func TestValidateFocus_RejectsSastForRepairAndRedirects(t *testing.T) {
+	t.Parallel()
+
+	// repair no longer advertises SAST (issue #88): the false-promise focus was
+	// removed, and selecting it must redirect to the surfaces that actually
+	// hydrate SAST guidance rather than silently no-op.
+	err := validateFocus("repair", "sast")
+	if err == nil {
+		t.Fatal("expected rejection for `repair --focus sast`")
+	}
+	cliErr := asCLIError(err)
+	if cliErr == nil || cliErr.ErrorCode != "unknown_route_mode" {
+		t.Fatalf("expected unknown_route_mode, got %v", err)
+	}
+	if !strings.Contains(cliErr.Remediation, "slipway review --focus sast") ||
+		!strings.Contains(cliErr.Remediation, "slipway validate --focus sast") {
+		t.Fatalf("expected redirect to review/validate sast focus, got remediation %q", cliErr.Remediation)
 	}
 }
 

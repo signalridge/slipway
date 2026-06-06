@@ -22,10 +22,17 @@ func validateFocus(command, alias string) error {
 		return nil
 	}
 	allowed := focusAliases(command)
+	remediation := fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", "))
+	// `repair` deliberately drops the `sast` focus: repair never runs external
+	// scanners. Redirect the operator to the surfaces that legitimately hydrate
+	// SAST guidance instead of leaving a bare allowed-list.
+	if command == "repair" && alias == "sast" {
+		remediation = "repair performs local-state integrity only and does not run SAST; to run SAST analysis use `slipway review --focus sast` or `slipway validate --focus sast`."
+	}
 	return newInvalidUsageError(
 		"unknown_route_mode",
 		fmt.Sprintf("unknown --focus=%q for `%s`", alias, command),
-		fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", ")),
+		remediation,
 		map[string]any{"command": command, "focus": alias, "allowed": allowed},
 	)
 }

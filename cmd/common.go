@@ -928,7 +928,12 @@ func createGuardInvocationWorkspaceRoot(root string) (string, error) {
 
 func newChangeTargetWorkspaceRoot(root string, change model.Change) (string, error) {
 	target := root
-	if change.NeedsDiscovery {
+	// Every governed change is worktree-provisioned by default (not just discovery
+	// changes), so predict the dedicated `.worktrees/<slug>` target whenever
+	// provisioning is enabled and the repo can support it. This keeps the
+	// single-active-change guard correct: worktree-isolated changes do not
+	// conflict with one another.
+	if autoProvisionWorktreeEnabled(root) {
 		repoRoot, err := state.ResolveGitWorkspaceRoot(root)
 		if err != nil {
 			if !strings.Contains(err.Error(), "not a git repository") {
@@ -939,6 +944,20 @@ func newChangeTargetWorkspaceRoot(root string, change model.Change) (string, err
 		}
 	}
 	return normalizePathForCompare(target), nil
+}
+
+// autoProvisionWorktreeEnabled reports whether `slipway new` will bind a
+// dedicated worktree for a governed change. It mirrors the gate used by
+// state.EnsureDefaultWorktreeForChange so the create guard predicts the same
+// target workspace the change will actually occupy. A missing config defaults to
+// enabled; an unreadable/invalid config also falls back to enabled so the guard
+// never blocks creation on a config read error (binding surfaces the real error).
+func autoProvisionWorktreeEnabled(root string) bool {
+	cfg, err := model.LoadConfig(state.ConfigPath(root))
+	if err != nil {
+		return true
+	}
+	return cfg.Governance.AutoProvisionWorktreeEnabled()
 }
 
 func existingChangeWorkspaceRoot(root string, ch model.Change) (string, error) {

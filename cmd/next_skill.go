@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/review"
 	"github.com/signalridge/slipway/internal/engine/skill"
@@ -29,9 +30,30 @@ func buildSkillConstraints(root string, def skill.Definition, governedChange *mo
 		if paths, err := state.ResolveChangePaths(root, *governedChange); err == nil {
 			sc.LockedDecisions = parseLockedDecisions(filepath.Join(paths.GovernedBundleDir, "decision.md"))
 		}
+
+		// Surface the exact high-risk reference tokens goal-verification must
+		// record so a guardrail-domain change is never a dead-end (issue #88).
+		if def.Name == progression.SkillGoalVerification && governedChange.GuardrailDomain != "" {
+			sc.RequiredHighRiskTokens = requiredHighRiskTokenHints(governedChange.GuardrailDomain)
+		}
 	}
 
 	return sc
+}
+
+// requiredHighRiskTokenHints returns the recordable goal-verification reference
+// tokens (one per required high-risk check) for a guardrail domain, e.g.
+// "high_risk_check:external_api_contracts.safety_baseline=pass".
+func requiredHighRiskTokenHints(domain string) []string {
+	checks := gate.RequiredHighRiskChecks(domain)
+	if len(checks) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(checks))
+	for _, checkID := range checks {
+		out = append(out, "high_risk_check:"+checkID+"=pass")
+	}
+	return out
 }
 
 // parseLockedDecisions extracts locked decision items from decision.md.

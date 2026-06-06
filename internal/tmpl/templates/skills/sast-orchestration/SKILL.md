@@ -4,10 +4,10 @@ domain: review-security
 function: run SAST tooling (CodeQL/Semgrep) with SARIF triage
 tier: T2
 primary_attachment: tool-recipe
-summary: "Use when running SAST tooling against the change. Triggers on review, validate, or repair commands and user text naming SAST tools."
+summary: "Use when running SAST tooling against the change. Triggers on review or validate commands and user text naming SAST tools."
 trigger_signals:
-  - command: ["review", "validate", "repair"]
-    reason: "Review/validate/repair command invoked; SAST may apply"
+  - command: ["review", "validate"]
+    reason: "Review/validate command invoked; SAST may apply"
   - user_text_matches: ["codeql", "semgrep", "sast", "sarif"]
     reason: "User text names a SAST tool"
 evidence_contract: artifact
@@ -26,9 +26,6 @@ bindings:
     attachment: tool-recipe
   - type: command-auto
     target: validate
-    attachment: tool-recipe
-  - type: command-auto
-    target: repair
     attachment: tool-recipe
 ---
 

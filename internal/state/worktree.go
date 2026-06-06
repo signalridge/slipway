@@ -162,8 +162,20 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 			Branch: change.WorktreeBranch,
 		}, nil
 	}
-	if !change.NeedsDiscovery {
-		return DefaultWorktreeBinding{SkippedReason: "discovery_not_required"}, nil
+	// Every governed change gets a dedicated worktree by default so the main
+	// checkout stays free for parallel work; `governance.auto_provision_worktree:
+	// false` opts out. Discovery is no longer the gate — non-discovery changes
+	// previously ran their entire lifecycle in the main checkout.
+	autoProvision := true
+	if cfg, cfgErr := model.LoadConfig(ConfigPath(root)); cfgErr != nil {
+		if !os.IsNotExist(cfgErr) {
+			return DefaultWorktreeBinding{}, cfgErr
+		}
+	} else {
+		autoProvision = cfg.Governance.AutoProvisionWorktreeEnabled()
+	}
+	if !autoProvision {
+		return DefaultWorktreeBinding{SkippedReason: "worktree_provisioning_disabled"}, nil
 	}
 
 	repoRoot, err := gitWorkspaceRoot(root)

@@ -1,0 +1,44 @@
+version: 1
+slug: fix-issue-95-governed-execution-advances-s2-execute-to-s3-re
+description: 'Fix issue #95: governed execution advances S2_EXECUTE to S3_REVIEW even when planned wave-plan tasks have no recorded task evidence. The wave-orchestration sync loads the full wave-plan task set but never asserts every planned task has passing evidence, so a host that records evidence for only the early tasks advances to review with later tasks unexecuted. Enforce execution completeness: block advancement with an actionable per-task blocker (and recovery remediation) until every planned execution/verification task has passing evidence or the plan is rescoped.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-06T11:27:07.526865Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-issue-95-governed-execution-advances-s2-execute-to-s3-re
+artifact_schema: expanded
+artifacts:
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: d85b7badd7fc6e359a6dd1b0aef65466d92bfff05710a832c42c676e7453bf67
+        updated_at: 2026-06-06T12:10:16.039577313Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: c7305c905dd457eb4e00d89d3b4d4f7bf8cc8864dc3543637cf4cac07ac13c4e
+        updated_at: 2026-06-06T12:04:47.254239145Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 04266c0c181163d50b9e12452f1b9b6210c404d7effebaa8625fe30bef5690b7
+        updated_at: 2026-06-06T11:58:50.378827368Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 93e35f350288be7cbe4b92362830ed4518ab53d9c2455069cdc96e45902fa182
+        updated_at: 2026-06-06T12:09:28.140137454Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 84f501a016a695d47013ef18257388cd4a4376456dcb4ac0ea209daa53c1bbc4
+        updated_at: 2026-06-06T12:41:37.578038275Z
