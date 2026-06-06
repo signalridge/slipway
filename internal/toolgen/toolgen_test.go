@@ -94,8 +94,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 19 commands (5 core + 10 situational + 4 diagnostics).
-	assert.Len(t, commandRegistry, 19)
+	// Verify registry has 20 commands (5 core + 10 situational + 5 diagnostics).
+	assert.Len(t, commandRegistry, 20)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -129,8 +129,8 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 	assert.Equal(t, 5, core, "expected 5 core commands")
 	assert.Equal(t, 10, sit, "expected 10 situational commands")
-	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
-	assert.Equal(t, 6, query, "expected 6 query commands")
+	assert.Equal(t, 5, diag, "expected 5 diagnostics commands")
+	assert.Equal(t, 7, query, "expected 7 query commands")
 	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
 
 	// Verify commandIDs() returns sorted list matching adapter skill commands only.
@@ -431,6 +431,36 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 	}
 }
 
+// referenceSectionFor returns the command-reference body from header up to the
+// next "### " command heading or "## " section heading (or end of file).
+func referenceSectionFor(ref, header string) string {
+	idx := strings.Index(ref, header)
+	if idx < 0 {
+		return ""
+	}
+	rest := ref[idx+len(header):]
+	cut := len(rest)
+	if next := strings.Index(rest, "\n### "); next >= 0 && next < cut {
+		cut = next
+	}
+	if next := strings.Index(rest, "\n## "); next >= 0 && next < cut {
+		cut = next
+	}
+	return rest[:cut]
+}
+
+// TestInstructionsCommandDeclaresNoFalsePrerequisites guards the issue-#91
+// regression where the `instructions` registry entry omitted Prerequisites and
+// commandPrerequisites leaked the catch-all default (run `slipway init` / an
+// active change), both false for a command that reads only embedded templates.
+func TestInstructionsCommandDeclaresNoFalsePrerequisites(t *testing.T) {
+	prereqs := commandPrerequisites("instructions")
+	require.NotEmpty(t, prereqs, "instructions must declare explicit prerequisites so the catch-all default cannot leak")
+	joined := strings.Join(prereqs, "\n")
+	assert.NotContains(t, joined, "an active change must exist", "instructions does not require an active change")
+	assert.NotContains(t, joined, "run `slipway init`", "instructions reads embedded templates; it does not require slipway init")
+}
+
 func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 	root := t.TempDir()
 	codexHome := t.TempDir()
@@ -485,6 +515,15 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
 		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
 		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
+
+		// instructions reads embedded templates only; its reference section must
+		// declare it prereq-free and must NOT leak the catch-all default
+		// prerequisites (run `slipway init` / an active change) (issue #91).
+		instrSection := referenceSectionFor(ref, "### `slipway instructions`")
+		assert.NotEmpty(t, instrSection, "%s: missing instructions command entry", cfg.ID)
+		assert.Contains(t, instrSection, "reads embedded artifact templates", "%s: instructions reference missing prereq-free declaration", cfg.ID)
+		assert.NotContains(t, instrSection, "an active change must exist", "%s: instructions reference leaked false active-change prerequisite", cfg.ID)
+		assert.NotContains(t, instrSection, "run `slipway init`", "%s: instructions reference leaked false init prerequisite", cfg.ID)
 		for _, focus := range capability.ExplicitFocusSurfaces() {
 			selector := "`slipway " + focus.Command + " --focus " + focus.PublicName + "`"
 			assert.Contains(t, ref, selector, "%s: missing focus selector %s", cfg.ID, selector)
@@ -784,6 +823,7 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 		"new": true, "next": true, "run": true, "status": true, "done": true,
 		"abort": true, "cancel": true, "review": true, "validate": true,
 		"pivot": true, "preset": true, "repair": true, "init": true, "checkpoint": true,
+		"instructions": true,
 	}
 
 	// Pattern to find `slipway <cmd>` references in generated files.

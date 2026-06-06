@@ -153,6 +153,21 @@ func TemplateContent(name string) (string, error) {
 	return tmpl.Content(filepath.Join("artifacts", name))
 }
 
+// RenderArtifactExample renders the named artifact template (e.g.
+// "requirements.md") with representative example data so callers such as
+// `slipway instructions` can present a concrete, directive-free exemplar —
+// headings, authoring-guidance comments, and the honest placeholder seed —
+// instead of the raw Go-template source with unresolved `{{ … }}` actions. The
+// engine owns this structure; the authoring skill owns the substance that
+// replaces the seed (issue #91).
+func RenderArtifactExample(name string) (string, error) {
+	example := model.Change{
+		Slug:        "example-change",
+		Description: "describe the change here",
+	}
+	return renderTemplateWithFallback("", name, "", buildTemplateData("", example, nil))
+}
+
 type templateData struct {
 	Slug               string
 	InitialRequest     string
@@ -455,12 +470,31 @@ func appendRequirementBlock(b *strings.Builder, reqNum int, objective string) {
 		b.WriteString("\n")
 	}
 	cleanedObjective := strings.Join(strings.Fields(strings.TrimSpace(objective)), " ")
+	// The engine owns structure (heading + stable REQ-* id); the authoring skill
+	// owns substance. Emit an honest, obviously-not-real placeholder — no
+	// normative MUST/SHALL and an explicit "replace" instruction — so it is
+	// caught by LooksLikeTemplatePlaceholder and rejected by the requirements
+	// substance gate until a skill writes the real requirement.
 	fmt.Fprintf(b, "### Requirement: %s\n", cleanedObjective)
-	fmt.Fprintf(b, "REQ-%03d: %s\n", reqNum, requirementNormativeSentence(cleanedObjective))
-	b.WriteString("\n#### Scenario: Primary flow\n")
-	b.WriteString("GIVEN the relevant workflow is exercised\n")
-	b.WriteString("WHEN the requirement is implemented in the target flow\n")
-	fmt.Fprintf(b, "THEN the expected behavior for %s is observed.\n", strings.ToLower(cleanedObjective))
+	fmt.Fprintf(b, "REQ-%03d: %s\n", reqNum, requirementPlaceholderSentence(cleanedObjective))
+	b.WriteString("\n#### Scenario: Pending — replace with a concrete scenario\n")
+	b.WriteString("GIVEN pending — replace with the precondition\n")
+	b.WriteString("WHEN pending — replace with the triggering action\n")
+	b.WriteString("THEN pending — replace with the observable expected outcome\n")
+}
+
+// requirementPlaceholderSentence returns an honest, non-normative placeholder for
+// a seeded requirement body. It deliberately contains no RFC-2119 MUST/SHALL and
+// a placeholder sentinel ("define requirements based on the initial request") so
+// the substance gate rejects an unedited scaffold.
+func requirementPlaceholderSentence(objective string) string {
+	if strings.TrimSpace(objective) == "" {
+		return "Pending — replace with the normative requirement. Define requirements based on the initial request."
+	}
+	return fmt.Sprintf(
+		"Pending — replace with the normative requirement (state what the system is required to do). Define requirements based on the initial request: %s.",
+		objective,
+	)
 }
 
 func appendGuardrailRequirementBlock(b *strings.Builder, reqNum int, guardrailDomain string) {
@@ -473,34 +507,6 @@ func appendGuardrailRequirementBlock(b *strings.Builder, reqNum int, guardrailDo
 	b.WriteString("GIVEN the change touches a guarded domain\n")
 	b.WriteString("WHEN the implementation is updated\n")
 	fmt.Fprintf(b, "THEN %s guardrail requirements remain satisfied.\n", guardrailDomain)
-}
-
-func requirementNormativeSentence(objective string) string {
-	lowerObjective := strings.ToLower(strings.TrimSpace(objective))
-	if lowerObjective == "" {
-		return "The system MUST support the approved change intent."
-	}
-	if looksLikeActionPhrase(lowerObjective) {
-		return "The system MUST " + lowerObjective + "."
-	}
-	return "The system MUST support the requested change described as: " + lowerObjective + "."
-}
-
-func looksLikeActionPhrase(objective string) bool {
-	firstWord := objective
-	if fields := strings.Fields(objective); len(fields) > 0 {
-		firstWord = fields[0]
-	}
-	switch firstWord {
-	case "add", "allow", "block", "create", "deny", "detect", "disable", "document",
-		"enable", "enforce", "expire", "expose", "fix", "generate", "improve", "infer",
-		"keep", "limit", "migrate", "parse", "preserve", "prevent", "reduce", "remove",
-		"replace", "require", "reuse", "seed", "support", "track", "update", "use",
-		"validate", "verify", "write":
-		return true
-	default:
-		return false
-	}
 }
 
 func docSectionItems(section string) []string {
@@ -932,8 +938,17 @@ func ParseDecisionLockedDecisions(content string) []string {
 
 // LooksLikeTemplatePlaceholder returns true if the text looks like unedited
 // scaffold content, including seeded draft prose that still needs explicit
-// confirmation before it should satisfy governance/runtime checks.
+// confirmation before it should satisfy governance/runtime checks. It is the
+// broad matcher used by the decision/runtime and task-objective paths: a
+// superset of LooksLikeRequirementsPlaceholder (the requirements-scaffold seed
+// markers + legacy tautology lines) plus the generic decision/research/task
+// sentinels below. The requirements substance gate uses the narrower
+// LooksLikeRequirementsPlaceholder so legitimately-authored requirement prose
+// that shares a generic phrase is not false-flagged (issue #91).
 func LooksLikeTemplatePlaceholder(text string) bool {
+	if LooksLikeRequirementsPlaceholder(text) {
+		return true
+	}
 	lower := strings.ToLower(text)
 	placeholderPhrases := []string{
 		"describe the chosen approach",
@@ -950,6 +965,7 @@ func LooksLikeTemplatePlaceholder(text string) bool {
 		"pending — assess after",
 		"pending investigation",
 		"pending task objective",
+		"pending verification objective",
 		"replace with concrete",
 		"record the selected approach only after",
 		"name changed interfaces and data flows",

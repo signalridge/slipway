@@ -84,7 +84,12 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 		seen[id] = struct{}{}
 		idSet[id] = struct{}{}
 
-		if strings.TrimSpace(task.Objective) == "" {
+		objective := strings.TrimSpace(task.Objective)
+		// A placeholder objective ("Pending task objective") is, for governance
+		// purposes, a missing concrete objective — the engine seeds it and the
+		// authoring skill must replace it (issue #91). Enforced from plan-audit
+		// onward, mirroring target_files, so pre-audit drafts stay lenient.
+		if objective == "" || (enforceTargetFiles && artifact.LooksLikeTemplatePlaceholder(objective)) {
 			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_completeness_missing_objective:%s", id))
 		}
 		if !task.HasDeclaredWave() {
@@ -143,7 +148,11 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 			result.Blockers = append(result.Blockers, "plan_dimension_execution_invalid_wave_plan:"+err.Error())
 		}
 	}
-	coverageIssues := validateTaskCoverageAgainstSpec(root, change, plan)
+	coverageIssues, requirementBlockers := validateTaskCoverageAgainstSpec(root, change, plan)
+	// Requirements-validity failures are hard regardless of preset: a mechanical
+	// or non-substantive requirements.md cannot reach done (issue #91). Only the
+	// requirement-to-task coverage advisories follow the light-preset downgrade.
+	result.Blockers = append(result.Blockers, requirementBlockers...)
 	if coverageAsWarning {
 		for _, issue := range coverageIssues {
 			result.Warnings = append(result.Warnings, checklistWarningToken(issue))
@@ -167,35 +176,56 @@ func checklistWarningToken(token string) string {
 	return parts[0] + "_warning:" + parts[1]
 }
 
-func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave.TaskPlan) []string {
+// validateTaskCoverageAgainstSpec evaluates requirements.md against the task
+// plan and returns two distinct blocker sets:
+//
+//   - coverageIssues: requirement-to-task coverage advisories (missing/unknown
+//     coverage, missing stable id, unreadable spec). The light preset downgrades
+//     these to warnings.
+//   - requirementBlockers: hard requirements-validity failures that block in any
+//     preset — a structurally invalid requirements.md, or (from plan-audit
+//     onward) a non-substantive one: placeholder/seed content, a requirement body
+//     with no RFC-2119 MUST/SHALL keyword, or a requirement with no concrete
+//     scenario. A mechanical or vacuous requirements.md cannot reach done
+//     (issue #91). The umbrella blocker keeps a stable token; the detailed
+//     substance reasons are surfaced by the requirements contract in
+//     `slipway validate`.
+func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave.TaskPlan) (coverageIssues, requirementBlockers []string) {
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	specPath := artifact.ResolveArtifactPath(bundleDir, change.Slug, "requirements.md")
 	raw, err := os.ReadFile(specPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil
+			return nil, nil
 		}
-		return []string{"plan_dimension_coverage_spec_unreadable"}
+		return []string{"plan_dimension_coverage_spec_unreadable"}, nil
 	}
 
 	content := string(raw)
 	requirementBlocks := artifact.ParseRequirementBlocks(content)
 	if strings.TrimSpace(content) != "" && len(requirementBlocks) == 0 {
-		return []string{"plan_dimension_coverage_requirements_invalid"}
+		return nil, []string{"plan_dimension_coverage_requirements_invalid"}
 	}
 
 	missingStableIDs := artifact.RequirementBlocksMissingStableIDs(content)
-	blockers := make([]string, 0, len(missingStableIDs))
 	for _, name := range missingStableIDs {
-		blockers = append(blockers, "plan_dimension_coverage_requirement_id_missing:"+name)
+		coverageIssues = append(coverageIssues, "plan_dimension_coverage_requirement_id_missing:"+name)
+	}
+
+	// From plan-audit onward, requirements.md must carry real substance, not the
+	// engine's placeholder scaffold and not a structurally-present-but-vacuous
+	// requirement (no MUST/SHALL body, no concrete scenario). This is a hard
+	// validity gate independent of preset (issue #91).
+	if isAtOrPastPlanAudit(change) && len(artifact.RequirementSubstanceBlockers(content)) > 0 {
+		requirementBlockers = append(requirementBlockers, "plan_dimension_coverage_requirements_invalid")
 	}
 
 	requirementIDs := artifact.ExtractRequirementStableIDs(content)
 	if len(requirementIDs) == 0 {
-		return stringutil.UniqueSorted(blockers)
+		return stringutil.UniqueSorted(coverageIssues), stringutil.UniqueSorted(requirementBlockers)
 	}
 
 	requirementByID := make(map[string]string, len(requirementIDs))
@@ -208,11 +238,11 @@ func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave
 		for _, cover := range task.Covers {
 			requirementID := artifact.NormalizeRequirementID(cover)
 			if requirementID == "" {
-				blockers = append(blockers, fmt.Sprintf("plan_dimension_coverage_unknown_requirement:%s->%s", task.TaskID, strings.TrimSpace(cover)))
+				coverageIssues = append(coverageIssues, fmt.Sprintf("plan_dimension_coverage_unknown_requirement:%s->%s", task.TaskID, strings.TrimSpace(cover)))
 				continue
 			}
 			if _, ok := requirementByID[requirementID]; !ok {
-				blockers = append(blockers, fmt.Sprintf("plan_dimension_coverage_unknown_requirement:%s->%s", task.TaskID, requirementID))
+				coverageIssues = append(coverageIssues, fmt.Sprintf("plan_dimension_coverage_unknown_requirement:%s->%s", task.TaskID, requirementID))
 				continue
 			}
 			covered[requirementID] = true
@@ -223,9 +253,9 @@ func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave
 		if covered[requirementID] {
 			continue
 		}
-		blockers = append(blockers, "plan_dimension_coverage_missing_requirement:"+requirementID)
+		coverageIssues = append(coverageIssues, "plan_dimension_coverage_missing_requirement:"+requirementID)
 	}
-	return stringutil.UniqueSorted(blockers)
+	return stringutil.UniqueSorted(coverageIssues), stringutil.UniqueSorted(requirementBlockers)
 }
 
 // HasDependencyCycle returns true if the dependency graph contains a cycle.

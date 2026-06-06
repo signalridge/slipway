@@ -218,7 +218,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"plan_dimension_coverage_requirements_invalid": {
 		Severity: ReasonSeverityError,
-		Message:  "Requirement coverage input is invalid",
+		Message:  "requirements.md is structurally invalid or not substantive",
 	},
 	"plan_dimension_coverage_requirement_id_missing": {
 		Severity: ReasonSeverityError,

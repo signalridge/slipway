@@ -1835,6 +1835,11 @@ INT-001: finalize governed closeout
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
 ### Requirement: ShipReadyCloseout
 REQ-001: The change MUST satisfy ship-ready governance evidence before finalization.
+
+#### Scenario: Finalization requires fresh evidence
+GIVEN a change carrying ship-ready governance evidence
+WHEN finalization runs the ship gate
+THEN the change is allowed to finalize.
 `)))
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte(`# Decision
 ## Alternatives Considered
@@ -1879,7 +1884,12 @@ INT-001: test fixture intent
 `)))
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
 ### Requirement: FixtureContract
-REQ-001: The fixture must provide a valid governed bundle.
+REQ-001: The fixture MUST provide a valid governed bundle.
+
+#### Scenario: Fixture bundle validates
+GIVEN a minimal governed bundle fixture
+WHEN governed validation runs
+THEN the bundle passes structural and substance checks.
 `)))
 	if change.NeedsDiscovery {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "research.md", []byte(`## Research Findings

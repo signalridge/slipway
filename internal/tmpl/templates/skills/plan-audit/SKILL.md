@@ -53,6 +53,24 @@ Populated is not the same as relevant. For a `partial` map, also inspect
 Use `slipway-coding-discipline` as the execution-shape bar: plans should stay
 simple, goal-scoped, and sliced for surgical implementation.
 
+## Author Substance First
+The engine seeds `requirements.md` and `tasks.md` as obviously-not-real
+placeholders — it owns structure, you own substance. Before auditing, run
+`slipway validate` and read its `requirements_contract` / `tasks_contract`: a
+`plan_dimension_coverage_requirements_invalid` blocker, or an `invalid`
+contract, means the seed was never authored.
+
+When that happens, author the real content first — do not audit a placeholder:
+- `slipway instructions requirements` — template and bar: each `REQ-*` body
+  states what the system MUST, SHALL, or is REQUIRED to do (an RFC-2119
+  strong-obligation keyword), with at least one concrete `#### Scenario`
+  (real GIVEN/WHEN/THEN, no tautology).
+- `slipway instructions tasks` — template and bar: each task carries a concrete
+  objective plus `wave`, `depends_on`, `target_files`, `task_kind`, and `covers`.
+
+A mechanical or vacuous requirements/tasks file cannot reach done. Re-run
+`slipway validate` until the substance gate passes, then audit.
+
 ## Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
 - Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`

@@ -1,0 +1,31 @@
+version: 1
+slug: make-requirements-md-tasks-md-skill-authored-not-mechanicall
+description: 'Make requirements.md/tasks.md skill-authored, not mechanically seeded with fake content that passes structure-only validation (issue #91): the engine yields an obviously-not-real scaffold instead of fabricated tautology requirements/tasks, and governance validates substance (MUST/SHALL in the requirement body, a concrete non-tautological scenario, placeholder rejection) so a mechanical scaffold cannot reach done. Engine owns structure; skill owns substance.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-06T14:35:52.567514Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/make-requirements-md-tasks-md-skill-authored-not-mechanicall
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 52f520b56121eff344c59aff0fcc91f82d29687e9658926247e349c8cfe95907
+        updated_at: 2026-06-06T18:16:05.506282989Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ee9aecbc69f539c75cdff0ffae90416bca4c38e1254cdde0a0eaf658b437f46e
+        updated_at: 2026-06-06T18:13:52.534408063Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 37e4cb4b366409b397e27f001ff745714004c21d0bbd0e9109ec005ab47bb808
+        updated_at: 2026-06-06T18:19:59.028570064Z
