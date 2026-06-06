@@ -99,6 +99,7 @@ fi
 
 cat <<EOF
 <slipway-session-start tool="{{.ToolID}}">
+slipway_entry_skill: This repository is governed by Slipway. To drive any non-trivial change through the governed lifecycle, load the "{{.EntrySkill}}" skill — the entry point that routes new/next/run/done.
 ${next_json}
 ${diagnostics_text}
 ${handoff_summary}

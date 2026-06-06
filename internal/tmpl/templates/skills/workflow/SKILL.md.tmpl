@@ -1,7 +1,7 @@
 ---
 skill_id: workflow
 name: {{.PublicName}}
-description: "Use when you need the single AI-first entrypoint into Slipway: first contact with a governed repo, deciding whether to create or continue a change, or routing between `slipway status`, `slipway new`, `slipway next`, `slipway run`, and `slipway done`. Triggers on lifecycle navigation, active-change continuation, or uncertainty about which Slipway surface should own the next step."
+description: "Use when starting any non-trivial change in a Slipway-governed repo — adding a feature, fixing a bug, refactoring, schema or auth work, or any multi-step edit — to drive the work through Slipway's governed lifecycle instead of editing ad hoc; also for first contact with the repo, deciding whether to create or continue a governed change, and routing between `slipway status`, `slipway new`, `slipway next`, `slipway run`, and `slipway done`. Triggers on starting governed work, continuing an active change, or uncertainty about which Slipway surface owns the next step."
 tool: "{{.ToolID}}"
 ---
 
@@ -19,6 +19,17 @@ hand off to a more specific command surface or governed host skill.
 Slipway is a governance CLI for AI-assisted software delivery. A governed
 change is the unit of work. `done-ready` means the change has satisfied the
 workflow gates and can be finalized; `done` happens only after explicit `slipway done`.
+
+## Layered Surfaces (use the most specific one that fits)
+Slipway exposes three AI-facing layers; this skill is only the top entry:
+- **This entry skill (`{{.PublicName}}`)** — first contact and routing: decide
+  create-vs-continue and pick the right command, then leave as soon as a command
+  or governed host owns the step.
+- **Command surfaces (`slipway:<command>`)** — one per CLI command with the exact
+  arguments and contract; prefer these over re-deriving a command here.
+- **Governed host skills (`slipway-<name>`)** — the stage skills the CLI selects
+  via `slipway next`/`run` (intake, research, plan-audit, wave-orchestration,
+  review, …); never guess these, load the one the CLI returns.
 
 ## Primary Route Table
 | Situation | Command |

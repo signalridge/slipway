@@ -150,11 +150,11 @@ var commandRegistry = []CommandDef{
 			"Minimal explicit-classification example: `echo '{\"description\":\"fix typo\",\"guardrail_domain\":\"\",\"needs_discovery\":false,\"complexity\":\"simple\"}' | slipway new --json`.",
 		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--diagnostics] [--context-guard] [--change <slug>]"},
+		Arguments: "[--json] [--diagnostics] [--context-guard] [--no-auto-pass] [--change <slug>]"},
 	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
-		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
+		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
@@ -165,9 +165,9 @@ var commandRegistry = []CommandDef{
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasPromptSurface: true,
-		Arguments: "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--change <slug>]"},
+		Arguments: "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]"},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--change <slug>]",
+		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasPromptSurface: true,
 		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]"},
@@ -179,7 +179,7 @@ var commandRegistry = []CommandDef{
 	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "[--json] [--focus <alias>] [--list-focuses]",
+		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime evidence for governed execution", Tier: "situational",
 		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]",
@@ -192,7 +192,7 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
-		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--focus <alias>] [--list-focuses] [--change <slug>]",
+		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
 		Arguments:     "[--json]",
@@ -1591,7 +1591,8 @@ func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 
 func renderSessionHook(cfg ToolConfig) (string, error) {
 	data := map[string]string{
-		"ToolID": cfg.ID,
+		"ToolID":     cfg.ID,
+		"EntrySkill": workflowEntryPublicName,
 	}
 	return tmpl.Render(path.Join("hooks", "session-start.sh.tmpl"), data)
 }
@@ -1729,6 +1730,13 @@ func commandArguments(id string) string {
 		return def.Arguments
 	}
 	return "[--json]"
+}
+
+// CommandArguments returns the registry argument summary for a command ID.
+// It is the single string the generated command reference renders from, so the
+// reverse flag-contract guard asserts every registered Cobra flag appears here.
+func CommandArguments(id string) string {
+	return commandArguments(id)
 }
 
 func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
