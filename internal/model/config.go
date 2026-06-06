@@ -35,6 +35,17 @@ type ConfigGovernance struct {
 	DisabledControls []ControlID `yaml:"disabled_controls,omitempty" json:"disabled_controls,omitempty"`
 	// Thresholds overrides the blast-radius activation thresholds for controls.
 	Thresholds ConfigGovernanceThresholds `yaml:"thresholds,omitempty" json:"thresholds,omitempty"`
+	// AutoProvisionWorktree controls whether `slipway new` provisions a dedicated
+	// `.worktrees/<slug>` worktree (branch `feat/<slug>`) for every governed
+	// change so the main checkout stays free for parallel work. nil means the
+	// default (enabled); set false to keep governed changes in the project root.
+	AutoProvisionWorktree *bool `yaml:"auto_provision_worktree,omitempty" json:"auto_provision_worktree,omitempty"`
+}
+
+// AutoProvisionWorktreeEnabled reports whether governed changes should bind a
+// dedicated worktree at creation. Default (unset) is enabled.
+func (g ConfigGovernance) AutoProvisionWorktreeEnabled() bool {
+	return g.AutoProvisionWorktree == nil || *g.AutoProvisionWorktree
 }
 
 // PolicyPack registers an external advisory governance pack. Policy packs are

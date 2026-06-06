@@ -18,6 +18,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestRepairFocusFlagHelpDoesNotAdvertiseSast(t *testing.T) {
+	t.Parallel()
+	// repair removed the false-promise `sast` focus (issue #88); the --focus flag
+	// help must not keep advertising it (it was "Repair focus (e.g. sast)").
+	flag := makeRepairCmd().Flags().Lookup("focus")
+	require.NotNil(t, flag)
+	assert.NotContains(t, strings.ToLower(flag.Usage), "sast",
+		"repair --focus help must not advertise the removed sast focus, got %q", flag.Usage)
+}
+
 func TestRepairRejectsPlainGitRepoWithoutSlipwayMarkers(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

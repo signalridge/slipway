@@ -79,11 +79,10 @@ var surfacePolicy = []SurfaceRecord{
 		PublicName: "sast", BackingID: "sast-orchestration",
 		Summary: "Run SAST tooling (CodeQL/Semgrep) with SARIF triage.",
 	},
-	{
-		Command: "repair", Class: SurfaceExplicitFocus,
-		PublicName: "sast", BackingID: "sast-orchestration",
-		Summary: "Run SAST tooling (CodeQL/Semgrep) with SARIF triage.",
-	},
+	// NOTE: `repair` intentionally has no `sast` focus. repair performs bounded
+	// local-state integrity only and never runs external scanners; SAST is
+	// orchestrated via `review`/`validate --focus sast`. validateFocus redirects
+	// a `repair --focus sast` selection to those surfaces.
 	{
 		Command: "review", Class: SurfaceExplicitFocus,
 		PublicName: "calibration", BackingID: "multi-reviewer-calibration",

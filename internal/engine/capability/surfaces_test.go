@@ -64,7 +64,9 @@ func TestExplicitFocusRegistryPerCommand(t *testing.T) {
 	}{
 		{command: "review", want: []string{"calibration", "sast"}},
 		{command: "validate", want: []string{"mutation", "property", "sast", "spec-trace"}},
-		{command: "repair", want: []string{"sast"}},
+		// repair intentionally exposes NO explicit focus (issue #88): it never
+		// runs external scanners, so the false `sast` focus was removed.
+		{command: "repair", want: []string{}},
 	}
 
 	for _, tc := range cases {

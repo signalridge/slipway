@@ -235,3 +235,55 @@ func runGit(t *testing.T, dir string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 }
+
+func initGitRepoAt(t *testing.T, root string) {
+	t.Helper()
+	runGit(t, root, "init", "--initial-branch=main")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "Test User")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("hello"), 0o644))
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "init")
+}
+
+func TestEnsureDefaultWorktreeForChange_ProvisionsNonDiscoveryByDefault(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+
+	// A non-discovery change is exactly the case that used to be skipped with
+	// "discovery_not_required" and run its whole lifecycle in the main checkout.
+	change := model.NewChange("my-change")
+	change.NeedsDiscovery = false
+
+	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.NoError(t, err)
+	assert.True(t, binding.Created, "non-discovery change should provision a worktree by default")
+	assert.Empty(t, binding.SkippedReason)
+	assert.Equal(t, "feat/my-change", binding.Branch)
+	assert.Contains(t, filepath.ToSlash(binding.Path), ".worktrees/my-change")
+	assert.NotEmpty(t, change.WorktreePath, "binding metadata must be persisted on the change")
+}
+
+func TestEnsureDefaultWorktreeForChange_DisabledByConfig(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"),
+		[]byte("governance:\n  auto_provision_worktree: false\n"), 0o644))
+
+	change := model.NewChange("my-change")
+	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.NoError(t, err)
+	assert.False(t, binding.Created)
+	assert.Equal(t, "worktree_provisioning_disabled", binding.SkippedReason)
+	assert.Empty(t, change.WorktreePath)
+}
+
+func TestEnsureDefaultWorktreeForChange_SkipsNonGitRepo(t *testing.T) {
+	root := t.TempDir() // never `git init`ed
+
+	change := model.NewChange("my-change")
+	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.NoError(t, err)
+	assert.Equal(t, "not_git_repository", binding.SkippedReason)
+	assert.False(t, binding.Created)
+}

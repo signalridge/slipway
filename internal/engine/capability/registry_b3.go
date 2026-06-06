@@ -26,14 +26,15 @@ func sastOrchestration() Skill {
 		Function:          "run SAST tooling (CodeQL/Semgrep) with SARIF triage",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentToolRecipe,
-		Summary:           "Use when running SAST tooling against the change. Triggers on review, validate, or repair commands and user text naming SAST tools.",
-		Evidence:          EvidenceArtifact, // Explicit-focus backing for `--focus sast` on review / validate /
-		// repair (resolved via surfaces.go). Command-auto bindings also let
-		// the skill appear in suggested_capabilities[] when SAST triggers fire.
+		Summary:           "Use when running SAST tooling against the change. Triggers on review or validate commands and user text naming SAST tools.",
+		Evidence:          EvidenceArtifact, // Explicit-focus backing for `--focus sast` on review /
+		// validate (resolved via surfaces.go). repair is intentionally excluded:
+		// it performs bounded local-state integrity only and never runs scanners.
+		// Command-auto bindings also let the skill appear in suggested_capabilities[]
+		// when SAST triggers fire.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentToolRecipe},
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentToolRecipe},
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "codeql-ruleset-catalog.md", Reason: "Pick a CodeQL query pack, threat model, language caveat, and build-fix path"},

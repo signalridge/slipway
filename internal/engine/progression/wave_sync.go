@@ -159,11 +159,26 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
 		executionSummary.SyncDerivedFields()
 	}
+	// Make incomplete-execution blockers durable in the summary's OpenBlockers so
+	// read-only readiness (validate/next/status) surfaces them too. Once a
+	// "ready" summary exists, refineS2WaveExecutionSkillBlockers short-circuits
+	// the preview path, so a returned-only blocker would vanish from read-only
+	// surfaces after the partial summary is written (issue #95 REQ-001).
+	// Suppressed under plan-drift, which owns its own remediation.
+	var incompleteBlockers []model.ReasonCode
+	if len(planDriftBlockers) == 0 {
+		incompleteBlockers = IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
+		if len(incompleteBlockers) > 0 {
+			executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, incompleteBlockers...))
+			executionSummary.SyncDerivedFields()
+		}
+	}
 	if !mutate {
 		runs := executionSummary.TaskRunMap()
 		blockers := model.ReasonCodesFromSpecs(parseIssues)
 		blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 		blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
+		blockers = append(blockers, incompleteBlockers...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
 	}
 
@@ -204,6 +219,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	blockers := model.ReasonCodesFromSpecs(parseIssues)
 	blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 	blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
+	blockers = append(blockers, incompleteBlockers...)
 	return WaveSyncResult{
 		Updated:  updated,
 		Blockers: model.NormalizeReasonCodes(blockers),
@@ -534,6 +550,42 @@ func CollectNonPassTaskBlockers(runs map[string]model.TaskRun) []model.ReasonCod
 		for _, blocker := range run.Blockers {
 			blockers = append(blockers, taskScopedReasonCode("task_blocker", taskID, blocker))
 		}
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// IncompleteExecutionTaskBlockers reports planned wave-plan tasks that have no
+// recorded run at the active run_summary_version. The wave-plan is the authority
+// for the full task set, so a task missing from runs has no task evidence at all
+// — distinct from a recorded-but-failing task, which CollectNonPassTaskBlockers
+// reports. Without this check a host that records evidence for only the early
+// tasks would let wave-orchestration "pass" and advance S2_EXECUTE -> S3_REVIEW
+// while later planned tasks were never executed (issue #95). The remedy is to
+// execute and record the named task, or rescope tasks.md so the plan no longer
+// claims it.
+func IncompleteExecutionTaskBlockers(plan model.WavePlan, runs map[string]model.TaskRun) []model.ReasonCode {
+	plannedIDs := plan.TaskIDs()
+	if len(plannedIDs) == 0 {
+		return nil
+	}
+	missing := make([]string, 0, len(plannedIDs))
+	for _, taskID := range plannedIDs {
+		taskID = strings.TrimSpace(taskID)
+		if taskID == "" {
+			continue
+		}
+		if _, ok := runs[taskID]; ok {
+			continue
+		}
+		missing = append(missing, taskID)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	slices.Sort(missing)
+	blockers := make([]model.ReasonCode, 0, len(missing))
+	for _, taskID := range missing {
+		blockers = append(blockers, model.NewReasonCode("incomplete_execution_task", taskID))
 	}
 	return model.NormalizeReasonCodes(blockers)
 }

@@ -73,9 +73,26 @@ Also block:
 - `pass`: every criterion passes at Exists, Substantive, and Wired levels
 - `fail`: any criterion is `fail` or `blocked`
 - Populate `blockers[]` with failed criterion IDs
-- Run guardrail high-risk checks when applicable
+- Run guardrail high-risk checks when applicable (see Guardrail Safety Baseline)
 - Use fresh test execution, not cached output
 - For performance or regression claims, require baseline and candidate measurements from the same environment
+
+## Guardrail Safety Baseline
+When the change has a guardrail domain (`skill_constraints.guardrail_domain` is
+set), the ship gate requires a `<domain>.safety_baseline` high-risk check, and
+this skill is its producer. `slipway next` lists the exact token(s) under
+`skill_constraints.required_high_risk_tokens`.
+
+1. Run SAST against the change — hydrate the recipe with
+   `slipway validate --focus sast` (CodeQL/Semgrep), then triage the findings.
+2. Record the verdict as a reference in THIS verification record:
+   - `high_risk_check:<domain>.safety_baseline=pass` — baseline clean / findings mitigated.
+   - `high_risk_check:<domain>.safety_baseline=fail` — unmitigated findings; this blocks ship.
+
+The verdict must reflect a real SAST run. A missing token leaves the ship gate
+blocked with `high_risk_check_missing`; there is no other satisfy-path and no
+bypass. This is the only way the gate is satisfied — do not invent a different
+reference format.
 
 ## Write Verification
 ```yaml
@@ -87,6 +104,7 @@ run_version: 1
 references:
   - "fresh:command_ref=<path or transcript ref>"
   - "scope_contract:pass"
+  - "high_risk_check:<domain>.safety_baseline=pass"   # required when guardrail_domain is set
 notes: |
   Criteria:
     AC-1: <criterion text> — pass — <concrete proof>
@@ -102,10 +120,13 @@ After confirmation: `slipway next`
 1. Fresh verification record, not cached evidence.
 2. Evidence-backed claims only.
 3. Scope Contract pass/fail/not-applicable statement when contract evidence exists.
-4. Guardrail high-risk checks when applicable.
+4. Guardrail high-risk checks when applicable, recording the
+   `high_risk_check:<domain>.safety_baseline` reference from a real SAST run.
 
 ## Block If
 - A criterion lacks fresh evidence.
 - The implementation is stubbed, placeholder-only, or unwired.
 - Scope Contract evidence exists and reports fail without an accepted amendment or rollback.
-- Guardrail-domain proof or performance proof is missing for a claimed outcome.
+- A guardrail domain is set but the `high_risk_check:<domain>.safety_baseline`
+  reference (from a real SAST run) is missing or `=fail`.
+- Performance proof is missing for a claimed outcome.

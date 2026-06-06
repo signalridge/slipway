@@ -124,6 +124,11 @@ type skillConstraints struct {
 	GuardrailDomain  string   `json:"guardrail_domain,omitempty"`
 	MitigationTarget string   `json:"mitigation_target,omitempty"`
 	RunSummaryBound  bool     `json:"run_summary_bound,omitempty"`
+	// RequiredHighRiskTokens lists the exact reference tokens the goal-verification
+	// host must record (from a real SAST run) to satisfy the ship gate's high-risk
+	// checks when the change has a guardrail domain. Populated only for the
+	// goal-verification handoff so the next agent never has to guess the format.
+	RequiredHighRiskTokens []string `json:"required_high_risk_tokens,omitempty"`
 }
 
 type techniqueHint struct {

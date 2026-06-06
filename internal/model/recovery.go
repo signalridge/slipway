@@ -162,14 +162,19 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"high_risk_check_failed": {
-		Remediation:     "Resolve the named high-risk safety check failure before continuing.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "The high-risk safety check {subject} failed in goal-verification; fix the SAST findings, re-run goal-verification, and record `high_risk_check:{subject}=pass` in its References before continuing.",
+		CommandTemplate: "slipway validate --focus sast",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"high_risk_check_missing": {
-		Remediation:     "Provide the named high-risk safety check before continuing.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Record the required high-risk safety check {subject} from goal-verification: run SAST (e.g. `slipway validate --focus sast`), triage findings, then add `high_risk_check:{subject}=pass` to the goal-verification References (use `=fail` to block ship); then continue.",
+		CommandTemplate: "slipway validate --focus sast",
 		Class:           RecoveryClassSatisfyControl,
+	},
+	"incomplete_execution_task": {
+		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or rescope tasks.md to drop it, then re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
 	},
 	"intake_confirmation_incomplete": {
 		Remediation:     "Complete the Approved Summary in intent.md before continuing.",
