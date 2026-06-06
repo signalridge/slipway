@@ -79,6 +79,26 @@ map-consuming planning skill (research-orchestration or plan-audit) is next and
 the status is `scaffold_only` or `baseline`, `warnings` carries a non-blocking
 codebase-map advisory.
 
+## Output And Hydration Flags
+
+Query and review commands share a consistent output-and-hydration surface, kept
+aligned with the CLI by a reverse flag-contract test:
+
+- `--format <text|yaml|json>` — `status` supports the full set; `review`,
+  `validate`, `repair`, and `health` use `--format` only to shape
+  `--list-focuses` output (`text|json`). `--json` is shorthand for
+  `--format json` where supported.
+- `--hydrate` / `--hydrate-ref <skill-id>/<name>` — `status`, `review`, and
+  `health` append selected hydrate reference bodies to text output;
+  `--hydrate-ref` restricts hydration to a named reference (repeatable).
+- `status --root` prints the canonical Slipway scope root; `status --stats`
+  shows workspace diagnostics (active count, stale summaries, integrity issues).
+- `next --no-auto-pass` reports skill eligibility instead of auto-passing;
+  `next --context-guard` emits context-budget guard messages in hook format.
+- `done --all-ready` archives every active change that is currently done-ready.
+- `pivot --reroute` refreshes the discovery decision; `pivot --rescope` returns
+  to discovery to modify scope boundaries.
+
 ## Useful JSON Invocations
 
 ```bash

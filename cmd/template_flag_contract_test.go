@@ -152,3 +152,78 @@ func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *test
 		assert.Contains(t, string(raw), "--change <slug>", "generated command entry for %s must surface the explicit change selector", id)
 	}
 }
+
+// TestCobraFlagsCoveredByRegistryArguments is the reverse contract of
+// TestTemplateFlagsMatchCobraCommands. The forward test prevents a template
+// from naming a flag that does not exist; this reverse test prevents a real
+// Cobra flag from silently dropping out of the generated command reference.
+// Every non-hidden, non-help flag a command registers MUST appear in that
+// command's toolgen.CommandArguments(id) string (the source the reference and
+// codex prompts render from), unless it is explicitly exempted below.
+func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
+	t.Parallel()
+
+	cmds := map[string]*cobra.Command{
+		"new":          makeNewCmd(),
+		"next":         makeNextCmd(),
+		"run":          makeRunCmd(),
+		"status":       makeStatusCmd(),
+		"done":         makeDoneCmd(),
+		"init":         makeInitCmd(),
+		"cancel":       makeCancelCmd(),
+		"review":       makeReviewCmd(),
+		"validate":     makeValidateCmd(),
+		"checkpoint":   makeCheckpointCmd(),
+		"preset":       makePresetCmd(),
+		"pivot":        makePivotCmd(),
+		"abort":        makeAbortCmd(),
+		"repair":       makeRepairCmd(),
+		"evidence":     makeEvidenceCmd(),
+		"learn":        makeLearnCmd(),
+		"stats":        makeStatsCmd(),
+		"health":       makeHealthCmd(),
+		"codebase-map": makeCodebaseMapCmd(),
+	}
+
+	// Flags intentionally omitted from the human-facing Arguments summary.
+	// Keep this list small and justified — it is the only sanctioned way for a
+	// real flag to be absent from the reference.
+	exempt := map[string]map[string]bool{
+		"review": {"artifact": true}, // documented as "unsupported in MVP"
+	}
+
+	for id, cmd := range cmds {
+		args := toolgen.CommandArguments(id)
+		require.NotEmptyf(t, args, "registry Arguments missing for command %q", id)
+		for name := range collectVisibleFlags(cmd) {
+			if name == "help" || exempt[id][name] {
+				continue
+			}
+			// Bound the match so "--hydrate" is not satisfied by "--hydrate-ref".
+			re := regexp.MustCompile("--" + regexp.QuoteMeta(name) + "([^a-zA-Z0-9-]|$)")
+			assert.Truef(t, re.MatchString(args),
+				"command %q registers flag --%s but it is absent from registry Arguments %q; add it to commandRegistry[%q].Arguments or to the exemption list",
+				id, name, args, id)
+		}
+	}
+}
+
+// collectVisibleFlags is collectCommandFlags restricted to non-hidden flags,
+// recursing into subcommands (e.g. `evidence task`).
+func collectVisibleFlags(cmd *cobra.Command) map[string]bool {
+	flags := map[string]bool{}
+	if cmd == nil {
+		return flags
+	}
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if !f.Hidden {
+			flags[f.Name] = true
+		}
+	})
+	for _, child := range cmd.Commands() {
+		for name := range collectVisibleFlags(child) {
+			flags[name] = true
+		}
+	}
+	return flags
+}
