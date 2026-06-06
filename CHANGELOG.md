@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/signalridge/slipway/compare/v0.8.0...v0.9.0) (2026-06-06)
+
+
+### Features
+
+* **toolgen:** align generated surfaces with real cobra flags; redesign entry skill ([#103](https://github.com/signalridge/slipway/issues/103)) ([d466a14](https://github.com/signalridge/slipway/commit/d466a14ec80e6dfa973af30572d71df20f48f50c))
+
+
+### Bug Fixes
+
+* **progression:** reopen to S2_EXECUTE when the Scope Contract fails ([#102](https://github.com/signalridge/slipway/issues/102)) ([7623d94](https://github.com/signalridge/slipway/commit/7623d949755595ede2c83598b9cfea29b89e3499))
+
 ## [0.8.0](https://github.com/signalridge/slipway/compare/v0.7.0...v0.8.0) (2026-06-06)
 
 
