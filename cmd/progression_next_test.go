@@ -1386,7 +1386,12 @@ func TestNextAdvancesWithPlanAuditEvidence(t *testing.T) {
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte(`# Requirements
 
 ### Requirement: Plan Audit
-REQ-001: The plan audit path must advance only when the task checklist is valid.
+REQ-001: The plan audit path MUST advance only when the task checklist is valid.
+
+#### Scenario: Advance only on a valid checklist
+GIVEN a governed change with passing plan-audit evidence and a valid task checklist
+WHEN next evaluates planning readiness
+THEN the change advances to S2_EXECUTE.
 `)))
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [ ] `+"`t-01`"+` implement plan audit checks

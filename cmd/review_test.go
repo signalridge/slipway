@@ -287,7 +287,12 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 
 ### Requirement: ReviewContract
 
-REQ-001: The system must preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+
+#### Scenario: Verify-state preserved on valid review
+GIVEN a governed change at S4_VERIFY with valid review prerequisites
+WHEN the review runs
+THEN the governed verify-state is preserved.
 `), 0o644))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -341,7 +346,12 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 
 ### Requirement: ReviewContract
 
-REQ-001: The system must preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+
+#### Scenario: Verify-state preserved on valid review
+GIVEN a governed change at S4_VERIFY with valid review prerequisites
+WHEN the review runs
+THEN the governed verify-state is preserved.
 `), 0o644))
 
 		now := time.Now().UTC()
@@ -428,7 +438,12 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
 
 ### Requirement: ReviewContract
 
-REQ-001: The system must preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+
+#### Scenario: Verify-state preserved on valid review
+GIVEN a governed change at S4_VERIFY with valid review prerequisites
+WHEN the review runs
+THEN the governed verify-state is preserved.
 `), 0o644))
 
 		now := time.Now().UTC()

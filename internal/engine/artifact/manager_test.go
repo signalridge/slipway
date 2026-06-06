@@ -518,8 +518,16 @@ func TestScaffoldGovernedBundleSeedsRequirementsDraft(t *testing.T) {
 	require.NoError(t, err)
 	content := string(raw)
 
+	// Structure is seeded (heading + stable REQ id) ...
 	require.Contains(t, content, "REQ-001")
 	require.NotContains(t, content, "Add requirements using")
+	// ... but the engine no longer fabricates substance: the default seed is an
+	// honest, obviously-not-real placeholder that the substance gate rejects.
+	require.True(t, LooksLikeTemplatePlaceholder(content),
+		"default-seeded requirements must read as a placeholder")
+	require.NotContains(t, content, "the relevant workflow is exercised")
+	require.NotContains(t, content, "the expected behavior for")
+	require.NotContains(t, content, "The system MUST")
 }
 
 func TestScaffoldGovernedBundleSeedsDecisionDraft(t *testing.T) {

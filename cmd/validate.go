@@ -38,7 +38,8 @@ type validateView struct {
 	EvidenceFreshness         string                               `json:"evidence_freshness"`
 	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
 	ActionableNextSkill       *actionableNextSkillView             `json:"actionable_next_skill,omitempty"`
-	RequirementsContract      *requirementsContractView            `json:"requirements_contract,omitempty"`
+	RequirementsContract      *artifactContractView                `json:"requirements_contract,omitempty"`
+	TasksContract             *artifactContractView                `json:"tasks_contract,omitempty"`
 	ScopeContract             *scopeContractView                   `json:"scope_contract,omitempty"`
 	Diagnostics               []string                             `json:"diagnostics,omitempty"`
 	Mode                      string                               `json:"mode,omitempty"`
@@ -54,7 +55,9 @@ type actionableNextSkillView struct {
 	RequiredTokens   []string `json:"required_tokens,omitempty"`
 }
 
-type requirementsContractView struct {
+// artifactContractView is the read-only projection of an artifact substance
+// contract. It backs both the requirements_contract and tasks_contract fields.
+type artifactContractView struct {
 	Status  string `json:"status"`
 	Source  string `json:"source,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -221,14 +224,23 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 		return view, nil
 	}
 
-	var requirementsContract *requirementsContractView
+	var requirementsContract *artifactContractView
+	var tasksContract *artifactContractView
 	if bundleDir, err := state.GovernedBundleDir(root, change); err == nil {
 		contract, err := artifact.EvaluateRequirementsContract(bundleDir, change.Slug)
 		if err == nil {
-			requirementsContract = &requirementsContractView{
+			requirementsContract = &artifactContractView{
 				Status:  string(contract.Status),
 				Source:  contract.Source,
 				Message: contract.Message,
+			}
+		}
+		tasks, err := artifact.EvaluateTasksContract(bundleDir, change.Slug)
+		if err == nil {
+			tasksContract = &artifactContractView{
+				Status:  string(tasks.Status),
+				Source:  tasks.Source,
+				Message: tasks.Message,
 			}
 		}
 	}
@@ -270,6 +282,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.GovernanceForecast = presetFields.GovernanceForecast
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.RequirementsContract = requirementsContract
+	view.TasksContract = tasksContract
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)

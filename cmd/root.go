@@ -66,6 +66,7 @@ var helpGroups = []commandGroup{
 			{Name: "learn", Description: desc("learn")},
 			{Name: "stats", Description: desc("stats")},
 			{Name: "health", Description: desc("health")},
+			{Name: "instructions", Description: desc("instructions")},
 		},
 	},
 	{
@@ -158,6 +159,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeLearnCmd())
 	cmd.AddCommand(makeStatsCmd())
 	cmd.AddCommand(makeHealthCmd())
+	cmd.AddCommand(makeInstructionsCmd())
 	cmd.AddCommand(makeRootPathCmd())
 	cmd.AddCommand(makeDoneCmd())
 	cmd.AddCommand(makeAbortCmd())

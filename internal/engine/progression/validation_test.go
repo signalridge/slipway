@@ -198,10 +198,18 @@ func TestValidateTasksChecklistDetailed_DowngradesOptionalFieldsAndCoverageToWar
   - depends_on: []
   - target_files: [main.go]
 `), 0o644))
+	// Substantive requirements (MUST body + concrete scenario) so this test
+	// isolates the light-preset coverage downgrade from the substance gate
+	// (issue #91): the only advisory left is REQ-001 being uncovered by t-01.
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`## Requirements
 
 ### Requirement: Auth
-REQ-001: The system must authenticate requests.
+REQ-001: The system MUST authenticate requests.
+
+#### Scenario: Rejects anonymous request
+GIVEN a request without credentials
+WHEN it reaches a protected route
+THEN the system returns 401.
 `), 0o644))
 
 	change := model.Change{
@@ -227,6 +235,129 @@ REQ-001: The system must authenticate requests.
 			t.Fatalf("expected warning %s, got %v", want, result.Warnings)
 		}
 	}
+}
+
+func TestValidateTasksChecklistDetailed_RejectsMechanicalScaffoldAtPlanAudit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("mechanical-reject")
+	change.Description = "do the thing"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, model.WorkflowPresetStandard))
+
+	// At plan-audit, the engine's placeholder scaffold must fail closed:
+	// placeholder task objective + placeholder requirements (issue #91).
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
+
+	result := ValidateTasksChecklistDetailed(root, change)
+
+	hasObjective, hasReq := false, false
+	for _, b := range result.Blockers {
+		if b == "plan_dimension_completeness_missing_objective:t-01" {
+			hasObjective = true
+		}
+		if b == "plan_dimension_coverage_requirements_invalid" {
+			hasReq = true
+		}
+	}
+	require.True(t, hasObjective, "placeholder task objective must block at plan-audit, got %v", result.Blockers)
+	require.True(t, hasReq, "placeholder requirements must block at plan-audit, got %v", result.Blockers)
+}
+
+func writeSubstanceGateBundle(t *testing.T, root, slug, requirements string) {
+	t.Helper()
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement auth flow
+  - wave: 1
+  - depends_on: []
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(requirements), 0o644))
+}
+
+// Issue #91 (P1): from plan-audit onward the requirements substance gate is a
+// hard blocker — not advisory — and is independent of the workflow preset. A
+// requirement that is non-placeholder yet non-substantive (a MUST body with no
+// concrete scenario, or a body with no RFC-2119 keyword) must block, and the
+// light preset must NOT downgrade that validity failure to a warning.
+func TestValidateTasksChecklistDetailed_RequirementsSubstanceGateIsHardAtPlanAudit(t *testing.T) {
+	t.Parallel()
+
+	const substantive = `## Requirements
+
+### Requirement: Auth
+REQ-001: The system MUST authenticate requests.
+
+#### Scenario: Rejects anonymous request
+GIVEN a request without credentials
+WHEN it reaches a protected route
+THEN the system returns 401.
+`
+	const noScenario = `## Requirements
+
+### Requirement: Auth
+REQ-001: The system MUST authenticate requests.
+`
+	const noNormative = `## Requirements
+
+### Requirement: Auth
+REQ-001: The system handles authentication for requests.
+`
+
+	planAudit := func(slug string, preset model.WorkflowPreset) model.Change {
+		return model.Change{
+			Slug:           slug,
+			WorkflowPreset: preset,
+			CurrentState:   model.StateS1Plan,
+			PlanSubStep:    model.PlanSubStepAudit,
+		}
+	}
+	contains := func(s []string, want string) bool {
+		for _, v := range s {
+			if v == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("MUST body with no concrete scenario blocks", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSubstanceGateBundle(t, root, "sub-no-scenario", noScenario)
+		result := ValidateTasksChecklistDetailed(root, planAudit("sub-no-scenario", model.WorkflowPresetStandard))
+		require.True(t, contains(result.Blockers, "plan_dimension_coverage_requirements_invalid"),
+			"a non-placeholder requirement with no concrete scenario must block at plan-audit, got %v", result.Blockers)
+	})
+
+	t.Run("substantive requirements pass", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSubstanceGateBundle(t, root, "sub-ok", substantive)
+		result := ValidateTasksChecklistDetailed(root, planAudit("sub-ok", model.WorkflowPresetStandard))
+		require.False(t, contains(result.Blockers, "plan_dimension_coverage_requirements_invalid"),
+			"substantive requirements must not trip the substance gate, got %v", result.Blockers)
+	})
+
+	t.Run("light preset does not downgrade the substance gate", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+		writeSubstanceGateBundle(t, root, "sub-light", noNormative)
+		result := ValidateTasksChecklistDetailed(root, planAudit("sub-light", model.WorkflowPresetLight))
+		require.True(t, contains(result.Blockers, "plan_dimension_coverage_requirements_invalid"),
+			"requirements validity must stay a hard blocker under the light preset, got blockers=%v warnings=%v", result.Blockers, result.Warnings)
+		require.False(t, contains(result.Warnings, "plan_dimension_coverage_requirements_invalid_warning"),
+			"requirements validity must not be downgraded to a warning, got warnings=%v", result.Warnings)
+	})
 }
 
 func TestValidateTasksChecklistDetailed_ScaffoldedGuardrailRequirementsStayCovered(t *testing.T) {

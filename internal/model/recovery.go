@@ -262,8 +262,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"plan_dimension_coverage_requirements_invalid": {
-		Remediation:     "Fix invalid requirements.md requirement identifiers, then re-run validation.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author requirements.md substance: each requirement needs a stable REQ-* id, a normative MUST/SHALL body, and at least one concrete scenario. Run `slipway instructions requirements` for the template and bar, then re-run validation.",
+		CommandTemplate: "slipway instructions requirements",
 		Class:           RecoveryClassFixScope,
 	},
 	"plan_dimension_coverage_requirement_id_missing": {

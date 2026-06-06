@@ -22,6 +22,10 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	assert.Contains(t, help, "Create or refresh the durable repo-scoped codebase map")
 	assert.Contains(t, help, "Show repo-wide governance freshness and workflow statistics")
 	assert.Contains(t, help, "Show repo-local integrity and repairability findings")
+	// Issue #91 (P2b): the new public authoring surface must be discoverable from
+	// the main `slipway help` path, not only docs/toolgen.
+	assert.Contains(t, help, "instructions")
+	assert.Contains(t, help, "Show the template and authoring guidance for a governed artifact")
 	assert.Contains(t, help, "Finalize a done-ready change and archive it")
 	assert.NotContains(t, help, "completed change")
 	assert.NotContains(t, help, "Auto-classify advisory versus governed work")

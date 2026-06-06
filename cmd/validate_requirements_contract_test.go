@@ -29,7 +29,12 @@ func TestValidateIncludesRequirementsContractForGovernedChange(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
 
 ### Requirement: Auth
-REQ-001: The system must authenticate requests.
+REQ-001: The system MUST authenticate requests before serving protected routes.
+
+#### Scenario: Unauthenticated request is rejected
+GIVEN a request without valid credentials
+WHEN it reaches a protected route
+THEN the system returns 401 and does not serve the resource.
 `), 0o644))
 
 		view, err := buildValidateViewForSlug(root, slug)
