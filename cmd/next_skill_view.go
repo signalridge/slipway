@@ -302,6 +302,18 @@ func assembleSkillViewWithOptions(
 		}
 	}
 
+	// Codebase-map relevance self-check (#80): a populated/partial map reflects
+	// content presence, not scope relevance, and can be consumed stale at any
+	// durable-map consumer — including wave-orchestration at S2_EXECUTE, the exact
+	// handoff issue #80 reproduces — so this fires independent of lifecycle state.
+	// It is disjoint by status from the S1 consume/discovery advisories above
+	// (those own scaffold_only/baseline/missing), so it never double-fires.
+	if governedChange != nil {
+		if advisory := codebaseMapRelevanceAdvisory(view.InputContext.CodebaseMapStatus, nextSkillName); advisory != "" {
+			view.Warnings = append(view.Warnings, advisory)
+		}
+	}
+
 	// Auto capability resolver: attach B1 catalog-skill hints on top of the
 	// kernel's host selection. Never changes the next skill chosen by
 	// ResolveNextSkill; only enriches TechniqueHints.
@@ -356,8 +368,10 @@ func codebaseMapStatusHasNoDurableDocs(status string) bool {
 // populated/partial/missing maps and for non-consuming skills. The wording adds
 // consume-time framing rather than restating the empty-map hint's "no durable
 // docs" text, so for scaffold_only — where both the hint and the advisory fire —
-// the two stay complementary, not contradictory. partial intentionally carries no
-// whole-map advisory; its non-durable docs surface via codebase_map_doc_states.
+// the two stay complementary, not contradictory. partial carries no CONSUME
+// advisory here because it is a durable status owned by
+// codebaseMapRelevanceAdvisory instead (populated/partial); for a partial map
+// that advisory routes the host to codebase_map_doc_states for the per-doc gaps.
 func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 	switch nextSkillName {
 	case progression.SkillResearchOrchestration, progression.SkillPlanAudit:
@@ -370,6 +384,45 @@ func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 			"codebase_map_advisory: %s is consuming a non-durable codebase map (status: %s); refine artifacts/codebase with source-backed findings before relying on it as reviewed context, or inspect input_context.codebase_map_doc_states for per-doc gaps.",
 			nextSkillName, status,
 		)
+	default:
+		return ""
+	}
+}
+
+// codebaseMapRelevanceAdvisory returns a non-blocking advisory when a durable-map
+// consumer is next and the codebase map is durable (populated or partial). The
+// consumers are research-orchestration and plan-audit (S1_PLAN) and
+// wave-orchestration (S2_EXECUTE) — the same set the codebase-mapping skill names
+// as SHOULD-consume — so the advisory fires at the exact handoff issue #80
+// reproduces: a stale populated map consumed at wave-orchestration. The map status
+// reflects content presence, not scope relevance — a map authored for a prior
+// change still reads `populated` — so Slipway cannot tell whether the map matches
+// THIS change. The engine only surfaces the trigger; the host AI owns the semantic
+// relevance judgment and the inline refresh (re-author the relevant docs in
+// artifacts/codebase in place; the assessment re-reads them on every run). For a
+// partial map the advisory also routes the host to codebase_map_doc_states to
+// complete the unfinished docs. It is disjoint by status from the non-durable
+// consume advisory (scaffold_only/baseline), so at most one codebase_map_advisory
+// fires.
+func codebaseMapRelevanceAdvisory(status, nextSkillName string) string {
+	switch nextSkillName {
+	case progression.SkillResearchOrchestration, progression.SkillPlanAudit, progression.SkillWaveOrchestration:
+	default:
+		return ""
+	}
+	switch status {
+	case artifact.CodebaseMapStatusPopulated, artifact.CodebaseMapStatusPartial:
+		advisory := fmt.Sprintf(
+			"codebase_map_advisory: %s is consuming a codebase map whose status (%s) reflects content presence, not scope relevance — it may have been authored for a prior change. Judge whether its affected seams, blast radius, and concerns match THIS change's scope, and re-author any stale sections in artifacts/codebase inline before relying on it.",
+			nextSkillName, status,
+		)
+		// A partial map mixes durable and non-durable docs; route the host to the
+		// per-doc states so it completes the unfinished set, matching the consuming
+		// skills' guidance. A populated map has no per-doc gaps, so it is omitted.
+		if status == artifact.CodebaseMapStatusPartial {
+			advisory += " It is partial: inspect input_context.codebase_map_doc_states and complete any scaffold_only/baseline/missing doc."
+		}
+		return advisory + " Advisory only — this does not block progression."
 	default:
 		return ""
 	}

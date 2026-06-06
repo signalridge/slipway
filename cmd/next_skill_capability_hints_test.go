@@ -50,6 +50,44 @@ func TestCodebaseMapConsumeAdvisoryMatrix(t *testing.T) {
 	assert.NotContains(t, advisory, "No durable codebase-map documents found")
 }
 
+// TestCodebaseMapRelevanceAdvisoryMatrix pins #80: the relevance advisory fires
+// for durable (populated/partial) maps consumed by research-orchestration or
+// plan-audit, is absent for non-consuming skills, and does not fire for the
+// non-durable statuses owned by the consume advisory.
+func TestCodebaseMapRelevanceAdvisoryMatrix(t *testing.T) {
+	t.Parallel()
+	// All durable-map consumers — including wave-orchestration (S2), the exact
+	// handoff issue #80 reproduces — receive the relevance advisory.
+	for _, skillName := range []string{
+		progression.SkillResearchOrchestration,
+		progression.SkillPlanAudit,
+		progression.SkillWaveOrchestration,
+	} {
+		for _, status := range []string{artifact.CodebaseMapStatusPopulated, artifact.CodebaseMapStatusPartial} {
+			adv := codebaseMapRelevanceAdvisory(status, skillName)
+			assert.NotEmpty(t, adv, "%s consumed by %s should surface a relevance advisory", status, skillName)
+			assert.Contains(t, adv, "reflects content presence, not scope relevance")
+			assert.Contains(t, adv, "does not block progression")
+		}
+		// A partial map mixes durable and non-durable docs, so the advisory routes
+		// the host to the per-doc states; a populated map has no gaps, so it omits
+		// that clause. This keeps the runtime message aligned with the skill docs.
+		assert.Contains(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPartial, skillName),
+			"codebase_map_doc_states", "partial advisory must route to per-doc states")
+		assert.NotContains(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPopulated, skillName),
+			"codebase_map_doc_states", "populated advisory must not mention per-doc states")
+		// Non-durable statuses belong to the consume advisory, not this one.
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusScaffoldOnly, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusBaseline, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusMissing, skillName))
+	}
+	// Non-consuming skills never receive the relevance advisory.
+	for _, skillName := range []string{progression.SkillIntakeClarification, progression.SkillGoalVerification, ""} {
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPopulated, skillName))
+		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPartial, skillName))
+	}
+}
+
 // TestCodebaseMapStatusHasNoDurableDocs pins the empty-map technique-hint set:
 // it fires for missing/scaffold_only and not for baseline/partial/populated.
 func TestCodebaseMapStatusHasNoDurableDocs(t *testing.T) {
@@ -128,6 +166,24 @@ go 1.26.3
 	assessment, err := artifact.AssessCodebaseMapDocs(root)
 	require.NoError(t, err)
 	require.Equal(t, artifact.CodebaseMapStatusBaseline, assessment.Status)
+}
+
+// writePartialCodebaseMapDocs writes a source-backed subset and leaves the rest
+// missing so AssessCodebaseMapDocs classifies the whole map as partial — the
+// mixed durable/non-durable case the relevance advisory must still fire for and
+// the one the consume advisory deliberately skips.
+func writePartialCodebaseMapDocs(t *testing.T, root string) {
+	t.Helper()
+	dir := state.CodebaseMapDir(root)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	for _, name := range []string{"STACK.md", "ARCHITECTURE.md", "STRUCTURE.md", "CONCERNS.md"} {
+		body := "# " + strings.TrimSuffix(name, ".md") + "\n- Reviewed: source-backed finding for " + name + "\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+	// INTEGRATIONS.md, CONVENTIONS.md, TESTING.md left missing → partial.
+	assessment, err := artifact.AssessCodebaseMapDocs(root)
+	require.NoError(t, err)
+	require.Equal(t, artifact.CodebaseMapStatusPartial, assessment.Status)
 }
 
 func hasNoDurableCodebaseMapHint(view nextView) bool {
@@ -218,6 +274,20 @@ func warningsContainCodebaseMapAdvisory(warnings []string) bool {
 	return false
 }
 
+// countCodebaseMapAdvisories counts how many warnings carry the
+// codebase_map_advisory prefix. The consume/discovery and relevance advisories
+// are disjoint by status, so a single `next` render must surface at most one;
+// asserting the count pins that call-site mutual exclusivity, not just presence.
+func countCodebaseMapAdvisories(warnings []string) int {
+	n := 0
+	for _, w := range warnings {
+		if strings.Contains(w, "codebase_map_advisory") {
+			n++
+		}
+	}
+	return n
+}
+
 // TestNextSurfacesCodebaseMapAdvisoryWarningEndToEnd drives a real next/run
 // invocation (not just the helper) to prove the consume-time advisory lands in
 // the surfaced warnings on BOTH the standard next view and the compact
@@ -277,23 +347,112 @@ func TestRunSurfacesBaselineCodebaseMapStatusAndAdvisory(t *testing.T) {
 	})
 }
 
-// TestNextOmitsCodebaseMapAdvisoryForPopulatedMap is the negative path: a
-// populated map consumed by research-orchestration must NOT add the advisory.
-func TestNextOmitsCodebaseMapAdvisoryForPopulatedMap(t *testing.T) {
+// TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap is the #80 path: a
+// populated map consumed by research-orchestration surfaces a non-blocking
+// relevance advisory (status reflects content presence, not scope relevance).
+func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "advisory absent for populated map")
+		createGovernedRequest(t, root, "L2", "relevance advisory for populated map")
 		writePopulatedCodebaseMapDocs(t, root)
 
 		var view nextView
 		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
 		require.NotNil(t, view.NextSkill)
 		require.Equal(t, "research-orchestration", view.NextSkill.Name)
-		assert.False(t, warningsContainCodebaseMapAdvisory(view.Warnings),
-			"populated map must not surface a codebase_map_advisory warning; got %v", view.Warnings)
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"populated map must surface a codebase_map_advisory relevance warning; got %v", view.Warnings)
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "reflects content presence, not scope relevance") {
+				found = true
+			}
+		}
+		assert.True(t, found,
+			"populated map advisory must be the relevance framing; got %v", view.Warnings)
+		// Exactly one codebase_map_advisory fires: the relevance advisory and the
+		// S1 consume/discovery advisories are disjoint by status, so they never
+		// double-fire at the call site.
+		assert.Equal(t, 1, countCodebaseMapAdvisories(view.Warnings),
+			"populated map must surface exactly one codebase_map_advisory; got %v", view.Warnings)
+		// The advisory stays non-blocking and the empty-map technique hint is absent.
 		assert.False(t, hasNoDurableCodebaseMapHint(view),
 			"populated map must not surface the empty-map technique hint")
+	})
+}
+
+// TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration is the exact
+// issue #80 live reproduction: at S2_EXECUTE the next skill is wave-orchestration
+// and a populated (stale prior-change) map must still surface the non-blocking
+// relevance advisory — the advisory is not gated to S1 planning skills.
+func TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		slug := createGovernedRequest(t, root, "L2", "relevance advisory at wave-orchestration")
+		writePopulatedCodebaseMapDocs(t, root)
+
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		change.NeedsDiscovery = false
+		require.NoError(t, state.SaveChange(root, change))
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "wave-orchestration", view.NextSkill.Name)
+		assert.True(t, warningsContainCodebaseMapAdvisory(view.Warnings),
+			"populated map consumed at wave-orchestration (S2) must surface the relevance advisory; got %v", view.Warnings)
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "reflects content presence, not scope relevance") {
+				found = true
+			}
+		}
+		assert.True(t, found,
+			"wave-orchestration advisory must be the relevance framing; got %v", view.Warnings)
+		assert.Equal(t, 1, countCodebaseMapAdvisories(view.Warnings),
+			"wave-orchestration (S2) must surface exactly one codebase_map_advisory; got %v", view.Warnings)
+	})
+}
+
+// TestNextSurfacesCodebaseMapRelevanceAdvisoryForPartialMap pins #80 for the
+// partial case: a partial map (some docs durable, some missing) is a durable
+// status the relevance advisory fires for — not the consume advisory — so exactly
+// one codebase_map_advisory surfaces and the per-doc states stay visible so the
+// host can complete the unfinished set.
+func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPartialMap(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
+		createGovernedRequest(t, root, "L2", "relevance advisory for partial map")
+		writePartialCodebaseMapDocs(t, root)
+
+		var view nextView
+		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
+		require.NotNil(t, view.NextSkill)
+		require.Equal(t, "research-orchestration", view.NextSkill.Name)
+		require.Equal(t, artifact.CodebaseMapStatusPartial, view.InputContext.CodebaseMapStatus)
+
+		assert.Equal(t, 1, countCodebaseMapAdvisories(view.Warnings),
+			"partial map must surface exactly one codebase_map_advisory; got %v", view.Warnings)
+		found := false
+		for _, w := range view.Warnings {
+			if strings.Contains(w, "reflects content presence, not scope relevance") {
+				found = true
+			}
+		}
+		assert.True(t, found,
+			"partial map advisory must be the relevance framing; got %v", view.Warnings)
+		// The partial advisory routes the host to the per-doc states, matching the
+		// consuming skills' guidance, and those states stay visible in the context.
+		assert.Contains(t, strings.Join(view.Warnings, "\n"), "codebase_map_doc_states",
+			"partial advisory must route the host to per-doc states; got %v", view.Warnings)
+		assert.NotEmpty(t, view.InputContext.CodebaseMapDocStates,
+			"partial map must expose per-doc states for host inspection; got %v", view.InputContext.CodebaseMapDocStates)
 	})
 }
 

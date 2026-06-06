@@ -42,7 +42,12 @@ to be reviewed and shared, not hidden as local-only state. `next`/`run` surface
 `input_context.codebase_map_status` (and per-doc
 `input_context.codebase_map_doc_states`) so downstream hosts can tell whether the
 map is durable; a `scaffold_only` or `baseline` status means the map is
-non-durable and should be refined before it is consumed as reviewed context.
+non-durable and should be refined before it is consumed as reviewed context. A
+`populated` status only means the documents differ from the scaffold/baseline —
+not that they describe the current change. When a populated map predates the
+change in scope, re-author the change-relevant documents in place rather than
+treating presence as freshness; the assessment re-reads them, so the inline edit
+is the refresh.
 
 ## Process
 
