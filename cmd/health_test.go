@@ -941,6 +941,54 @@ func TestHealthCommandGovernanceReportsUnreadableSnapshotInsteadOfFailing(t *tes
 	})
 }
 
+// TestHealthCommandDoctorSurfacesGaplessTraceabilityWarning is the end-to-end
+// regression for the over-broad #92 doctor suppression: an unreadable governance
+// snapshot yields a gapless traceability_coherence WARN ("data unavailable"),
+// which must still surface as a doctor action. Only traceability checks that
+// carry advisory (non-blocking) gaps are suppressed.
+func TestHealthCommandDoctorSurfacesGaplessTraceabilityWarning(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "health doctor gapless traceability")
+		snapshotPath := governance.SnapshotPath(root, slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(snapshotPath), 0o755))
+		require.NoError(t, os.WriteFile(snapshotPath, []byte("version: ["), 0o644))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json", "--governance", "--doctor", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.Governance)
+		require.NotNil(t, view.Doctor)
+
+		var traceFound bool
+		for _, check := range view.Governance.Checks {
+			if check.Name == "traceability_coherence" {
+				traceFound = true
+				assert.Equal(t, "WARN", check.Status)
+				assert.Empty(t, check.TraceabilityGaps, "data-unavailable WARN carries no gaps")
+			}
+		}
+		require.True(t, traceFound, "expected a traceability_coherence check")
+
+		hasTraceAction := false
+		for _, action := range view.Doctor.Actions {
+			if action.Category == "governance_traceability_coherence" {
+				hasTraceAction = true
+			}
+		}
+		assert.True(t, hasTraceAction,
+			"a gapless traceability WARN (unreadable snapshot) must still surface as a doctor action")
+	})
+}
+
 func TestHealthCommandGovernanceObservationsStillRenderWhenSnapshotUnreadable(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1621,6 +1669,27 @@ func TestGovernanceDoctorActionsSuppressNonBlockingTraceabilityWarning(t *testin
 		}
 	}
 	assert.True(t, found, "a blocking traceability gap must still surface as a doctor action")
+
+	// Regression: a gapless traceability_coherence WARN (e.g. no-snapshot or
+	// unreadable-snapshot "data unavailable") is NOT an advisory gap and must
+	// still surface as a doctor action. The suppression is scoped to checks
+	// that actually carry advisory gaps, not to every non-blocking WARN.
+	gapless := &governance.GovernanceHealthReport{
+		Slug: "stage-aware",
+		Checks: []governance.GovernanceHealthCheck{{
+			Name:    "traceability_coherence",
+			Status:  "WARN",
+			Message: "governance_audit_data_unavailable: parse governance snapshot",
+		}},
+	}
+	foundGapless := false
+	for _, action := range governanceDoctorActions(gapless) {
+		if action.Category == "governance_traceability_coherence" {
+			foundGapless = true
+		}
+	}
+	assert.True(t, foundGapless,
+		"a gapless traceability WARN (missing/unreadable governance data) must still surface as a doctor action")
 }
 
 // TestHealthCommandDoctorTracksAssuranceCoverageBlockingState is the end-to-end
