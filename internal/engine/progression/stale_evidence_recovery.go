@@ -11,6 +11,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/action"
 	"github.com/signalridge/slipway/internal/engine/governance"
+	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -428,4 +429,45 @@ func staleEvidenceAuthorityLabel(workflowState model.WorkflowState, subStep mode
 		return string(workflowState) + "/" + string(subStep)
 	}
 	return string(workflowState)
+}
+
+// scopeContractReopenTarget returns an S2_EXECUTE reopen target when a satisfied
+// execution summary nonetheless fails the Scope Contract. The Scope Contract is
+// owned by S2_EXECUTE (it scores the wave-execution evidence), but it can only
+// be evaluated once the run summary exists — which is produced at the moment the
+// change advances out of S2. Without this gate the failure first surfaces in
+// S3_REVIEW, where task evidence can no longer be recorded, stranding the change
+// with a recovery hint that points at a command that cannot fix it. Reopening to
+// S2_EXECUTE makes the failure fail closed to a rerun of wave-orchestration in
+// its owning stage. Returns the zero target when the summary is not ready, the
+// change has not yet reached S2_EXECUTE, evaluation errors (surfaced via
+// readiness), or the contract passes.
+func scopeContractReopenTarget(root string, change model.Change, summary *model.ExecutionSummary) (StaleEvidenceTarget, error) {
+	if !state.ExecutionSummaryReady(summary) {
+		return StaleEvidenceTarget{}, nil
+	}
+	if compareStaleEvidencePosition(
+		currentStaleEvidencePosition(change),
+		staleEvidencePositionFor(model.StateS2Execute, model.PlanSubStepNone),
+	) < 0 {
+		return StaleEvidenceTarget{}, nil
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return StaleEvidenceTarget{}, err
+	}
+	report, err := scopecontract.EvaluateBundleWithChangedFiles(
+		paths.GovernedBundleDir,
+		summary,
+		scopeContractWorkspaceChangedFiles(paths),
+	)
+	if err != nil || len(report.Blockers) == 0 {
+		return StaleEvidenceTarget{}, nil
+	}
+	return StaleEvidenceTarget{
+		SkillName:   SkillWaveOrchestration,
+		State:       model.StateS2Execute,
+		PlanSubStep: model.PlanSubStepNone,
+		Blockers:    report.Blockers,
+	}, nil
 }

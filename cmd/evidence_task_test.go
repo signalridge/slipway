@@ -33,8 +33,11 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 			"--task-kind", "verification",
 			"--verdict", "pass",
 			"--evidence-ref", "test:evidence-task",
-			"--changed-file", "cmd/evidence.go",
-			"--target-file", "cmd/evidence.go",
+			// Must stay within the fixture wave-plan's target_files
+			// (cmd/lifecycle_commands_test.go) so the Scope Contract passes; an
+			// out-of-scope changed_file now reopens to S2 (scope_contract gate).
+			"--changed-file", "cmd/lifecycle_commands_test.go",
+			"--target-file", "cmd/lifecycle_commands_test.go",
 			"--captured-at", capturedAt.Format(time.RFC3339Nano),
 			"--session-id", "session-a",
 		})
@@ -65,8 +68,8 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 		assert.Equal(t, "t-01", task.TaskID)
 		assert.Equal(t, model.TaskVerdictPass, task.Verdict)
 		assert.Equal(t, model.TaskKindVerification, task.TaskKind)
-		assert.Equal(t, []string{"cmd/evidence.go"}, task.ChangedFiles)
-		assert.Equal(t, []string{"cmd/evidence.go"}, task.TargetFiles)
+		assert.Equal(t, []string{"cmd/lifecycle_commands_test.go"}, task.ChangedFiles)
+		assert.Equal(t, []string{"cmd/lifecycle_commands_test.go"}, task.TargetFiles)
 		assert.True(t, capturedAt.Equal(parsedAt))
 		assert.Equal(t, "session-a", sessionID)
 		assert.True(t, task.FreshnessInputs.Equal(expectedFreshnessInputs))
