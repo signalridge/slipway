@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1](https://github.com/signalridge/slipway/compare/v0.11.0...v0.11.1) (2026-06-06)
+
+
+### Bug Fixes
+
+* **governance:** skill-authored requirements/tasks + substance gates ([#91](https://github.com/signalridge/slipway/issues/91)) ([#113](https://github.com/signalridge/slipway/issues/113)) ([ca8334f](https://github.com/signalridge/slipway/commit/ca8334f9f11ca63eb9d0c622735569c0a0c9fcc2))
+
 ## [0.11.0](https://github.com/signalridge/slipway/compare/v0.10.0...v0.11.0) (2026-06-06)
 
 
