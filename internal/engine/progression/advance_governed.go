@@ -109,6 +109,17 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)), nil
 	}
 
+	// Scope Contract gate (owned by S2_EXECUTE): a satisfied execution summary
+	// must also satisfy the Scope Contract. On failure, reopen to S2_EXECUTE so
+	// the agent re-records task evidence in the owning stage instead of advancing
+	// into S3_REVIEW, where the failure is detected but cannot be repaired (task
+	// evidence is only recordable during S2_EXECUTE) — which would strand the change.
+	if target, err := scopeContractReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
+		return AdvanceSummary{}, err
+	} else if target.SkillName != "" {
+		return reopenToStaleStage(root, &change, target, fromState)
+	}
+
 	preTransitionSideEffects := make([]SideEffect, 0, 2)
 
 	// Ensure research artifact exists for discovery changes entering S1_PLAN/research.
