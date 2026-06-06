@@ -33,11 +33,14 @@ and known risk hotspots.
 
 `input_context.codebase_map_status` reflects content **presence, not scope
 relevance** — a map authored for a prior change still reads `populated`. When
-`next`/`run` surfaces a codebase-map relevance advisory, judge whether the map
-matches **this** change's scope before relying on it for execution targeting, and
-re-author any stale sections in `artifacts/codebase` inline (the assessment
-re-reads them) rather than executing against a stale map. Populated is not the
-same as relevant; this is advisory and never blocks execution.
+`next`/`run` surfaces the codebase-map relevance advisory (it fires for
+`populated` and `partial`), judge whether the map matches **this** change's scope
+before relying on it for execution targeting, and re-author any stale sections in
+`artifacts/codebase` inline (the assessment re-reads them) rather than executing
+against a stale map. For a `partial` map, also inspect
+`input_context.codebase_map_doc_states` and treat any per-doc `scaffold_only`,
+`baseline`, or `missing` entry as non-durable for that document. Populated is not
+the same as relevant; this is advisory and never blocks execution.
 
 If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
 when `freshness` is `fresh`; stale checkpoints require rerunning everything.

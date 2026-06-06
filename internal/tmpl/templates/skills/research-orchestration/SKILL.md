@@ -72,21 +72,25 @@ codebase-map advisory for a non-durable map, record it as a research finding and
 refine the documents (file:line citations, module boundaries, change-specific
 risks) before depending on them.
 
-A `populated` status means only that the documents differ from the scaffold and
-the CLI baseline — it reflects content **presence, not scope relevance**. A map
-authored for a prior change still reads `populated`. When `next`/`run` surfaces a
-codebase-map relevance advisory, judge whether the map's affected seams, blast
-radius, and concerns match **this** change's scope; re-author any stale or
-out-of-scope sections in `input_context.codebase_map_dir` inline (the assessment
-re-reads them on every run) before relying on the map as reviewed context.
-Populated is not the same as relevant.
+A `populated` or `partial` status means only that the documents differ from the
+scaffold and the CLI baseline — it reflects content **presence, not scope
+relevance**. A map authored for a prior change still reads `populated`. When
+`next`/`run` surfaces the codebase-map relevance advisory (it fires for
+`populated` and `partial`), judge whether the map's affected seams, blast radius,
+and concerns match **this** change's scope; re-author any stale or out-of-scope
+sections in `input_context.codebase_map_dir` inline (the assessment re-reads them
+on every run) before relying on the map as reviewed context. Populated is not the
+same as relevant.
 
-Inspect `input_context.codebase_map_doc_states` and treat any per-doc
-`scaffold_only`, `baseline`, or `missing` entry as non-durable for that document.
+For a `partial` map, also inspect `input_context.codebase_map_doc_states` and
+treat any per-doc `scaffold_only`, `baseline`, or `missing` entry as non-durable
+for that document.
 
-If the durable codebase map is missing or stale, run the
+If the codebase map is **missing** (`status: missing`), run the
 `slipway-codebase-mapping` technique skill first and write the documents into
-`input_context.codebase_map_dir`.
+`input_context.codebase_map_dir`. For a `populated`/`partial` map that is
+semantically stale, re-author the affected sections inline (above) — do not rerun
+the technique skill, which only scaffolds a missing or non-durable set.
 
 ## Write Verification
 ```yaml

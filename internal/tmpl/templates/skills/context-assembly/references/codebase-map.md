@@ -14,7 +14,9 @@ command.
   - First touch of a brownfield area during intake or plan-audit.
   - A context-dependent signal fires (e.g. the user asks "how does this
     work", or a host skill requests grounded context).
-  - The previous map output is stale (see "When stale or invalid" below).
+  - The document set is missing or non-durable (scaffold-only/baseline). A
+    *semantically* stale `populated` map is re-authored inline, not regenerated
+    — see "When stale or invalid" below.
 
 ## Durable output contract
 
@@ -81,9 +83,10 @@ map, judge its relevance yourself:
 - A file that is empty or holds only the scaffold template is non-durable
   (`scaffold_only`), not stale — fill it from source.
 
-Do not rely on file mtimes, entry-point renames, or lockfile drift as staleness
-signals: those are mechanical proxies that miss the real question — does the map
-describe the change in front of you?
+Do not let file mtimes, entry-point renames, or lockfile drift decide staleness
+on their own: those are mechanical proxies, not the test. They can be incidental
+cues to look closer, but the decision is always the same semantic question — does
+the map describe the change in front of you?
 
 Partial output — one or two docs filled, the rest empty — is not stale, it
 is unfinished. Complete the set before handing off to a planning or review
@@ -102,7 +105,7 @@ skill.
 |---------|-------------|
 | Doc exists but contains only the scaffold | Run `slipway codebase-map`; if it remains scaffold-only, treat it as missing and fill with citations before handoff. |
 | `codebase-map --json` reports `status: "baseline"` | Keep the detected facts, then add source-backed findings and citations before treating the map as reviewed context. |
-| Citations reference files that no longer exist | Rerun on the affected scope; annotate historical files as removed. |
+| Citations reference files that no longer exist | Re-author the affected docs inline and annotate the removed files; rerun `slipway codebase-map` only if the document set is missing or non-durable. |
 | Two docs disagree (e.g., `STRUCTURE.md` names an entry point that `ARCHITECTURE.md` ignores) | The inconsistency itself is a finding; surface it in `CONCERNS.md` rather than silently picking one. |
 | Command fails with workspace-uninitialized error | Run `slipway init` first; the command assumes workspace state. |
 

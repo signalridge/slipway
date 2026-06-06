@@ -100,7 +100,21 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 		assert.Contains(t, flat, "not scope relevance", path)
 		assert.Contains(t, flat, "Populated is not the same as relevant", path)
 		assert.NotContains(t, flat, "no whole-map advisory", path)
+		// The advisory fires for partial too, so the prose must name partial
+		// explicitly and route it to per-doc inspection (engine code at
+		// codebaseMapRelevanceAdvisory fires for populated AND partial).
+		assert.Contains(t, flat, "fires for `populated` and `partial`", path)
+		assert.Contains(t, flat, "For a `partial` map, also inspect", path)
 	}
+
+	// research-orchestration must not lump "stale" into the run-the-command path:
+	// a semantically stale populated/partial map is re-authored inline, not
+	// regenerated (the command only scaffolds a missing/non-durable set).
+	research, err := Content("skills/research-orchestration/SKILL.md")
+	require.NoError(t, err)
+	flatResearch := norm(research)
+	assert.Contains(t, flatResearch, "do not rerun")
+	assert.NotContains(t, flatResearch, "missing or stale, run the")
 
 	// wave-orchestration (rendered) is a durable-map consumer and must carry the
 	// relevance self-check — the exact handoff issue #80 reproduces.
@@ -113,6 +127,8 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 	flatWave := norm(wave)
 	assert.Contains(t, flatWave, "not scope relevance")
 	assert.Contains(t, flatWave, "Populated is not the same as relevant")
+	assert.Contains(t, flatWave, "fires for `populated` and `partial`")
+	assert.Contains(t, flatWave, "For a `partial` map, also inspect")
 
 	mapping, err := Content("skills/codebase-mapping/SKILL.md")
 	require.NoError(t, err)
