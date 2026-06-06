@@ -656,6 +656,19 @@ func governanceDoctorActions(report *governance.GovernanceHealthReport) []doctor
 			continue
 		}
 
+		// A traceability_coherence check whose gaps are ALL non-blocking is
+		// advisory, not an incident: e.g. per-requirement assurance coverage
+		// verdicts that are authored later during review (#92). It needs no
+		// repair now and has no command to offer, so surfacing it as a
+		// non-repairable doctor action would re-create the false "blocking
+		// incident" friction that contradicts validate/next. A FAIL check (at
+		// least one blocking gap) and a gapless WARN (e.g. no-snapshot or
+		// unreadable-snapshot "data unavailable" warnings) still surface
+		// unchanged.
+		if check.Name == "traceability_coherence" && traceabilityCheckHasOnlyAdvisoryGaps(check) {
+			continue
+		}
+
 		action := doctorAction{
 			Priority:   governanceDoctorPriority(check.Status),
 			Category:   "governance_" + check.Name,
@@ -670,6 +683,24 @@ func governanceDoctorActions(report *governance.GovernanceHealthReport) []doctor
 		actions = append(actions, action)
 	}
 	return actions
+}
+
+// traceabilityCheckHasOnlyAdvisoryGaps reports whether a traceability_coherence
+// check carries at least one gap and every gap is non-blocking (advisory, e.g.
+// pre-review assurance coverage verdicts, #92). It is false for a check with a
+// blocking gap (FAIL) and false for a check with NO gaps at all — a gapless
+// traceability WARN signals missing or unreadable governance data, not an
+// advisory gap, so it must still surface as a doctor action.
+func traceabilityCheckHasOnlyAdvisoryGaps(check governance.GovernanceHealthCheck) bool {
+	if len(check.TraceabilityGaps) == 0 {
+		return false
+	}
+	for _, gap := range check.TraceabilityGaps {
+		if gap.Blocking {
+			return false
+		}
+	}
+	return true
 }
 
 func governanceDoctorPriority(status string) int {

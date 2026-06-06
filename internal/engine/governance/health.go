@@ -458,9 +458,10 @@ func deriveGovernanceControls(
 	existingControls []model.ControlActivation,
 ) (control.DeriveControlsResult, model.TraceabilitySummary, error) {
 	traceability := EvaluateTraceability(TraceabilityInput{
-		BundleDir:  bundleDir,
-		Slug:       change.Slug,
-		SchemaName: change.ArtifactSchema,
+		BundleDir:      bundleDir,
+		Slug:           change.Slug,
+		SchemaName:     change.ArtifactSchema,
+		LifecycleState: change.CurrentState,
 	})
 
 	presetPolicy, err := ResolvePresetPolicy(root, change)

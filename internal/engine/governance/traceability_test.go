@@ -444,6 +444,174 @@ REQ-001: verified via tests
 	assert.Contains(t, gapIDs, "REQ-002")
 }
 
+func hasGapIssue(gaps []model.TraceabilityGap, issue string) bool {
+	for _, g := range gaps {
+		if g.Issue == issue {
+			return true
+		}
+	}
+	return false
+}
+
+func hasBlockingGapIssue(gaps []model.TraceabilityGap, issue string) bool {
+	for _, g := range gaps {
+		if g.Issue == issue && g.Blocking {
+			return true
+		}
+	}
+	return false
+}
+
+// writeAssuranceGapBundle writes a bundle whose assurance covers REQ-001 but not
+// REQ-002, producing a "requirement missing assurance coverage verdict" gap.
+func writeAssuranceGapBundle(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	slug := "assurance-stage"
+	writeFile(t, filepath.Join(dir, "intent.md"), `INT-001: Intent`)
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+### Requirement: Something Else
+REQ-002: Something else. INT-001
+`)
+	writeFile(t, filepath.Join(dir, "tasks.md"), `# Tasks
+- [ ] `+"`t-01`"+` first task
+  covers: [REQ-001, REQ-002]
+`)
+	writeFile(t, filepath.Join(dir, "assurance.md"), `# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+`)
+	return dir, slug
+}
+
+func TestTraceabilityAssuranceCoverageGapIsStageAware(t *testing.T) {
+	t.Parallel()
+
+	const issue = "requirement missing assurance coverage verdict"
+
+	for _, state := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Execute} {
+		state := state
+		t.Run("non-blocking before review/"+string(state), func(t *testing.T) {
+			t.Parallel()
+			dir, slug := writeAssuranceGapBundle(t)
+			result := EvaluateTraceability(TraceabilityInput{
+				BundleDir:      dir,
+				Slug:           slug,
+				LifecycleState: state,
+			})
+			assert.Equal(t, model.TraceabilityStatusWarning, result.Status)
+			assert.True(t, hasGapIssue(result.Gaps, issue), "gap should still be reported")
+			assert.False(t, hasBlockingGapIssue(result.Gaps, issue), "gap should be non-blocking before review")
+		})
+	}
+
+	for _, state := range []model.WorkflowState{model.StateS3Review, model.StateS4Verify, model.StateDone} {
+		state := state
+		t.Run("blocking at or after review/"+string(state), func(t *testing.T) {
+			t.Parallel()
+			dir, slug := writeAssuranceGapBundle(t)
+			result := EvaluateTraceability(TraceabilityInput{
+				BundleDir:      dir,
+				Slug:           slug,
+				LifecycleState: state,
+			})
+			assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+			assert.True(t, hasBlockingGapIssue(result.Gaps, issue), "gap must fail closed at/after review")
+		})
+	}
+
+	t.Run("unknown state stays fail-closed", func(t *testing.T) {
+		t.Parallel()
+		dir, slug := writeAssuranceGapBundle(t)
+		result := EvaluateTraceability(TraceabilityInput{BundleDir: dir, Slug: slug})
+		assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+		assert.True(t, hasBlockingGapIssue(result.Gaps, issue), "unknown lifecycle state must fail closed")
+	})
+}
+
+func TestTraceabilityAssuranceNoREQIDsIsStageAware(t *testing.T) {
+	t.Parallel()
+
+	const issue = "assurance verifies no requirement IDs"
+	writeBundle := func(t *testing.T) (string, string) {
+		t.Helper()
+		dir := t.TempDir()
+		slug := "assurance-no-ids"
+		writeFile(t, filepath.Join(dir, "intent.md"), `INT-001: Intent`)
+		writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+`)
+		writeFile(t, filepath.Join(dir, "assurance.md"), `# Assurance
+All tests pass.
+`)
+		return dir, slug
+	}
+
+	t.Run("non-blocking at S2_EXECUTE", func(t *testing.T) {
+		t.Parallel()
+		dir, slug := writeBundle(t)
+		result := EvaluateTraceability(TraceabilityInput{
+			BundleDir:      dir,
+			Slug:           slug,
+			LifecycleState: model.StateS2Execute,
+		})
+		assert.Equal(t, model.TraceabilityStatusWarning, result.Status)
+		assert.True(t, hasGapIssue(result.Gaps, issue))
+		assert.False(t, hasBlockingGapIssue(result.Gaps, issue))
+	})
+
+	t.Run("blocking at S3_REVIEW", func(t *testing.T) {
+		t.Parallel()
+		dir, slug := writeBundle(t)
+		result := EvaluateTraceability(TraceabilityInput{
+			BundleDir:      dir,
+			Slug:           slug,
+			LifecycleState: model.StateS3Review,
+		})
+		assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+		assert.True(t, hasBlockingGapIssue(result.Gaps, issue))
+	})
+}
+
+func TestTraceabilityAssuranceCompleteCoverageOKAcrossStates(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []model.WorkflowState{model.StateS2Execute, model.StateS3Review} {
+		state := state
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			slug := "assurance-complete"
+			writeFile(t, filepath.Join(dir, "intent.md"), `INT-001: Intent`)
+			writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+### Requirement: Something Else
+REQ-002: Something else. INT-001
+`)
+			writeFile(t, filepath.Join(dir, "tasks.md"), `# Tasks
+- [ ] `+"`t-01`"+` first task
+  covers: [REQ-001, REQ-002]
+`)
+			writeFile(t, filepath.Join(dir, "assurance.md"), `# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+REQ-002: verified via tests
+`)
+			result := EvaluateTraceability(TraceabilityInput{
+				BundleDir:      dir,
+				Slug:           slug,
+				LifecycleState: state,
+			})
+			assert.Equal(t, model.TraceabilityStatusOK, result.Status)
+			assert.False(t, hasGapIssue(result.Gaps, "requirement missing assurance coverage verdict"))
+		})
+	}
+}
+
 func TestTraceabilityBlockingOpenQuestions(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
