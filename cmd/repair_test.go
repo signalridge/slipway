@@ -502,7 +502,7 @@ func TestBuildUnrepairedDriftFindingsKeepsActionableTargets(t *testing.T) {
 
 	drift := buildUnrepairedDriftFindings([]string{
 		"bundle directory exists without change.yaml: orphan-dir",
-		"multiple active changes require operator intervention",
+		"multiple active changes are active: demo-a, demo-b",
 		"demo: execution summary unreadable: bad yaml",
 	})
 
@@ -513,15 +513,19 @@ func TestBuildUnrepairedDriftFindingsKeepsActionableTargets(t *testing.T) {
 		NextAction: "repair or replace the authoritative change.yaml before continuing",
 	})
 	assert.Contains(t, drift, repairDriftFinding{
-		Target:     "workspace",
-		Reason:     "multiple active changes require operator intervention",
-		NextAction: "inspect the named artifact and rerun the owning Slipway command after correction",
+		Target:     "demo-a, demo-b",
+		Reason:     "multiple active changes are active",
+		NextAction: "run `slipway status` to inspect, then resolve one with `slipway cancel --change <slug>` or `slipway done --change <slug>`",
 	})
 	assert.Contains(t, drift, repairDriftFinding{
 		Target:     "demo",
 		Reason:     "execution summary unreadable: bad yaml",
 		NextAction: "regenerate execution-summary.yaml from current wave-backed task evidence",
 	})
+	// Dead-end strings (#86) must not survive.
+	for _, f := range drift {
+		assert.NotEqual(t, "inspect the named artifact and rerun the owning Slipway command after correction", f.NextAction)
+	}
 }
 
 func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
@@ -1209,6 +1213,22 @@ func TestRepairDriftNextActionDigestGuidanceUsesRun(t *testing.T) {
 			assert.NotContains(t, got, "restamp")
 		})
 	}
+}
+
+func TestRepairDriftNextActionGenericAndDualActive(t *testing.T) {
+	t.Parallel()
+
+	// #86: a generic drift finding routes to `slipway run`, not the
+	// "inspect the named artifact and rerun" dead-end.
+	generic := repairDriftNextAction("some unclassified drift", "artifacts/changes/demo")
+	assert.Contains(t, generic, "slipway run")
+	assert.NotContains(t, generic, "inspect the named artifact")
+
+	// #86: the dual-active finding names executable resolution commands.
+	dual := repairDriftNextAction("multiple active changes are active", "demo-a, demo-b")
+	assert.Contains(t, dual, "slipway status")
+	assert.Contains(t, dual, "slipway cancel --change")
+	assert.Contains(t, dual, "slipway done --change")
 }
 
 func TestRepairPathAuthorityUsesLinkedWorktreeInvocationWorkspace(t *testing.T) {

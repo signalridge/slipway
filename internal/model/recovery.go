@@ -127,9 +127,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        15,
 	},
 	"dedicated_worktree_branch_mismatch": {
-		Remediation:     "Repair the dedicated worktree binding so the recorded branch matches the bound worktree.",
-		CommandTemplate: "slipway repair",
-		Class:           RecoveryClassSatisfyControl,
+		Remediation:     "Run `slipway run` to reconcile the recorded branch to the bound worktree's actual branch and continue.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
 	},
 	"dedicated_worktree_metadata_required": {
 		Remediation:     "Record or repair dedicated worktree metadata before continuing.",

@@ -210,6 +210,40 @@ func TestListGitWorktreesCachedWithListerDoesNotCacheStaleResultWhenProbeChanges
 	assert.Equal(t, 2, calls, "probe changes during listing must prevent caching stale worktree sets")
 }
 
+func TestReconcileWorktreeBranchBindingRealignsBranchMismatch(t *testing.T) {
+	repoRoot, worktreePath := setupRepoWithWorktree(t)
+
+	// The worktree is actually on "feature"; record a mismatched branch.
+	change := model.NewChange("rebind-demo")
+	change.WorktreePath = worktreePath
+	change.WorktreeBranch = "main"
+
+	reconciled, err := ReconcileWorktreeBranchBinding(repoRoot, &change)
+	require.NoError(t, err)
+	assert.True(t, reconciled, "a pure branch mismatch on a dedicated worktree must reconcile")
+	assert.Equal(t, "feature", change.WorktreeBranch, "recorded branch realigned to the worktree's actual branch")
+
+	// Now that the binding matches reality, a second reconcile is a no-op.
+	reconciledAgain, err := ReconcileWorktreeBranchBinding(repoRoot, &change)
+	require.NoError(t, err)
+	assert.False(t, reconciledAgain)
+}
+
+func TestReconcileWorktreeBranchBindingLeavesNonBranchMismatchAlone(t *testing.T) {
+	repoRoot, _ := setupRepoWithWorktree(t)
+
+	// An invalid/unregistered worktree path is NOT a pure branch mismatch, so
+	// reconcile must fail closed and leave the recorded branch untouched.
+	change := model.NewChange("rebind-noop")
+	change.WorktreePath = filepath.Join(repoRoot, "missing")
+	change.WorktreeBranch = "feature"
+
+	reconciled, err := ReconcileWorktreeBranchBinding(repoRoot, &change)
+	require.NoError(t, err)
+	assert.False(t, reconciled)
+	assert.Equal(t, "feature", change.WorktreeBranch)
+}
+
 func setupRepoWithWorktree(t *testing.T) (repoRoot string, worktreePath string) {
 	t.Helper()
 	repoRoot = t.TempDir()

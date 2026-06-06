@@ -285,7 +285,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 			readiness.ScopeContract = &cloned
 			readiness.Blockers = append(readiness.Blockers, scopeReport.Blockers...)
 			readiness.Diagnostics = append(readiness.Diagnostics, scopeReport.Diagnostics...)
-			if scopeContractNeedsRecoveryGuidance(effectiveState, scopeReport) {
+			if scopeContractNeedsRecoveryGuidance(scopeReport) {
 				readiness.Diagnostics = append(readiness.Diagnostics, scopeContractRecoveryGuidanceDiagnostic)
 			}
 		}
@@ -419,10 +419,13 @@ func wavePreviewHasReplacementBlockers(blockers []model.ReasonCode) bool {
 	return false
 }
 
-func scopeContractNeedsRecoveryGuidance(state model.WorkflowState, report scopecontract.Report) bool {
-	if state != model.StateS3Review && state != model.StateS4Verify {
-		return false
-	}
+// scopeContractNeedsRecoveryGuidance reports whether the scope-contract recovery
+// guidance diagnostic should be surfaced. It is emitted whenever the contract has
+// blockers, at any lifecycle state (S2_EXECUTE as well as S3_REVIEW/S4_VERIFY) so
+// the explanation has surface parity. The executable next action at S2 is already
+// carried by per-blocker remediation and the scope-contract advance-reopen gate;
+// this diagnostic is the narrative complement.
+func scopeContractNeedsRecoveryGuidance(report scopecontract.Report) bool {
 	return len(report.Blockers) > 0
 }
 
