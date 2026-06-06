@@ -83,6 +83,12 @@ complete. Slipway computes `freshness_inputs` and `captured_at` unless
 `--captured-at` is explicitly provided. A passing wave-orchestration record
 without task evidence blocks execution-summary generation.
 
+**Completeness contract:** record passing evidence for EVERY planned task in the
+wave plan before the change can advance to review. A planned task left without
+passing evidence blocks advancement with `incomplete_execution_task:<task_id>` —
+partial execution does not reach S3_REVIEW. To intentionally drop a task, rescope
+`tasks.md` (re-plan) so the wave plan no longer claims it; never skip its evidence.
+
 ## Guardrails
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
 - Auto-fix only issues directly blocking the current task and directly caused by the current task's change.
@@ -122,3 +128,5 @@ After confirmation: `slipway next`
 - Retry budget is exhausted.
 - A checkpoint resumes without a fresh subagent context.
 - Task evidence was not recorded through the supported CLI.
+- Any planned task lacks passing evidence (`incomplete_execution_task`) and has
+  not been removed by rescoping `tasks.md`.

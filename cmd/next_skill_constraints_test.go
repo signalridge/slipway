@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -15,6 +16,36 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRequiredHighRiskTokenHints(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t,
+		[]string{"high_risk_check:external_api_contracts.safety_baseline=pass"},
+		requiredHighRiskTokenHints(model.GuardrailDomainExternalAPIContracts),
+	)
+	assert.Nil(t, requiredHighRiskTokenHints(""))
+}
+
+func TestBuildSkillConstraintsSurfacesHighRiskTokensForGoalVerification(t *testing.T) {
+	t.Parallel()
+	change := model.NewChange("guardrail-change")
+	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
+	def := skill.Definition{Name: progression.SkillGoalVerification}
+
+	sc := buildSkillConstraints(t.TempDir(), def, &change)
+	require.NotNil(t, sc)
+	assert.Contains(t, sc.RequiredHighRiskTokens, "high_risk_check:external_api_contracts.safety_baseline=pass")
+}
+
+func TestBuildSkillConstraintsNoHighRiskTokensWithoutGuardrailDomain(t *testing.T) {
+	t.Parallel()
+	change := model.NewChange("plain-change") // no guardrail domain
+	def := skill.Definition{Name: progression.SkillGoalVerification}
+
+	sc := buildSkillConstraints(t.TempDir(), def, &change)
+	require.NotNil(t, sc)
+	assert.Empty(t, sc.RequiredHighRiskTokens)
+}
 
 func TestParseLockedDecisions(t *testing.T) {
 	t.Parallel()

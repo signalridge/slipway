@@ -180,6 +180,84 @@ func TestNewDiscoveryChangeBindsDefaultWorktreeBeforeIntentArtifact(t *testing.T
 	})
 }
 
+func TestNewNonDiscoveryChangeBindsDefaultWorktreeByDefault(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+
+		// A non-discovery change is exactly the case that previously ran its
+		// whole lifecycle in the main checkout (worktree_skipped_reason:
+		// discovery_not_required). With auto_provision_worktree defaulting on it
+		// now binds a dedicated worktree at creation, freeing the main checkout.
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				GuardrailDomain: "",
+				NeedsDiscovery:  false,
+				Complexity:      "simple",
+			},
+		}
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--json", "rename a helper function"})
+		require.NoError(t, cmd.Execute())
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		require.True(t, payload.WorktreeCreated, "non-discovery change should bind a worktree by default")
+		require.NotEmpty(t, payload.WorktreePath)
+		require.NotEqual(t, "discovery_not_required", payload.WorktreeSkippedReason)
+		assert.Equal(t, state.DefaultWorktreeBranch(payload.Slug), payload.WorktreeBranch)
+
+		rootIntent := filepath.Join(root, "artifacts", "changes", payload.Slug, "intent.md")
+		_, err := os.Stat(rootIntent)
+		assert.True(t, os.IsNotExist(err), "new must not create the bundle in the root workspace once the worktree is bound")
+
+		worktreeIntent := filepath.Join(payload.WorktreePath, "artifacts", "changes", payload.Slug, "intent.md")
+		_, err = os.Stat(worktreeIntent)
+		require.NoError(t, err, "bundle must live inside the dedicated worktree")
+	})
+}
+
+func TestNewNonDiscoveryWorktreeProvisioningCanBeDisabled(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"),
+			[]byte("governance:\n  auto_provision_worktree: false\n"), 0o644))
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+
+		classifier := &recordingIntentClassifier{
+			classification: progression.IntentClassification{
+				NeedsDiscovery: false,
+				Complexity:     "simple",
+			},
+		}
+
+		var buf bytes.Buffer
+		cmd := makeNewCmd()
+		cmd.SetOut(&buf)
+		cmd.SetContext(withIntentClassifierContext(cmd.Context(), classifier))
+		cmd.SetArgs([]string{"--json", "rename a helper function"})
+		require.NoError(t, cmd.Execute())
+
+		var payload createOutput
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		assert.False(t, payload.WorktreeCreated)
+		assert.Equal(t, "worktree_provisioning_disabled", payload.WorktreeSkippedReason)
+		assert.Empty(t, payload.WorktreePath)
+
+		rootIntent := filepath.Join(root, "artifacts", "changes", payload.Slug, "intent.md")
+		_, err := os.Stat(rootIntent)
+		require.NoError(t, err, "with provisioning disabled the bundle stays in the project root")
+	})
+}
+
 func TestNewCommandPassesDescriptionAndDocContentToIntentClassifier(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

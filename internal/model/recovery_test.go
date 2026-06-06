@@ -128,6 +128,9 @@ func inScopeProducedRecoverySpecs() []string {
 	return []string{
 		"research_structure_invalid:section \"Findings\" must have non-empty content",
 		"non_pass_task:t-01",
+		"incomplete_execution_task:t-19",
+		"high_risk_check_missing:external_api_contracts.safety_baseline",
+		"high_risk_check_failed:external_api_contracts.safety_baseline",
 		"closeout_goal_verification_reuse_invalid:goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout",
 		"worktree_metadata_persist_failed:permission denied",
 	}
@@ -148,6 +151,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"governed_bundle_path_invalid":             true,
 		"high_risk_check_failed":                   true,
 		"high_risk_check_missing":                  true,
+		"incomplete_execution_task":                true,
 		"intake_clarification_incomplete":          true,
 		"intake_confirmation_incomplete":           true,
 		"intake_substep_invalid":                   true,
@@ -214,7 +218,9 @@ func sampleRecoveryDetail(code string) string {
 	case "governed_bundle_path_invalid":
 		return "../outside"
 	case "high_risk_check_failed", "high_risk_check_missing":
-		return "sast"
+		return "external_api_contracts.safety_baseline"
+	case "incomplete_execution_task":
+		return "t-19"
 	case "missing_required_artifact", "required_artifact_schema_missing", "required_artifact_unreadable":
 		return "decision.md"
 	case "required_artifact_dependency_missing":

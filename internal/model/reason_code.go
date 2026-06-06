@@ -92,6 +92,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required high-risk safety check is missing",
 	},
+	"incomplete_execution_task": {
+		Severity: ReasonSeverityError,
+		Message:  "A planned execution task has no recorded passing evidence",
+	},
 	"invalid_pivot_kind": {
 		Severity: ReasonSeverityError,
 		Message:  "The requested pivot kind is invalid",

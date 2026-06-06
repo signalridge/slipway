@@ -44,7 +44,10 @@ Verify ALL of the following before producing closeout verification:
 - [ ] `assurance.md` is complete on standard/strict preset
 - [ ] both review skills have passing verification
 - [ ] artifact staleness propagation is clean
-- [ ] guardrail baseline is rechecked when a guardrail domain is active
+- [ ] when a guardrail domain is active, goal-verification carries a fresh
+      `high_risk_check:<domain>.safety_baseline=pass` (the ship-gate check); the
+      goal-verification reuse branch reuses it only when still fresh, otherwise
+      rerun the SAST baseline. Record `closeout:guardrail_baseline=pass` once confirmed.
 
 Each unchecked item is a blocker.
 
@@ -117,7 +120,7 @@ references:
   - "closeout:goal_verification_reuse=pass"              # only when using the reuse branch
   - "closeout:goal_verification_reuse_run_version=1"     # only when using the reuse branch
   - "closeout:reviewer_independence=pass"
-  - "closeout:guardrail_baseline=pass"
+  - "closeout:guardrail_baseline=pass"   # closeout's recheck; the ship-gate check itself is goal-verification's high_risk_check:<domain>.safety_baseline
   - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
 notes: |
   <verification notes>
