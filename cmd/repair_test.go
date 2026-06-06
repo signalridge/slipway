@@ -437,7 +437,7 @@ func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing
   - target_files: ["cmd/repair.go"]
   - task_kind: code
 `)))
-		tasksPlanHash, err := state.CurrentTasksPlanState(root, change)
+		tasksPlanHash, err := state.CurrentTasksPlanStructuralState(root, change)
 		require.NoError(t, err)
 		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
 			"changed_files":    []string{"cmd/repair.go"},
@@ -1129,12 +1129,12 @@ REQ-001: Original requirement.
 	})
 }
 
-func TestRepairRoutesStaleGovernanceDigestToEvidenceRestamp(t *testing.T) {
+func TestRepairRoutesStaleGovernanceDigestToSlipwayRun(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair routes stale digest to restamp")
+		slug := createGovernedRequest(t, root, "L2", "repair routes stale digest to run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1170,38 +1170,33 @@ func TestRepairRoutesStaleGovernanceDigestToEvidenceRestamp(t *testing.T) {
 		for _, drift := range summary.UnrepairedDrift {
 			if drift.Target == progression.SkillPlanAudit && strings.Contains(drift.Reason, "evidence digest") {
 				found = true
-				assert.Contains(t, drift.NextAction, "evidence restamp")
-				assert.Contains(t, drift.NextAction, "--skill plan-audit")
+				assert.Contains(t, drift.NextAction, "slipway run")
+				assert.Contains(t, drift.NextAction, "plan-audit")
 			}
 		}
-		assert.True(t, found, "expected repair to route the stale plan-audit digest at slipway evidence restamp")
+		assert.True(t, found, "expected repair to route the stale plan-audit digest through slipway run")
 	})
 }
 
-func TestRepairDriftNextActionDigestGuidanceAlwaysCarriesSkill(t *testing.T) {
+func TestRepairDriftNextActionDigestGuidanceUsesRun(t *testing.T) {
 	t.Parallel()
 
-	// A digest/stale next-action must never emit a bare `restamp --dry-run`:
-	// without --skill the command fails evidence_restamp_skill_required, so a
-	// user copying the guidance verbatim would hit an invalid-usage dead-end.
 	cases := []struct {
 		name   string
 		reason string
 		target string
-		want   string
 	}{
-		{name: "required_skill_stale with skill target", reason: "required_skill_stale: plan-audit:requirements.md", target: "plan-audit", want: "--skill plan-audit"},
-		{name: "evidence digest reason with skill target", reason: `slug: evidence digest for governance skill "research-orchestration" is stale`, target: "research-orchestration", want: "--skill research-orchestration"},
-		{name: "digest reason without a known skill", reason: "required_skill_stale drift", target: "", want: "--skill <skill>"},
+		{name: "required_skill_stale with skill target", reason: "required_skill_stale: plan-audit:requirements.md", target: "plan-audit"},
+		{name: "evidence digest reason with skill target", reason: `slug: evidence digest for governance skill "research-orchestration" is stale`, target: "research-orchestration"},
+		{name: "digest reason without a known skill", reason: "required_skill_stale drift", target: ""},
 	}
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := repairDriftNextAction(tc.reason, tc.target)
-			assert.Contains(t, got, tc.want)
-			assert.Contains(t, got, "--dry-run")
-			assert.NotContains(t, got, "restamp --dry-run", "guidance must never drop the required --skill")
+			assert.Contains(t, got, "slipway run")
+			assert.NotContains(t, got, "restamp")
 		})
 	}
 }

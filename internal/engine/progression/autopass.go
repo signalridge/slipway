@@ -5,7 +5,6 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/model"
-	"github.com/signalridge/slipway/internal/stringutil"
 )
 
 const (
@@ -27,7 +26,6 @@ func attemptAutoPassSequence(
 	candidate.PlanSubStep = model.PlanSubStepNone
 	current := startState
 	autoPassed := make([]model.AutoPassedState, 0, 2)
-	var backfilledSkills []string
 
 	for {
 		candidate.CurrentState = current
@@ -49,10 +47,8 @@ func attemptAutoPassSequence(
 		if len(stampResult.Blockers) > 0 {
 			summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
 			summary.AutoPassedStates = autoPassed
-			summary.SideEffects = digestBackfilledSideEffects(backfilledSkills)
 			return summary, true, nil
 		}
-		backfilledSkills = append(backfilledSkills, stampResult.BackfilledSkills...)
 		autoPassed = append(autoPassed, model.AutoPassedState{
 			State:  current,
 			Reason: reason,
@@ -68,7 +64,6 @@ func attemptAutoPassSequence(
 				Message:          "All governance gates passed. Run `slipway done` to finalize.",
 				Blockers:         []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
 				AutoPassedStates: autoPassed,
-				SideEffects:      digestBackfilledSideEffects(backfilledSkills),
 			})
 			return summary, true, err
 		}
@@ -88,7 +83,6 @@ func attemptAutoPassSequence(
 		Reason:           "auto_pass_partial",
 		Message:          fmt.Sprintf("Advanced to %s.", current),
 		AutoPassedStates: autoPassed,
-		SideEffects:      digestBackfilledSideEffects(backfilledSkills),
 	})
 	return summary, true, err
 }
@@ -190,8 +184,7 @@ func stampAutoPassedSkillDigests(root string, change model.Change) (skillDigestS
 			return skillDigestStampResult{}, err
 		}
 		return skillDigestStampResult{
-			BackfilledSkills: stringutil.UniqueSorted(append(append([]string{}, reviewResult.BackfilledSkills...), verifyResult.BackfilledSkills...)),
-			Blockers:         stringutil.UniqueSorted(append(append([]string{}, reviewResult.Blockers...), verifyResult.Blockers...)),
+			Blockers: append(append([]string{}, reviewResult.Blockers...), verifyResult.Blockers...),
 		}, nil
 	default:
 		return skillDigestStampResult{}, nil

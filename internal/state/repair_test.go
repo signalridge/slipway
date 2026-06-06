@@ -78,6 +78,65 @@ func TestDiagnoseBundleConsistencyAssuranceMissingWarningPreReview(t *testing.T)
 	assert.Contains(t, result.Warnings[0], "assurance.md missing")
 }
 
+// seedWavePlanRepairChange writes a tasks.md, materializes its wave-plan, and
+// returns the change plus the materialized plan.
+func seedWavePlanRepairChange(t *testing.T, slug, tasksMD string) (string, model.Change, model.WavePlan) {
+	t.Helper()
+	root := createRuntimeLayout(t)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksMD), 0o644))
+	plan, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	return root, change, plan
+}
+
+func TestWavePlanRepairDriftRebuildsOnStructuralDriftWhenSummaryNotReady(t *testing.T) {
+	t.Parallel()
+	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+	root, change, plan := seedWavePlanRepairChange(t, "wave-repair-structural", tasksA)
+
+	// No drift before editing tasks.md.
+	changed, blocked, err := wavePlanRepairDrift(root, change, plan, nil)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	assert.Empty(t, blocked)
+
+	// A structural edit (task_kind) with no ready summary must rebuild, not reuse
+	// the readable-but-stale plan (#97 / REQ-006).
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
+		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: test\n"), 0o644))
+	changed, blocked, err = wavePlanRepairDrift(root, change, plan, nil)
+	require.NoError(t, err)
+	assert.True(t, changed, "structural drift with no ready summary must rebuild the wave-plan")
+	assert.Empty(t, blocked)
+}
+
+func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
+	t.Parallel()
+	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+	root, change, plan := seedWavePlanRepairChange(t, "wave-repair-legacy-scope", tasksA)
+
+	// Simulate a plan materialized before the scope-hash field existed: structure
+	// hashes are present, scope hash is empty.
+	plan.TasksPlanScopeHash = ""
+
+	// A target_files-only edit keeps the structure identical but changes scope.
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
+		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"), 0o644))
+
+	changed, blocked, err := wavePlanRepairDrift(root, change, plan, nil)
+	require.NoError(t, err)
+	assert.True(t, changed, "legacy plan with empty scope hash must rebuild on scope drift instead of carrying stale target_files")
+	assert.Empty(t, blocked)
+}
+
 func TestDiagnoseBundleConsistencyAssuranceMissingErrorInReview(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

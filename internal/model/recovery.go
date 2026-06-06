@@ -61,9 +61,8 @@ type RecoveryClass string
 const (
 	RecoveryClassConfirmPreset  RecoveryClass = "confirm_preset"
 	RecoveryClassSatisfyControl RecoveryClass = "satisfy_control"
-	RecoveryClassReopenPlanning RecoveryClass = "reopen_planning"
+	RecoveryClassReopenEvidence RecoveryClass = "reopen_evidence"
 	RecoveryClassRerunSkill     RecoveryClass = "rerun_skill"
-	RecoveryClassRestampDigest  RecoveryClass = "restamp_evidence"
 	RecoveryClassFixScope       RecoveryClass = "fix_scope"
 	RecoveryClassRefreshWave    RecoveryClass = "refresh_execution"
 	RecoveryClassAdvance        RecoveryClass = "advance"
@@ -77,9 +76,8 @@ const (
 var recoveryClassPriority = []RecoveryClass{
 	RecoveryClassConfirmPreset,
 	RecoveryClassSatisfyControl,
-	RecoveryClassReopenPlanning,
+	RecoveryClassReopenEvidence,
 	RecoveryClassRerunSkill,
-	RecoveryClassRestampDigest,
 	RecoveryClassFixScope,
 	RecoveryClassRefreshWave,
 	RecoveryClassAdvance,
@@ -314,9 +312,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"required_skill_stale": {
-		Remediation:     "Inputs certified by {subject} changed; re-run {subject} to re-certify the affected artifacts, or restamp if the recorded verdict still holds.",
-		CommandTemplate: "slipway evidence restamp --skill {subject} --dry-run",
-		Class:           RecoveryClassRestampDigest,
+		Remediation:     "Inputs certified by {subject} changed; run Slipway to reopen the earliest affected authority and re-run the owning stage.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
 	},
 	"research_structure_invalid": {
 		Remediation:     "Fix research.md so it satisfies the required research structure, then re-run validation.",
@@ -331,12 +329,12 @@ var blockerRemediations = map[string]blockerRemediation{
 	"stale_planning_evidence": {
 		Remediation:     "Planning artifacts changed after execution evidence; reopen planning audit, then refresh execution evidence in order.",
 		CommandTemplate: "slipway run",
-		Class:           RecoveryClassReopenPlanning,
+		Class:           RecoveryClassReopenEvidence,
 	},
-	"stale_planning_recovery_available": {
-		Remediation:     "Stale planning evidence can be recovered by reopening planning audit.",
+	"stale_evidence_recovery_available": {
+		Remediation:     "Stale evidence can be recovered by reopening the earliest affected authority.",
 		CommandTemplate: "slipway run",
-		Class:           RecoveryClassReopenPlanning,
+		Class:           RecoveryClassReopenEvidence,
 	},
 	"stale_execution_evidence": {
 		Remediation:     "Execution evidence is stale; re-run wave-orchestration for the affected tasks.",
@@ -719,6 +717,10 @@ func selectPrimaryStep(steps []RecoveryStep) RecoveryStep {
 }
 
 func lessRecoveryStep(a, b RecoveryStep) bool {
+	oa, ob := recoveryPrimaryOverrideRank(a), recoveryPrimaryOverrideRank(b)
+	if oa != ob {
+		return oa < ob
+	}
 	pa, pb := recoveryClassRank(a.RecoveryClass), recoveryClassRank(b.RecoveryClass)
 	if pa != pb {
 		return pa < pb
@@ -732,6 +734,15 @@ func lessRecoveryStep(a, b RecoveryStep) bool {
 		return sa < sb
 	}
 	return a.Code < b.Code
+}
+
+func recoveryPrimaryOverrideRank(step RecoveryStep) int {
+	switch step.Code {
+	case "stale_evidence_recovery_available":
+		return 0
+	default:
+		return 1
+	}
 }
 
 func recoveryClassRank(class RecoveryClass) int {

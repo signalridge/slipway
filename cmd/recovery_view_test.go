@@ -93,7 +93,8 @@ func TestValidateRecoveryIncludesGateDetailBlockers(t *testing.T) {
 	}
 	require.NotNil(t, step, "plan-audit gate_details blocker must render a recovery step")
 	assert.Equal(t, []string{"requirements.md", "tasks.md"}, step.Details)
-	assert.Contains(t, step.Command, "--skill plan-audit")
+	assert.Equal(t, "slipway run", step.Command)
+	assert.NotContains(t, step.Command, "--skill")
 	assert.NotEmpty(t, step.Remediation)
 }
 

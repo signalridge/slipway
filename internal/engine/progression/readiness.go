@@ -82,7 +82,7 @@ type GovernanceReadinessOptions struct {
 	IncludeShipSurface        bool
 }
 
-const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: in S3/S4, fix tasks.md target_files or execution scope first; if the planning artifact changes, stale_planning_evidence recovery reopens S1_PLAN/audit via `slipway run`; pivot --rescope remains S2_EXECUTE-only."
+const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: fix tasks.md target_files or execution scope first; if a planning artifact structurally changes, stale_evidence recovery reopens the owning authority via `slipway run`; strict target_files-only drift rebuilds compatible generated evidence in S2."
 
 type ArtifactReadinessReader interface {
 	Evaluate(root string, change model.Change) (ArtifactReadiness, error)

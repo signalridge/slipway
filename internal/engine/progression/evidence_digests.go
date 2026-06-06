@@ -17,11 +17,8 @@ import (
 
 var errDigestInputsUnavailable = errors.New("evidence digest inputs unavailable")
 
-const digestBackfilledFromLegacyVerdictEvent = "digest_backfilled_from_legacy_verdict"
-
 type skillDigestStampResult struct {
-	BackfilledSkills []string
-	Blockers         []string
+	Blockers []string
 }
 
 func reviewDigestSkill(skillName string) bool {
@@ -107,7 +104,6 @@ func stampEvidenceDigestForSkill(
 	if err != nil {
 		return err
 	}
-	current.RunVersion = record.RunVersion
 	current.VerdictTimestamp = record.Timestamp
 
 	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
@@ -124,95 +120,6 @@ func stampEvidenceDigestForSkill(
 	}
 	next.Skills[strings.TrimSpace(skillName)] = current
 	return state.SaveEvidenceDigests(root, change.Slug, next)
-}
-
-// Tier-0 evidence-restamp refusal reasons.
-const (
-	EvidenceRestampReasonNoEvidence        = "no_passing_evidence"
-	EvidenceRestampReasonVerdictNotPassing = "verdict_not_passing"
-	EvidenceRestampReasonInputsChanged     = "inputs_changed_after_verdict"
-	EvidenceRestampReasonInputsUnavailable = "input_digest_unavailable"
-)
-
-// EvidenceRestampOutcome reports the result of a Tier-0 evidence-restamp attempt.
-type EvidenceRestampOutcome struct {
-	Skill         string   // skill whose digest was assessed
-	Eligible      bool     // Tier-0 safe: verdict passing + inputs unchanged after verdict
-	Stamped       bool     // digest was written (always false in dry-run)
-	DryRun        bool     // assessment only; no state mutated
-	Reason        string   // refusal reason, set when !Eligible
-	ChangedInputs []string // inputs that changed after the verdict, when refused for drift
-	RerunSkill    string   // host skill to re-run when not eligible
-}
-
-// RestampEvidenceDigestTier0 records the engine-owned input digest for a skill
-// when (and only when) the recorded verdict is still passing and the certified
-// inputs did not change after the verdict — Tier 0, provably safe. It never
-// fabricates a pass: a missing or non-passing verdict, or any input changed
-// after the verdict, is refused, and the caller is told which host skill to
-// re-run. With dryRun the eligibility is assessed without writing the digest.
-func RestampEvidenceDigestTier0(root string, change model.Change, skillName string, dryRun bool) (EvidenceRestampOutcome, error) {
-	skillName = strings.TrimSpace(skillName)
-	outcome := EvidenceRestampOutcome{Skill: skillName, DryRun: dryRun, RerunSkill: skillName}
-	if skillName == "" {
-		return outcome, fmt.Errorf("skill name is required")
-	}
-	record, err := state.LoadVerification(root, change.Slug, skillName)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
-			outcome.Reason = EvidenceRestampReasonNoEvidence
-			return outcome, nil
-		}
-		return outcome, err
-	}
-	if !record.IsPassing() {
-		outcome.Reason = EvidenceRestampReasonVerdictNotPassing
-		return outcome, nil
-	}
-	if err := ensureDigestInputsAvailableForRestamp(root, change, skillName); err != nil {
-		if digestStampUnavailable(err) {
-			outcome.Reason = EvidenceRestampReasonInputsUnavailable
-			return outcome, nil
-		}
-		return outcome, err
-	}
-	// Tier-0 safety: refuse if any certified input changed after the verdict.
-	changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
-	if err != nil {
-		if digestStampUnavailable(err) {
-			outcome.Reason = EvidenceRestampReasonInputsUnavailable
-			return outcome, nil
-		}
-		return outcome, err
-	}
-	if len(changedAfterVerdict) > 0 {
-		outcome.Reason = EvidenceRestampReasonInputsChanged
-		outcome.ChangedInputs = changedAfterVerdict
-		return outcome, nil
-	}
-	outcome.Eligible = true
-	if dryRun {
-		return outcome, nil
-	}
-	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-	if err != nil {
-		return outcome, err
-	}
-	if err := stampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
-		if digestStampUnavailable(err) {
-			outcome.Eligible = false
-			outcome.Reason = EvidenceRestampReasonInputsUnavailable
-			return outcome, nil
-		}
-		return outcome, err
-	}
-	outcome.Stamped = true
-	return outcome, nil
-}
-
-func ensureDigestInputsAvailableForRestamp(root string, change model.Change, skillName string) error {
-	_, err := digestInputArtifactPaths(root, change, skillName)
-	return err
 }
 
 // pruneEvidenceDigestForSkill removes a skill's entry from evidence-digests.yaml
@@ -273,60 +180,13 @@ func skillDigestFreshnessBlockersWithSummary(
 	}
 
 	if !hasStored {
-		// No stored digest entry yet. If the skill was never recorded and a digest
-		// file already exists for other skills, there is nothing to be stale about.
-		if digests != nil {
-			recorded, err := lifecycleHasRecordedSkillEvidence(root, change, skillName)
-			if err != nil {
-				return nil, err
-			}
-			if !recorded {
-				return nil, nil
-			}
-		}
-		// Tier-0: a recorded (or legacy file-absent) orphan is healable when its
-		// certified inputs did not change after the verdict; only report stale, with
-		// the specific changed inputs, when they genuinely did. Unifying the
-		// digests==nil and digests!=nil branches here means a missing digest entry no
-		// longer deadlocks on the generic input_digest_missing token.
-		changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
-		if err != nil {
-			return nil, err
-		}
-		if len(changedAfterVerdict) > 0 {
-			return staleSkillDigestBlockers(skillName, changedAfterVerdict), nil
-		}
 		return nil, nil
-	}
-
-	if stored.RunVersion != record.RunVersion {
-		return []string{"required_skill_stale:" + skillName + ":run_version"}, nil
 	}
 	fresh, changed := model.EvidenceFreshness(stored, current.Inputs)
 	if fresh {
 		return nil, nil
 	}
-	if skillDigestRecordRefreshedAfterStored(record, stored) {
-		changedAfterVerdict, err := digestSelectedInputsChangedAfterVerdict(root, change, skillName, record.Timestamp, changed)
-		if err != nil {
-			return nil, err
-		}
-		if len(changedAfterVerdict) == 0 {
-			return nil, nil
-		}
-		return staleSkillDigestBlockers(skillName, changedAfterVerdict), nil
-	}
 	return staleSkillDigestBlockers(skillName, changed), nil
-}
-
-func skillDigestRecordRefreshedAfterStored(record model.VerificationRecord, stored model.SkillDigest) bool {
-	if record.Timestamp.IsZero() {
-		return false
-	}
-	if stored.VerdictTimestamp.IsZero() {
-		return true
-	}
-	return record.Timestamp.UTC().After(stored.VerdictTimestamp.UTC())
 }
 
 func stampPassingSkillDigests(
@@ -356,44 +216,18 @@ func stampPassingSkillDigests(
 	if len(stampSkills) == 0 {
 		return skillDigestStampResult{}, nil
 	}
-	legacyDigestFileAbsent := existingDigests == nil
 	var result skillDigestStampResult
 	for skillName, record := range stampSkills {
 		skillName = strings.TrimSpace(skillName)
 		if !record.IsPassing() {
 			continue
 		}
-		backfill, err := legacyDigestBackfillEventRequired(root, change, skillName, record, legacyDigestFileAbsent)
-		if err != nil {
-			return skillDigestStampResult{}, err
-		}
 		if !directPassing[skillName] {
-			digestChecked := hasStoredSkillDigest(existingDigests, skillName)
 			if blockers, err := previouslyAcceptedSkillDigestBlockers(root, change, skillName, record, summary, existingDigests); err != nil {
 				return skillDigestStampResult{}, err
 			} else if len(blockers) > 0 {
 				result.Blockers = append(result.Blockers, blockers...)
 				continue
-			}
-			if recorded, err := lifecycleHasRecordedSkillEvidence(root, change, skillName); err != nil {
-				return skillDigestStampResult{}, err
-			} else if recorded && !digestChecked {
-				// Tier-0 backfill: a recorded orphan with no digest entry is healable
-				// when its certified inputs did not change after the verdict; only block,
-				// with the specific changed inputs, when they genuinely did. This applies
-				// whether or not a digest file already exists for other skills, so a
-				// missing entry no longer deadlocks on input_digest_missing.
-				changedAfterVerdict, err := digestInputsChangedAfterVerdict(root, change, skillName, record.Timestamp)
-				if err != nil {
-					if digestStampUnavailable(err) {
-						continue
-					}
-					return skillDigestStampResult{}, err
-				}
-				if len(changedAfterVerdict) > 0 {
-					result.Blockers = append(result.Blockers, staleSkillDigestBlockers(skillName, changedAfterVerdict)...)
-					continue
-				}
 			}
 		}
 		if err := stampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
@@ -405,22 +239,9 @@ func stampPassingSkillDigests(
 			}
 			return skillDigestStampResult{}, err
 		}
-		if backfill {
-			result.BackfilledSkills = append(result.BackfilledSkills, strings.TrimSpace(skillName))
-		}
 	}
-	result.BackfilledSkills = stringutil.UniqueSorted(result.BackfilledSkills)
 	result.Blockers = stringutil.UniqueSorted(result.Blockers)
 	return result, nil
-}
-
-func hasStoredSkillDigest(existingDigests *model.EvidenceDigests, skillName string) bool {
-	if existingDigests == nil {
-		return false
-	}
-	existingDigests.Normalize()
-	_, ok := existingDigests.Skills[strings.TrimSpace(skillName)]
-	return ok
 }
 
 func previouslyAcceptedSkillDigestBlockers(
@@ -439,9 +260,6 @@ func previouslyAcceptedSkillDigestBlockers(
 	if !ok {
 		return nil, nil
 	}
-	if stored.RunVersion != record.RunVersion {
-		return []string{"required_skill_stale:" + strings.TrimSpace(skillName) + ":run_version"}, nil
-	}
 	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
 	if err != nil {
 		if digestStampUnavailable(err) {
@@ -452,16 +270,6 @@ func previouslyAcceptedSkillDigestBlockers(
 	fresh, changed := model.EvidenceFreshness(stored, current.Inputs)
 	if fresh {
 		return nil, nil
-	}
-	if skillDigestRecordRefreshedAfterStored(record, stored) {
-		changedAfterVerdict, err := digestSelectedInputsChangedAfterVerdict(root, change, skillName, record.Timestamp, changed)
-		if err != nil {
-			return nil, err
-		}
-		if len(changedAfterVerdict) == 0 {
-			return nil, nil
-		}
-		return staleSkillDigestBlockers(skillName, changedAfterVerdict), nil
 	}
 	return staleSkillDigestBlockers(skillName, changed), nil
 }
@@ -507,30 +315,6 @@ func passingAndPreviouslyAcceptedSkillRecords(
 		}
 	}
 	return out, nil
-}
-
-func legacyDigestBackfillEventRequired(root string, change model.Change, skillName string, record model.VerificationRecord, legacyDigestFileAbsent bool) (bool, error) {
-	if !legacyDigestFileAbsent || !record.IsPassing() {
-		return false, nil
-	}
-	return lifecycleHasRecordedSkillEvidence(root, change, skillName)
-}
-
-func lifecycleHasRecordedSkillEvidence(root string, change model.Change, skillName string) (bool, error) {
-	skillName = strings.TrimSpace(skillName)
-	if skillName == "" {
-		return false, nil
-	}
-	events, err := state.ReadLifecycleEvents(root, change)
-	if err != nil {
-		return false, err
-	}
-	for _, event := range events {
-		if event.EventType == "skill.evidence_recorded" && strings.TrimSpace(event.SkillID) == skillName {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func recordedSkillEvidenceSet(root string, change model.Change) (map[string]bool, error) {
@@ -599,9 +383,9 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 		}
 		return err
 	}
-	hash, err := wave.TaskPlanSemanticHash(string(raw))
+	hash, err := wave.TaskPlanStructuralHash(string(raw))
 	if err != nil {
-		return fmt.Errorf("hash tasks.md semantically: %w", err)
+		return fmt.Errorf("hash tasks.md structurally: %w", err)
 	}
 	inputs["tasks.md"] = hash
 	return nil
@@ -710,16 +494,8 @@ func addContentPathInputs(root string, change model.Change, summary *model.Execu
 					key = filepath.ToSlash(display)
 				}
 			}
-			hash, err := model.ComputeFileContentHash(path)
+			hash, err := workspacePathInputHash(path, key)
 			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					hash, err = deletedFileInputHash(key)
-					if err != nil {
-						return err
-					}
-					inputs[key] = hash
-					continue
-				}
 				return err
 			}
 			inputs[key] = hash
@@ -813,6 +589,14 @@ func addReviewSkillInputs(
 	}
 	for _, rel := range reviewWorkspaceInputPaths(paths, change) {
 		if err := addWorkspaceFileInput(paths.WorkspaceRoot, rel, inputs); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				hash, hashErr := deletedFileInputHash(rel)
+				if hashErr != nil {
+					return hashErr
+				}
+				inputs[rel] = hash
+				continue
+			}
 			return err
 		}
 	}
@@ -837,6 +621,14 @@ func addReviewSummaryContentInputs(root string, change model.Change, summary *mo
 		}
 		if !strings.ContainsAny(rel, "*?[") {
 			if err := addWorkspaceFileInput(paths.WorkspaceRoot, rel, inputs); err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					hash, hashErr := deletedFileInputHash(rel)
+					if hashErr != nil {
+						return hashErr
+					}
+					inputs[rel] = hash
+					continue
+				}
 				return err
 			}
 			continue
@@ -849,16 +641,16 @@ func addReviewSummaryContentInputs(root string, change model.Change, summary *mo
 			return fmt.Errorf("content path must be workspace-relative: %s", rel)
 		}
 		for _, path := range candidates {
-			hash, err := model.ComputeFileContentHash(path)
-			if err != nil {
-				return err
-			}
 			key := rel
 			if strings.ContainsAny(rel, "*?[") {
 				display, displayErr := filepath.Rel(paths.WorkspaceRoot, path)
 				if displayErr == nil {
 					key = filepath.ToSlash(display)
 				}
+			}
+			hash, err := workspacePathInputHash(path, key)
+			if err != nil {
+				return err
 			}
 			inputs[key] = hash
 		}
@@ -956,20 +748,54 @@ func addWorkspaceFileInput(workspaceRoot, rel string, inputs map[string]string) 
 		return nil
 	}
 	path := filepath.Join(workspaceRoot, filepath.FromSlash(rel))
-	hash, err := model.ComputeFileContentHash(path)
+	hash, err := workspacePathInputHash(path, rel)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			hash, err = deletedFileInputHash(rel)
-			if err != nil {
-				return err
-			}
-			inputs[rel] = hash
-			return nil
-		}
 		return err
 	}
 	inputs[rel] = hash
 	return nil
+}
+
+func workspacePathInputHash(path, rel string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return deletedFileInputHash(rel)
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return model.ComputeFileContentHash(path)
+	}
+	files := map[string]string{}
+	if err := filepath.WalkDir(path, func(child string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		display, err := filepath.Rel(path, child)
+		if err != nil {
+			return err
+		}
+		hash, err := model.ComputeFileContentHash(child)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(display)] = hash
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return model.ComputeInputHash(map[string]any{
+		"path":  filepath.ToSlash(strings.TrimSpace(rel)),
+		"type":  "directory",
+		"files": files,
+	})
 }
 
 func deletedFileInputHash(rel string) (string, error) {
@@ -977,91 +803,6 @@ func deletedFileInputHash(rel string) (string, error) {
 		"path":    filepath.ToSlash(strings.TrimSpace(rel)),
 		"deleted": true,
 	})
-}
-
-func digestInputsChangedAfterVerdict(
-	root string,
-	change model.Change,
-	skillName string,
-	verdictAt time.Time,
-) ([]string, error) {
-	return digestSelectedInputsChangedAfterVerdict(root, change, skillName, verdictAt, nil)
-}
-
-func digestSelectedInputsChangedAfterVerdict(
-	root string,
-	change model.Change,
-	skillName string,
-	verdictAt time.Time,
-	onlyInputs []string,
-) ([]string, error) {
-	if verdictAt.IsZero() {
-		return nil, nil
-	}
-	paths, err := digestInputArtifactPaths(root, change, skillName)
-	if err != nil {
-		if errors.Is(err, errDigestInputsUnavailable) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	only := map[string]struct{}{}
-	for _, input := range onlyInputs {
-		input = strings.TrimSpace(filepath.ToSlash(input))
-		if input != "" {
-			only[input] = struct{}{}
-		}
-	}
-	changed := []string{}
-	var summary *model.ExecutionSummary
-	if strings.TrimSpace(skillName) == SkillWaveOrchestration {
-		loaded, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-		if err != nil {
-			return nil, err
-		}
-		summary = loaded
-	}
-	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
-	if err != nil {
-		if errors.Is(err, errDigestInputsUnavailable) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	for rel, inputPaths := range paths {
-		if len(only) > 0 {
-			if _, ok := only[rel]; !ok {
-				continue
-			}
-		}
-		if len(inputPaths) == 0 {
-			if deletedInputDigest(current.Inputs[rel], rel) {
-				changed = append(changed, rel)
-			}
-			continue
-		}
-		inputChanged, err := digestInputChangedAfterVerdict(rel, inputPaths, verdictAt)
-		if err != nil {
-			return nil, err
-		}
-		if inputChanged {
-			changed = append(changed, rel)
-		}
-	}
-	for rel, digest := range current.Inputs {
-		if len(only) > 0 {
-			if _, ok := only[rel]; !ok {
-				continue
-			}
-		}
-		if _, ok := paths[rel]; ok {
-			continue
-		}
-		if deletedInputDigest(digest, rel) {
-			changed = append(changed, rel)
-		}
-	}
-	return stringutil.UniqueSorted(changed), nil
 }
 
 func deletedInputDigest(digest, rel string) bool {
@@ -1073,172 +814,4 @@ func deletedInputDigest(digest, rel string) bool {
 		"deleted": true,
 	})
 	return err == nil && digest == expected
-}
-
-func digestInputChangedAfterVerdict(rel string, paths []string, verdictAt time.Time) (bool, error) {
-	for _, path := range paths {
-		changed, err := digestInputPathChangedAfterVerdict(rel, path, verdictAt)
-		if err != nil {
-			return false, err
-		}
-		if changed {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func digestInputPathChangedAfterVerdict(rel, path string, verdictAt time.Time) (bool, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	if !info.IsDir() {
-		return info.ModTime().UTC().After(verdictAt.UTC()), nil
-	}
-	changed := false
-	err = filepath.WalkDir(path, func(child string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.ModTime().UTC().After(verdictAt.UTC()) {
-			changed = true
-			return fs.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return false, fmt.Errorf("inspect digest input %s: %w", rel, err)
-	}
-	return changed, nil
-}
-
-func digestInputArtifactPaths(root string, change model.Change, skillName string) (map[string][]string, error) {
-	var summary *model.ExecutionSummary
-	if strings.TrimSpace(skillName) == SkillWaveOrchestration {
-		loaded, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-		if err != nil {
-			return nil, err
-		}
-		summary = loaded
-	}
-	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
-	if err != nil {
-		return nil, err
-	}
-	paths, err := state.ResolveChangePaths(root, change)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string][]string{}
-	for rel := range current.Inputs {
-		if err := addDigestInputArtifactPath(out, paths, change.Slug, rel, summary); err != nil {
-			return nil, err
-		}
-	}
-	if len(out) == 0 {
-		return nil, errDigestInputsUnavailable
-	}
-	return out, nil
-}
-
-func addDigestInputArtifactPath(
-	out map[string][]string,
-	paths state.ResolvedChangePaths,
-	slug string,
-	rel string,
-	summary *model.ExecutionSummary,
-) error {
-	rel = strings.TrimSpace(filepath.ToSlash(rel))
-	if rel == "" {
-		return nil
-	}
-	switch rel {
-	case "changed_target_files":
-		out[rel] = append(out[rel], state.ExecutionSummaryPathForRead(paths.WorkspaceRoot, slug))
-		return nil
-	case "run_summary_version":
-		rel = "execution-summary.yaml"
-	case "tasks_plan_hash":
-		rel = "tasks.md"
-	case "runtime_task_evidence":
-		if summary == nil || summary.RunSummaryVersion < 1 {
-			return errDigestInputsUnavailable
-		}
-		taskPaths, err := runtimeTaskEvidenceInputPaths(paths.WorkspaceRoot, slug, summary.RunSummaryVersion)
-		if err != nil {
-			return err
-		}
-		out[rel] = append(out[rel], taskPaths...)
-		return nil
-	}
-	candidates := []string{}
-	if rel == "wave-plan.yaml" {
-		candidates = append(candidates, state.WavePlanPathForRead(paths.WorkspaceRoot, slug))
-	}
-	if !strings.Contains(rel, "/") {
-		candidates = append(candidates, filepath.Join(paths.GovernedBundleDir, filepath.FromSlash(rel)))
-	}
-	candidates = append(candidates, filepath.Join(paths.WorkspaceRoot, filepath.FromSlash(rel)))
-	if rel == "execution-summary.yaml" {
-		candidates = append(candidates, state.ExecutionSummaryPathForRead(paths.WorkspaceRoot, slug))
-	}
-	for _, path := range candidates {
-		info, err := os.Stat(path)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return err
-		}
-		if info.IsDir() {
-			continue
-		}
-		out[rel] = append(out[rel], path)
-		return nil
-	}
-	out[rel] = nil
-	return nil
-}
-
-func runtimeTaskEvidenceInputPaths(root, slug string, runSummaryVersion int) ([]string, error) {
-	if runSummaryVersion < 1 {
-		return nil, errDigestInputsUnavailable
-	}
-	dir := state.EvidenceTasksDir(root, slug)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, errDigestInputsUnavailable
-		}
-		return nil, err
-	}
-	paths := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
-		version, err := taskEvidenceRunVersion(path)
-		if err != nil {
-			return nil, err
-		}
-		if version == runSummaryVersion {
-			paths = append(paths, path)
-		}
-	}
-	if len(paths) == 0 {
-		return nil, errDigestInputsUnavailable
-	}
-	return paths, nil
 }

@@ -272,7 +272,7 @@ func TestRecoveryStepFillsSubjectIntoCommand(t *testing.T) {
 	rc := ReasonCodeFromSpec("required_skill_stale:plan-audit:assurance.md")
 	step, ok := recoveryStepFor(rc)
 	require.True(t, ok)
-	assert.Contains(t, step.Command, "--skill plan-audit", "command must interpolate the subject")
+	assert.Equal(t, "slipway run", step.Command)
 	assert.NotContains(t, step.Remediation, "{subject}")
 	assert.NotContains(t, step.Remediation, "{detail}")
 }
@@ -300,7 +300,7 @@ func TestBuildRecoveryNilOnCleanState(t *testing.T) {
 func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
 	t.Parallel()
 
-	// reopen_planning (root-most) must win over refresh_execution (later stage),
+	// reopen_evidence (root-most) must win over refresh_execution (later stage),
 	// regardless of blocker order.
 	blockers := []ReasonCode{
 		NewReasonCode("stale_execution_evidence", ""),
@@ -309,11 +309,29 @@ func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
 	}
 	got := BuildRecovery(blockers)
 	require.NotNil(t, got)
-	assert.Equal(t, RecoveryClassReopenPlanning, got.RecoveryClass)
+	assert.Equal(t, RecoveryClassReopenEvidence, got.RecoveryClass)
 	assert.NotEmpty(t, got.PrimaryCommand)
 	for _, step := range got.Steps {
 		assert.NotEqual(t, "no_skill_required", step.Code, "informational blocker must not appear as a step")
 	}
+}
+
+func TestBuildRecoveryPrioritizesStaleEvidenceRecoveryOverDerivedShipBlockers(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("high_risk_check_missing", "external_api_contracts.safety_baseline"),
+		NewReasonCode("closeout_assurance_attestation_missing",
+			"final-closeout must record closeout:assurance_complete=pass on standard/strict"),
+		NewReasonCode("required_skill_stale", "code-quality-review:CLAUDE.md"),
+		NewReasonCode("stale_evidence_recovery_available", "S3_REVIEW"),
+		NewReasonCode("run_slipway_run_to_advance", "S4_VERIFY"),
+		NewReasonCode("verification_evidence_missing", ""),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway run", got.PrimaryCommand)
+	assert.Equal(t, RecoveryClassReopenEvidence, got.RecoveryClass)
+	assert.Contains(t, got.PrimaryAction, "earliest affected authority")
 }
 
 func TestRecoveryTokensUseCanonicalMessages(t *testing.T) {
@@ -452,8 +470,7 @@ func TestBuildRecoveryGroupsBlockersByCodeAndSubject(t *testing.T) {
 	t.Parallel()
 
 	// Many stale artifacts under one skill must collapse into a single step that
-	// lists the artifacts in Details, not N near-identical restamp steps; a second
-	// skill stays a distinct step.
+	// lists the artifacts in Details; a second skill stays a distinct step.
 	blockers := []ReasonCode{
 		NewReasonCode("required_skill_stale", "code-quality-review:CLAUDE.md"),
 		NewReasonCode("required_skill_stale", "code-quality-review:README.md"),
@@ -474,7 +491,7 @@ func TestBuildRecoveryGroupsBlockersByCodeAndSubject(t *testing.T) {
 	require.NotNil(t, cqr, "the code-quality-review group must be one step")
 	assert.Equal(t, []string{"CLAUDE.md", "README.md", "cmd/next.go"}, cqr.Details,
 		"details are de-duplicated and sorted")
-	assert.Contains(t, cqr.Command, "--skill code-quality-review")
+	assert.Equal(t, "slipway run", cqr.Command)
 	assert.NotContains(t, cqr.Remediation, "{", "remediation must not embed a per-detail placeholder")
 }
 

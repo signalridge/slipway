@@ -173,7 +173,7 @@ func TestNextStalePlanningEvidenceReportsRecoveryRunGuidance(t *testing.T) {
 			reasons := model.ReasonSpecs(view.Blockers)
 			assert.Contains(t, reasons, "stale_planning_evidence")
 			assert.Contains(t, reasons, "run_slipway_run_to_advance:"+string(tt.state))
-			assert.Contains(t, reasons, "stale_planning_recovery_available:S1_PLAN/audit")
+			assert.Contains(t, reasons, "stale_evidence_recovery_available:S1_PLAN/audit")
 			assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
 
 			loaded, err := state.LoadChange(root, slug)
@@ -1415,6 +1415,41 @@ REQ-001: The plan audit path must advance only when the task checklist is valid.
 	// This test provides sufficient artifacts for the clean path.
 	assert.Equal(t, model.StateS2Execute, view.Advanced.ToState)
 	assert.Equal(t, model.StateS2Execute, view.CurrentState)
+}
+
+func TestNextReadOnlyReportsRunGuidanceAfterPassingPlanAudit(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "report S1 audit advance guidance")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
+	})
+
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, true, false)
+	require.NoError(t, err)
+
+	assert.Nil(t, view.NextSkill)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S1_PLAN")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S1_PLAN")
+	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	assert.Equal(t, "slipway run", view.ConfirmationRequirement.NextCommand)
+
+	reloaded, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS1Plan, reloaded.CurrentState)
+	assert.Equal(t, model.PlanSubStepAudit, reloaded.PlanSubStep)
 }
 
 func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {

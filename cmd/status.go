@@ -38,6 +38,7 @@ type statusView struct {
 	NextReadyActions          []string                             `json:"next_ready_actions,omitempty"`
 	SummaryBlockers           []model.ReasonCode                   `json:"summary_blockers,omitempty"`
 	Blockers                  []model.ReasonCode                   `json:"blockers,omitempty"`
+	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
 	GateStatus                map[string]model.GateRecord          `json:"gate_status,omitempty"`
 	ContextDependencies       *model.ContextDependencies           `json:"context_dependencies,omitempty"`
 	SelectedPriorContext      []selectedPriorContextView           `json:"selected_prior_context,omitempty"`

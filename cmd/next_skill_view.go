@@ -179,20 +179,26 @@ func assembleSkillViewWithOptions(
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
 	}
-	if governedChange != nil && progression.StalePlanningRecoveryAvailable(*governedChange, blockersForResolution) {
-		nextSkillName = ""
-		nextState = string(model.StateS1Plan)
-		view.Blockers = appendReasonCodes(
-			view.Blockers,
-			[]model.ReasonCode{
-				model.NewReasonCode("stale_planning_recovery_available", progression.StalePlanningRecoveryTarget),
-				model.NewReasonCode("run_slipway_run_to_advance", string(governedChange.CurrentState)),
-			},
-		)
-		view.Warnings = append(view.Warnings, "stale_planning_recovery_available: run `slipway run` to reopen S1_PLAN/audit, then refresh plan-audit, wave-plan, and execution-summary evidence in order.")
-		blockersForResolution = append([]model.ReasonCode(nil), view.Blockers...)
-		if advanced.Action == "blocked" {
-			blockersForResolution = append(blockersForResolution, advanced.Blockers...)
+	if governedChange != nil {
+		staleTarget, staleAvailable, err := progression.StaleEvidenceRecoveryAvailable(root, *governedChange, blockersForResolution)
+		if err != nil {
+			return err
+		}
+		if staleAvailable {
+			nextSkillName = ""
+			nextState = string(staleTarget.State)
+			view.Blockers = appendReasonCodes(
+				view.Blockers,
+				[]model.ReasonCode{
+					model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
+					model.NewReasonCode("run_slipway_run_to_advance", string(governedChange.CurrentState)),
+				},
+			)
+			view.Warnings = append(view.Warnings, "stale_evidence_recovery_available: run `slipway run` to reopen "+staleTarget.Label()+" and re-run the owning stage.")
+			blockersForResolution = append([]model.ReasonCode(nil), view.Blockers...)
+			if advanced.Action == "blocked" {
+				blockersForResolution = append(blockersForResolution, advanced.Blockers...)
+			}
 		}
 	}
 	if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
@@ -623,7 +629,18 @@ func noSkillStateAdvanceReadiness(root string, change model.Change) (bool, []mod
 	case model.StateS1Plan:
 		// S1 research reaches the no-skill branch only after its evidence passed
 		// and the display skill was cleared.
-		return change.PlanSubStep == model.PlanSubStepResearch || change.PlanSubStep == model.PlanSubStepValidate, nil
+		switch change.PlanSubStep {
+		case model.PlanSubStepResearch, model.PlanSubStepValidate:
+			return true, nil
+		case model.PlanSubStepAudit:
+			result := progression.ValidatePlanningReadiness(root, change)
+			if len(result.Blockers) > 0 {
+				return false, result.Blockers
+			}
+			return true, nil
+		default:
+			return false, nil
+		}
 	case model.StateS3Review:
 		return true, nil
 	default:

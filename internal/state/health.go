@@ -327,9 +327,17 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 		return findings, nil
 	}
 
-	if currentHash, err := CurrentTasksPlanState(root, change); err == nil &&
-		strings.TrimSpace(plan.TasksPlanHash) != "" &&
-		currentHash != strings.TrimSpace(plan.TasksPlanHash) {
+	plan.Normalize()
+	planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
+	if planHash == "" {
+		planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+	}
+	if planHash == "" {
+		planHash = strings.TrimSpace(plan.TasksPlanHash)
+	}
+	if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil &&
+		planHash != "" &&
+		currentHash != planHash {
 		findings = append(findings, HealthFinding{
 			Severity:   model.ReasonSeverityError,
 			Category:   "wave_execution",

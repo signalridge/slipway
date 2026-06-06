@@ -73,7 +73,7 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 	if err := state.ResetWaveExecution(root, change.Slug); err != nil {
 		return pivotView{}, err
 	}
-	if err := os.RemoveAll(state.ChangeDir(root, change.Slug)); err != nil {
+	if err := clearPivotRuntimeResidue(root, change.Slug); err != nil {
 		return pivotView{}, err
 	}
 	if err := os.RemoveAll(filepath.Dir(state.TaskPIDFilePath(root, change.Slug))); err != nil {
@@ -95,6 +95,49 @@ func executeGovernedPivot(root, slug, kind string) (pivotView, error) {
 		ExecutionMode: governedExecutionMode,
 		CurrentState:  string(change.CurrentState),
 	}, nil
+}
+
+func clearPivotRuntimeResidue(root, slug string) error {
+	runtimeDir := state.ChangeDir(root, slug)
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(runtimeDir, entry.Name())
+		if entry.Name() == "evidence" {
+			if err := clearPivotEvidenceResidue(path); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func clearPivotEvidenceResidue(evidenceDir string) error {
+	entries, err := os.ReadDir(evidenceDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == "tasks" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(evidenceDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // clearApprovedSummaryForRescope implements the rescope artifact semantics from

@@ -378,7 +378,7 @@ func TestProjectFreshnessTracksTasksPlanHash(t *testing.T) {
   - target_files: ["cmd/placeholder.go"]
   - task_kind: code
 `)))
-	hash, err := state.CurrentTasksPlanState(root, change)
+	hash, err := state.CurrentTasksPlanStructuralState(root, change)
 	require.NoError(t, err)
 
 	oldTS := time.Now().UTC().Add(-5 * time.Second)

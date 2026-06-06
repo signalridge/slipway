@@ -320,9 +320,9 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Planning artifacts changed after execution evidence; rerun affected planning gates before refreshing execution evidence",
 	},
-	"stale_planning_recovery_available": {
+	"stale_evidence_recovery_available": {
 		Severity: ReasonSeverityWarning,
-		Message:  "Stale planning evidence can be recovered by reopening planning audit",
+		Message:  "Stale evidence can be recovered by reopening the earliest affected authority",
 	},
 	"tasks_checklist_invalid_format": {
 		Severity: ReasonSeverityError,
