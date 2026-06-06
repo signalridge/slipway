@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/signalridge/slipway/compare/v0.10.0...v0.11.0) (2026-06-06)
+
+
+### Features
+
+* **codebase-map:** host-AI semantic staleness self-check + inline refresh ([#80](https://github.com/signalridge/slipway/issues/80)) ([#112](https://github.com/signalridge/slipway/issues/112)) ([33f89ef](https://github.com/signalridge/slipway/commit/33f89ef6b3ebb6bcf6cc7aa16381e761face03b2))
+
+
+### Bug Fixes
+
+* **governance:** stage-aware assurance traceability; doctor raises no incident before review ([#92](https://github.com/signalridge/slipway/issues/92)) ([#110](https://github.com/signalridge/slipway/issues/110)) ([066850b](https://github.com/signalridge/slipway/commit/066850b735f296e07eea1ea387ce6c725437a33f))
+
 ## [0.10.0](https://github.com/signalridge/slipway/compare/v0.9.0...v0.10.0) (2026-06-06)
 
 
