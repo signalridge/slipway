@@ -4,7 +4,7 @@ domain: repair-ci
 function: triage failing CI runs to root cause before retrying
 tier: T2
 primary_attachment: procedure
-summary: "Use when CI is failing and a retry is being considered. Triggers on repair command, or user text naming CI failures."
+summary: "Use when CI, a build, or a pipeline is failing and a retry is being considered. Triggers on the `slipway repair` command or user text naming CI/build/pipeline failures."
 trigger_signals:
   - command: repair
     reason: "repair command invoked; CI failures may be in scope"

@@ -1,0 +1,22 @@
+{{- define "command-instructions-body" -}}
+# Instructions
+
+Show the embedded template and authoring guidance (required sections and the
+quality bar) for a governed artifact.
+
+## Invocation
+```bash
+slipway instructions <artifact> --json
+```
+`<artifact>` is one of: `assurance`, `decision`, `intent`, `requirements`,
+`research`, `tasks`.
+
+## Contract
+- Read-only and prereq-free: it reads embedded artifact templates only, so it
+  needs no `slipway init` and no active change.
+- Use it before authoring an artifact to get the exact required structure rather
+  than guessing the headings.
+
+## Flags
+- `--json`: JSON output
+{{- end -}}

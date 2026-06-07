@@ -86,12 +86,12 @@ The runtime will reject `pass` verification if any of these references is missin
 After verification is written, return to the source workspace and run:
 
 ```bash
-slipway next
+slipway run --json
 ```
 
-<HARD-GATE>Do not run `slipway next` until the dedicated worktree exists, the baseline verification command has passed, and the verification references are complete.</HARD-GATE>
+<HARD-GATE>Do not run `slipway run` until the dedicated worktree exists, the baseline verification command has passed, and the verification references are complete; `slipway next` is read-only preview and never advances.</HARD-GATE>
 
-The runtime will validate the worktree binding and persist `worktree_path` and `worktree_branch` before advancing.
+The runtime will validate the worktree binding and persist `worktree_path` and `worktree_branch` while advancing.
 
 ## DO NOT SKIP
 1. Use a dedicated worktree, not the primary workspace root.
@@ -103,4 +103,4 @@ The runtime will validate the worktree binding and persist `worktree_path` and `
   `feat/<slug>` unless an explicit operator/project override says otherwise,
   then rerun the preflight.
 - If the baseline command fails, set verdict to `fail` with the failed command or failing subsystem as a blocker.
-- If branch/path metadata changes, emit fresh verification before calling `slipway next`.
+- If branch/path metadata changes, emit fresh verification before calling `slipway run`.

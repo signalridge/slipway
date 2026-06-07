@@ -49,7 +49,7 @@ func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 		{
 			SkillID: "coverage-analysis",
 			Kind:    AttachmentChecklist,
-			Reason:  "Use when a change needs coverage evaluation. Triggers on validate command, goal-verification host, or coverage-related user text.",
+			Reason:  "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the goal-verification host, or coverage-related user text.",
 		},
 	}, res.Supports)
 }

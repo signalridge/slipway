@@ -1,7 +1,9 @@
 {{- define "command-pivot-body" -}}
 # Pivot
 
-Reroute (refresh the current discovery decision) or rescope (return to discovery) an active change.
+Reroute (re-evaluate the routing/discovery decision) or rescope (reopen intake to
+amend scope) an active change. Both set `needs_discovery=true` and clear
+execution residue.
 
 ## Invocation
 ```bash
@@ -12,10 +14,16 @@ slipway pivot --rescope
 ## Contract
 - Show pivot summary with before/after state.
 - Confirm pivot action with user before executing.
+- `--reroute` (the default when no flag is given) is valid in `S1_PLAN`,
+  `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`; it returns the change to `S1_PLAN`
+  with discovery forced on. An invalid state is blocked (`pivot_state_invalid`).
+- `--rescope` is valid only in `S2_EXECUTE`; it returns the change to `S0_INTAKE`
+  (intake/clarify) and clears the intent `## Approved Summary` so it must be
+  re-confirmed. Outside `S2_EXECUTE` it is blocked (`rescope_state_invalid`).
 
 ## Flags
-- `--reroute`: Refresh S1 analysis and re-route to the appropriate discovery path.
-- `--rescope`: Return to discovery phase to modify scope boundaries.
+- `--reroute`: Re-evaluate routing/discovery and re-enter `S1_PLAN` (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY).
+- `--rescope`: Reopen intake — return to `S0_INTAKE` to amend scope, clearing the Approved Summary (valid only in S2_EXECUTE).
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 {{- end -}}

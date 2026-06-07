@@ -80,7 +80,7 @@ notes: |
 ```
 
 ### 7. Advance
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run` (`slipway next` is read-only and does not advance; use it only to preview the next skill once `run` has advanced).
 
 ## DO NOT SKIP
 1. At least one clarification question (even for trivial changes).

@@ -9,7 +9,7 @@ func contextAssembly() Skill {
 		Function:          "assemble product, codebase, and risk context before planning or review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when a task needs grounded context before planning or review. Triggers on research or plan-audit hosts, unclear context, or action-scoped hydration cues.",
+		Summary:           "Use when a task needs grounded context before planning or review. Triggers on the research or plan-audit hosts, unclear context, or a user asking how something works or for background.",
 		Evidence:          EvidenceArtifact,
 		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "research-orchestration", Attachment: AttachmentProcedure},
@@ -48,10 +48,10 @@ func securityReview() Skill {
 	return Skill{
 		ID:                "security-review",
 		Domain:            DomainReviewSecurity,
-		Function:          "secure-default and framework-aware security review",
+		Function:          "secure-default, boundary- and framework-aware security review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths.",
+		Summary:           "Use when reviewing security-relevant code for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths.",
 		Evidence:          EvidenceVerdict,
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
@@ -76,7 +76,7 @@ func specTrace() Skill {
 		Function:          "bidirectional spec-to-code and code-to-spec trace review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when verifying that implementation mirrors the approved plan. Triggers on spec-compliance host or validate/review commands.",
+		Summary:           "Use when tracing the approved plan and code in both directions (plan line to code, diff hunk back to plan line) to catch drift. Triggers on the spec-compliance-review stage, `slipway review` (auto-attached), or `slipway validate --focus spec-trace`.",
 		Evidence:          EvidenceVerdict,
 		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},

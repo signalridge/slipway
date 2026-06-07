@@ -1,7 +1,7 @@
 ---
 skill_id: tdd-governance
 name: slipway-tdd-governance
-description: "Use when verifying TDD discipline for guardrail-domain wave execution. Triggers on guardrail-domain execution or before wave verification is frozen."
+description: "Use when enforcing test-first (RED-GREEN-REFACTOR) discipline during guardrail-domain wave execution — a companion discipline applied within wave-orchestration, not a standalone lifecycle stage. Triggers on guardrail-domain task execution inside wave-orchestration."
 ---
 
 # TDD Governance
@@ -20,12 +20,16 @@ wave execution. Block ceremonial or after-the-fact test proof.
 3. Write a verdict, surface blockers, and wait for approval.
 
 ## When This Runs
-During wave execution phase for guardrail-domain governed changes. Validates
-that tasks follow TDD protocol before wave-orchestration verification is frozen.
+This is a companion discipline applied *within* wave-orchestration during
+`S2_EXECUTE` for guardrail-domain governed changes. It is never resolved as its
+own next-skill — `slipway next`/`run` route `S2_EXECUTE` to wave-orchestration,
+which applies this TDD judgment as it executes each task.
 
 ## Read Context
-Run `slipway next --json` and read the task plan and wave execution state.
-Treat the following as the authoritative proof contract for each task:
+Read the same `S2_EXECUTE` context wave-orchestration uses: `tasks.md`, the
+`input_context.*` fields from wave-orchestration's `slipway next --json`, and the
+`slipway evidence task` ledger. Do not expect `slipway next` to resolve to
+tdd-governance. Treat the following as the authoritative proof contract for each task:
 - **RED**: failing test recorded before any production change
 - **GREEN**: smallest change that makes the failing test pass
 - **REFACTOR**: structure cleanup only while the target remains green
@@ -83,25 +87,41 @@ Minimum record:
 - Stub-only tests: `fail`
 - Critical path changed without explicit test coverage: `fail`
 - Refactor-only tasks may skip test-first only when existing tests cover the refactor and were rerun green
-- Investigation or docs tasks may be marked not applicable with a note
+- `investigation` or `doc` tasks (per the `slipway evidence task --task-kind`
+  enum: code, test, doc, ops, verification, investigation, other) still use
+  `slipway evidence task` with a valid task `--verdict`; mark the TDD portion
+  not-applicable in the `--evidence-ref`, task references, or folded
+  wave-orchestration notes, not through a separate evidence-note command or a
+  non-existent not-applicable verdict
 
-## Write Verification
+## Record Evidence (engine-consumed)
+The engine does not read `verification/tdd-governance.yaml`. Record per-task TDD
+outcomes through the engine-consumed evidence ledger with `slipway evidence task`
+(verdict + blockers + references), and fold the consolidated TDD verdict into
+wave-orchestration's gated record at
+`artifacts/changes/{slug}/verification/wave-orchestration.yaml`. Keep this
+verdict shape; only the destination differs from a standalone file:
 ```yaml
-# Write to: artifacts/changes/{slug}/verification/tdd-governance.yaml
+# Folded into verification/wave-orchestration.yaml by wave-orchestration
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <current wave-orchestration run_version>
 references:
   - "tdd:task-001=pass:test-first-verified"
 notes: |
   <verification notes>
 ```
 
-## Present and Advance
-Show TDD compliance summary per task. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
-
-After confirmation: `slipway next`
+## Hand Back to wave-orchestration
+Show the TDD compliance summary per task. <HARD-GATE>Wait for explicit user
+confirmation of TDD compliance before folding this verdict back into
+wave-orchestration; do not let wave-orchestration's `slipway run` advance proceed
+until the user approves.</HARD-GATE> tdd-governance is never the resolved
+next-skill, so do not advance from here yourself with `slipway next`/`run`. After
+confirmation, return to wave-orchestration: it owns the `slipway run` advance once
+its evidence ledger and `verification/wave-orchestration.yaml` record (including
+this TDD verdict) are complete.
 
 ## DO NOT SKIP
 1. Test-first verification for each task, not a sample.

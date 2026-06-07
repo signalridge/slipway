@@ -88,7 +88,8 @@ func TestValidateFocus_RejectsSastForRepairAndRedirects(t *testing.T) {
 func TestValidateFocus_RejectsUnknownWithRemediation(t *testing.T) {
 	t.Parallel()
 
-	for _, cmd := range []string{"review", "validate", "repair"} {
+	// review/validate expose public focuses, so the remediation lists them.
+	for _, cmd := range []string{"review", "validate"} {
 		err := validateFocus(cmd, "does-not-exist")
 		if err == nil {
 			t.Fatalf("%s: expected rejection for unknown focus", cmd)
@@ -103,6 +104,26 @@ func TestValidateFocus_RejectsUnknownWithRemediation(t *testing.T) {
 		if !strings.Contains(cliErr.Remediation, "Use one of:") {
 			t.Fatalf("%s: remediation should list allowed values, got %q", cmd, cliErr.Remediation)
 		}
+	}
+
+	// repair exposes no public focuses; the remediation must name a real next
+	// action instead of a dead-end "Use one of:" with an empty list.
+	err := validateFocus("repair", "does-not-exist")
+	if err == nil {
+		t.Fatal("repair: expected rejection for unknown focus")
+	}
+	cliErr := asCLIError(err)
+	if cliErr == nil {
+		t.Fatalf("repair: expected CLI error, got %T", err)
+	}
+	if cliErr.ErrorCode != "unknown_route_mode" {
+		t.Fatalf("repair: unexpected error code %q", cliErr.ErrorCode)
+	}
+	if !strings.Contains(cliErr.Remediation, "no public --focus aliases") {
+		t.Fatalf("repair: remediation should explain no focuses exist, got %q", cliErr.Remediation)
+	}
+	if strings.Contains(cliErr.Remediation, "Use one of:") {
+		t.Fatalf("repair: remediation must not be a dead-end empty list, got %q", cliErr.Remediation)
 	}
 }
 

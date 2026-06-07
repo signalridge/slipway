@@ -4,13 +4,19 @@ domain: ops-diagnostics
 function: incident-response posture - contain, diagnose, communicate, and write up
 tier: T3
 primary_attachment: report-schema
-summary: "Use when a production incident is suspected or active. Triggers on status or health commands or user text naming an incident."
+summary: "Use when a production incident is suspected or active. Triggers on `slipway status --focus incident` / `slipway health --focus incident` or user text naming an incident."
 size_rationale: "Warn-band accepted: timeline, containment, diagnosis, and communication fields are intentionally in one schema for on-call handoff."
 trigger_signals:
-  - command: ["status", "health"]
-    reason: "status or health command invoked; incident may be in scope"
-  - user_text_matches: ["incident", "outage", "page", "sev1", "sev2"]
-    reason: "User text names an incident"
+  - user_text_matches:
+      - "status --focus incident"
+      - "health --focus incident"
+      - "--focus incident"
+      - "incident"
+      - "outage"
+      - "page"
+      - "sev1"
+      - "sev2"
+    reason: "User text or focused status/health usage names an incident"
 evidence_contract: artifact
 hydrate_references:
   - name: incident-response-framework.md

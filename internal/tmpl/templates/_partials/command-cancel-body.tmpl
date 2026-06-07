@@ -9,8 +9,10 @@ slipway cancel
 ```
 
 ## Contract
-- Terminates the active change regardless of current state.
-- Archives terminal state for audit trail.
+- Requires an ACTIVE change; an already-done or already-cancelled change is rejected (`not_active`).
+- Cancels at any lifecycle stage (S0_INTAKE through S4_VERIFY) — it gates on status, not workflow state.
+- Preempts in-flight task processes: SIGINT to recorded task PIDs, then SIGKILL to any survivors after the configured grace period.
+- Sets status to `cancelled` and archives the terminal state for the audit trail.
 - Show cancellation summary to user.
 
 ## Flags

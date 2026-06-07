@@ -4,7 +4,7 @@ domain: review-quality
 function: fresh-context code review with explicit verdict contract and reviewer-handoff discipline
 tier: T1
 primary_attachment: procedure
-summary: "Use when performing code review with a verdict contract. Triggers on review host or the review command surface."
+summary: "Use when a fresh-context code review with an explicit verdict contract is needed — the base reader that both review hosts (spec-compliance-review, code-quality-review) embed. Triggers on a review host or the `slipway review` command surface."
 trigger_signals:
   - host: ["spec-compliance-review", "code-quality-review"]
     reason: "Review host active; anchor fresh-context review discipline"

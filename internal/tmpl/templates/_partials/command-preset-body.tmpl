@@ -2,8 +2,9 @@
 # Confirm Or Override Workflow Preset
 
 Use `slipway preset` when a governed change is waiting for preset confirmation
-or when the user explicitly wants to tighten or relax the active change's
-governance posture.
+or when the user explicitly wants to adjust the active change's governance
+posture (free while the change is at `S0_INTAKE` or `S1_PLAN`; after planning,
+preset can only be upgraded).
 
 ## Command
 ```bash
@@ -12,17 +13,22 @@ slipway preset <light|standard|strict> --json
 
 ## Runtime Contract
 - Confirms or overrides the active change's persisted `workflow_preset`.
-- On the first confirmation for a pending change, scaffolds the governed bundle
-  before artifact authoring continues.
-- Keeps the change in `S1_PLAN`; preset confirmation is not a separate workflow
-  state.
-- `effective_workflow_preset` may still upgrade above the confirmed preset when
-  project minimums or guardrail floors apply.
+- On first confirmation it scaffolds the artifacts the current state needs: at
+  `S0_INTAKE` only `intent.md`; at `S1_PLAN` the full governed bundle.
+- Preset confirmation does not change lifecycle state; the change stays in its
+  current state (`S0_INTAKE` or `S1_PLAN`). It is not a separate workflow state.
+- After leaving `S1_PLAN`, a lower-rank preset is rejected (error
+  `preset_downgrade_rejected`); to restart with a lighter preset, run
+  `slipway pivot` or `slipway cancel`.
+- The effective (floor-applied) preset is reported by `slipway status` /
+  `slipway validate` (field `effective_workflow_preset`), not by this command —
+  project minimums or guardrail floors may raise it above the confirmed preset.
 
 ## Workflow
 1. Run `slipway preset <light|standard|strict> --json`.
-2. Read the JSON output for `workflow_preset` and, when present,
-   `effective_workflow_preset`.
+2. Read the JSON output for `slug` and `workflow_preset` (the confirmed preset).
+   `slipway preset --json` returns only these two fields; for the effective /
+   forecast preset run `slipway status --json` or `slipway validate --json`.
 3. Continue with `slipway next`.
 
 ## Do Not

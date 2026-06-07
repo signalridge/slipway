@@ -133,9 +133,10 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 7, query, "expected 7 query commands")
 	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
 
-	// Verify commandIDs() returns sorted list matching adapter skill commands only.
+	// Verify commandIDs() returns a sorted list covering every command (all
+	// commands ship a prompt surface).
 	ids := commandIDs()
-	assert.Len(t, ids, 14)
+	assert.Len(t, ids, 20)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -1723,6 +1724,10 @@ func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
 
 	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
 	assert.Contains(t, body, "reproducible command or transcript reference")
+	assert.Contains(t, body, "with a valid task `--verdict`")
+	assert.Contains(t, body, "not through a separate evidence-note command")
+	assert.NotContains(t, body, "recorded not-applicable via a `slipway evidence task` note")
+	assert.NotContains(t, body, "rather than a TDD verdict")
 	assert.NotContains(t, body, "{{template", "rendered tdd-governance must not leak raw template directives")
 }
 
@@ -1767,12 +1772,11 @@ func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 		{
 			skill: "research-orchestration",
 			mustContain: []string{
-				"`slipway-plan-audit` can validate it",
+				"stage (`slipway-plan-audit`) can build on",
 				"[Questions that slipway-plan-audit must address]",
-				"`slipway-plan-audit` to validate",
 			},
 			mustOmit: []string{
-				"`plan-audit` can validate it",
+				"(`plan-audit`) can build on",
 				"[Questions that plan-audit must address]",
 				"`plan-audit` to validate",
 			},
@@ -1803,6 +1807,21 @@ func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 				assert.NotContainsf(t, body, unwanted, "%s: found stale bare public-name prose", tc.skill)
 			}
 		})
+	}
+}
+
+// TestSharedChecklistReferenceIsEmittedToConsumingSkills pins that the shared
+// requirements-quality checklist actually ships into the generated references/
+// dir of every skill that points at it, so the "Apply references/checklist-quality.md"
+// pointer is reachable (previously it named a top-level sibling no generation
+// path emitted).
+func TestSharedChecklistReferenceIsEmittedToConsumingSkills(t *testing.T) {
+	skillsRoot := generatedSkillsRoot(t)
+	for _, skill := range []string{"slipway-plan-audit", "slipway-spec-compliance-review"} {
+		ref := filepath.Join(skillsRoot, skill, "references", "checklist-quality.md")
+		body, err := os.ReadFile(ref)
+		require.NoErrorf(t, err, "shared checklist not emitted for %s", skill)
+		assert.Contains(t, string(body), "Requirement-to-intent traceability")
 	}
 }
 

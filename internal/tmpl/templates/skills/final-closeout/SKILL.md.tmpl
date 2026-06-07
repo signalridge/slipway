@@ -25,11 +25,18 @@ Only when governed closeout refresh is required. `slipway next` returns `next_sk
 This skill runs AFTER goal-verification and BEFORE the G_ship gate decision.
 
 ## Read Context
-Run `slipway next --json`. Examine:
-- current `run_summary_version`
+Run `slipway next --json` for the handoff, `slipway status --json` for the
+current `run_summary_version`, and `slipway validate --json` for current
+freshness/readiness state. Examine:
+- current `run_version` / `run_summary_version` from `slipway status --json`
+  (`progress.run_summary_version`) — `slipway validate --json` does NOT carry it,
+  and `slipway next --json` only carries it nested under
+  `input_context.resume_checkpoint`, which is absent at closeout
+- freshness state (`evidence_freshness`, `freshness_diagnostics`) from
+  `slipway validate --json`
 - verification index for prior skills
 - assurance artifact state
-- active blockers list
+- active blockers list (`blockers` in either output)
 
 ## Closeout Checklist
 Verify ALL of the following before producing closeout verification:
@@ -65,7 +72,8 @@ You may avoid rerunning duplicate full-suite proof only when goal-verification i
 already fresh for the current run_version and current content state. Before
 using this branch:
 
-1. Run `slipway validate --json`.
+1. Run `slipway validate --json` (freshness/readiness) and `slipway status --json`
+   (`progress.run_summary_version`).
 2. Confirm the latest execution summary is fresh and its run_summary_version
    matches goal-verification.
 3. Confirm goal-verification was captured at or after the latest execution
@@ -113,12 +121,12 @@ Closeout must be performed independently from implementation.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <current run_summary_version from slipway status --json>  # progress.run_summary_version; must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "closeout:evidence_freshness=pass"
   - "closeout:test_suite=pass:N/N"
-  - "closeout:goal_verification_reuse=pass"              # only when using the reuse branch
-  - "closeout:goal_verification_reuse_run_version=1"     # only when using the reuse branch
+  - "closeout:goal_verification_reuse=pass"                         # only when using the reuse branch
+  - "closeout:goal_verification_reuse_run_version=<current run_version>"  # only when using the reuse branch; must match goal-verification, final-closeout, and execution-summary
   - "closeout:reviewer_independence=pass"
   - "closeout:guardrail_baseline=pass"   # closeout's recheck; the ship-gate check itself is goal-verification's high_risk_check:<domain>.safety_baseline
   - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
@@ -135,7 +143,9 @@ On light preset, omit it — assurance is optional there.
 ## Present and Advance
 Show closeout summary with verification index. {{template "hard-gate"}}
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`; the engine rechecks G_ship and
+surfaces done-ready when closeout evidence is accepted (`slipway next` only
+previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Full test suite pass, unless the validated reuse branch applies.

@@ -165,39 +165,42 @@ var commandRegistry = []CommandDef{
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasPromptSurface: true,
-		Arguments: "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]"},
+		Arguments:     "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE, S3_REVIEW, or S4_VERIFY with execution-summary evidence (run wave-orchestration first)."}},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasPromptSurface: true,
-		Arguments: "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]"},
+		Arguments:     "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE with a materialized wave plan (run `slipway repair` if `wave-plan.yaml` is missing)."}},
 	{ID: "preset", Class: CommandClassMutation, Description: "Confirm or override the active change workflow preset", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "<light|standard|strict> [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change should already exist, or pass `--change <slug>`."}},
 	{ID: "pivot", Class: CommandClassMutation, Description: "Reroute or rescope an active change", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--reroute|--rescope] [--json] [--change <slug>]"},
 	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasPromptSurface: true,
-		Arguments: "[--json] [--change <slug>]"},
+		Arguments:     "[--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE; outside S2_EXECUTE use `slipway cancel` instead."}},
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime evidence for governed execution", Tier: "situational",
+	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime evidence for governed execution", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE with a materialized wave plan."}},
-	// Diagnostics (4) — CLI-only, no generated prompt surfaces
-	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics",
+	// Diagnostics (5)
+	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--preview] [--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics",
+	{ID: "stats", Class: CommandClassQuery, Description: "Show repo-wide governance freshness and workflow statistics", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics",
+	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics",
+	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "instructions", Class: CommandClassQuery, Description: "Show the template and authoring guidance for a governed artifact", Tier: "diagnostics",
+	{ID: "instructions", Class: CommandClassQuery, Description: "Show the template and authoring guidance for a governed artifact", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments: "<artifact> [--json]",
 		// instructions reads embedded artifact templates only — it needs no
 		// `.slipway.yaml` and no active change. Declare that explicitly so the
@@ -1407,18 +1410,65 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 	return nil
 }
 
+// sharedReferenceDocs maps a shared reference filename to the detection that
+// decides whether a skill should receive it. A skill gets the shared doc copied
+// into its references/ dir only when its SKILL.md actually points at it, so the
+// "Apply `references/<doc>`" pointer the skill prints is always reachable in the
+// generated tree (it previously named a top-level sibling that no generation
+// path emitted).
+var sharedReferenceDocs = []string{"checklist-quality.md"}
+
 func emitSharedSkillSupportFromFS(srcFS fs.FS, skillID, sub, dstDir string, refresh bool) error {
-	if sub != "scripts" {
+	switch sub {
+	case "scripts":
+		usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
+		if err != nil {
+			return err
+		}
+		if !usesSharedHelper {
+			return nil
+		}
+		return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", "scripts"), dstDir, refresh)
+	case "references":
+		for _, doc := range sharedReferenceDocs {
+			referenced, err := skillReferencesSharedDoc(srcFS, skillID, doc)
+			if err != nil {
+				return err
+			}
+			if !referenced {
+				continue
+			}
+			content, err := fs.ReadFile(srcFS, path.Join("skills", "_shared", "references", doc))
+			if err != nil {
+				return err
+			}
+			if err := writeDeterministic(filepath.Join(dstDir, doc), string(content), refresh); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
 		return nil
 	}
-	usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
-	if err != nil {
-		return err
+}
+
+// skillReferencesSharedDoc reports whether a skill's authored SKILL.md (or
+// SKILL.md.tmpl) names the shared reference doc, so generation only ships it to
+// the skills that consume it.
+func skillReferencesSharedDoc(srcFS fs.FS, skillID, doc string) (bool, error) {
+	for _, leaf := range []string{"SKILL.md", "SKILL.md.tmpl"} {
+		content, err := fs.ReadFile(srcFS, sourceSkillTemplatePath(skillID, leaf))
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return false, err
+		}
+		if strings.Contains(string(content), doc) {
+			return true, nil
+		}
 	}
-	if !usesSharedHelper {
-		return nil
-	}
-	return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", sub), dstDir, refresh)
+	return false, nil
 }
 
 func skillUsesSharedScriptHelper(srcFS fs.FS, skillID string) (bool, error) {
