@@ -37,7 +37,10 @@
 {{- if ge .ComplexityRank 2 }}
 
 ## Open Questions
-<!-- Unresolved questions → consumed by S1_PLAN/research -->
+<!-- Track real unknowns as a checklist. An unchecked `- [ ]` item is unresolved
+     and routes intake to S1_PLAN/research; mark `- [x]` once resolved. Leave the
+     section empty (or write `None`) when there are none. Prose here is
+     documentation, not a blocker — a genuine open question must be a `- [ ]`. -->
 
 ## Deferred Ideas
 <!-- Identified but postponed ideas -->

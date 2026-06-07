@@ -567,7 +567,7 @@ func TestAdvanceIntake_ClarifyToConfirm(t *testing.T) {
 	}
 }
 
-func TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics(t *testing.T) {
+func TestAdvanceIntake_OpenQuestionsUseChecklistStructure(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -609,20 +609,34 @@ func TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics(t *testing.T) {
 			wantReason: "open_questions_detected",
 		},
 		{
-			name: "plain bullet advances to research",
+			// Contract: only an unchecked `- [ ]` blocks. A bare bullet is
+			// documentation, so intake advances; promoting it to a real question is
+			// the intake-clarification skill's responsibility, not the engine's.
+			name: "plain bullet is documentation, advances to confirm",
 			questions: `## Open Questions
 - Which docs build command should be used?
 `,
-			wantSub:    model.IntakeSubStepResearch,
-			wantReason: "open_questions_detected",
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
 		},
 		{
-			name: "plain prose advances to research",
+			name: "plain prose advances to confirm",
 			questions: `## Open Questions
 Need to decide which adapter layout should be documented.
 `,
-			wantSub:    model.IntakeSubStepResearch,
-			wantReason: "open_questions_detected",
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
+		},
+		{
+			// Regression for #104: a sentinel followed by an explanatory clause is
+			// prose, not an open question, and must advance instead of detouring to
+			// research.
+			name: "sentinel prose advances to confirm (#104)",
+			questions: `## Open Questions
+None requiring research — the page model is already specified.
+`,
+			wantSub:    model.IntakeSubStepConfirm,
+			wantReason: "clarification_complete",
 		},
 	}
 
@@ -692,6 +706,23 @@ Docs build
 	}
 }
 
+// Routing out of clarify on a blocking open question must not be silent (#104):
+// the note names the specific unchecked entry and the resolve escape hatch.
+func TestOpenQuestionsRoutingNoteNamesEntryAndEscapeHatch(t *testing.T) {
+	t.Parallel()
+
+	note := openQuestionsRoutingNote("## Open Questions\n- [ ] Which token TTL?\n")
+	if !strings.Contains(note, "Which token TTL?") {
+		t.Fatalf("note should name the blocking entry, got %q", note)
+	}
+	if !strings.Contains(note, "- [x]") {
+		t.Fatalf("note should give the resolve escape hatch, got %q", note)
+	}
+	if got := openQuestionsRoutingNote("## Open Questions\n(none)\n"); got != "" {
+		t.Fatalf("note should be empty when nothing blocks, got %q", got)
+	}
+}
+
 func TestAdvanceIntakeResearchDiscoveryEntersS1ResearchAndClearsStaleEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -731,7 +762,7 @@ Skip direct execution.
 S1 research must require fresh research evidence.
 
 ## Open Questions
-- Which implementation path should be selected?
+- [ ] Which implementation path should be selected?
 `
 	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
 		t.Fatalf("write intent.md: %v", err)
@@ -839,7 +870,7 @@ Skip direct execution.
 Advance must block without intake-clarification evidence.
 
 ## Open Questions
-- Which implementation path should be selected?
+- [ ] Which implementation path should be selected?
 `
 	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
 		t.Fatalf("write intent.md: %v", err)

@@ -45,7 +45,10 @@ For each clarification round:
 - `## In Scope`: concrete files, APIs, commands, or user-visible surfaces
 - `## Out of Scope`: at least one explicit exclusion
 - `## Acceptance Signals`: at least one verifiable check, not a hope
-- `## Open Questions`: only technical unknowns that truly require research
+- `## Open Questions`: a `- [ ]` checklist of technical unknowns that truly
+  require research; mark `- [x]` once resolved. You own this semantic judgment —
+  the engine blocks only on an unchecked `- [ ]`, so a real unknown left as prose
+  will NOT route to research. Leave the section empty (or `None`) when there are none.
 - `## Approved Summary`: reviewed with the user before advancement
 
 If the user says "just testing", "trivial change", "quick fix", "that's it",
@@ -53,9 +56,10 @@ or "good enough", accept current scope, fill minimal sections, and move to
 confirmation.
 
 ### 4. Research Route (if needed)
-If `## Open Questions` contains technical unknowns that cannot be resolved via clarification:
-- Document them in `## Open Questions`
-- The state machine will route to S0_INTAKE/research
+If a technical unknown cannot be resolved via clarification:
+- Record it as an unchecked `- [ ]` item under `## Open Questions` (one per unknown)
+- `slipway run` then routes to S0_INTAKE/research; resolve it by marking `- [x]`
+  (or removing it) once research answers it
 
 ### 5. Confirmation
 Once scope is clear:
