@@ -2,20 +2,11 @@
 
 `slipway init --tools` exports host-tool files that let AI coding tools invoke Slipway commands and load governed skill instructions from the current project.
 
-```mermaid
-flowchart LR
-  Init["slipway init --tools"] --> Config[".slipway.yaml"]
-  Init --> Claude[".claude/"]
-  Init --> Codex[".codex/ + $CODEX_HOME/prompts"]
-  Init --> Cursor[".cursor/"]
-  Init --> Gemini[".gemini/"]
-  Init --> OpenCode[".opencode/"]
-  Claude --> CLI["slipway CLI"]
-  Codex --> CLI
-  Cursor --> CLI
-  Gemini --> CLI
-  OpenCode --> CLI
-```
+<div align="center" markdown>
+
+![Slipway tool adapters: slipway init --tools generates per-tool adapter bundles for Claude, Codex, Cursor, Gemini and OpenCode plus the .slipway.yaml runtime config; each adapter's generated skills and commands route governed actions to the slipway CLI](assets/diagrams/tool-adapters.svg)
+
+</div>
 
 ## Supported Tools
 
