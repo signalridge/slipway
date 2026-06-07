@@ -92,7 +92,7 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 	blockers := model.ReasonCodesFromSpecs(skillBlockers)
 	layerBlockers := []model.ReasonCode{}
 	if artifactReviewEvidence, ok := passingSkills[SkillSpecComplianceReview]; ok {
-		artifactCtx := resolveArtifactEvaluationContext(root, change, policy.EffectivePreset)
+		artifactCtx := resolveArtifactEvaluationContext(change, policy.EffectivePreset)
 		projection, err := projectArtifactProjectionWithContext(root, change, artifactCtx)
 		if err != nil {
 			return ReviewAuthority{}, err
@@ -322,12 +322,12 @@ func closeoutGoalVerificationReuseBlockers(
 			"execution-summary freshness must be fresh, got " + string(freshness),
 		)}
 	}
-	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, goalRecord, summary); err != nil {
+	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary); err != nil {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification digest cannot be evaluated: " + err.Error())}
 	} else if len(blockers) > 0 {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification inputs changed: " + strings.Join(blockers, ","))}
 	}
-	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillFinalCloseout, closeoutRecord, summary); err != nil {
+	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillFinalCloseout, summary); err != nil {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout digest cannot be evaluated: " + err.Error())}
 	} else if len(blockers) > 0 {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout inputs changed: " + strings.Join(blockers, ","))}

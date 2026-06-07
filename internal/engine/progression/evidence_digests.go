@@ -90,16 +90,6 @@ func StampEvidenceDigestForSkill(
 	record model.VerificationRecord,
 	summary *model.ExecutionSummary,
 ) error {
-	return stampEvidenceDigestForSkill(root, change, skillName, record, summary)
-}
-
-func stampEvidenceDigestForSkill(
-	root string,
-	change model.Change,
-	skillName string,
-	record model.VerificationRecord,
-	summary *model.ExecutionSummary,
-) error {
 	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
 	if err != nil {
 		return err
@@ -149,20 +139,18 @@ func skillDigestFreshnessBlockers(
 	root string,
 	change model.Change,
 	skillName string,
-	record model.VerificationRecord,
 ) ([]string, error) {
 	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
 	if err != nil {
 		return nil, err
 	}
-	return skillDigestFreshnessBlockersWithSummary(root, change, skillName, record, summary)
+	return skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
 }
 
 func skillDigestFreshnessBlockersWithSummary(
 	root string,
 	change model.Change,
 	skillName string,
-	record model.VerificationRecord,
 	summary *model.ExecutionSummary,
 ) ([]string, error) {
 	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
@@ -223,14 +211,14 @@ func stampPassingSkillDigests(
 			continue
 		}
 		if !directPassing[skillName] {
-			if blockers, err := previouslyAcceptedSkillDigestBlockers(root, change, skillName, record, summary, existingDigests); err != nil {
+			if blockers, err := previouslyAcceptedSkillDigestBlockers(root, change, skillName, summary, existingDigests); err != nil {
 				return skillDigestStampResult{}, err
 			} else if len(blockers) > 0 {
 				result.Blockers = append(result.Blockers, blockers...)
 				continue
 			}
 		}
-		if err := stampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
+		if err := StampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
 			if digestStampUnavailable(err) {
 				if directPassing[skillName] {
 					result.Blockers = append(result.Blockers, skillDigestInputUnavailableBlocker(skillName))
@@ -248,7 +236,6 @@ func previouslyAcceptedSkillDigestBlockers(
 	root string,
 	change model.Change,
 	skillName string,
-	record model.VerificationRecord,
 	summary *model.ExecutionSummary,
 	existingDigests *model.EvidenceDigests,
 ) ([]string, error) {
@@ -587,7 +574,7 @@ func addReviewSkillInputs(
 	if err != nil {
 		return err
 	}
-	for _, rel := range reviewWorkspaceInputPaths(paths, change) {
+	for _, rel := range reviewWorkspaceInputPaths(paths) {
 		if err := addWorkspaceFileInput(paths.WorkspaceRoot, rel, inputs); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				hash, hashErr := deletedFileInputHash(rel)
@@ -616,7 +603,7 @@ func addReviewSummaryContentInputs(root string, change model.Change, summary *mo
 	}
 	for _, rel := range closeoutGoalVerificationReuseContentPaths(change, summary) {
 		rel = filepath.ToSlash(strings.TrimSpace(rel))
-		if rel == "" || reviewInputPathExcluded(change, rel) {
+		if rel == "" || reviewInputPathExcluded(rel) {
 			continue
 		}
 		if !strings.ContainsAny(rel, "*?[") {
@@ -709,7 +696,7 @@ func addWaveOrchestrationInputs(
 	return nil
 }
 
-func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths, change model.Change) []string {
+func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths) []string {
 	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
 	if workspaceRoot == "" {
 		return nil
@@ -720,7 +707,7 @@ func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths, change model.Cha
 	for _, file := range files {
 		rel := filepath.ToSlash(strings.TrimSpace(file))
 		rel = strings.TrimPrefix(rel, "./")
-		if rel == "" || reviewInputPathExcluded(change, rel) {
+		if rel == "" || reviewInputPathExcluded(rel) {
 			continue
 		}
 		filtered = append(filtered, rel)
@@ -728,7 +715,7 @@ func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths, change model.Cha
 	return stringutil.UniqueSorted(filtered)
 }
 
-func reviewInputPathExcluded(change model.Change, rel string) bool {
+func reviewInputPathExcluded(rel string) bool {
 	rel = strings.Trim(strings.TrimSpace(filepath.ToSlash(rel)), "/")
 	if rel == "" || strings.HasPrefix(rel, ".git/") {
 		return true
@@ -803,15 +790,4 @@ func deletedFileInputHash(rel string) (string, error) {
 		"path":    filepath.ToSlash(strings.TrimSpace(rel)),
 		"deleted": true,
 	})
-}
-
-func deletedInputDigest(digest, rel string) bool {
-	if strings.TrimSpace(digest) == "" {
-		return false
-	}
-	expected, err := model.ComputeInputHash(map[string]any{
-		"path":    filepath.ToSlash(strings.TrimSpace(rel)),
-		"deleted": true,
-	})
-	return err == nil && digest == expected
 }

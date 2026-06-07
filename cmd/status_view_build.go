@@ -215,7 +215,7 @@ func projectStatusExecutionAction(root string, change model.Change, execCtx exec
 		return "run", nil, nil
 	}
 
-	_, resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "status")
+	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "status")
 	switch {
 	case err != nil:
 		blockers, diagnostics := statusWaveExecutionIssues(err)
@@ -452,10 +452,6 @@ func mapStatusProgress(progress *enginestatus.Progress) *statusProgress {
 		}
 	}
 	return mapped
-}
-
-func mapArtifactDAGNodes(nodes []enginestatus.ArtifactNode) []artifactDAGNode {
-	return mapArtifactDAGNodesForGateStatus(nodes, nil)
 }
 
 func mapArtifactDAGNodesForGateStatus(nodes []enginestatus.ArtifactNode, gateStatus map[string]model.GateRecord) []artifactDAGNode {

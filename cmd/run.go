@@ -133,7 +133,7 @@ func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse st
 		return nil
 	}
 
-	_, resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "run")
+	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "run")
 	if err != nil {
 		return err
 	}

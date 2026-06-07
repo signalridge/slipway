@@ -41,7 +41,7 @@ THEN the system returns 401 and does not serve the resource.
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, "valid", view.RequirementsContract.Status)
-		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md"), view.RequirementsContract.Source)
+		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, "requirements.md"), view.RequirementsContract.Source)
 		assert.Contains(t, view.RequirementsContract.Message, "validated")
 	})
 }
@@ -62,7 +62,7 @@ func TestValidateReportsMissingRequirementsContract(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, "missing", view.RequirementsContract.Status)
-		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md"), view.RequirementsContract.Source)
+		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, "requirements.md"), view.RequirementsContract.Source)
 		assert.Contains(t, view.RequirementsContract.Message, "missing")
 	})
 }
@@ -158,7 +158,7 @@ REQ-001: The system must authenticate requests.
 		view, err := buildValidateViewForSlug(root, slug)
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
-		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md"), view.RequirementsContract.Source)
+		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, "requirements.md"), view.RequirementsContract.Source)
 		normalizedWorktreePath, err := state.NormalizePath(worktreePath)
 		require.NoError(t, err)
 		normalizedSource, err := state.NormalizePath(view.RequirementsContract.Source)

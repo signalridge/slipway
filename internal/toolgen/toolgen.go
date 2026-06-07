@@ -275,15 +275,6 @@ func CommandDescription(id string) string {
 	return ""
 }
 
-// CommandClassification returns the registry classification for a command ID.
-// Returns empty string if the command is not registered.
-func CommandClassification(id string) string {
-	if def, ok := commandRegistryMap[id]; ok {
-		return string(def.Class)
-	}
-	return ""
-}
-
 // promptSurfaceIDs returns IDs of commands that have generated prompt surfaces.
 // It is derived from commandRegistry to keep the generated surfaces in sync.
 var promptSurfaceIDs = func() []string {
@@ -402,17 +393,6 @@ func ShouldExportAsHostSkill(id string) bool {
 // GovernanceSkillNames lists the static exported governance surfaces (.md).
 var GovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderStatic)
 
-// workflowGovernanceNames lists the workflow-state-owned governance hosts.
-var workflowGovernanceNames = governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
-	return desc.WorkflowOwned
-})
-
-// extraExportedGovernanceNames lists exported helpers that are intentionally
-// outside the workflow-governance registry.
-var extraExportedGovernanceNames = governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
-	return desc.ExportOnlyExtra
-})
-
 // standaloneGovernanceNames lists standalone exported governance helpers.
 var standaloneGovernanceNames = governanceSurfaceIDsByRenderMode(governanceRenderStandalone)
 
@@ -478,7 +458,7 @@ func buildCommandRenderData(id string) (commandRenderData, error) {
 		Class:         def.Class,
 		Tier:          def.Tier,
 		Description:   commandDescriptions[id],
-		Arguments:     commandArguments(id),
+		Arguments:     CommandArguments(id),
 		Prerequisites: commandPrerequisites(id),
 		Notes:         append([]string(nil), def.Notes...),
 	}, nil
@@ -724,17 +704,13 @@ func AdapterSkillName(id string) string {
 	return adapterSkillName(id)
 }
 
-func exportedSkillDirName(id string) string {
-	return adapterSkillName(id)
-}
-
 func sourceSkillTemplatePath(id, leaf string) string {
 	return path.Join("skills", id, leaf)
 }
 
 // SkillPath returns the relative path to a skill's SKILL.md for the given tool config.
 func SkillPath(cfg ToolConfig, skillName string) string {
-	return filepath.Join(cfg.SkillsDir, exportedSkillDirName(skillName), "SKILL.md")
+	return filepath.Join(cfg.SkillsDir, adapterSkillName(skillName), "SKILL.md")
 }
 
 // SkillIndexPath returns the relative path to the generated workflow-owned
@@ -1031,12 +1007,12 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 			if !shouldExportAsHostSkill(name) {
 				continue
 			}
-			expected[exportedSkillDirName(name)] = struct{}{}
+			expected[adapterSkillName(name)] = struct{}{}
 		}
 	}
 	for _, name := range catalogSkillIDs {
 		if shouldExportAsHostSkill(name) {
-			expected[exportedSkillDirName(name)] = struct{}{}
+			expected[adapterSkillName(name)] = struct{}{}
 		}
 	}
 	managed := generatedSkillDirNameSet()
@@ -1073,7 +1049,7 @@ func generatedSkillDirNameSet() map[string]struct{} {
 		catalogSkillIDs,
 	} {
 		for _, name := range names {
-			managed[exportedSkillDirName(name)] = struct{}{}
+			managed[adapterSkillName(name)] = struct{}{}
 		}
 	}
 	return managed
@@ -1783,18 +1759,14 @@ func commandTrigger(cfg ToolConfig, commandID string) string {
 	return fmt.Sprintf("%s%s", cfg.TriggerPrefix, commandID)
 }
 
-func commandArguments(id string) string {
-	if def, ok := commandRegistryMap[id]; ok && def.Arguments != "" {
-		return def.Arguments
-	}
-	return "[--json]"
-}
-
 // CommandArguments returns the registry argument summary for a command ID.
 // It is the single string the generated command reference renders from, so the
 // reverse flag-contract guard asserts every registered Cobra flag appears here.
 func CommandArguments(id string) string {
-	return commandArguments(id)
+	if def, ok := commandRegistryMap[id]; ok && def.Arguments != "" {
+		return def.Arguments
+	}
+	return "[--json]"
 }
 
 func hasGeneratedAdapter(root string, cfg ToolConfig) bool {

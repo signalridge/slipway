@@ -25,9 +25,7 @@ const (
 
 func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.GovernanceSnapshot) []RequiredAction {
 	verifications := loadRuntimeVerificationState(root, change)
-	executionSummaryCtx := state.RelevantExecutionSummaryContext{}
-	var err error
-	executionSummaryCtx, err = state.LoadRelevantExecutionSummaryContext(root, change)
+	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
 	if err != nil {
 		verifications.diagnostics = append(verifications.diagnostics, fmt.Sprintf("runtime_execution_summary_invalid:%v", err))
 		// Fail closed for execution-summary-bound checks by treating invalid
@@ -258,7 +256,7 @@ func artifactSectionHasSubstantiveContent(root string, change model.Change, arti
 	if err != nil {
 		return false
 	}
-	body := extractMarkdownSectionBodyForRuntimeAction(string(content), heading)
+	body := extractMarkdownSectionBody(string(content), heading)
 	if strings.TrimSpace(body) == "" {
 		return false
 	}
@@ -275,30 +273,6 @@ func artifactSectionHasSubstantiveContent(root string, change model.Change, arti
 		return false
 	}
 	return true
-}
-
-func extractMarkdownSectionBodyForRuntimeAction(content, heading string) string {
-	if strings.TrimSpace(content) == "" {
-		return ""
-	}
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	target := strings.ToLower(strings.TrimSpace(heading))
-	found := false
-	body := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !found {
-			if strings.ToLower(trimmed) == target {
-				found = true
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "## ") {
-			break
-		}
-		body = append(body, line)
-	}
-	return strings.TrimSpace(strings.Join(body, "\n"))
 }
 
 func normalizeSectionBody(body string) string {

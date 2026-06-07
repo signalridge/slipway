@@ -198,7 +198,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	if err != nil {
 		return GovernanceReadiness{}, err
 	}
-	artifactCtx := resolveArtifactEvaluationContext(root, evaluationChange, policy.EffectivePreset)
+	artifactCtx := resolveArtifactEvaluationContext(evaluationChange, policy.EffectivePreset)
 	artifactReadinessReader := readers.artifactReadiness
 	if artifactReadinessReader == nil {
 		artifactReadinessReader = contextualArtifactReadinessReader{ctx: artifactCtx}
@@ -573,7 +573,7 @@ func evaluateArtifactReadinessWithContext(root string, change model.Change, ctx 
 	}
 
 	for _, name := range required {
-		path := artifact.ResolveArtifactPath(base, change.Slug, name)
+		path := artifact.ResolveArtifactPath(base, name)
 		if _, err := os.Stat(path); err != nil {
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
@@ -734,7 +734,7 @@ func sortStrings(values *[]string) {
 	slices.Sort(*values)
 }
 
-func resolveArtifactEvaluationContext(root string, change model.Change, requiredPreset model.WorkflowPreset) artifactEvaluationContext {
+func resolveArtifactEvaluationContext(change model.Change, requiredPreset model.WorkflowPreset) artifactEvaluationContext {
 	if !requiredPreset.IsValid() {
 		requiredPreset = change.WorkflowPreset
 	}

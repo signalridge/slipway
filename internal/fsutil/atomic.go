@@ -73,11 +73,6 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// CleanupAtomicTempArtifacts removes stale temp files created by WriteFileAtomic.
-func CleanupAtomicTempArtifacts(root string) ([]string, error) {
-	return CleanupAtomicTempArtifactsOlderThan(root, 0, time.Now().UTC())
-}
-
 // CleanupAtomicTempArtifactsOlderThan removes temp files created by
 // WriteFileAtomic only after they are old enough to be considered abandoned.
 func CleanupAtomicTempArtifactsOlderThan(root string, staleAfter time.Duration, now time.Time) ([]string, error) {

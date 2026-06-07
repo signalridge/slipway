@@ -22,7 +22,7 @@ func TestDoneAllReadyPreservesShipGateReasonCodes(t *testing.T) {
 	blocked.CurrentState = model.StateS4Verify
 	blocked.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, blocked))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, blocked, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, blocked, "", model.ProjectContext{}))
 	writePassingExecutionSummary(t, root, blocked.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, blocked.Slug, 1)
 	writePassingGoalVerificationEvidence(t, root, blocked.Slug, 1)
@@ -51,7 +51,7 @@ func TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers(t *testing.T) {
 	blocked.CurrentState = model.StateS4Verify
 	blocked.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, blocked))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, blocked, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, blocked, "", model.ProjectContext{}))
 	writePassingExecutionSummary(t, root, blocked.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, blocked.Slug, 1)
 	writePassingReviewEvidencePack(t, root, blocked.Slug, 1)

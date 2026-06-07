@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,17 +27,6 @@ type changeRef struct {
 const governedExecutionMode = string(ctxpack.ExecutionModeGoverned)
 
 type projectRootContextKey struct{}
-
-func setCommandProjectRoot(cmd *cobra.Command, root string) {
-	if cmd == nil {
-		return
-	}
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	cmd.SetContext(context.WithValue(ctx, projectRootContextKey{}, root))
-}
 
 func projectRootFromCommand(cmd *cobra.Command) (string, error) {
 	if root, ok := projectRootOverrideFromCommand(cmd); ok {
@@ -380,15 +368,7 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 				nil,
 			)
 		}
-		return changeRef{}, newStateIntegrityError(
-			"change_state_load_failed",
-			fmt.Sprintf("failed to load change state for %q: %v", slug, err),
-			"Run `slipway repair` to inspect or repair change state files.",
-			slug,
-			map[string]any{
-				"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
-			},
-		)
+		return changeRef{}, newChangeStateLoadFailedError(slug, err)
 	}
 	if change.Status != model.ChangeStatusActive {
 		return changeRef{}, newPreconditionError(
@@ -416,17 +396,24 @@ func loadChangeBySlug(root, slug string) (model.Change, error) {
 				nil,
 			)
 		}
-		return model.Change{}, newStateIntegrityError(
-			"change_state_load_failed",
-			fmt.Sprintf("failed to load change state for %q: %v", slug, err),
-			"Run `slipway repair` to inspect or repair change state files.",
-			slug,
-			map[string]any{
-				"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
-			},
-		)
+		return model.Change{}, newChangeStateLoadFailedError(slug, err)
 	}
 	return change, nil
+}
+
+// newChangeStateLoadFailedError builds the standard error returned when a
+// change's change.yaml cannot be loaded. All change-state loaders share it so
+// the error code, remediation, and metadata stay identical.
+func newChangeStateLoadFailedError(slug string, err error) *CLIError {
+	return newStateIntegrityError(
+		"change_state_load_failed",
+		fmt.Sprintf("failed to load change state for %q: %v", slug, err),
+		"Run `slipway repair` to inspect or repair change state files.",
+		slug,
+		map[string]any{
+			"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
+		},
+	)
 }
 
 func wrapResolutionError(err error) error {
@@ -481,15 +468,7 @@ func wrapResolutionError(err error) error {
 func loadActiveChange(root, slug, inactiveMessage, remediation string) (model.Change, error) {
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
-		return model.Change{}, newStateIntegrityError(
-			"change_state_load_failed",
-			fmt.Sprintf("failed to load change state for %q: %v", slug, err),
-			"Run `slipway repair` to inspect or repair change state files.",
-			slug,
-			map[string]any{
-				"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
-			},
-		)
+		return model.Change{}, newChangeStateLoadFailedError(slug, err)
 	}
 	if change.Status != model.ChangeStatusActive {
 		return model.Change{}, newPreconditionError(
@@ -600,16 +579,16 @@ func loadResumableWaveExecution(
 	change model.Change,
 	execCtx executionContext,
 	operation string,
-) (*waveExecutionContext, int, error) {
+) (int, error) {
 	if change.CurrentState != model.StateS2Execute || !execCtx.Ready {
-		return nil, 0, nil
+		return 0, nil
 	}
 
 	waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, operation)
 	if err != nil || waveCtx == nil {
-		return nil, 0, err
+		return 0, err
 	}
-	return waveCtx, state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs), nil
+	return state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs), nil
 }
 
 func validateActiveCheckpointAuthority(

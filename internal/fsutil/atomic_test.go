@@ -76,7 +76,7 @@ readLoop:
 	staleTemp := filepath.Join(dir, ".tmp-state.yaml-stale")
 	require.NoError(t, os.WriteFile(staleTemp, []byte("stale"), 0o644))
 
-	deleted, err := CleanupAtomicTempArtifacts(dir)
+	deleted, err := CleanupAtomicTempArtifactsOlderThan(dir, 0, time.Now().UTC())
 	require.NoError(t, err)
 	assert.Contains(t, deleted, staleTemp)
 

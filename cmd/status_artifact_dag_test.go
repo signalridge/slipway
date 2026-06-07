@@ -153,7 +153,7 @@ func TestArtifactDAGFromProjectionSkipsNonRequiredNodes(t *testing.T) {
 		},
 	}, workflowStateLabel)
 	require.NoError(t, err)
-	dag := mapArtifactDAGNodes(projection.ArtifactDAG)
+	dag := mapArtifactDAGNodesForGateStatus(projection.ArtifactDAG, nil)
 
 	require.Len(t, dag, 1)
 	assert.Equal(t, "intent.md", dag[0].Name)

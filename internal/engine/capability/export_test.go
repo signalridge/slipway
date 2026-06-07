@@ -2,20 +2,27 @@ package capability
 
 import (
 	"fmt"
+	"path"
 	"strings"
 	"testing"
 )
 
+func buildDefaultSkillIndex(reg *Registry) string {
+	return BuildSkillIndexWithPaths(reg, func(id string) string {
+		return path.Join("slipway-"+strings.TrimSpace(id), "SKILL.md")
+	})
+}
+
 func TestBuildSkillIndex_NilRegistry(t *testing.T) {
-	if got := BuildSkillIndex(nil); got != "" {
+	if got := buildDefaultSkillIndex(nil); got != "" {
 		t.Fatalf("expected empty index for nil registry, got %q", got)
 	}
 }
 
 func TestBuildSkillIndex_Deterministic(t *testing.T) {
 	reg := DefaultRegistry()
-	a := BuildSkillIndex(reg)
-	b := BuildSkillIndex(reg)
+	a := buildDefaultSkillIndex(reg)
+	b := buildDefaultSkillIndex(reg)
 	if a != b {
 		t.Fatal("skill index is non-deterministic across calls")
 	}
@@ -23,7 +30,7 @@ func TestBuildSkillIndex_Deterministic(t *testing.T) {
 
 func TestBuildSkillIndex_IncludesEverySkillInRegistry(t *testing.T) {
 	reg := DefaultRegistry()
-	index := BuildSkillIndex(reg)
+	index := buildDefaultSkillIndex(reg)
 	for _, id := range reg.IDs() {
 		publicName := adapterSkillPublicName(id)
 		if !strings.Contains(index, "`"+publicName+"`") {
@@ -34,7 +41,7 @@ func TestBuildSkillIndex_IncludesEverySkillInRegistry(t *testing.T) {
 
 func TestBuildSkillIndex_RendersShortInformationalIndex(t *testing.T) {
 	reg := DefaultRegistry()
-	index := BuildSkillIndex(reg)
+	index := buildDefaultSkillIndex(reg)
 	if len([]byte(index)) > 12000 {
 		t.Fatalf("skill index too large: got %d bytes, want <= 12000", len([]byte(index)))
 	}
@@ -63,7 +70,7 @@ func TestBuildSkillIndex_RendersShortInformationalIndex(t *testing.T) {
 
 func TestBuildSkillIndex_UsesCanonicalPublicSkillLabels(t *testing.T) {
 	reg := DefaultRegistry()
-	index := BuildSkillIndex(reg)
+	index := buildDefaultSkillIndex(reg)
 	for _, sk := range reg.All() {
 		publicName := adapterSkillPublicName(sk.ID)
 		if !strings.Contains(index, "| `"+publicName+"` |") {
@@ -87,7 +94,7 @@ func TestBuildSkillIndex_RendersPublicFocusAliasesWithoutHostPaths(t *testing.T)
 		t.Fatal(err)
 	}
 
-	index := BuildSkillIndex(reg)
+	index := buildDefaultSkillIndex(reg)
 	for _, rec := range ExplicitFocusSurfaces() {
 		selector := fmt.Sprintf("`slipway %s --focus %s`", rec.Command, rec.PublicName)
 		if !strings.Contains(index, selector) {

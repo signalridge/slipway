@@ -997,7 +997,7 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
 	bundleDir, err := state.GovernedBundleDir(root, change)
@@ -1091,7 +1091,7 @@ func TestAdvanceGoverned_S2PassesWithCompleteRuntimeTaskEvidence(t *testing.T) {
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
 
@@ -1212,7 +1212,7 @@ func TestAdvanceGoverned_AppliesWorktreePreflightBeforeRequiredActionBlockers(t 
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, model.WorkflowPresetStrict); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStrict, model.ProjectContext{}); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
 	bundleDir, err := state.GovernedBundleDir(root, change)

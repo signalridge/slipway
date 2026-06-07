@@ -107,7 +107,7 @@ func assembleSkillViewWithOptions(
 			if policyErr != nil {
 				return policyErr
 			}
-			latestRunVersion := 0
+			var latestRunVersion int
 			if execCtx != nil {
 				latestRunVersion = execCtx.LatestRunVersion
 			} else {
@@ -550,7 +550,7 @@ func buildRequiredSkillEvidence(
 	if err != nil {
 		return nil, err
 	}
-	latestRunVersion := 0
+	var latestRunVersion int
 	if execCtx != nil {
 		latestRunVersion = execCtx.LatestRunVersion
 	} else {

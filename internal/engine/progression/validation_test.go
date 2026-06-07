@@ -94,7 +94,7 @@ func assertChecklistCoverageBlocker(t *testing.T, slug, coverRef, specContent, w
 	if err := os.WriteFile(filepath.Join(tasksDir, "tasks.md"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	specPath := artifact.ResolveArtifactPath(tasksDir, slug, "requirements.md")
+	specPath := artifact.ResolveArtifactPath(tasksDir, "requirements.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestValidateTasksChecklistDetailed_RejectsMechanicalScaffoldAtPlanAudit(t *
 	change := model.NewChange("mechanical-reject")
 	change.Description = "do the thing"
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, model.WorkflowPresetStandard))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStandard, model.ProjectContext{}))
 
 	// At plan-audit, the engine's placeholder scaffold must fail closed:
 	// placeholder task objective + placeholder requirements (issue #91).
@@ -369,7 +369,7 @@ func TestValidateTasksChecklistDetailed_ScaffoldedGuardrailRequirementsStayCover
 	change.GuardrailDomain = "auth_authz"
 	change.WorkflowPreset = model.WorkflowPresetStandard
 
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, model.WorkflowPresetStandard))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStandard, model.ProjectContext{}))
 
 	result := ValidateTasksChecklistDetailed(root, change)
 	for _, blocker := range result.Blockers {

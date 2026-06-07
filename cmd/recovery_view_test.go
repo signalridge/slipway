@@ -63,7 +63,7 @@ func TestValidateViewBaseCarriesRecovery(t *testing.T) {
 	change.CurrentState = model.StateS1Plan
 	blockers := model.ReasonCodesFromSpecs([]string{"plan_audit_failed"})
 
-	view := buildValidateViewBase(root, change, governedExecutionMode, nil, blockers, nil, nil)
+	view := buildValidateViewBase(root, change, nil, blockers, nil, nil)
 
 	require.NotNil(t, view.Recovery)
 	assert.NotEmpty(t, view.Recovery.PrimaryCommand)
@@ -105,7 +105,7 @@ func TestValidateViewBaseOmitsRecoveryWhenClean(t *testing.T) {
 	change := model.NewChange("clean-validate")
 	change.CurrentState = model.StateS1Plan
 
-	view := buildValidateViewBase(root, change, governedExecutionMode, nil, nil, nil, nil)
+	view := buildValidateViewBase(root, change, nil, nil, nil, nil)
 	assert.Nil(t, view.Recovery)
 }
 

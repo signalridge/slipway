@@ -5,21 +5,6 @@ import (
 	"strings"
 )
 
-// BuildSkillIndex renders the generated workflow-owned skill index. The index
-// is a compact markdown file aimed at external agents that need a
-// description-level map of exported Slipway host skills.
-//
-// It is a one-way reference. The kernel does not read this file back, so the
-// output shape is free to evolve as authoring needs change — only the
-// renderer must remain deterministic so regenerations produce stable diffs.
-//
-// Adapter-visible skill labels use the canonical `slipway-<id>` public name.
-func BuildSkillIndex(reg *Registry) string {
-	return BuildSkillIndexWithPaths(reg, func(id string) string {
-		return "slipway-" + strings.TrimSpace(id) + "/SKILL.md"
-	})
-}
-
 func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) string) string {
 	if reg == nil {
 		return ""
@@ -28,7 +13,7 @@ func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) strin
 	b.WriteString("# Slipway Skill Index\n\n")
 	b.WriteString("Informational index only. Use `slipway next --json` for governed host selection, then load the real host skill path directly.\n\n")
 	b.WriteString("Generated from the Go-owned capability registry. Refresh with `slipway init`.\n\n")
-	b.WriteString(fmt.Sprintf("Indexed skills: %d\n\n", reg.Len()))
+	fmt.Fprintf(&b, "Indexed skills: %d\n\n", reg.Len())
 
 	b.WriteString("## Index\n\n")
 	b.WriteString("| Skill | Host skill path | Tier | Bindings | Evidence | Hydrate refs | Use when |\n")
@@ -38,7 +23,7 @@ func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) strin
 		if hostSkillPath != nil {
 			loadPath = strings.TrimSpace(hostSkillPath(sk.ID))
 		}
-		b.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&b,
 			"| `%s` | `%s` | `%s` | %s | `%s` | %s | %s |\n",
 			adapterSkillPublicName(sk.ID),
 			loadPath,
@@ -47,7 +32,7 @@ func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) strin
 			sk.Evidence,
 			formatHydrateReferences(sk),
 			sk.Summary,
-		))
+		)
 	}
 	b.WriteString("\n")
 
@@ -58,13 +43,13 @@ func BuildSkillIndexWithPaths(reg *Registry, hostSkillPath func(id string) strin
 		b.WriteString("| Selector | Backing skill | Use when |\n")
 		b.WriteString("| --- | --- | --- |\n")
 		for _, focus := range focuses {
-			b.WriteString(fmt.Sprintf(
+			fmt.Fprintf(&b,
 				"| `slipway %s --focus %s` | `%s` | %s |\n",
 				focus.Command,
 				focus.PublicName,
 				focus.BackingID,
 				focus.Summary,
-			))
+			)
 		}
 		b.WriteString("\n")
 	}

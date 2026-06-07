@@ -60,7 +60,7 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	resolve := input.ArtifactResolver
 	if resolve == nil {
 		resolve = func(name string) string {
-			return artifact.ResolveArtifactPath(input.BundleDir, input.Slug, name)
+			return artifact.ResolveArtifactPath(input.BundleDir, name)
 		}
 	}
 

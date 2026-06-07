@@ -1,7 +1,6 @@
 package scopecontract
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,10 +36,6 @@ type Report struct {
 	MissingChangedFileTasks []string           `json:"missing_changed_file_tasks,omitempty"`
 	Blockers                []model.ReasonCode `json:"blockers,omitempty"`
 	Diagnostics             []string           `json:"diagnostics,omitempty"`
-}
-
-func Evaluate(plan wave.TaskPlan, summary *model.ExecutionSummary) Report {
-	return EvaluateWithChangedFiles(plan, summary, nil)
 }
 
 func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummary, extraChangedFiles []string) Report {
@@ -79,10 +74,6 @@ func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummar
 	}
 	report.Status = StatusPass
 	return report
-}
-
-func EvaluateBundle(bundleDir string, summary *model.ExecutionSummary) (Report, error) {
-	return EvaluateBundleWithChangedFiles(bundleDir, summary, nil)
 }
 
 func EvaluateBundleWithChangedFiles(bundleDir string, summary *model.ExecutionSummary, extraChangedFiles []string) (Report, error) {
@@ -301,8 +292,4 @@ func (r Report) Clone() Report {
 		Blockers:                append([]model.ReasonCode(nil), r.Blockers...),
 		Diagnostics:             append([]string(nil), r.Diagnostics...),
 	}
-}
-
-func (r Report) String() string {
-	return fmt.Sprintf("%s planned=%d changed=%d drift=%d", r.Status, len(r.PlannedTargets), len(r.ChangedFiles), len(r.OutOfScopeFiles))
 }

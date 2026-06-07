@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestLateAssuranceEditDoesNotStalePlanAuditAtS1(t *testing.T) {
 		require.NoError(t, os.Chtimes(filepath.Join(bundleDir, rel), beforeVerdict, beforeVerdict))
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, rec)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
 
 	// A late closeout-style edit to assurance.md, well after the plan-audit verdict.
 	afterVerdict := verdictAt.Add(time.Hour)
@@ -148,7 +149,7 @@ func TestEvaluateRequiredSkillsUsesContentDigestNotMTime(t *testing.T) {
 		Timestamp: time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, rec)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
 
 	olderThanEvidence := rec.Timestamp.Add(-time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "requirements.md"), olderThanEvidence, olderThanEvidence))
@@ -182,7 +183,7 @@ func TestEvaluateRequiredSkillsAcceptsRefreshedVerdictAfterDigestDrift(t *testin
 		Timestamp: originalAt,
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, original)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, original, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, original, nil))
 
 	refreshedAt := originalAt.Add(2 * time.Hour)
 	assurancePath := filepath.Join(bundleDir, "assurance.md")
@@ -226,7 +227,7 @@ func TestEvaluateRequiredSkillsIgnoresUnchangedTaskMTimeInRefreshedVerdictWindow
 		Timestamp: originalAt,
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, original)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, original, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, original, nil))
 
 	refreshedAt := originalAt.Add(2 * time.Hour)
 	assurancePath := filepath.Join(bundleDir, "assurance.md")
@@ -324,13 +325,13 @@ func TestMissingWaveDigestEntryStampsCurrentRuntimeTaskEvidenceWithoutTimestampR
 	taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "t-01.json")
 	require.NoError(t, os.Chtimes(taskEvidencePath, beforeVerdict, beforeVerdict))
 
-	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, record, summary)
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, summary)
 	require.NoError(t, err)
 	assert.Empty(t, blockers)
 
 	afterVerdict := verdictAt.Add(time.Minute)
 	require.NoError(t, os.Chtimes(taskEvidencePath, afterVerdict, afterVerdict))
-	blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, record, summary)
+	blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, summary)
 	require.NoError(t, err)
 	assert.Empty(t, blockers)
 
@@ -453,7 +454,7 @@ func TestStampPassingSkillDigestsUsesStoredDigestForPreviouslyAcceptedPlanAuditC
 	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md", "assurance.md", "tasks.md"} {
 		require.NoError(t, os.Chtimes(filepath.Join(bundleDir, rel), beforeVerdict, beforeVerdict))
 	}
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, planRecord, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, planRecord, nil))
 	_, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
 		EventType: "skill.evidence_recorded",
 		SkillID:   SkillPlanAudit,
@@ -732,7 +733,7 @@ func TestResearchOrchestrationInputDigestIncludesResearchArtifact(t *testing.T) 
 		Timestamp: time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillResearchOrchestration, record)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillResearchOrchestration, record, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillResearchOrchestration, record, nil))
 
 	digests, err := state.LoadEvidenceDigestsForChange(root, change)
 	require.NoError(t, err)
@@ -740,7 +741,7 @@ func TestResearchOrchestrationInputDigestIncludesResearchArtifact(t *testing.T) 
 	require.Contains(t, digests.Skills[SkillResearchOrchestration].Inputs, "research.md")
 
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte("# Research\nchanged after research verdict\n"), 0o644))
-	blockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration, record)
+	blockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:research-orchestration:research.md")
 }
@@ -761,10 +762,10 @@ func TestStoredGoalDigestStalesWhenInputContentChanges(t *testing.T) {
 		Timestamp:  verdictAt,
 		RunVersion: 1,
 	}
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n\nconst goalDigestChanged = true\n"), 0o644))
 
-	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, record, summary)
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:goal-verification:tracked.go")
 }
@@ -785,10 +786,10 @@ func TestStoredReviewDigestStalesWhenInputContentChanges(t *testing.T) {
 		Timestamp:  verdictAt,
 		RunVersion: 1,
 	}
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
 	require.NoError(t, os.WriteFile(reviewablePath, []byte("package main\n\nconst reviewDigestChanged = true\n"), 0o644))
 
-	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, record, summary)
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, summary)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:independent-review:reviewable.go")
 }
@@ -808,10 +809,10 @@ func TestStoredReviewDigestStalesWhenInputFileIsDeleted(t *testing.T) {
 		Timestamp:  verdictAt,
 		RunVersion: 1,
 	}
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
 	require.NoError(t, os.Remove(deletedPath))
 
-	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, record, summary)
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, summary)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:independent-review:tracked.go")
 }
@@ -832,7 +833,7 @@ func TestGatePlanningSkillRecordsPreservesStaleDigestArtifactName(t *testing.T) 
 		Timestamp: time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, rec)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte("# Decision\nchanged after plan audit\n"), 0o644))
 
 	_, blockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
@@ -1161,10 +1162,10 @@ func TestGoalAndCloseoutInputDigestNamesDeletedSummarizedFiles(t *testing.T) {
 				Timestamp:  time.Date(2026, 6, 4, 5, 0, 0, 0, time.UTC),
 				RunVersion: 1,
 			}
-			require.NoError(t, stampEvidenceDigestForSkill(root, change, skillName, record, summary))
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
 
 			require.NoError(t, os.Remove(filepath.Join(root, "tracked.go")))
-			blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, skillName, record, summary)
+			blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
 			require.NoError(t, err)
 			assert.Contains(t, blockers, "required_skill_stale:"+skillName+":tracked.go")
 			assert.NotContains(t, blockers, "required_skill_stale:"+skillName+":input_digest_unavailable")
@@ -1265,8 +1266,8 @@ REQ-001: S4 ship gate approval reopens stale review digests. Traces to INT-001.
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillSpecComplianceReview, specReviewRecord)
 	writeVerificationForTest(t, root, change.Slug, SkillCodeQualityReview, codeReviewRecord)
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillSpecComplianceReview, specReviewRecord, summary))
-	require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillCodeQualityReview, codeReviewRecord, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillSpecComplianceReview, specReviewRecord, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillCodeQualityReview, codeReviewRecord, summary))
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n\nconst refreshedDigestInput = true\n"), 0o644))
 	refreshedAt := originalAt.Add(time.Hour)
@@ -1435,4 +1436,14 @@ Rollback is source-only in this fixture.
 ## Archive Decision
 The fixture is ready to reach done-ready.
 `
+}
+
+// deletedInputDigest reports whether digest matches the deleted-file input hash
+// for rel. Test-only assertion helper for evidence-digest behavior.
+func deletedInputDigest(digest, rel string) bool {
+	if strings.TrimSpace(digest) == "" {
+		return false
+	}
+	expected, err := deletedFileInputHash(rel)
+	return err == nil && digest == expected
 }

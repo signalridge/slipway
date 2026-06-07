@@ -698,7 +698,7 @@ func codebaseMapDocIsLegacyGenerated(name, content string) bool {
 			strings.HasPrefix(lines[4], "- Key dependencies: ") &&
 			strings.HasPrefix(lines[5], "- Notes: go.mod declares Go ")
 	case "INTEGRATIONS.md":
-		return linesEqual(lines, []string{
+		return slices.Equal(lines, []string{
 			"# Integrations",
 			"- External APIs: Git CLI is used for repository and worktree inspection.",
 			"- Infrastructure bindings: Local filesystem state under artifacts/, .slipway.yaml, and git-local runtime directories.",
@@ -707,7 +707,7 @@ func codebaseMapDocIsLegacyGenerated(name, content string) bool {
 			"- Notes: Integration inventory is deterministic baseline context; refine with project-specific external services when present.",
 		})
 	case "ARCHITECTURE.md":
-		return linesEqual(lines, []string{
+		return slices.Equal(lines, []string{
 			"# Architecture",
 			"- Module responsibilities: cmd/ owns CLI surfaces; internal/state owns change authority and filesystem layout; internal/engine owns progression, governance, artifact, and gate logic.",
 			"- Dependency flow: CLI commands assemble model state and delegate durable state changes to internal/state and workflow decisions to internal/engine.",
@@ -725,7 +725,7 @@ func codebaseMapDocIsLegacyGenerated(name, content string) bool {
 			(lines[5] == "- Notes: Go tests not detected by baseline scan." ||
 				lines[5] == "- Notes: Go *_test.go files are present.")
 	case "CONVENTIONS.md":
-		return linesEqual(lines, []string{
+		return slices.Equal(lines, []string{
 			"# Conventions",
 			"- Naming: CLI commands live in cmd/ with make<Command>Cmd constructors; workflow states and durable schemas live in internal/model.",
 			"- File organization: Runtime state helpers belong under internal/state; progression decisions belong under internal/engine/progression.",
@@ -735,7 +735,7 @@ func codebaseMapDocIsLegacyGenerated(name, content string) bool {
 			"- Notes: Generated host-skill templates should stay synchronized with runtime contracts.",
 		})
 	case "TESTING.md":
-		return linesEqual(lines, []string{
+		return slices.Equal(lines, []string{
 			"# Testing",
 			"- Test layout: cmd/*_test.go covers CLI contracts; internal/**/*_test.go covers state, artifact, progression, governance, and template behavior.",
 			"- Coverage hotspots: next/run/status JSON contracts, governed lifecycle gates, archive migration, worktree binding, and generated skill/template drift.",
@@ -745,7 +745,7 @@ func codebaseMapDocIsLegacyGenerated(name, content string) bool {
 			"- Notes: Prefer focused regression tests before full-suite verification.",
 		})
 	case "CONCERNS.md":
-		return linesEqual(lines, []string{
+		return slices.Equal(lines, []string{
 			"# Concerns",
 			"- Architectural pressure points: Worktree binding must happen before canonical governed artifacts are treated as reviewed execution inputs.",
 			"- Brittle areas: Scaffold-only codebase maps, planning-vs-execution evidence freshness, and archive relocation can create misleading authority signals.",
@@ -769,18 +769,6 @@ func substantiveCodebaseMapLines(content string) []string {
 		lines = append(lines, line)
 	}
 	return lines
-}
-
-func linesEqual(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for idx := range got {
-		if got[idx] != want[idx] {
-			return false
-		}
-	}
-	return true
 }
 
 func hasSubstantiveCodebaseMapContent(content string) bool {
