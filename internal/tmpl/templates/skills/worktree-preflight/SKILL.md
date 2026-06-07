@@ -54,9 +54,17 @@ smoke, or targeted test command when it exercises the touched workflow boundary.
 Use the project's full test command only when no narrower baseline would prove
 the preflight risk.
 
+Keep baseline verification summary-first. Use an isolated context when
+supported; otherwise bounded summary output is the fallback. The host retains
+only the baseline command, exit code, bounded summary, and output reference in
+the main context. Write the full baseline output to a referenceable artifact,
+then cite it with `baseline_output_ref:` instead of pasting the full output into
+the host context.
+
 At minimum:
 - confirm the command exits successfully
 - capture the exact verification command you ran
+- capture the full baseline output in an artifact or transcript reference
 - if baseline fails, set verdict to `fail` and record the failure as a blocker
 
 Do not repeat an expensive full-suite run here solely because final
@@ -76,11 +84,16 @@ references:
   - "worktree_path:/absolute/path/to/worktree"
   - "worktree_branch:feat/change-slug"
   - "baseline_verify_cmd:go test ./cmd -run TestRelevantWorkflowBoundary -count=1"
+  - "baseline_output_ref:artifacts/changes/{slug}/verification/worktree-preflight-baseline.log"
 notes: |
-  <verification notes>
+  Baseline command: <command>
+  Exit code: <code>
+  Bounded summary: <short result, failing package, or failing subsystem>
 ```
 
-The runtime will reject `pass` verification if any of these references is missing.
+The runtime will reject `pass` verification if any required worktree path,
+branch, or baseline command reference is missing. Keep the full baseline output
+outside the notes and cite the output reference instead.
 
 ### 4. Advance
 After verification is written, return to the source workspace and run:
@@ -97,6 +110,7 @@ The runtime will validate the worktree binding and persist `worktree_path` and `
 1. Use a dedicated worktree, not the primary workspace root.
 2. Run a fresh, bounded baseline verification command before writing `pass` verification.
 3. Record absolute worktree path and exact branch name in the verification references.
+4. Record a baseline output reference without carrying the full output in the host context.
 
 ## Failure Handling
 - If no dedicated worktree exists yet, create `.worktrees/<slug>` on

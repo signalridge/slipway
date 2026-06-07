@@ -22,25 +22,26 @@ a time, spot-check results, write verification, and wait for approval.
 ## Read Context
 Run `slipway next --json` and read the task plan from the governed change bundle.
 
-If durable codebase mapping exists at `input_context.codebase_map_dir`, read:
-- `STRUCTURE.md`
-- `CONVENTIONS.md`
-- `TESTING.md`
-- `CONCERNS.md`
+For codebase mapping, keep the coordinator context to `input_context.wave_plan`
+and the bounded map metadata from `slipway next --json`. Do not read durable map
+documents into the coordinator just to prepare task briefs. Instead, pass
+`input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs`
+paths to task executors along with `input_context.codebase_map_status` and
+`input_context.codebase_map_doc_states`.
 
-Use them to align execution with directory conventions, test infrastructure,
-and known risk hotspots.
-
-`input_context.codebase_map_status` reflects content **presence, not scope
-relevance** — a map authored for a prior change still reads `populated`. When
-`next`/`run` surfaces the codebase-map relevance advisory (it fires for
-`populated` and `partial`), judge whether the map matches **this** change's scope
-before relying on it for execution targeting, and re-author any stale sections in
-`artifacts/codebase` inline (the assessment re-reads them) rather than executing
-against a stale map. For a `partial` map, also inspect
-`input_context.codebase_map_doc_states` and treat any per-doc `scaffold_only`,
-`baseline`, or `missing` entry as non-durable for that document. Populated is not
-the same as relevant; this is advisory and never blocks execution.
+PR #112 preserves the codebase-map relevance/staleness self-check: it is
+relocated to executor-owned relevance/staleness self-check work, not removed.
+`input_context.codebase_map_status` still reflects content presence, not scope
+relevance, and the codebase-map relevance advisory fires for `populated` and
+`partial`.
+Each executor that uses map guidance must judge whether the referenced docs
+match this task's scope before relying on them, and must report stale or
+non-durable docs in `test_summary` or blocker evidence. For a `partial` map,
+also inspect `input_context.codebase_map_doc_states` inside the executor-owned
+self-check; any per-doc `scaffold_only`, `baseline`, or `missing` entry is
+non-durable for that document. Populated is not the same as relevant; this
+advisory never blocks execution by itself, but stale map usage is not acceptable
+evidence.
 
 If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
 when `freshness` is `fresh`; stale checkpoints require rerunning everything.
@@ -76,6 +77,8 @@ after any checkpoint pause continue with a **fresh** subagent context.
 - Use one isolated executor context per task when supported; otherwise execute sequentially.
 - Pass file paths only; executors read source files in their own context.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
+- For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
+- Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the PR #112 relevance/staleness self-check.
 - Outputs: `changed_files`, `test_summary`, and `evidence_ref`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
 - For test-bearing work, isolate the `task_kind=test` test-authoring step from

@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1041,6 +1042,125 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 
 	if _, err := state.LoadExecutionSummary(root, change.Slug); err != nil {
 		t.Fatalf("load execution summary: %v", err)
+	}
+}
+
+func TestAdvanceGoverned_S2PassesWithCompleteRuntimeTaskEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s2-complete-runtime-evidence")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetLight
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+	if err := artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""); err != nil {
+		t.Fatalf("scaffold bundle: %v", err)
+	}
+
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`t-01`"+` add regression test
+  - wave: 1
+  - target_files: ["internal/engine/progression/advance_test.go"]
+  - task_kind: test
+
+- [ ] `+"`t-02`"+` implement change
+  - wave: 2
+  - depends_on: [t-01]
+  - target_files: ["internal/engine/progression/advance_governed.go"]
+  - task_kind: code
+
+- [ ] `+"`t-03`"+` verify behavior
+  - wave: 3
+  - depends_on: [t-02]
+  - target_files: ["internal/engine/progression"]
+  - task_kind: verification
+`)
+
+	base := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	taskEvidence := []struct {
+		taskID       string
+		taskKind     model.TaskKind
+		changedFiles []string
+		targetFiles  []string
+		capturedAt   time.Time
+	}{
+		{
+			taskID:       "t-01",
+			taskKind:     model.TaskKindTest,
+			changedFiles: []string{"internal/engine/progression/advance_test.go"},
+			targetFiles:  []string{"internal/engine/progression/advance_test.go"},
+			capturedAt:   base.Add(time.Minute),
+		},
+		{
+			taskID:       "t-02",
+			taskKind:     model.TaskKindCode,
+			changedFiles: []string{"internal/engine/progression/advance_governed.go"},
+			targetFiles:  []string{"internal/engine/progression/advance_governed.go"},
+			capturedAt:   base.Add(2 * time.Minute),
+		},
+		{
+			taskID:      "t-03",
+			taskKind:    model.TaskKindVerification,
+			targetFiles: []string{"internal/engine/progression"},
+			capturedAt:  base.Add(3 * time.Minute),
+		},
+	}
+	for _, task := range taskEvidence {
+		payload := map[string]any{
+			"task_id":             task.taskID,
+			"run_summary_version": 1,
+			"task_kind":           task.taskKind,
+			"verdict":             model.TaskVerdictPass,
+			"changed_files":       task.changedFiles,
+			"target_files":        task.targetFiles,
+			"evidence_ref":        "test:" + task.taskID,
+			"captured_at":         task.capturedAt.Format(time.RFC3339Nano),
+			"freshness_inputs": expectedTaskFreshnessInputsForWavePlan(
+				t,
+				root,
+				change,
+				1,
+				task.taskID,
+			),
+		}
+		raw, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal %s task evidence: %v", task.taskID, err)
+		}
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), task.taskID+".json")
+		if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
+			t.Fatalf("mkdir task dir: %v", err)
+		}
+		if err := os.WriteFile(taskPath, raw, 0o644); err != nil {
+			t.Fatalf("write %s task evidence: %v", task.taskID, err)
+		}
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  base.Add(4 * time.Minute),
+		RunVersion: 1,
+	})
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summary.Action != "advanced" || summary.ToState != model.StateS3Review {
+		t.Fatalf("expected S2 to advance to S3 without stale recovery, got %+v", summary)
+	}
+	if _, err := state.LoadExecutionSummary(root, change.Slug); err != nil {
+		t.Fatalf("load execution summary: %v", err)
+	}
+	if _, err := state.LoadVerification(root, change.Slug, SkillWaveOrchestration); err != nil {
+		t.Fatalf("load wave-orchestration verification: %v", err)
 	}
 }
 
