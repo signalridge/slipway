@@ -73,7 +73,7 @@ func staleReopenTarget(root string, change model.Change) (StaleEvidenceTarget, b
 		if !record.IsPassing() {
 			continue
 		}
-		blockers, err := skillDigestFreshnessBlockers(root, change, authority.SkillName, record)
+		blockers, err := skillDigestFreshnessBlockers(root, change, authority.SkillName)
 		if err != nil {
 			return StaleEvidenceTarget{}, false, err
 		}

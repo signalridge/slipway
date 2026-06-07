@@ -28,7 +28,7 @@ func TestBuildProjectionUsesBundleProgressOutsideExecutionStates(t *testing.T) {
 	change.CurrentState = model.StateS1Plan
 	change.PlanSubStep = model.PlanSubStepBundle
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, change.WorkflowPreset, model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestBuildProjectionKeepsExecutionSummaryProgressInExecutionStates(t *testin
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, change.WorkflowPreset, model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestBuildProjectionDoesNotSynthesizeWaveProgressWhenWaveRunsAreMissing(t *t
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, change.WorkflowPreset, model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, change.WorkflowPreset))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, change.WorkflowPreset, model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)

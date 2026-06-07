@@ -213,7 +213,7 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 	writeShipReadyGovernedBundle(t, root, change)
 	writeAssuranceMD(t, root, slug, validAssuranceContent())
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")

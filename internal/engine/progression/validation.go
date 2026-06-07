@@ -195,7 +195,7 @@ func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave
 	if err != nil {
 		return nil, nil
 	}
-	specPath := artifact.ResolveArtifactPath(bundleDir, change.Slug, "requirements.md")
+	specPath := artifact.ResolveArtifactPath(bundleDir, "requirements.md")
 	raw, err := os.ReadFile(specPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -484,7 +484,7 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 
 	blockers := append([]string{}, resolution.Blockers...)
 	for _, name := range required {
-		path := artifact.ResolveArtifactPath(base, change.Slug, name)
+		path := artifact.ResolveArtifactPath(base, name)
 		if _, err := os.Stat(path); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				blockers = append(blockers, "missing_required_artifact:"+name)

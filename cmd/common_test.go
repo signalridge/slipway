@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,6 +21,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func setCommandProjectRoot(cmd *cobra.Command, root string) {
+	if cmd == nil {
+		return
+	}
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd.SetContext(context.WithValue(ctx, projectRootContextKey{}, root))
+}
 
 func TestResolveExplicitChangeRejectsInactiveSlug(t *testing.T) {
 	t.Parallel()
@@ -535,7 +547,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		change.NeedsDiscovery = true
 		change.WorkflowPreset = model.WorkflowPresetLight
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		cfg, err := model.LoadConfig(state.ConfigPath(root))
 		require.NoError(t, err)
@@ -597,7 +609,7 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.NeedsDiscovery = true
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		worktreeRoot := filepath.Join(t.TempDir(), slug)
 		branch := "feat/" + slug

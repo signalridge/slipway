@@ -409,15 +409,15 @@ func classifyReviewGaps(blockers []model.ReasonCode) *reviewGaps {
 	var codeToArt, artToCode []model.ReasonCode
 	for _, b := range blockers {
 		lower := strings.ToLower(b.Code)
-		switch {
-		case lower == "review_layer_missing" ||
-			lower == "review_layer_failed" ||
-			lower == "required_skill_missing":
+		switch lower {
+		case "review_layer_missing",
+			"review_layer_failed",
+			"required_skill_missing":
 			artToCode = append(artToCode, b)
-		case lower == "non_pass_task" ||
-			lower == "task_blockers" ||
-			lower == "non_pass_wave" ||
-			lower == "wave_run_missing":
+		case "non_pass_task",
+			"task_blockers",
+			"non_pass_wave",
+			"wave_run_missing":
 			codeToArt = append(codeToArt, b)
 		default:
 			artToCode = append(artToCode, b)

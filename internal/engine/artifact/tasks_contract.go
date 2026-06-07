@@ -32,7 +32,7 @@ type TasksContractResult struct {
 // verification objective") is the mechanical scaffold the authoring skill must
 // replace (issue #91). The engine owns structure; the skill owns substance.
 func EvaluateTasksContract(bundleDir, slug string) (TasksContractResult, error) {
-	sourcePath := ResolveArtifactPath(bundleDir, slug, "tasks.md")
+	sourcePath := ResolveArtifactPath(bundleDir, "tasks.md")
 	if _, err := os.Stat(sourcePath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return TasksContractResult{

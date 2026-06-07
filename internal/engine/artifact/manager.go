@@ -102,7 +102,7 @@ func RequiredArtifactsForChange(schema []ArtifactSpec, needsDiscovery bool, pres
 // ResolveArtifactPath maps a logical artifact name to its on-disk path inside
 // a governed bundle directory (artifacts/changes/<slug>). All artifacts are
 // stored flat in the bundle root.
-func ResolveArtifactPath(baseDir, slug, artifactName string) string {
+func ResolveArtifactPath(baseDir, artifactName string) string {
 	return filepath.Join(baseDir, strings.TrimSpace(artifactName))
 }
 
@@ -241,14 +241,14 @@ func buildTemplateData(root string, change model.Change, docs *DocSections, over
 		GuardrailDomain:    change.GuardrailDomain,
 	}
 	data.SeededRequirements = seedRequirements(data)
-	data.SeededDecision = seedDecision(data)
-	data.SeededDecisionApproach = seedDecisionApproach(data)
-	data.SeededDecisionInterfaces = seedDecisionInterfaces(data)
-	data.SeededDecisionRollback = seedDecisionRollback(data)
-	data.SeededDecisionRisk = seedDecisionRisk(data)
-	data.SeededResearch = seedResearch(data)
-	data.SeededResearchUnknowns = seedResearchUnknowns(data)
-	data.SeededResearchAssumptions = seedResearchAssumptions(data)
+	data.SeededDecision = seedDecision()
+	data.SeededDecisionApproach = seedDecisionApproach()
+	data.SeededDecisionInterfaces = seedDecisionInterfaces()
+	data.SeededDecisionRollback = seedDecisionRollback()
+	data.SeededDecisionRisk = seedDecisionRisk()
+	data.SeededResearch = seedResearch()
+	data.SeededResearchUnknowns = seedResearchUnknowns()
+	data.SeededResearchAssumptions = seedResearchAssumptions()
 	data.SeededResearchReferences = seedResearchReferences(data)
 	data.SeededTasks = seedTasks(data)
 
@@ -312,36 +312,36 @@ func seedRequirements(data templateData) string {
 }
 
 // seedDecision generates a first-pass decision section from available context.
-func seedDecision(data templateData) string {
+func seedDecision() string {
 	return "Pending investigation. Replace with concrete alternatives, tradeoffs, and the selected direction after research or code inspection.\n"
 }
 
-func seedDecisionApproach(data templateData) string {
+func seedDecisionApproach() string {
 	return "Pending investigation. Record the selected approach only after the alternatives have concrete evidence."
 }
 
-func seedDecisionInterfaces(data templateData) string {
+func seedDecisionInterfaces() string {
 	return "Pending investigation. Name changed interfaces and data flows, or write \"none\" after inspection."
 }
 
-func seedDecisionRollback(data templateData) string {
+func seedDecisionRollback() string {
 	return "Pending investigation. Write the concrete rollback path and verification command after implementation scope is known."
 }
 
-func seedDecisionRisk(data templateData) string {
+func seedDecisionRisk() string {
 	return "Pending investigation. List concrete risks only after inspecting the affected code and contracts."
 }
 
 // seedResearch generates a first-pass research section.
-func seedResearch(data templateData) string {
+func seedResearch() string {
 	return "Pending investigation. Replace with concrete alternatives, supporting evidence, and the selected direction.\n"
 }
 
-func seedResearchUnknowns(data templateData) string {
+func seedResearchUnknowns() string {
 	return "- Pending investigation. List unknowns that must be resolved before planning.\n"
 }
 
-func seedResearchAssumptions(data templateData) string {
+func seedResearchAssumptions() string {
 	return "- Pending investigation. List assumptions only after identifying the evidence that supports them.\n"
 }
 
@@ -699,10 +699,6 @@ func constraintSeedItems(section string) []string {
 	return append([]string{preambleText}, items...)
 }
 
-func ScaffoldGovernedBundleForChangeWithPreset(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) error {
-	return scaffoldGovernedBundleForChange(root, change, preset, nil, nil, schema...)
-}
-
 // ScaffoldIntentForChangeWithContext creates only intent.md in the governed
 // bundle directory using an externally-provided ProjectContext. This is used
 // when preset is pending to ensure the intake artifact exists without creating
@@ -720,7 +716,7 @@ func ScaffoldIntentForChangeWithContext(root string, change model.Change, projec
 		return err
 	}
 	data := buildTemplateData(root, change, nil, projectCtx)
-	intentPath := ResolveArtifactPath(base, slug, "intent.md")
+	intentPath := ResolveArtifactPath(base, "intent.md")
 	if _, err := os.Stat(intentPath); err == nil {
 		return nil // already exists
 	}
@@ -792,7 +788,7 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 	}
 
 	for _, file := range files {
-		path := ResolveArtifactPath(base, slug, file)
+		path := ResolveArtifactPath(base, file)
 		if _, err := os.Stat(path); err == nil {
 			continue
 		} else if !errors.Is(err, fs.ErrNotExist) {
@@ -855,9 +851,9 @@ func EnsureResearchArtifactForChange(root string, change model.Change) error {
 
 // validateSectionStructure validates that content contains the given headings
 // in order, each with at least one non-empty line of content beneath it.
-func validateSectionStructure(content string, headings []string) (lines []string, indices []int, err error) {
-	lines = strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	indices = make([]int, 0, len(headings))
+func validateSectionStructure(content string, headings []string) error {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	indices := make([]int, 0, len(headings))
 	searchFrom := 0
 
 	for _, heading := range headings {
@@ -869,7 +865,7 @@ func validateSectionStructure(content string, headings []string) (lines []string
 			}
 		}
 		if idx < 0 {
-			return nil, nil, fmt.Errorf("missing required heading %q", heading)
+			return fmt.Errorf("missing required heading %q", heading)
 		}
 		indices = append(indices, idx)
 		searchFrom = idx + 1
@@ -889,10 +885,10 @@ func validateSectionStructure(content string, headings []string) (lines []string
 			}
 		}
 		if !hasContent {
-			return nil, nil, fmt.Errorf("section %q must have non-empty content", heading)
+			return fmt.Errorf("section %q must have non-empty content", heading)
 		}
 	}
-	return lines, indices, nil
+	return nil
 }
 
 // ResearchStructureBlockers validates the research.md artifact structure.
@@ -902,8 +898,7 @@ func ResearchStructureBlockers(content string) []model.ReasonCode {
 		return nil // research.md may not be present for non-discovery changes
 	}
 
-	_, _, err := validateSectionStructure(content, headings)
-	if err != nil {
+	if err := validateSectionStructure(content, headings); err != nil {
 		return []model.ReasonCode{model.NewReasonCode("research_structure_invalid", err.Error())}
 	}
 	return nil
@@ -999,8 +994,7 @@ func AssuranceStructureBlockers(content string) []string {
 		return []string{"assurance_structure_invalid:no required sections configured for assurance.md"}
 	}
 
-	_, _, err := validateSectionStructure(content, headings)
-	if err != nil {
+	if err := validateSectionStructure(content, headings); err != nil {
 		return []string{"assurance_structure_invalid:" + err.Error()}
 	}
 
@@ -1332,7 +1326,7 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 			filePath := artifact.Path
 			if filePath == "" {
 				fileName := artifactFileName(id)
-				filePath = ResolveArtifactPath(bundleDir, change.Slug, fileName)
+				filePath = ResolveArtifactPath(bundleDir, fileName)
 			}
 			diskHash, err := model.ComputeFileContentHash(filePath)
 			if err != nil {
@@ -1370,7 +1364,7 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 		filePath := artifact.Path
 		if filePath == "" {
 			fileName := artifactFileName(id)
-			filePath = ResolveArtifactPath(bundleDir, change.Slug, fileName)
+			filePath = ResolveArtifactPath(bundleDir, fileName)
 		}
 
 		_, err := os.Stat(filePath)
@@ -1439,7 +1433,7 @@ func materializeRequiredArtifacts(root string, change *model.Change, schema []Ar
 			current.State = model.ArtifactLifecycleDraft
 		}
 		if current.Path == "" {
-			current.Path = ResolveArtifactPath(base, change.Slug, name)
+			current.Path = ResolveArtifactPath(base, name)
 		}
 
 		info, err := os.Stat(current.Path)

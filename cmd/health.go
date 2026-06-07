@@ -310,15 +310,7 @@ func resolveHealthChangeTarget(root, slug string) (*model.Change, error) {
 					nil,
 				)
 			}
-			return nil, newStateIntegrityError(
-				"change_state_load_failed",
-				fmt.Sprintf("failed to load change state for %q: %v", slug, err),
-				"Run `slipway repair` to inspect or repair change state files.",
-				slug,
-				map[string]any{
-					"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
-				},
-			)
+			return nil, newChangeStateLoadFailedError(slug, err)
 		}
 		return &change, nil
 	}
@@ -774,7 +766,7 @@ func doctorResumeAction(root, changeSlug string) (*doctorAction, error) {
 	if !execCtx.Ready {
 		return nil, nil
 	}
-	_, resumeWaveIndex, err := loadResumableWaveExecution(root, *change, execCtx, "doctor")
+	resumeWaveIndex, err := loadResumableWaveExecution(root, *change, execCtx, "doctor")
 	if err != nil {
 		return nil, nil
 	}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ func TestCleanupAtomicTempArtifacts(t *testing.T) {
 		require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
 	}
 
-	deleted, err := CleanupAtomicTempArtifacts(root)
+	deleted, err := CleanupAtomicTempArtifactsOlderThan(root, 0, time.Now().UTC())
 	require.NoError(t, err)
 	assert.Len(t, deleted, 2)
 

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -526,7 +525,7 @@ func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model
 	}
 
 	change := *governedChange
-	latestRunVersion := 0
+	var latestRunVersion int
 	if execCtx != nil {
 		latestRunVersion = execCtx.LatestRunVersion
 	} else {
@@ -650,7 +649,6 @@ func hasReasonCode(reasons []model.ReasonCode, code string) bool {
 func confirmationHardStop(reason string) confirmationRequirement {
 	reason = strings.TrimSpace(reason)
 	resumeResponseSupported := reason == "resume_checkpoint"
-	kind, command := hardStopNextActionKind(reason, resumeResponseSupported)
 	return confirmationRequirement{
 		Required:                     true,
 		Boundary:                     "hard_stop",
@@ -659,8 +657,7 @@ func confirmationHardStop(reason string) confirmationRequirement {
 		Reason:                       reason,
 		ResumeResponseSupported:      resumeResponseSupported,
 		NextAction:                   hardStopNextAction(reason, resumeResponseSupported),
-		NextActionKind:               kind,
-		NextCommand:                  command,
+		NextActionKind:               hardStopNextActionKind(reason, resumeResponseSupported),
 	}
 }
 
@@ -731,22 +728,19 @@ func commandBoundaryNextAction(reason string) string {
 	}
 }
 
-// hardStopNextActionKind returns the machine-readable action kind and, when one
-// applies, the exact command to run for a hard-stop boundary. Callers branch on
-// next_action_kind rather than parsing the human-readable next_action prose.
-// next_command is populated only when it is runnable as-is; checkpoint resume
-// requires an operator-supplied response argument, so it leaves next_command
-// empty and is signaled by resume_response_supported instead.
-func hardStopNextActionKind(reason string, resumeResponseSupported bool) (kind, command string) {
+// hardStopNextActionKind returns the machine-readable action kind for a
+// hard-stop boundary. Hard stops do not expose next_command because checkpoint
+// resume requires an operator-supplied response argument.
+func hardStopNextActionKind(reason string, resumeResponseSupported bool) string {
 	switch {
 	case resumeResponseSupported:
-		return "checkpoint_resume", ""
+		return "checkpoint_resume"
 	case reason == "preset_confirmation_required":
-		return "preset_confirmation", ""
+		return "preset_confirmation"
 	case strings.HasPrefix(reason, "skill_handoff"):
-		return "skill_handoff", ""
+		return "skill_handoff"
 	default:
-		return "confirmation", ""
+		return "confirmation"
 	}
 }
 
@@ -766,18 +760,12 @@ func commandBoundaryNextActionKind(reason string) (kind, command string) {
 }
 
 func writeNextHuman(w io.Writer, view nextView) error {
-	var writeErr error
-	writeLine := func(format string, args ...any) {
-		if writeErr != nil {
-			return
-		}
-		_, writeErr = fmt.Fprintf(w, format, args...)
-	}
+	writer := newFormatWriter(w)
 
-	writeLine("Change: %s (%s)\n", view.Slug, workflowStateLabel(view.CurrentState, view.IntakeSubStep, view.PlanSubStep))
-	writeLine("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
+	writer.Writef("Change: %s (%s)\n", view.Slug, workflowStateLabel(view.CurrentState, view.IntakeSubStep, view.PlanSubStep))
+	writer.Writef("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
 	if view.QualityMode != "" {
-		writeLine("Quality: %s | Discovery Required: %t\n", view.QualityMode, view.NeedsDiscovery)
+		writer.Writef("Quality: %s | Discovery Required: %t\n", view.QualityMode, view.NeedsDiscovery)
 	}
 	for _, line := range renderWorkflowPresetLines(workflowPresetView{
 		WorkflowPreset:            view.WorkflowPreset,
@@ -787,120 +775,120 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		PresetUpgradeReasons:      view.PresetUpgradeReasons,
 		GovernanceForecast:        view.GovernanceForecast,
 	}) {
-		writeLine("%s\n", line)
+		writer.Writef("%s\n", line)
 	}
 	if view.PlanningNote != "" {
-		writeLine("Planning Note: %s\n", view.PlanningNote)
+		writer.Writef("Planning Note: %s\n", view.PlanningNote)
 	}
 
 	if view.InputContext.Description != "" {
-		writeLine("Description: %s\n", view.InputContext.Description)
+		writer.Writef("Description: %s\n", view.InputContext.Description)
 	}
 	if view.InputContext.Slug != "" {
-		writeLine("Slug: %s\n", view.InputContext.Slug)
+		writer.Writef("Slug: %s\n", view.InputContext.Slug)
 	}
 	if view.Advanced != nil {
 		if view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready" {
-			writeLine("\nAdvanced: %s -> %s (%s)\n", view.Advanced.FromState, view.Advanced.ToState, view.Advanced.Message)
+			writer.Writef("\nAdvanced: %s -> %s (%s)\n", view.Advanced.FromState, view.Advanced.ToState, view.Advanced.Message)
 		}
 		if len(view.Advanced.SideEffects) > 0 {
 			heading := "Side Effects:"
 			if view.Advanced.RecoveryOnly {
 				heading = "Recovery Side Effects:"
 			}
-			writeLine("%s\n", heading)
+			writer.Writef("%s\n", heading)
 			for _, effect := range view.Advanced.SideEffects {
 				if effect.Detail != "" {
-					writeLine("  - %s: %s\n", effect.Kind, effect.Detail)
+					writer.Writef("  - %s: %s\n", effect.Kind, effect.Detail)
 				} else {
-					writeLine("  - %s\n", effect.Kind)
+					writer.Writef("  - %s\n", effect.Kind)
 				}
 			}
 		}
 		if len(view.Advanced.AutoPassedStates) > 0 {
-			writeLine("Auto-Passed:\n")
+			writer.Writef("Auto-Passed:\n")
 			for _, state := range view.Advanced.AutoPassedStates {
-				writeLine("  - %s (%s)\n", state.State, state.Reason)
+				writer.Writef("  - %s (%s)\n", state.State, state.Reason)
 			}
 		}
 	}
 
 	if view.GovernanceSignals != nil {
-		writeLine("\nDetected Signals:\n")
+		writer.Writef("\nDetected Signals:\n")
 		if len(view.GovernanceSignals.Domains) > 0 {
-			writeLine("  Domains:       [%s]\n", strings.Join(view.GovernanceSignals.Domains, ", "))
+			writer.Writef("  Domains:       [%s]\n", strings.Join(view.GovernanceSignals.Domains, ", "))
 		}
-		writeLine("  Blast Radius:  %s\n", view.GovernanceSignals.BlastRadius)
+		writer.Writef("  Blast Radius:  %s\n", view.GovernanceSignals.BlastRadius)
 	}
 	if len(view.ActiveControls) > 0 {
-		writeLine("\nActive Controls:\n")
+		writer.Writef("\nActive Controls:\n")
 		for _, ctrl := range view.ActiveControls {
-			writeLine("  - %s (%s / %s)\n", ctrl.ControlID, ctrl.Mode, ctrl.Scope)
+			writer.Writef("  - %s (%s / %s)\n", ctrl.ControlID, ctrl.Mode, ctrl.Scope)
 		}
 	}
 	if len(view.RequiredActions) > 0 {
-		writeLine("\nRequired Actions:\n")
+		writer.Writef("\nRequired Actions:\n")
 		for _, action := range view.RequiredActions {
 			mark := " "
 			if action.Satisfied {
 				mark = "x"
 			}
-			writeLine("  [%s] %s: %s\n", mark, action.ControlID, action.Description)
+			writer.Writef("  [%s] %s: %s\n", mark, action.ControlID, action.Description)
 		}
 	}
 
-	writeLine("\n")
+	writer.Writef("\n")
 
 	if view.NextSkill != nil {
 		hydrateWriter := newFormatWriter(w)
-		writeLine("Next Skill: %s\n", view.NextSkill.Name)
-		writeLine("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
-		writeLine("  Evidence State: %s\n", view.NextSkill.State)
+		writer.Writef("Next Skill: %s\n", view.NextSkill.Name)
+		writer.Writef("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
+		writer.Writef("  Evidence State: %s\n", view.NextSkill.State)
 		if len(view.NextSkill.RequiredTokens) > 0 {
-			writeLine("  Required Tokens: %s\n", strings.Join(view.NextSkill.RequiredTokens, ", "))
+			writer.Writef("  Required Tokens: %s\n", strings.Join(view.NextSkill.RequiredTokens, ", "))
 		}
 		if view.NextSkill.ReviewContext != nil {
 			if len(view.NextSkill.ReviewContext.RequiredArtifactLayers) > 0 {
-				writeLine("  Required Artifact Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredArtifactLayers, ", "))
+				writer.Writef("  Required Artifact Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredArtifactLayers, ", "))
 			}
 			if len(view.NextSkill.ReviewContext.RequiredImplementationLayers) > 0 {
-				writeLine("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
+				writer.Writef("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
 			}
 		}
 
 		if len(view.NextSkill.TechniqueHints) > 0 {
-			writeLine("\nTechnique Hints:\n")
+			writer.Writef("\nTechnique Hints:\n")
 			for _, hint := range view.NextSkill.TechniqueHints {
-				writeLine("  - %s: %s\n", hint.Name, hint.Reason)
+				writer.Writef("  - %s: %s\n", hint.Name, hint.Reason)
 				writeHydrateLine(hydrateWriter, "    ", hint.HydrateReferences)
 			}
 		}
 
 		if len(view.Warnings) > 0 {
-			writeLine("\nWarnings:\n")
+			writer.Writef("\nWarnings:\n")
 			for _, warning := range view.Warnings {
-				writeLine("  - %s\n", warning)
+				writer.Writef("  - %s\n", warning)
 			}
 		}
 
 		if len(view.Blockers) > 0 {
-			writeLine("\nBlockers:\n")
+			writer.Writef("\nBlockers:\n")
 			for _, b := range renderReasonCodeLines(view.Blockers) {
-				writeLine("  - %s\n", b)
+				writer.Writef("  - %s\n", b)
 			}
 		}
 	} else {
 		if len(view.Warnings) > 0 {
 			for _, warning := range view.Warnings {
-				writeLine("  %s\n", warning)
+				writer.Writef("  %s\n", warning)
 			}
 		}
 		if len(view.Blockers) > 0 {
 			for _, b := range renderReasonCodeLines(view.Blockers) {
-				writeLine("  %s\n", b)
+				writer.Writef("  %s\n", b)
 			}
 		}
 	}
 
-	return writeErr
+	return writer.Err()
 }

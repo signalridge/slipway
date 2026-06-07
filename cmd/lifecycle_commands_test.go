@@ -571,7 +571,7 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
@@ -1148,7 +1148,7 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 	slug, _ := prepareStalePlanningRecoveryBaseFixture(t, root, model.StateS4Verify)
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-	requirementsPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+	requirementsPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 	rawRequirements, err := os.ReadFile(requirementsPath)
 	require.NoError(t, err)
 	require.NoError(t, writeBundleArtifactFile(

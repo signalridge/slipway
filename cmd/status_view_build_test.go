@@ -91,7 +91,7 @@ func TestBuildGovernedStatusViewExposesSummaryBlockersSeparately(t *testing.T) {
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
 		Version:           model.ExecutionSummaryVersion,
@@ -136,7 +136,7 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	staleAt := time.Now().Add(-time.Minute).UTC()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
@@ -188,7 +188,7 @@ func TestBuildGovernedStatusViewKeepsExecutionSummaryProgressWhenChecklistExists
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryI
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)

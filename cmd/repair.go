@@ -229,14 +229,8 @@ func makeRepairCmd() *cobra.Command {
 				slices.Sort(summary.NonRepairableFindings)
 				summary.NonRepairableFindings = slices.Compact(summary.NonRepairableFindings)
 				summary.AppliedRepairs = buildAppliedRepairFindings(summary)
-				freshnessDrift, err := buildFreshnessRepairDriftFindings(root, allChanges)
-				if err != nil {
-					return err
-				}
-				digestDrift, err := buildGovernanceDigestDriftFindings(root, allChanges)
-				if err != nil {
-					return err
-				}
+				freshnessDrift := buildFreshnessRepairDriftFindings(root, allChanges)
+				digestDrift := buildGovernanceDigestDriftFindings(root, allChanges)
 				summary.UnrepairedDrift = normalizeRepairDriftFindings(append(append(buildUnrepairedDriftFindings(summary.NonRepairableFindings), freshnessDrift...), digestDrift...))
 				summary.PathAuthority = buildRepairPathAuthority(root, allChanges, summary)
 				applyRepairInvocationWorkspacePath(cmd, root, &summary)
@@ -397,7 +391,7 @@ func buildUnrepairedDriftFindings(findings []string) []repairDriftFinding {
 	return out
 }
 
-func buildFreshnessRepairDriftFindings(root string, changes []model.Change) ([]repairDriftFinding, error) {
+func buildFreshnessRepairDriftFindings(root string, changes []model.Change) []repairDriftFinding {
 	out := []repairDriftFinding{}
 	for _, change := range changes {
 		if change.Status != model.ChangeStatusActive || !state.ExecutionSummaryRelevantState(change.CurrentState) {
@@ -471,7 +465,7 @@ func buildFreshnessRepairDriftFindings(root string, changes []model.Change) ([]r
 			NextAction: nextAction,
 		})
 	}
-	return normalizeRepairDriftFindings(out), nil
+	return normalizeRepairDriftFindings(out)
 }
 
 func normalizeRepairDriftFindings(findings []repairDriftFinding) []repairDriftFinding {
@@ -614,7 +608,7 @@ func repairDriftNextAction(reason, target string) string {
 // buildGovernanceDigestDriftFindings surfaces governance-skill evidence-digest
 // drift (`required_skill_stale`) as a non-repairable finding routed back through
 // normal lifecycle advancement. repair does not mutate engine-owned digests.
-func buildGovernanceDigestDriftFindings(root string, changes []model.Change) ([]repairDriftFinding, error) {
+func buildGovernanceDigestDriftFindings(root string, changes []model.Change) []repairDriftFinding {
 	out := []repairDriftFinding{}
 	for _, change := range changes {
 		if change.Status != model.ChangeStatusActive {
@@ -648,7 +642,7 @@ func buildGovernanceDigestDriftFindings(root string, changes []model.Change) ([]
 			})
 		}
 	}
-	return out, nil
+	return out
 }
 
 func governanceDigestRunNextAction(skillName string) string {

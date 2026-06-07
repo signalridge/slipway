@@ -2381,7 +2381,7 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
   - target_files: ["cmd/run.go"]
   - task_kind: code
 `)))
-		change, err = state.LoadChange(root, slug)
+		_, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
 		materializeWaveExecutionForSummary(t, root, slug)
 
@@ -3405,7 +3405,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 		change.WorktreePath = worktreeRoot
 		change.WorktreeBranch = branch
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -3598,7 +3598,7 @@ func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testi
 		change.PlanSubStep = model.PlanSubStepNone
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		intentPath := artifact.ResolveArtifactPath(bundlePath, slug, "intent.md")
+		intentPath := artifact.ResolveArtifactPath(bundlePath, "intent.md")
 		oldContent := []byte("# Intent\nOriginal frozen content\n")
 		require.NoError(t, os.WriteFile(intentPath, oldContent, 0o644))
 		oldHash, err := model.ComputeFileContentHash(intentPath)
@@ -4046,7 +4046,7 @@ func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion in
 }
 
 func writeBundleArtifactFile(bundlePath, slug, artifactName string, content []byte) error {
-	path := artifact.ResolveArtifactPath(bundlePath, slug, artifactName)
+	path := artifact.ResolveArtifactPath(bundlePath, artifactName)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

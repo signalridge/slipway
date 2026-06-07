@@ -31,7 +31,7 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 		require.NoError(t, state.SaveChange(root, change))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, change.Slug, "decision.md")))
+		require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -102,7 +102,7 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, change.Slug, "decision.md")))
+	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 		})
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-		require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, change.Slug, "decision.md")))
+		require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -175,7 +175,7 @@ func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *te
 	require.NoError(t, state.SaveChange(root, change))
 
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, change.Slug, "decision.md")))
+	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
 	view, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.
 	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
-	intentPath := artifact.ResolveArtifactPath(bundlePath, change.Slug, "intent.md")
+	intentPath := artifact.ResolveArtifactPath(bundlePath, "intent.md")
 	oldContent := []byte("# Intent\nFrozen validate baseline\n")
 	require.NoError(t, os.WriteFile(intentPath, oldContent, 0o644))
 	oldHash, err := model.ComputeFileContentHash(intentPath)
@@ -442,7 +442,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
@@ -484,7 +484,7 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	change.CurrentState = model.StateS2Execute
 	change.Artifacts = map[string]model.ArtifactState{}
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	// Write execution summary first.
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")

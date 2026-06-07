@@ -38,7 +38,7 @@ type RequirementsContractResult struct {
 }
 
 func EvaluateRequirementsContract(bundleDir, slug string) (RequirementsContractResult, error) {
-	sourcePath := ResolveArtifactPath(bundleDir, slug, "requirements.md")
+	sourcePath := ResolveArtifactPath(bundleDir, "requirements.md")
 	if _, err := os.Stat(sourcePath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return RequirementsContractResult{

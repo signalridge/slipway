@@ -69,3 +69,27 @@ skills: {}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "field unexpected")
 }
+
+// LoadEvidenceDigests and evidenceDigestsReadPath are slug-based read helpers
+// used only by these tests; production reads digests through the change-based
+// LoadEvidenceDigestsForChange path.
+func LoadEvidenceDigests(root, slug string) (model.EvidenceDigests, error) {
+	displayPath := EvidenceDigestsPathForRead(root, slug)
+	path, err := evidenceDigestsReadPath(root, slug)
+	if err != nil {
+		return model.EvidenceDigests{}, wrapExecutionSummaryLoadError(displayPath, err)
+	}
+	digests, err := loadEvidenceDigestsFromPath(path)
+	if err != nil {
+		return model.EvidenceDigests{}, wrapExecutionSummaryLoadError(path, err)
+	}
+	return digests, nil
+}
+
+func evidenceDigestsReadPath(root, slug string) (string, error) {
+	dir, err := resolveExistingVerificationDir(root, slug)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, EvidenceDigestsFileName), nil
+}

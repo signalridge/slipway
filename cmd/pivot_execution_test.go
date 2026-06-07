@@ -78,7 +78,7 @@ func TestExecuteGovernedPivotKeepsBundleInBoundWorktreeWhenDiscoveryClears(t *te
 	change.CurrentState = model.StateS2Execute
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 	require.NoError(t, os.RemoveAll(filepath.Join(root, "artifacts", "changes", slug)))
 
 	worktreeBundle := filepath.Join(normalizedWT, "artifacts", "changes", slug)

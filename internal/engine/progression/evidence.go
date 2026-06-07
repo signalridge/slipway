@@ -121,7 +121,7 @@ func evaluateRequiredSkills(
 			continue
 		}
 
-		digestBlockers, err := skillDigestFreshnessBlockers(root, change, skillName, rec)
+		digestBlockers, err := skillDigestFreshnessBlockers(root, change, skillName)
 		if err != nil {
 			return nil, nil, err
 		}

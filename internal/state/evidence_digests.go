@@ -19,33 +19,12 @@ func EvidenceDigestsPathForRead(root, slug string) string {
 	return filepath.Join(verificationDirPathForRead(root, slug), EvidenceDigestsFileName)
 }
 
-func evidenceDigestsReadPath(root, slug string) (string, error) {
-	dir, err := resolveExistingVerificationDir(root, slug)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, EvidenceDigestsFileName), nil
-}
-
 func evidenceDigestsReadPathForChange(root string, change model.Change) (string, error) {
 	dir, err := verificationDirForChange(root, change)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, EvidenceDigestsFileName), nil
-}
-
-func LoadEvidenceDigests(root, slug string) (model.EvidenceDigests, error) {
-	displayPath := EvidenceDigestsPathForRead(root, slug)
-	path, err := evidenceDigestsReadPath(root, slug)
-	if err != nil {
-		return model.EvidenceDigests{}, wrapExecutionSummaryLoadError(displayPath, err)
-	}
-	digests, err := loadEvidenceDigestsFromPath(path)
-	if err != nil {
-		return model.EvidenceDigests{}, wrapExecutionSummaryLoadError(path, err)
-	}
-	return digests, nil
 }
 
 func LoadEvidenceDigestsForChange(root string, change model.Change) (model.EvidenceDigests, error) {

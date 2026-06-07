@@ -19,7 +19,7 @@ func writeFile(t *testing.T, path, content string) {
 
 // resolveTestArtifact returns the path where the default resolver will look for requirements.md.
 func resolveTestArtifact(bundleDir, slug string) string {
-	return artifact.ResolveArtifactPath(bundleDir, slug, "requirements.md")
+	return artifact.ResolveArtifactPath(bundleDir, "requirements.md")
 }
 
 func traceabilityGapIDs(gaps []model.TraceabilityGap) []string {
