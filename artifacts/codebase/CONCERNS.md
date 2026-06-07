@@ -1,23 +1,32 @@
 # Concerns
 
 - Architectural pressure points:
-  - `slipway new` must distinguish "known active authority" from "blocking
-    workspace collision"; state discovery intentionally exposes hidden sibling
-    authorities to the guard.
-  - The prospective target workspace for a discovery change must stay aligned
-    with `state.EnsureDefaultWorktreeForChange`.
+  - Verification and preflight stages are gate-bearing; context reduction must
+    not change the evidence required to pass those gates.
+  - Host wording must be runtime-portable: Codex currently does not receive
+    generated agent directories, so the template must allow "subagent if
+    supported; structured-summary fallback otherwise" rather than depending on a
+    single runtime's Task API.
 - Brittle areas:
-  - Unbound active changes have no persisted `WorktreePath`; the fallback
-    workspace root is the local project root until a binding exists.
-  - Worktree visibility markers affect normal reads but should not be confused
-    with workspace collision semantics.
+  - `goal-verification` must still record
+    `high_risk_check:<domain>.safety_baseline=pass` from a real SAST run when a
+    guardrail domain is set.
+  - `worktree-preflight` must still record worktree path, branch, and exact
+    baseline command references even if the baseline's full output is delegated.
+  - `wave-orchestration` must still record task evidence with
+    `slipway evidence task`; slimming context cannot permit skipped task
+    evidence.
 - Migration traps:
-  - A broad storage migration for per-scope active-change authority is not
-    required for the #48/#50 fix; changing it here would expand the blast
-    radius beyond create-guard behavior.
+  - Editing generated `.codex/`, `.claude/`, `.cursor/`, or `.gemini/` files by
+    hand would drift from the template source of truth.
+  - Implementing token telemetry or model-profile routing here would broaden the
+    issue #114 scope beyond the first context-span optimization.
 - Recheck routing:
-  - Re-run targeted `cmd` tests for unbound and bound active-change create
-    scenarios, then full `go test -count=1 ./...` before closeout.
+  - Run focused template tests after editing skill templates, then full
+    `go test ./...`.
+  - Refresh generated surfaces through the repo-native init/refresh command if
+    template tests or repository policy require generated copies to be updated.
 - Notes:
-  - Source references: `cmd/common.go`, `cmd/new.go`,
-    `internal/state/store.go`, `internal/state/paths.go`.
+  - Source references: `internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl`,
+    `internal/tmpl/templates/skills/worktree-preflight/SKILL.md`,
+    `internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl`.

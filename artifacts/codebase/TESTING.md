@@ -2,20 +2,24 @@
 
 - Test layout: Go *_test.go files
 - Coverage hotspots:
-  - `cmd/new_test.go` covers `slipway new` intake setup, JSON/classifier
-    behavior, worktree binding, active-change create-guard behavior, and
-    user-facing precondition errors.
-  - `internal/state/store_test.go` covers workspace/worktree discovery,
-    visibility, and hidden authority behavior for active bundles.
+  - `internal/tmpl/templates_test.go` covers generated template contracts,
+    stale text removal, prompt surfaces, and skill export expectations.
+  - `internal/tmpl/wave_isolation_content_test.go` covers wave dispatch
+    isolation phrasing.
+  - `internal/toolgen/toolgen_test.go` covers exported host skill inventory,
+    generated directory layouts, and tool-specific surface behavior.
 - Coverage gaps:
-  - Cross-worktree create-guard behavior must be asserted at the command layer
-    because state discovery intentionally reports more authorities than should
-    necessarily block `new`.
+  - Existing tests assert some wave dispatch language, but do not yet guard that
+    goal-verification and worktree-preflight stay thin-host/summary-first.
+  - Generated skill contract tests should prevent future regressions that move
+    long command output or source-file reading back into main host context.
 - Verification commands: go build ./...; go test ./...
 - Fixture patterns:
-  - Command tests use `withWorkspace`, `initTestWorkspace`, temporary git repos,
-    `recordingIntentClassifier`, and real `git worktree add` calls.
-  - State tests use temporary repositories plus helper worktrees to exercise
-    visibility and fallback paths.
+  - Template tests commonly read from the embedded template FS and assert on
+    rendered markdown substrings.
+  - Toolgen tests build generated trees in temporary directories and inspect
+    emitted skill/prompt files.
 - Notes:
-  - Source references: `cmd/new_test.go`, `internal/state/store_test.go`.
+  - Source references: `internal/tmpl/templates_test.go`,
+    `internal/tmpl/wave_isolation_content_test.go`,
+    `internal/toolgen/toolgen_test.go`.

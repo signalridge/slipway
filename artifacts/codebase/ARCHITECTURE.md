@@ -1,26 +1,33 @@
 # Architecture
 
 - Module responsibilities:
-  - `cmd/new.go` owns `slipway new` classification, slug allocation, guarded
-    creation, default worktree binding, and JSON/human response rendering.
-  - `cmd/common.go` owns shared command helpers, active-change resolution, and
-    create-time precondition errors used by lifecycle commands.
-  - `internal/state/store.go` owns active bundle discovery across the current
-    workspace and sibling git worktrees.
+  - `internal/tmpl/templates/skills/` is the source of truth for generated
+    governance skill surfaces. Hand-editing `.codex/`, `.claude/`, `.cursor/`,
+    or other generated copies is out of bounds.
+  - `internal/toolgen/toolgen.go` owns which template-backed skills are exported
+    for each supported tool and how generated runtime surfaces are laid out.
+  - `internal/tmpl/templates_test.go` and focused `internal/tmpl/*_test.go`
+    files protect generated-surface text contracts.
 - Dependency flow:
-  - `cmd/new.go` builds a prospective `model.Change`, calls
-    `rejectIfConflictingChange`, then calls `state.EnsureDefaultWorktreeForChange`
-    and `state.SaveChange`.
-  - The create guard consumes `state.ListChangesForCreateGuard` and compares
-    existing active changes with the current/prospective workspace authority.
+  - Template files embed shared partials from `internal/tmpl/templates/_partials`
+    where needed, then `toolgen` renders those files into per-tool skills and
+    prompt surfaces.
+  - The lifecycle engine routes by `next_skill.name`; the generated skill text
+    instructs the host AI how to execute the stage without changing engine gates.
 - Coupling hotspots:
-  - `ListChangesForCreateGuard` intentionally sees hidden sibling worktree
-    authorities; callers must decide whether visibility should become a block.
-  - `state.WorkspaceRootForChange` is the authority for unbound vs bound change
-    workspace ownership.
+  - `goal-verification` is closeout-adjacent and produces high-risk safety
+    baseline references; any context optimization must preserve fail-closed
+    evidence requirements.
+  - `worktree-preflight` owns baseline proof before execution; it must record
+    required worktree references while avoiding long baseline output in the
+    main host.
+  - `wave-orchestration` already dispatches task executors, but the host text
+    still asks the coordinator to read broad codebase-map files before dispatch.
 - Current change blast radius:
-  - Create-time lifecycle gating for `slipway new`; no runtime execution,
-    validation, archive, or template surface changes.
+  - Generated governance skill templates and tests for template contracts.
+  - No lifecycle engine gate weakening and no generated output hand edits.
 - Notes:
-  - Source references: `cmd/new.go`, `cmd/common.go`,
-    `internal/state/store.go`, `internal/state/paths.go`.
+  - Source references: `internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl`,
+    `internal/tmpl/templates/skills/worktree-preflight/SKILL.md`,
+    `internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl`,
+    `internal/toolgen/toolgen.go`, `internal/tmpl/templates_test.go`.

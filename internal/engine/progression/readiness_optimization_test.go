@@ -412,6 +412,7 @@ func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle
 	root := t.TempDir()
 	initGitWorkspaceForReadinessOptimizationTests(t, root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "codebase"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("before\n"), 0o644))
 	gitForReadinessOptimizationTests(t, root, "add", "README.md")
 	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
@@ -419,6 +420,7 @@ func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle
 	bundleDir := filepath.Join(root, "artifacts", "changes", "scope-drift")
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("after\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "codebase", "STRUCTURE.md"), []byte("# Structure\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "untracked.go"), []byte("package cmd\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".golangci.yml"), []byte("run:\n  timeout: 2m\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"), []byte("version: 1\n"), 0o644))
@@ -435,6 +437,7 @@ func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle
 	assert.Contains(t, files, "cmd/untracked.go")
 	assert.NotContains(t, files, ".slipway.yaml")
 	assert.NotContains(t, files, ".gitignore")
+	assert.NotContains(t, files, "artifacts/codebase/STRUCTURE.md")
 	assert.NotContains(t, files, "artifacts/changes/scope-drift/tasks.md")
 }
 
@@ -453,6 +456,8 @@ func TestWorkspaceChangedFilesForDoneArchiveExcludesBundleAndGeneratedLocalState
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("after\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "untracked.go"), []byte("package cmd\n"), 0o644))
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "codebase"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "artifacts", "codebase", "STRUCTURE.md"), []byte("# Structure\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(state.LocalStateGitIgnoreBlock()), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n"), 0o644))
 
@@ -463,6 +468,7 @@ func TestWorkspaceChangedFilesForDoneArchiveExcludesBundleAndGeneratedLocalState
 
 	assert.Contains(t, files, "README.md")
 	assert.Contains(t, files, "cmd/untracked.go")
+	assert.Contains(t, files, "artifacts/codebase/STRUCTURE.md")
 	assert.NotContains(t, files, "artifacts/changes/done-dirty/tasks.md")
 	assert.NotContains(t, files, ".gitignore")
 	assert.NotContains(t, files, ".slipway.yaml")

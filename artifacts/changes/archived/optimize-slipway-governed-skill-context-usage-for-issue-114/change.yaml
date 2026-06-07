@@ -1,0 +1,50 @@
+version: 1
+slug: optimize-slipway-governed-skill-context-usage-for-issue-114
+description: 'Optimize Slipway governed skill context usage for issue #114 by studying local gsd, superpowers, and spec-kitty patterns, then applying functionality-preserving thin-host/subagent or summary-first changes to heavy verification/preflight/orchestration surfaces.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-07T06:40:38.757113Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/optimize-slipway-governed-skill-context-usage-for-issue-114
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: c36278216ec789693e48a023f4786469fbd194e1077b4564d4a1b1d63104fd82
+        updated_at: 2026-06-07T08:45:13.80885695Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 8279bf5c60f6f28c124397267bb8b7d5752095e6714423673c1af02be7a14c0f
+        updated_at: 2026-06-07T08:08:10.64780453Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 63e070545e996bb9ab41a62c4a4f6be84fa6004355f644c04b0533ed2a5cbfce
+        updated_at: 2026-06-07T08:08:34.406566482Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8ede34d89877ee2c27e35f7f4ab2605c5f04a4aaee1bd7c0fa7fdfa47158b6bc
+        updated_at: 2026-06-07T08:00:34.601700007Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 738f11251c1586cba4479ab47f649ab35f90847baa76071221357d2f2b848b71
+        updated_at: 2026-06-07T08:07:37.695733055Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: ff0338a9ac4fea20bbf2ba40afffb2c127d48e148d278607d1b7eba85829b456
+        updated_at: 2026-06-07T08:00:57.230908064Z

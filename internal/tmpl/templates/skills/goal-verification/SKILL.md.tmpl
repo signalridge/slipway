@@ -58,6 +58,27 @@ Apply all of the following before marking any criterion `pass`:
 Minimum record:
 {{template "fresh-evidence-minimum-record"}}
 
+## Thin Host Evidence Reading
+Keep bulky command output and file scanning out of the main host context. Use an
+isolated verifier context when supported; otherwise use a bounded
+structured-summary fallback. The verifier reads the heavy evidence and returns
+only:
+- command and exit code
+- bounded finding summary
+- affected acceptance criterion IDs
+- concrete artifact or transcript references, including `fresh:command_ref=...`
+
+The host owns the final verdict, blocker list, and verification YAML. It must
+enumerate the acceptance criteria itself, review the bounded verifier result,
+and fail closed when delegated evidence is missing, stale, inconclusive, unsafe,
+or not tied to a real command reference. Do not accept a prose-only delegated
+verdict or a private attestation as evidence.
+
+Delegate these bulky reads when possible:
+- stub and placeholder scan output
+- fresh test command output
+- SAST output and finding triage for guardrail safety baseline checks
+
 ## Stub And Placeholder Scan
 Run the following scans against all claimed target files. Any real hit is a blocker.
 
@@ -94,6 +115,8 @@ this skill is its producer. `slipway next` lists the exact token(s) under
    - `high_risk_check:<domain>.safety_baseline=pass` — baseline clean / findings mitigated.
    - `high_risk_check:<domain>.safety_baseline=fail` — unmitigated findings; this blocks ship.
 
+`high_risk_check:<domain>.safety_baseline=pass` must be paired with
+`fresh:command_ref=` that points to the real SAST output artifact or transcript.
 The verdict must reflect a real SAST run. A missing token leaves the ship gate
 blocked with `high_risk_check_missing`; there is no other satisfy-path and no
 bypass. This is the only way the gate is satisfied — do not invent a different
