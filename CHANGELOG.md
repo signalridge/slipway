@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.5](https://github.com/signalridge/slipway/compare/v0.11.4...v0.11.5) (2026-06-07)
+
+
+### Performance
+
+* **skills:** thin-host heavy governed stages to cut main-thread token span ([#114](https://github.com/signalridge/slipway/issues/114)) ([#122](https://github.com/signalridge/slipway/issues/122)) ([007b62b](https://github.com/signalridge/slipway/commit/007b62b583d58e325402681cda78f95de2f599e4))
+
 ## [0.11.4](https://github.com/signalridge/slipway/compare/v0.11.3...v0.11.4) (2026-06-07)
 
 
