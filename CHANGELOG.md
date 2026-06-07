@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2](https://github.com/signalridge/slipway/compare/v0.11.1...v0.11.2) (2026-06-07)
+
+
+### Bug Fixes
+
+* **recovery:** make live P3 lifecycle dead-ends name an executable next action ([#86](https://github.com/signalridge/slipway/issues/86)) ([#108](https://github.com/signalridge/slipway/issues/108)) ([aed8f81](https://github.com/signalridge/slipway/commit/aed8f8128cc55369de3f1c01b5449f961af473bf))
+
 ## [0.11.1](https://github.com/signalridge/slipway/compare/v0.11.0...v0.11.1) (2026-06-06)
 
 
