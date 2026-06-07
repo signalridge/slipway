@@ -9,22 +9,11 @@ Slipway routes work through a governed lifecycle:
 
 The active lifecycle state is stored in `artifacts/changes/<slug>/change.yaml`.
 
-```mermaid
-stateDiagram-v2
-  [*] --> S0_INTAKE: slipway new
-  S0_INTAKE --> S1_PLAN: intent confirmed
-  S1_PLAN --> S2_EXECUTE: plan approved
-  S2_EXECUTE --> S3_REVIEW: task evidence complete
-  S3_REVIEW --> S4_VERIFY: reviews pass
-  S4_VERIFY --> S4_VERIFY: goal-verification then final-closeout skills
-  S4_VERIFY --> DONE: done-ready outcome (gates pass), slipway done
-  DONE --> [*]
+<div align="center" markdown>
 
-  S0_INTAKE --> S0_INTAKE: open questions / clarification
-  S1_PLAN --> S1_PLAN: research / audit blockers
-  S2_EXECUTE --> S2_EXECUTE: wave blockers
-  S3_REVIEW --> S2_EXECUTE: review requires changes
-```
+![Slipway governed lifecycle: new, S0 Intake, S1 Plan, S2 Execute, S3 Review, S4 Verify, done, with clarify, audit, wave and changes-requested loop-backs and a primary command loop of new, next, run and done](assets/diagrams/lifecycle.svg)
+
+</div>
 
 ## Create A Change
 
