@@ -15,22 +15,9 @@ Slipway is a small governance control plane for local AI-assisted development. I
 
 ## Architecture Model
 
-```mermaid
-flowchart TB
-  Human["Human operator"] --> CLI["slipway CLI"]
-  Agent["AI coding tool"] --> Adapter["Generated adapter<br/>skills / commands / hooks / prompts"]
-  Adapter --> CLI
-
-  CLI --> Authority["change.yaml<br/>current state authority"]
-  CLI --> Trace["events/lifecycle.jsonl<br/>append-only lifecycle trace"]
-  CLI --> Artifacts["Markdown artifacts<br/>intent / research / requirements / decision / tasks / assurance"]
-  CLI --> Evidence["verification/*.yaml<br/>skill and review evidence"]
-
-  Authority --> Next["next / status / validate<br/>read-only views"]
-  Artifacts --> Next
-  Evidence --> Next
-  CLI --> Run["run / done<br/>state-mutating progression"]
-```
+<p align="center">
+  <img alt="Slipway architecture model: human and AI tool feed the slipway CLI, which writes the repository system of record (change.yaml, lifecycle.jsonl, Markdown artifacts, verification YAML); read-only surfaces read state, state-mutating surfaces write it" src="assets/diagrams/architecture.svg" width="840">
+</p>
 
 The separation matters. `next`, `status`, and `validate` can recompute readiness without mutating lifecycle authority. `run` and `done` are explicit mutation surfaces. Generated host files help AI tools discover the right action, but the CLI remains the execution authority.
 

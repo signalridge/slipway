@@ -1,6 +1,9 @@
 <div align="center">
 
-<img alt="Slipway - Governance CLI for AI-assisted software delivery" src="docs/assets/brand/slipway-logo.svg" width="760">
+<img alt="Slipway - Governance CLI for AI-assisted software delivery" src="docs/assets/brand/slipway-logo-adaptive.svg" width="120">
+
+<br/>
+<br/>
 
 <p>
   <a href="https://github.com/signalridge/slipway/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/signalridge/slipway/ci.yml?style=for-the-badge&logo=github&label=CI"></a>&nbsp;
@@ -67,35 +70,9 @@ See [Design Philosophy](docs/design.md) for the longer architecture explanation.
 
 ## Lifecycle
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Inter, ui-sans-serif, system-ui, sans-serif", "primaryColor": "#f8fafc", "primaryTextColor": "#0f172a", "primaryBorderColor": "#115e59", "lineColor": "#64748b", "tertiaryColor": "#ecfeff"}}}%%
-flowchart LR
-  classDef entry fill:#ecfeff,stroke:#115e59,stroke-width:2px,color:#0f172a
-  classDef plan fill:#eef2ff,stroke:#2563eb,stroke-width:2px,color:#0f172a
-  classDef execute fill:#f8fafc,stroke:#475569,stroke-width:2px,color:#0f172a
-  classDef review fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#0f172a
-  classDef verify fill:#f0fdf4,stroke:#15803d,stroke-width:2px,color:#0f172a
-  classDef complete fill:#111827,stroke:#111827,stroke-width:2px,color:#ffffff
-  classDef loop fill:#f8fafc,stroke:#94a3b8,stroke-dasharray: 5 5,color:#334155
-
-  start((new)):::entry --> intake["Intake<br/>intent + guardrail classification"]:::entry
-  intake --> planNode["Plan<br/>research + requirements + tasks"]:::plan
-  planNode --> executeNode["Execute<br/>wave work + evidence"]:::execute
-  executeNode --> reviewNode["Review<br/>domain + independent checks"]:::review
-  reviewNode --> verifyNode["Verify<br/>assurance + goal proof"]:::verify
-  verifyNode --> closeout["Closeout<br/>fresh proof + archive ready"]:::verify
-  closeout --> doneNode((done)):::complete
-
-  intake -. clarify / research .-> intake
-  planNode -. audit blockers .-> planNode
-  executeNode -. wave blockers .-> executeNode
-  reviewNode -. changes requested .-> executeNode
-
-  commandLoop["Primary command loop<br/>next inspects<br/>run advances<br/>status reports"]:::loop
-  commandLoop -.-> intake
-  commandLoop -.-> executeNode
-  commandLoop -.-> verifyNode
-```
+<div align="center">
+  <img alt="Slipway governed lifecycle: new, S0 Intake, S1 Plan, S2 Execute, S3 Review, S4 Verify, done" src="docs/assets/diagrams/lifecycle.svg" width="920">
+</div>
 
 The primary lifecycle commands are `slipway new`, `slipway next`, `slipway run`, `slipway status`, and `slipway done`.
 If planning evidence drifts after execution or review, `slipway next` reports
