@@ -1,0 +1,50 @@
+version: 1
+slug: resolve-the-live-recovery-ux-p3-lifecycle-dead-ends-from-iss
+description: 'Resolve the live Recovery UX P3 lifecycle dead-ends from issue #86 (rescoped). Fix four user-facing dead-ends so every blocked state names an executable next action: (1) a governed change bound to a worktree on a mismatched git branch has no rebind path, and the recovery vocabulary points to `slipway repair` which has no branch-rebind code path (hollow remediation); (2) `slipway repair` dual-active and generic-drift findings yield non-actionable ''inspect the named artifact and rerun'' dead-ends; (3) abort then repair can loop because only `slipway run` clears InterruptedExecutionAt while `slipway abort` advises `slipway repair`; (4) the scope-contract recovery guidance diagnostic is suppressed at S2_EXECUTE. Drop the obsolete #86 item about restamp/recover/Tier docs, since PR #99 removed that surface entirely.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-06T14:00:10.929918Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-the-live-recovery-ux-p3-lifecycle-dead-ends-from-iss
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: a6ca9ce7965487e7255a5f5dce816d325c613732ba0b953892ccb615f00ad894
+        updated_at: 2026-06-06T14:35:42.557993684Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: f16c5a6c39ef9ae485194ed28590a1efd8ed029f1a8cc61c4df2894c2c66b6f5
+        updated_at: 2026-06-06T14:11:39.170912918Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 37eb9be536841115adead128c5ad457dd25634beaeb5192b515883e85025ea4c
+        updated_at: 2026-06-06T14:06:25.330981302Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: e7b7fd81b51336a26906998054188a19df690d90f84b3be37e03feac43048e6f
+        updated_at: 2026-06-06T14:11:02.002231908Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 086af036db725ae8133f9475b8385ce6a6bf406eb96319780dfb12f199b332f0
+        updated_at: 2026-06-06T14:08:56.417562779Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b549cab750f5c63682e36fcddff3643cf84b36158fa1ed2a4d69ec442e5e3b58
+        updated_at: 2026-06-06T14:35:01.291563821Z

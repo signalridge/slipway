@@ -373,6 +373,63 @@ func ValidateDedicatedWorktreeAuthenticityReasons(repoRoot, worktreePath, expect
 	return nil, nil
 }
 
+// resolveWorktreeActualBranch returns the git branch the bound worktree is
+// actually on (the same value ValidateWorktreeAuthenticityReasons compares
+// against). It performs no mutation.
+func resolveWorktreeActualBranch(worktreePath string) (string, error) {
+	normalizedPath, err := NormalizePath(worktreePath)
+	if err != nil {
+		return "", err
+	}
+	if actualBranch, ok := gitBranchFromMetadata(normalizedPath); ok {
+		return strings.TrimSpace(actualBranch), nil
+	}
+	cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ReconcileWorktreeBranchBinding realigns a bound change's recorded
+// WorktreeBranch to the worktree's actual git branch when the ONLY authenticity
+// problem is a branch mismatch on an otherwise-valid dedicated worktree. It is a
+// metadata reconciliation — no `git checkout`/HEAD move — routed through the
+// canonical PersistScopeWorktreeMetadata setter, so worktree-preflight remains
+// the initial binder and this only realigns an existing binding to reality.
+//
+// It returns (false, nil) and leaves the change untouched for any other
+// condition (unbound, path invalid/unregistered, non-dedicated, or no mismatch),
+// preserving the worktree gate's fail-closed behavior for those cases.
+func ReconcileWorktreeBranchBinding(repoRoot string, change *model.Change) (bool, error) {
+	if change == nil {
+		return false, nil
+	}
+	worktreePath := strings.TrimSpace(change.WorktreePath)
+	if worktreePath == "" || strings.TrimSpace(change.WorktreeBranch) == "" {
+		return false, nil
+	}
+	reasons, err := ValidateDedicatedWorktreeAuthenticityReasons(repoRoot, worktreePath, change.WorktreeBranch)
+	if err != nil {
+		return false, err
+	}
+	if len(reasons) != 1 || strings.TrimSpace(reasons[0].Code) != WorktreeReasonBranchMismatch {
+		return false, nil
+	}
+	actualBranch, err := resolveWorktreeActualBranch(worktreePath)
+	if err != nil {
+		return false, err
+	}
+	if actualBranch == "" || actualBranch == strings.TrimSpace(change.WorktreeBranch) {
+		return false, nil
+	}
+	if err := PersistScopeWorktreeMetadata(change, change.WorktreePath, actualBranch); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func reasonCodesFromWorktreeReasons(reasons []string) []model.ReasonCode {
 	if len(reasons) == 0 {
 		return nil

@@ -70,6 +70,23 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return advanceIntake(root, &change, fromState)
 	}
 
+	// 1b. Reconcile a bound worktree whose recorded branch drifted from its actual
+	// git branch (no git mutation) so a branch mismatch resolves via `slipway run`
+	// instead of a hollow `slipway repair` dead-end. Only a pure branch mismatch on
+	// an otherwise-valid dedicated worktree is reconciled; every other authenticity
+	// failure stays fail-closed in the bundle/worktree gates below.
+	if fromState == model.StateS2Execute && strings.TrimSpace(change.WorktreePath) != "" {
+		reconciled, err := state.ReconcileWorktreeBranchBinding(root, &change)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if reconciled {
+			if err := state.SaveChange(root, change); err != nil {
+				return AdvanceSummary{}, err
+			}
+		}
+	}
+
 	// 2. Bundle precondition check.
 	// Skip at S1_PLAN/research with NeedsDiscovery — research runs before
 	// the full bundle is populated.

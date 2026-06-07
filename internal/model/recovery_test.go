@@ -303,6 +303,20 @@ func TestBuildRecoveryNilOnCleanState(t *testing.T) {
 	assert.Nil(t, BuildRecovery(nil))
 }
 
+func TestBuildRecoveryWorktreeBranchMismatchRoutesToRun(t *testing.T) {
+	t.Parallel()
+
+	// #86: a bound-worktree branch mismatch must route to `slipway run` (which
+	// reconciles the recorded branch), not the hollow `slipway repair` dead-end.
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("dedicated_worktree_branch_mismatch", ""),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway run", got.PrimaryCommand)
+	assert.NotContains(t, got.PrimaryAction, "slipway repair")
+	assert.Contains(t, got.PrimaryAction, "slipway run")
+}
+
 func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
 	t.Parallel()
 

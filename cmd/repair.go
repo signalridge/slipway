@@ -214,9 +214,14 @@ func makeRepairCmd() *cobra.Command {
 						unique[ch.Slug] = struct{}{}
 					}
 					if len(unique) > 1 {
+						slugs := make([]string, 0, len(unique))
+						for slug := range unique {
+							slugs = append(slugs, slug)
+						}
+						slices.Sort(slugs)
 						summary.NonRepairableFindings = append(
 							summary.NonRepairableFindings,
-							"multiple active changes require operator intervention",
+							fmt.Sprintf("multiple active changes are active: %s", strings.Join(slugs, ", ")),
 						)
 					}
 				}
@@ -599,8 +604,10 @@ func repairDriftNextAction(reason, target string) string {
 		return "regenerate execution-summary.yaml from current wave-backed task evidence"
 	case strings.Contains(lower, "change authority"), strings.Contains(lower, "change.yaml"):
 		return "repair or replace the authoritative change.yaml before continuing"
+	case strings.Contains(lower, "multiple active changes"):
+		return "run `slipway status` to inspect, then resolve one with `slipway cancel --change <slug>` or `slipway done --change <slug>`"
 	default:
-		return "inspect the named artifact and rerun the owning Slipway command after correction"
+		return "run `slipway run` to reopen the earliest affected authority and re-run the owning stage"
 	}
 }
 

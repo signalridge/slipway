@@ -126,7 +126,7 @@ func makeAbortCmd() *cobra.Command {
 				}
 				switch nextAction {
 				case "repair":
-					writer.Writef("Run `slipway repair`, then inspect `slipway status` before retrying execution.\n")
+					writer.Writef("Run `slipway repair` to restore execution integrity, then `slipway run` to clear the interrupted-execution marker and continue.\n")
 				default:
 					writer.Writef("Use `slipway %s` to continue later, or `slipway status` to inspect blockers.\n", nextAction)
 				}

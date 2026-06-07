@@ -145,6 +145,38 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 	})
 }
 
+func TestAbortRepairBranchGuidanceNamesRun(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "abort repair branch names run")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		// Corrupt the execution summary so loadExecutionContext errors and abort
+		// resolves to the "repair" guidance branch (#86 dead-end 3).
+		summaryPath := state.ExecutionSummaryPathForRead(root, slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
+		require.NoError(t, os.WriteFile(summaryPath, []byte("not: [valid: yaml"), 0o644))
+
+		cmd := makeAbortCmd()
+		cmd.SetArgs([]string{"--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		require.NoError(t, cmd.Execute())
+
+		out := buf.String()
+		assert.Contains(t, out, "`slipway run`",
+			"repair-branch guidance must name slipway run as the interrupted-execution clearer")
+		assert.Contains(t, out, "`slipway repair`")
+	})
+}
+
 func TestAbortTextUsesRunWhenNoResumableWaveStateExists(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

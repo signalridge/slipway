@@ -8,11 +8,27 @@ import (
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/governance"
+	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestScopeContractRecoveryGuidanceHasSurfaceParity pins #86 dead-end (4): the
+// scope-contract recovery guidance diagnostic is emitted whenever the contract
+// has blockers, at any lifecycle state (S2_EXECUTE as well as S3/S4) — no
+// state-gated suppression.
+func TestScopeContractRecoveryGuidanceHasSurfaceParity(t *testing.T) {
+	t.Parallel()
+
+	withBlockers := scopecontract.Report{Blockers: []model.ReasonCode{model.NewReasonCode("scope_contract_drift", "")}}
+	assert.True(t, scopeContractNeedsRecoveryGuidance(withBlockers),
+		"scope guidance must surface whenever there are blockers, including at S2_EXECUTE")
+
+	clean := scopecontract.Report{}
+	assert.False(t, scopeContractNeedsRecoveryGuidance(clean))
+}
 
 func TestEvaluateArtifactReadinessWithContext_IgnoresDependenciesOutsideEligibleLevel(t *testing.T) {
 	t.Parallel()
