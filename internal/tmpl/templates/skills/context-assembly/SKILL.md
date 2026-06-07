@@ -4,7 +4,7 @@ domain: intake
 function: assemble product, codebase, and risk context before planning or review
 tier: T1
 primary_attachment: procedure
-summary: "Use when a task needs grounded context before planning or review. Triggers on research or plan-audit hosts, unclear context, or action-scoped hydration cues."
+summary: "Use when a task needs grounded context before planning or review. Triggers on the research or plan-audit hosts, unclear context, or a user asking how something works or for background."
 size_rationale: "Warn-band accepted: keeps explicit anti-patterns and checklist anchors so context handoff quality remains reviewable."
 trigger_signals:
   - host: ["research-orchestration", "plan-audit"]

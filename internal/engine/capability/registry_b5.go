@@ -9,7 +9,7 @@ func ciTriage() Skill {
 		Function:          "triage failing CI runs to root cause before retrying",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when CI is failing and a retry is being considered. Triggers on repair command or user text naming CI failures.",
+		Summary:           "Use when CI, a build, or a pipeline is failing and a retry is being considered. Triggers on the `slipway repair` command or user text naming CI/build/pipeline failures.",
 		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). No public explicit selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
@@ -39,7 +39,7 @@ func gitRecovery() Skill {
 		Function:          "recover git state without destroying unsaved work or bypassing hooks",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery.",
+		Summary:           "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on the `slipway repair` command or user text describing those operations.",
 		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). Host-embedded attachment
 		// on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
@@ -56,7 +56,7 @@ func incidentResponse() Skill {
 		Function:          "incident-response posture: contain, diagnose, communicate, and write up",
 		Tier:              TierT3,
 		PrimaryAttachment: AttachmentReportSchema,
-		Summary:           "Use when a production incident is suspected or active. Triggers on status or health commands or user text naming an incident.",
+		Summary:           "Use when a production incident is suspected or active. Triggers on `slipway status --focus incident` / `slipway health --focus incident` or user text naming an incident.",
 		// Public status/health exposure is owned by surfaces.go, not catalog bindings.
 		Evidence: EvidenceArtifact,
 		Bindings: []Binding{

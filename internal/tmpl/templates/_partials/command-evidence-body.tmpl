@@ -1,0 +1,34 @@
+{{- define "command-evidence-body" -}}
+# Evidence
+
+Record runtime task evidence for the active execution run. The wave-orchestration
+host calls this once per completed task during `S2_EXECUTE`. The verdict is a host
+judgment the engine consumes to advance the wave, so it cannot be inferred.
+
+## Invocation
+```bash
+slipway evidence task --task-id <id> --run-summary-version <n> --task-kind <kind> \
+  --verdict <pass|fail|blocked|incomplete|timeout> --evidence-ref "<ref>" --json
+```
+
+## Contract
+- Only valid for an active change in `S2_EXECUTE` with a materialized wave plan.
+- `--task-id` must exist in `wave-plan.yaml`; `--task-kind` must match the planned kind.
+- `--target-file` defaults to the planned task's target files when omitted.
+- The engine computes `freshness_inputs`; never hand-write the evidence JSON.
+- For a non-pass verdict, record blockers with `--blocker <code[:detail]>`.
+
+## Flags
+- `--task-id <id>`: task ID from `wave-plan.yaml` (required)
+- `--run-summary-version <n>`: current wave-orchestration run_version (required)
+- `--task-kind <kind>`: code, test, doc, ops, verification, investigation, other (required)
+- `--verdict <v>`: pass, fail, blocked, incomplete, timeout (required)
+- `--evidence-ref "<ref>"`: stable transcript/command/artifact/note reference (required)
+- `--changed-file <path>`: actual changed file (repeatable)
+- `--target-file <path>`: target file (repeatable; defaults to the plan's targets)
+- `--blocker <code[:detail]>`: task blocker (repeatable)
+- `--captured-at <RFC3339Nano>`: evidence timestamp (defaults to now)
+- `--session-id <id>`: executor session identifier
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+{{- end -}}

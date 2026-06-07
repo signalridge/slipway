@@ -35,12 +35,14 @@ claiming alignment.
 
 ## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Read `next_skill.review_context.required_artifact_layers` for required review
-tokens and the top-level `confirmation_requirement` object for stop boundaries.
-Those fields are the source of truth for this handoff.
-Apply the shared requirements checklist from `checklist-quality.md`. Use the
-attached `spec-trace` checklist to enumerate the forward and reverse trace
-edges you must verify.
+Read its current `run_summary_version`; your verification's `run_version` must
+equal that value, not a literal `1`. Read
+`next_skill.review_context.required_artifact_layers` for required review tokens
+and the top-level `confirmation_requirement` object for stop boundaries. Those
+fields are the source of truth for this handoff.
+Apply the shared requirements checklist from `references/checklist-quality.md`
+(shipped next to this skill). Use the attached `spec-trace` checklist to
+enumerate the forward and reverse trace edges you must verify.
 Use `slipway-coding-discipline` as a posture check when judging whether the
 implemented change stayed simple, surgical, and goal-driven.
 
@@ -108,7 +110,7 @@ the exact `R*` layer tokens.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <run_summary_version from verification/execution-summary.yaml>  # must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "layer:R0=pass"
   - "layer:R3=pass" # include only when review_context requires R3
@@ -125,7 +127,7 @@ bidirectional alignment.
 ## Present and Advance
 Show review findings. {{template "hard-gate"}}
 
-After confirmation: proceed to code-quality-review.
+After confirmation, advance with `slipway run`; the engine re-resolves S3_REVIEW to code-quality-review as Stage 2 (`slipway next` only previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Independent review for governed levels.

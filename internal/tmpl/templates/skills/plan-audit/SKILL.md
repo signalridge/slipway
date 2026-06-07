@@ -74,13 +74,23 @@ A mechanical or vacuous requirements/tasks file cannot reach done. Re-run
 ## Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
 - Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`
-- Required on expanded / discovery paths: `decision.md`
-- Required on standard/strict effective preset: `assurance.md`
-- If `research.md` is present in the artifact bundle, include it in validation
+- Required whenever the change is on the **expanded** artifact schema — discovery
+  changes (`needs_discovery=true`); the research/config/meta workflow profiles; or
+  a repo configured to default to expanded. A standard non-discovery code change
+  uses the **core** schema and does not require it. No public surface exposes the
+  frozen schema name, so treat the engine as the authority: a missing one on an
+  expanded change is surfaced as `missing_required_artifact:decision.md`: `decision.md`
+- Required when `needs_discovery=true` (the only discovery-gated artifact — check
+  `needs_discovery` in `slipway next --json` / `slipway validate`): `research.md`.
+  A missing one is a blocker (`missing_required_artifact:research.md`). On
+  non-discovery changes `research.md` is absent and not required.
+- Required on standard/strict effective preset: `assurance.md` — at S1 plan-audit
+  this only needs to be **present**; its structural validity is enforced later at
+  `S3_REVIEW`.
 
-Each artifact must be non-empty, structurally valid, free of stale code
-references, and consistent with the stale-propagation graph. Tasks must have
-clear acceptance criteria.
+Each required artifact except `assurance.md` must be non-empty, structurally
+valid, free of stale code references, and consistent with the stale-propagation
+graph. Tasks must have clear acceptance criteria.
 
 If `research.md` is present, also verify that:
 - `## Alternatives Considered` is consistent with the selected approach in `decision.md`
@@ -106,9 +116,9 @@ On standard/strict, any failed dimension blocks. On light, only dimension #1
 coverage failures downgrade to warnings.
 
 ## Sidecars
-Apply `checklist-quality.md`: specificity, measurability, requirement-to-intent
-traceability, edge cases, failure modes, alternatives, tradeoffs, and concrete
-risks.
+Apply `references/checklist-quality.md` (shipped next to this skill):
+specificity, measurability, requirement-to-intent traceability, edge cases,
+failure modes, alternatives, tradeoffs, and concrete risks.
 
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
@@ -133,9 +143,9 @@ notes: |
 ```
 
 ## Present and Advance
-Show audit results. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
+Show audit results. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`.
 
 ## DO NOT SKIP
 1. Confirm the verification file exists after audit.

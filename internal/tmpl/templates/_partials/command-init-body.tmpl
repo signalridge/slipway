@@ -11,4 +11,8 @@ slipway init --tools all
 
 This command is setup-only and executes the CLI directly.
 No skill routing is required.
+
+## Flags
+- `--tools <all|none|comma list>`: tool adapters to generate (e.g. `claude,codex,cursor,gemini,opencode`); `all` generates every adapter, `none` initializes only the runtime layout (`.slipway.yaml`, gitignore block, runtime markers) with no adapter files.
+- `--refresh`: regenerate managed tool artifacts deterministically. When `--tools` is omitted, `--refresh` auto-detects previously generated adapters and reports a remediation if none are found.
 {{- end -}}

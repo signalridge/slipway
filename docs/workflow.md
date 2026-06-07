@@ -16,9 +16,9 @@ stateDiagram-v2
   S1_PLAN --> S2_EXECUTE: plan approved
   S2_EXECUTE --> S3_REVIEW: task evidence complete
   S3_REVIEW --> S4_VERIFY: reviews pass
-  S4_VERIFY --> S5_CLOSEOUT: goals verified
-  S5_CLOSEOUT --> DONE_READY: closeout proof fresh
-  DONE_READY --> [*]: slipway done
+  S4_VERIFY --> S4_VERIFY: goal-verification then final-closeout skills
+  S4_VERIFY --> DONE: done-ready outcome (gates pass), slipway done
+  DONE --> [*]
 
   S0_INTAKE --> S0_INTAKE: open questions / clarification
   S1_PLAN --> S1_PLAN: research / audit blockers

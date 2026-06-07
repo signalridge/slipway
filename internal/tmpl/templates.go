@@ -15,7 +15,6 @@ import (
 //go:embed templates/artifacts/*.md
 //go:embed templates/commands/*.tmpl
 //go:embed templates/hooks/*.tmpl
-//go:embed templates/skills/*.md
 //go:embed templates/skills/*/*.md templates/skills/*/*.tmpl
 //go:embed templates/skills/*/references/*.md
 //go:embed templates/skills/*/scripts/*.py templates/skills/*/scripts/*.sh

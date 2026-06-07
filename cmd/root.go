@@ -31,7 +31,6 @@ var helpGroups = []commandGroup{
 		Description: "new -> [next|run -> (AI executes skill)]* -> done",
 		Commands: []groupedCommand{
 			{Name: "new", Description: desc("new")},
-			{Name: "preset", Description: desc("preset")},
 			{Name: "next", Description: desc("next")},
 			{Name: "run", Description: desc("run")},
 			{Name: "status", Description: desc("status")},
@@ -49,6 +48,7 @@ var helpGroups = []commandGroup{
 		Title:       "Situational",
 		Description: "Commands used when workflow decisions are needed.",
 		Commands: []groupedCommand{
+			{Name: "preset", Description: desc("preset")},
 			{Name: "review", Description: desc("review")},
 			{Name: "validate", Description: desc("validate")},
 			{Name: "pivot", Description: desc("pivot")},

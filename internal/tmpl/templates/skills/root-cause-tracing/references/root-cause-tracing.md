@@ -98,13 +98,16 @@ npm test 2>&1 | grep 'DEBUG git init'
 
 If something appears during tests but you don't know which test:
 
-Use the bisection script `find-polluter.sh` in this directory:
+Use the bisection script `find-polluter-go.sh` in this skill's `scripts/`
+directory:
 
 ```bash
-./find-polluter.sh '.git' 'src/**/*.test.ts'
+../scripts/find-polluter-go.sh ./.cache.tmp ./internal/... -run '^TestIntegration'
 ```
 
-Runs tests one-by-one, stops at first polluter. See script for usage.
+It runs Go test packages one-by-one (`go test -count=1`), stops at the first
+package that creates the pollution path, and prints a reproduce command. Run
+`../scripts/find-polluter-go.sh` with no args for full usage.
 
 ## Real Example: Empty projectDir
 

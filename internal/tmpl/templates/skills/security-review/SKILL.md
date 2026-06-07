@@ -1,10 +1,10 @@
 ---
 skill_id: security-review
 domain: review-security
-function: secure-default and boundary-focused security review
+function: secure-default, boundary- and framework-aware security review
 tier: T1
 primary_attachment: checklist
-summary: "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths."
+summary: "Use when reviewing security-relevant code for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths."
 trigger_signals:
   - command: review
     reason: "review command invoked; attach security checklist"

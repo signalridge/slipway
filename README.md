@@ -174,7 +174,7 @@ slipway status --json
 slipway done --json
 ```
 
-`next`, `status`, and `validate` are read-only inspection surfaces. `run`, `new`, `preset`, `checkpoint`, `repair`, `cancel`, `abort`, and `done` can mutate local governed state.
+`next`, `status`, and `validate` are read-only inspection surfaces. `run`, `new`, `preset`, `pivot`, `review`, `checkpoint`, `repair`, `cancel`, `abort`, `evidence`, and `done` can mutate local governed state (plus `init` and `codebase-map`, which write workspace/map files).
 The blocked/stale `next` and `validate` views, the `run --json` handoff, and
 governance-blocked `CLIError` envelopes carry an additive, read-only `recovery`
 object whenever a listed blocker — or a ready-to-advance/finalize next action —
@@ -200,10 +200,10 @@ Generate host-tool surfaces with `slipway init --tools`.
 
 | Tool | Generated surfaces |
 | --- | --- |
-| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md` |
+| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/hooks/slipway-session-start.sh`, `.claude/settings.json` |
 | Codex | `.codex/skills/slipway-*/SKILL.md`, `$CODEX_HOME/prompts/slipway-*.md` |
-| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md` |
-| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml` |
+| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start.sh` |
+| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start.sh`, `.gemini/settings.json` |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start.sh` |
 
 The AI-tool installation prompt in [Installation](docs/installation.md#ai-tool-installation-prompt) is written for copy-paste use in tools such as OpenCode, Codex, and Claude Code.

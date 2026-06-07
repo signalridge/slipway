@@ -1,6 +1,9 @@
 # Command Reference
 
-All routed commands support `--json` when structured output is useful.
+Most routed commands support `--json` when structured output is useful. Two
+exceptions: `slipway init` is setup-only (`--tools`/`--refresh`, no `--json`), and
+`slipway validate` emits JSON only (its `--format` flag shapes `--list-focuses`
+output, not the main report).
 
 ## Core Lifecycle
 
@@ -27,11 +30,16 @@ slipway new "add install docs" --preset standard
 slipway new "docs-only change" --profile docs
 slipway new --from-doc docs/installation.md "refresh install docs"
 slipway new "small fix" --trivial
+slipway new "auth refactor" --discuss   # carry open questions forward into context
+slipway new "schema migration" --full   # force fresh final-closeout evidence before ship
 ```
 
 Presets control gate strictness: `light`, `standard`, or `strict`.
 
 Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
+
+`--discuss` persists unresolved gray areas into context before execution;
+`--full` requires a refreshed final-closeout verification before the ship gate.
 
 ## Situational Commands
 
@@ -40,10 +48,10 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway init` | mutation | Initialize `.slipway.yaml` and optional AI-tool adapters. |
 | `slipway preset <level>` | mutation | Confirm or change the active change preset. |
 | `slipway validate` | query | Recompute evidence and gate readiness without advancing. |
-| `slipway review` | mutation | Run explicit artifact-code alignment review from execution onward. |
-| `slipway checkpoint` | mutation | Pause execution for a task-level human response. |
+| `slipway review` | mutation | Run explicit artifact-code alignment review (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY, after execution-summary evidence exists). |
+| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_EXECUTE; `--task-id` required, `--allowed-responses` required for `--type decision`). |
 | `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
-| `slipway pivot` | mutation | Reroute or rescope an active change from execution onward. |
+| `slipway pivot` | mutation | Reroute an active change (S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY) or rescope it (S2_EXECUTE back to S0_INTAKE). |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
@@ -97,13 +105,21 @@ aligned with the CLI by a reverse flag-contract test:
 - `--hydrate` / `--hydrate-ref <skill-id>/<name>` — `status`, `review`, and
   `health` append selected hydrate reference bodies to text output;
   `--hydrate-ref` restricts hydration to a named reference (repeatable).
+- `--focus <alias>` / `--list-focuses` — `status`, `health`, `review`,
+  `validate`, and `repair` accept a public focus override; run
+  `<command> --list-focuses` to enumerate. Known aliases: `status`/`health` →
+  `incident`; `review` → `sast`, `calibration`; `validate` → `sast`, `property`,
+  `mutation`, `spec-trace`; `repair` currently exposes none.
 - `status --root` prints the canonical Slipway scope root; `status --stats`
   shows workspace diagnostics (active count, stale summaries, integrity issues).
 - `next --no-auto-pass` reports skill eligibility instead of auto-passing;
   `next --context-guard` emits context-budget guard messages in hook format.
 - `done --all-ready` archives every active change that is currently done-ready.
-- `pivot --reroute` refreshes the discovery decision; `pivot --rescope` returns
-  to discovery to modify scope boundaries.
+- `pivot --reroute` re-evaluates the routing/discovery decision and re-enters
+  S1_PLAN (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY); `pivot --rescope`
+  (valid only in S2_EXECUTE) returns the change to S0_INTAKE to amend scope,
+  clearing the Approved Summary for re-confirmation. Both set
+  `needs_discovery=true`.
 
 ## Useful JSON Invocations
 
@@ -147,9 +163,13 @@ active-readiness contract: `validate` proves the currently active governed state
 before `done`; it is not a post-archive audit surface for frozen bundles.
 
 `slipway evidence task` writes the flat runtime task JSON consumed by
-wave-orchestration sync. The command computes `freshness_inputs`, defaults
-`captured_at` to current UTC, validates task kind/verdict/blockers, and refuses
-unknown or path-unsafe task IDs instead of relying on hand-written JSON.
+wave-orchestration sync. Required flags: `--task-id`, `--run-summary-version`,
+`--task-kind`, `--verdict`, `--evidence-ref`. Optional: `--changed-file` and
+`--target-file` (each repeatable), `--blocker <code[:detail]>` (repeatable;
+supply for non-pass verdicts), `--captured-at <RFC3339Nano>` (defaults to now),
+`--session-id`, and `--change <slug>`. The command computes `freshness_inputs`,
+validates task kind/verdict/blockers, and refuses unknown or path-unsafe task IDs
+instead of relying on hand-written JSON.
 `freshness_inputs` includes the current wave-plan `tasks_plan_hash` so task
 evidence cannot be reused after `tasks.md` semantically changes.
 

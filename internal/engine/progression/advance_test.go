@@ -265,6 +265,15 @@ func TestCheckGateWithIterationDetectsStalledFeedback(t *testing.T) {
 	if !hasAdvanceReasonCode(second.Blockers, "plan_checker_loop_terminated") {
 		t.Fatalf("expected loop termination blocker, got %v", second.Blockers)
 	}
+	expectedRecovery := "consider `slipway pivot --reroute` or manual plan revision"
+	if !hasAdvanceReasonDetail(second.Blockers, "plan_audit_budget_exhausted", expectedRecovery) {
+		t.Fatalf("expected valid reroute recovery detail, got %v", second.Blockers)
+	}
+	for _, blocker := range second.Blockers {
+		if strings.Contains(blocker.Detail, "--kind") {
+			t.Fatalf("blocker detail must not recommend invalid pivot --kind syntax: %v", second.Blockers)
+		}
+	}
 	if !hasAdvanceReasonDetail(second.Blockers, "plan_audit_iteration", "2/3") {
 		t.Fatalf("expected second iteration detail, got %v", second.Blockers)
 	}

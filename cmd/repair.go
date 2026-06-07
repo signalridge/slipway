@@ -264,7 +264,7 @@ func makeRepairCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().StringVar(&focus, "focus", "", "Repair focus alias (see --list-focuses)")
+	cmd.Flags().StringVar(&focus, "focus", "", "Repair focus alias (repair exposes no public focuses; uses the default local-integrity route)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
