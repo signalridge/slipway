@@ -1410,18 +1410,65 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 	return nil
 }
 
+// sharedReferenceDocs maps a shared reference filename to the detection that
+// decides whether a skill should receive it. A skill gets the shared doc copied
+// into its references/ dir only when its SKILL.md actually points at it, so the
+// "Apply `references/<doc>`" pointer the skill prints is always reachable in the
+// generated tree (it previously named a top-level sibling that no generation
+// path emitted).
+var sharedReferenceDocs = []string{"checklist-quality.md"}
+
 func emitSharedSkillSupportFromFS(srcFS fs.FS, skillID, sub, dstDir string, refresh bool) error {
-	if sub != "scripts" {
+	switch sub {
+	case "scripts":
+		usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
+		if err != nil {
+			return err
+		}
+		if !usesSharedHelper {
+			return nil
+		}
+		return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", "scripts"), dstDir, refresh)
+	case "references":
+		for _, doc := range sharedReferenceDocs {
+			referenced, err := skillReferencesSharedDoc(srcFS, skillID, doc)
+			if err != nil {
+				return err
+			}
+			if !referenced {
+				continue
+			}
+			content, err := fs.ReadFile(srcFS, path.Join("skills", "_shared", "references", doc))
+			if err != nil {
+				return err
+			}
+			if err := writeDeterministic(filepath.Join(dstDir, doc), string(content), refresh); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
 		return nil
 	}
-	usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
-	if err != nil {
-		return err
+}
+
+// skillReferencesSharedDoc reports whether a skill's authored SKILL.md (or
+// SKILL.md.tmpl) names the shared reference doc, so generation only ships it to
+// the skills that consume it.
+func skillReferencesSharedDoc(srcFS fs.FS, skillID, doc string) (bool, error) {
+	for _, leaf := range []string{"SKILL.md", "SKILL.md.tmpl"} {
+		content, err := fs.ReadFile(srcFS, sourceSkillTemplatePath(skillID, leaf))
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return false, err
+		}
+		if strings.Contains(string(content), doc) {
+			return true, nil
+		}
 	}
-	if !usesSharedHelper {
-		return nil
-	}
-	return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", sub), dstDir, refresh)
+	return false, nil
 }
 
 func skillUsesSharedScriptHelper(srcFS fs.FS, skillID string) (bool, error) {

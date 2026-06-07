@@ -112,9 +112,9 @@ On standard/strict, any failed dimension blocks. On light, only dimension #1
 coverage failures downgrade to warnings.
 
 ## Sidecars
-Apply `checklist-quality.md`: specificity, measurability, requirement-to-intent
-traceability, edge cases, failure modes, alternatives, tradeoffs, and concrete
-risks.
+Apply `references/checklist-quality.md` (shipped next to this skill):
+specificity, measurability, requirement-to-intent traceability, edge cases,
+failure modes, alternatives, tradeoffs, and concrete risks.
 
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone

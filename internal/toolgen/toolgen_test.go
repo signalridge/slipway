@@ -1805,6 +1805,21 @@ func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 	}
 }
 
+// TestSharedChecklistReferenceIsEmittedToConsumingSkills pins that the shared
+// requirements-quality checklist actually ships into the generated references/
+// dir of every skill that points at it, so the "Apply references/checklist-quality.md"
+// pointer is reachable (previously it named a top-level sibling no generation
+// path emitted).
+func TestSharedChecklistReferenceIsEmittedToConsumingSkills(t *testing.T) {
+	skillsRoot := generatedSkillsRoot(t)
+	for _, skill := range []string{"slipway-plan-audit", "slipway-spec-compliance-review"} {
+		ref := filepath.Join(skillsRoot, skill, "references", "checklist-quality.md")
+		body, err := os.ReadFile(ref)
+		require.NoErrorf(t, err, "shared checklist not emitted for %s", skill)
+		assert.Contains(t, string(body), "Requirement-to-intent traceability")
+	}
+}
+
 // generatedSkillsRoot generates a codex tree and returns the path to
 // `<root>/.codex/skills/` for script-contract tests.
 func generatedSkillsRoot(t *testing.T) string {

@@ -51,7 +51,7 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) {
 	t.Parallel()
 
-	checklist, err := Content("skills/checklist-quality.md")
+	checklist, err := Content("skills/_shared/references/checklist-quality.md")
 	require.NoError(t, err)
 	assert.Contains(t, checklist, "Requirement-to-intent traceability")
 
