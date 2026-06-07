@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.4](https://github.com/signalridge/slipway/compare/v0.11.3...v0.11.4) (2026-06-07)
+
+
+### Bug Fixes
+
+* **intake:** gate Open Questions on checklist structure, not prose ([#104](https://github.com/signalridge/slipway/issues/104)) ([#120](https://github.com/signalridge/slipway/issues/120)) ([cbf716d](https://github.com/signalridge/slipway/commit/cbf716dedb6b2fb678cf04e6c97ab62f05acca4d))
+
 ## [0.11.3](https://github.com/signalridge/slipway/compare/v0.11.2...v0.11.3) (2026-06-07)
 
 
