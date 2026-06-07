@@ -133,9 +133,10 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 7, query, "expected 7 query commands")
 	assert.Equal(t, 13, mutation, "expected 13 mutation commands")
 
-	// Verify commandIDs() returns sorted list matching adapter skill commands only.
+	// Verify commandIDs() returns a sorted list covering every command (all
+	// commands ship a prompt surface).
 	ids := commandIDs()
-	assert.Len(t, ids, 14)
+	assert.Len(t, ids, 20)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}

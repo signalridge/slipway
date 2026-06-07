@@ -902,7 +902,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
-		require.Len(t, partials, 14)
+		require.Len(t, partials, 20)
 
 		for _, bodyTemplate := range partials {
 			commandID := strings.TrimSuffix(strings.TrimPrefix(bodyTemplate, "command-"), "-body")

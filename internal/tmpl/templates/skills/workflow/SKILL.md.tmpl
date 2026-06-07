@@ -82,10 +82,10 @@ re-explaining the command inline here.
 `~/.codex/prompts/slipway-<command>.md`.{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
 directory `{{.CommandsDir}}`.{{end}}
 
-Several commands have no separate command prompt surface — the CLI-only
-diagnostics `learn`, `stats`, `health`, `codebase-map`, and `instructions`, plus
-`evidence` (recorded during governed execution). For any of these, use the
-generated workflow reference file for their detailed arguments and prerequisites.
+Every CLI command ships a command surface, so you never need to fall back to
+guessing one — including the diagnostics (`learn`, `stats`, `health`,
+`codebase-map`, `instructions`) and `evidence` (recorded during governed
+execution). Use `references/command-reference.md` as the index across all of them.
 
 ## Skill Index and Host Handoff
 - when exported skill navigation is needed, read `{{.SkillIndexPath}}`
