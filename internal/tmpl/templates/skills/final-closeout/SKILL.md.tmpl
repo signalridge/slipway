@@ -25,12 +25,15 @@ Only when governed closeout refresh is required. `slipway next` returns `next_sk
 This skill runs AFTER goal-verification and BEFORE the G_ship gate decision.
 
 ## Read Context
-Run `slipway next --json` for the handoff, and `slipway validate --json` for
-current freshness state. Examine:
-- current `run_version` / `run_summary_version` from `slipway validate --json`
-  (`evidence_freshness`, `freshness_diagnostics`) — `slipway next --json` only
-  carries `run_summary_version` nested under `input_context.resume_checkpoint`,
-  which is absent at closeout
+Run `slipway next --json` for the handoff, `slipway status --json` for the
+current `run_summary_version`, and `slipway validate --json` for current
+freshness/readiness state. Examine:
+- current `run_version` / `run_summary_version` from `slipway status --json`
+  (`progress.run_summary_version`) — `slipway validate --json` does NOT carry it,
+  and `slipway next --json` only carries it nested under
+  `input_context.resume_checkpoint`, which is absent at closeout
+- freshness state (`evidence_freshness`, `freshness_diagnostics`) from
+  `slipway validate --json`
 - verification index for prior skills
 - assurance artifact state
 - active blockers list (`blockers` in either output)
@@ -69,7 +72,8 @@ You may avoid rerunning duplicate full-suite proof only when goal-verification i
 already fresh for the current run_version and current content state. Before
 using this branch:
 
-1. Run `slipway validate --json`.
+1. Run `slipway validate --json` (freshness/readiness) and `slipway status --json`
+   (`progress.run_summary_version`).
 2. Confirm the latest execution summary is fresh and its run_summary_version
    matches goal-verification.
 3. Confirm goal-verification was captured at or after the latest execution
@@ -117,7 +121,7 @@ Closeout must be performed independently from implementation.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: <current run_summary_version from slipway validate --json>  # must equal the current execution-summary run_summary_version, not a literal 1
+run_version: <current run_summary_version from slipway status --json>  # progress.run_summary_version; must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "closeout:evidence_freshness=pass"
   - "closeout:test_suite=pass:N/N"

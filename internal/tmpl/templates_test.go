@@ -733,12 +733,12 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 		{
 			name:          "goal verification",
 			templatePath:  "skills/goal-verification/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current run_summary_version from slipway validate --json>",
+			wantRunSource: "run_version: <current run_summary_version from slipway status --json>",
 		},
 		{
 			name:          "final closeout",
 			templatePath:  "skills/final-closeout/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current run_summary_version from slipway validate --json>",
+			wantRunSource: "run_version: <current run_summary_version from slipway status --json>",
 		},
 	}
 

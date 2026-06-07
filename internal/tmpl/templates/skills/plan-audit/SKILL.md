@@ -74,8 +74,12 @@ A mechanical or vacuous requirements/tasks file cannot reach done. Re-run
 ## Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
 - Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`
-- Required whenever the expanded artifact schema is in effect (the default
-  schema; also force-promoted when `needs_discovery=true`): `decision.md`
+- Required whenever the change is on the **expanded** artifact schema — discovery
+  changes (`needs_discovery=true`); the research/config/meta workflow profiles; or
+  a repo configured to default to expanded. A standard non-discovery code change
+  uses the **core** schema and does not require it. No public surface exposes the
+  frozen schema name, so treat the engine as the authority: a missing one on an
+  expanded change is surfaced as `missing_required_artifact:decision.md`: `decision.md`
 - Required when `needs_discovery=true` (the only discovery-gated artifact — check
   `needs_discovery` in `slipway next --json` / `slipway validate`): `research.md`.
   A missing one is a blocker (`missing_required_artifact:research.md`). On
