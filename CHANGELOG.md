@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.3](https://github.com/signalridge/slipway/compare/v0.11.2...v0.11.3) (2026-06-07)
+
+
+### Bug Fixes
+
+* align AI command/skill/doc surfaces with real CLI behavior + complete the Claude Code command set ([#117](https://github.com/signalridge/slipway/issues/117)) ([5775142](https://github.com/signalridge/slipway/commit/57751427c10724f315072dc6ad0fff187448d44e))
+
 ## [0.11.2](https://github.com/signalridge/slipway/compare/v0.11.1...v0.11.2) (2026-06-07)
 
 
