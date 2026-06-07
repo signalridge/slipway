@@ -611,7 +611,7 @@ func CheckGateWithIteration(root string, change model.Change, passingSkills map[
 		blockers = append(blockers, model.NewReasonCode("plan_audit_stalled", "checker feedback did not change from the previous failed audit"))
 	}
 	if stalled || iteration >= maxIterations {
-		blockers = append(blockers, model.NewReasonCode("plan_audit_budget_exhausted", "consider `slipway pivot --kind rescope` or manual intervention"))
+		blockers = append(blockers, model.NewReasonCode("plan_audit_budget_exhausted", "consider `slipway pivot --reroute` or manual plan revision"))
 		blockers = append(blockers, model.NewReasonCode("plan_checker_loop_terminated", ""))
 	}
 

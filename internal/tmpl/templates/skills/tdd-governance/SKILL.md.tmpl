@@ -87,7 +87,12 @@ Minimum record:
 - Stub-only tests: `fail`
 - Critical path changed without explicit test coverage: `fail`
 - Refactor-only tasks may skip test-first only when existing tests cover the refactor and were rerun green
-- `investigation` or `doc` tasks (per the `slipway evidence task --task-kind` enum: code, test, doc, ops, verification, investigation, other) may be recorded not-applicable via a `slipway evidence task` note rather than a TDD verdict
+- `investigation` or `doc` tasks (per the `slipway evidence task --task-kind`
+  enum: code, test, doc, ops, verification, investigation, other) still use
+  `slipway evidence task` with a valid task `--verdict`; mark the TDD portion
+  not-applicable in the `--evidence-ref`, task references, or folded
+  wave-orchestration notes, not through a separate evidence-note command or a
+  non-existent not-applicable verdict
 
 ## Record Evidence (engine-consumed)
 The engine does not read `verification/tdd-governance.yaml`. Record per-task TDD

@@ -1724,6 +1724,10 @@ func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
 
 	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
 	assert.Contains(t, body, "reproducible command or transcript reference")
+	assert.Contains(t, body, "with a valid task `--verdict`")
+	assert.Contains(t, body, "not through a separate evidence-note command")
+	assert.NotContains(t, body, "recorded not-applicable via a `slipway evidence task` note")
+	assert.NotContains(t, body, "rather than a TDD verdict")
 	assert.NotContains(t, body, "{{template", "rendered tdd-governance must not leak raw template directives")
 }
 

@@ -657,17 +657,26 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 		"skills/intake-clarification/SKILL.md",
 		"skills/plan-audit/SKILL.md",
 		"skills/research-orchestration/SKILL.md",
+		"skills/worktree-preflight/SKILL.md",
+	}
+	forbiddenNextAdvanceFragments := []string{
+		"After confirmation: `slipway next`",
+		"```bash\nslipway next\n```",
+		"Do not run `slipway next` until",
+		"calling `slipway next`",
 	}
 	for _, name := range staticSkills {
 		content, err := Content(name)
 		require.NoError(t, err, "failed to load %s", name)
-		assert.NotContains(
-			t,
-			content,
-			"After confirmation: `slipway next`",
-			"%s must not route advancement through read-only next",
-			name,
-		)
+		for _, forbidden := range forbiddenNextAdvanceFragments {
+			assert.NotContains(
+				t,
+				content,
+				forbidden,
+				"%s must not route advancement through read-only next",
+				name,
+			)
+		}
 		assert.Contains(t, content, "slipway run", "%s must name the advancing command", name)
 	}
 
@@ -686,15 +695,46 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 	for _, name := range templatedSkills {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
-		assert.NotContains(
-			t,
-			content,
-			"After confirmation: `slipway next`",
-			"%s must not route advancement through read-only next",
-			name,
-		)
+		for _, forbidden := range forbiddenNextAdvanceFragments {
+			assert.NotContains(
+				t,
+				content,
+				forbidden,
+				"%s must not route advancement through read-only next",
+				name,
+			)
+		}
 		assert.Contains(t, content, "slipway run", "%s must name the advancing command", name)
 	}
+}
+
+func TestTDDGovernanceUsesEvidenceTaskVerdictContract(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:tdd-governance",
+		"Description": "test",
+	}
+	content, err := Render("skills/tdd-governance/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "with a valid task `--verdict`")
+	assert.Contains(t, content, "not through a separate evidence-note command")
+	assert.NotContains(t, content, "recorded not-applicable via a `slipway evidence task` note")
+	assert.NotContains(t, content, "rather than a TDD verdict")
+}
+
+func TestIncidentResponseDoesNotTriggerOnBareStatusHealth(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/incident-response/SKILL.md")
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "status --focus incident")
+	assert.Contains(t, content, "health --focus incident")
+	assert.NotContains(t, content, `command: ["status", "health"]`)
+	assert.NotContains(t, content, "status or health command invoked; incident may be in scope")
 }
 
 func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T) {
