@@ -15,9 +15,11 @@ Slipway is a small governance control plane for local AI-assisted development. I
 
 ## Architecture Model
 
-<p align="center">
-  <img alt="Slipway architecture model: human and AI tool feed the slipway CLI, which writes the repository system of record (change.yaml, lifecycle.jsonl, Markdown artifacts, verification YAML); read-only surfaces read state, state-mutating surfaces write it" src="assets/diagrams/architecture.svg" width="840">
-</p>
+<div align="center" markdown>
+
+![Slipway architecture model: human and AI tool feed the slipway CLI, which writes the repository system of record (change.yaml, lifecycle.jsonl, Markdown artifacts, verification YAML); read-only surfaces read state, state-mutating surfaces write it](assets/diagrams/architecture.svg)
+
+</div>
 
 The separation matters. `next`, `status`, and `validate` can recompute readiness without mutating lifecycle authority. `run` and `done` are explicit mutation surfaces. Generated host files help AI tools discover the right action, but the CLI remains the execution authority.
 
