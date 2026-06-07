@@ -50,7 +50,7 @@ func TestParseBlockerSegments(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := ParseBlockerSpec(tc.spec)
+			got := ParseBlocker(ReasonCodeFromSpec(tc.spec))
 			assert.Equal(t, tc.code, got.Code)
 			assert.Equal(t, tc.subject, got.Subject)
 			assert.Equal(t, tc.detail, got.Detail)
@@ -534,4 +534,16 @@ func recoveryCodes(steps []RecoveryStep) []string {
 		codes = append(codes, step.Code)
 	}
 	return codes
+}
+
+// recoveryStepFor resolves a single blocker into a RecoveryStep. It is a small
+// single-blocker wrapper used only by tests that do not need group collapse.
+// The second return is false for blockers with no recovery-relevant
+// remediation (e.g. informational no_skill_required), which are skipped.
+func recoveryStepFor(rc ReasonCode) (RecoveryStep, bool) {
+	rc.Normalize()
+	if _, ok := blockerRemediations[rc.Code]; !ok {
+		return RecoveryStep{}, false
+	}
+	return recoveryStepForGroup([]ReasonCode{rc}), true
 }

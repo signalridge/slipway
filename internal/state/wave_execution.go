@@ -135,11 +135,6 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 	return plan, nil
 }
 
-func CurrentTasksPlanState(root string, change model.Change) (string, error) {
-	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
-	return hashes.Semantic, err
-}
-
 func CurrentTasksPlanStructuralState(root string, change model.Change) (string, error) {
 	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
 	return hashes.Structural, err

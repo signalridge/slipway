@@ -102,10 +102,7 @@ func CollectHealthReport(root string, activeSlugOpt ...string) (HealthReport, er
 			return nil
 		}
 		seenExecutionSummaryChecks[slug] = struct{}{}
-		finding, err := executionSummaryHealthFinding(root, change)
-		if err != nil {
-			return err
-		}
+		finding := executionSummaryHealthFinding(root, change)
 		if finding != nil {
 			findings = append(findings, *finding)
 		}
@@ -219,9 +216,9 @@ func annotateActiveChangeImpact(findings []HealthFinding, activeSlug string) {
 	}
 }
 
-func executionSummaryHealthFinding(root string, change model.Change) (*HealthFinding, error) {
+func executionSummaryHealthFinding(root string, change model.Change) *HealthFinding {
 	if !ExecutionSummaryRelevantState(change.CurrentState) {
-		return nil, nil
+		return nil
 	}
 	if _, err := LoadOptionalRelevantExecutionSummary(root, change); err != nil {
 		return &HealthFinding{
@@ -232,19 +229,15 @@ func executionSummaryHealthFinding(root string, change model.Change) (*HealthFin
 			Repairable: false,
 			RepairHint: "Fix or replace verification/execution-summary.yaml manually, then rerun health or repair.",
 			Reasons:    []model.ReasonCode{model.NewReasonCode("execution_summary_unreadable", err.Error())},
-		}, nil
+		}
 	}
-	return nil, nil
+	return nil
 }
 
 func executionContractHealthFindings(root string, change model.Change) ([]HealthFinding, error) {
 	findings := []HealthFinding{}
 
-	if driftFindings, err := runtimeStateHealthFindings(root, change); err != nil {
-		return nil, err
-	} else {
-		findings = append(findings, driftFindings...)
-	}
+	findings = append(findings, runtimeStateHealthFindings(change)...)
 
 	if change.ActiveCheckpoint != nil && change.CurrentState != model.StateS2Execute {
 		findings = append(findings, HealthFinding{
@@ -475,7 +468,7 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 	return findings, nil
 }
 
-func runtimeStateHealthFindings(root string, change model.Change) ([]HealthFinding, error) {
+func runtimeStateHealthFindings(change model.Change) []HealthFinding {
 	findings := []HealthFinding{}
 
 	// Check for interrupted execution from the change itself.
@@ -493,7 +486,7 @@ func runtimeStateHealthFindings(root string, change model.Change) ([]HealthFindi
 			Reasons:    []model.ReasonCode{model.NewReasonCode("execution_interrupted", interruptedAt)},
 		})
 	}
-	return findings, nil
+	return findings
 }
 
 func checkpointStaleAfter(root string) time.Duration {

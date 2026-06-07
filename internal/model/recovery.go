@@ -37,12 +37,6 @@ func ParseBlocker(rc ReasonCode) ParsedBlocker {
 	}
 }
 
-// ParseBlockerSpec decomposes a raw "code:subject:detail" spec string through
-// the same ReasonCode path used everywhere else.
-func ParseBlockerSpec(spec string) ParsedBlocker {
-	return ParseBlocker(ReasonCodeFromSpec(spec))
-}
-
 func splitSubjectDetail(detail string) (string, string) {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
@@ -585,19 +579,6 @@ func BuildRecovery(blockers []ReasonCode) *RecoverySummary {
 		RecoveryClass:  primary.RecoveryClass,
 		Steps:          steps,
 	}
-}
-
-// recoveryStepFor resolves a single blocker into a RecoveryStep. It is a small
-// single-blocker wrapper used mostly by tests and local callers that do not need
-// group collapse. The second return is false for blockers with no
-// recovery-relevant remediation (e.g. informational no_skill_required), which
-// are skipped.
-func recoveryStepFor(rc ReasonCode) (RecoveryStep, bool) {
-	rc.Normalize()
-	if _, ok := blockerRemediations[rc.Code]; !ok {
-		return RecoveryStep{}, false
-	}
-	return recoveryStepForGroup([]ReasonCode{rc}), true
 }
 
 // recoveryStepForGroup renders one step for a group of blockers sharing a

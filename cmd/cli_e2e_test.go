@@ -417,11 +417,11 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		// Write spec with a single requirement.
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		specPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 		require.NoError(t, os.WriteFile(specPath, []byte("## Requirements\n\n### Requirement: ReviewE2E\n\nREQ-001: The system MUST support review from the CLI.\n\n#### Scenario: Review runs from the CLI\nGIVEN a governed change ready for review\nWHEN the reviewer runs the CLI review command\nTHEN the review result is produced.\n"), 0o644))
 

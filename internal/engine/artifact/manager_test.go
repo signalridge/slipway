@@ -17,7 +17,7 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	change := model.NewChange("my-change")
-	err := ScaffoldGovernedBundleForChangeWithPreset(root, change, "")
+	err := ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{})
 	require.NoError(t, err)
 
 	base := filepath.Join(root, "artifacts", "changes", "my-change")
@@ -28,7 +28,7 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 		"tasks.md",
 		"assurance.md",
 	} {
-		_, err := os.Stat(ResolveArtifactPath(base, "my-change", file))
+		_, err := os.Stat(ResolveArtifactPath(base, file))
 		require.NoError(t, err, file)
 	}
 
@@ -49,7 +49,7 @@ func TestScaffoldGovernedBundleNeedsDiscoveryAddsResearch(t *testing.T) {
 	change.NeedsDiscovery = true
 	change.WorktreePath = worktreeRoot
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	_, err := os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "my-change", "research.md"))
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestScaffoldGovernedBundleNoDiscoverySkipsResearch(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("my-change")
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", "my-change", "research.md"))
 	require.Error(t, err)
@@ -78,7 +78,7 @@ func TestScaffoldGovernedBundleInjectsProjectContext(t *testing.T) {
 	cfg.Context.Languages = []string{"go", "yaml"}
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, model.NewChange("ctx-change"), ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("ctx-change"), "", cfg.Context))
 	proposalPath := filepath.Join(root, "artifacts", "changes", "ctx-change", "intent.md")
 	raw, err := os.ReadFile(proposalPath)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestScaffoldGovernedBundleInjectsProjectContext(t *testing.T) {
 func TestScaffoldGovernedBundleL1CreatesBundle(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, model.NewChange("my-change"), ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("my-change"), "", model.ProjectContext{}))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", "my-change"))
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestScaffoldGovernedBundleDiscoveryCreatesResearch(t *testing.T) {
 
 	change := model.NewChange("discovery-change")
 	change.NeedsDiscovery = true
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
 	require.NoError(t, err)
@@ -512,7 +512,7 @@ func TestScaffoldGovernedBundleSeedsRequirementsDraft(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("add-session-timeout-policy")
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
 	require.NoError(t, err)
@@ -535,7 +535,7 @@ func TestScaffoldGovernedBundleSeedsDecisionDraft(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("add-session-timeout-policy")
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "decision.md"))
 	require.NoError(t, err)
@@ -552,7 +552,7 @@ func TestScaffoldGovernedBundleSeedsDecisionSectionBodies(t *testing.T) {
 	change := model.NewChange("add-session-timeout-policy")
 	change.Description = "add session timeout policy"
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "decision.md"))
 	require.NoError(t, err)
@@ -585,7 +585,7 @@ func TestScaffoldGovernedBundleSeedsTasksDraft(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("add-session-timeout-policy")
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "tasks.md"))
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestScaffoldGovernedBundleSeedsResearchDraft(t *testing.T) {
 	change := model.NewChange("add-session-timeout-policy")
 	change.NeedsDiscovery = true
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
 	require.NoError(t, err)
@@ -621,7 +621,7 @@ func TestScaffoldGovernedBundleSeedsResearchSectionBodies(t *testing.T) {
 	change.Description = "add session timeout policy"
 	change.NeedsDiscovery = true
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
 	require.NoError(t, err)
@@ -642,7 +642,7 @@ func TestScaffoldGovernedBundleMarkdownSizeBudget(t *testing.T) {
 	change := model.NewChange("add-session-timeout-policy")
 	change.NeedsDiscovery = true
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 	base := filepath.Join(root, "artifacts", "changes", change.Slug)
 	entries, err := os.ReadDir(base)
@@ -877,17 +877,16 @@ func TestScaffoldWithDocSectionsPreservesConstraintPreambleAlongsideListItems(t 
 func TestParseDecisionLockedDecisionsIgnoresScaffoldDraftSelectedDirection(t *testing.T) {
 	t.Parallel()
 
-	data := templateData{InitialRequest: "update auth middleware timeout strategy"}
 	content := `# Decision
 
 ## Alternatives Considered
-` + seedDecision(data) + `
+` + seedDecision() + `
 
 ## Selected Approach
-` + seedDecisionApproach(data) + `
+` + seedDecisionApproach() + `
 
 ## Risk
-` + seedDecisionRisk(data) + `
+` + seedDecisionRisk() + `
 `
 
 	assert.Nil(t, ParseDecisionLockedDecisions(content))
@@ -952,7 +951,7 @@ func TestScaffoldCustomSchemaWithExternalTemplate(t *testing.T) {
 		{Name: "custom-artifact.md", Template: filepath.Join("templates", "custom-artifact.md")},
 	}
 
-	err := ScaffoldGovernedBundleForChangeWithPreset(root, model.NewChange("test-change"), "", customSchema)
+	err := ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("test-change"), "", model.ProjectContext{}, customSchema)
 	require.NoError(t, err)
 
 	base := filepath.Join(root, "artifacts", "changes", "test-change")
@@ -970,7 +969,7 @@ func TestScaffoldCustomSchemaFallbackToStub(t *testing.T) {
 		{Name: "my-widget.md"},
 	}
 
-	err := ScaffoldGovernedBundleForChangeWithPreset(root, model.NewChange("test-change"), "", customSchema)
+	err := ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("test-change"), "", model.ProjectContext{}, customSchema)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", "test-change", "my-widget.md"))
@@ -1067,7 +1066,7 @@ func TestReconcileFromFilesystemMissingUpstreamFileStalesDownstreamAndClearsHash
 	base := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, os.MkdirAll(base, 0o755))
 
-	reqPath := ResolveArtifactPath(base, slug, "requirements.md")
+	reqPath := ResolveArtifactPath(base, "requirements.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(reqPath), 0o755))
 	require.NoError(t, os.WriteFile(reqPath, []byte("# Requirements\nCurrent content"), 0o644))
 
@@ -1165,7 +1164,7 @@ func TestReconcileFromFilesystemHashMismatchPropagatesToDownstream(t *testing.T)
 	require.NoError(t, os.WriteFile(artifactPath, []byte("# Intent\nModified content"), 0o644))
 
 	// Create downstream artifact files so they are not reset to draft by file-missing rule.
-	reqPath := ResolveArtifactPath(base, slug, "requirements.md")
+	reqPath := ResolveArtifactPath(base, "requirements.md")
 	decisionPath := filepath.Join(base, "decision.md")
 	tasksPath := filepath.Join(base, "tasks.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(reqPath), 0o755))

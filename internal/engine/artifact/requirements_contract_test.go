@@ -31,7 +31,7 @@ THEN the system returns 401 and does not serve the resource.
 	result, err := EvaluateRequirementsContract(bundleDir, slug)
 	require.NoError(t, err)
 	assert.Equal(t, RequirementsContractStatusValid, result.Status)
-	assert.Equal(t, ResolveArtifactPath(bundleDir, slug, "requirements.md"), result.Source)
+	assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
 	assert.Contains(t, result.Message, "validated")
 }
 
@@ -46,7 +46,7 @@ func TestEvaluateRequirementsContractReturnsMissingResult(t *testing.T) {
 	result, err := EvaluateRequirementsContract(bundleDir, slug)
 	require.NoError(t, err)
 	assert.Equal(t, RequirementsContractStatusMissing, result.Status)
-	assert.Equal(t, ResolveArtifactPath(bundleDir, slug, "requirements.md"), result.Source)
+	assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
 	assert.Contains(t, result.Message, "missing")
 }
 
@@ -139,7 +139,7 @@ THEN pending — replace with the observable expected outcome
 			result, err := EvaluateRequirementsContract(bundleDir, slug)
 			require.NoError(t, err)
 			assert.Equal(t, RequirementsContractStatusInvalid, result.Status)
-			assert.Equal(t, ResolveArtifactPath(bundleDir, slug, "requirements.md"), result.Source)
+			assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
 			assert.Contains(t, result.Message, tt.wantMessage)
 		})
 	}

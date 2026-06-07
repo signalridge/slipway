@@ -156,10 +156,17 @@ func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
 		exported[name] = struct{}{}
 	}
 
+	workflowGovernanceNames := governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
+		return desc.WorkflowOwned
+	})
 	for _, name := range workflowGovernanceNames {
 		_, ok := exported[name]
 		assert.Truef(t, ok, "workflow governance host %q is not exported by toolgen", name)
 	}
+
+	extraExportedGovernanceNames := governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
+		return desc.ExportOnlyExtra
+	})
 	for _, name := range extraExportedGovernanceNames {
 		_, ok := exported[name]
 		assert.Truef(t, ok, "extra exported governance surface %q is not exported by toolgen", name)
@@ -198,7 +205,7 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 	} {
 		for _, name := range names {
 			if shouldExportAsHostSkill(name) {
-				expectedSet[exportedSkillDirName(name)] = struct{}{}
+				expectedSet[adapterSkillName(name)] = struct{}{}
 			}
 		}
 	}

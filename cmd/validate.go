@@ -100,7 +100,6 @@ func buildSkillsReady(passing map[string]model.VerificationRecord) map[string]st
 func buildValidateViewBase(
 	root string,
 	change model.Change,
-	execMode string,
 	executionSummary *model.ExecutionSummary,
 	blockers []model.ReasonCode,
 	skillsReady map[string]string,
@@ -109,7 +108,7 @@ func buildValidateViewBase(
 	return validateView{
 		Slug:          change.Slug,
 		Phase:         model.PhaseFor(change.CurrentState),
-		ExecutionMode: execMode,
+		ExecutionMode: governedExecutionMode,
 		CurrentState:  change.CurrentState,
 		IntakeSubStep: change.IntakeSubStep,
 		PlanSubStep:   change.PlanSubStep,
@@ -129,11 +128,7 @@ func buildValidateViewBase(
 }
 
 func buildValidateRecovery(blockers []model.ReasonCode, gateDetails map[string]model.GateRecord) *model.RecoverySummary {
-	all := append([]model.ReasonCode(nil), blockers...)
-	for _, gate := range gateDetails {
-		all = append(all, gate.ReasonCodes...)
-	}
-	return model.BuildRecovery(all)
+	return model.BuildRecovery(appendValidateRecoveryInputs(blockers, gateDetails))
 }
 
 func makeValidateCmd() *cobra.Command {
@@ -196,7 +191,6 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 		return validateView{}, err
 	}
 
-	execMode := governedExecutionMode
 	execCtx, err := loadExecutionContext(root, change)
 	if err != nil {
 		return validateView{}, err
@@ -211,7 +205,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	// return a minimal view — skip artifact reconciliation, skill evaluation,
 	// worktree validation, governance surface, and all downstream checks.
 	if change.WorkflowPresetConfirmationPending() {
-		view := buildValidateViewBase(root, change, execMode, execCtx.Summary, []model.ReasonCode{model.NewReasonCode("preset_confirmation_required", "")}, nil, nil)
+		view := buildValidateViewBase(root, change, execCtx.Summary, []model.ReasonCode{model.NewReasonCode("preset_confirmation_required", "")}, nil, nil)
 		profile := buildChangeProfileView(change)
 		view.QualityMode = profile.QualityMode
 		view.NeedsDiscovery = profile.NeedsDiscovery
@@ -266,7 +260,6 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view := buildValidateViewBase(
 		root,
 		change,
-		execMode,
 		execCtx.Summary,
 		blockers,
 		buildSkillsReady(readiness.PassingSkills),

@@ -96,7 +96,7 @@ func makeAbortCmd() *cobra.Command {
 				}); err != nil {
 					return err
 				}
-				nextAction := "run"
+				var nextAction string
 				if execCtx, err := loadExecutionContext(root, change); err != nil {
 					nextAction = "repair"
 				} else {

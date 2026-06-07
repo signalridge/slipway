@@ -112,7 +112,7 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 			continue
 		}
 		switch {
-		case hasRequiredSkillReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillFinalCloseout):
+		case hasReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillFinalCloseout):
 			view.CloseoutFreshness.Missing = append(view.CloseoutFreshness.Missing, change.Slug)
 		// CloseoutFreshness is intentionally broader than StaleRunSummaries: it
 		// reflects ship-readiness for refreshed closeout evidence, not only the
@@ -177,12 +177,8 @@ func requiresFrozenRunSummary(currentState model.WorkflowState) bool {
 }
 
 func hasMissingReviewEvidenceBlockers(blockers []model.ReasonCode) bool {
-	return hasRequiredSkillReason(blockers, "required_skill_missing", progression.SkillSpecComplianceReview) ||
-		hasRequiredSkillReason(blockers, "required_skill_missing", progression.SkillCodeQualityReview)
-}
-
-func hasRequiredSkillReason(blockers []model.ReasonCode, code, skillName string) bool {
-	return hasReason(blockers, code, skillName)
+	return hasReason(blockers, "required_skill_missing", progression.SkillSpecComplianceReview) ||
+		hasReason(blockers, "required_skill_missing", progression.SkillCodeQualityReview)
 }
 
 func hasAnyRequiredSkillBlocker(blockers []model.ReasonCode, skillNames ...string) bool {

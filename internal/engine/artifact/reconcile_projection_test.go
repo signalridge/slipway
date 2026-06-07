@@ -12,7 +12,7 @@ import (
 func TestReconcileFromFilesystemMaterializesRequiredArtifactsFromDisk(t *testing.T) {
 	root := t.TempDir()
 	slug := "test-change"
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithPreset(root, model.NewChange(slug), ""))
+	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange(slug), "", model.ProjectContext{}))
 
 	change := &model.Change{
 		Slug:      slug,
@@ -27,7 +27,7 @@ func TestReconcileFromFilesystemMaterializesRequiredArtifactsFromDisk(t *testing
 	assert.Equal(t, model.ArtifactLifecycleDraft, req.State)
 	bundleDir, err := state.GovernedBundleDir(root, *change)
 	require.NoError(t, err)
-	assert.Equal(t, ResolveArtifactPath(bundleDir, slug, "requirements.md"), req.Path)
+	assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), req.Path)
 	assert.NotEmpty(t, req.ContentHash)
 
 	_, hasResearch := change.Artifacts["research"]

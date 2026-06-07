@@ -94,7 +94,7 @@ func TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps(t *testing.T
 				RunVersion: 1,
 			}
 			writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, record)
-			require.NoError(t, stampEvidenceDigestForSkill(root, change, SkillIntakeClarification, record, nil))
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, record, nil))
 
 			// intent.md changes after the accepted verdict → intake-clarification
 			// is now stale.

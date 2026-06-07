@@ -124,7 +124,7 @@ func detectRemediationSources(root string, change model.Change) []model.ArchiveR
 			return nil
 		}
 		name := entry.Name()
-		if !(strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")) {
+		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			return nil
 		}
 		data, readErr := os.ReadFile(path)
@@ -579,7 +579,7 @@ func validateGovernedDoneArtifacts(root string, change model.Change) error {
 	if err != nil {
 		return err
 	}
-	assurancePath := artifact.ResolveArtifactPath(paths.GovernedBundleDir, change.Slug, "assurance.md")
+	assurancePath := artifact.ResolveArtifactPath(paths.GovernedBundleDir, "assurance.md")
 	content, err := os.ReadFile(assurancePath)
 	if err != nil {
 		return newGovernanceBlockedError(

@@ -51,7 +51,7 @@ func TestEvaluateArtifactReadinessWithContext_IgnoresDependenciesOutsideEligible
 
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	require.NoError(t, err)
-	ctx := resolveArtifactEvaluationContext(root, change, policy.EffectivePreset)
+	ctx := resolveArtifactEvaluationContext(change, policy.EffectivePreset)
 
 	readiness, err := evaluateArtifactReadinessWithContext(root, change, ctx)
 	require.NoError(t, err)

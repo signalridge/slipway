@@ -233,7 +233,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
@@ -269,7 +269,7 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
@@ -281,7 +281,7 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
   - task_kind: verification
   - covers: [REQ-001]
 `), 0o644))
-		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		specPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 		require.NoError(t, os.WriteFile(specPath, []byte(`## Requirements
 
@@ -340,7 +340,7 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
   - task_kind: verification
   - covers: [REQ-001]
 `), 0o644))
-		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		specPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 		require.NoError(t, os.WriteFile(specPath, []byte(`## Requirements
 
@@ -432,7 +432,7 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
   - task_kind: verification
   - covers: [REQ-001]
 `), 0o644))
-		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		specPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 		require.NoError(t, os.WriteFile(specPath, []byte(`## Requirements
 
@@ -591,7 +591,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		change.CurrentState = model.StateS3Review
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		// Write execution summary with CapturedAt = now.
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -637,7 +637,7 @@ func TestReviewAllDoesNotTreatImplementationEvidenceAsArtifactEvidence(t *testin
 		change.PlanSubStep = model.PlanSubStepNone
 		change.GuardrailDomain = string(model.GuardrailDomainExternalAPIContracts)
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithPreset(root, change, ""))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)
@@ -885,7 +885,7 @@ func TestReviewFailsWhenTasksChecklistCoverageDrifts(t *testing.T) {
   - task_kind: code
   - covers: [REQ-001]
 `), 0o644))
-		specPath := artifact.ResolveArtifactPath(bundlePath, slug, "requirements.md")
+		specPath := artifact.ResolveArtifactPath(bundlePath, "requirements.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 		require.NoError(t, os.WriteFile(specPath, []byte(`## Requirements
 

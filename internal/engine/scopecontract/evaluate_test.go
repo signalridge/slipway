@@ -14,9 +14,9 @@ import (
 func TestEvaluatePassesWhenChangedFilesAreWithinPlannedTargets(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "cmd/validate.go", "internal/engine/scopecontract/**", "docs/"),
-	}}, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go", "internal/engine/scopecontract/evaluate.go", "docs/guide.md")))
+	}}, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go", "internal/engine/scopecontract/evaluate.go", "docs/guide.md")), nil)
 
 	assert.Equal(t, StatusPass, report.Status)
 	assert.Empty(t, report.Blockers)
@@ -27,9 +27,9 @@ func TestEvaluatePassesWhenChangedFilesAreWithinPlannedTargets(t *testing.T) {
 func TestEvaluateReportsScopeDriftDeterministically(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "cmd/validate.go"),
-	}}, summary(taskRun("t-01", model.TaskKindCode, "internal/secret.go", "cmd/review.go")))
+	}}, summary(taskRun("t-01", model.TaskKindCode, "internal/secret.go", "cmd/review.go")), nil)
 
 	assert.Equal(t, StatusFail, report.Status)
 	assert.Equal(t, []string{"cmd/review.go", "internal/secret.go"}, report.OutOfScopeFiles)
@@ -55,9 +55,9 @@ func TestEvaluateWithChangedFilesIncludesWorkspaceDrift(t *testing.T) {
 func TestEvaluateTreatsBareNonGlobTargetAsExactFileOnly(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "docs/api"),
-	}}, summary(taskRun("t-01", model.TaskKindCode, "docs/api/v2.md")))
+	}}, summary(taskRun("t-01", model.TaskKindCode, "docs/api/v2.md")), nil)
 
 	assert.Equal(t, StatusFail, report.Status)
 	assert.Equal(t, []string{"docs/api/v2.md"}, report.OutOfScopeFiles)
@@ -67,9 +67,9 @@ func TestEvaluateTreatsBareNonGlobTargetAsExactFileOnly(t *testing.T) {
 func TestEvaluateAllowsExplicitDirectoryTargets(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "docs/api/"),
-	}}, summary(taskRun("t-01", model.TaskKindCode, "docs/api/v2.md")))
+	}}, summary(taskRun("t-01", model.TaskKindCode, "docs/api/v2.md")), nil)
 
 	assert.Equal(t, StatusPass, report.Status)
 	assert.Empty(t, report.OutOfScopeFiles)
@@ -78,13 +78,13 @@ func TestEvaluateAllowsExplicitDirectoryTargets(t *testing.T) {
 func TestEvaluateReportsMissingContractAndChangedFilesEvidence(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode),
 	}}, summary(model.ExecutionTaskSummary{
 		TaskID:   "t-01",
 		Verdict:  model.TaskVerdictPass,
 		TaskKind: model.TaskKindCode,
-	}))
+	}), nil)
 
 	assert.Equal(t, StatusFail, report.Status)
 	assert.Contains(t, model.ReasonSpecs(report.Blockers), "scope_contract_missing:t-01")
@@ -94,10 +94,10 @@ func TestEvaluateReportsMissingContractAndChangedFilesEvidence(t *testing.T) {
 func TestEvaluateReportsPlannedMutableTaskMissingFromExecutionSummary(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "cmd/validate.go"),
 		task("t-02", model.TaskKindVerification, "artifacts/changes/demo/**"),
-	}}, summary())
+	}}, summary(), nil)
 
 	assert.Equal(t, StatusFail, report.Status)
 	assert.Equal(t, []string{"t-01"}, report.MissingChangedFileTasks)
@@ -107,13 +107,13 @@ func TestEvaluateReportsPlannedMutableTaskMissingFromExecutionSummary(t *testing
 func TestEvaluateDoesNotRequireChangedFilesForVerificationTasks(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindVerification, "artifacts/changes/demo/**"),
 	}}, summary(model.ExecutionTaskSummary{
 		TaskID:   "t-01",
 		Verdict:  model.TaskVerdictPass,
 		TaskKind: model.TaskKindVerification,
-	}))
+	}), nil)
 
 	assert.Equal(t, StatusPass, report.Status)
 	assert.Empty(t, report.MissingChangedFileTasks)
@@ -122,9 +122,9 @@ func TestEvaluateDoesNotRequireChangedFilesForVerificationTasks(t *testing.T) {
 func TestEvaluateSkipsBeforeExecutionSummaryExists(t *testing.T) {
 	t.Parallel()
 
-	report := Evaluate(wave.TaskPlan{Tasks: []wave.TaskNode{
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
 		task("t-01", model.TaskKindCode, "cmd/validate.go"),
-	}}, nil)
+	}}, nil, nil)
 
 	assert.Equal(t, StatusNotApplicable, report.Status)
 	assert.Empty(t, report.Blockers)
@@ -143,7 +143,7 @@ func TestEvaluateBundleReadsTasksMarkdown(t *testing.T) {
   - task_kind: code
 `), 0o644))
 
-	report, err := EvaluateBundle(bundleDir, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go")))
+	report, err := EvaluateBundleWithChangedFiles(bundleDir, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go")), nil)
 	require.NoError(t, err)
 	assert.Equal(t, StatusPass, report.Status)
 }
