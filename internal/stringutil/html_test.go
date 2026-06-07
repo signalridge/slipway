@@ -92,6 +92,13 @@ func TestHasBlockingOpenQuestions(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "unchecked plus checklist blocks",
+			content: `## Open Questions
++ [ ] Which installer path should be documented?
+`,
+			want: true,
+		},
+		{
 			name: "unchecked entry blocks even when its text says none",
 			content: `## Open Questions
 - [ ] None.

@@ -65,8 +65,8 @@ func LastMarkdownSectionContent(content, heading string) string {
 
 // HasBlockingOpenQuestions reports whether the canonical Open Questions section
 // holds an unresolved entry. Open questions are recorded as a markdown checklist:
-// an unchecked item (`- [ ]` / `* [ ]`) is unresolved and blocks intake; a checked
-// item (`- [x]`) is resolved. Everything else — an empty section, an explicit
+// an unchecked item (`- [ ]`, `* [ ]`, or `+ [ ]`) is unresolved and blocks intake;
+// a checked item (`- [x]`) is resolved. Everything else — an empty section, an explicit
 // `None`, or free-form prose — is documentation, not a blocker. Deciding what
 // counts as a real open question is a semantic judgment owned by the
 // intake-clarification host skill, which records it as a checklist item; the
@@ -87,7 +87,9 @@ func FirstBlockingOpenQuestion(content string) string {
 	for _, line := range strings.Split(section, "\n") {
 		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
-		if strings.HasPrefix(lower, "- [ ]") || strings.HasPrefix(lower, "* [ ]") {
+		if strings.HasPrefix(lower, "- [ ]") ||
+			strings.HasPrefix(lower, "* [ ]") ||
+			strings.HasPrefix(lower, "+ [ ]") {
 			return trimmed
 		}
 	}
