@@ -35,6 +35,7 @@ Codex command prompts are global because Codex consumes prompt files from its ho
 slipway init --tools claude
 slipway init --tools codex,opencode
 slipway init --tools all
+slipway init --tools none   # initialize runtime layout only, no adapter files
 ```
 
 Refresh managed files:
@@ -73,12 +74,16 @@ Situational prompt-backed commands:
 - `abort`
 - `repair`
 
+`evidence` is situational but CLI-only (no generated prompt surface) — the
+wave-orchestration host records task evidence via `slipway evidence task ...`.
+
 Diagnostics commands are CLI-only and documented in generated command references where appropriate:
 
 - `learn`
 - `stats`
 - `health`
 - `codebase-map`
+- `instructions`
 
 ## OpenCode Notes
 

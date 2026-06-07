@@ -249,7 +249,11 @@ Run `init` from the target repository or a child directory inside it:
 slipway init
 ```
 
-This writes `.slipway.yaml` only. Add AI-tool surfaces with `--tools`:
+This writes the repo's `.slipway.yaml` config plus a managed
+"# Slipway local state (managed)" block in `.gitignore` (ignoring per-change
+`evidence/`, `events/`, and `verification/` dirs and `.worktrees/`), and creates
+the repo-local `.git/slipway/` runtime markers. It does not generate any AI-tool
+surfaces unless you pass `--tools`:
 
 ```bash
 slipway init --tools claude
