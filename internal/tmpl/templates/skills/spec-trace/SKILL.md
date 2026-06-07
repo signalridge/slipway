@@ -4,7 +4,7 @@ domain: review-change-shape
 function: bidirectional spec-to-code and code-to-spec trace review
 tier: T1
 primary_attachment: checklist
-summary: "Use when verifying that implementation mirrors the approved plan. Triggers on spec-compliance host or validate/review commands."
+summary: "Use when tracing the approved plan and code in both directions (plan line to code, diff hunk back to plan line) to catch drift. Triggers on the spec-compliance-review stage, `slipway review` (auto-attached), or `slipway validate --focus spec-trace`."
 trigger_signals:
   - host: spec-compliance-review
     reason: "Spec-compliance host active; enforce spec trace"

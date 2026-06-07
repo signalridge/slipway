@@ -4,7 +4,7 @@ domain: verification
 function: evaluate test coverage against the change surface with a reproducible report
 tier: T1
 primary_attachment: checklist
-summary: "Use when a change needs coverage evaluation. Triggers on validate command, goal-verification host, or coverage-related user text."
+summary: "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the goal-verification host, or coverage-related user text."
 trigger_signals:
   - command: validate
     reason: "validate command invoked; coverage report applies"

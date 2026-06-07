@@ -9,7 +9,7 @@ func testDesign() Skill {
 		Function:          "language-agnostic test design, case enumeration, and test-double judgment",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when designing meaningful test cases, test doubles, properties, or fixtures. Triggers on wave-orchestration host or testing-quality user text.",
+		Summary:           "Use when designing meaningful test cases, doubles, properties, or fixtures — test design, not language syntax/idiom (the host language skill owns idiom). Triggers on the wave-orchestration host or testing-quality user text.",
 		Evidence:          EvidenceArtifact,
 		Bindings: []Binding{
 			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},

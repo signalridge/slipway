@@ -4,7 +4,7 @@ domain: repair-ci
 function: recover git state without destroying unsaved work or bypassing hooks
 tier: T2
 primary_attachment: procedure
-summary: "Use when git state is entangled and a destructive operation is being considered. Triggers on repair command or user text naming git recovery."
+summary: "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on the `slipway repair` command or user text describing those operations."
 trigger_signals:
   - command: repair
     reason: "repair command invoked; git recovery may be in scope"

@@ -4,7 +4,7 @@ domain: verification
 function: language-agnostic test design, case enumeration, and test-double judgment
 tier: T1
 primary_attachment: procedure
-summary: "Use when designing meaningful test cases, test doubles, properties, or fixtures. Triggers on wave-orchestration host or testing-quality user text."
+summary: "Use when designing meaningful test cases, doubles, properties, or fixtures — test design, not language syntax/idiom (the host language skill owns idiom). Triggers on the wave-orchestration host or testing-quality user text."
 trigger_signals:
   - host: wave-orchestration
     reason: "Execution host is authoring tests or evaluating test quality before implementation"

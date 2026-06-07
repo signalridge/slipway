@@ -1,15 +1,15 @@
 ---
 skill_id: workflow
 name: {{.PublicName}}
-description: "Use when starting any non-trivial change in a Slipway-governed repo — adding a feature, fixing a bug, refactoring, schema or auth work, or any multi-step edit — to drive the work through Slipway's governed lifecycle instead of editing ad hoc; also for first contact with the repo, deciding whether to create or continue a governed change, and routing between `slipway status`, `slipway new`, `slipway next`, `slipway run`, and `slipway done`. Triggers on starting governed work, continuing an active change, or uncertainty about which Slipway surface owns the next step."
+description: "Use when starting any non-trivial change in a Slipway-governed repo — adding a feature, fixing a bug, refactoring, schema or auth work, or any multi-step edit — to drive the work through Slipway's governed lifecycle instead of editing ad hoc; also for first contact with the repo, deciding whether to create or continue a governed change, and routing to the right Slipway lifecycle command. Triggers on starting governed work, continuing an active change, or uncertainty about which Slipway surface owns the next step. Skip for one-off trivial edits (a single-line typo, comment, or formatting fix) that need no governed lifecycle."
 tool: "{{.ToolID}}"
 ---
 
 # Slipway Workflow
 
-```
-IRON LAW: THIS SKILL ROUTES INTO THE CLI; IT DOES NOT REPLACE THE CLI
-```
+This skill routes *into* the CLI; it never replaces it. Every lifecycle
+transition, gate, and command semantic lives in the CLI, so this entry skill only
+decides which command or governed host owns the next step and then hands off.
 
 ## Purpose
 Use `{{.PublicName}}` as the single exported entry skill for Slipway. It tells
@@ -82,9 +82,10 @@ re-explaining the command inline here.
 `~/.codex/prompts/slipway-<command>.md`.{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
 directory `{{.CommandsDir}}`.{{end}}
 
-CLI-only diagnostics such as `learn`, `stats`, `health`, and `codebase-map` do not have
-separate command prompt surfaces; use the generated workflow reference file for
-their detailed arguments and prerequisites.
+Several commands have no separate command prompt surface — the CLI-only
+diagnostics `learn`, `stats`, `health`, `codebase-map`, and `instructions`, plus
+`evidence` (recorded during governed execution). For any of these, use the
+generated workflow reference file for their detailed arguments and prerequisites.
 
 ## Skill Index and Host Handoff
 - when exported skill navigation is needed, read `{{.SkillIndexPath}}`
