@@ -1,7 +1,6 @@
 package stringutil
 
 import (
-	"regexp"
 	"strings"
 )
 
@@ -65,87 +64,34 @@ func LastMarkdownSectionContent(content, heading string) string {
 }
 
 // HasBlockingOpenQuestions reports whether the canonical Open Questions section
-// contains unresolved content. Documentation is not an intake blocker: a resolved
-// checklist entry (`- [x]`), an indented continuation of a list item, an explicit
-// none marker, or a line carrying a RESOLVED/ANSWERED marker all read as resolved.
-// Only an explicitly unchecked checklist item (`- [ ]`) or an unmarked bare entry
-// blocks. Continuations and resolution markers keep a wrapped or prose-documented
-// answer from reading as a fresh question.
+// holds an unresolved entry. Open questions are recorded as a markdown checklist:
+// an unchecked item (`- [ ]`, `* [ ]`, or `+ [ ]`) is unresolved and blocks intake;
+// a checked item (`- [x]`) is resolved. Everything else — an empty section, an explicit
+// `None`, or free-form prose — is documentation, not a blocker. Deciding what
+// counts as a real open question is a semantic judgment owned by the
+// intake-clarification host skill, which records it as a checklist item; the
+// engine gates only on that structure, never on prose.
 func HasBlockingOpenQuestions(content string) bool {
+	return FirstBlockingOpenQuestion(content) != ""
+}
+
+// FirstBlockingOpenQuestion returns the trimmed text of the first unchecked
+// checklist entry in the canonical Open Questions section, or "" when nothing
+// blocks. It backs HasBlockingOpenQuestions and lets callers name the specific
+// entry that is holding intake in clarification, so routing is not silent.
+func FirstBlockingOpenQuestion(content string) string {
 	section := LastMarkdownSectionContent(content, "## Open Questions")
 	if section == "" {
-		return false
+		return ""
 	}
 	for _, line := range strings.Split(section, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
+		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "- [ ]") ||
+			strings.HasPrefix(lower, "* [ ]") ||
+			strings.HasPrefix(lower, "+ [ ]") {
+			return trimmed
 		}
-		// An indented line that does not itself start a list item is a
-		// continuation of the previous entry; it inherits that entry's state and
-		// never blocks on its own. This lets a resolved `- [x]` item wrap across
-		// lines without the wrapped text reading as a new question.
-		if isOpenQuestionContinuation(line, trimmed) {
-			continue
-		}
-		lowerTrimmed := strings.ToLower(trimmed)
-		if strings.HasPrefix(lowerTrimmed, "- [x]") || strings.HasPrefix(lowerTrimmed, "* [x]") {
-			continue
-		}
-		if strings.HasPrefix(lowerTrimmed, "- [ ]") || strings.HasPrefix(lowerTrimmed, "* [ ]") {
-			return true
-		}
-		if isExplicitNoneMarker(trimmed) {
-			continue
-		}
-		if hasResolvedMarker(trimmed) {
-			continue
-		}
-		return true
 	}
-	return false
-}
-
-// isOpenQuestionContinuation reports whether raw is an indented continuation of
-// the previous list item rather than a new top-level entry. An indented line that
-// itself starts a list marker is treated as its own (nested) entry, so a nested
-// `- [ ]` still blocks.
-func isOpenQuestionContinuation(raw, trimmed string) bool {
-	if raw == trimmed {
-		return false // no leading indentation: a top-level line
-	}
-	if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-		return false // an indented list item is its own entry, not a continuation
-	}
-	return true
-}
-
-var resolvedMarkerPattern = regexp.MustCompile(`(?i)\b(resolved|answered)\b`)
-
-// hasResolvedMarker reports whether a line carries an explicit resolution marker
-// (RESOLVED or ANSWERED, case-insensitive, on a word boundary so "unresolved"
-// does not match). Such a line documents an answered question.
-func hasResolvedMarker(line string) bool {
-	return resolvedMarkerPattern.MatchString(line)
-}
-
-func isExplicitNoneMarker(line string) bool {
-	normalized := strings.TrimSpace(line)
-	for {
-		next := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(normalized, "-"), "*"))
-		if next == normalized {
-			break
-		}
-		normalized = next
-	}
-	normalized = strings.Trim(normalized, " \t().:")
-	normalized = strings.TrimSuffix(normalized, ".")
-	normalized = strings.ToLower(strings.TrimSpace(normalized))
-
-	switch normalized {
-	case "none", "n/a", "na", "not applicable", "no open questions", "no unresolved questions":
-		return true
-	default:
-		return false
-	}
+	return ""
 }

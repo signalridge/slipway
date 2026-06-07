@@ -620,7 +620,7 @@ func TestTraceabilityBlockingOpenQuestions(t *testing.T) {
 INT-001: Something
 
 ## Open Questions
-- What about edge cases?
+- [ ] What about edge cases?
 `)
 
 	slug := "test-change"
@@ -645,9 +645,14 @@ REQ-001: Something. INT-001
 	assert.Contains(t, issues, "blocking open questions remain unresolved while downstream artifacts are ready")
 }
 
-func TestTraceabilityBlockingOpenQuestionProse(t *testing.T) {
+// Contract (#104): the Open Questions section blocks only on an unchecked `- [ ]`
+// checklist entry. Free-form prose — even a sentence that reads like a question —
+// is documentation, never an engine blocker. Promoting a real open question to a
+// checklist item is the intake-clarification host skill's job, not the engine's.
+func TestTraceabilityProseOpenQuestionsDoNotBlock(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	slug := "prose-open-questions"
 
 	writeFile(t, filepath.Join(dir, "intent.md"), `# Intent
 INT-001: Something
@@ -655,14 +660,17 @@ INT-001: Something
 ## Open Questions
 Need to decide which adapter layout should be documented.
 `)
-
-	slug := "test-change"
 	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
 ### Requirement: Something
 REQ-001: Something. INT-001
 `)
-	writeFile(t, filepath.Join(dir, "tasks.md"), `- [ ] Do thing
+	writeFile(t, filepath.Join(dir, "tasks.md"), `# Tasks
+- [ ] `+"`t-01`"+` do thing
   covers: [REQ-001]
+`)
+	writeFile(t, filepath.Join(dir, "assurance.md"), `# Assurance
+## Requirement Coverage
+REQ-001: verified
 `)
 
 	result := EvaluateTraceability(TraceabilityInput{
@@ -670,12 +678,10 @@ REQ-001: Something. INT-001
 		Slug:      slug,
 	})
 
-	assert.Equal(t, model.TraceabilityStatusFail, result.Status)
-	var issues []string
+	assert.Equal(t, model.TraceabilityStatusOK, result.Status)
 	for _, g := range result.Gaps {
-		issues = append(issues, g.Issue)
+		assert.NotEqual(t, "intent-open-questions", g.ID)
 	}
-	assert.Contains(t, issues, "blocking open questions remain unresolved while downstream artifacts are ready")
 }
 
 func TestTraceabilityResolvedOpenQuestionsDoNotBlock(t *testing.T) {
