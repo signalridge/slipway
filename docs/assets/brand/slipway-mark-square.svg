@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Slipway mark">
+  <title>Slipway mark</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <g transform="translate(-3.5,-10) scale(1.35)">
+    <path stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M22,22 L50,42 L78,22"/>
+    <path stroke="#f0fdf4" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M22,38 L50,58 L78,38"/>
+    <path stroke="#d9f99d" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M22,54 L50,74 L78,54"/>
+    <circle cx="50" cy="87" r="5.5" fill="#ffffff"/>
+  </g>
+</svg>

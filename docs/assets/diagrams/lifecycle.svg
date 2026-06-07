@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 470" width="1200" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-label="Slipway governed lifecycle: new to S0 Intake to S1 Plan to S2 Execute to S3 Review to S4 Verify to done, with clarify, audit, wave and changes-requested loop-backs and a primary command loop of next, run, status and done.">
+  <title>Slipway governed lifecycle</title>
+  <desc>new -> S0 Intake -> S1 Plan -> S2 Execute -> S3 Review -> S4 Verify -> done</desc>
+  <defs>
+    <style>
+      :root{
+        --text:#0f172a; --muted:#64748b; --line:#94a3b8;
+        --rail-bg:#f8fafc; --rail-border:#e2e8f0; --rail-label:#64748b;
+        --entry-fill:#ecfdf5; --entry-stroke:#047857; --entry-pill:#047857;
+        --plan-fill:#ecfdf5;  --plan-stroke:#059669;  --plan-pill:#059669;
+        --exec-fill:#f0fdf4;  --exec-stroke:#16a34a;  --exec-pill:#16a34a;
+        --review-fill:#f7fee7;--review-stroke:#4d7c0f;--review-pill:#4d7c0f;
+        --verify-fill:#f7fee7;--verify-stroke:#65a30d;--verify-pill:#65a30d;
+        --term-fill:#0f172a;  --term-stroke:#0f172a; --term-text:#ffffff;
+        --new-fill:#ffffff;   --new-stroke:#047857;  --new-text:#047857;
+        --chip-fill:#ffffff;  --chip-border:#e2e8f0;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --text:#e6edf3; --muted:#8b949e; --line:#475569;
+          --rail-bg:#0d1117; --rail-border:#21262d; --rail-label:#8b949e;
+          --entry-fill:#053024; --entry-stroke:#34d399; --entry-pill:#10b981;
+          --plan-fill:#052e1c;  --plan-stroke:#4ade80;  --plan-pill:#16a34a;
+          --exec-fill:#0d2f12;  --exec-stroke:#86efac;  --exec-pill:#22c55e;
+          --review-fill:#1c2e08;--review-stroke:#a3e635;--review-pill:#65a30d;
+          --verify-fill:#222b06;--verify-stroke:#bef264;--verify-pill:#84cc16;
+          --term-fill:#e6edf3;  --term-stroke:#e6edf3; --term-text:#0d1117;
+          --new-fill:#0d1117;   --new-stroke:#34d399;  --new-text:#34d399;
+          --chip-fill:#161b22;  --chip-border:#30363d;
+        }
+      }
+      .titleBig{fill:var(--text);font-weight:700;}
+      .title{fill:var(--text);font-weight:600;}
+      .sub{fill:var(--muted);}
+      .pillT{fill:#ffffff;font-weight:700;letter-spacing:.5px;}
+      .card{stroke-width:1.75;}
+      .entry{fill:var(--entry-fill);stroke:var(--entry-stroke);}
+      .plan{fill:var(--plan-fill);stroke:var(--plan-stroke);}
+      .exec{fill:var(--exec-fill);stroke:var(--exec-stroke);}
+      .review{fill:var(--review-fill);stroke:var(--review-stroke);}
+      .verify{fill:var(--verify-fill);stroke:var(--verify-stroke);}
+      .pEntry{fill:var(--entry-pill);} .pPlan{fill:var(--plan-pill);}
+      .pExec{fill:var(--exec-pill);} .pReview{fill:var(--review-pill);} .pVerify{fill:var(--verify-pill);}
+      .spine{stroke:var(--line);stroke-width:2;fill:none;}
+      .loop{stroke:var(--line);stroke-width:1.6;fill:none;stroke-dasharray:5 5;}
+      .loopT{fill:var(--muted);font-style:italic;}
+      .arrowhead{fill:var(--line);}
+      .termT{fill:var(--term-text);font-weight:700;}
+      .newT{fill:var(--new-text);font-weight:700;}
+      .rail{fill:var(--rail-bg);stroke:var(--rail-border);stroke-width:1.5;}
+      .chip{fill:var(--chip-fill);stroke:var(--chip-border);stroke-width:1.25;}
+      .cmd{fill:var(--text);font-weight:600;font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;}
+      .railLabel{fill:var(--rail-label);font-weight:700;letter-spacing:1.5px;}
+    </style>
+    <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- heading -->
+  <text class="titleBig" x="46" y="34" font-size="19">Slipway &#183; governed lifecycle</text>
+  <text class="sub" x="46" y="55" font-size="12.5">one current authority (change.yaml) &#183; evidence before confidence &#183; fail-closed review</text>
+
+  <!-- spine connectors -->
+  <line class="spine" x1="76"  y1="133" x2="90"   y2="133" marker-end="url(#ah)"/>
+  <line class="spine" x1="272" y1="133" x2="294"  y2="133" marker-end="url(#ah)"/>
+  <line class="spine" x1="476" y1="133" x2="498"  y2="133" marker-end="url(#ah)"/>
+  <line class="spine" x1="680" y1="133" x2="702"  y2="133" marker-end="url(#ah)"/>
+  <line class="spine" x1="884" y1="133" x2="906"  y2="133" marker-end="url(#ah)"/>
+  <line class="spine" x1="1088" y1="133" x2="1102" y2="133" marker-end="url(#ah)"/>
+
+  <!-- new terminal -->
+  <circle class="card" cx="46" cy="133" r="28" fill="var(--new-fill)" stroke="var(--new-stroke)" stroke-width="1.75"/>
+  <text class="newT" x="46" y="138" text-anchor="middle" font-size="13">new</text>
+  <text class="sub" x="46" y="184" text-anchor="middle" font-size="10">slipway new</text>
+
+  <!-- S0 Intake -->
+  <rect class="card entry" x="92" y="78" width="178" height="110" rx="14"/>
+  <rect class="pEntry" x="104" y="90" width="34" height="18" rx="5"/>
+  <text class="pillT" x="121" y="103" text-anchor="middle" font-size="10">S0</text>
+  <text class="title" x="181" y="135" text-anchor="middle" font-size="17">Intake</text>
+  <text class="sub" x="181" y="157" text-anchor="middle" font-size="11">intent &#183; scope &#183;</text>
+  <text class="sub" x="181" y="172" text-anchor="middle" font-size="11">guardrail class</text>
+
+  <!-- S1 Plan -->
+  <rect class="card plan" x="296" y="78" width="178" height="110" rx="14"/>
+  <rect class="pPlan" x="308" y="90" width="34" height="18" rx="5"/>
+  <text class="pillT" x="325" y="103" text-anchor="middle" font-size="10">S1</text>
+  <text class="title" x="385" y="135" text-anchor="middle" font-size="17">Plan</text>
+  <text class="sub" x="385" y="157" text-anchor="middle" font-size="11">research &#183; requirements</text>
+  <text class="sub" x="385" y="172" text-anchor="middle" font-size="11">decision &#183; tasks</text>
+
+  <!-- S2 Execute -->
+  <rect class="card exec" x="500" y="78" width="178" height="110" rx="14"/>
+  <rect class="pExec" x="512" y="90" width="34" height="18" rx="5"/>
+  <text class="pillT" x="529" y="103" text-anchor="middle" font-size="10">S2</text>
+  <text class="title" x="589" y="135" text-anchor="middle" font-size="17">Execute</text>
+  <text class="sub" x="589" y="157" text-anchor="middle" font-size="11">dependency-ordered</text>
+  <text class="sub" x="589" y="172" text-anchor="middle" font-size="11">waves + evidence</text>
+
+  <!-- S3 Review -->
+  <rect class="card review" x="704" y="78" width="178" height="110" rx="14"/>
+  <rect class="pReview" x="716" y="90" width="34" height="18" rx="5"/>
+  <text class="pillT" x="733" y="103" text-anchor="middle" font-size="10">S3</text>
+  <text class="title" x="793" y="135" text-anchor="middle" font-size="17">Review</text>
+  <text class="sub" x="793" y="157" text-anchor="middle" font-size="11">domain + independent</text>
+  <text class="sub" x="793" y="172" text-anchor="middle" font-size="11">review checks</text>
+
+  <!-- S4 Verify -->
+  <rect class="card verify" x="908" y="78" width="178" height="110" rx="14"/>
+  <rect class="pVerify" x="920" y="90" width="34" height="18" rx="5"/>
+  <text class="pillT" x="937" y="103" text-anchor="middle" font-size="10">S4</text>
+  <text class="title" x="997" y="135" text-anchor="middle" font-size="17">Verify</text>
+  <text class="sub" x="997" y="157" text-anchor="middle" font-size="11">assurance &#183; goal proof</text>
+  <text class="sub" x="997" y="172" text-anchor="middle" font-size="11">&#183; final closeout</text>
+
+  <!-- done terminal -->
+  <circle class="card" cx="1132" cy="133" r="28" fill="var(--term-fill)" stroke="var(--term-stroke)" stroke-width="1.75"/>
+  <text class="termT" x="1132" y="138" text-anchor="middle" font-size="13">done</text>
+  <text class="sub" x="1132" y="184" text-anchor="middle" font-size="10">slipway done</text>
+
+  <!-- self loops -->
+  <path class="loop" d="M 167 188 C 155 230 207 230 195 188" marker-end="url(#ah)"/>
+  <text class="loopT" x="181" y="246" text-anchor="middle" font-size="10.5">clarify / research</text>
+
+  <path class="loop" d="M 371 188 C 359 230 411 230 399 188" marker-end="url(#ah)"/>
+  <text class="loopT" x="385" y="246" text-anchor="middle" font-size="10.5">audit blockers</text>
+
+  <path class="loop" d="M 575 188 C 563 230 615 230 603 188" marker-end="url(#ah)"/>
+  <text class="loopT" x="589" y="246" text-anchor="middle" font-size="10.5">wave blockers</text>
+
+  <!-- review -> execute back arc -->
+  <path class="loop" d="M 770 190 C 758 300 662 300 650 190" marker-end="url(#ah)"/>
+  <text class="loopT" x="710" y="318" text-anchor="middle" font-size="10.5">changes requested &#8594; re-execute</text>
+
+  <!-- primary command loop -->
+  <rect class="rail" x="92" y="338" width="994" height="106" rx="16"/>
+  <text class="railLabel" x="112" y="362" font-size="10.5">PRIMARY COMMAND LOOP</text>
+  <text class="sub" x="1066" y="362" font-size="10.5" text-anchor="end">next inspects &#183; run advances &#183; status &amp; validate report (read-only)</text>
+
+  <!-- chip 1 -->
+  <rect class="chip" x="112" y="378" width="226" height="48" rx="10"/>
+  <circle cx="129" cy="402" r="5" fill="var(--entry-pill)"/>
+  <text class="cmd" x="142" y="399" font-size="12.5">slipway new</text>
+  <text class="sub" x="142" y="415" font-size="10">create governed change</text>
+  <!-- chip 2 -->
+  <rect class="chip" x="354" y="378" width="226" height="48" rx="10"/>
+  <circle cx="371" cy="402" r="5" fill="var(--exec-pill)"/>
+  <text class="cmd" x="384" y="399" font-size="12.5">slipway next</text>
+  <text class="sub" x="384" y="415" font-size="10">inspect next action &#183; read-only</text>
+  <!-- chip 3 -->
+  <rect class="chip" x="596" y="378" width="226" height="48" rx="10"/>
+  <circle cx="613" cy="402" r="5" fill="var(--plan-pill)"/>
+  <text class="cmd" x="626" y="399" font-size="12.5">slipway run</text>
+  <text class="sub" x="626" y="415" font-size="10">advance lifecycle &#183; mutating</text>
+  <!-- chip 4 -->
+  <rect class="chip" x="838" y="378" width="226" height="48" rx="10"/>
+  <circle cx="855" cy="402" r="5" fill="var(--verify-pill)"/>
+  <text class="cmd" x="868" y="399" font-size="12.5">slipway done</text>
+  <text class="sub" x="868" y="415" font-size="10">finalize + archive terminal state</text>
+</svg>
