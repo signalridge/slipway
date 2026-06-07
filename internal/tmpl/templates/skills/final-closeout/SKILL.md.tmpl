@@ -25,11 +25,15 @@ Only when governed closeout refresh is required. `slipway next` returns `next_sk
 This skill runs AFTER goal-verification and BEFORE the G_ship gate decision.
 
 ## Read Context
-Run `slipway next --json`. Examine:
-- current `run_summary_version`
+Run `slipway next --json` for the handoff, and `slipway validate --json` for
+current freshness state. Examine:
+- current `run_version` / `run_summary_version` from `slipway validate --json`
+  (`evidence_freshness`, `freshness_diagnostics`) — `slipway next --json` only
+  carries `run_summary_version` nested under `input_context.resume_checkpoint`,
+  which is absent at closeout
 - verification index for prior skills
 - assurance artifact state
-- active blockers list
+- active blockers list (`blockers` in either output)
 
 ## Closeout Checklist
 Verify ALL of the following before producing closeout verification:

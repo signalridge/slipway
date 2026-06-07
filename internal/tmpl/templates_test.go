@@ -647,7 +647,7 @@ func TestPartialsAreAvailableInRender(t *testing.T) {
 	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, content, "<HARD-GATE>", "hard-gate partial should render into governance skill")
-	assert.Contains(t, content, "Do not call `slipway next` until the user approves.", "hard-gate partial content missing")
+	assert.Contains(t, content, "Do not call `slipway run` (the advancing command) until the user approves", "hard-gate partial content missing")
 }
 
 func TestPartialsDeduplicateGovernanceContent(t *testing.T) {

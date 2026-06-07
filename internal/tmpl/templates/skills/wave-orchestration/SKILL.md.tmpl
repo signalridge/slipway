@@ -50,11 +50,17 @@ Apply `slipway-coding-discipline` while splitting work: keep task scopes
 minimal, prefer simple changes, and reject executor plans that broaden beyond
 the governed objective.
 
-## Discover and Group Waves
-Parse `tasks.md`, extract task entries and `depends_on`, group tasks into
-waves, and validate that every task belongs to exactly one wave. Wave 1 has no
-unsatisfied dependencies; later waves depend only on earlier waves. Cycles are
-blockers.
+## Read the Authoritative Wave Plan
+At `S2_EXECUTE`, read the engine-authoritative wave plan from
+`input_context.wave_plan` in `slipway next --json`: `wave_count`, `total_tasks`,
+and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
+`depends_on`, `target_files`, `task_kind`). Slipway has already dependency-ordered
+the waves and detected cycles from the persisted `wave-plan.yaml`; do not
+re-derive a grouping from `tasks.md` that could diverge from it. (Before
+`S2_EXECUTE` the same field is only a preview derived from `tasks.md`.) If
+`input_context.wave_plan.parse_error` is set (e.g. a dependency cycle, or
+"authoritative wave-plan.yaml is missing; run `slipway repair`"), treat it as a
+blocker and follow the named remediation rather than executing.
 
 Report the wave plan before execution: description, total tasks, wave count,
 and one row per wave with task IDs plus a 3-8 word build summary.
@@ -123,9 +129,9 @@ References should include the task evidence command outputs or stable refs for
 each recorded task.
 
 ## Present and Advance
-Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
+Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`.
 
 ## DO NOT SKIP
 1. Dependency ordering before execution.

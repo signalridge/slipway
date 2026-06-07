@@ -22,7 +22,15 @@ func validateFocus(command, alias string) error {
 		return nil
 	}
 	allowed := focusAliases(command)
-	remediation := fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", "))
+	var remediation string
+	if len(allowed) == 0 {
+		// A command can register --focus without exposing any public aliases yet
+		// (e.g. repair, whose only route is the default). A bare "Use one of: "
+		// is a dead-end, so name the real next action instead.
+		remediation = fmt.Sprintf("`%s` exposes no public --focus aliases; rerun without --focus.", command)
+	} else {
+		remediation = fmt.Sprintf("Use one of: %s", strings.Join(allowed, ", "))
+	}
 	// `repair` deliberately drops the `sast` focus: repair never runs external
 	// scanners. Redirect the operator to the surfaces that legitimately hydrate
 	// SAST guidance instead of leaving a bare allowed-list.

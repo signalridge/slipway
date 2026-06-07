@@ -13,4 +13,10 @@ slipway repair
 - Applies deterministic fixes where possible.
 - Reports what was found and fixed.
 - Show repair summary to user.
+
+## Flags
+- `--json`: JSON output (separates applied repairs from unrepaired drift)
+- `--focus <alias>`: repair focus alias — repair currently exposes no public focuses (default local-integrity route only)
+- `--list-focuses`: list public repair focuses (currently none)
+- `--format <text|json>`: output format for `--list-focuses`
 {{- end -}}

@@ -1767,12 +1767,11 @@ func TestRenderedSkillProseUsesCanonicalPublicNames(t *testing.T) {
 		{
 			skill: "research-orchestration",
 			mustContain: []string{
-				"`slipway-plan-audit` can validate it",
+				"stage (`slipway-plan-audit`) can build on",
 				"[Questions that slipway-plan-audit must address]",
-				"`slipway-plan-audit` to validate",
 			},
 			mustOmit: []string{
-				"`plan-audit` can validate it",
+				"(`plan-audit`) can build on",
 				"[Questions that plan-audit must address]",
 				"`plan-audit` to validate",
 			},

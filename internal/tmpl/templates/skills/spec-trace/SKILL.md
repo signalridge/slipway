@@ -32,7 +32,9 @@ IRON LAW: EVERY SPEC LINE MAPS TO CODE; EVERY CODE CHANGE MAPS TO SPEC
 ## Purpose
 Verify the approved plan in both directions: plan line to code, and diff hunk
 back to plan line. `spec-compliance-review` uses this as its attached trace
-contract, and `review` / `validate --focus spec-trace` keep it public.
+contract; `slipway review` auto-attaches it (there is no `review --focus
+spec-trace` selector — that is rejected), and `slipway validate --focus
+spec-trace` exposes it as an explicit focus.
 
 ## Report schema
 ```yaml

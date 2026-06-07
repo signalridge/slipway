@@ -15,9 +15,14 @@ research, scope confirmation, and plan audit; it does not own a governed route.
 Advisory hint during discovery or governed spec bundling within `S1_PLAN`. This is a technique skill — it does not produce governance evidence and missing output does not block any gate.
 
 ## Durable Output Contract
-Use `slipway next --json` first and read these path fields:
-- `input_context.codebase_map_dir`
-- `input_context.codebase_map_docs`
+Resolve the canonical map paths from `slipway codebase-map --json` — read
+`codebase_map_dir`, `codebase_map_docs`, `status`, and `doc_states`. (During
+standalone discovery `slipway next --json` returns `no_active_change`; only
+*inside* an active change can you instead read
+`input_context.codebase_map_dir`/`input_context.codebase_map_docs` from
+`slipway next --json`.) The path fields are:
+- `codebase_map_dir`
+- `codebase_map_docs`
 
 Write a durable brownfield map under `artifacts/codebase/` using this fixed document set:
 - `STACK.md`
@@ -52,8 +57,11 @@ is the refresh.
 ## Process
 
 ### 1. Resolve Output Paths
-Extract `input_context.codebase_map_dir` and `input_context.codebase_map_docs`.
-Create the map directory if needed.
+Run `slipway codebase-map --json` to scaffold the canonical map directory and the
+fixed document set, then read `codebase_map_dir`/`codebase_map_docs` from its
+output. Do not hand-create the directory or guess the doc set. (Inside an active
+change you may instead read the `input_context.codebase_map_*` fields from
+`slipway next --json`.)
 
 ### 2. Repository Structure Scan
 Map top-level directories, build/config files, tests, docs, and

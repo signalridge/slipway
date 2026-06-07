@@ -48,7 +48,7 @@ func securityReview() Skill {
 	return Skill{
 		ID:                "security-review",
 		Domain:            DomainReviewSecurity,
-		Function:          "secure-default and framework-aware security review",
+		Function:          "secure-default, boundary- and framework-aware security review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
 		Summary:           "Use when reviewing security-relevant code. Triggers on review command, security-classified guardrail, or changes to auth/crypto/input paths.",

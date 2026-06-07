@@ -1,7 +1,10 @@
 {{- define "command-done-body" -}}
 # Done
 
-Finalize a done-ready change: check G_ship gate, archive runtime state, and clean up.
+Finalize a done-ready change: run a fresh G_ship gate check and archive the
+governed bundle to `artifacts/changes/archived/<slug>/`. `done` never removes the
+git worktree — uncommitted non-bundle files are left for you to commit alongside
+the archived bundle.
 
 ## Invocation
 ```bash
@@ -13,12 +16,15 @@ slipway done --all-ready
 ## Contract
 - Only call when the change has reached DONE-ready state.
 - `--all-ready` archives every active change that is currently done-ready.
-- CLI checks G_ship gate before archiving.
-- If gate fails, show blockers and suggest remediation.
+- CLI checks the G_ship gate before archiving; if it fails (e.g. stale
+  evidence), it surfaces blockers and a remediation (often `slipway run`).
+- On success, surface the archive path and any non-blocking
+  `worktree_dirty_warning` / `worktree_dirty_files` so the operator commits those
+  files with the archived bundle; `done` does not remove the worktree.
 - Show archived change summary to user.
 
 ## Flags
-- `--all-ready`: Archive every active change that is done-ready
+- `--all-ready`: Archive every active change that is done-ready (cannot be combined with `--change`)
 - `--json`: JSON output
-- `--change <slug>`: target a specific active change
+- `--change <slug>`: target a specific active change (cannot be combined with `--all-ready`)
 {{- end -}}

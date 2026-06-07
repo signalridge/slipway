@@ -18,4 +18,15 @@ slipway status --json
 - If no active change: suggest `slipway new`.
 - If multiple active changes: show the summary and suggest `slipway status --change <slug>`.
 - Suggest `slipway repair` only for actual state-integrity problems.
+
+## Flags
+- `--format <text|yaml|json>`: output format (also shapes `--list-focuses`: text|json).
+- `--json`: JSON output (shorthand for `--format json`).
+- `--focus <alias>`: status focus override, e.g. `incident` (see `--list-focuses`).
+- `--list-focuses`: list public status focuses.
+- `--hydrate`: append selected hydrate reference bodies (text output only).
+- `--hydrate-ref <skill-id>/<name>`: restrict `--hydrate` to the named reference (repeatable; requires `--hydrate`).
+- `--root`: print the canonical slipway scope root.
+- `--stats`: show workspace diagnostics (active count, stale summaries, integrity issues).
+- `--change <slug>`: target a specific active change.
 {{- end -}}

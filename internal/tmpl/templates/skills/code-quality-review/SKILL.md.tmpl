@@ -34,8 +34,11 @@ verification. Use fresh context; do not carry assumptions from Stage 1.
 - If something "looks fine at a glance", treat that as a signal to inspect it line-by-line
 
 ## Read Context
-Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Verify `spec-compliance-review` exists with `verdict=pass`. Read
+Run `slipway next --json`. Read `verification/spec-compliance-review.yaml` and
+verify it has `verdict: pass` with empty `blockers` (this per-skill file — NOT
+`execution-summary.yaml` — is the authority for the prior Stage 1 verdict). Read
+`verification/execution-summary.yaml` only for the current `run_summary_version`
+(the value your verification's `run_version` must equal). Read
 `next_skill.review_context.required_implementation_layers` for required review
 tokens and the top-level `confirmation_requirement` object for stop boundaries.
 Those fields are the source of truth for this handoff.
@@ -90,7 +93,7 @@ tokens.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <run_summary_version from verification/execution-summary.yaml>  # must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "layer:IR1=pass"
   - "layer:IR3=pass" # include only when review_context requires IR3

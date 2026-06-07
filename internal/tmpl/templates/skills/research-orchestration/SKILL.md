@@ -105,9 +105,9 @@ notes: |
 ```
 
 ## Surface Findings
-Write `research.md` using the artifact schema headings directly so
-`validate` and `slipway-plan-audit` evaluate the same structure the host asks
-you to produce:
+Write `research.md` using the artifact schema headings directly so `validate`
+and the `G_scope` research gate (surfaced by `slipway next`/`run`) evaluate the
+same structure the host asks you to produce:
 
 ```markdown
 ## Research Findings
@@ -149,13 +149,21 @@ you to produce:
 - `[file:path]` for each source used as planning authority
 ```
 
-Use this structure so `slipway-plan-audit` can validate it. This format
-enables `slipway-plan-audit` to validate that all research dimensions have
-findings and that the schema-required top-level headings are present.
+Use this structure so the discovery gate can validate it. When `slipway run`
+advances out of `S1_PLAN/research`, the `G_scope` gate checks that discovery
+evidence exists and that the schema-required top-level headings (e.g.
+`## Alternatives Considered`, `## Unknowns`, `## Assumptions`,
+`## Canonical References`) are present and structurally valid — a missing/invalid
+heading surfaces `research_structure_invalid`, missing discovery evidence
+surfaces `missing_discovery_evidence`. The four research dimensions above
+(Architecture, Patterns, Risks, Test Strategy) are required by this host for
+decision-ready research but are not separately gated by the engine; keep them
+complete so the later `S1_PLAN/audit` stage (`slipway-plan-audit`) can build on
+solid discovery.
 
-After presenting findings, <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway next` until the user approves.</HARD-GATE>
+After presenting findings, <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`.
 
 ## DO NOT SKIP
 1. All four research dimensions must have concrete findings.
