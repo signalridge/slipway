@@ -38,7 +38,7 @@
 
 ## Open Questions
 <!-- Track real unknowns as a checklist. An unchecked `- [ ]` item is unresolved
-     and routes intake to S1_PLAN/research; mark `- [x]` once resolved. Leave the
+     and routes intake to S0_INTAKE/research; mark `- [x]` once resolved. Leave the
      section empty (or write `None`) when there are none. Prose here is
      documentation, not a blocker — a genuine open question must be a `- [ ]`. -->
 

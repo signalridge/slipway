@@ -100,7 +100,7 @@ planning gate; treat the flag as the current gate signal.
 Use targeted checks while implementing:
 
 ```bash
-go test ./internal/stringutil ./internal/engine/progression ./internal/engine/governance -run 'TestHasBlockingOpenQuestions|TestAdvanceIntake_OpenQuestionsUseResolvedItemSemantics|TestTraceability.*OpenQuestions' -count=1
+go test ./internal/stringutil ./internal/engine/progression ./internal/engine/governance -run 'TestHasBlockingOpenQuestions|TestFirstBlockingOpenQuestion|TestAdvanceIntake_OpenQuestionsUseChecklistStructure|TestOpenQuestionsRoutingNoteNamesEntryAndEscapeHatch|TestTraceability.*OpenQuestions|TestGovernanceReadinessUsesTraceabilitySnapshot' -count=1
 ```
 
 Use the full proof before closeout:
