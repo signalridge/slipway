@@ -2,14 +2,14 @@ package capability
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
 )
 
 func buildDefaultSkillIndex(reg *Registry) string {
 	return BuildSkillIndexWithPaths(reg, func(id string) string {
-		return filepath.Join("slipway-"+strings.TrimSpace(id), "SKILL.md")
+		return path.Join("slipway-"+strings.TrimSpace(id), "SKILL.md")
 	})
 }
 
