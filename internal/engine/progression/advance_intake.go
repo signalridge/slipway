@@ -91,7 +91,7 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 			Signals:       map[string]bool{"open_questions_detected": true},
 			SideEffects:   evidenceSideEffects,
 			SkillEvidence: skillEvidenceTraceFromPassing(root, *change, passingSkills),
-			Message:       "Advanced to S0_INTAKE/research for open questions.",
+			Message:       "Advanced to S0_INTAKE/research for open questions." + openQuestionsRoutingNote(intentContent),
 		}, nil
 	}
 
@@ -181,7 +181,7 @@ func advanceIntakeResearch(root string, change *model.Change, fromState model.Wo
 			Signals:       map[string]bool{"open_questions_detected": true},
 			SideEffects:   evidenceSideEffects,
 			SkillEvidence: evidenceTraces,
-			Message:       "Returned to S0_INTAKE/clarify with remaining questions.",
+			Message:       "Returned to S0_INTAKE/clarify with remaining questions." + openQuestionsRoutingNote(intentContent),
 		}, nil
 	}
 
@@ -392,4 +392,19 @@ func sectionNonEmpty(content, heading string) bool {
 // hasOpenQuestions checks if the Open Questions section has unresolved items.
 func hasOpenQuestions(content string) bool {
 	return stringutil.HasBlockingOpenQuestions(content)
+}
+
+// openQuestionsRoutingNote names the specific unchecked checklist entry holding
+// intake in clarification so the routing is not silent. It is empty when nothing
+// blocks. Open questions are tracked as a `- [ ]` checklist; prose and explicit
+// `None` never block, so the note also tells the author how to clear the detour.
+func openQuestionsRoutingNote(intentContent string) string {
+	entry := stringutil.FirstBlockingOpenQuestion(intentContent)
+	if entry == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		" Unresolved `## Open Questions` entry in intent.md: %q. Mark it `- [x]` once resolved or remove it; only unchecked `- [ ]` entries hold intake here.",
+		entry,
+	)
 }

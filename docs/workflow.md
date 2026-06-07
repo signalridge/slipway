@@ -77,7 +77,10 @@ Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run`
 
 ## Open Questions Semantics
 
-`intent.md` may contain a canonical `## Open Questions` section. Slipway treats these entries as resolved:
+`intent.md` may contain a canonical `## Open Questions` section. The engine gates
+on **structure, not prose**: only an unchecked checklist item blocks intake.
+
+These read as resolved (intake advances to `S0_INTAKE/confirm`):
 
 ```markdown
 ## Open Questions
@@ -86,7 +89,7 @@ Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run`
 
 ```markdown
 ## Open Questions
-- None.
+- None requiring research — the page model is already specified.
 ```
 
 ```markdown
@@ -94,24 +97,21 @@ Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run`
 - [x] Installer path resolved by research.
 ```
 
-These entries remain blockers:
+Only an unchecked `- [ ]` entry blocks (routes to `S0_INTAKE/research`):
 
 ```markdown
 ## Open Questions
 - [ ] Which installer path should be documented?
 ```
 
-```markdown
-## Open Questions
-- Which docs build command should be used?
-```
-
-```markdown
-## Open Questions
-Need to decide which adapter layout should be documented.
-```
-
-This lets an artifact preserve the question history without keeping intake stuck after clarification is complete.
+Free-form prose and bare bullets are **documentation, never a blocker**. Deciding
+whether something is a genuine open question is a semantic judgment owned by the
+`intake-clarification` skill, which records a real unknown as a `- [ ]` item; the
+engine never parses intent prose. This keeps a no-unknowns change (`None`, a
+sentinel sentence, or an empty section) from silently detouring into research,
+while letting an artifact preserve question history with `- [x]`. When an entry
+does block, `slipway run` names the specific `- [ ]` line so the routing is not
+silent.
 
 ## Done
 

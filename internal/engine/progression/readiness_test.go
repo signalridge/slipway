@@ -78,7 +78,7 @@ func TestEvaluateGovernanceReadinessRetainsTraceabilityActionBlockersWhenSnapsho
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(`# Intent
 INT-001: protect auth flows
 ## Open Questions
-- unresolved MFA question
+- [ ] unresolved MFA question
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
 ### Requirement: auth review

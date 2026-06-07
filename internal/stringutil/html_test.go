@@ -71,13 +71,6 @@ func TestHasBlockingOpenQuestions(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "explicit no open questions bullet",
-			content: `## Open Questions
-* No open questions.
-`,
-			want: false,
-		},
-		{
 			name: "resolved checklist",
 			content: `## Open Questions
 - [x] Resolved by local reference survey.
@@ -85,30 +78,81 @@ func TestHasBlockingOpenQuestions(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "unchecked none checklist remains blocking",
-			content: `## Open Questions
-- [ ] None.
-`,
-			want: true,
-		},
-		{
-			name: "unchecked checklist",
+			name: "unchecked checklist blocks",
 			content: `## Open Questions
 - [ ] Which installer path should be documented?
 `,
 			want: true,
 		},
 		{
-			name: "plain bullet question",
+			name: "unchecked star checklist blocks",
 			content: `## Open Questions
-- Which docs build command should be used?
+* [ ] Which installer path should be documented?
 `,
 			want: true,
 		},
 		{
-			name: "plain prose question",
+			name: "unchecked plus checklist blocks",
+			content: `## Open Questions
++ [ ] Which installer path should be documented?
+`,
+			want: true,
+		},
+		{
+			name: "unchecked entry blocks even when its text says none",
+			content: `## Open Questions
+- [ ] None.
+`,
+			want: true,
+		},
+		{
+			// Contract: only checklist items count. A bare bullet is documentation;
+			// the intake-clarification skill must promote a real question to `- [ ]`.
+			name: "plain bullet is documentation, not a blocker",
+			content: `## Open Questions
+- Which docs build command should be used?
+`,
+			want: false,
+		},
+		{
+			name: "plain prose is documentation, not a blocker",
 			content: `## Open Questions
 Need to decide which adapter layout should be documented.
+`,
+			want: false,
+		},
+		{
+			// Regression for #104: a sentinel followed by an explanatory clause must
+			// not read as an open question. Prose never blocks under the checklist
+			// contract, so this advances instead of detouring to research.
+			name: "sentinel with explanatory prose does not block (#104)",
+			content: `## Open Questions
+None requiring research — the page model is already specified.
+`,
+			want: false,
+		},
+		{
+			name: "n/a with explanatory prose does not block (#104)",
+			content: `## Open Questions
+N/A — page model already defined.
+`,
+			want: false,
+		},
+		{
+			// A genuinely-open question written as prose does NOT block the engine;
+			// surfacing it as a `- [ ]` is the intake-clarification skill's job. The
+			// engine deliberately gates on structure only.
+			name: "real open question in prose is not an engine blocker",
+			content: `## Open Questions
+None of the auth flows are specified yet — need to decide token TTL.
+`,
+			want: false,
+		},
+		{
+			name: "mixed list blocks on the unchecked item",
+			content: `## Open Questions
+- [x] Installer path resolved by research.
+- [ ] Token TTL still undecided.
 `,
 			want: true,
 		},
@@ -118,7 +162,7 @@ Need to decide which adapter layout should be documented.
 Copied source.
 
 ## Open Questions
-- Copied unresolved question.
+- [ ] Copied unresolved question.
 
 ## Open Questions
 (none)
@@ -135,41 +179,12 @@ Copied source.
 			want: false,
 		},
 		{
-			name: "uppercase RESOLVED prose is documentation",
-			content: `## Open Questions
-All intake questions RESOLVED during research; see research.md.
-`,
-			want: false,
-		},
-		{
-			name: "lowercase resolved prose is documentation",
-			content: `## Open Questions
-Domain classification resolved: verification.
-`,
-			want: false,
-		},
-		{
-			name: "unresolved prose still blocks",
-			content: `## Open Questions
-Adapter layout is still unresolved.
-`,
-			want: true,
-		},
-		{
 			name: "nested unchecked checklist still blocks",
 			content: `## Open Questions
 - [x] Parent question — RESOLVED.
   - [ ] Nested follow-up still open.
 `,
 			want: true,
-		},
-		{
-			name: "resolved checklist continuation with question mark does not block",
-			content: `## Open Questions
-- [x] Which host emits the hint — RESOLVED: wave-orchestration only. Why not
-  tdd-governance? Because it is ExportOnlyExtra and never a next-skill.
-`,
-			want: false,
 		},
 	}
 
@@ -181,4 +196,32 @@ Adapter layout is still unresolved.
 			assert.Equal(t, tt.want, HasBlockingOpenQuestions(tt.content))
 		})
 	}
+}
+
+func TestFirstBlockingOpenQuestion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns the first unchecked entry", func(t *testing.T) {
+		t.Parallel()
+		content := `## Open Questions
+- [x] Installer path resolved.
+- [ ] Token TTL still undecided.
+- [ ] Second open item.
+`
+		assert.Equal(t, "- [ ] Token TTL still undecided.", FirstBlockingOpenQuestion(content))
+	})
+
+	t.Run("empty when nothing blocks", func(t *testing.T) {
+		t.Parallel()
+		content := `## Open Questions
+- [x] All resolved.
+None requiring research.
+`
+		assert.Equal(t, "", FirstBlockingOpenQuestion(content))
+	})
+
+	t.Run("empty section", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", FirstBlockingOpenQuestion("## Open Questions\n<!-- placeholder -->\n"))
+	})
 }
