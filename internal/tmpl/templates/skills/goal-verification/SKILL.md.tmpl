@@ -23,8 +23,11 @@ fresh, concrete proof from the current run.
 After review passes. `slipway next` returns `next_skill: goal-verification`.
 
 ## Read Context
-Run `slipway next --json` and read the acceptance criteria from the original
-change description and governed artifacts.
+Run `slipway next --json` for the handoff, and `slipway validate --json` for
+current freshness state. Read the current `run_version` / `run_summary_version`;
+your verification's `run_version` must equal the current execution-summary
+run_summary_version, not a literal `1`. Read the acceptance criteria from the
+original change description and governed artifacts.
 If `validate --json`, `status --json`, or `review --json` exposes
 `scope_contract`, read it before finalizing completion. Final evidence must
 state whether the in-scope contract passed, failed, or was not applicable.
@@ -100,7 +103,7 @@ reference format.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <current run_summary_version from slipway validate --json>  # must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "fresh:command_ref=<path or transcript ref>"
   - "scope_contract:pass"
@@ -114,7 +117,9 @@ notes: |
 ## Present and Advance
 Show verification summary. {{template "hard-gate"}}
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`; the engine rechecks S4_VERIFY
+evidence and surfaces final-closeout or done-ready when the gate is satisfied
+(`slipway next` only previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Fresh verification record, not cached evidence.

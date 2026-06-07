@@ -109,7 +109,9 @@ cross-artifact consistency.
 ## Present and Advance
 Show review findings. {{template "hard-gate"}}
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`; the engine rechecks the S3_REVIEW
+evidence and advances when required review evidence is satisfied (`slipway next`
+only previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Fresh context separate from spec-compliance-review.

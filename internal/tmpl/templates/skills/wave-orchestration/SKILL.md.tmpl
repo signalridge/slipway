@@ -114,12 +114,17 @@ partial execution does not reach S3_REVIEW. To intentionally drop a task, rescop
 - Spec or artifact blockers must use `spec:<artifact_id>` references.
 
 ## Write Verification
+Use one current wave-orchestration `run_version` consistently for the task
+evidence ledger and this verification record. If refreshing an earlier execution
+run, do not reuse a stale literal value; choose the refreshed run_version and
+record every task with that same value.
+
 ```yaml
 # Write to: artifacts/changes/{slug}/verification/wave-orchestration.yaml
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <current wave-orchestration run_version>
 references: []
 notes: |
   <verification notes>

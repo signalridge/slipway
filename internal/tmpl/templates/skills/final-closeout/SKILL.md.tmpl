@@ -117,12 +117,12 @@ Closeout must be performed independently from implementation.
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"
-run_version: 1
+run_version: <current run_summary_version from slipway validate --json>  # must equal the current execution-summary run_summary_version, not a literal 1
 references:
   - "closeout:evidence_freshness=pass"
   - "closeout:test_suite=pass:N/N"
-  - "closeout:goal_verification_reuse=pass"              # only when using the reuse branch
-  - "closeout:goal_verification_reuse_run_version=1"     # only when using the reuse branch
+  - "closeout:goal_verification_reuse=pass"                         # only when using the reuse branch
+  - "closeout:goal_verification_reuse_run_version=<current run_version>"  # only when using the reuse branch; must match goal-verification, final-closeout, and execution-summary
   - "closeout:reviewer_independence=pass"
   - "closeout:guardrail_baseline=pass"   # closeout's recheck; the ship-gate check itself is goal-verification's high_risk_check:<domain>.safety_baseline
   - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
@@ -139,7 +139,9 @@ On light preset, omit it — assurance is optional there.
 ## Present and Advance
 Show closeout summary with verification index. {{template "hard-gate"}}
 
-After confirmation: `slipway next`
+After confirmation, advance with `slipway run`; the engine rechecks G_ship and
+surfaces done-ready when closeout evidence is accepted (`slipway next` only
+previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Full test suite pass, unless the validated reuse branch applies.

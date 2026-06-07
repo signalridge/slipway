@@ -650,6 +650,122 @@ func TestPartialsAreAvailableInRender(t *testing.T) {
 	assert.Contains(t, content, "Do not call `slipway run` (the advancing command) until the user approves", "hard-gate partial content missing")
 }
 
+func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
+	t.Parallel()
+
+	staticSkills := []string{
+		"skills/intake-clarification/SKILL.md",
+		"skills/plan-audit/SKILL.md",
+		"skills/research-orchestration/SKILL.md",
+	}
+	for _, name := range staticSkills {
+		content, err := Content(name)
+		require.NoError(t, err, "failed to load %s", name)
+		assert.NotContains(
+			t,
+			content,
+			"After confirmation: `slipway next`",
+			"%s must not route advancement through read-only next",
+			name,
+		)
+		assert.Contains(t, content, "slipway run", "%s must name the advancing command", name)
+	}
+
+	data := map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:test",
+		"Description": "test",
+	}
+	templatedSkills := []string{
+		"skills/wave-orchestration/SKILL.md.tmpl",
+		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/final-closeout/SKILL.md.tmpl",
+	}
+	for _, name := range templatedSkills {
+		content, err := Render(name, data)
+		require.NoError(t, err, "failed to render %s", name)
+		assert.NotContains(
+			t,
+			content,
+			"After confirmation: `slipway next`",
+			"%s must not route advancement through read-only next",
+			name,
+		)
+		assert.Contains(t, content, "slipway run", "%s must name the advancing command", name)
+	}
+}
+
+func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:test",
+		"Description": "test",
+	}
+	tests := []struct {
+		name          string
+		templatePath  string
+		wantRunSource string
+	}{
+		{
+			name:          "wave orchestration",
+			templatePath:  "skills/wave-orchestration/SKILL.md.tmpl",
+			wantRunSource: "run_version: <current wave-orchestration run_version>",
+		},
+		{
+			name:          "tdd governance",
+			templatePath:  "skills/tdd-governance/SKILL.md.tmpl",
+			wantRunSource: "run_version: <current wave-orchestration run_version>",
+		},
+		{
+			name:          "spec compliance review",
+			templatePath:  "skills/spec-compliance-review/SKILL.md.tmpl",
+			wantRunSource: "run_version: <run_summary_version from verification/execution-summary.yaml>",
+		},
+		{
+			name:          "code quality review",
+			templatePath:  "skills/code-quality-review/SKILL.md.tmpl",
+			wantRunSource: "run_version: <run_summary_version from verification/execution-summary.yaml>",
+		},
+		{
+			name:          "goal verification",
+			templatePath:  "skills/goal-verification/SKILL.md.tmpl",
+			wantRunSource: "run_version: <current run_summary_version from slipway validate --json>",
+		},
+		{
+			name:          "final closeout",
+			templatePath:  "skills/final-closeout/SKILL.md.tmpl",
+			wantRunSource: "run_version: <current run_summary_version from slipway validate --json>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			content, err := Render(tt.templatePath, data)
+			require.NoError(t, err, "failed to render %s", tt.templatePath)
+			assert.NotContains(
+				t,
+				content,
+				"\nrun_version: 1\n",
+				"%s must not guide agents to copy a stale literal run_version",
+				tt.templatePath,
+			)
+			assert.Contains(
+				t,
+				content,
+				tt.wantRunSource,
+				"%s must name the authoritative run_version source",
+				tt.templatePath,
+			)
+		})
+	}
+}
+
 func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	t.Parallel()
 	// Verify shared verification doctrine renders in goal-verification.
