@@ -117,6 +117,81 @@ func CodebaseMapDisplayDocs(displayRoot, codebaseMapDir string) map[string]strin
 	return docs
 }
 
+// CodebaseMapInstructionKeys returns the sorted public doc keys (e.g. "stack",
+// "architecture") so `slipway instructions <key>` can route codebase-map docs
+// through the same authoring contract as the governed bundle artifacts. These
+// docs are repo-scoped and advisory — they do not gate any stage.
+func CodebaseMapInstructionKeys() []string {
+	keys := make([]string, 0, len(codebaseMapDocKeys))
+	for _, key := range codebaseMapDocKeys {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// CodebaseMapDocInstruction resolves a codebase-map doc by public key
+// ("stack") or file name ("STACK.md", case-insensitive) and returns its file
+// name and static template. ok is false when nameOrKey matches no codebase-map
+// doc, letting the caller fall through to the bundle-artifact path.
+func CodebaseMapDocInstruction(nameOrKey string) (file string, template string, ok bool) {
+	name := codebaseMapDocFileName(nameOrKey)
+	if name == "" {
+		return "", "", false
+	}
+	tmpl, ok := codebaseMapDocTemplates[name]
+	if !ok {
+		return "", "", false
+	}
+	return name, tmpl, true
+}
+
+// CodebaseMapDocKey returns the public key ("stack") for a codebase-map doc
+// given its key or file name. It returns the normalized input when the doc is
+// unknown so callers always get a stable label.
+func CodebaseMapDocKey(nameOrKey string) string {
+	if name := codebaseMapDocFileName(nameOrKey); name != "" {
+		return codebaseMapDocKeys[name]
+	}
+	return strings.TrimSpace(nameOrKey)
+}
+
+// CodebaseMapBaselineDoc returns the machine-extracted baseline content for a
+// codebase-map doc (resolved by key or file name) computed from the workspace
+// manifests under root. These are real detected facts, not placeholder seed, so
+// `slipway instructions` can offer them as background the author preserves and
+// extends. ok is false when nameOrKey matches no codebase-map doc.
+func CodebaseMapBaselineDoc(root, nameOrKey string) (content string, ok bool) {
+	name := codebaseMapDocFileName(nameOrKey)
+	if name == "" {
+		return "", false
+	}
+	if _, exists := codebaseMapDocTemplates[name]; !exists {
+		return "", false
+	}
+	return renderCodebaseMapBaselineDoc(inspectCodebaseMapFacts(root), name), true
+}
+
+// codebaseMapDocFileName normalizes a public key ("stack") or file name
+// ("stack.md", "STACK.md") to the canonical codebase-map file name ("STACK.md"),
+// or "" when it matches no codebase-map doc.
+func codebaseMapDocFileName(nameOrKey string) string {
+	value := strings.TrimSpace(nameOrKey)
+	if value == "" {
+		return ""
+	}
+	if _, ok := codebaseMapDocTemplates[value]; ok {
+		return value
+	}
+	lower := strings.ToLower(value)
+	for _, name := range codebaseMapDocNames {
+		if strings.ToLower(name) == lower || codebaseMapDocKeys[name] == lower {
+			return name
+		}
+	}
+	return ""
+}
+
 func EnsureCodebaseMapDocs(root string) (created []string, err error) {
 	dir := state.CodebaseMapDir(root)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

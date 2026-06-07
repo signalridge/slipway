@@ -28,7 +28,7 @@ WHEN it reaches a protected route
 THEN the system returns 401 and does not serve the resource.
 `), 0o644))
 
-	result, err := EvaluateRequirementsContract(bundleDir, slug)
+	result, err := EvaluateRequirementsContract(bundleDir)
 	require.NoError(t, err)
 	assert.Equal(t, RequirementsContractStatusValid, result.Status)
 	assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
@@ -43,11 +43,28 @@ func TestEvaluateRequirementsContractReturnsMissingResult(t *testing.T) {
 	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 
-	result, err := EvaluateRequirementsContract(bundleDir, slug)
+	result, err := EvaluateRequirementsContract(bundleDir)
 	require.NoError(t, err)
 	assert.Equal(t, RequirementsContractStatusMissing, result.Status)
 	assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
 	assert.Contains(t, result.Message, "missing")
+}
+
+func TestEvaluateRequirementsContractRejectsInstructionsTemplate(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "example-change"
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	template, err := RenderArtifactExample("requirements.md")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(template), 0o644))
+
+	result, err := EvaluateRequirementsContract(bundleDir)
+	require.NoError(t, err)
+	assert.Equal(t, RequirementsContractStatusInvalid, result.Status)
+	assert.Contains(t, result.Message, "no Requirement blocks found")
 }
 
 func TestEvaluateRequirementsContractReturnsInvalidResults(t *testing.T) {
@@ -136,7 +153,7 @@ THEN pending — replace with the observable expected outcome
 			require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(tt.content), 0o644))
 
-			result, err := EvaluateRequirementsContract(bundleDir, slug)
+			result, err := EvaluateRequirementsContract(bundleDir)
 			require.NoError(t, err)
 			assert.Equal(t, RequirementsContractStatusInvalid, result.Status)
 			assert.Equal(t, ResolveArtifactPath(bundleDir, "requirements.md"), result.Source)
@@ -218,6 +235,11 @@ THEN the expected behavior for an expired token is a 401 response.
 	assert.Empty(t, RequirementSubstanceBlockers(concreteExpectedBehavior),
 		"a concrete 'expected behavior for' scenario must not be treated as placeholder")
 
+	template, err := RenderArtifactExample("requirements.md")
+	require.NoError(t, err)
+	assert.NotEmpty(t, RequirementSubstanceBlockers(template),
+		"instructions template comments must not satisfy the requirements gate")
+
 	mechanical := `# Requirements
 ### Requirement: do the thing
 REQ-001: Pending — replace with the normative requirement. Define requirements based on the initial request.
@@ -278,7 +300,7 @@ func TestEvaluateRequirementsContractReturnsErrorForUnreadableFile(t *testing.T)
 		_ = os.RemoveAll(reqPath)
 	})
 
-	_, err := EvaluateRequirementsContract(bundleDir, slug)
+	_, err := EvaluateRequirementsContract(bundleDir)
 	require.Error(t, err)
 }
 

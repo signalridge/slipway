@@ -3405,7 +3405,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 		change.WorktreePath = worktreeRoot
 		change.WorktreeBranch = branch
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,

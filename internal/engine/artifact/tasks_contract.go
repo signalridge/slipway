@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/wave"
+	"github.com/signalridge/slipway/internal/stringutil"
 )
 
 // TasksContractStatus mirrors RequirementsContractStatus for tasks.md.
@@ -31,7 +32,7 @@ type TasksContractResult struct {
 // engine's placeholder objectives ("Pending task objective" / "Pending
 // verification objective") is the mechanical scaffold the authoring skill must
 // replace (issue #91). The engine owns structure; the skill owns substance.
-func EvaluateTasksContract(bundleDir, slug string) (TasksContractResult, error) {
+func EvaluateTasksContract(bundleDir string) (TasksContractResult, error) {
 	sourcePath := ResolveArtifactPath(bundleDir, "tasks.md")
 	if _, err := os.Stat(sourcePath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -73,6 +74,7 @@ func EvaluateTasksContract(bundleDir, slug string) (TasksContractResult, error) 
 // judged. A tasks.md that is empty, fails to parse, declares no task, or carries
 // an empty/placeholder objective is rejected.
 func TaskSubstanceBlockers(content string) []string {
+	content = stringutil.StripHTMLComments(content)
 	if strings.TrimSpace(content) == "" {
 		return []string{"tasks.md is empty"}
 	}
@@ -98,6 +100,14 @@ func TaskSubstanceBlockers(content string) []string {
 		if LooksLikeTemplatePlaceholder(objective) {
 			blockers = append(blockers, fmt.Sprintf(
 				"task %s has a placeholder objective (%q); author a concrete objective", id, objective))
+		}
+		// Every task must name the files or evidence targets that bound its
+		// execution scope. target_files feeds plan readiness, scope-contract
+		// checks, freshness digests, and wave evidence; treating it as code-only
+		// would let tasks_contract report valid while the hard plan gate blocks.
+		if len(task.TargetFiles) == 0 {
+			blockers = append(blockers, fmt.Sprintf(
+				"task %s lists no target_files; name the files or evidence targets that bound it", id))
 		}
 	}
 	return blockers

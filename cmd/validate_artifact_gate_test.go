@@ -53,6 +53,39 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 	})
 }
 
+func TestValidateReportsDeferredArtifactsMissingAfterRealScaffold(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := "real-scaffold-deferred-missing"
+	change := model.NewChange(slug)
+	change.Description = "validate real scaffold deferred artifacts"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.QualityMode = model.QualityModeStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepBundle
+	require.NoError(t, state.SaveChange(root, change))
+
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, model.WorkflowPresetStandard))
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	for _, file := range []string{"requirements.md", "decision.md", "tasks.md"} {
+		_, err := os.Stat(filepath.Join(bundlePath, file))
+		require.ErrorIsf(t, err, os.ErrNotExist, "%s must be deferred to skill authoring", file)
+	}
+
+	view, err := buildValidateViewForSlug(root, slug)
+	require.NoError(t, err)
+	specs := model.ReasonSpecs(view.Blockers)
+	assert.Contains(t, specs, "missing_required_artifact:requirements.md")
+	assert.Contains(t, specs, "missing_required_artifact:decision.md")
+	assert.Contains(t, specs, "missing_required_artifact:tasks.md")
+	require.NotNil(t, view.Recovery)
+	assert.Contains(t, recoveryStepCodes(view.Recovery), "missing_required_artifact")
+}
+
 func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -150,6 +183,71 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 		assert.False(t, view.CanAdvance)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_required_artifact:decision.md")
 	})
+}
+
+func TestValidateBlocksPlanAuditWhenDecisionIsTemplateOnly(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "validate should gate template decision at plan audit")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "requirements.md", []byte(`# Requirements
+
+### Requirement: Decision substance gate
+REQ-001: The system MUST block plan readiness when decision.md contains only template comments.
+
+#### Scenario: Template decision blocks plan readiness
+GIVEN decision.md contains only generated guidance comments
+WHEN validation previews plan readiness
+THEN G_plan remains blocked with a decision contract blocker.
+`)))
+	templateDecision, err := artifact.RenderArtifactExample("decision.md")
+	require.NoError(t, err)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "decision.md", []byte(templateDecision)))
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` Enforce decision substance in plan readiness
+  - wave: 1
+  - depends_on: []
+  - target_files: ["internal/engine/progression/readiness.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
+	})
+
+	view, err := buildValidateViewForSlug(root, slug)
+	require.NoError(t, err)
+
+	assert.False(t, view.CanAdvance)
+	requireReasonSpecPrefix(t, model.ReasonSpecs(view.Blockers), "decision_section_placeholder:")
+	require.Contains(t, view.GateDetails, "G_plan")
+	assert.Equal(t, model.GateStatusBlocked, view.GateDetails["G_plan"].Status)
+	requireReasonSpecPrefix(t, model.ReasonSpecs(view.GateDetails["G_plan"].ReasonCodes),
+		"decision_section_placeholder:")
+}
+
+func requireReasonSpecPrefix(t *testing.T, specs []string, prefix string) {
+	t.Helper()
+	for _, spec := range specs {
+		if strings.HasPrefix(spec, prefix) {
+			return
+		}
+	}
+	require.Failf(t, "missing reason prefix", "expected prefix %q in %v", prefix, specs)
 }
 
 func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *testing.T) {
@@ -442,7 +540,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
@@ -484,7 +582,7 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	change.CurrentState = model.StateS2Execute
 	change.Artifacts = map[string]model.ArtifactState{}
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 	// Write execution summary first.
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")

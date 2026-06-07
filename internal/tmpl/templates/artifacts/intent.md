@@ -1,14 +1,4 @@
 # Intent
-{{- if or .ProjectTechStack .ProjectConventions .ProjectTestCmd .ProjectBuildCmd .ProjectLanguages }}
-
-## Project Context
-<!-- Auto-filled by InferProjectContext(); .slipway.yaml overrides -->
-- Tech Stack: {{ .ProjectTechStack }}
-- Languages: {{ .ProjectLanguages }}
-- Test Command: {{ .ProjectTestCmd }}
-- Build Command: {{ .ProjectBuildCmd }}
-- Conventions: {{ .ProjectConventions }}
-{{- end }}
 
 ## Summary
 {{ if .InitialRequest }}{{ .InitialRequest }}{{ else }}Describe the change objective.{{ end }}

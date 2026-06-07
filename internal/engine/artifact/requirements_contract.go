@@ -37,7 +37,7 @@ type RequirementsContractResult struct {
 	Message string
 }
 
-func EvaluateRequirementsContract(bundleDir, slug string) (RequirementsContractResult, error) {
+func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult, error) {
 	sourcePath := ResolveArtifactPath(bundleDir, "requirements.md")
 	if _, err := os.Stat(sourcePath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -95,8 +95,8 @@ func EvaluateRequirementsContract(bundleDir, slug string) (RequirementsContractR
 	}, nil
 }
 
-// RequirementSubstanceBlockers returns substance problems in requirements.md
-// beyond structure: template/seed placeholder content, a requirement body with
+// RequirementSubstanceBlockers returns substance problems in requirements.md: no
+// Requirement blocks, template/seed placeholder content, a requirement body with
 // no RFC-2119 MUST/SHALL/REQUIRED keyword, or a requirement without a concrete
 // GIVEN/WHEN/THEN scenario. An empty slice means the requirements carry real
 // substance. This is the gate that stops a mechanical scaffold from reaching
@@ -108,12 +108,17 @@ func EvaluateRequirementsContract(bundleDir, slug string) (RequirementsContractR
 // in "pending investigation" status — is not false-flagged (issue #91: avoid
 // false positives that block real work).
 func RequirementSubstanceBlockers(content string) []string {
+	content = stripRequirementGuidanceComments(content)
 	var blockers []string
 	if LooksLikeRequirementsPlaceholder(content) {
 		blockers = append(blockers,
 			"contains template/seed placeholder content; author concrete requirements")
 	}
-	for _, block := range splitRequirementBlocksForSubstance(content) {
+	blocks := splitRequirementBlocksForSubstance(content)
+	if len(blocks) == 0 {
+		blockers = append(blockers, "requirements.md declares no Requirement blocks; author concrete requirements")
+	}
+	for _, block := range blocks {
 		label := block.stableID
 		if label == "" {
 			label = block.name

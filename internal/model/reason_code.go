@@ -48,6 +48,22 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The assurance artifact structure is invalid",
 	},
+	"assurance_contract_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The assurance artifact is missing",
+	},
+	"assurance_contract_path_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The assurance artifact path is invalid",
+	},
+	"assurance_contract_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "The assurance artifact is unreadable",
+	},
+	"assurance_section_placeholder": {
+		Severity: ReasonSeverityError,
+		Message:  "The assurance artifact still contains a placeholder section",
+	},
 	"closeout_assurance_attestation_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The final-closeout assurance attestation is missing",
@@ -71,6 +87,22 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"dedicated_worktree_required": {
 		Severity: ReasonSeverityError,
 		Message:  "A dedicated worktree is required for this governed change",
+	},
+	"decision_contract_path_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact path is invalid",
+	},
+	"decision_contract_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact is unreadable",
+	},
+	"decision_section_placeholder": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact still contains a placeholder section",
+	},
+	"decision_structure_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact structure is invalid",
 	},
 	"execution_interrupted": {
 		Severity: ReasonSeverityWarning,
@@ -271,6 +303,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"research_structure_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "The research artifact structure is invalid",
+	},
+	"research_section_placeholder": {
+		Severity: ReasonSeverityError,
+		Message:  "The research artifact still contains a placeholder section",
 	},
 	"run_slipway_done_to_finalize": {
 		Severity: ReasonSeverityWarning,

@@ -110,8 +110,48 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"assurance_structure_invalid": {
-		Remediation:     "Fix assurance.md so it satisfies the required assurance structure, then re-run validation.",
+		Remediation:     "Author assurance.md from the current artifact instructions, replace placeholder scaffold with real verification substance, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_missing": {
+		Remediation:     "Author assurance.md from the current artifact instructions, write the real file, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_path_invalid": {
+		Remediation:     "Repair the governed bundle path for assurance.md before continuing.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_unreadable": {
+		Remediation:     "Fix assurance.md so it is readable before continuing.",
 		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_section_placeholder": {
+		Remediation:     "Replace the placeholder section in assurance.md with real closeout evidence, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_contract_path_invalid": {
+		Remediation:     "Repair the governed bundle path for decision.md before continuing.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_contract_unreadable": {
+		Remediation:     "Fix decision.md so it is readable before continuing.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_structure_invalid": {
+		Remediation:     "Author decision.md from the current artifact instructions, fix the required decision sections, then re-run validation.",
+		CommandTemplate: "slipway instructions decision",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_section_placeholder": {
+		Remediation:     "Replace the placeholder section in decision.md with a concrete decision, then re-run validation.",
+		CommandTemplate: "slipway instructions decision",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"closeout_goal_verification_reuse_invalid": {
@@ -316,8 +356,13 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"research_structure_invalid": {
-		Remediation:     "Fix research.md so it satisfies the required research structure, then re-run validation.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author research.md from the current artifact instructions, fix the required research sections, then re-run validation.",
+		CommandTemplate: "slipway instructions research",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"research_section_placeholder": {
+		Remediation:     "Replace the placeholder section in research.md with evidence-backed research, then re-run validation.",
+		CommandTemplate: "slipway instructions research",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"tasks_plan_changed_since_task_evidence": {
@@ -495,8 +540,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"missing_required_artifact": {
-		Remediation:     "Create or restore the required governed artifact {subject}, then re-run validation.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author the required governed artifact {subject}: run `slipway instructions {subject}` for its template, resolved output path, and upstream inputs, write the real file, then re-run validation.",
+		CommandTemplate: "slipway instructions {subject}",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"intake_clarification_incomplete": {

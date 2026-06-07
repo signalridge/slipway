@@ -1,27 +1,23 @@
 # Requirements
 
-{{- if or .ProjectTechStack .ProjectConventions .ProjectTestCmd .ProjectBuildCmd .ProjectLanguages }}
-## Project Context
-- Tech Stack: {{ .ProjectTechStack }}
-- Conventions: {{ .ProjectConventions }}
-- Test Command: {{ .ProjectTestCmd }}
-- Build Command: {{ .ProjectBuildCmd }}
-- Languages: {{ .ProjectLanguages }}
-
-{{- end }}
-
 ## Requirements
 
 <!--
-Authoring guidance — the engine owns structure, the authoring skill owns substance:
-- Each requirement is "### Requirement: <title>" + a stable "REQ-" identifier line
-  whose body states what the system MUST, SHALL, or is REQUIRED to do (an RFC-2119
-  strong-obligation keyword).
-- Each requirement needs at least one concrete "#### Scenario:" with real GIVEN/WHEN/THEN
-  (no placeholder or tautology lines).
-- Replace the seeded placeholder below; an unedited scaffold is rejected by the
-  requirements substance gate and cannot reach done.
-- Run `slipway instructions requirements` for the full template and quality bar.
--->
+Author each requirement here. The engine owns this structure; you own the
+substance. Run `slipway instructions requirements` for the quality bar, the
+resolved output path, and the upstream dependencies to read by path.
 
-{{ .SeededRequirements }}
+Format — replace every <...> with concrete, change-specific content:
+
+  ### Requirement: <short requirement title>
+  REQ-001: The system MUST <required behavior> — an RFC-2119 MUST / SHALL /
+  REQUIRED strong-obligation keyword.
+
+  #### Scenario: <scenario name>
+  GIVEN <precondition>
+  WHEN <triggering action>
+  THEN <observable expected outcome>
+
+This file is unwritten until you author it: an empty or structure-only file is
+rejected by the requirements substance gate and cannot reach done.
+-->

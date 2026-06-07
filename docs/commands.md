@@ -64,12 +64,17 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway stats` | query | Show repo-wide governance freshness and workflow statistics. |
 | `slipway health` | query | Show repo-local integrity and repairability findings. |
 | `slipway codebase-map` | mutation | Create or refresh advisory repo-scoped context under `artifacts/codebase/`. |
-| `slipway instructions <artifact>` | query | Show the template and authoring guidance for a governed artifact (e.g. `requirements`, `tasks`). |
+| `slipway instructions <artifact>` | query | Show the template, quality bar, and — inside a change — resolved output path + dependency graph for a governed artifact or codebase-map doc. |
 
 `slipway instructions <artifact>` serves the artifact template plus its quality
-bar so an authoring skill writes substance instead of accepting the engine's
-obviously-not-real placeholder; the engine owns structure, the skill owns
-substance.
+bar so an authoring skill writes the real file directly — the engine owns
+structure, the skill owns substance, and there is no seeded body to replace.
+Inside a governed change it also returns the resolved output path, the
+dependency/unlock graph, and tagged background (`context`/`rules`) the skill must
+honor but never copy into the artifact. It covers the six governed bundle
+artifacts (`intent`, `requirements`, `decision`, `research`, `tasks`,
+`assurance`) and the repo-scoped codebase-map docs (`stack`, `architecture`,
+`structure`, `conventions`, `integrations`, `testing`, `concerns`).
 
 `codebase-map --json` reports `status: "baseline"` when documents contain only
 CLI-detected repository facts. Baseline docs are useful starting context, not

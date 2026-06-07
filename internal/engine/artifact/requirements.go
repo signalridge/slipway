@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/stringutil"
 )
 
 var (
@@ -68,6 +70,10 @@ func LooksLikeRequirementsPlaceholder(text string) bool {
 	return false
 }
 
+func stripRequirementGuidanceComments(content string) string {
+	return stringutil.StripHTMLComments(content)
+}
+
 // requirementHeading is a recognized "### Requirement: <name>" heading.
 type requirementHeading struct {
 	line int
@@ -102,6 +108,7 @@ type RequirementBlock struct {
 
 // ParseRequirementBlocks extracts requirement headings and their first stable REQ-* ID.
 func ParseRequirementBlocks(content string) []RequirementBlock {
+	content = stripRequirementGuidanceComments(content)
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	headings := requirementHeadingsIn(lines)
 
@@ -134,6 +141,7 @@ func RequirementBlocksMissingStableIDs(content string) []string {
 
 // ExtractRequirementStableIDs returns the unique stable REQ-* IDs found in content.
 func ExtractRequirementStableIDs(content string) []string {
+	content = stripRequirementGuidanceComments(content)
 	matches := requirementIDPattern.FindAllStringSubmatch(content, -1)
 	seen := map[string]struct{}{}
 	ids := make([]string, 0, len(matches))

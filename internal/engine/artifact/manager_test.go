@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
-	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,19 +17,31 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	change := model.NewChange("my-change")
-	err := ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{})
+	err := ScaffoldGovernedBundleForChange(root, change, "")
 	require.NoError(t, err)
 
 	base := filepath.Join(root, "artifacts", "changes", "my-change")
+	// The engine still scaffolds the artifacts whose bodies it owns.
 	for _, file := range []string{
 		"intent.md",
-		"requirements.md",
-		"decision.md",
-		"tasks.md",
 		"assurance.md",
 	} {
 		_, err := os.Stat(ResolveArtifactPath(base, file))
 		require.NoError(t, err, file)
+	}
+
+	// requirements.md/decision.md/tasks.md are authored directly by the host
+	// skill via `slipway instructions`; the engine defers their creation so an
+	// un-authored required artifact surfaces as missing/fail-closed rather than a
+	// placeholder body the skill must overwrite (issue #119).
+	for _, file := range []string{
+		"requirements.md",
+		"decision.md",
+		"tasks.md",
+	} {
+		_, err := os.Stat(ResolveArtifactPath(base, file))
+		require.Error(t, err, file)
+		assert.True(t, os.IsNotExist(err), file)
 	}
 
 	// status.md is no longer written — change.yaml in bundle is the authority.
@@ -49,7 +61,7 @@ func TestScaffoldGovernedBundleNeedsDiscoveryAddsResearch(t *testing.T) {
 	change.NeedsDiscovery = true
 	change.WorktreePath = worktreeRoot
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	_, err := os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "my-change", "research.md"))
 	require.NoError(t, err)
@@ -60,39 +72,17 @@ func TestScaffoldGovernedBundleNoDiscoverySkipsResearch(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("my-change")
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", "my-change", "research.md"))
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 }
 
-func TestScaffoldGovernedBundleInjectsProjectContext(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	cfg := model.DefaultConfig()
-	cfg.Context.TechStack = "Go, Cobra"
-	cfg.Context.Conventions = "Deterministic CLI contracts"
-	cfg.Context.TestCmd = "go test ./..."
-	cfg.Context.BuildCmd = "go build ./..."
-	cfg.Context.Languages = []string{"go", "yaml"}
-	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("ctx-change"), "", cfg.Context))
-	proposalPath := filepath.Join(root, "artifacts", "changes", "ctx-change", "intent.md")
-	raw, err := os.ReadFile(proposalPath)
-	require.NoError(t, err)
-	content := string(raw)
-	assert.Contains(t, content, "## Project Context")
-	assert.Contains(t, content, "Go, Cobra")
-	assert.Contains(t, content, "go test ./...")
-	assert.Contains(t, content, "go, yaml")
-}
-
 func TestScaffoldGovernedBundleL1CreatesBundle(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("my-change"), "", model.ProjectContext{}))
+	require.NoError(t, ScaffoldGovernedBundleForChange(root, model.NewChange("my-change"), ""))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", "my-change"))
 	require.NoError(t, err)
@@ -104,10 +94,27 @@ func TestScaffoldGovernedBundleDiscoveryCreatesResearch(t *testing.T) {
 
 	change := model.NewChange("discovery-change")
 	change.NeedsDiscovery = true
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
 	require.NoError(t, err)
+}
+
+// TestArtifactTemplatesParseUnderEngineParsers pins the instructions exemplars
+// (what `slipway instructions` serves) to the engine parsers that consume the
+// authored artifacts, so the template and parser cannot drift — a drift would
+// make skill-authored files unparseable (issue #119).
+func TestArtifactTemplatesParseUnderEngineParsers(t *testing.T) {
+	t.Parallel()
+	req, err := RenderArtifactExample("requirements.md")
+	require.NoError(t, err)
+	assert.NotPanics(t, func() { _ = ParseRequirementBlocks(req) },
+		"requirements template must parse under the requirement parser")
+
+	tasks, err := RenderArtifactExample("tasks.md")
+	require.NoError(t, err)
+	_, err = wave.ParseTaskPlan(tasks)
+	require.NoError(t, err, "tasks template must parse under the engine task-plan parser")
 }
 
 func TestTemplateRequiredSections(t *testing.T) {
@@ -154,6 +161,50 @@ Docs and specs that constrain this work.`
 
 	blockers := ResearchStructureBlockers(valid)
 	assert.Empty(t, blockers)
+
+	template, err := RenderArtifactExample("research.md")
+	require.NoError(t, err)
+	blockers = ResearchStructureBlockers(template)
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Alternatives Considered")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Unknowns")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Assumptions")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Canonical References")
+
+	legacySeeded := `# Research
+
+## Alternatives Considered
+Pending investigation. Replace with concrete alternatives, supporting evidence, and the selected direction.
+
+## Unknowns
+- Pending investigation. List unknowns that must be resolved before planning.
+
+## Assumptions
+- Pending investigation. List assumptions only after identifying the evidence that supports them.
+
+## Canonical References
+- ` + "`artifacts/changes/example-change/intent.md`" + ` for the original request and intake context.
+- ` + "`requirements.md`" + ` and ` + "`decision.md`" + ` in the same bundle once planning artifacts are refined.
+- Existing code paths and tests related to the affected behavior in the repository.
+`
+	blockers = ResearchStructureBlockers(legacySeeded)
+	require.Len(t, blockers, 4, "every legacy seeded research section must be flagged")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Alternatives Considered")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Unknowns")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Assumptions")
+	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Canonical References")
+
+	authoredFromTemplate := strings.NewReplacer(
+		"<!-- Real alternatives with supporting evidence and the selected direction. -->",
+		"Compared direct engine seeding with skill-authored artifacts; skill authoring preserves fail-closed ownership.",
+		"<!-- Unknowns that must be resolved before planning, or \"None\". -->",
+		"None; parser and readiness contracts were confirmed in tests.",
+		"<!-- Assumptions with the evidence that supports them. -->",
+		"Assumes `slipway instructions research` is the public authoring surface.",
+		"<!-- file:path references used as planning authority. -->",
+		"internal/tmpl/templates/artifacts/research.md\ninternal/engine/artifact/manager.go",
+	).Replace(template)
+	assert.Empty(t, ResearchStructureBlockers(authoredFromTemplate),
+		"an authored research.md derived from the real instructions template must pass")
 
 	// Missing a required section.
 	missing := `## Alternatives Considered
@@ -507,142 +558,13 @@ func TestAssuranceSectionScaffoldDerivesFromTemplate(t *testing.T) {
 	}
 }
 
-func TestScaffoldGovernedBundleSeedsRequirementsDraft(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	// Structure is seeded (heading + stable REQ id) ...
-	require.Contains(t, content, "REQ-001")
-	require.NotContains(t, content, "Add requirements using")
-	// ... but the engine no longer fabricates substance: the default seed is an
-	// honest, obviously-not-real placeholder that the substance gate rejects.
-	require.True(t, LooksLikeTemplatePlaceholder(content),
-		"default-seeded requirements must read as a placeholder")
-	require.NotContains(t, content, "the relevant workflow is exercised")
-	require.NotContains(t, content, "the expected behavior for")
-	require.NotContains(t, content, "The system MUST")
-}
-
-func TestScaffoldGovernedBundleSeedsDecisionDraft(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "decision.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	require.Contains(t, content, "Pending investigation")
-	require.NotContains(t, content, "Approach A")
-	require.NotContains(t, content, "| | | | |")
-}
-
-func TestScaffoldGovernedBundleSeedsDecisionSectionBodies(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-	change.Description = "add session timeout policy"
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "decision.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	selected := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Selected Approach"), "\n"))
-	interfaces := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Interfaces and Data Flow"), "\n"))
-	rollback := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Rollout and Rollback"), "\n"))
-	risk := strings.TrimSpace(strings.Join(markdownSectionLines(content, "Risk"), "\n"))
-
-	assert.Contains(t, selected, "Pending investigation")
-	assert.NotContains(t, selected, "session timeout policy")
-	assert.NotContains(t, selected, "Describe the chosen approach")
-
-	assert.Contains(t, interfaces, "Pending investigation")
-	assert.NotContains(t, interfaces, "session timeout policy")
-	assert.NotContains(t, interfaces, "Pending — detail after approach is confirmed.")
-
-	assert.Contains(t, rollback, "Pending investigation")
-	assert.NotContains(t, rollback, "session timeout policy")
-	assert.NotContains(t, rollback, "Pending — define after interfaces are finalized.")
-
-	assert.Contains(t, risk, "Pending investigation")
-	assert.NotContains(t, risk, "session timeout policy")
-	assert.NotContains(t, risk, "Pending — assess after approach is confirmed.")
-}
-
-func TestScaffoldGovernedBundleSeedsTasksDraft(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "tasks.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	require.Contains(t, content, "t-01")
-	require.Contains(t, content, "Pending task objective")
-	require.NotContains(t, content, "Define implementation tasks")
-	require.NotContains(t, content, "Add tests for the implementation")
-}
-
-func TestScaffoldGovernedBundleSeedsResearchDraft(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-	change.NeedsDiscovery = true
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	require.Contains(t, content, "Pending investigation")
-	require.NotContains(t, content, "Approach A")
-	require.Contains(t, content, "## Alternatives Considered")
-}
-
-func TestScaffoldGovernedBundleSeedsResearchSectionBodies(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("add-session-timeout-policy")
-	change.Description = "add session timeout policy"
-	change.NeedsDiscovery = true
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
-	require.NoError(t, err)
-	content := string(raw)
-
-	assert.Contains(t, content, "## Unknowns")
-	assert.Contains(t, content, "## Assumptions")
-	assert.Contains(t, content, "## Canonical References")
-	assert.NotContains(t, content, "Unresolved technical questions to investigate.")
-	assert.NotContains(t, content, "Assumptions to validate during planning.")
-	assert.NotContains(t, content, "Docs, specs, code paths, and external references that constrain this work.")
-	assert.NotContains(t, content, "session timeout policy")
-}
-
 func TestScaffoldGovernedBundleMarkdownSizeBudget(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	change := model.NewChange("add-session-timeout-policy")
 	change.NeedsDiscovery = true
 
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	base := filepath.Join(root, "artifacts", "changes", change.Slug)
 	entries, err := os.ReadDir(base)
@@ -659,237 +581,6 @@ func TestScaffoldGovernedBundleMarkdownSizeBudget(t *testing.T) {
 	}
 
 	assert.LessOrEqual(t, total, 15000, "fresh artifact bundle scaffold must stay structural, not analytical")
-}
-
-func TestSeedRequirementsContainsGuardrailDomain(t *testing.T) {
-	t.Parallel()
-	data := templateData{
-		Slug:            "auth-change",
-		InitialRequest:  "update auth middleware",
-		GuardrailDomain: "auth_authz",
-	}
-	result := seedRequirements(data)
-	assert.Contains(t, result, "REQ-001")
-	assert.Contains(t, result, "REQ-002")
-	assert.Contains(t, result, "auth_authz")
-}
-
-func TestSeedRequirementsFromDocPreservesGuardrailDomain(t *testing.T) {
-	t.Parallel()
-	data := templateData{
-		Slug:            "auth-change",
-		InitialRequest:  "update auth middleware",
-		GuardrailDomain: "auth_authz",
-	}
-	docs := DocSections{
-		Scope: "- update auth middleware",
-	}
-
-	result := seededRequirementsContent(data, docSectionItems(docs.Scope))
-
-	assert.Contains(t, result, "REQ-001")
-	assert.Contains(t, result, "REQ-002")
-	assert.Contains(t, result, "auth_authz")
-}
-
-func TestSeedRequirementsUsesConservativeFallbackForNounPhraseAndDoesNotInventIntentIDs(t *testing.T) {
-	t.Parallel()
-	data := templateData{
-		Slug:           "session-timeout",
-		InitialRequest: "session timeout",
-	}
-
-	result := seedRequirements(data)
-
-	assert.Contains(t, result, "REQ-001")
-	assert.Contains(t, result, "session timeout")
-	assert.NotContains(t, result, "The system MUST session timeout.")
-	assert.NotContains(t, result, "Traces to INT-001.")
-}
-
-func TestSeedTasksContainsOnlyStructuralPlaceholder(t *testing.T) {
-	t.Parallel()
-	data := templateData{
-		Slug:           "my-change",
-		InitialRequest: "fix login timeout",
-	}
-	result := seedTasks(data)
-	assert.Contains(t, result, "t-01")
-	assert.Contains(t, result, "Pending task objective")
-	assert.Contains(t, result, "task_kind: investigation")
-	assert.NotContains(t, result, "t-02")
-	assert.NotContains(t, result, "task_kind: test")
-}
-
-func TestCapitalizeFirstHandlesUnicodePrefix(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "Éclair", capitalizeFirst("éclair"))
-}
-
-func TestScaffoldWithDocSectionsEnrichesRequirements(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("session-timeout")
-	change.Description = "session timeout"
-
-	docs := DocSections{
-		Scope:      "- expire idle sessions after 15 minutes",
-		Acceptance: "- sessions expire after 15 minutes of inactivity",
-	}
-	projectCtx := model.ProjectContext{}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", projectCtx, docs))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-	content := string(raw)
-	assert.Contains(t, content, "15 minutes")
-	assert.Contains(t, content, "REQ-001")
-}
-
-func TestScaffoldWithDocSectionsCreatesRequirementBlockPerScopeItem(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("session-timeout")
-	change.Description = "session timeout"
-
-	docs := DocSections{
-		Scope: strings.Join([]string{
-			"- expire idle sessions after 15 minutes",
-			"- preserve MFA enforcement for admin sessions",
-		}, "\n"),
-	}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", model.ProjectContext{}, docs))
-
-	raw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-
-	blocks := ParseRequirementBlocks(string(raw))
-	require.Len(t, blocks, 2)
-	assert.Equal(t, "REQ-001", blocks[0].StableID)
-	assert.Equal(t, "REQ-002", blocks[1].StableID)
-}
-
-func TestScaffoldWithDocSectionsTreatsWrappedProseScopeAsSingleRequirement(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("cache-timeout-update")
-	change.Description = "cache timeout update"
-
-	docs := DocSections{
-		Scope: "expire idle cache entries after 15 minutes while preserving middleware contracts\nfor existing auth flows.",
-	}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", model.ProjectContext{}, docs))
-
-	requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-	blocks := ParseRequirementBlocks(string(requirementsRaw))
-	require.Len(t, blocks, 1)
-	assert.NotContains(t, string(requirementsRaw), "REQ-002: The system MUST for existing auth flows.")
-
-	tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "tasks.md"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(tasksRaw), "`t-02` For existing auth flows.")
-}
-
-func TestScaffoldWithDocSectionsTreatsMultiParagraphScopeAsSingleRequirement(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("session-timeout")
-	change.Description = "session timeout"
-
-	docs := DocSections{
-		Scope: strings.Join([]string{
-			"expire idle sessions after 15 minutes while keeping middleware contracts stable.",
-			"",
-			"Preserve MFA enforcement for admin sessions throughout the change.",
-		}, "\n"),
-	}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", model.ProjectContext{}, docs))
-
-	requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-	blocks := ParseRequirementBlocks(string(requirementsRaw))
-	require.Len(t, blocks, 1)
-	assert.Contains(t, strings.ToLower(string(requirementsRaw)), "preserve mfa enforcement")
-
-	tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "tasks.md"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(tasksRaw), "`t-02` Preserve MFA enforcement for admin sessions throughout the change.")
-}
-
-func TestScaffoldWithDocSectionsTreatsNestedScopeBulletsAsSingleTopLevelRequirement(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("session-timeout")
-	change.Description = "session timeout"
-
-	docs := DocSections{
-		Scope: strings.Join([]string{
-			"- update session timeout handling",
-			"  - expire idle sessions after 15 minutes",
-			"  - preserve MFA enforcement for admin sessions",
-		}, "\n"),
-	}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", model.ProjectContext{}, docs))
-
-	requirementsRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "requirements.md"))
-	require.NoError(t, err)
-	blocks := ParseRequirementBlocks(string(requirementsRaw))
-	require.Len(t, blocks, 1)
-	assert.Contains(t, string(requirementsRaw), "15 minutes")
-	assert.Contains(t, strings.ToLower(string(requirementsRaw)), "preserve mfa enforcement")
-
-	tasksRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "tasks.md"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(tasksRaw), "`t-02` Expire idle sessions after 15 minutes")
-	assert.NotContains(t, string(tasksRaw), "`t-03` Preserve MFA enforcement for admin sessions")
-}
-
-func TestScaffoldWithDocSectionsPreservesConstraintPreambleAlongsideListItems(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("session-timeout")
-	change.Description = "session timeout"
-
-	docs := DocSections{
-		Constraints: strings.Join([]string{
-			"Preserve the existing session revocation semantics.",
-			"- keep existing middleware contract",
-		}, "\n"),
-	}
-
-	require.NoError(t, ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, "", model.ProjectContext{}, docs))
-
-	decisionRaw, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", change.Slug, "decision.md"))
-	require.NoError(t, err)
-	selectedApproach := strings.TrimSpace(strings.Join(markdownSectionLines(string(decisionRaw), "Selected Approach"), "\n"))
-
-	assert.Contains(t, selectedApproach, "Preserve the existing session revocation semantics.")
-	assert.Contains(t, selectedApproach, "keep existing middleware contract")
-	assert.Contains(t, selectedApproach, "This direction must continue honoring the documented constraints:")
-}
-
-func TestParseDecisionLockedDecisionsIgnoresScaffoldDraftSelectedDirection(t *testing.T) {
-	t.Parallel()
-
-	content := `# Decision
-
-## Alternatives Considered
-` + seedDecision() + `
-
-## Selected Approach
-` + seedDecisionApproach() + `
-
-## Risk
-` + seedDecisionRisk() + `
-`
-
-	assert.Nil(t, ParseDecisionLockedDecisions(content))
 }
 
 func TestParseDecisionLockedDecisionsIgnoresUnconfirmedSeededTextWithoutDraftComment(t *testing.T) {
@@ -951,7 +642,7 @@ func TestScaffoldCustomSchemaWithExternalTemplate(t *testing.T) {
 		{Name: "custom-artifact.md", Template: filepath.Join("templates", "custom-artifact.md")},
 	}
 
-	err := ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("test-change"), "", model.ProjectContext{}, customSchema)
+	err := ScaffoldGovernedBundleForChange(root, model.NewChange("test-change"), "", customSchema)
 	require.NoError(t, err)
 
 	base := filepath.Join(root, "artifacts", "changes", "test-change")
@@ -969,7 +660,7 @@ func TestScaffoldCustomSchemaFallbackToStub(t *testing.T) {
 		{Name: "my-widget.md"},
 	}
 
-	err := ScaffoldGovernedBundleForChangeWithContext(root, model.NewChange("test-change"), "", model.ProjectContext{}, customSchema)
+	err := ScaffoldGovernedBundleForChange(root, model.NewChange("test-change"), "", customSchema)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(root, "artifacts", "changes", "test-change", "my-widget.md"))

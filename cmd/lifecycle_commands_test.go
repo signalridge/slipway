@@ -571,7 +571,7 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
@@ -1925,6 +1925,10 @@ Selected: Option A for test runtime.
 - cmd/lifecycle_commands_test.go
 `)))
 	}
+	// This shared fixture intentionally uses concrete prose, not the comment-only
+	// instructions scaffold. The decision gate currently rejects missing/empty
+	// sections and pure scaffold comments; if it later rejects weak draft prose,
+	// this fixture should be upgraded with it.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte(`# Decision
 ## Alternatives Considered
 ### Option A

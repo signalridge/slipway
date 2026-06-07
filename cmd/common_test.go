@@ -547,7 +547,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		change.NeedsDiscovery = true
 		change.WorkflowPreset = model.WorkflowPresetLight
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		cfg, err := model.LoadConfig(state.ConfigPath(root))
 		require.NoError(t, err)
@@ -609,7 +609,7 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.NeedsDiscovery = true
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		worktreeRoot := filepath.Join(t.TempDir(), slug)
 		branch := "feat/" + slug
