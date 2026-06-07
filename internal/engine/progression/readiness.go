@@ -809,6 +809,9 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 			if bundleRel != "" && bundleRel != "." && (file == bundleRel || strings.HasPrefix(file, bundleRel+"/")) {
 				continue
 			}
+			if !opts.includeLocalState && scopeContractContextArtifactChangedFile(file) {
+				continue
+			}
 		}
 		filtered = append(filtered, file)
 	}
@@ -816,6 +819,12 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 		return nil
 	}
 	return stringutil.UniqueSorted(filtered)
+}
+
+func scopeContractContextArtifactChangedFile(file string) bool {
+	file = filepath.ToSlash(strings.TrimSpace(file))
+	file = strings.TrimPrefix(file, "./")
+	return file == "artifacts/codebase" || strings.HasPrefix(file, "artifacts/codebase/")
 }
 
 func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {
