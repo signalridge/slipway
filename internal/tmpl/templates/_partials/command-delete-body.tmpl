@@ -20,9 +20,10 @@ slipway delete --change <slug> --archived --yes   # purge an archived record
 - Removes the governed bundle (`artifacts/changes/<slug>`) and the per-change
   runtime binding. `--worktree` also removes the bound git worktree; `--archived`
   purges an archived terminal record under `artifacts/changes/archived/<slug>`.
-- Fails closed: refuses to remove a worktree with uncommitted tracked changes
-  unless `--force`; never deletes the implementation or pushed PR branch.
-- A refusal blocks the whole operation so nothing is partially deleted.
+- Fails closed: refuses to remove a worktree with uncommitted tracked changes or
+  untracked files outside generated Slipway paths unless `--force`; never
+  deletes the implementation or pushed PR branch.
+- A plan-time refusal blocks execution before any target is deleted.
 - Reports which targets were deleted, skipped, or refused.
 - Use this when `status`/`next`/recovery report a change that is abandoned,
   broken, or bound to another worktree (they route here with the exact `--change`
@@ -33,6 +34,6 @@ slipway delete --change <slug> --archived --yes   # purge an archived record
 - `--worktree`: also remove the bound git worktree
 - `--archived`: purge an archived terminal record instead of active state
 - `--yes`: execute the deletion (otherwise a dry-run plan is printed)
-- `--force`: override the uncommitted-tracked-changes refusal on worktree removal
+- `--force`: override dirty or unsafe-untracked refusals on worktree removal
 - `--json`: JSON output
 {{- end -}}

@@ -62,8 +62,8 @@ func makeDeleteCmd() *cobra.Command {
 					}, jsonOutput)
 				}
 
-				// Fail closed: a refusal blocks the whole operation so nothing is
-				// partially deleted.
+				// Fail closed: a plan-time refusal blocks execution before any
+				// target is deleted.
 				if plan.HasRefusals() {
 					return deleteRefusedError(slug, plan)
 				}
@@ -92,10 +92,10 @@ func makeDeleteCmd() *cobra.Command {
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().BoolVar(&removeWorktree, "worktree", false, "Also remove the bound git worktree (refused if dirty unless --force)")
+	cmd.Flags().BoolVar(&removeWorktree, "worktree", false, "Also remove the bound git worktree (refused if dirty or unsafe-untracked unless --force)")
 	cmd.Flags().BoolVar(&archived, "archived", false, "Purge an archived terminal record instead of active governed state")
-	cmd.Flags().BoolVar(&yes, "yes", false, "Execute the deletion; without it `delete` prints a dry-run plan and removes nothing")
-	cmd.Flags().BoolVar(&force, "force", false, "Override the uncommitted-tracked-changes refusal when removing a worktree")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Execute the deletion; without it delete prints a dry-run plan and removes nothing")
+	cmd.Flags().BoolVar(&force, "force", false, "Override dirty or unsafe-untracked refusals when removing a worktree")
 	return cmd
 }
 
@@ -106,13 +106,27 @@ func makeDeleteCmd() *cobra.Command {
 // resolution errors (no_active_change, change_bound_to_other_worktree, ...).
 func resolveDeleteTargetSlug(root, explicitSlug string) (string, error) {
 	if s := strings.TrimSpace(explicitSlug); s != "" {
-		return s, nil
+		return validateDeleteTargetSlug(s)
 	}
 	ref, err := resolveActiveChangeRef(root, "")
 	if err != nil {
 		return "", err
 	}
-	return ref.Slug, nil
+	return validateDeleteTargetSlug(ref.Slug)
+}
+
+func validateDeleteTargetSlug(slug string) (string, error) {
+	slug = strings.TrimSpace(slug)
+	if err := state.ValidateChangeSlug(slug); err != nil {
+		return "", newPreconditionError(
+			"invalid_change_slug",
+			fmt.Sprintf("invalid change slug %q: %v", slug, err),
+			"Pass a canonical Slipway change slug, for example `example-change-123`.",
+			slug,
+			nil,
+		)
+	}
+	return slug, nil
 }
 
 // currentWorktreeForDelete returns the worktree root the command is running
@@ -152,6 +166,14 @@ func emitDeleteView(cmd *cobra.Command, view deleteView, jsonOutput bool) error 
 		writer.Writef("Dry-run delete plan for %s (mode: %s)\n", view.Slug, view.Mode)
 		writeDeleteTargets(writer, view.Plan)
 		writer.Writef("Nothing deleted. Re-run with --yes to execute.\n")
+		return writer.Err()
+	}
+	if len(view.Removed) == 0 {
+		writer.Writef("Nothing to delete for %s (mode: %s)\n", view.Slug, view.Mode)
+		if len(view.Skipped) > 0 {
+			writer.Writef("Skipped:\n")
+			writeDeleteTargets(writer, view.Skipped)
+		}
 		return writer.Err()
 	}
 	writer.Writef("Deleted %s (mode: %s)\n", view.Slug, view.Mode)

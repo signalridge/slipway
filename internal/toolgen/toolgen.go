@@ -169,7 +169,7 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Operates on an abandoned/accidental or partially-deleted change; distinct from `cancel`, which archives a terminal record."},
 		Notes: []string{
 			"Default (no `--yes`) prints a dry-run plan and deletes nothing; `--yes` executes.",
-			"`--worktree` also removes the bound git worktree (refused on uncommitted tracked changes unless `--force`); `--archived` purges an archived terminal record. The implementation/PR branch is never deleted.",
+			"`--worktree` also removes the bound git worktree (refused on dirty or unsafe-untracked changes unless `--force`); `--archived` purges an archived terminal record. The implementation/PR branch is never deleted.",
 			"`cancel` archives a terminal record; `delete` discards local governed state. `status`/`next` route here when a change is abandoned, broken, or bound elsewhere.",
 		}},
 	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasPromptSurface: true,

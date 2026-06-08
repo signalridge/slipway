@@ -211,6 +211,9 @@ func makeStatusCmd() *cobra.Command {
 				}
 				change, err := loadChangeBySlug(root, changeSlug)
 				if err != nil {
+					if diag := orphanDiagnosticStatusViewForSlug(root, changeSlug); diag != nil {
+						return printStatusView(cmd, root, *diag, outputFormat, hydrate)
+					}
 					return err
 				}
 				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
@@ -336,7 +339,11 @@ func diagnosticStatusView(message string) *statusView {
 // Returns nil when no orphan bundles are present, so the caller can surface the
 // original error instead.
 func orphanDiagnosticStatusView(root string) *statusView {
-	orphans, err := state.OrphanBundleSlugs(root)
+	return orphanDiagnosticStatusViewForSlug(root, "")
+}
+
+func orphanDiagnosticStatusViewForSlug(root, slug string) *statusView {
+	orphans, err := orphanedChangeBundleSlugs(root, slug)
 	if err != nil || len(orphans) == 0 {
 		return nil
 	}
@@ -344,16 +351,14 @@ func orphanDiagnosticStatusView(root string) *statusView {
 		ExecutionMode:     "diagnostics",
 		EvidenceFreshness: "unknown",
 	}
-	blockers := make([]model.ReasonCode, 0, len(orphans))
 	for _, slug := range orphans {
-		blockers = append(blockers, model.NewReasonCode("orphaned_change_bundle", slug))
 		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
 			"governed bundle %q is missing its change.yaml authority; discard it with `slipway delete --change %s`",
 			slug, slug,
 		))
 	}
-	view.Blockers = blockers
-	view.Recovery = model.BuildRecovery(blockers)
+	view.Blockers = orphanedChangeBundleReasons(orphans)
+	view.Recovery = model.BuildRecovery(view.Blockers)
 	return view
 }
 

@@ -322,6 +322,9 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 	if worktreePath != "" {
 		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
 		if err != nil {
+			if orphanErr := orphanedChangeBundleError(root, ""); orphanErr != nil {
+				return changeRef{}, orphanErr
+			}
 			return changeRef{}, wrapResolutionError(err)
 		}
 		return changeRef{Slug: change.Slug}, nil
@@ -329,6 +332,9 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 
 	change, err := state.FindActiveChange(root)
 	if err != nil {
+		if orphanErr := orphanedChangeBundleError(root, ""); orphanErr != nil {
+			return changeRef{}, orphanErr
+		}
 		return changeRef{}, wrapResolutionError(err)
 	}
 	return changeRef{Slug: change.Slug}, nil
@@ -368,6 +374,9 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 				nil,
 			)
 		}
+		if orphanErr := orphanedChangeBundleError(root, slug); orphanErr != nil {
+			return changeRef{}, orphanErr
+		}
 		return changeRef{}, newChangeStateLoadFailedError(slug, err)
 	}
 	if change.Status != model.ChangeStatusActive {
@@ -396,9 +405,63 @@ func loadChangeBySlug(root, slug string) (model.Change, error) {
 				nil,
 			)
 		}
+		if orphanErr := orphanedChangeBundleError(root, slug); orphanErr != nil {
+			return model.Change{}, orphanErr
+		}
 		return model.Change{}, newChangeStateLoadFailedError(slug, err)
 	}
 	return change, nil
+}
+
+func orphanedChangeBundleError(root, slug string) *CLIError {
+	orphans, err := orphanedChangeBundleSlugs(root, slug)
+	if err != nil || len(orphans) == 0 {
+		return nil
+	}
+	reasons := orphanedChangeBundleReasons(orphans)
+	primarySlug := orphans[0]
+	message := fmt.Sprintf("governed bundle %q is missing its change.yaml authority", primarySlug)
+	remediation := fmt.Sprintf("Discard it with `slipway delete --change %s` (add --worktree to also remove its worktree).", primarySlug)
+	if len(orphans) > 1 {
+		message = "governed bundles are missing their change.yaml authority: " + strings.Join(orphans, ", ")
+		remediation = fmt.Sprintf("Discard each abandoned change with `slipway delete --change <slug>`; first suggested command: `slipway delete --change %s`.", primarySlug)
+	}
+	return newCLIErrorWithReasons(
+		categoryPrecondition,
+		"orphaned_change_bundle",
+		message,
+		remediation,
+		primarySlug,
+		reasons,
+		map[string]any{
+			"orphaned_change_bundles": orphans,
+		},
+	)
+}
+
+func orphanedChangeBundleSlugs(root, slug string) ([]string, error) {
+	orphans, err := state.OrphanBundleSlugs(root)
+	if err != nil {
+		return nil, err
+	}
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return orphans, nil
+	}
+	for _, orphan := range orphans {
+		if orphan == slug {
+			return []string{slug}, nil
+		}
+	}
+	return nil, nil
+}
+
+func orphanedChangeBundleReasons(slugs []string) []model.ReasonCode {
+	reasons := make([]model.ReasonCode, 0, len(slugs))
+	for _, slug := range slugs {
+		reasons = append(reasons, model.NewReasonCode("orphaned_change_bundle", slug))
+	}
+	return reasons
 }
 
 // newChangeStateLoadFailedError builds the standard error returned when a

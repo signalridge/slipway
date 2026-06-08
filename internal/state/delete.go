@@ -1,13 +1,17 @@
 package state
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/model"
 )
 
 // DeleteOptions controls which targets `slipway delete` acts on.
@@ -119,16 +123,38 @@ type DeleteResult struct {
 	Skipped []DeleteTarget `json:"skipped,omitempty"`
 }
 
+var canonicalChangeSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+// ValidateChangeSlug ensures a user-provided change slug is a canonical single
+// path segment before any lock, bundle, runtime, or archive path is derived from
+// it.
+func ValidateChangeSlug(slug string) error {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return errors.New("slug is required")
+	}
+	if len(slug) > model.MaxSlugLength {
+		return fmt.Errorf("slug exceeds maximum length %d", model.MaxSlugLength)
+	}
+	if filepath.IsAbs(slug) || slug == "." || slug == ".." || strings.ContainsAny(slug, `/\`) || filepath.Clean(slug) != slug {
+		return errors.New("slug must be a single path segment")
+	}
+	if !canonicalChangeSlugPattern.MatchString(slug) {
+		return errors.New("slug must use lowercase letters, digits, and single hyphen separators")
+	}
+	return nil
+}
+
 // BuildDeletePlan plans deletion of an active or orphaned governed change (or,
 // with opts.Archived, an archived terminal record) identified by slug. It never
 // mutates state.
 func BuildDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan, error) {
 	slug = strings.TrimSpace(slug)
-	if slug == "" {
-		return DeletePlan{}, errors.New("slug is required")
+	if err := ValidateChangeSlug(slug); err != nil {
+		return DeletePlan{}, err
 	}
 	if opts.Archived {
-		return buildArchivedDeletePlan(root, slug)
+		return buildArchivedDeletePlan(root, slug, opts)
 	}
 	return buildActiveDeletePlan(root, slug, opts)
 }
@@ -165,7 +191,7 @@ func buildActiveDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan, e
 	return plan, nil
 }
 
-func buildArchivedDeletePlan(root, slug string) (DeletePlan, error) {
+func buildArchivedDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan, error) {
 	archivedDir, err := locateBundleDir(ArchivedBundlesDir, root, slug)
 	if err != nil {
 		return DeletePlan{}, err
@@ -176,15 +202,39 @@ func buildArchivedDeletePlan(root, slug string) (DeletePlan, error) {
 	} else {
 		plan.Targets = append(plan.Targets, DeleteTarget{Kind: DeleteTargetArchivedBundle, Path: DisplayPath(root, filepath.Join(ArchivedBundlesDir(root), slug)), Action: DeleteActionSkip, Reason: "no archived record found"})
 	}
+	if opts.RemoveWorktree || opts.Force {
+		plan.Targets = append(plan.Targets, DeleteTarget{
+			Kind:   DeleteTargetWorktree,
+			Path:   "",
+			Action: DeleteActionSkip,
+			Reason: "--archived only purges archived records; --worktree/--force apply to active worktree removal",
+		})
+	}
 	return plan, nil
 }
 
 func planWorktreeTarget(root, slug string, opts DeleteOptions) DeleteTarget {
-	worktreePath, err := resolveChangeWorktreePath(root, slug)
-	if err != nil || strings.TrimSpace(worktreePath) == "" {
-		reason := "no bound worktree"
-		if !opts.RemoveWorktree {
-			reason = "not requested (pass --worktree)"
+	return planWorktreeTargetWithResolver(root, slug, opts, resolveChangeWorktreePath)
+}
+
+func planWorktreeTargetWithResolver(root, slug string, opts DeleteOptions, resolver func(string, string) (string, error)) DeleteTarget {
+	worktreePath, err := resolver(root, slug)
+	if err != nil {
+		target := DeleteTarget{
+			Kind:   DeleteTargetWorktree,
+			Path:   "",
+			Action: DeleteActionSkip,
+			Reason: fmt.Sprintf("could not determine bound worktree: %v", err),
+		}
+		if opts.RemoveWorktree {
+			target.Action = DeleteActionRefused
+		}
+		return target
+	}
+	if strings.TrimSpace(worktreePath) == "" {
+		reason := "not requested (pass --worktree)"
+		if opts.RemoveWorktree {
+			reason = "no bound worktree"
 		}
 		return DeleteTarget{Kind: DeleteTargetWorktree, Path: "", Action: DeleteActionSkip, Reason: reason}
 	}
@@ -199,15 +249,15 @@ func planWorktreeTarget(root, slug string, opts DeleteOptions) DeleteTarget {
 		target.Reason = "cannot remove the worktree you are running inside; re-run from the repository root"
 		return target
 	}
-	dirty, derr := worktreeHasUncommittedTrackedChanges(worktreePath)
+	refusal, derr := worktreeRemovalRefusalReason(worktreePath, slug, opts.Force)
 	if derr != nil {
 		target.Action = DeleteActionRefused
 		target.Reason = fmt.Sprintf("cannot determine worktree cleanliness: %v", derr)
 		return target
 	}
-	if dirty && !opts.Force {
+	if refusal != "" {
 		target.Action = DeleteActionRefused
-		target.Reason = "worktree has uncommitted tracked changes; pass --force to remove anyway"
+		target.Reason = "worktree " + refusal
 	}
 	return target
 }
@@ -260,7 +310,7 @@ func executeDeleteTarget(root, slug string, target DeleteTarget, opts DeleteOpti
 		}
 		return nil
 	case DeleteTargetWorktree:
-		if err := RemoveChangeWorktree(root, target.absPath, opts.Force); err != nil {
+		if err := RemoveChangeWorktree(root, slug, target.absPath, opts.Force); err != nil {
 			return err
 		}
 		return nil
@@ -270,23 +320,19 @@ func executeDeleteTarget(root, slug string, target DeleteTarget, opts DeleteOpti
 }
 
 // RemoveChangeWorktree removes the git worktree at worktreePath. It refuses a
-// worktree with uncommitted tracked changes unless force is set; the worktree's
-// branch is never deleted. Untracked governed artifacts (the bundle, build
-// output) are expected in a governed worktree, so git's own removal always runs
-// with --force once this function's tracked-change gate has allowed it.
-func RemoveChangeWorktree(root, worktreePath string, force bool) error {
+// worktree with uncommitted tracked changes, or untracked files outside known
+// generated Slipway paths, unless force is set; the worktree's branch is never
+// deleted. Git's own removal always runs with --force after this gate so expected
+// generated files do not block abandoned-worktree cleanup.
+func RemoveChangeWorktree(root, slug, worktreePath string, force bool) error {
 	worktreePath = strings.TrimSpace(worktreePath)
 	if worktreePath == "" {
 		return errors.New("worktree path is required")
 	}
-	if !force {
-		dirty, err := worktreeHasUncommittedTrackedChanges(worktreePath)
-		if err != nil {
-			return err
-		}
-		if dirty {
-			return fmt.Errorf("worktree %q has uncommitted tracked changes; re-run with --force to remove it", worktreePath)
-		}
+	if refusal, err := worktreeRemovalRefusalReason(worktreePath, slug, force); err != nil {
+		return err
+	} else if refusal != "" {
+		return fmt.Errorf("worktree %q %s", worktreePath, refusal)
 	}
 	repoRoot, err := gitWorkspaceRoot(root)
 	if err != nil {
@@ -352,6 +398,72 @@ func worktreeHasUncommittedTrackedChanges(worktreePath string) (bool, error) {
 		return false, fmt.Errorf("git %s in worktree %q: %w", strings.Join(args, " "), worktreePath, err)
 	}
 	return false, nil
+}
+
+func worktreeRemovalRefusalReason(worktreePath, slug string, force bool) (string, error) {
+	if force {
+		return "", nil
+	}
+	dirty, err := worktreeHasUncommittedTrackedChanges(worktreePath)
+	if err != nil {
+		return "", err
+	}
+	if dirty {
+		return "has uncommitted tracked changes; pass --force to remove anyway", nil
+	}
+	unsafeUntracked, err := worktreeUnsafeUntrackedFiles(worktreePath, slug)
+	if err != nil {
+		return "", err
+	}
+	if len(unsafeUntracked) > 0 {
+		return fmt.Sprintf(
+			"has untracked files outside generated Slipway paths (%s); pass --force to remove anyway",
+			formatPathSample(unsafeUntracked, 3),
+		), nil
+	}
+	return "", nil
+}
+
+func worktreeUnsafeUntrackedFiles(worktreePath, slug string) ([]string, error) {
+	out, err := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files --others in worktree %q: %w", worktreePath, err)
+	}
+	var unsafe []string
+	for _, raw := range bytes.Split(out, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		path := filepath.ToSlash(filepath.Clean(string(raw)))
+		if safeGeneratedUntrackedPath(path, slug) {
+			continue
+		}
+		unsafe = append(unsafe, path)
+	}
+	return unsafe, nil
+}
+
+func safeGeneratedUntrackedPath(path, slug string) bool {
+	switch path {
+	case ".gitignore", ".slipway.yaml":
+		return true
+	}
+	for _, prefix := range []string{
+		"artifacts/changes/" + slug + "/",
+		"artifacts/codebase/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatPathSample(paths []string, limit int) string {
+	if len(paths) <= limit {
+		return strings.Join(paths, ", ")
+	}
+	return strings.Join(paths[:limit], ", ") + fmt.Sprintf(", and %d more", len(paths)-limit)
 }
 
 // locateBundleDir finds an existing bundle directory for slug across every

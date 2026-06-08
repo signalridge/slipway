@@ -63,6 +63,14 @@ func bundleDirForDelete(t *testing.T, worktreePath, slug string) string {
 	return filepath.Join(worktreePath, "artifacts", "changes", slug)
 }
 
+func partiallyDeleteBundleForDelete(t *testing.T, worktreePath, slug string) string {
+	t.Helper()
+	bundleDir := bundleDirForDelete(t, worktreePath, slug)
+	require.NoError(t, os.Remove(filepath.Join(bundleDir, "change.yaml")))
+	require.FileExists(t, filepath.Join(bundleDir, "intent.md"))
+	return bundleDir
+}
+
 func deleteTargetsByKind(t *testing.T, raw any) map[string]map[string]any {
 	t.Helper()
 	out := map[string]map[string]any{}
@@ -74,6 +82,33 @@ func deleteTargetsByKind(t *testing.T, raw any) map[string]map[string]any {
 		out[kind] = target
 	}
 	return out
+}
+
+func assertOrphanStatusDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
+	t.Helper()
+	blockers, _ := payload["blockers"].([]any)
+	foundOrphan := false
+	for _, b := range blockers {
+		if bm, ok := b.(map[string]any); ok && bm["code"] == "orphaned_change_bundle" {
+			foundOrphan = true
+		}
+	}
+	assert.True(t, foundOrphan, "expected orphaned_change_bundle blocker")
+
+	recovery, ok := payload["recovery"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "slipway delete --change "+slug, recovery["primary_command"])
+}
+
+func assertOrphanErrorDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
+	t.Helper()
+	assert.Equal(t, "orphaned_change_bundle", payload["error_code"])
+	assert.Contains(t, payload["message"], slug)
+	assert.Contains(t, payload["remediation"], "slipway delete --change "+slug)
+
+	recovery, ok := payload["recovery"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "slipway delete --change "+slug, recovery["primary_command"])
 }
 
 // REQ-002: a bare delete (no --yes) prints a plan and deletes nothing.
@@ -95,6 +130,23 @@ func TestDeleteDryRunDefaultDeletesNothing(t *testing.T) {
 
 		// Nothing was deleted.
 		assert.DirExists(t, bundleDir)
+	})
+}
+
+// Safety: --change is a slug, not a path. Reject traversal before locks or
+// deletion paths are derived from it.
+func TestDeleteRejectsTraversalSlug(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		victimDir := filepath.Join(root, "victim")
+		require.NoError(t, os.MkdirAll(victimDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(victimDir, "keep.txt"), []byte("sentinel\n"), 0o644))
+
+		_, stderr, err := runRootCommandIn(root, []string{"delete", "--change", "../../victim", "--yes", "--json"})
+		require.Error(t, err)
+		errPayload := decodeJSONMap(t, stderr)
+		assert.Equal(t, "invalid_change_slug", errPayload["error_code"])
+		assert.DirExists(t, victimDir, "invalid slug must not delete outside artifacts/changes")
+		assert.NoFileExists(t, filepath.Join(state.GitStateDir(root), "victim.lock"), "invalid slug must be rejected before per-change lock creation")
 	})
 }
 
@@ -136,28 +188,14 @@ func TestDeleteExecutesAndStatusStaysHealthy(t *testing.T) {
 func TestStatusRoutesToDeleteAfterPartialDelete(t *testing.T) {
 	withDeleteWorkspace(t, func(root string) {
 		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
-		bundleDir := bundleDirForDelete(t, worktreePath, slug)
 		// Simulate a partial manual delete: remove the change.yaml authority but
 		// leave other bundle files behind.
-		require.NoError(t, os.Remove(filepath.Join(bundleDir, "change.yaml")))
-		require.FileExists(t, filepath.Join(bundleDir, "intent.md"))
+		bundleDir := partiallyDeleteBundleForDelete(t, worktreePath, slug)
 
 		stdout, _, err := runRootCommandIn(root, []string{"status", "--json"})
 		require.NoError(t, err, "status must not dead-end on a partially-deleted change")
 		payload := decodeJSONMap(t, stdout)
-
-		blockers, _ := payload["blockers"].([]any)
-		foundOrphan := false
-		for _, b := range blockers {
-			if bm, ok := b.(map[string]any); ok && bm["code"] == "orphaned_change_bundle" {
-				foundOrphan = true
-			}
-		}
-		assert.True(t, foundOrphan, "expected orphaned_change_bundle blocker")
-
-		recovery, ok := payload["recovery"].(map[string]any)
-		require.True(t, ok)
-		assert.Equal(t, "slipway delete --change "+slug, recovery["primary_command"])
+		assertOrphanStatusDeleteRecovery(t, payload, slug)
 
 		// The routed command heals the repo.
 		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--yes"})
@@ -168,6 +206,55 @@ func TestStatusRoutesToDeleteAfterPartialDelete(t *testing.T) {
 		require.NoError(t, err)
 		healed := decodeJSONMap(t, stdout)
 		assert.Equal(t, "diagnostics", healed["execution_mode"])
+	})
+}
+
+func TestExplicitStatusRoutesToDeleteAfterPartialDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
+		partiallyDeleteBundleForDelete(t, worktreePath, slug)
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json", "--change", slug})
+		require.NoError(t, err, "explicit status must not dead-end on a partially-deleted change")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", payload["execution_mode"])
+		assertOrphanStatusDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestNextRoutesToDeleteAfterPartialDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
+		partiallyDeleteBundleForDelete(t, worktreePath, slug)
+
+		_, stderr, err := runRootCommandIn(root, []string{"next", "--json"})
+		require.Error(t, err, "next must route partially-deleted changes to delete recovery")
+		payload := decodeJSONMap(t, stderr)
+		assertOrphanErrorDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestExplicitValidateRoutesToDeleteAfterPartialDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
+		partiallyDeleteBundleForDelete(t, worktreePath, slug)
+
+		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
+		require.Error(t, err, "explicit validate must route partially-deleted changes to delete recovery")
+		payload := decodeJSONMap(t, stderr)
+		assertOrphanErrorDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestDeleteNothingToDeleteTextDoesNotSayDeleted(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		stdout, stderr, err := runRootCommandIn(root, []string{"delete", "--change", "already-deleted", "--yes"})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		assert.Contains(t, stdout, "Nothing to delete for already-deleted")
+		assert.NotContains(t, stdout, "Deleted already-deleted")
+		assert.Contains(t, stdout, "Skipped:")
 	})
 }
 
@@ -221,6 +308,28 @@ func TestDeleteWorktreeRefusesDirtyUnlessForce(t *testing.T) {
 	})
 }
 
+// REQ-004 / safety: --worktree must not silently drop arbitrary untracked work
+// unless the operator explicitly passes --force.
+func TestDeleteWorktreeRefusesUnsafeUntrackedUnlessForce(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
+		untracked := filepath.Join(worktreePath, "untracked-draft.txt")
+		require.NoError(t, os.WriteFile(untracked, []byte("draft\n"), 0o644))
+
+		_, stderr, err := runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--yes", "--json"})
+		require.Error(t, err)
+		errPayload := decodeJSONMap(t, stderr)
+		assert.Equal(t, "delete_refused", errPayload["error_code"])
+		assert.Contains(t, stderr, "untracked-draft.txt")
+		assert.DirExists(t, worktreePath, "worktree must survive an untracked-file refusal")
+
+		// --force overrides the untracked-file refusal.
+		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--force", "--yes", "--json"})
+		require.NoError(t, err)
+		assert.NoDirExists(t, worktreePath)
+	})
+}
+
 // REQ-008 / safety: a worktree-removal request from inside that worktree is
 // refused so the operator does not delete the checkout they are standing in.
 func TestDeleteRefusesCurrentWorktree(t *testing.T) {
@@ -265,6 +374,26 @@ func TestDeleteArchivedRecord(t *testing.T) {
 	})
 }
 
+func TestDeleteArchivedReportsIgnoredWorktreeFlags(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "to be archived")
+		_, _, err := runRootCommandIn(root, []string{"cancel", "--change", slug, "--json"})
+		require.NoError(t, err)
+		archivedDir := filepath.Join(worktreePath, "artifacts", "changes", "archived", slug)
+		require.DirExists(t, archivedDir)
+
+		stdout, _, err := runRootCommandIn(root, []string{"delete", "--change", slug, "--archived", "--worktree", "--force", "--json"})
+		require.NoError(t, err)
+		payload := decodeJSONMap(t, stdout)
+		targets := deleteTargetsByKind(t, payload["plan"])
+		require.Contains(t, targets, "worktree")
+		assert.Equal(t, "skip", targets["worktree"]["action"])
+		assert.Contains(t, targets["worktree"]["reason"], "--archived only purges archived records")
+		assert.Contains(t, targets["worktree"]["reason"], "--worktree/--force")
+		assert.DirExists(t, archivedDir)
+	})
+}
+
 // REQ-007: a change bound to another worktree yields an actionable
 // `slipway delete --change <slug>` command rather than a dead-end error.
 func TestResolutionErrorNamesDeleteCommand(t *testing.T) {
@@ -279,4 +408,13 @@ func TestResolutionErrorNamesDeleteCommand(t *testing.T) {
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
 	assert.Contains(t, cliErr.Remediation, "slipway delete --change abandoned-change")
+}
+
+func TestDeleteHelpDoesNotRenderYesAsTakingValue(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := runRootCommand([]string{"delete", "--help"})
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "--yes")
+	assert.NotContains(t, stdout, "--yes delete")
 }

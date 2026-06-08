@@ -66,10 +66,11 @@ accidental, or partially-deleted change — its bundle, its runtime binding, and
 already-archived record. `delete` is dry-run by default: a bare
 `slipway delete --change <slug>` prints the removal plan and deletes nothing;
 pass `--yes` to execute. It fails closed — it refuses to remove a worktree with
-uncommitted tracked changes unless `--force`, and never deletes the
-implementation or pushed PR branch. When a change is abandoned, broken, or bound
-to another worktree, `slipway status`/`slipway next` and recovery output route
-to the exact `slipway delete --change <slug>` command.
+uncommitted tracked changes or untracked files outside generated Slipway paths
+unless `--force`, and never deletes the implementation or pushed PR branch. When
+a change is abandoned, broken, or bound to another worktree, `slipway status`/
+`slipway next` and recovery output route to the exact
+`slipway delete --change <slug>` command.
 
 ## Diagnostics
 
