@@ -345,6 +345,23 @@ func TestBuildRecoveryWorktreeBranchMismatchRoutesToRun(t *testing.T) {
 	assert.Contains(t, got.PrimaryAction, "slipway run")
 }
 
+func TestBuildRecoveryOrphanedChangeBundleRoutesToDelete(t *testing.T) {
+	t.Parallel()
+
+	// #129: a governed bundle missing its change.yaml authority must route to the
+	// public `slipway delete --change <slug>` surface (with the slug filled in),
+	// not a dead-end integrity error.
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("orphaned_change_bundle", "abandoned-change"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway delete --change abandoned-change", got.PrimaryCommand)
+	assert.Equal(t, RecoveryClassDiscardChange, got.RecoveryClass)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, "abandoned-change", got.Steps[0].Subject)
+	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
+}
+
 func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
 	t.Parallel()
 

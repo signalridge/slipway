@@ -54,6 +54,7 @@ var helpGroups = []commandGroup{
 			{Name: "pivot", Description: desc("pivot")},
 			{Name: "abort", Description: desc("abort")},
 			{Name: "cancel", Description: desc("cancel")},
+			{Name: "delete", Description: desc("delete")},
 			{Name: "repair", Description: desc("repair")},
 			{Name: "checkpoint", Description: desc("checkpoint")},
 			{Name: "evidence", Description: desc("evidence")},
@@ -164,6 +165,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeDoneCmd())
 	cmd.AddCommand(makeAbortCmd())
 	cmd.AddCommand(makeCancelCmd())
+	cmd.AddCommand(makeDeleteCmd())
 	cmd.AddCommand(makeReviewCmd())
 	cmd.AddCommand(makeValidateCmd())
 	cmd.AddCommand(makePivotCmd())

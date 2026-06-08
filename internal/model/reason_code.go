@@ -176,6 +176,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A governed task did not pass",
 	},
+	"orphaned_change_bundle": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed bundle directory is missing its change.yaml authority",
+	},
 	"pivot_not_approved": {
 		Severity: ReasonSeverityError,
 		Message:  "The requested pivot is not approved",

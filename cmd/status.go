@@ -218,6 +218,13 @@ func makeStatusCmd() *cobra.Command {
 
 			changes, err := state.ListChanges(root)
 			if err != nil {
+				// A partially-deleted change (a governed bundle directory that
+				// survived without its change.yaml authority) otherwise dead-ends
+				// status with a raw integrity error. Auto-diagnose the orphan and
+				// route the operator to `slipway delete` instead.
+				if diag := orphanDiagnosticStatusView(root); diag != nil {
+					return printStatusView(cmd, root, *diag, outputFormat, hydrate)
+				}
 				return err
 			}
 			var active []model.Change
@@ -321,6 +328,33 @@ func diagnosticStatusView(message string) *statusView {
 		EvidenceFreshness: "unknown",
 		Diagnostics:       []string{message},
 	}
+}
+
+// orphanDiagnosticStatusView builds a diagnostics status view that routes the
+// operator to `slipway delete` when one or more governed bundle directories
+// survive without their change.yaml authority (a partially-deleted change).
+// Returns nil when no orphan bundles are present, so the caller can surface the
+// original error instead.
+func orphanDiagnosticStatusView(root string) *statusView {
+	orphans, err := state.OrphanBundleSlugs(root)
+	if err != nil || len(orphans) == 0 {
+		return nil
+	}
+	view := &statusView{
+		ExecutionMode:     "diagnostics",
+		EvidenceFreshness: "unknown",
+	}
+	blockers := make([]model.ReasonCode, 0, len(orphans))
+	for _, slug := range orphans {
+		blockers = append(blockers, model.NewReasonCode("orphaned_change_bundle", slug))
+		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
+			"governed bundle %q is missing its change.yaml authority; discard it with `slipway delete --change %s`",
+			slug, slug,
+		))
+	}
+	view.Blockers = blockers
+	view.Recovery = model.BuildRecovery(blockers)
+	return view
 }
 
 func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool) error {

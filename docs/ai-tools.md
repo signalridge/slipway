@@ -57,6 +57,7 @@ Situational prompt-backed commands:
 
 - `init`
 - `cancel`
+- `delete`
 - `review`
 - `validate`
 - `checkpoint`

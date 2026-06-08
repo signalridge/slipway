@@ -428,10 +428,10 @@ func wrapResolutionError(err error) error {
 			})
 			parts = append(parts, fmt.Sprintf("%s at %s", change.Slug, change.WorktreePath))
 		}
-		remediation := "Use `slipway next --change <slug>` / `slipway run --change <slug>`, or cd into the bound worktree."
+		remediation := "Use `slipway next --change <slug>` / `slipway run --change <slug>`, or cd into the bound worktree. To discard an abandoned change instead, run `slipway delete --change <slug>` (add --worktree to also remove its worktree)."
 		if len(boundElsewhere.BoundChanges) == 1 {
 			change := boundElsewhere.BoundChanges[0]
-			remediation = fmt.Sprintf("Use `slipway next --change %s` / `slipway run --change %s`, or cd into %s.", change.Slug, change.Slug, change.WorktreePath)
+			remediation = fmt.Sprintf("Use `slipway next --change %s` / `slipway run --change %s`, or cd into %s. To discard it instead, run `slipway delete --change %s` (add --worktree to also remove its worktree).", change.Slug, change.Slug, change.WorktreePath, change.Slug)
 		}
 		return newPreconditionError(
 			"change_bound_to_other_worktree",

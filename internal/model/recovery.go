@@ -54,6 +54,7 @@ type RecoveryClass string
 
 const (
 	RecoveryClassConfirmPreset  RecoveryClass = "confirm_preset"
+	RecoveryClassDiscardChange  RecoveryClass = "discard_change"
 	RecoveryClassSatisfyControl RecoveryClass = "satisfy_control"
 	RecoveryClassReopenEvidence RecoveryClass = "reopen_evidence"
 	RecoveryClassRerunSkill     RecoveryClass = "rerun_skill"
@@ -69,6 +70,7 @@ const (
 // higher priority for selecting the single primary command.
 var recoveryClassPriority = []RecoveryClass{
 	RecoveryClassConfirmPreset,
+	RecoveryClassDiscardChange,
 	RecoveryClassSatisfyControl,
 	RecoveryClassReopenEvidence,
 	RecoveryClassRerunSkill,
@@ -244,6 +246,15 @@ var blockerRemediations = map[string]blockerRemediation{
 		Remediation:     "Resolve the failing task evidence for task {subject}, then re-run wave-orchestration.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
+	},
+	"orphaned_change_bundle": {
+		// Emitted as orphaned_change_bundle:<slug>. The governed bundle directory
+		// survived without its change.yaml authority (a partially-deleted change),
+		// which would otherwise dead-end resolution; route the operator to discard
+		// the abandoned local state with the public delete surface.
+		Remediation:     "Governed bundle {subject} is missing its change.yaml authority; discard the abandoned change with `slipway delete --change {subject}` (add --worktree to also remove its worktree).",
+		CommandTemplate: "slipway delete --change {subject}",
+		Class:           RecoveryClassDiscardChange,
 	},
 	"plan_dimension_completeness_missing_objective": {
 		Remediation:     "Fix tasks.md so every task has a concrete objective.",
