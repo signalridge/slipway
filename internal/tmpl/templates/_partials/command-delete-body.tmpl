@@ -1,0 +1,39 @@
+{{- define "command-delete-body" -}}
+# Delete
+
+Discard an abandoned, accidental, or partially-deleted governed change without
+relying on private knowledge of `artifacts/changes/<slug>` or `.git/slipway`
+internals. `delete` removes local governed state; it is distinct from `cancel`,
+which archives a terminal record.
+
+## Invocation
+```bash
+slipway delete --change <slug>            # dry-run plan (deletes nothing)
+slipway delete --change <slug> --yes      # discard bundle + runtime binding
+slipway delete --change <slug> --worktree --yes   # also remove the worktree
+slipway delete --change <slug> --archived --yes   # purge an archived record
+```
+
+## Contract
+- Default (no `--yes`) prints a dry-run plan of exactly what would be removed and
+  deletes nothing. Pass `--yes` to execute.
+- Removes the governed bundle (`artifacts/changes/<slug>`) and the per-change
+  runtime binding. `--worktree` also removes the bound git worktree; `--archived`
+  purges an archived terminal record under `artifacts/changes/archived/<slug>`.
+- Fails closed: refuses to remove a worktree with uncommitted tracked changes or
+  untracked files outside generated Slipway paths unless `--force`; never
+  deletes the implementation or pushed PR branch.
+- A plan-time refusal blocks execution before any target is deleted.
+- Reports which targets were deleted, skipped, or refused.
+- Use this when `status`/`next`/recovery report a change that is abandoned,
+  broken, or bound to another worktree (they route here with the exact `--change`
+  command).
+
+## Flags
+- `--change <slug>`: target a specific change (required when not resolvable as the active change)
+- `--worktree`: also remove the bound git worktree
+- `--archived`: purge an archived terminal record instead of active state
+- `--yes`: execute the deletion (otherwise a dry-run plan is printed)
+- `--force`: override dirty or unsafe-untracked refusals on worktree removal
+- `--json`: JSON output
+{{- end -}}

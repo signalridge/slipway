@@ -54,7 +54,23 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway pivot` | mutation | Reroute an active change (S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY) or rescope it (S2_EXECUTE back to S0_INTAKE). |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
+| `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
+
+`slipway cancel` and `slipway delete` are not the same operation. `cancel`
+takes an **active** change to a terminal `cancelled` status and **archives** it
+under `artifacts/changes/archived/<slug>` so the decision stays in the audit
+trail. `delete` instead **discards local governed state** for an abandoned,
+accidental, or partially-deleted change — its bundle, its runtime binding, and
+(with `--worktree`) the bound git worktree — and with `--archived` can purge an
+already-archived record. `delete` is dry-run by default: a bare
+`slipway delete --change <slug>` prints the removal plan and deletes nothing;
+pass `--yes` to execute. It fails closed — it refuses to remove a worktree with
+uncommitted tracked changes or untracked files outside generated Slipway paths
+unless `--force`, and never deletes the implementation or pushed PR branch. When
+a change is abandoned, broken, or bound to another worktree, `slipway status`/
+`slipway next` and recovery output route to the exact
+`slipway delete --change <slug>` command.
 
 ## Diagnostics
 

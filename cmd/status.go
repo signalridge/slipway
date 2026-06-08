@@ -211,6 +211,9 @@ func makeStatusCmd() *cobra.Command {
 				}
 				change, err := loadChangeBySlug(root, changeSlug)
 				if err != nil {
+					if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
+						return printStatusView(cmd, root, *diag, outputFormat, hydrate)
+					}
 					return err
 				}
 				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
@@ -218,6 +221,13 @@ func makeStatusCmd() *cobra.Command {
 
 			changes, err := state.ListChanges(root)
 			if err != nil {
+				// A partially-deleted change (a governed bundle directory that
+				// survived without its change.yaml authority) otherwise dead-ends
+				// status with a raw integrity error. Auto-diagnose the orphan and
+				// route the operator to `slipway delete` instead.
+				if diag := deleteRecoveryStatusView(root); diag != nil {
+					return printStatusView(cmd, root, *diag, outputFormat, hydrate)
+				}
 				return err
 			}
 			var active []model.Change
@@ -225,6 +235,9 @@ func makeStatusCmd() *cobra.Command {
 				if c.Status == model.ChangeStatusActive {
 					active = append(active, c)
 				}
+			}
+			if diag := deleteRecoveryStatusView(root); diag != nil {
+				return printStatusView(cmd, root, *diag, outputFormat, hydrate)
 			}
 			route, err := resolveStatusRouteForRoot(root, active)
 			if err != nil {
@@ -321,6 +334,48 @@ func diagnosticStatusView(message string) *statusView {
 		EvidenceFreshness: "unknown",
 		Diagnostics:       []string{message},
 	}
+}
+
+// deleteRecoveryStatusView builds a diagnostics status view that routes the
+// operator to `slipway delete` when local governed state is abandoned or
+// partially deleted. Returns nil when no delete-recovery state is present, so
+// the caller can surface the original route instead.
+func deleteRecoveryStatusView(root string) *statusView {
+	return deleteRecoveryStatusViewForSlug(root, "")
+}
+
+func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
+	orphans, err := orphanedChangeBundleSlugs(root, slug)
+	if err != nil {
+		return nil
+	}
+	stale, err := staleRuntimeBindingSlugs(root, slug)
+	if err != nil {
+		return nil
+	}
+	if len(orphans) == 0 && len(stale) == 0 {
+		return nil
+	}
+	view := &statusView{
+		ExecutionMode:     "diagnostics",
+		EvidenceFreshness: "unknown",
+	}
+	for _, slug := range orphans {
+		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
+			"governed bundle %q is missing its change.yaml authority; discard it with `slipway delete --change %s`",
+			slug, slug,
+		))
+	}
+	for _, slug := range stale {
+		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
+			"runtime binding for %q remains after its governed bundle was removed; discard it with `slipway delete --change %s`",
+			slug, slug,
+		))
+	}
+	view.Blockers = append(view.Blockers, orphanedChangeBundleReasons(orphans)...)
+	view.Blockers = append(view.Blockers, staleRuntimeBindingReasons(stale)...)
+	view.Recovery = model.BuildRecovery(view.Blockers)
+	return view
 }
 
 func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool) error {

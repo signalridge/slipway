@@ -41,6 +41,7 @@ var frozenAdapterCommandIDs = []string{
 	"cancel",
 	"checkpoint",
 	"codebase-map",
+	"delete",
 	"done",
 	"evidence",
 	"health",
