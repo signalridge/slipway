@@ -1,27 +1,24 @@
 # Decision
 
-{{- if or .ProjectTechStack .ProjectConventions .ProjectTestCmd .ProjectBuildCmd .ProjectLanguages }}
-## Project Context
-- Tech Stack: {{ .ProjectTechStack }}
-- Conventions: {{ .ProjectConventions }}
-- Test Command: {{ .ProjectTestCmd }}
-- Build Command: {{ .ProjectBuildCmd }}
-- Languages: {{ .ProjectLanguages }}
-
-{{- end }}
+<!--
+Author the decision here. The engine owns this structure; you own the substance.
+Run `slipway instructions decision` for the quality bar, the resolved output
+path, and the upstream dependencies (intent.md, requirements.md) to read by path.
+Replace each section's guidance with concrete, change-specific content; an
+unwritten section cannot reach done.
+-->
 
 ## Alternatives Considered
-
-{{ .SeededDecision }}
+<!-- At least two real approaches with tradeoffs, and the selected direction. -->
 
 ## Selected Approach
-{{ .SeededDecisionApproach }}
+<!-- The chosen direction and why, grounded in the alternatives above. -->
 
 ## Interfaces and Data Flow
-{{ .SeededDecisionInterfaces }}
+<!-- Changed interfaces and data flows, or "none" after inspection. -->
 
 ## Rollout and Rollback
-{{ .SeededDecisionRollback }}
+<!-- The concrete rollback path and its verification command. -->
 
 ## Risk
-{{ .SeededDecisionRisk }}
+<!-- Concrete risks found by inspecting the affected code and contracts. -->

@@ -55,7 +55,7 @@ func TestStatsUsesExecutionSummaryForFrozenEvidenceFreshness(t *testing.T) {
 	change.NeedsDiscovery = false
 	change.GuardrailDomain = ""
 	require.NoError(t, state.SaveChange(root, change))
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks

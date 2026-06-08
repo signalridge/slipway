@@ -127,6 +127,15 @@ func TestInScopeProducedBlockersResolveToCanonicalRecovery(t *testing.T) {
 func inScopeProducedRecoverySpecs() []string {
 	return []string{
 		"research_structure_invalid:section \"Findings\" must have non-empty content",
+		"research_section_placeholder:## Alternatives Considered",
+		"decision_structure_invalid:missing required heading \"## Selected Approach\"",
+		"decision_section_placeholder:## Selected Approach",
+		"decision_contract_path_invalid:permission denied",
+		"decision_contract_unreadable",
+		"assurance_contract_missing",
+		"assurance_contract_path_invalid:permission denied",
+		"assurance_contract_unreadable",
+		"assurance_section_placeholder:## Scope Summary",
 		"non_pass_task:t-01",
 		"incomplete_execution_task:t-19",
 		"high_risk_check_missing:external_api_contracts.safety_baseline",
@@ -139,6 +148,10 @@ func inScopeProducedRecoverySpecs() []string {
 func recoveryRelevantCanonicalCodes() []string {
 	exact := map[string]bool{
 		"assurance_structure_invalid":              true,
+		"assurance_contract_missing":               true,
+		"assurance_contract_path_invalid":          true,
+		"assurance_contract_unreadable":            true,
+		"assurance_section_placeholder":            true,
 		"artifact_not_ready":                       true,
 		"artifact_schema_missing":                  true,
 		"closeout_assurance_attestation_missing":   true,
@@ -147,6 +160,10 @@ func recoveryRelevantCanonicalCodes() []string {
 		"dedicated_worktree_metadata_required":     true,
 		"dedicated_worktree_path_invalid":          true,
 		"dedicated_worktree_required":              true,
+		"decision_contract_path_invalid":           true,
+		"decision_contract_unreadable":             true,
+		"decision_section_placeholder":             true,
+		"decision_structure_invalid":               true,
 		"governance_action_required":               true,
 		"governed_bundle_path_invalid":             true,
 		"high_risk_check_failed":                   true,
@@ -164,6 +181,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"non_pass_task":                            true,
 		"preset_confirmation_required":             true,
 		"research_structure_invalid":               true,
+		"research_section_placeholder":             true,
 		"run_slipway_done_to_finalize":             true,
 		"run_slipway_run_to_advance":               true,
 		"ship_gate_blocked":                        true,
@@ -209,6 +227,10 @@ func sampleRecoveryDetail(code string) string {
 	switch code {
 	case "assurance_structure_invalid":
 		return "missing required Evidence section: closeout:assurance_complete=pass"
+	case "assurance_contract_path_invalid", "decision_contract_path_invalid":
+		return "permission denied"
+	case "assurance_section_placeholder":
+		return "## Scope Summary"
 	case "closeout_assurance_attestation_missing":
 		return "final-closeout must record closeout:assurance_complete=pass on standard/strict"
 	case "closeout_goal_verification_reuse_invalid":
@@ -247,8 +269,14 @@ func sampleRecoveryDetail(code string) string {
 		return "plan-audit:assurance.md"
 	case "required_skill_blockers_present", "required_skill_missing", "required_skill_not_passed", "required_skill_not_ready":
 		return "plan-audit"
+	case "decision_section_placeholder":
+		return "## Selected Approach"
+	case "decision_structure_invalid":
+		return "missing required heading \"## Selected Approach\""
 	case "research_structure_invalid":
 		return "section \"Findings\" must have non-empty content"
+	case "research_section_placeholder":
+		return "## Alternatives Considered"
 	case "ship_gate_blocked":
 		return "required_skill_missing:final-closeout"
 	case "scope_contract_changed_files_missing", "scope_contract_missing", "wave_orchestration_stale_task_evidence":
@@ -369,6 +397,58 @@ func TestRecoveryTokensUseCanonicalMessages(t *testing.T) {
 	}
 }
 
+func TestArtifactAuthoringBlockersRouteToInstructions(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		spec    string
+		command string
+	}{
+		{
+			name:    "decision structure",
+			spec:    "decision_structure_invalid:missing required heading \"## Selected Approach\"",
+			command: "slipway instructions decision",
+		},
+		{
+			name:    "decision placeholder",
+			spec:    "decision_section_placeholder:## Selected Approach",
+			command: "slipway instructions decision",
+		},
+		{
+			name:    "research structure",
+			spec:    "research_structure_invalid:section \"Findings\" must have non-empty content",
+			command: "slipway instructions research",
+		},
+		{
+			name:    "research placeholder",
+			spec:    "research_section_placeholder:## Alternatives Considered",
+			command: "slipway instructions research",
+		},
+		{
+			name:    "assurance placeholder",
+			spec:    "assurance_section_placeholder:## Scope Summary",
+			command: "slipway instructions assurance",
+		},
+		{
+			name:    "missing custom artifact",
+			spec:    "missing_required_artifact:my-widget.md",
+			command: "slipway instructions my-widget.md",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			step, ok := recoveryStepFor(ReasonCodeFromSpec(tc.spec))
+			require.True(t, ok)
+			assert.Equal(t, tc.command, step.Command)
+			assert.NotContains(t, step.Remediation, "{")
+		})
+	}
+}
+
 func TestReasonCodeJSONShapeHasNoPresentationFields(t *testing.T) {
 	t.Parallel()
 
@@ -467,6 +547,21 @@ func TestBuildRecoveryPrioritizesVerificationBeforeCloseout(t *testing.T) {
 		"goal-verification recovery must precede final-closeout when both S4 blockers are present")
 }
 
+func TestBuildRecoveryPrioritizesMissingArtifactsByAuthoringOrder(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("missing_required_artifact", "assurance.md"),
+		NewReasonCode("missing_required_artifact", "tasks.md"),
+		NewReasonCode("missing_required_artifact", "decision.md"),
+		NewReasonCode("missing_required_artifact", "requirements.md"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway instructions requirements.md", got.PrimaryCommand)
+	assert.Contains(t, got.PrimaryAction, "requirements.md",
+		"missing artifact recovery must start at the earliest plan authoring input, not the alphabetically first downstream artifact")
+}
+
 func TestReadyStatesSurfaceAdvanceRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -526,6 +621,25 @@ func TestGovernanceActionRemediationStaysCleanWithoutDetail(t *testing.T) {
 	assert.NotContains(t, step.Remediation, ": .")
 	assert.NotContains(t, step.Remediation, "  ")
 	assert.NotContains(t, step.Remediation, "{")
+}
+
+func TestDecisionContractUnreadableRoutesToRepair(t *testing.T) {
+	t.Parallel()
+
+	step, ok := recoveryStepFor(NewReasonCode("decision_contract_unreadable", ""))
+	require.True(t, ok)
+	assert.Equal(t, "slipway repair", step.Command)
+}
+
+func TestMissingTargetFilesRecoveryAppliesToEveryTaskKind(t *testing.T) {
+	t.Parallel()
+
+	rc := NewReasonCode("plan_dimension_key_links_missing_target_files", "t-01")
+	step, ok := recoveryStepFor(rc)
+	require.True(t, ok)
+	assert.Equal(t, "A task is missing target files: t-01", rc.Message)
+	assert.Contains(t, step.Remediation, "every task")
+	assert.NotContains(t, step.Remediation, "code task")
 }
 
 func recoveryCodes(steps []RecoveryStep) []string {

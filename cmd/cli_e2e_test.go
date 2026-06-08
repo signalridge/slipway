@@ -417,7 +417,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		// Write spec with a single requirement.
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)

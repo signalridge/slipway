@@ -34,6 +34,7 @@ func EvaluateGScope(
 	researchContent string,
 	discoveryEvidenceOK bool,
 	worktreeValidationReasons []model.ReasonCode,
+	researchArtifactReasons ...model.ReasonCode,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
 	if change.NeedsDiscovery {
@@ -41,7 +42,9 @@ func EvaluateGScope(
 			reasonCodes = append(reasonCodes, model.NewReasonCode("missing_discovery_evidence", ""))
 		}
 
-		if blockers := artifact.ResearchStructureBlockers(researchContent); len(blockers) > 0 {
+		if len(researchArtifactReasons) > 0 {
+			reasonCodes = append(reasonCodes, researchArtifactReasons...)
+		} else if blockers := artifact.ResearchStructureBlockers(researchContent); len(blockers) > 0 {
 			reasonCodes = append(reasonCodes, blockers...)
 		}
 

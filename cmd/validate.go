@@ -40,6 +40,7 @@ type validateView struct {
 	ActionableNextSkill       *actionableNextSkillView             `json:"actionable_next_skill,omitempty"`
 	RequirementsContract      *artifactContractView                `json:"requirements_contract,omitempty"`
 	TasksContract             *artifactContractView                `json:"tasks_contract,omitempty"`
+	DecisionContract          *artifactContractView                `json:"decision_contract,omitempty"`
 	ScopeContract             *scopeContractView                   `json:"scope_contract,omitempty"`
 	Diagnostics               []string                             `json:"diagnostics,omitempty"`
 	Mode                      string                               `json:"mode,omitempty"`
@@ -220,8 +221,9 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 
 	var requirementsContract *artifactContractView
 	var tasksContract *artifactContractView
+	var decisionContract *artifactContractView
 	if bundleDir, err := state.GovernedBundleDir(root, change); err == nil {
-		contract, err := artifact.EvaluateRequirementsContract(bundleDir, change.Slug)
+		contract, err := artifact.EvaluateRequirementsContract(bundleDir)
 		if err == nil {
 			requirementsContract = &artifactContractView{
 				Status:  string(contract.Status),
@@ -229,12 +231,25 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 				Message: contract.Message,
 			}
 		}
-		tasks, err := artifact.EvaluateTasksContract(bundleDir, change.Slug)
+		tasks, err := artifact.EvaluateTasksContract(bundleDir)
 		if err == nil {
 			tasksContract = &artifactContractView{
 				Status:  string(tasks.Status),
 				Source:  tasks.Source,
 				Message: tasks.Message,
+			}
+		}
+		// decision.md is expanded-schema only; surface its substance contract
+		// just for changes that require it so a core change does not report a
+		// misleading decision_contract: missing.
+		if progression.DecisionArtifactRequired(root, change) {
+			decision, err := artifact.EvaluateDecisionContract(bundleDir)
+			if err == nil {
+				decisionContract = &artifactContractView{
+					Status:  string(decision.Status),
+					Source:  decision.Source,
+					Message: decision.Message,
+				}
 			}
 		}
 	}
@@ -276,6 +291,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.RequirementsContract = requirementsContract
 	view.TasksContract = tasksContract
+	view.DecisionContract = decisionContract
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)

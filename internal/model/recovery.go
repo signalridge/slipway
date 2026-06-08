@@ -110,8 +110,48 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"assurance_structure_invalid": {
-		Remediation:     "Fix assurance.md so it satisfies the required assurance structure, then re-run validation.",
+		Remediation:     "Author assurance.md from the current artifact instructions, replace placeholder scaffold with real verification substance, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_missing": {
+		Remediation:     "Author assurance.md from the current artifact instructions, write the real file, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_path_invalid": {
+		Remediation:     "Repair the governed bundle path for assurance.md before continuing.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_contract_unreadable": {
+		Remediation:     "Fix assurance.md so it is readable before continuing.",
 		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"assurance_section_placeholder": {
+		Remediation:     "Replace the placeholder section in assurance.md with real closeout evidence, then re-run validation.",
+		CommandTemplate: "slipway instructions assurance",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_contract_path_invalid": {
+		Remediation:     "Repair the governed bundle path for decision.md before continuing.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_contract_unreadable": {
+		Remediation:     "Fix decision.md so it is readable before continuing.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_structure_invalid": {
+		Remediation:     "Author decision.md from the current artifact instructions, fix the required decision sections, then re-run validation.",
+		CommandTemplate: "slipway instructions decision",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_section_placeholder": {
+		Remediation:     "Replace the placeholder section in decision.md with a concrete decision, then re-run validation.",
+		CommandTemplate: "slipway instructions decision",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"closeout_goal_verification_reuse_invalid": {
@@ -216,7 +256,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"plan_dimension_key_links_missing_target_files": {
-		Remediation:     "Fix tasks.md so every code task declares target_files.",
+		Remediation:     "Fix tasks.md so every task declares target_files.",
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
@@ -316,8 +356,13 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"research_structure_invalid": {
-		Remediation:     "Fix research.md so it satisfies the required research structure, then re-run validation.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author research.md from the current artifact instructions, fix the required research sections, then re-run validation.",
+		CommandTemplate: "slipway instructions research",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"research_section_placeholder": {
+		Remediation:     "Replace the placeholder section in research.md with evidence-backed research, then re-run validation.",
+		CommandTemplate: "slipway instructions research",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"tasks_plan_changed_since_task_evidence": {
@@ -435,8 +480,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"tasks_checklist_missing": {
-		Remediation:     "Create tasks.md with the governed task checklist before continuing.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author tasks.md from the current artifact instructions, write the real task checklist, then re-run validation.",
+		CommandTemplate: "slipway instructions tasks.md",
 		Class:           RecoveryClassFixScope,
 	},
 	"tasks_checklist_path_invalid": {
@@ -495,8 +540,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"missing_required_artifact": {
-		Remediation:     "Create or restore the required governed artifact {subject}, then re-run validation.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author the required governed artifact {subject}: run `slipway instructions {subject}` for its template, resolved output path, and upstream inputs, write the real file, then re-run validation.",
+		CommandTemplate: "slipway instructions {subject}",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"intake_clarification_incomplete": {
@@ -589,6 +634,10 @@ func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 	rep.Normalize()
 	base := blockerRemediations[rep.Code]
 	parsed := parseBlockerForRecovery(rep, base)
+	priority := recoveryPriority(base)
+	if parsed.Code == "missing_required_artifact" {
+		priority = missingRequiredArtifactRecoveryPriority(parsed.Subject)
+	}
 	return RecoveryStep{
 		Code:          parsed.Code,
 		Subject:       parsed.Subject,
@@ -598,7 +647,26 @@ func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 		Remediation:   fillTemplate(base.Remediation, parsed),
 		Command:       resolveCommandTemplate(base.CommandTemplate, parsed),
 		RecoveryClass: base.Class,
-		priority:      recoveryPriority(base),
+		priority:      priority,
+	}
+}
+
+func missingRequiredArtifactRecoveryPriority(subject string) int {
+	switch strings.TrimSpace(subject) {
+	case "intent.md":
+		return 10
+	case "research.md":
+		return 20
+	case "requirements.md":
+		return 30
+	case "decision.md":
+		return 40
+	case "tasks.md":
+		return 50
+	case "assurance.md":
+		return 60
+	default:
+		return defaultRecoveryPriority
 	}
 }
 

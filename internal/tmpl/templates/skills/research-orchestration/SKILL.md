@@ -54,9 +54,11 @@ approaches** for the change:
 - Recommend one approach with a clear rationale
 - Present alternatives to the user and wait for their selection before proceeding
 
-The selected approach must be reflected in `research.md` under
-`## Alternatives Considered`, and the locked decision recorded in `decision.md`
-under `## Selected Approach`.
+Record the selected approach in `research.md` under
+`## Alternatives Considered` with the evidence and rationale that support it.
+Do not author `decision.md` during research: plan-audit authors the formal
+decision after `requirements.md` exists, using `research.md` as an upstream
+dependency.
 
 ## Codebase Mapping (SHOULD)
 If `input_context.codebase_map_dir` already contains documents, read at least:
@@ -105,12 +107,15 @@ notes: |
 ```
 
 ## Surface Findings
-Write `research.md` using the artifact schema headings directly so `validate`
-and the `G_scope` research gate (surfaced by `slipway next`/`run`) evaluate the
-same structure the host asks you to produce:
+Author `research.md` from `slipway instructions research` — its payload carries
+the template, the resolved output path to write, and the upstream inputs to read
+by path (honor its `context`/`rules` but never copy them into the file). Use the
+artifact schema headings directly so `validate` and the `G_scope` research gate
+(surfaced by `slipway next`/`run`) evaluate the same structure the host asks you
+to produce:
 
 ```markdown
-## Research Findings
+## Alternatives Considered
 
 ### Architecture
 - Affected modules: [list with file paths]
@@ -133,7 +138,7 @@ same structure the host asks you to produce:
 - Infrastructure needs: [new test helpers, fixtures, mocks needed]
 - Verification approach: [how to verify each acceptance criterion]
 
-## Alternatives Considered
+### Options
 - [Approach 1]: [tradeoffs]
 - [Approach 2]: [tradeoffs]
 - Selected: [chosen direction and rationale]
@@ -154,8 +159,9 @@ advances out of `S1_PLAN/research`, the `G_scope` gate checks that discovery
 evidence exists and that the schema-required top-level headings (e.g.
 `## Alternatives Considered`, `## Unknowns`, `## Assumptions`,
 `## Canonical References`) are present and structurally valid — a missing/invalid
-heading surfaces `research_structure_invalid`, missing discovery evidence
-surfaces `missing_discovery_evidence`. The four research dimensions above
+heading surfaces `research_structure_invalid`; a section that still contains only
+the instructions comment surfaces `research_section_placeholder`; missing
+discovery evidence surfaces `missing_discovery_evidence`. The four research dimensions above
 (Architecture, Patterns, Risks, Test Strategy) are required by this host for
 decision-ready research but are not separately gated by the engine; keep them
 complete so the later `S1_PLAN/audit` stage (`slipway-plan-audit`) can build on

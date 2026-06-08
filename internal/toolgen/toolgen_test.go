@@ -529,7 +529,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		// prerequisites (run `slipway init` / an active change) (issue #91).
 		instrSection := referenceSectionFor(ref, "### `slipway instructions`")
 		assert.NotEmpty(t, instrSection, "%s: missing instructions command entry", cfg.ID)
-		assert.Contains(t, instrSection, "reads embedded artifact templates", "%s: instructions reference missing prereq-free declaration", cfg.ID)
+		assert.Contains(t, instrSection, "serves a static template and guidance", "%s: instructions reference missing prereq-free declaration", cfg.ID)
 		assert.NotContains(t, instrSection, "an active change must exist", "%s: instructions reference leaked false active-change prerequisite", cfg.ID)
 		assert.NotContains(t, instrSection, "run `slipway init`", "%s: instructions reference leaked false init prerequisite", cfg.ID)
 		for _, focus := range capability.ExplicitFocusSurfaces() {

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
@@ -100,15 +101,23 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 			if len(task.TargetFiles) == 0 {
 				result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
 			} else {
+				hasPlaceholderTarget := false
 				for _, file := range task.TargetFiles {
 					target := strings.TrimSpace(file)
 					if target == "" {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_invalid_target:%s", id))
 						continue
 					}
+					if artifact.LooksLikeInstructionPlaceholder(target) {
+						hasPlaceholderTarget = true
+						continue
+					}
 					if filepath.IsAbs(target) || strings.Contains(target, "..") {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_out_of_bounds_target:%s:%s", id, target))
 					}
+				}
+				if hasPlaceholderTarget {
+					result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
 				}
 			}
 		}
@@ -422,6 +431,25 @@ func CheckGovernedBundleReady(root string, change model.Change) bool {
 	return len(GovernedBundleBlockers(root, change)) == 0
 }
 
+// RequiredArtifactNames returns the change's required governed artifact set
+// after schema resolution and effective-preset policy are applied.
+func RequiredArtifactNames(root string, change model.Change) []string {
+	resolution := ResolveChangeSchemaDiagnostics(change)
+	requiredPreset := change.WorkflowPreset
+	if policy, err := governance.ResolvePresetPolicy(root, change); err == nil {
+		requiredPreset = policy.EffectivePreset
+	}
+	return artifact.RequiredArtifactsForChange(resolution.Schema, change.NeedsDiscovery, change.WorkflowPreset, requiredPreset)
+}
+
+// DecisionArtifactRequired reports whether decision.md is in the change's
+// required artifact set (expanded/custom schemas may require it). Keep callers
+// on this shared helper so validate, instructions, and progression gates do not
+// drift on preset/schema policy.
+func DecisionArtifactRequired(root string, change model.Change) bool {
+	return slices.Contains(RequiredArtifactNames(root, change), "decision.md")
+}
+
 // GovernedBundleBlockers returns a list of blocker strings for missing governed
 // bundle artifacts. Empty slice means the bundle is ready.
 func GovernedBundleBlockers(root string, change model.Change) []string {
@@ -531,6 +559,39 @@ func AssuranceContractBlockers(root string, change model.Change) []string {
 	return artifact.AssuranceStructureBlockers(string(raw))
 }
 
+// DecisionContractBlockers enforces decision.md substance for changes whose
+// schema requires it (the expanded schema). Parallel to the requirements/tasks
+// substance gates, an unwritten or template-only decision.md (only the
+// <!-- ... --> guidance comments) must not satisfy planning readiness (issue
+// #119). Returns nil when decision.md is not a required artifact, before
+// plan-audit (so pre-audit drafts stay lenient, mirroring the tasks target_files
+// gate), or when the file is absent — a missing required decision.md is owned by
+// GovernedBundleBlockers (missing_required_artifact) rather than double-reported.
+func DecisionContractBlockers(root string, change model.Change) []string {
+	if !DecisionArtifactRequired(root, change) {
+		return nil
+	}
+	// Defer strict substance enforcement to plan-audit and later, mirroring the
+	// tasks checklist gate, so pre-audit planning drafts are not blocked early.
+	if !isAtOrPastPlanAudit(change) {
+		return nil
+	}
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return []string{"decision_contract_path_invalid:" + err.Error()}
+	}
+	path := filepath.Join(bundleDir, "decision.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return []string{"decision_contract_unreadable"}
+	}
+	return artifact.DecisionSubstanceBlockers(string(raw))
+}
+
 // ResolveChangeSchemaDiagnostics resolves the artifact schema for a change
 // using strict, frozen change metadata only.
 func ResolveChangeSchemaDiagnostics(change model.Change) ChangeSchemaResolution {
@@ -582,6 +643,12 @@ func ValidatePlanningReadiness(root string, change model.Change) model.PlanningV
 	checklistResult := ValidateTasksChecklistDetailed(root, change)
 	result.Blockers = append(result.Blockers, model.ReasonCodesFromSpecs(checklistResult.Blockers)...)
 	result.Diagnostics = append(result.Diagnostics, checklistResult.Warnings...)
+
+	// 2b. Decision substance (expanded schema): an unwritten or template-only
+	// decision.md must not satisfy planning readiness, parallel to the
+	// requirements/tasks substance gates (issue #119).
+	decisionBlockers := DecisionContractBlockers(root, change)
+	result.Blockers = append(result.Blockers, model.ReasonCodesFromSpecs(decisionBlockers)...)
 
 	// 3. Schema diagnostics.
 	schemaDiag := ResolveChangeSchemaDiagnostics(change)

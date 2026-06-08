@@ -3405,7 +3405,22 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 		change.WorktreePath = worktreeRoot
 		change.WorktreeBranch = branch
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
+
+		bundlePath := filepath.Join(worktreeRoot, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "research.md", []byte(`
+## Alternatives Considered
+Confirmed current CLI behavior and artifact ownership boundaries.
+
+## Unknowns
+None.
+
+## Assumptions
+The research-orchestration skill authored this artifact before recording pass evidence.
+
+## Canonical References
+- artifacts/changes/`+change.Slug+`/research.md
+`)))
 
 		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,

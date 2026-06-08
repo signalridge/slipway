@@ -1,22 +1,38 @@
 {{- define "command-instructions-body" -}}
 # Instructions
 
-Show the embedded template and authoring guidance (required sections and the
-quality bar) for a governed artifact.
+Show the authoring contract for a governed artifact or codebase-map doc: the
+template (required sections), the quality bar, and — inside an active change —
+the resolved output path, the dependency/unlock graph, and tagged background to
+honor while authoring. Read it before writing so you author the real file
+straight to the right path instead of guessing headings.
 
 ## Invocation
 ```bash
-slipway instructions <artifact> --json
+slipway instructions <artifact> [--change <slug>] [--json]
 ```
-`<artifact>` is one of: `assurance`, `decision`, `intent`, `requirements`,
-`research`, `tasks`.
+`<artifact>` is one of the governed bundle artifacts — `intent`, `requirements`,
+`decision`, `research`, `tasks`, `assurance` — or a repo-scoped codebase-map doc
+— `stack`, `architecture`, `structure`, `conventions`, `integrations`,
+`testing`, `concerns`. The `.md` file name (e.g. `decision.md`) also resolves.
 
 ## Contract
-- Read-only and prereq-free: it reads embedded artifact templates only, so it
-  needs no `slipway init` and no active change.
-- Use it before authoring an artifact to get the exact required structure rather
-  than guessing the headings.
+- Read-only. Serves a static template + guidance with no `slipway init` and no
+  active change; it never fails just because no change is active.
+- Inside a governed change (auto-detected, or named with `--change <slug>`) it
+  additionally returns `resolved_output_path`, the `dependencies` to read by path
+  (each with a done flag), the artifacts this one `unlocks`, and tagged
+  `context`/`rules` to honor but not copy into the artifact. An explicit
+  `--change` that cannot be resolved fails closed instead of silently serving the
+  static exemplar.
+- Codebase-map docs are repo-scoped and advisory: they resolve their output path
+  under `artifacts/codebase/` without an active change, and their `context` is
+  baseline facts to preserve and extend into the doc — not do-not-copy
+  background. In JSON, `context_is_baseline: true` marks this copy policy.
 
 ## Flags
-- `--json`: JSON output
+- `--change <slug>`: author against a specific governed change (defaults to the
+  active change).
+- `--json`: JSON output (adds `resolved_output_path`, `dependencies`, `unlocks`,
+  `context`, `context_is_baseline`, `rules`).
 {{- end -}}
