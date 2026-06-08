@@ -85,23 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install syft
-        # Install via the official script with retries: GitHub intermittently
-        # returns HTTP 504 on the anchore/syft release pages, and the
-        # download-syft action has no retry, so a single blip fails the workflow.
-        env:
-          SYFT_VERSION: v1.45.1
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-              | sh -s -- -b /usr/local/bin "$SYFT_VERSION"; then
-              syft version
-              exit 0
-            fi
-            echo "::warning::syft install attempt ${attempt} failed; retrying in $((attempt * 10))s"
-            sleep $((attempt * 10))
-          done
-          echo "::error::Failed to install syft after 5 attempts"
-          exit 1
+        uses: anchore/sbom-action/download-syft@v0
       - name: Generate SBOM
         run: |
           syft . -o spdx-json > sbom.spdx.json
