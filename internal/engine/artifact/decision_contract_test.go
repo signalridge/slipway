@@ -19,10 +19,10 @@ func TestDecisionSubstanceBlockers(t *testing.T) {
 	template, err := RenderArtifactExample("decision.md")
 	require.NoError(t, err)
 	templateBlockers := DecisionSubstanceBlockers(template)
-	require.Len(t, templateBlockers, 5, "every comment-only required section must be flagged")
-	for _, b := range templateBlockers {
-		assert.Contains(t, b, "decision_section_placeholder:", "the raw instructions decision template must not pass")
-	}
+	require.Len(t, templateBlockers, 1,
+		"comment-only required sections must fail closed at the structure layer")
+	assert.Contains(t, templateBlockers[0], "decision_structure_invalid:")
+	assert.Contains(t, templateBlockers[0], "non-empty content")
 
 	// Legacy scaffold regression: existing active changes may still carry the
 	// pre-#119 seeded prose. It is not an HTML comment, but it is still unwritten
@@ -106,7 +106,7 @@ func TestEvaluateDecisionContract(t *testing.T) {
 		res, err := EvaluateDecisionContract(bundleDir)
 		require.NoError(t, err)
 		assert.Equal(t, DecisionContractStatusInvalid, res.Status)
-		assert.Contains(t, res.Message, "decision_section_placeholder")
+		assert.Contains(t, res.Message, "decision_structure_invalid")
 	})
 
 	t.Run("valid authored", func(t *testing.T) {

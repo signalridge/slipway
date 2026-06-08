@@ -313,11 +313,10 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 // directly by the host skill (via `slipway instructions <artifact>`) rather than
 // scaffolded by the engine. The engine defers creation so an un-authored required
 // artifact surfaces as missing (fail-closed), not a passing placeholder the skill
-// must overwrite (issue #119). research.md is excluded: it is governed by the
-// discovery evidence gate (G_scope), not the missing-artifact gate.
+// must overwrite (issue #119).
 func deferredToSkillAuthoring(name string) bool {
 	switch name {
-	case "requirements.md", "decision.md", "tasks.md":
+	case "requirements.md", "decision.md", "research.md", "tasks.md":
 		return true
 	default:
 		return false
@@ -339,32 +338,20 @@ func complexityRank(level string) int {
 	}
 }
 
-// EnsureResearchArtifactForChange ensures research.md exists in the governed bundle.
+// EnsureResearchArtifactForChange ensures the governed bundle directory exists
+// for research authoring. research.md itself stays absent until the
+// research-orchestration host writes the real file from `slipway instructions
+// research`, so an un-authored research artifact fails closed as missing.
 func EnsureResearchArtifactForChange(root string, change model.Change) error {
 	base, err := state.GovernedBundleDir(root, change)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return err
-	}
-
-	path := filepath.Join(base, "research.md")
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-
-	rendered, err := renderTemplateWithFallback(root, "research.md", "", buildTemplateData(change))
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(rendered), 0o644)
+	return os.MkdirAll(base, 0o755)
 }
 
 // validateSectionStructure validates that content contains the given headings
-// in order, each with at least one non-empty line of content beneath it.
+// in order, each with at least one non-comment content line beneath it.
 func validateSectionStructure(content string, headings []string) error {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	indices := make([]int, 0, len(headings))
@@ -391,14 +378,8 @@ func validateSectionStructure(content string, headings []string) error {
 		if i+1 < len(indices) {
 			end = indices[i+1]
 		}
-		hasContent := false
-		for _, line := range lines[start:end] {
-			if strings.TrimSpace(line) != "" {
-				hasContent = true
-				break
-			}
-		}
-		if !hasContent {
+		body := strings.Join(lines[start:end], "\n")
+		if strings.TrimSpace(stringutil.StripHTMLComments(body)) == "" {
 			return fmt.Errorf("section %q must have non-empty content", heading)
 		}
 	}

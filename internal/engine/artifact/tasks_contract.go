@@ -108,6 +108,14 @@ func TaskSubstanceBlockers(content string) []string {
 		if len(task.TargetFiles) == 0 {
 			blockers = append(blockers, fmt.Sprintf(
 				"task %s lists no target_files; name the files or evidence targets that bound it", id))
+		} else {
+			for _, file := range task.TargetFiles {
+				target := strings.TrimSpace(file)
+				if LooksLikeInstructionPlaceholder(target) {
+					blockers = append(blockers, fmt.Sprintf(
+						"task %s has a placeholder target_files entry (%q); name concrete files or evidence targets", id, target))
+				}
+			}
 		}
 	}
 	return blockers

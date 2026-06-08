@@ -12,6 +12,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/stringutil"
 	"github.com/spf13/cobra"
 )
 
@@ -31,9 +32,10 @@ var instructionsArtifacts = map[string]string{
 }
 
 // instructionsDependency names an upstream artifact this one depends on, with a
-// path the authoring skill reads lazily and a done flag (the upstream file
-// already exists on disk). Mirrors OpenSpec's dependency-as-path model: upstream
-// inputs are referenced by path, never inlined into the produced artifact.
+// path the authoring skill reads lazily and a done flag (the upstream artifact
+// satisfies the engine-owned contract). Mirrors OpenSpec's dependency-as-path
+// model: upstream inputs are referenced by path, never inlined into the produced
+// artifact.
 type instructionsDependency struct {
 	Artifact string `json:"artifact"`
 	Path     string `json:"path"`
@@ -92,8 +94,7 @@ func instructionsGuidance(name string) string {
 			"is rejected on expanded-schema plan readiness."
 	case "research":
 		return "Author evidence-backed research with alternatives, unknowns, assumptions, and canonical references. " +
-			"The engine may create a comment-only research scaffold for discovery; replace the guidance comments " +
-			"with concrete findings before advancing."
+			"The engine does not seed this body; write the real file from these instructions before advancing."
 	case "intent":
 		return "Use the intent structure to preserve confirmed intake facts and scope boundaries. The engine may " +
 			"already have created this file during intake; keep user-confirmed substance and replace placeholder " +
@@ -305,8 +306,11 @@ func customArtifactInstructionsView(
 		Guidance: instructionsGuidance(name),
 		Template: content,
 	}
-	if err := enrichInstructionsView(cmd, &view, changeSlug, spec.Name); err != nil {
-		return instructionsView{}, false, err
+	if err := enrichInstructionsViewForChange(&view, root, change, spec.Name); err != nil {
+		if explicit {
+			return instructionsView{}, false, err
+		}
+		warnInstructionsStaticFallback(cmd, err)
 	}
 	return view, true, nil
 }
@@ -346,10 +350,7 @@ func enrichInstructionsView(cmd *cobra.Command, view *instructionsView, changeSl
 	}
 	root, err := projectRootFromCommand(cmd)
 	if err != nil {
-		if explicit {
-			return err
-		}
-		return nil
+		return fail(err)
 	}
 	ref, err := resolveActiveChangeRef(root, changeSlug)
 	if err != nil {
@@ -359,9 +360,21 @@ func enrichInstructionsView(cmd *cobra.Command, view *instructionsView, changeSl
 	if err != nil {
 		return fail(err)
 	}
+	if err := enrichInstructionsViewForChange(view, root, change, artifactFile); err != nil {
+		return fail(err)
+	}
+	return nil
+}
+
+func enrichInstructionsViewForChange(
+	view *instructionsView,
+	root string,
+	change model.Change,
+	artifactFile string,
+) error {
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
-		return fail(err)
+		return err
 	}
 
 	view.ResolvedOutputPath = state.DisplayPath(root, artifact.ResolveArtifactPath(paths.GovernedBundleDir, artifactFile))
@@ -382,7 +395,7 @@ func enrichInstructionsView(cmd *cobra.Command, view *instructionsView, changeSl
 				view.Dependencies = append(view.Dependencies, instructionsDependency{
 					Artifact: dep,
 					Path:     state.DisplayPath(root, depPath),
-					Done:     statErr == nil,
+					Done:     instructionsDependencyDone(paths.GovernedBundleDir, dep, statErr),
 				})
 			}
 			continue
@@ -396,11 +409,37 @@ func enrichInstructionsView(cmd *cobra.Command, view *instructionsView, changeSl
 			}
 		}
 	}
-	sort.Strings(view.Unlocks)
+	view.Unlocks = stringutil.UniqueSorted(view.Unlocks)
 
 	view.Context = renderInstructionsContext(change.ProjectContext)
 	view.Rules = instructionsRules(change)
 	return nil
+}
+
+func instructionsDependencyDone(bundleDir string, artifactName string, statErr error) bool {
+	if statErr != nil {
+		return false
+	}
+
+	switch artifactName {
+	case "requirements.md":
+		result, err := artifact.EvaluateRequirementsContract(bundleDir)
+		return err == nil && result.Status == artifact.RequirementsContractStatusValid
+	case "decision.md":
+		result, err := artifact.EvaluateDecisionContract(bundleDir)
+		return err == nil && result.Status == artifact.DecisionContractStatusValid
+	case "tasks.md":
+		result, err := artifact.EvaluateTasksContract(bundleDir)
+		return err == nil && result.Status == artifact.TasksContractStatusValid
+	case "research.md":
+		data, err := os.ReadFile(artifact.ResolveArtifactPath(bundleDir, artifactName))
+		return err == nil && len(artifact.ResearchStructureBlockers(string(data))) == 0
+	case "assurance.md":
+		data, err := os.ReadFile(artifact.ResolveArtifactPath(bundleDir, artifactName))
+		return err == nil && len(artifact.AssuranceStructureBlockers(string(data))) == 0
+	default:
+		return true
+	}
 }
 
 func warnInstructionsStaticFallback(cmd *cobra.Command, err error) {

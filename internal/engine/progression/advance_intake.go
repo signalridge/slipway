@@ -254,8 +254,8 @@ func enterPlanningFromIntake(root string, change *model.Change, clearResearchEvi
 			return nil, nil, err
 		}
 		sideEffects = append(sideEffects, SideEffect{
-			Kind:   "scaffolded_research",
-			Detail: "research.md created or verified for S1_PLAN/research",
+			Kind:   "deferred_research_authoring",
+			Detail: "research.md will be authored by research-orchestration via slipway instructions research",
 		})
 	}
 	return sideEffects, cleared, nil

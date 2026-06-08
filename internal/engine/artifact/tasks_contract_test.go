@@ -17,6 +17,10 @@ func TestTaskSubstanceBlockers(t *testing.T) {
 	mechanical := "# Tasks\n## Task List\n- [ ] `t-01` Pending task objective\n  - wave: 1\n  - covers: [REQ-001]\n"
 	assert.NotEmpty(t, TaskSubstanceBlockers(mechanical), "placeholder objective must be rejected")
 
+	copiedInstructionObjective := "# Tasks\n## Task List\n- [ ] `t-01` <concrete task objective>\n  - wave: 1\n  - target_files: [\"internal/engine/artifact/tasks_contract.go\"]\n  - covers: [REQ-001]\n"
+	assert.NotEmpty(t, TaskSubstanceBlockers(copiedInstructionObjective),
+		"copied instructions objective placeholder must be rejected")
+
 	authored := "# Tasks\n## Task List\n- [ ] `t-01` Implement the substance gate in requirements_contract.go\n  - wave: 1\n  - target_files: [\"internal/engine/artifact/requirements_contract.go\"]\n  - covers: [REQ-001]\n"
 	assert.Empty(t, TaskSubstanceBlockers(authored), "authored tasks must pass")
 
@@ -58,6 +62,12 @@ func TestTaskSubstanceBlockers(t *testing.T) {
 	require.Len(t, verificationNoTargetsBlockers, 1, "a non-code task with no target_files yields exactly the target_files blocker")
 	assert.Contains(t, verificationNoTargetsBlockers[0], "target_files",
 		"the blocker must name the missing target_files")
+
+	placeholderTargets := "# Tasks\n## Task List\n- [ ] `t-01` Implement the parser-based code gate in tasks_contract.go\n  - wave: 1\n  - target_files: [<path/to/file.go>]\n  - task_kind: code\n  - covers: [REQ-001]\n"
+	placeholderTargetBlockers := TaskSubstanceBlockers(placeholderTargets)
+	require.Len(t, placeholderTargetBlockers, 1, "a placeholder target_files entry yields exactly the target_files blocker")
+	assert.Contains(t, placeholderTargetBlockers[0], "placeholder target_files",
+		"the blocker must name the copied target_files placeholder")
 
 	template, err := RenderArtifactExample("tasks.md")
 	require.NoError(t, err)
@@ -149,5 +159,14 @@ func TestEvaluateTasksContract(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, TasksContractStatusInvalid, res.Status)
 		assert.Contains(t, res.Message, "target_files")
+	})
+
+	t.Run("invalid placeholder target_files", func(t *testing.T) {
+		t.Parallel()
+		bundleDir := write(t, "# Tasks\n## Task List\n- [ ] `t-01` Implement target_files placeholder rejection\n  - wave: 1\n  - target_files: [<path/to/file.go>]\n  - task_kind: code\n  - covers: [REQ-001]\n")
+		res, err := EvaluateTasksContract(bundleDir)
+		require.NoError(t, err)
+		assert.Equal(t, TasksContractStatusInvalid, res.Status)
+		assert.Contains(t, res.Message, "placeholder target_files")
 	})
 }

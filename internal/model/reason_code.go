@@ -218,7 +218,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"plan_dimension_key_links_missing_target_files": {
 		Severity: ReasonSeverityError,
-		Message:  "A code task is missing target files",
+		Message:  "A task is missing target files",
 	},
 	"plan_dimension_scope_invalid_target": {
 		Severity: ReasonSeverityError,

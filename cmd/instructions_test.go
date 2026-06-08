@@ -66,7 +66,7 @@ func TestInstructionsJSONIncludesTemplateAndGuidance(t *testing.T) {
 func TestInstructionsGuidanceMatchesScaffoldOwnership(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"intent", "research", "assurance"} {
+	for _, name := range []string{"intent", "assurance"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -78,6 +78,19 @@ func TestInstructionsGuidanceMatchesScaffoldOwnership(t *testing.T) {
 				"scaffolded artifacts must not claim there is no seeded body")
 			assert.Contains(t, view.Guidance, "engine may",
 				"guidance should acknowledge engine-owned scaffold behavior")
+		})
+	}
+
+	for _, name := range []string{"requirements", "decision", "research", "tasks"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			out, err := runInstructions(t, name, "--json")
+			require.NoError(t, err)
+			var view instructionsView
+			require.NoError(t, json.Unmarshal([]byte(out), &view))
+			assert.Contains(t, view.Guidance, "engine does not seed",
+				"skill-authored artifacts must not be described as engine scaffold outputs")
 		})
 	}
 }
@@ -227,6 +240,42 @@ func TestInstructionsChangeAwareAuthoringPayload(t *testing.T) {
 	})
 }
 
+func TestInstructionsDependencyDoneRequiresValidUpstreamArtifact(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "instructions dependency validity")
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "intent.md",
+			[]byte("# Intent\n\n## Summary\ninvalid upstream dependency\n")))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "requirements.md"), []byte(`# Requirements
+
+## Requirements
+
+<!-- template-only; no authored requirement blocks -->
+`), 0o644))
+
+		stdout, stderr, err := runRootCommandIn(root, []string{
+			"instructions", "decision", "--json", "--change", slug,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+
+		var view instructionsView
+		require.NoError(t, json.Unmarshal([]byte(stdout), &view))
+
+		done := map[string]bool{}
+		for _, dep := range view.Dependencies {
+			done[dep.Artifact] = dep.Done
+		}
+		require.Contains(t, done, "requirements.md")
+		assert.False(t, done["requirements.md"],
+			"invalid requirements.md must not satisfy the decision dependency")
+	})
+}
+
 func TestInstructionsUnlocksUseEffectivePreset(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -303,7 +352,7 @@ func TestInstructionsCustomArtifactUsesActiveChangeSchema(t *testing.T) {
 		change.CustomArtifacts = []model.ArtifactDefinition{
 			{Name: "intent.md"},
 			{Name: "my-widget.md", DependsOn: []string{"intent.md"}},
-			{Name: "widget-report.md", DependsOn: []string{"my-widget.md"}},
+			{Name: "widget-report.md", DependsOn: []string{"my-widget.md", "my-widget.md"}},
 		}
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -324,7 +373,8 @@ func TestInstructionsCustomArtifactUsesActiveChangeSchema(t *testing.T) {
 		require.Len(t, view.Dependencies, 1)
 		assert.Equal(t, "intent.md", view.Dependencies[0].Artifact)
 		assert.False(t, view.Dependencies[0].Done)
-		assert.Contains(t, view.Unlocks, "widget-report.md")
+		assert.Equal(t, []string{"widget-report.md"}, view.Unlocks,
+			"unlocks must be sorted and deduplicated even if a malformed custom schema repeats dependencies")
 	})
 }
 
@@ -359,6 +409,22 @@ func TestInstructionsOmittedChangeFallsBackToStatic(t *testing.T) {
 		assert.Equal(t, "decision", view.Artifact)
 		assert.Empty(t, view.ResolvedOutputPath, "no active change resolves to the static exemplar")
 	})
+}
+
+func TestInstructionsOmittedChangeWarnsWhenProjectRootUnavailable(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	stdout, stderr, err := runRootCommandIn(root, []string{"instructions", "decision", "--json"})
+	require.NoError(t, err)
+	assert.Contains(t, stderr, "warning: serving static instructions")
+	assert.Contains(t, stderr, "workspace is not initialized")
+
+	var view instructionsView
+	require.NoError(t, json.Unmarshal([]byte(stdout), &view))
+	assert.Equal(t, "decision", view.Artifact)
+	assert.Empty(t, view.ResolvedOutputPath,
+		"uninitialized workspace falls back to the static exemplar, not a resolved payload")
 }
 
 func TestInstructionsOmittedChangeWarnsWhenActiveContextAmbiguous(t *testing.T) {

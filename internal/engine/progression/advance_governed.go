@@ -138,7 +138,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 
 	preTransitionSideEffects := make([]SideEffect, 0, 2)
 
-	// Ensure research artifact exists for discovery changes entering S1_PLAN/research.
+	// Ensure the bundle directory exists for discovery changes entering
+	// S1_PLAN/research; research.md itself is authored by research-orchestration.
 	isResearchEntry := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepResearch
 	if isResearchEntry && change.NeedsDiscovery {
 		if err := artifact.EnsureResearchArtifactForChange(root, change); err != nil {
@@ -952,8 +953,15 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 	}
 	researchPath := filepath.Join(paths.GovernedBundleDir, "research.md")
 	researchContent := ""
+	var researchArtifactReasons []model.ReasonCode
 	if data, err := os.ReadFile(researchPath); err == nil {
 		researchContent = string(data)
+	} else if os.IsNotExist(err) {
+		researchArtifactReasons = append(researchArtifactReasons,
+			model.NewReasonCode("missing_required_artifact", "research.md"))
+	} else {
+		researchArtifactReasons = append(researchArtifactReasons,
+			model.NewReasonCode("required_artifact_unreadable", "research.md"))
 	}
 
 	_, discoveryOK := passingSkills[SkillResearchOrchestration]
@@ -969,5 +977,5 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 			return gate.GateEvaluation{}, wtErr
 		}
 	}
-	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons), nil
+	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, researchArtifactReasons...), nil
 }

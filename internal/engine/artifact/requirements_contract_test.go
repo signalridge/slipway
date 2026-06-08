@@ -143,6 +143,20 @@ THEN pending — replace with the observable expected outcome
 `,
 			wantMessage: "placeholder content",
 		},
+		{
+			name: "copied instructions placeholders",
+			content: `# Requirements
+
+### Requirement: <short requirement title>
+REQ-001: The system MUST <required behavior>.
+
+#### Scenario: <scenario name>
+GIVEN <precondition>
+WHEN <triggering action>
+THEN <observable expected outcome>
+`,
+			wantMessage: "placeholder content",
+		},
 	}
 
 	for _, tt := range tests {
@@ -170,6 +184,8 @@ func TestLooksLikeTemplatePlaceholderRecognizesRequirementsTautologies(t *testin
 		"WHEN the requirement is implemented in the target flow",
 		"Define requirements based on the initial request: foo.",
 		"Pending — replace with the normative requirement.",
+		"<required behavior>",
+		"<path/to/file.go>",
 	} {
 		assert.True(t, LooksLikeTemplatePlaceholder(s), "should detect placeholder: %q", s)
 	}

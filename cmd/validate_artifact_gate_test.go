@@ -233,11 +233,11 @@ THEN G_plan remains blocked with a decision contract blocker.
 	require.NoError(t, err)
 
 	assert.False(t, view.CanAdvance)
-	requireReasonSpecPrefix(t, model.ReasonSpecs(view.Blockers), "decision_section_placeholder:")
+	requireReasonSpecPrefix(t, model.ReasonSpecs(view.Blockers), "decision_structure_invalid:")
 	require.Contains(t, view.GateDetails, "G_plan")
 	assert.Equal(t, model.GateStatusBlocked, view.GateDetails["G_plan"].Status)
 	requireReasonSpecPrefix(t, model.ReasonSpecs(view.GateDetails["G_plan"].ReasonCodes),
-		"decision_section_placeholder:")
+		"decision_structure_invalid:")
 }
 
 func requireReasonSpecPrefix(t *testing.T, specs []string, prefix string) {

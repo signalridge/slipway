@@ -101,15 +101,23 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 			if len(task.TargetFiles) == 0 {
 				result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
 			} else {
+				hasPlaceholderTarget := false
 				for _, file := range task.TargetFiles {
 					target := strings.TrimSpace(file)
 					if target == "" {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_invalid_target:%s", id))
 						continue
 					}
+					if artifact.LooksLikeInstructionPlaceholder(target) {
+						hasPlaceholderTarget = true
+						continue
+					}
 					if filepath.IsAbs(target) || strings.Contains(target, "..") {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_out_of_bounds_target:%s:%s", id, target))
 					}
+				}
+				if hasPlaceholderTarget {
+					result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_key_links_missing_target_files:%s", id))
 				}
 			}
 		}

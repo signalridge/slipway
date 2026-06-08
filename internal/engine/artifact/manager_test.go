@@ -53,7 +53,7 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func TestScaffoldGovernedBundleNeedsDiscoveryAddsResearch(t *testing.T) {
+func TestScaffoldGovernedBundleNeedsDiscoveryDefersResearchAuthoring(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	worktreeRoot := t.TempDir()
@@ -64,7 +64,7 @@ func TestScaffoldGovernedBundleNeedsDiscoveryAddsResearch(t *testing.T) {
 	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	_, err := os.Stat(filepath.Join(worktreeRoot, "artifacts", "changes", "my-change", "research.md"))
-	require.NoError(t, err)
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestScaffoldGovernedBundleNoDiscoverySkipsResearch(t *testing.T) {
@@ -88,7 +88,7 @@ func TestScaffoldGovernedBundleL1CreatesBundle(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestScaffoldGovernedBundleDiscoveryCreatesResearch(t *testing.T) {
+func TestScaffoldGovernedBundleDiscoveryDefersResearch(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 
@@ -97,7 +97,7 @@ func TestScaffoldGovernedBundleDiscoveryCreatesResearch(t *testing.T) {
 	require.NoError(t, ScaffoldGovernedBundleForChange(root, change, ""))
 
 	_, err := os.Stat(filepath.Join(root, "artifacts", "changes", change.Slug, "research.md"))
-	require.NoError(t, err)
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 // TestArtifactTemplatesParseUnderEngineParsers pins the instructions exemplars
@@ -106,10 +106,28 @@ func TestScaffoldGovernedBundleDiscoveryCreatesResearch(t *testing.T) {
 // make skill-authored files unparseable (issue #119).
 func TestArtifactTemplatesParseUnderEngineParsers(t *testing.T) {
 	t.Parallel()
-	req, err := RenderArtifactExample("requirements.md")
+	reqTemplate, err := RenderArtifactExample("requirements.md")
 	require.NoError(t, err)
-	assert.NotPanics(t, func() { _ = ParseRequirementBlocks(req) },
-		"requirements template must parse under the requirement parser")
+	assert.Contains(t, reqTemplate, "### Requirement: <short requirement title>",
+		"requirements instructions must keep the format marker the parser expects authors to fill")
+	req := `# Requirements
+
+## Requirements
+
+### Requirement: Authenticated access
+REQ-001: The system MUST reject protected-route requests that do not carry valid credentials.
+
+#### Scenario: Missing credentials
+GIVEN a request without valid credentials
+WHEN it reaches a protected route
+THEN the system returns 401 and does not serve the protected resource.
+`
+	reqBlocks := ParseRequirementBlocks(req)
+	require.Len(t, reqBlocks, 1, "filled requirements example must parse into one block")
+	assert.Equal(t, "Authenticated access", reqBlocks[0].Name)
+	assert.Equal(t, "REQ-001", reqBlocks[0].StableID)
+	assert.Empty(t, RequirementSubstanceBlockers(req),
+		"filled requirements example must satisfy the requirements substance parser")
 
 	tasks, err := RenderArtifactExample("tasks.md")
 	require.NoError(t, err)
@@ -165,10 +183,10 @@ Docs and specs that constrain this work.`
 	template, err := RenderArtifactExample("research.md")
 	require.NoError(t, err)
 	blockers = ResearchStructureBlockers(template)
-	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Alternatives Considered")
-	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Unknowns")
-	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Assumptions")
-	assert.Contains(t, model.ReasonSpecs(blockers), "research_section_placeholder:## Canonical References")
+	require.Len(t, blockers, 1,
+		"comment-only instructions template sections must fail closed at the structure layer")
+	assert.Equal(t, "research_structure_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "non-empty content")
 
 	legacySeeded := `# Research
 

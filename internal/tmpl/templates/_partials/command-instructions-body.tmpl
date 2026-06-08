@@ -28,11 +28,11 @@ slipway instructions <artifact> [--change <slug>] [--json]
 - Codebase-map docs are repo-scoped and advisory: they resolve their output path
   under `artifacts/codebase/` without an active change, and their `context` is
   baseline facts to preserve and extend into the doc — not do-not-copy
-  background.
+  background. In JSON, `context_is_baseline: true` marks this copy policy.
 
 ## Flags
 - `--change <slug>`: author against a specific governed change (defaults to the
   active change).
 - `--json`: JSON output (adds `resolved_output_path`, `dependencies`, `unlocks`,
-  `context`, `rules`).
+  `context`, `context_is_baseline`, `rules`).
 {{- end -}}

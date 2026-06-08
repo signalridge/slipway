@@ -547,6 +547,21 @@ func TestBuildRecoveryPrioritizesVerificationBeforeCloseout(t *testing.T) {
 		"goal-verification recovery must precede final-closeout when both S4 blockers are present")
 }
 
+func TestBuildRecoveryPrioritizesMissingArtifactsByAuthoringOrder(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("missing_required_artifact", "assurance.md"),
+		NewReasonCode("missing_required_artifact", "tasks.md"),
+		NewReasonCode("missing_required_artifact", "decision.md"),
+		NewReasonCode("missing_required_artifact", "requirements.md"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway instructions requirements.md", got.PrimaryCommand)
+	assert.Contains(t, got.PrimaryAction, "requirements.md",
+		"missing artifact recovery must start at the earliest plan authoring input, not the alphabetically first downstream artifact")
+}
+
 func TestReadyStatesSurfaceAdvanceRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -606,6 +621,25 @@ func TestGovernanceActionRemediationStaysCleanWithoutDetail(t *testing.T) {
 	assert.NotContains(t, step.Remediation, ": .")
 	assert.NotContains(t, step.Remediation, "  ")
 	assert.NotContains(t, step.Remediation, "{")
+}
+
+func TestDecisionContractUnreadableRoutesToRepair(t *testing.T) {
+	t.Parallel()
+
+	step, ok := recoveryStepFor(NewReasonCode("decision_contract_unreadable", ""))
+	require.True(t, ok)
+	assert.Equal(t, "slipway repair", step.Command)
+}
+
+func TestMissingTargetFilesRecoveryAppliesToEveryTaskKind(t *testing.T) {
+	t.Parallel()
+
+	rc := NewReasonCode("plan_dimension_key_links_missing_target_files", "t-01")
+	step, ok := recoveryStepFor(rc)
+	require.True(t, ok)
+	assert.Equal(t, "A task is missing target files: t-01", rc.Message)
+	assert.Contains(t, step.Remediation, "every task")
+	assert.NotContains(t, step.Remediation, "code task")
 }
 
 func recoveryCodes(steps []RecoveryStep) []string {

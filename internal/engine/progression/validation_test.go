@@ -75,6 +75,72 @@ func TestValidateTasksChecklist_MissingFields(t *testing.T) {
 	}
 }
 
+func TestValidateTasksChecklist_RejectsInstructionPlaceholderTargetFilesAtPlanAudit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "test-change"
+	tasksDir := filepath.Join(dir, "artifacts", "changes", slug)
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `# Tasks
+
+- [ ] ` + "`t-01`" + ` implement target placeholder rejection
+  - wave: 1
+  - target_files: [<path/to/file.go>]
+  - task_kind: code
+`
+	if err := os.WriteFile(filepath.Join(tasksDir, "tasks.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	change := model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepAudit,
+	}
+	blockers := ValidateTasksChecklistDetailed(dir, change).Blockers
+	for _, blocker := range blockers {
+		if blocker == "plan_dimension_key_links_missing_target_files:t-01" {
+			return
+		}
+	}
+	t.Fatalf("expected placeholder target_files to block as missing concrete target_files, got %v", blockers)
+}
+
+func TestValidateTasksChecklist_RejectsPlaceholderObjectiveAtPlanAudit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "test-change"
+	tasksDir := filepath.Join(dir, "artifacts", "changes", slug)
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Pending task objective
+  - wave: 1
+  - target_files: [main.go]
+  - task_kind: verification
+`
+	if err := os.WriteFile(filepath.Join(tasksDir, "tasks.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	change := model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepAudit,
+	}
+	blockers := ValidateTasksChecklistDetailed(dir, change).Blockers
+	for _, blocker := range blockers {
+		if blocker == "plan_dimension_completeness_missing_objective:t-01" {
+			return
+		}
+	}
+	t.Fatalf("expected placeholder objective to block as missing concrete objective, got %v", blockers)
+}
+
 func assertChecklistCoverageBlocker(t *testing.T, slug, coverRef, specContent, wantBlocker string) {
 	t.Helper()
 
@@ -381,9 +447,8 @@ func TestDecisionContractBlockers(t *testing.T) {
 		root := writeDecision(t, "dec-tmpl", template)
 		blockers := DecisionContractBlockers(root, expandedAudit("dec-tmpl"))
 		require.NotEmpty(t, blockers, "an unedited template-only decision.md must block planning readiness")
-		for _, b := range blockers {
-			require.Contains(t, b, "decision_section_placeholder:")
-		}
+		require.Contains(t, blockers[0], "decision_structure_invalid:")
+		require.Contains(t, blockers[0], "non-empty content")
 	})
 
 	t.Run("authored decision passes", func(t *testing.T) {
@@ -418,7 +483,8 @@ func TestDecisionContractBlockers(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		blockers := DecisionContractBlockers(root, change)
 		require.NotEmpty(t, blockers, "post-plan states must still enforce decision substance")
-		require.Contains(t, blockers[0], "decision_section_placeholder:")
+		require.Contains(t, blockers[0], "decision_structure_invalid:")
+		require.Contains(t, blockers[0], "non-empty content")
 	})
 
 	t.Run("core schema does not require decision substance", func(t *testing.T) {

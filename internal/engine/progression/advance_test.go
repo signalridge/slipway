@@ -719,11 +719,11 @@ S1 research must require fresh research evidence.
 	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
 		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
 	}
-	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
-		t.Fatalf("expected research artifact to be scaffolded, got %+v", summary.SideEffects)
+	if !hasSideEffect(summary.SideEffects, "deferred_research_authoring") {
+		t.Fatalf("expected research artifact authoring to be deferred, got %+v", summary.SideEffects)
 	}
-	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
-		t.Fatalf("expected research.md to exist after S1 research handoff: %v", err)
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected research.md to remain absent until research-orchestration authors it, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected stale research verification to be removed, err=%v", err)
@@ -1342,7 +1342,7 @@ func TestAdvanceIntake_ConfirmToS1Plan(t *testing.T) {
 	}
 }
 
-func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *testing.T) {
+func TestAdvanceIntake_ConfirmToS1PlanResearchDefersResearchAuthoring(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
@@ -1386,14 +1386,14 @@ func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *te
 	if summary.ToState != model.StateS1Plan || summary.ToSubStep != string(model.PlanSubStepResearch) {
 		t.Fatalf("expected transition to S1_PLAN/research, got state=%s substep=%s", summary.ToState, summary.ToSubStep)
 	}
-	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
-		t.Fatalf("expected scaffolded_research side effect, got %+v", summary.SideEffects)
+	if !hasSideEffect(summary.SideEffects, "deferred_research_authoring") {
+		t.Fatalf("expected deferred_research_authoring side effect, got %+v", summary.SideEffects)
 	}
 	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
 		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
 	}
-	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
-		t.Fatalf("expected research.md to exist after intake confirmation: %v", err)
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected research.md to remain absent until research-orchestration authors it, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected stale research verification to be removed, err=%v", err)
@@ -1482,6 +1482,57 @@ Internal docs.
 			if strings.Contains(b.Code, "worktree") || strings.Contains(b.Code, "dedicated_worktree") {
 				t.Fatalf("G_scope must not block on missing worktree at S1_PLAN/research: %v", summary.Blockers)
 			}
+		}
+	}
+}
+
+func TestEvaluateScopeGateReportsMissingResearchArtifact(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("missing-research-artifact")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	change.IntakeSubStep = model.IntakeSubStepNone
+	change.NeedsDiscovery = true
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	for _, file := range []string{"intent.md", "requirements.md", "tasks.md", "assurance.md", "decision.md"} {
+		if err := os.WriteFile(filepath.Join(bundleDir, file), []byte("# "+file+"\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", file, err)
+		}
+	}
+
+	evaluation, err := EvaluateScopeGate(root, change, map[string]model.VerificationRecord{
+		SkillResearchOrchestration: {
+			Verdict:    model.VerificationVerdictPass,
+			Timestamp:  change.CreatedAt,
+			RunVersion: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evaluation.Status != model.GateStatusBlocked {
+		t.Fatalf("expected missing research.md to block, got %+v", evaluation)
+	}
+	if !hasAdvanceReasonDetail(evaluation.ReasonCodes, "missing_required_artifact", "research.md") {
+		t.Fatalf("expected missing_required_artifact:research.md blocker, got %+v", evaluation.ReasonCodes)
+	}
+	for _, blocker := range evaluation.ReasonCodes {
+		if blocker.Code == "research_structure_invalid" {
+			t.Fatalf("missing research.md must not be reported as a structure error: %+v", evaluation.ReasonCodes)
 		}
 	}
 }

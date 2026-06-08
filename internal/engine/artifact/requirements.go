@@ -46,16 +46,48 @@ var requirementsPlaceholderPhrases = []string{
 	"define requirements based on the initial request",
 }
 
+// instructionPlaceholderPhrases are literal placeholders emitted by
+// `slipway instructions` examples. They are safe to reject in authored artifact
+// substance because the templates explicitly say every <...> token must be
+// replaced before the file can satisfy governance.
+var instructionPlaceholderPhrases = []string{
+	"<short requirement title>",
+	"<required behavior>",
+	"<scenario name>",
+	"<precondition>",
+	"<triggering action>",
+	"<observable expected outcome>",
+	"<concrete task objective>",
+	"<path/to/file.go>",
+}
+
+// LooksLikeInstructionPlaceholder reports whether text still contains a literal
+// placeholder copied from a `slipway instructions` template.
+func LooksLikeInstructionPlaceholder(text string) bool {
+	lower := strings.ToLower(text)
+	for _, phrase := range instructionPlaceholderPhrases {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
 // LooksLikeRequirementsPlaceholder reports whether text still carries the
 // engine's requirements scaffold seed — a requirements-specific seed marker or
-// one of the legacy fabricated GIVEN/WHEN/THEN tautology lines. It is
-// deliberately NARROWER than LooksLikeTemplatePlaceholder: it does not match the
-// generic decision/research/task sentinels, so authored requirement prose that
-// shares a phrase with those seeds is not rejected (issue #91 — avoid false
-// positives that block real work). The requirements substance gate uses this
-// matcher; LooksLikeTemplatePlaceholder remains a superset that folds these in
-// for the decision/runtime and task-objective paths.
+// one of the legacy fabricated GIVEN/WHEN/THEN tautology lines. It also rejects
+// literal `slipway instructions` placeholders such as `<required behavior>`,
+// which are not authored substance. It is deliberately NARROWER than
+// LooksLikeTemplatePlaceholder: it does not match the generic decision/research
+// sentinels, so authored requirement prose that shares a phrase with those seeds
+// is not rejected (issue #91 — avoid false positives that block real work). The
+// requirements substance gate uses this matcher; LooksLikeTemplatePlaceholder
+// remains a superset that folds these in for the decision/runtime and
+// task-objective paths.
 func LooksLikeRequirementsPlaceholder(text string) bool {
+	if LooksLikeInstructionPlaceholder(text) {
+		return true
+	}
 	lower := strings.ToLower(text)
 	for _, phrase := range requirementsPlaceholderPhrases {
 		if strings.Contains(lower, phrase) {

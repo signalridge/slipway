@@ -141,7 +141,7 @@ var blockerRemediations = map[string]blockerRemediation{
 	},
 	"decision_contract_unreadable": {
 		Remediation:     "Fix decision.md so it is readable before continuing.",
-		CommandTemplate: "slipway validate",
+		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"decision_structure_invalid": {
@@ -256,7 +256,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"plan_dimension_key_links_missing_target_files": {
-		Remediation:     "Fix tasks.md so every code task declares target_files.",
+		Remediation:     "Fix tasks.md so every task declares target_files.",
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
@@ -480,8 +480,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"tasks_checklist_missing": {
-		Remediation:     "Create tasks.md with the governed task checklist before continuing.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Author tasks.md from the current artifact instructions, write the real task checklist, then re-run validation.",
+		CommandTemplate: "slipway instructions tasks.md",
 		Class:           RecoveryClassFixScope,
 	},
 	"tasks_checklist_path_invalid": {
@@ -634,6 +634,10 @@ func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 	rep.Normalize()
 	base := blockerRemediations[rep.Code]
 	parsed := parseBlockerForRecovery(rep, base)
+	priority := recoveryPriority(base)
+	if parsed.Code == "missing_required_artifact" {
+		priority = missingRequiredArtifactRecoveryPriority(parsed.Subject)
+	}
 	return RecoveryStep{
 		Code:          parsed.Code,
 		Subject:       parsed.Subject,
@@ -643,7 +647,26 @@ func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 		Remediation:   fillTemplate(base.Remediation, parsed),
 		Command:       resolveCommandTemplate(base.CommandTemplate, parsed),
 		RecoveryClass: base.Class,
-		priority:      recoveryPriority(base),
+		priority:      priority,
+	}
+}
+
+func missingRequiredArtifactRecoveryPriority(subject string) int {
+	switch strings.TrimSpace(subject) {
+	case "intent.md":
+		return 10
+	case "research.md":
+		return 20
+	case "requirements.md":
+		return 30
+	case "decision.md":
+		return 40
+	case "tasks.md":
+		return 50
+	case "assurance.md":
+		return 60
+	default:
+		return defaultRecoveryPriority
 	}
 }
 

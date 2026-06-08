@@ -75,6 +75,9 @@ honor but never copy into the artifact. It covers the six governed bundle
 artifacts (`intent`, `requirements`, `decision`, `research`, `tasks`,
 `assurance`) and the repo-scoped codebase-map docs (`stack`, `architecture`,
 `structure`, `conventions`, `integrations`, `testing`, `concerns`).
+In `--json`, `context_is_baseline: true` marks codebase-map baseline context
+that should be preserved and extended into the authored doc; when absent or
+false, `context` is background to honor but not copy.
 
 `codebase-map --json` reports `status: "baseline"` when documents contain only
 CLI-detected repository facts. Baseline docs are useful starting context, not
