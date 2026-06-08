@@ -1,17 +1,14 @@
 name: Security
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   actions: read
   contents: read
   security-events: write
-
 jobs:
   govulncheck:
     name: Go Vulnerability Check
@@ -53,7 +50,6 @@ jobs:
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
-
   trivy:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
@@ -82,7 +78,6 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy
-
   sbom:
     name: Generate SBOM
     runs-on: ubuntu-latest
@@ -90,7 +85,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        # Install via the official script with retries: GitHub intermittently
+        # returns HTTP 504 on the anchore/syft release pages, and the
+        # download-syft action has no retry, so a single blip fails the workflow.
+        env:
+          SYFT_VERSION: v1.45.1
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+              | sh -s -- -b /usr/local/bin "$SYFT_VERSION"; then
+              syft version
+              exit 0
+            fi
+            echo "::warning::syft install attempt ${attempt} failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "::error::Failed to install syft after 5 attempts"
+          exit 1
       - name: Generate SBOM
         run: |
           syft . -o spdx-json > sbom.spdx.json
@@ -103,7 +114,6 @@ jobs:
             sbom.spdx.json
             sbom.cdx.json
           retention-days: 30
-
   license-check:
     name: License Compliance
     runs-on: ubuntu-latest
