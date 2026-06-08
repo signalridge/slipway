@@ -180,6 +180,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A governed bundle directory is missing its change.yaml authority",
 	},
+	"stale_runtime_binding": {
+		Severity: ReasonSeverityError,
+		Message:  "A per-change runtime binding remains after its governed bundle was removed",
+	},
 	"pivot_not_approved": {
 		Severity: ReasonSeverityError,
 		Message:  "The requested pivot is not approved",

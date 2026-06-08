@@ -256,6 +256,14 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway delete --change {subject}",
 		Class:           RecoveryClassDiscardChange,
 	},
+	"stale_runtime_binding": {
+		// Emitted as stale_runtime_binding:<slug>. The active bundle directory was
+		// removed entirely but git-local runtime state still records the abandoned
+		// change, so route to the same public discard surface.
+		Remediation:     "Runtime binding for {subject} remains after its governed bundle was removed; discard the abandoned local state with `slipway delete --change {subject}` (add --worktree to also remove its worktree).",
+		CommandTemplate: "slipway delete --change {subject}",
+		Class:           RecoveryClassDiscardChange,
+	},
 	"plan_dimension_completeness_missing_objective": {
 		Remediation:     "Fix tasks.md so every task has a concrete objective.",
 		CommandTemplate: "slipway validate",

@@ -249,6 +249,27 @@ func planWorktreeTargetWithResolver(root, slug string, opts DeleteOptions, resol
 		target.Reason = "cannot remove the worktree you are running inside; re-run from the repository root"
 		return target
 	}
+	registered, rerr := registeredGitWorktree(root, worktreePath)
+	if rerr != nil {
+		target.Action = DeleteActionRefused
+		target.Reason = fmt.Sprintf("cannot determine whether worktree is registered: %v", rerr)
+		return target
+	}
+	if !registered {
+		target.Action = DeleteActionSkip
+		target.Reason = "bound worktree is no longer registered"
+		return target
+	}
+	exists, eerr := worktreeDirExists(worktreePath)
+	if eerr != nil {
+		target.Action = DeleteActionRefused
+		target.Reason = fmt.Sprintf("cannot determine whether worktree exists: %v", eerr)
+		return target
+	}
+	if !exists {
+		target.Reason = "bound worktree directory is already missing; git worktree metadata will be removed"
+		return target
+	}
 	refusal, derr := worktreeRemovalRefusalReason(worktreePath, slug, opts.Force)
 	if derr != nil {
 		target.Action = DeleteActionRefused
@@ -329,10 +350,16 @@ func RemoveChangeWorktree(root, slug, worktreePath string, force bool) error {
 	if worktreePath == "" {
 		return errors.New("worktree path is required")
 	}
-	if refusal, err := worktreeRemovalRefusalReason(worktreePath, slug, force); err != nil {
-		return err
-	} else if refusal != "" {
-		return fmt.Errorf("worktree %q %s", worktreePath, refusal)
+	exists, err := worktreeDirExists(worktreePath)
+	if err != nil {
+		return fmt.Errorf("stat worktree %q: %w", worktreePath, err)
+	}
+	if exists {
+		if refusal, err := worktreeRemovalRefusalReason(worktreePath, slug, force); err != nil {
+			return err
+		} else if refusal != "" {
+			return fmt.Errorf("worktree %q %s", worktreePath, refusal)
+		}
 	}
 	repoRoot, err := gitWorkspaceRoot(root)
 	if err != nil {
@@ -374,6 +401,40 @@ func resolveChangeWorktreePath(root, slug string) (string, error) {
 		return candidate, nil
 	}
 	return "", nil
+}
+
+func worktreeDirExists(worktreePath string) (bool, error) {
+	info, err := os.Stat(worktreePath)
+	if err == nil {
+		if !info.IsDir() {
+			return false, fmt.Errorf("path exists but is not a directory")
+		}
+		return true, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+func registeredGitWorktree(root, worktreePath string) (bool, error) {
+	repoRoot, err := gitWorkspaceRoot(root)
+	if err != nil {
+		if gitCommandReportsNotRepository(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	normalized, err := NormalizePath(worktreePath)
+	if err != nil {
+		normalized = filepath.Clean(worktreePath)
+	}
+	registered, err := listGitWorktrees(repoRoot)
+	if err != nil {
+		return false, err
+	}
+	_, ok := registered[normalized]
+	return ok, nil
 }
 
 // worktreeHasUncommittedTrackedChanges reports whether the worktree has staged
@@ -453,7 +514,6 @@ func safeGeneratedUntrackedPath(path, slug string) bool {
 	}
 	for _, prefix := range []string{
 		"artifacts/changes/" + slug + "/",
-		"artifacts/codebase/",
 	} {
 		if strings.HasPrefix(path, prefix) {
 			return true

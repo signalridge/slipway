@@ -322,8 +322,8 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 	if worktreePath != "" {
 		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
 		if err != nil {
-			if orphanErr := orphanedChangeBundleError(root, ""); orphanErr != nil {
-				return changeRef{}, orphanErr
+			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
+				return changeRef{}, recoveryErr
 			}
 			return changeRef{}, wrapResolutionError(err)
 		}
@@ -332,8 +332,8 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 
 	change, err := state.FindActiveChange(root)
 	if err != nil {
-		if orphanErr := orphanedChangeBundleError(root, ""); orphanErr != nil {
-			return changeRef{}, orphanErr
+		if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
+			return changeRef{}, recoveryErr
 		}
 		return changeRef{}, wrapResolutionError(err)
 	}
@@ -366,6 +366,9 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 					},
 				)
 			}
+			if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+				return changeRef{}, recoveryErr
+			}
 			return changeRef{}, newPreconditionError(
 				"no_active_change",
 				fmt.Sprintf("no change found for slug %q", slug),
@@ -374,8 +377,8 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 				nil,
 			)
 		}
-		if orphanErr := orphanedChangeBundleError(root, slug); orphanErr != nil {
-			return changeRef{}, orphanErr
+		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+			return changeRef{}, recoveryErr
 		}
 		return changeRef{}, newChangeStateLoadFailedError(slug, err)
 	}
@@ -397,6 +400,9 @@ func loadChangeBySlug(root, slug string) (model.Change, error) {
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+				return model.Change{}, recoveryErr
+			}
 			return model.Change{}, newPreconditionError(
 				"change_not_found",
 				fmt.Sprintf("no change found for slug %q", slug),
@@ -405,12 +411,19 @@ func loadChangeBySlug(root, slug string) (model.Change, error) {
 				nil,
 			)
 		}
-		if orphanErr := orphanedChangeBundleError(root, slug); orphanErr != nil {
-			return model.Change{}, orphanErr
+		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+			return model.Change{}, recoveryErr
 		}
 		return model.Change{}, newChangeStateLoadFailedError(slug, err)
 	}
 	return change, nil
+}
+
+func deleteRecoveryError(root, slug string) *CLIError {
+	if orphanErr := orphanedChangeBundleError(root, slug); orphanErr != nil {
+		return orphanErr
+	}
+	return staleRuntimeBindingError(root, slug)
 }
 
 func orphanedChangeBundleError(root, slug string) *CLIError {
@@ -439,6 +452,32 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 	)
 }
 
+func staleRuntimeBindingError(root, slug string) *CLIError {
+	stale, err := staleRuntimeBindingSlugs(root, slug)
+	if err != nil || len(stale) == 0 {
+		return nil
+	}
+	reasons := staleRuntimeBindingReasons(stale)
+	primarySlug := stale[0]
+	message := fmt.Sprintf("runtime binding for %q remains after its governed bundle was removed", primarySlug)
+	remediation := fmt.Sprintf("Discard it with `slipway delete --change %s` (add --worktree to also remove its worktree).", primarySlug)
+	if len(stale) > 1 {
+		message = "runtime bindings remain after their governed bundles were removed: " + strings.Join(stale, ", ")
+		remediation = fmt.Sprintf("Discard each abandoned change with `slipway delete --change <slug>`; first suggested command: `slipway delete --change %s`.", primarySlug)
+	}
+	return newCLIErrorWithReasons(
+		categoryPrecondition,
+		"stale_runtime_binding",
+		message,
+		remediation,
+		primarySlug,
+		reasons,
+		map[string]any{
+			"stale_runtime_bindings": stale,
+		},
+	)
+}
+
 func orphanedChangeBundleSlugs(root, slug string) ([]string, error) {
 	orphans, err := state.OrphanBundleSlugs(root)
 	if err != nil {
@@ -456,10 +495,35 @@ func orphanedChangeBundleSlugs(root, slug string) ([]string, error) {
 	return nil, nil
 }
 
+func staleRuntimeBindingSlugs(root, slug string) ([]string, error) {
+	stale, err := state.StaleRuntimeBindingSlugs(root)
+	if err != nil {
+		return nil, err
+	}
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return stale, nil
+	}
+	for _, candidate := range stale {
+		if candidate == slug {
+			return []string{slug}, nil
+		}
+	}
+	return nil, nil
+}
+
 func orphanedChangeBundleReasons(slugs []string) []model.ReasonCode {
 	reasons := make([]model.ReasonCode, 0, len(slugs))
 	for _, slug := range slugs {
 		reasons = append(reasons, model.NewReasonCode("orphaned_change_bundle", slug))
+	}
+	return reasons
+}
+
+func staleRuntimeBindingReasons(slugs []string) []model.ReasonCode {
+	reasons := make([]model.ReasonCode, 0, len(slugs))
+	for _, slug := range slugs {
+		reasons = append(reasons, model.NewReasonCode("stale_runtime_binding", slug))
 	}
 	return reasons
 }

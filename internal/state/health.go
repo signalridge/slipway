@@ -679,6 +679,60 @@ func OrphanBundleSlugs(root string) ([]string, error) {
 	return slices.Compact(orphans), nil
 }
 
+// StaleRuntimeBindingSlugs returns change slugs whose git-local runtime binding
+// remains after the active governed bundle directory has been removed entirely.
+func StaleRuntimeBindingSlugs(root string) ([]string, error) {
+	entries, err := os.ReadDir(ChangesDir(root))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var stale []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		slug := entry.Name()
+		if err := ValidateChangeSlug(slug); err != nil {
+			continue
+		}
+		if !fileExists(WorktreeBindingPath(root, slug)) {
+			continue
+		}
+		hasBundle, err := activeBundleDirExists(root, slug)
+		if err != nil {
+			return nil, err
+		}
+		if hasBundle {
+			continue
+		}
+		stale = append(stale, slug)
+	}
+	slices.Sort(stale)
+	return slices.Compact(stale), nil
+}
+
+func activeBundleDirExists(root, slug string) (bool, error) {
+	workspaceRoots, err := allWorkspaceRoots(root)
+	if err != nil {
+		return false, err
+	}
+	for _, workspaceRoot := range workspaceRoots {
+		info, err := os.Stat(filepath.Join(ActiveBundlesDir(workspaceRoot), slug))
+		if err == nil {
+			return info.IsDir(), nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		return false, err
+	}
+	return false, nil
+}
+
 func nowUTC() (now time.Time) {
 	return time.Now().UTC()
 }

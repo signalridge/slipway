@@ -362,6 +362,22 @@ func TestBuildRecoveryOrphanedChangeBundleRoutesToDelete(t *testing.T) {
 	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
 }
 
+func TestBuildRecoveryStaleRuntimeBindingRoutesToDelete(t *testing.T) {
+	t.Parallel()
+
+	// #129: when only git-local runtime state remains after a bundle was fully
+	// removed, recovery must still route through the public delete surface.
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("stale_runtime_binding", "abandoned-change"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway delete --change abandoned-change", got.PrimaryCommand)
+	assert.Equal(t, RecoveryClassDiscardChange, got.RecoveryClass)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, "abandoned-change", got.Steps[0].Subject)
+	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
+}
+
 func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
 	t.Parallel()
 

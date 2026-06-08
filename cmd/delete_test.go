@@ -71,6 +71,13 @@ func partiallyDeleteBundleForDelete(t *testing.T, worktreePath, slug string) str
 	return bundleDir
 }
 
+func fullyDeleteBundleForDelete(t *testing.T, worktreePath, slug string) string {
+	t.Helper()
+	bundleDir := bundleDirForDelete(t, worktreePath, slug)
+	require.NoError(t, os.RemoveAll(bundleDir))
+	return bundleDir
+}
+
 func deleteTargetsByKind(t *testing.T, raw any) map[string]map[string]any {
 	t.Helper()
 	out := map[string]map[string]any{}
@@ -103,6 +110,33 @@ func assertOrphanStatusDeleteRecovery(t *testing.T, payload map[string]any, slug
 func assertOrphanErrorDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
 	t.Helper()
 	assert.Equal(t, "orphaned_change_bundle", payload["error_code"])
+	assert.Contains(t, payload["message"], slug)
+	assert.Contains(t, payload["remediation"], "slipway delete --change "+slug)
+
+	recovery, ok := payload["recovery"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "slipway delete --change "+slug, recovery["primary_command"])
+}
+
+func assertStaleRuntimeStatusDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
+	t.Helper()
+	blockers, _ := payload["blockers"].([]any)
+	foundStale := false
+	for _, b := range blockers {
+		if bm, ok := b.(map[string]any); ok && bm["code"] == "stale_runtime_binding" {
+			foundStale = true
+		}
+	}
+	assert.True(t, foundStale, "expected stale_runtime_binding blocker")
+
+	recovery, ok := payload["recovery"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "slipway delete --change "+slug, recovery["primary_command"])
+}
+
+func assertStaleRuntimeErrorDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
+	t.Helper()
+	assert.Equal(t, "stale_runtime_binding", payload["error_code"])
 	assert.Contains(t, payload["message"], slug)
 	assert.Contains(t, payload["remediation"], "slipway delete --change "+slug)
 
@@ -247,6 +281,130 @@ func TestExplicitValidateRoutesToDeleteAfterPartialDelete(t *testing.T) {
 	})
 }
 
+// REQ-003: deleting the entire active bundle but leaving the runtime binding
+// must still route through the public delete surface, not private .git/slipway
+// inspection.
+func TestStatusRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		bundleDir := fullyDeleteBundleForDelete(t, worktreePath, slug)
+		runtimeDir := state.ChangeDir(root, slug)
+		require.DirExists(t, runtimeDir)
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
+		require.NoError(t, err, "status must route a stale runtime binding to delete recovery")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", payload["execution_mode"])
+		assertStaleRuntimeStatusDeleteRecovery(t, payload, slug)
+
+		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--yes"})
+		require.NoError(t, err)
+		assert.NoDirExists(t, bundleDir)
+		assert.NoDirExists(t, runtimeDir)
+	})
+}
+
+func TestExplicitStatusRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, worktreePath, slug)
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json", "--change", slug})
+		require.NoError(t, err, "explicit status must route a stale runtime binding to delete recovery")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", payload["execution_mode"])
+		assertStaleRuntimeStatusDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestNextRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, worktreePath, slug)
+
+		_, stderr, err := runRootCommandIn(root, []string{"next", "--json"})
+		require.Error(t, err, "next must route a stale runtime binding to delete recovery")
+		payload := decodeJSONMap(t, stderr)
+		assertStaleRuntimeErrorDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestValidateRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, worktreePath, slug)
+
+		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json"})
+		require.Error(t, err, "validate must route a stale runtime binding to delete recovery")
+		payload := decodeJSONMap(t, stderr)
+		assertStaleRuntimeErrorDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestExplicitValidateRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, worktreePath, slug)
+
+		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
+		require.Error(t, err, "explicit validate must route a stale runtime binding to delete recovery")
+		payload := decodeJSONMap(t, stderr)
+		assertStaleRuntimeErrorDeleteRecovery(t, payload, slug)
+	})
+}
+
+func TestStatusReportsStaleRuntimeBindingWithAnotherActiveChange(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		staleSlug, staleWorktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, staleWorktreePath, staleSlug)
+		activeSlug, _ := newGovernedChangeForDelete(t, root, "still active")
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
+		require.NoError(t, err, "status must surface stale bindings even when another active change exists")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", payload["execution_mode"])
+		assert.NotEqual(t, activeSlug, payload["slug"])
+		assertStaleRuntimeStatusDeleteRecovery(t, payload, staleSlug)
+	})
+}
+
+func TestDeleteUnregistersAlreadyMissingBoundWorktreeAndRemovesRuntime(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "removed worktree binding")
+		runtimeDir := state.ChangeDir(root, slug)
+		require.DirExists(t, runtimeDir)
+
+		require.NoError(t, os.RemoveAll(worktreePath))
+		require.NoDirExists(t, worktreePath)
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--yes", "--json"})
+		require.NoError(t, err, "missing bound worktree should not block runtime cleanup")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		removed := deleteTargetsByKind(t, payload["removed"])
+		assert.Contains(t, removed, "runtime_binding")
+		require.Contains(t, removed, "worktree")
+		assert.Equal(t, "delete", removed["worktree"]["action"])
+		assert.Contains(t, removed["worktree"]["reason"], "metadata will be removed")
+		skipped := deleteTargetsByKind(t, payload["skipped"])
+		assert.NotContains(t, skipped, "worktree")
+		assert.NoDirExists(t, runtimeDir)
+
+		worktrees, err := exec.Command("git", "-C", root, "worktree", "list", "--porcelain").CombinedOutput()
+		require.NoError(t, err)
+		assert.NotContains(t, string(worktrees), worktreePath, "missing worktree metadata must be unregistered")
+
+		stdout, stderr, err = runRootCommandIn(root, []string{"status", "--json"})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		statusPayload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", statusPayload["execution_mode"])
+	})
+}
+
 func TestDeleteNothingToDeleteTextDoesNotSayDeleted(t *testing.T) {
 	withDeleteWorkspace(t, func(root string) {
 		stdout, stderr, err := runRootCommandIn(root, []string{"delete", "--change", "already-deleted", "--yes"})
@@ -324,6 +482,26 @@ func TestDeleteWorktreeRefusesUnsafeUntrackedUnlessForce(t *testing.T) {
 		assert.DirExists(t, worktreePath, "worktree must survive an untracked-file refusal")
 
 		// --force overrides the untracked-file refusal.
+		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--force", "--yes", "--json"})
+		require.NoError(t, err)
+		assert.NoDirExists(t, worktreePath)
+	})
+}
+
+func TestDeleteWorktreeRefusesUntrackedCodebaseMapUnlessForce(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "codebase map cleanup")
+		codebaseMap := filepath.Join(worktreePath, "artifacts", "codebase", "ARCHITECTURE.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(codebaseMap), 0o755))
+		require.NoError(t, os.WriteFile(codebaseMap, []byte("valuable local context\n"), 0o644))
+
+		_, stderr, err := runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--yes", "--json"})
+		require.Error(t, err)
+		errPayload := decodeJSONMap(t, stderr)
+		assert.Equal(t, "delete_refused", errPayload["error_code"])
+		assert.Contains(t, stderr, "artifacts/codebase/ARCHITECTURE.md")
+		assert.DirExists(t, worktreePath, "worktree must survive an untracked codebase-map refusal")
+
 		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--force", "--yes", "--json"})
 		require.NoError(t, err)
 		assert.NoDirExists(t, worktreePath)
