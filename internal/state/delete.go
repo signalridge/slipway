@@ -425,7 +425,10 @@ func worktreeRemovalRefusalReason(worktreePath, slug string, force bool) (string
 }
 
 func worktreeUnsafeUntrackedFiles(worktreePath, slug string) ([]string, error) {
-	out, err := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z").Output()
+	// Include ignored files: `git worktree remove --force` deletes the whole
+	// worktree, so ignored local files need the same fail-closed treatment as
+	// ordinary untracked files unless they are known generated Slipway paths.
+	out, err := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "-z").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files --others in worktree %q: %w", worktreePath, err)
 	}

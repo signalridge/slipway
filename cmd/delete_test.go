@@ -330,6 +330,35 @@ func TestDeleteWorktreeRefusesUnsafeUntrackedUnlessForce(t *testing.T) {
 	})
 }
 
+func TestDeleteWorktreeRefusesIgnoredUntrackedUnlessForce(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		gitignorePath := filepath.Join(root, ".gitignore")
+		raw, err := os.ReadFile(gitignorePath)
+		if err != nil && !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+		raw = append(raw, []byte("\nsecret.env\n")...)
+		require.NoError(t, os.WriteFile(gitignorePath, raw, 0o644))
+		deleteTestGit(t, root, "add", ".gitignore", ".slipway.yaml")
+		deleteTestGit(t, root, "commit", "-m", "track slipway config and ignored local files")
+
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "ignored untracked cleanup")
+		ignored := filepath.Join(worktreePath, "secret.env")
+		require.NoError(t, os.WriteFile(ignored, []byte("local secret\n"), 0o644))
+
+		_, stderr, err := runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--yes", "--json"})
+		require.Error(t, err)
+		errPayload := decodeJSONMap(t, stderr)
+		assert.Equal(t, "delete_refused", errPayload["error_code"])
+		assert.Contains(t, stderr, "secret.env")
+		assert.DirExists(t, worktreePath, "worktree must survive an ignored-file refusal")
+
+		_, _, err = runRootCommandIn(root, []string{"delete", "--change", slug, "--worktree", "--force", "--yes", "--json"})
+		require.NoError(t, err)
+		assert.NoDirExists(t, worktreePath)
+	})
+}
+
 // REQ-008 / safety: a worktree-removal request from inside that worktree is
 // refused so the operator does not delete the checkout they are standing in.
 func TestDeleteRefusesCurrentWorktree(t *testing.T) {
