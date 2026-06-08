@@ -85,3 +85,24 @@ func TestScopeContractReopenTargetEmptyWhenSummaryNotReady(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, target.SkillName, "no reopen without a ready execution summary")
 }
+
+// Out-of-scope drift (a changed file outside the plan) is non-destructive and
+// must block visibly instead of clearing wave evidence; missing task
+// changed-file evidence still requires a re-record reopen (issue #136).
+func TestScopeContractDriftOnly(t *testing.T) {
+	t.Parallel()
+
+	drift := model.NewReasonCode(scopecontract.ReasonScopeContractDrift, "scratch.txt")
+	missing := model.NewReasonCode(scopecontract.ReasonScopeContractChangedFilesMissing, "t-01")
+
+	assert.True(t, scopeContractDriftOnly([]model.ReasonCode{drift}),
+		"a sole drift blocker is drift-only")
+	assert.True(t, scopeContractDriftOnly([]model.ReasonCode{drift, drift}),
+		"multiple drift blockers are still drift-only")
+	assert.False(t, scopeContractDriftOnly([]model.ReasonCode{drift, missing}),
+		"a mix with missing-evidence is not drift-only")
+	assert.False(t, scopeContractDriftOnly([]model.ReasonCode{missing}),
+		"missing-evidence alone is not drift-only")
+	assert.False(t, scopeContractDriftOnly(nil),
+		"no blockers is not drift-only")
+}

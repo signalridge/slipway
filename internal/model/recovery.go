@@ -455,8 +455,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        90,
 	},
 	"scope_contract_drift": {
-		Remediation:     "Changed files fall outside the planned Scope Contract; add the targets to tasks.md or revert the out-of-scope change.",
-		CommandTemplate: "slipway validate",
+		Remediation:     "Changed files fall outside the planned Scope Contract (recorded wave evidence is preserved). If a listed file is a build artifact or scratch file, remove it or rely on an existing ignore/local exclude; if keeping the file or adding a tracked .gitignore rule is intended, include it in the plan with `slipway pivot --rescope`; then re-run.",
+		CommandTemplate: "slipway pivot --rescope",
 		Class:           RecoveryClassFixScope,
 	},
 	"scope_contract_missing": {
