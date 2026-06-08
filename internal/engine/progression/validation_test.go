@@ -75,6 +75,72 @@ func TestValidateTasksChecklist_MissingFields(t *testing.T) {
 	}
 }
 
+func TestValidateTasksChecklist_RejectsInstructionPlaceholderTargetFilesAtPlanAudit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "test-change"
+	tasksDir := filepath.Join(dir, "artifacts", "changes", slug)
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `# Tasks
+
+- [ ] ` + "`t-01`" + ` implement target placeholder rejection
+  - wave: 1
+  - target_files: [<path/to/file.go>]
+  - task_kind: code
+`
+	if err := os.WriteFile(filepath.Join(tasksDir, "tasks.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	change := model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepAudit,
+	}
+	blockers := ValidateTasksChecklistDetailed(dir, change).Blockers
+	for _, blocker := range blockers {
+		if blocker == "plan_dimension_key_links_missing_target_files:t-01" {
+			return
+		}
+	}
+	t.Fatalf("expected placeholder target_files to block as missing concrete target_files, got %v", blockers)
+}
+
+func TestValidateTasksChecklist_RejectsPlaceholderObjectiveAtPlanAudit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	slug := "test-change"
+	tasksDir := filepath.Join(dir, "artifacts", "changes", slug)
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Pending task objective
+  - wave: 1
+  - target_files: [main.go]
+  - task_kind: verification
+`
+	if err := os.WriteFile(filepath.Join(tasksDir, "tasks.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	change := model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS1Plan,
+		PlanSubStep:  model.PlanSubStepAudit,
+	}
+	blockers := ValidateTasksChecklistDetailed(dir, change).Blockers
+	for _, blocker := range blockers {
+		if blocker == "plan_dimension_completeness_missing_objective:t-01" {
+			return
+		}
+	}
+	t.Fatalf("expected placeholder objective to block as missing concrete objective, got %v", blockers)
+}
+
 func assertChecklistCoverageBlocker(t *testing.T, slug, coverRef, specContent, wantBlocker string) {
 	t.Helper()
 
@@ -237,36 +303,6 @@ THEN the system returns 401.
 	}
 }
 
-func TestValidateTasksChecklistDetailed_RejectsMechanicalScaffoldAtPlanAudit(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	change := model.NewChange("mechanical-reject")
-	change.Description = "do the thing"
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStandard, model.ProjectContext{}))
-
-	// At plan-audit, the engine's placeholder scaffold must fail closed:
-	// placeholder task objective + placeholder requirements (issue #91).
-	change.CurrentState = model.StateS1Plan
-	change.PlanSubStep = model.PlanSubStepAudit
-	require.NoError(t, state.SaveChange(root, change))
-
-	result := ValidateTasksChecklistDetailed(root, change)
-
-	hasObjective, hasReq := false, false
-	for _, b := range result.Blockers {
-		if b == "plan_dimension_completeness_missing_objective:t-01" {
-			hasObjective = true
-		}
-		if b == "plan_dimension_coverage_requirements_invalid" {
-			hasReq = true
-		}
-	}
-	require.True(t, hasObjective, "placeholder task objective must block at plan-audit, got %v", result.Blockers)
-	require.True(t, hasReq, "placeholder requirements must block at plan-audit, got %v", result.Blockers)
-}
-
 func writeSubstanceGateBundle(t *testing.T, root, slug, requirements string) {
 	t.Helper()
 	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
@@ -369,12 +405,122 @@ func TestValidateTasksChecklistDetailed_ScaffoldedGuardrailRequirementsStayCover
 	change.GuardrailDomain = "auth_authz"
 	change.WorkflowPreset = model.WorkflowPresetStandard
 
-	require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStandard, model.ProjectContext{}))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, model.WorkflowPresetStandard))
 
 	result := ValidateTasksChecklistDetailed(root, change)
 	for _, blocker := range result.Blockers {
 		require.NotContains(t, blocker, "plan_dimension_coverage_missing_requirement")
 	}
+}
+
+func TestDecisionContractBlockers(t *testing.T) {
+	t.Parallel()
+
+	template, err := artifact.RenderArtifactExample("decision.md")
+	require.NoError(t, err)
+	const authored = "# Decision\n\n## Alternatives Considered\nA vs B; B wins on latency.\n\n" +
+		"## Selected Approach\nB, grounded in the alternatives above.\n\n" +
+		"## Interfaces and Data Flow\nnone\n\n" +
+		"## Rollout and Rollback\nFeature flag; rollback flips it off. Verify with go test.\n\n" +
+		"## Risk\nDuplicate delivery; idempotency keys.\n"
+
+	expandedAudit := func(slug string) model.Change {
+		return model.Change{
+			Slug:           slug,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+			WorkflowPreset: model.WorkflowPresetStandard,
+			CurrentState:   model.StateS1Plan,
+			PlanSubStep:    model.PlanSubStepAudit,
+		}
+	}
+	writeDecision := func(t *testing.T, slug, content string) string {
+		t.Helper()
+		root := t.TempDir()
+		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(content), 0o644))
+		return root
+	}
+
+	t.Run("template-only decision blocks at plan-audit", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-tmpl", template)
+		blockers := DecisionContractBlockers(root, expandedAudit("dec-tmpl"))
+		require.NotEmpty(t, blockers, "an unedited template-only decision.md must block planning readiness")
+		require.Contains(t, blockers[0], "decision_structure_invalid:")
+		require.Contains(t, blockers[0], "non-empty content")
+	})
+
+	t.Run("authored decision passes", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-ok", authored)
+		require.Empty(t, DecisionContractBlockers(root, expandedAudit("dec-ok")))
+	})
+
+	t.Run("pre-audit draft stays lenient", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-pre", template)
+		change := expandedAudit("dec-pre")
+		change.PlanSubStep = model.PlanSubStepResearch
+		require.Empty(t, DecisionContractBlockers(root, change),
+			"a template-only decision before plan-audit must stay lenient")
+	})
+
+	t.Run("bundle draft stays lenient", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-bundle", template)
+		change := expandedAudit("dec-bundle")
+		change.PlanSubStep = model.PlanSubStepBundle
+		require.Empty(t, DecisionContractBlockers(root, change),
+			"a template-only decision before plan-audit must stay lenient")
+	})
+
+	t.Run("post-plan state enforces decision substance", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-exec", template)
+		change := expandedAudit("dec-exec")
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		blockers := DecisionContractBlockers(root, change)
+		require.NotEmpty(t, blockers, "post-plan states must still enforce decision substance")
+		require.Contains(t, blockers[0], "decision_structure_invalid:")
+		require.Contains(t, blockers[0], "non-empty content")
+	})
+
+	t.Run("core schema does not require decision substance", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-core", template)
+		change := expandedAudit("dec-core")
+		change.ArtifactSchema = model.ArtifactSchemaCore
+		require.Empty(t, DecisionContractBlockers(root, change),
+			"decision.md is not required under the core schema")
+	})
+
+	t.Run("missing decision is owned by the bundle gate", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", "dec-missing"), 0o755))
+		require.Empty(t, DecisionContractBlockers(root, expandedAudit("dec-missing")),
+			"a missing decision.md is reported by GovernedBundleBlockers, not double-reported here")
+	})
+
+	t.Run("invalid bundle path returns path blocker", func(t *testing.T) {
+		t.Parallel()
+		blockers := DecisionContractBlockers(t.TempDir(), expandedAudit(""))
+		require.Len(t, blockers, 1)
+		require.Contains(t, blockers[0], "decision_contract_path_invalid:")
+	})
+
+	t.Run("unreadable decision returns unreadable blocker", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		bundleDir := filepath.Join(root, "artifacts", "changes", "dec-unreadable")
+		require.NoError(t, os.MkdirAll(filepath.Join(bundleDir, "decision.md"), 0o755))
+		require.Equal(t,
+			[]string{"decision_contract_unreadable"},
+			DecisionContractBlockers(root, expandedAudit("dec-unreadable")),
+		)
+	})
 }
 
 func TestGovernedBundleBlockers_UsesEffectivePresetForAssuranceRequirement(t *testing.T) {

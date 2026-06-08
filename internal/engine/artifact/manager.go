@@ -11,11 +11,10 @@ import (
 	"strings"
 	"sync"
 	"text/template"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/stringutil"
 	"github.com/signalridge/slipway/internal/tmpl"
 	"gopkg.in/yaml.v3"
 )
@@ -156,554 +155,60 @@ func TemplateContent(name string) (string, error) {
 // RenderArtifactExample renders the named artifact template (e.g.
 // "requirements.md") with representative example data so callers such as
 // `slipway instructions` can present a concrete, directive-free exemplar —
-// headings, authoring-guidance comments, and the honest placeholder seed —
-// instead of the raw Go-template source with unresolved `{{ … }}` actions. The
-// engine owns this structure; the authoring skill owns the substance that
-// replaces the seed (issue #91).
+// headings and authoring-guidance comments — instead of the raw Go-template
+// source with unresolved `{{ … }}` actions. The engine owns this structure; the
+// authoring skill writes the substance into the skeleton (issues #91, #119).
 func RenderArtifactExample(name string) (string, error) {
 	example := model.Change{
 		Slug:        "example-change",
 		Description: "describe the change here",
 	}
-	return renderTemplateWithFallback("", name, "", buildTemplateData("", example, nil))
+	return renderTemplateWithFallback("", name, "", buildTemplateData(example))
+}
+
+// RenderArtifactExampleWithTemplate renders a governed artifact exemplar using
+// an optional external template path. It is the custom-schema companion to
+// RenderArtifactExample for command surfaces such as `slipway instructions`.
+func RenderArtifactExampleWithTemplate(root, name, externalPath string) (string, error) {
+	example := model.Change{
+		Slug:        "example-change",
+		Description: "describe the change here",
+	}
+	return renderTemplateWithFallback(root, name, externalPath, buildTemplateData(example))
 }
 
 type templateData struct {
-	Slug               string
-	InitialRequest     string
-	QualityMode        string
-	BundleRoot         string
-	CodebaseMapRoot    string
-	BundleArchiveRoot  string
-	ProjectTechStack   string
-	ProjectConventions string
-	ProjectTestCmd     string
-	ProjectBuildCmd    string
-	ProjectLanguages   string
-	ComplexityLevel    string
-	ComplexityRank     int    // 0=trivial, 1=simple, 2=complex, 3=critical
-	GuardrailDomain    string // Inferred guardrail domain (e.g. auth_authz, security_credentials)
-
-	// Seeded draft content — computed from InitialRequest, project context,
-	// and optionally from --from-doc extraction.
-	SeededRequirements        string
-	SeededDecision            string
-	SeededDecisionApproach    string
-	SeededDecisionInterfaces  string
-	SeededDecisionRollback    string
-	SeededDecisionRisk        string
-	SeededResearch            string
-	SeededResearchUnknowns    string
-	SeededResearchAssumptions string
-	SeededResearchReferences  string
-	SeededTasks               string
+	Slug              string
+	InitialRequest    string
+	QualityMode       string
+	BundleRoot        string
+	CodebaseMapRoot   string
+	BundleArchiveRoot string
+	ComplexityLevel   string
+	ComplexityRank    int    // 0=trivial, 1=simple, 2=complex, 3=critical
+	GuardrailDomain   string // Inferred guardrail domain (e.g. auth_authz, security_credentials)
 }
 
-// DocSections carries extracted document sections across the cmd → artifact
-// package boundary when --from-doc is used.
-type DocSections struct {
-	Scope       string
-	Constraints string
-	Acceptance  string
-}
-
-func loadProjectContext(root string) model.ProjectContext {
-	projectCtx := model.ProjectContext{}
-	if cfg, err := model.LoadConfig(state.ConfigPath(root)); err == nil {
-		projectCtx = cfg.Context
-	}
-	return projectCtx
-}
-
-func buildTemplateData(root string, change model.Change, docs *DocSections, overrideCtx ...model.ProjectContext) templateData {
-	var projectCtx model.ProjectContext
-	if len(overrideCtx) > 0 {
-		projectCtx = overrideCtx[0]
-	} else {
-		projectCtx = loadProjectContext(root)
-	}
-	projectLanguages := strings.Join(projectCtx.Languages, ", ")
+func buildTemplateData(change model.Change) templateData {
 	slug := strings.TrimSpace(change.Slug)
 	data := templateData{
-		Slug:               slug,
-		InitialRequest:     strings.TrimSpace(change.Description),
-		QualityMode:        string(change.EffectiveQualityMode()),
-		BundleRoot:         filepath.ToSlash(filepath.Join("artifacts", "changes", slug)),
-		CodebaseMapRoot:    filepath.ToSlash(filepath.Join("artifacts", "codebase")),
-		BundleArchiveRoot:  filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug)),
-		ProjectTechStack:   strings.TrimSpace(projectCtx.TechStack),
-		ProjectConventions: strings.TrimSpace(projectCtx.Conventions),
-		ProjectTestCmd:     strings.TrimSpace(projectCtx.TestCmd),
-		ProjectBuildCmd:    strings.TrimSpace(projectCtx.BuildCmd),
-		ProjectLanguages:   strings.TrimSpace(projectLanguages),
-		ComplexityLevel:    change.ComplexityLevel,
-		ComplexityRank:     complexityRank(change.ComplexityLevel),
-		GuardrailDomain:    change.GuardrailDomain,
-	}
-	data.SeededRequirements = seedRequirements(data)
-	data.SeededDecision = seedDecision()
-	data.SeededDecisionApproach = seedDecisionApproach()
-	data.SeededDecisionInterfaces = seedDecisionInterfaces()
-	data.SeededDecisionRollback = seedDecisionRollback()
-	data.SeededDecisionRisk = seedDecisionRisk()
-	data.SeededResearch = seedResearch()
-	data.SeededResearchUnknowns = seedResearchUnknowns()
-	data.SeededResearchAssumptions = seedResearchAssumptions()
-	data.SeededResearchReferences = seedResearchReferences(data)
-	data.SeededTasks = seedTasks(data)
-
-	if docs == nil {
-		return data
-	}
-	if docs.Scope != "" {
-		data.SeededRequirements = seededRequirementsContent(data, docSectionItems(docs.Scope))
-	}
-	if docs.Scope != "" || docs.Acceptance != "" {
-		data.SeededTasks = seedTasksFromDoc(data, *docs)
-	}
-	if docs.Constraints != "" {
-		data.SeededDecision += "\n### Constraints (from source document)\n" + docs.Constraints + "\n"
-		constraintItems := constraintSeedItems(docs.Constraints)
-		data.SeededDecisionApproach = appendDocConstraints(
-			data.SeededDecisionApproach,
-			constraintItems,
-			"This direction must continue honoring the documented constraints:",
-		)
-		data.SeededDecisionInterfaces = appendDocConstraints(
-			data.SeededDecisionInterfaces,
-			constraintItems,
-			"Interface and data-flow changes must respect these documented constraints:",
-		)
-		data.SeededDecisionRollback = appendDocConstraints(
-			data.SeededDecisionRollback,
-			constraintItems,
-			"Rollback planning must preserve these documented constraints:",
-		)
-		data.SeededDecisionRisk = appendDocConstraints(
-			data.SeededDecisionRisk,
-			constraintItems,
-			"Constraint-driven risks to keep explicit during implementation:",
-		)
-		data.SeededResearch += "\n### Constraints (from source document)\n" + docs.Constraints + "\n"
-		if len(constraintItems) > 0 {
-			var unknowns strings.Builder
-			unknowns.WriteString(data.SeededResearchUnknowns)
-			for _, item := range constraintItems {
-				fmt.Fprintf(&unknowns, "- How does the constraint %q limit the implementation of %s?\n", item, strings.ToLower(data.InitialRequest))
-			}
-			data.SeededResearchUnknowns = unknowns.String()
-
-			var assumptions strings.Builder
-			assumptions.WriteString(data.SeededResearchAssumptions)
-			for _, item := range constraintItems {
-				fmt.Fprintf(&assumptions, "- Assume the constraint %q remains binding until code inspection or stakeholder input proves otherwise.\n", item)
-			}
-			data.SeededResearchAssumptions = assumptions.String()
-			data.SeededResearchReferences += "- The `--from-doc` source document, especially its Constraints section.\n"
-		}
+		Slug:              slug,
+		InitialRequest:    strings.TrimSpace(change.Description),
+		QualityMode:       string(change.EffectiveQualityMode()),
+		BundleRoot:        filepath.ToSlash(filepath.Join("artifacts", "changes", slug)),
+		CodebaseMapRoot:   filepath.ToSlash(filepath.Join("artifacts", "codebase")),
+		BundleArchiveRoot: filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug)),
+		ComplexityLevel:   change.ComplexityLevel,
+		ComplexityRank:    complexityRank(change.ComplexityLevel),
+		GuardrailDomain:   change.GuardrailDomain,
 	}
 	return data
 }
 
-// seedRequirements generates a first-pass requirements section from the change description.
-func seedRequirements(data templateData) string {
-	requirementItems := []string{strings.TrimSpace(data.InitialRequest)}
-	return seededRequirementsContent(data, requirementItems)
-}
-
-// seedDecision generates a first-pass decision section from available context.
-func seedDecision() string {
-	return "Pending investigation. Replace with concrete alternatives, tradeoffs, and the selected direction after research or code inspection.\n"
-}
-
-func seedDecisionApproach() string {
-	return "Pending investigation. Record the selected approach only after the alternatives have concrete evidence."
-}
-
-func seedDecisionInterfaces() string {
-	return "Pending investigation. Name changed interfaces and data flows, or write \"none\" after inspection."
-}
-
-func seedDecisionRollback() string {
-	return "Pending investigation. Write the concrete rollback path and verification command after implementation scope is known."
-}
-
-func seedDecisionRisk() string {
-	return "Pending investigation. List concrete risks only after inspecting the affected code and contracts."
-}
-
-// seedResearch generates a first-pass research section.
-func seedResearch() string {
-	return "Pending investigation. Replace with concrete alternatives, supporting evidence, and the selected direction.\n"
-}
-
-func seedResearchUnknowns() string {
-	return "- Pending investigation. List unknowns that must be resolved before planning.\n"
-}
-
-func seedResearchAssumptions() string {
-	return "- Pending investigation. List assumptions only after identifying the evidence that supports them.\n"
-}
-
-func seedResearchReferences(data templateData) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "- `artifacts/changes/%s/intent.md` for the original request and intake context.\n", data.Slug)
-	b.WriteString("- `requirements.md` and `decision.md` in the same bundle once planning artifacts are refined.\n")
-	if strings.TrimSpace(data.ProjectTestCmd) != "" {
-		fmt.Fprintf(&b, "- Existing verification flows referenced by the scaffold context, especially `%s`.\n", strings.TrimSpace(data.ProjectTestCmd))
-	} else {
-		b.WriteString("- Existing code paths and tests related to the affected behavior in the repository.\n")
-	}
-	return b.String()
-}
-
-// seedTasks generates a first-pass task list from the change description.
-func seedTasks(data templateData) string {
-	var b strings.Builder
-	reqRefs := strings.Join(seededRequirementRefs(data, 0), ", ")
-	b.WriteString("- [ ] `t-01` Pending task objective\n")
-	b.WriteString("  - wave: 1\n")
-	b.WriteString("  - depends_on: []\n")
-	b.WriteString("  - target_files: []\n")
-	b.WriteString("  - task_kind: investigation\n")
-	fmt.Fprintf(&b, "  - covers: [%s]\n\n", reqRefs)
-	return b.String()
-}
-
-// seedTasksFromDoc enriches tasks with --from-doc extracted scope items.
-func seedTasksFromDoc(data templateData, docs DocSections) string {
-	scopeItems := docSectionItems(docs.Scope)
-	acceptanceItems := docSectionItems(docs.Acceptance)
-	if len(scopeItems) == 0 && len(acceptanceItems) == 0 {
-		return seedTasks(data)
-	}
-
-	var b strings.Builder
-	taskNum := 1
-	codeTaskIDs := make([]string, 0, len(scopeItems))
-	reqRefs := seededRequirementRefs(data, len(scopeItems))
-	for idx, line := range scopeItems {
-		fmt.Fprintf(&b, "- [ ] `t-%02d` %s\n", taskNum, capitalizeFirst(line))
-		b.WriteString("  - wave: 1\n")
-		b.WriteString("  - depends_on: []\n")
-		b.WriteString("  - target_files: []\n")
-		b.WriteString("  - task_kind: code\n")
-		fmt.Fprintf(&b, "  - covers: [%s]\n\n", reqRefs[idx])
-		codeTaskIDs = append(codeTaskIDs, fmt.Sprintf("t-%02d", taskNum))
-		taskNum++
-	}
-
-	if len(codeTaskIDs) == 0 {
-		fmt.Fprintf(&b, "- [ ] `t-%02d` Implement %s\n", taskNum, strings.ToLower(data.InitialRequest))
-		b.WriteString("  - wave: 1\n")
-		b.WriteString("  - depends_on: []\n")
-		b.WriteString("  - target_files: []\n")
-		b.WriteString("  - task_kind: code\n")
-		b.WriteString("  - covers: [REQ-001]\n\n")
-		codeTaskIDs = append(codeTaskIDs, fmt.Sprintf("t-%02d", taskNum))
-		taskNum++
-	}
-
-	if len(acceptanceItems) > 0 {
-		deps := strings.Join(codeTaskIDs, ", ")
-		for _, line := range acceptanceItems {
-			fmt.Fprintf(&b, "- [ ] `t-%02d` %s\n", taskNum, capitalizeFirst(line))
-			b.WriteString("  - wave: 2\n")
-			fmt.Fprintf(&b, "  - depends_on: [%s]\n", deps)
-			b.WriteString("  - target_files: []\n")
-			b.WriteString("  - task_kind: verification\n")
-			fmt.Fprintf(&b, "  - covers: [%s]\n\n", strings.Join(reqRefs, ", "))
-			taskNum++
-		}
-		return b.String()
-	}
-
-	fmt.Fprintf(&b, "- [ ] `t-%02d` Pending verification objective\n", taskNum)
-	b.WriteString("  - wave: 2\n")
-	fmt.Fprintf(&b, "  - depends_on: [%s]\n", strings.Join(codeTaskIDs, ", "))
-	b.WriteString("  - target_files: []\n")
-	b.WriteString("  - task_kind: verification\n")
-	fmt.Fprintf(&b, "  - covers: [%s]\n", strings.Join(reqRefs, ", "))
-	return b.String()
-}
-
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	r, size := utf8.DecodeRuneInString(s)
-	if r == utf8.RuneError && size == 1 {
-		return s
-	}
-	return string(unicode.ToUpper(r)) + s[size:]
-}
-
-func seededRequirementsContent(data templateData, requirementItems []string) string {
-	items := make([]string, 0, len(requirementItems))
-	for _, item := range requirementItems {
-		if trimmed := strings.TrimSpace(item); trimmed != "" {
-			items = append(items, trimmed)
-		}
-	}
-	if len(items) == 0 {
-		fallback := strings.TrimSpace(data.InitialRequest)
-		if fallback == "" {
-			fallback = "define requirements based on the initial request"
-		}
-		items = append(items, fallback)
-	}
-
-	var b strings.Builder
-	reqNum := 1
-	for _, item := range items {
-		appendRequirementBlock(&b, reqNum, item)
-		reqNum++
-	}
-	if data.GuardrailDomain != "" {
-		appendGuardrailRequirementBlock(&b, reqNum, data.GuardrailDomain)
-	}
-	return b.String()
-}
-
-func appendRequirementBlock(b *strings.Builder, reqNum int, objective string) {
-	if b.Len() > 0 {
-		b.WriteString("\n")
-	}
-	cleanedObjective := strings.Join(strings.Fields(strings.TrimSpace(objective)), " ")
-	// The engine owns structure (heading + stable REQ-* id); the authoring skill
-	// owns substance. Emit an honest, obviously-not-real placeholder — no
-	// normative MUST/SHALL and an explicit "replace" instruction — so it is
-	// caught by LooksLikeTemplatePlaceholder and rejected by the requirements
-	// substance gate until a skill writes the real requirement.
-	fmt.Fprintf(b, "### Requirement: %s\n", cleanedObjective)
-	fmt.Fprintf(b, "REQ-%03d: %s\n", reqNum, requirementPlaceholderSentence(cleanedObjective))
-	b.WriteString("\n#### Scenario: Pending — replace with a concrete scenario\n")
-	b.WriteString("GIVEN pending — replace with the precondition\n")
-	b.WriteString("WHEN pending — replace with the triggering action\n")
-	b.WriteString("THEN pending — replace with the observable expected outcome\n")
-}
-
-// requirementPlaceholderSentence returns an honest, non-normative placeholder for
-// a seeded requirement body. It deliberately contains no RFC-2119 MUST/SHALL and
-// a placeholder sentinel ("define requirements based on the initial request") so
-// the substance gate rejects an unedited scaffold.
-func requirementPlaceholderSentence(objective string) string {
-	if strings.TrimSpace(objective) == "" {
-		return "Pending — replace with the normative requirement. Define requirements based on the initial request."
-	}
-	return fmt.Sprintf(
-		"Pending — replace with the normative requirement (state what the system is required to do). Define requirements based on the initial request: %s.",
-		objective,
-	)
-}
-
-func appendGuardrailRequirementBlock(b *strings.Builder, reqNum int, guardrailDomain string) {
-	if b.Len() > 0 {
-		b.WriteString("\n")
-	}
-	fmt.Fprintf(b, "### Requirement: %s guardrail compliance\n", guardrailDomain)
-	fmt.Fprintf(b, "REQ-%03d: The implementation MUST comply with %s guardrail requirements.\n", reqNum, guardrailDomain)
-	b.WriteString("\n#### Scenario: Guardrail compliance\n")
-	b.WriteString("GIVEN the change touches a guarded domain\n")
-	b.WriteString("WHEN the implementation is updated\n")
-	fmt.Fprintf(b, "THEN %s guardrail requirements remain satisfied.\n", guardrailDomain)
-}
-
-func docSectionItems(section string) []string {
-	lines := strings.Split(section, "\n")
-	if items := markdownListItems(lines); len(items) > 0 {
-		return items
-	}
-	return proseParagraphItems(lines)
-}
-
-func markdownListItems(lines []string) []string {
-	items := make([]string, 0)
-	current := ""
-	sawListMarker := false
-	currentHasNestedItems := false
-
-	flush := func() {
-		if strings.TrimSpace(current) == "" {
-			current = ""
-			currentHasNestedItems = false
-			return
-		}
-		items = append(items, strings.Join(strings.Fields(current), " "))
-		current = ""
-		currentHasNestedItems = false
-	}
-
-	for _, raw := range lines {
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" {
-			if sawListMarker {
-				flush()
-			}
-			continue
-		}
-		if item, ok := listItemText(trimmed); ok {
-			if leadingIndentWidth(raw) == 0 {
-				sawListMarker = true
-				flush()
-				current = item
-				continue
-			}
-			if sawListMarker {
-				if current == "" {
-					current = item
-				} else if !currentHasNestedItems {
-					current += ": " + item
-					currentHasNestedItems = true
-				} else {
-					current += "; " + item
-				}
-				continue
-			}
-		}
-		if sawListMarker {
-			if current == "" {
-				current = trimmed
-			} else {
-				current += " " + trimmed
-			}
-		}
-	}
-
-	if !sawListMarker {
-		return nil
-	}
-	flush()
-	return items
-}
-
-func leadingIndentWidth(s string) int {
-	width := 0
-	for _, r := range s {
-		if r != ' ' && r != '\t' {
-			break
-		}
-		width++
-	}
-	return width
-}
-
-func proseParagraphItems(lines []string) []string {
-	parts := make([]string, 0, len(lines))
-	for _, raw := range lines {
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" {
-			continue
-		}
-		parts = append(parts, trimmed)
-	}
-	if len(parts) == 0 {
-		return nil
-	}
-	return []string{strings.Join(parts, " ")}
-}
-
-func listItemText(line string) (string, bool) {
-	for _, prefix := range []string{"- ", "* "} {
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
-		}
-	}
-
-	idx := 0
-	for idx < len(line) && line[idx] >= '0' && line[idx] <= '9' {
-		idx++
-	}
-	if idx == 0 || idx+1 >= len(line) {
-		return "", false
-	}
-	if (line[idx] != '.' && line[idx] != ')') || line[idx+1] != ' ' {
-		return "", false
-	}
-	return strings.TrimSpace(line[idx+2:]), true
-}
-
-func seededRequirementRefs(data templateData, scopeItemCount int) []string {
-	count := scopeItemCount
-	if count == 0 {
-		count = 1
-	}
-	if data.GuardrailDomain != "" {
-		count++
-	}
-	return reqReferenceList(count)
-}
-
-func reqReferenceList(count int) []string {
-	if count <= 0 {
-		return []string{"REQ-001"}
-	}
-	refs := make([]string, 0, count)
-	for i := 1; i <= count; i++ {
-		refs = append(refs, fmt.Sprintf("REQ-%03d", i))
-	}
-	return refs
-}
-
-func appendDocConstraints(base string, items []string, heading string) string {
-	if len(items) == 0 {
-		return base
-	}
-	var b strings.Builder
-	b.WriteString(strings.TrimSpace(base))
-	b.WriteString("\n\n")
-	b.WriteString(heading)
-	b.WriteString("\n")
-	for _, item := range items {
-		b.WriteString("- ")
-		b.WriteString(item)
-		b.WriteString("\n")
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-func constraintSeedItems(section string) []string {
-	items := docSectionItems(section)
-	if strings.TrimSpace(section) == "" {
-		return items
-	}
-
-	lines := strings.Split(section, "\n")
-	preamble := make([]string, 0, len(lines))
-	sawTopLevelList := false
-	for _, raw := range lines {
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" {
-			if sawTopLevelList {
-				break
-			}
-			continue
-		}
-		if _, ok := listItemText(trimmed); ok && leadingIndentWidth(raw) == 0 {
-			sawTopLevelList = true
-			break
-		}
-		if sawTopLevelList {
-			break
-		}
-		preamble = append(preamble, trimmed)
-	}
-	if !sawTopLevelList {
-		return items
-	}
-
-	preambleText := strings.Join(preamble, " ")
-	if strings.TrimSpace(preambleText) == "" {
-		return items
-	}
-	return append([]string{preambleText}, items...)
-}
-
-// ScaffoldIntentForChangeWithContext creates only intent.md in the governed
-// bundle directory using an externally-provided ProjectContext. This is used
-// when preset is pending to ensure the intake artifact exists without creating
-// the full governed bundle.
-func ScaffoldIntentForChangeWithContext(root string, change model.Change, projectCtx model.ProjectContext) error {
+// ScaffoldIntentForChange creates only intent.md in the governed bundle
+// directory. This is used when preset is pending to ensure the intake artifact
+// exists without creating the full governed bundle.
+func ScaffoldIntentForChange(root string, change model.Change) error {
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
 		return fmt.Errorf("slug is required")
@@ -715,7 +220,7 @@ func ScaffoldIntentForChangeWithContext(root string, change model.Change, projec
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return err
 	}
-	data := buildTemplateData(root, change, nil, projectCtx)
+	data := buildTemplateData(change)
 	intentPath := ResolveArtifactPath(base, "intent.md")
 	if _, err := os.Stat(intentPath); err == nil {
 		return nil // already exists
@@ -730,21 +235,14 @@ func ScaffoldIntentForChangeWithContext(root string, change model.Change, projec
 	return os.WriteFile(intentPath, []byte(rendered), 0o644)
 }
 
-// ScaffoldGovernedBundleForChangeWithContext creates the artifact files using
-// an externally-provided ProjectContext (e.g. from InferProjectContext) instead
-// of loading from .slipway.yaml.
-func ScaffoldGovernedBundleForChangeWithContext(root string, change model.Change, preset model.WorkflowPreset, projectCtx model.ProjectContext, schema ...[]ArtifactSpec) error {
-	return scaffoldGovernedBundleForChange(root, change, preset, &projectCtx, nil, schema...)
+// ScaffoldGovernedBundleForChange creates the artifact files for a governed
+// change. The engine owns structure only; project context is persisted on the
+// change and surfaced through `slipway instructions`, not copied into bodies.
+func ScaffoldGovernedBundleForChange(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) error {
+	return scaffoldGovernedBundleForChange(root, change, preset, schema...)
 }
 
-// ScaffoldGovernedBundleForChangeWithContextAndDocs creates the artifact files
-// using an externally-provided ProjectContext and doc sections extracted from
-// --from-doc. The doc sections enrich seeded content in templates.
-func ScaffoldGovernedBundleForChangeWithContextAndDocs(root string, change model.Change, preset model.WorkflowPreset, projectCtx model.ProjectContext, docs DocSections, schema ...[]ArtifactSpec) error {
-	return scaffoldGovernedBundleForChange(root, change, preset, &projectCtx, &docs, schema...)
-}
-
-func scaffoldGovernedBundleForChange(root string, change model.Change, preset model.WorkflowPreset, projectCtx *model.ProjectContext, docs *DocSections, schema ...[]ArtifactSpec) error {
+func scaffoldGovernedBundleForChange(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) error {
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
 		return fmt.Errorf("slug is required")
@@ -772,12 +270,7 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return err
 	}
-	var data templateData
-	if projectCtx != nil {
-		data = buildTemplateData(root, change, docs, *projectCtx)
-	} else {
-		data = buildTemplateData(root, change, docs)
-	}
+	data := buildTemplateData(change)
 
 	// Build a lookup from artifact name to template source path for custom schemas.
 	templatePaths := map[string]string{}
@@ -788,6 +281,12 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 	}
 
 	for _, file := range files {
+		// The engine defers creation of skill-authored artifacts so an
+		// un-authored required artifact is missing (fail-closed), not a
+		// placeholder body the skill must overwrite (issue #119).
+		if deferredToSkillAuthoring(file) {
+			continue
+		}
 		path := ResolveArtifactPath(base, file)
 		if _, err := os.Stat(path); err == nil {
 			continue
@@ -810,6 +309,20 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 	return nil
 }
 
+// deferredToSkillAuthoring reports whether an artifact's body is authored
+// directly by the host skill (via `slipway instructions <artifact>`) rather than
+// scaffolded by the engine. The engine defers creation so an un-authored required
+// artifact surfaces as missing (fail-closed), not a passing placeholder the skill
+// must overwrite (issue #119).
+func deferredToSkillAuthoring(name string) bool {
+	switch name {
+	case "requirements.md", "decision.md", "research.md", "tasks.md":
+		return true
+	default:
+		return false
+	}
+}
+
 func complexityRank(level string) int {
 	switch level {
 	case "trivial":
@@ -825,32 +338,20 @@ func complexityRank(level string) int {
 	}
 }
 
-// EnsureResearchArtifactForChange ensures research.md exists in the governed bundle.
+// EnsureResearchArtifactForChange ensures the governed bundle directory exists
+// for research authoring. research.md itself stays absent until the
+// research-orchestration host writes the real file from `slipway instructions
+// research`, so an un-authored research artifact fails closed as missing.
 func EnsureResearchArtifactForChange(root string, change model.Change) error {
 	base, err := state.GovernedBundleDir(root, change)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return err
-	}
-
-	path := filepath.Join(base, "research.md")
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-
-	rendered, err := renderTemplateWithFallback(root, "research.md", "", buildTemplateData(root, change, nil))
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(rendered), 0o644)
+	return os.MkdirAll(base, 0o755)
 }
 
 // validateSectionStructure validates that content contains the given headings
-// in order, each with at least one non-empty line of content beneath it.
+// in order, each with at least one non-comment content line beneath it.
 func validateSectionStructure(content string, headings []string) error {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	indices := make([]int, 0, len(headings))
@@ -877,14 +378,8 @@ func validateSectionStructure(content string, headings []string) error {
 		if i+1 < len(indices) {
 			end = indices[i+1]
 		}
-		hasContent := false
-		for _, line := range lines[start:end] {
-			if strings.TrimSpace(line) != "" {
-				hasContent = true
-				break
-			}
-		}
-		if !hasContent {
+		body := strings.Join(lines[start:end], "\n")
+		if strings.TrimSpace(stringutil.StripHTMLComments(body)) == "" {
 			return fmt.Errorf("section %q must have non-empty content", heading)
 		}
 	}
@@ -901,7 +396,43 @@ func ResearchStructureBlockers(content string) []model.ReasonCode {
 	if err := validateSectionStructure(content, headings); err != nil {
 		return []model.ReasonCode{model.NewReasonCode("research_structure_invalid", err.Error())}
 	}
-	return nil
+
+	var blockers []model.ReasonCode
+	for _, heading := range headings {
+		body := strings.Join(markdownSectionLines(content, heading), "\n")
+		if artifactSectionBodyLooksPlaceholder(body) {
+			blockers = append(blockers, model.NewReasonCode("research_section_placeholder", heading))
+		}
+	}
+	return blockers
+}
+
+var legacyArtifactSectionPlaceholderPhrases = []string{
+	"pending investigation. replace with concrete alternatives, tradeoffs, and the selected direction after research or code inspection.",
+	"pending investigation. record the selected approach only after the alternatives have concrete evidence.",
+	"pending investigation. name changed interfaces and data flows, or write \"none\" after inspection.",
+	"pending investigation. write the concrete rollback path and verification command after implementation scope is known.",
+	"pending investigation. list concrete risks only after inspecting the affected code and contracts.",
+	"pending investigation. replace with concrete alternatives, supporting evidence, and the selected direction.",
+	"pending investigation. list unknowns that must be resolved before planning.",
+	"pending investigation. list assumptions only after identifying the evidence that supports them.",
+	"requirements.md` and `decision.md` in the same bundle once planning artifacts are refined",
+	"existing code paths and tests related to the affected behavior in the repository",
+	"existing verification flows referenced by the scaffold context",
+}
+
+func artifactSectionBodyLooksPlaceholder(body string) bool {
+	stripped := strings.TrimSpace(stringutil.StripHTMLComments(body))
+	if stripped == "" {
+		return true
+	}
+	normalized := strings.ToLower(strings.Join(strings.Fields(stripped), " "))
+	for _, phrase := range legacyArtifactSectionPlaceholderPhrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseDecisionLockedDecisions extracts decision items from decision.md.

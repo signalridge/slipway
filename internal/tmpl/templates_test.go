@@ -573,6 +573,34 @@ func TestResearchOrchestrationUsesResearchArtifactSchemaHeadings(t *testing.T) {
 	assert.Contains(t, content, "## Assumptions")
 	assert.Contains(t, content, "## Canonical References")
 	assert.NotContains(t, content, "### Unknowns Resolved")
+	assert.NotContains(t, content, "## Research Findings")
+	assert.Contains(t, content, "research_section_placeholder")
+}
+
+func TestPlanningSkillsFollowArtifactDependencyOrder(t *testing.T) {
+	t.Parallel()
+
+	research, err := Content("skills/research-orchestration/SKILL.md")
+	require.NoError(t, err)
+	assert.Contains(t, research, "Record the selected approach in `research.md`")
+	assert.Contains(t, research, "Do not author `decision.md` during research")
+	assert.NotContains(t, research, "`slipway instructions decision`")
+	assert.NotContains(t, research, "locked decision authored into `decision.md`")
+
+	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+	requirementsIdx := strings.Index(planAudit, "`slipway instructions requirements`")
+	decisionIdx := strings.Index(planAudit, "`slipway instructions decision`")
+	tasksIdx := strings.Index(planAudit, "`slipway instructions tasks`")
+	require.NotEqual(t, -1, requirementsIdx)
+	require.NotEqual(t, -1, decisionIdx)
+	require.NotEqual(t, -1, tasksIdx)
+	assert.Less(t, requirementsIdx, decisionIdx)
+	assert.Less(t, decisionIdx, tasksIdx)
+	assert.Contains(t, planAudit, "schema dependency order")
+	assert.Contains(t, planAudit, "`decision_contract`")
+	assert.Contains(t, strings.Join(strings.Fields(planAudit), " "), "Every task names concrete `target_files`")
+	assert.NotContains(t, planAudit, "research-orchestration already locked")
 }
 
 func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {

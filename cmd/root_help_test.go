@@ -25,7 +25,7 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	// Issue #91 (P2b): the new public authoring surface must be discoverable from
 	// the main `slipway help` path, not only docs/toolgen.
 	assert.Contains(t, help, "instructions")
-	assert.Contains(t, help, "Show the template and authoring guidance for a governed artifact")
+	assert.Contains(t, help, "Show the authoring contract")
 	assert.Contains(t, help, "Finalize a done-ready change and archive it")
 	assert.NotContains(t, help, "completed change")
 	assert.NotContains(t, help, "Auto-classify advisory versus governed work")

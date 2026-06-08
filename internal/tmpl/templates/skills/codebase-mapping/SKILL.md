@@ -36,6 +36,20 @@ Write a durable brownfield map under `artifacts/codebase/` using this fixed docu
 These documents are advisory but canonical. Downstream skills consume them by
 path instead of relying on transient chat context.
 
+Before authoring each doc, read its authoring contract with `slipway
+instructions <doc> --json` (e.g. `slipway instructions architecture --json`;
+both the key `architecture` and the file name `ARCHITECTURE.md` resolve). It
+returns the same instructions->author payload the governed bundle artifacts use:
+- `template` — the doc's structure to fill in.
+- `guidance` — the quality bar (file:line-cited findings, module boundaries,
+  change-relevant risks).
+- `resolved_output_path` — the repo-scoped path under `artifacts/codebase/` to
+  write to. Codebase-map docs are repo-scoped and advisory, so this resolves
+  without an active change and does not gate any stage.
+- `context` — when the CLI's baseline scan detected real facts, the machine-
+  extracted baseline content. These are real detected facts to preserve and
+  extend, NOT a placeholder seed to delete.
+
 `slipway codebase-map --json` may report `status: "baseline"` and
 `baseline_docs` when the CLI has written only detected repository facts. Baseline
 docs are not finished mapping work; refine them with file:line citations,
@@ -61,7 +75,9 @@ Run `slipway codebase-map --json` to scaffold the canonical map directory and th
 fixed document set, then read `codebase_map_dir`/`codebase_map_docs` from its
 output. Do not hand-create the directory or guess the doc set. (Inside an active
 change you may instead read the `input_context.codebase_map_*` fields from
-`slipway next --json`.)
+`slipway next --json`.) For each doc you author, read `slipway instructions
+<doc> --json` to get its template, quality bar, resolved output path, and
+baseline facts (see Durable Output Contract).
 
 ### 2. Repository Structure Scan
 Map top-level directories, build/config files, tests, docs, and
@@ -95,7 +111,10 @@ Document existing patterns that the change should follow:
 - naming, file organization, error handling, tests, and configuration
 
 ### 8. Structured Output
-Write the findings into the durable document set.
+Write the findings into the durable document set. Author each doc against its
+`slipway instructions <doc>` contract — fill the returned `template`, meet the
+`guidance` quality bar, preserve and extend any baseline `context`, and write to
+the `resolved_output_path`.
 
 ```markdown
 artifacts/codebase/STACK.md

@@ -489,9 +489,9 @@ func createDirectGovernedChange(
 			return err
 		}
 		// S0_INTAKE owns intent clarification. Defer downstream governed
-		// artifacts until S1_PLAN/bundle so they can be seeded from the
-		// confirmed intent instead of from empty template placeholders.
-		if err := artifact.ScaffoldIntentForChangeWithContext(root, change, projectCtx); err != nil {
+		// artifacts until S1_PLAN/bundle so skill-authored artifacts stay
+		// missing until the owning host writes real substance.
+		if err := artifact.ScaffoldIntentForChange(root, change); err != nil {
 			if change.WorkflowPreset.IsValid() {
 				return restoreNewPresetAfterScaffoldFailure(root, &change, err)
 			}

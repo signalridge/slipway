@@ -259,6 +259,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		checklistResult := ValidateTasksChecklistDetailed(root, evaluationChange)
 		readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(checklistResult.Blockers)...)
 		readiness.Diagnostics = append(readiness.Diagnostics, checklistResult.Warnings...)
+		readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(DecisionContractBlockers(root, evaluationChange))...)
 	}
 
 	readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(AssuranceContractBlockers(root, evaluationChange))...)

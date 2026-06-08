@@ -233,7 +233,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
@@ -269,7 +269,7 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
@@ -591,7 +591,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		change.CurrentState = model.StateS3Review
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		// Write execution summary with CapturedAt = now.
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -637,7 +637,7 @@ func TestReviewAllDoesNotTreatImplementationEvidenceAsArtifactEvidence(t *testin
 		change.PlanSubStep = model.PlanSubStepNone
 		change.GuardrailDomain = string(model.GuardrailDomainExternalAPIContracts)
 		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}))
+		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)

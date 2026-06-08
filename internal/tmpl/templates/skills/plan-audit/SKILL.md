@@ -54,32 +54,44 @@ Use `slipway-coding-discipline` as the execution-shape bar: plans should stay
 simple, goal-scoped, and sliced for surgical implementation.
 
 ## Author Substance First
-The engine seeds `requirements.md` and `tasks.md` as obviously-not-real
-placeholders — it owns structure, you own substance. Before auditing, run
-`slipway validate` and read its `requirements_contract` / `tasks_contract`: a
-`plan_dimension_coverage_requirements_invalid` blocker, or an `invalid`
-contract, means the seed was never authored.
+The engine owns each plan artifact's structure; you own its substance. Author the
+real plan artifacts in schema dependency order: `requirements.md` first,
+`decision.md` next on the expanded schema, then `tasks.md`. Run `slipway validate`
+and read its `requirements_contract` / `decision_contract` / `tasks_contract`,
+and watch for `missing_required_artifact:decision.md`: an `invalid` contract or
+a missing required artifact means the substance was never authored.
 
-When that happens, author the real content first — do not audit a placeholder:
-- `slipway instructions requirements` — template and bar: each `REQ-*` body
-  states what the system MUST, SHALL, or is REQUIRED to do (an RFC-2119
-  strong-obligation keyword), with at least one concrete `#### Scenario`
-  (real GIVEN/WHEN/THEN, no tautology).
-- `slipway instructions tasks` — template and bar: each task carries a concrete
-  objective plus `wave`, `depends_on`, `target_files`, `task_kind`, and `covers`.
+When that happens, author the real content first — do not audit a placeholder.
+Each `slipway instructions <artifact>` payload carries the template, the quality
+bar, the resolved output path to write, and the upstream dependencies to read by
+path; honor its `context`/`rules` but never copy them into the file:
+- `slipway instructions requirements` — each `REQ-*` body states what the system
+  MUST, SHALL, or is REQUIRED to do (an RFC-2119 strong-obligation keyword), with
+  at least one concrete `#### Scenario` (real GIVEN/WHEN/THEN, no tautology).
+- `slipway instructions decision` — each of the five sections (Alternatives
+  Considered, Selected Approach, Interfaces and Data Flow, Rollout and Rollback,
+  Risk) carries concrete, change-specific content. On a discovery change, use the
+  selected approach and evidence recorded in `research.md`; author the formal
+  decision here after the requirements are real.
+- `slipway instructions tasks` — each task carries a concrete objective plus
+  `wave`, `depends_on`, `target_files`, `task_kind`, and `covers`. Every task
+  names concrete `target_files` that bound the files or evidence targets it
+  changes or verifies.
 
-A mechanical or vacuous requirements/tasks file cannot reach done. Re-run
-`slipway validate` until the substance gate passes, then audit.
+A mechanical or vacuous plan artifact cannot reach done. Re-run `slipway validate`
+until the substance gate passes, then audit.
 
 ## Validate Artifacts
 Verify the **required artifact set** exists and is structurally valid:
-- Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`
+- Required (all paths): `change.yaml`, `intent.md`, `requirements.md`, `tasks.md`.
+  `decision.md` is intentionally listed separately below because only expanded
+  schemas require it.
 - Required whenever the change is on the **expanded** artifact schema — discovery
   changes (`needs_discovery=true`); the research/config/meta workflow profiles; or
   a repo configured to default to expanded. A standard non-discovery code change
   uses the **core** schema and does not require it. No public surface exposes the
   frozen schema name, so treat the engine as the authority: a missing one on an
-  expanded change is surfaced as `missing_required_artifact:decision.md`: `decision.md`
+  expanded change is surfaced as `missing_required_artifact:decision.md`.
 - Required when `needs_discovery=true` (the only discovery-gated artifact — check
   `needs_discovery` in `slipway next --json` / `slipway validate`): `research.md`.
   A missing one is a blocker (`missing_required_artifact:research.md`). On
@@ -106,7 +118,7 @@ dimension:
 1. **Coverage (Nyquist Check)**: every `REQ-*` SHOULD be covered by at least one task. Standard/strict uncovered requirements block; light uncovered requirements warn.
 2. **Completeness**: each task has objective, `wave`, dependencies, and expected outputs.
 3. **Dependency Integrity**: `depends_on` references valid earlier-wave tasks and has no cycles.
-4. **Key Links**: each task names concrete `target_files` or evidence targets.
+4. **Key Links**: each task names concrete `target_files` for the files or evidence targets it changes or verifies.
 5. **Scope Control**: task targets stay inside declared scope.
 6. **Context Compliance**: task metadata supports context-safe execution (`task_kind` where present).
 7. **Test Coverage Mapping**: acceptance criteria map to automated checks; new scaffolding is an explicit dependency.

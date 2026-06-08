@@ -331,20 +331,27 @@ func TestPresetCommandScaffoldFailureRollsBackToPendingConfirmation(t *testing.T
 		change.PlanSubStep = model.PlanSubStepResearch
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Replace intent.md with a directory so scaffold preparation fails
-		// portably before downstream artifacts are rewritten.
+		// Point intent.md at a target under a missing directory so the current
+		// scaffold path reaches WriteFile(intent.md) and fails after following the
+		// dangling symlink. This deliberately depends on the os.Stat-then-WriteFile
+		// sequence in ScaffoldIntentForChange; if that sequence changes,
+		// replace this with an explicit scaffold fault seam instead of letting the
+		// test pass for a different reason. The bundle dir itself stays writable, so
+		// the rollback's atomic SaveChange still persists. intent.md is always a
+		// required artifact, so the scaffold attempts the write regardless of
+		// discovery classification.
 		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
 		blockedArtifact := filepath.Join(bundleDir, "intent.md")
 		require.NoError(t, os.Remove(blockedArtifact))
-		require.NoError(t, os.Mkdir(blockedArtifact, 0o755))
-		defer func() { _ = os.RemoveAll(blockedArtifact) }()
+		require.NoError(t, os.Symlink(filepath.Join(bundleDir, "missing-parent", "intent.md"), blockedArtifact))
+		defer func() { _ = os.Remove(blockedArtifact) }()
 
 		cmd := makePresetCmd()
 		cmd.SetArgs([]string{"light"})
 		err = cmd.Execute()
 		require.Error(t, err)
 
-		_ = os.RemoveAll(blockedArtifact)
+		_ = os.Remove(blockedArtifact)
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.True(t, reloaded.WorkflowPresetConfirmationPending(),
@@ -379,20 +386,25 @@ func TestPresetCommandReScaffoldFailurePreservesConfirmedPreset(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepResearch
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Replace intent.md with a directory so re-scaffold preparation fails
-		// portably.
+		// Point intent.md at a target under a missing directory so the current
+		// re-scaffold path reaches WriteFile(intent.md) and fails after following
+		// the dangling symlink. This deliberately depends on the
+		// os.Stat-then-WriteFile sequence in ScaffoldIntentForChange; if
+		// that sequence changes, replace this with an explicit scaffold fault seam
+		// instead of letting the test pass for a different reason. The bundle dir
+		// itself stays writable, so the rollback's atomic SaveChange still persists.
 		bundleDir := filepath.Join(root, "artifacts", "changes", slug)
 		blockedArtifact := filepath.Join(bundleDir, "intent.md")
 		require.NoError(t, os.Remove(blockedArtifact))
-		require.NoError(t, os.Mkdir(blockedArtifact, 0o755))
-		defer func() { _ = os.RemoveAll(blockedArtifact) }()
+		require.NoError(t, os.Symlink(filepath.Join(bundleDir, "missing-parent", "intent.md"), blockedArtifact))
+		defer func() { _ = os.Remove(blockedArtifact) }()
 
 		retryCmd := makePresetCmd()
 		retryCmd.SetArgs([]string{"strict"})
 		err = retryCmd.Execute()
-		require.Error(t, err, "re-scaffold should fail because intent.md cannot be read as a file")
+		require.Error(t, err, "re-scaffold should fail because intent.md cannot be written through the dangling symlink")
 
-		_ = os.RemoveAll(blockedArtifact)
+		_ = os.Remove(blockedArtifact)
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.WorkflowPresetStrict, reloaded.WorkflowPreset,

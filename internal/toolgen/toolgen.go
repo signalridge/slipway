@@ -200,14 +200,16 @@ var commandRegistry = []CommandDef{
 	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "instructions", Class: CommandClassQuery, Description: "Show the template and authoring guidance for a governed artifact", Tier: "diagnostics", HasPromptSurface: true,
-		Arguments: "<artifact> [--json]",
-		// instructions reads embedded artifact templates only — it needs no
-		// `.slipway.yaml` and no active change. Declare that explicitly so the
-		// generated command-reference does not leak the catch-all default
+	{ID: "instructions", Class: CommandClassQuery, Description: "Show the authoring contract (template, quality bar, and inside a change the resolved output path + dependency graph) for a governed artifact or codebase-map doc", Tier: "diagnostics", HasPromptSurface: true,
+		Arguments: "<artifact> [--change <slug>] [--json]",
+		// instructions serves a static template/guidance exemplar with no
+		// `.slipway.yaml` and no active change, for governed bundle artifacts and
+		// codebase-map docs alike. Inside a change it additionally resolves output
+		// path/dependencies, but never requires one. Declare prereq-free explicitly
+		// so the generated command-reference does not leak the catch-all default
 		// prerequisites (run `slipway init` / an active change), which would be
-		// false for this prereq-free surface (issue #91).
-		Prerequisites: []string{"None — reads embedded artifact templates; no `slipway init` or active change required."}},
+		// false for this prereq-free surface (issues #91, #119).
+		Prerequisites: []string{"None — serves a static template and guidance with no `slipway init` or active change required."}},
 }
 
 // commandRegistryMap provides O(1) lookup by command ID.

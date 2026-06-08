@@ -126,7 +126,7 @@ func TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence(t *testing.T) {
 	})
 }
 
-func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
+func TestNextL3AdvanceDefersResearchArtifactAuthoringAtScopeEntry(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -134,7 +134,7 @@ func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
 	initGitRepoForWorktreeTests(t, root)
 
 	change := model.NewChange("l3-scope-artifact")
-	change.Description = "scope entry should have canonical research artifact"
+	change.Description = "scope entry should defer canonical research artifact authoring"
 	change.NeedsDiscovery = true
 	change.CurrentState = model.StateS1Plan
 	change.PlanSubStep = model.PlanSubStepResearch
@@ -150,11 +150,11 @@ func TestNextL3AdvanceCreatesResearchArtifactAtScopeEntry(t *testing.T) {
 
 	assert.Equal(t, model.StateS1Plan, view.CurrentState)
 
-	// Research artifact should be created at the project root bundle dir
-	// (not worktree) at S1_PLAN/research entry for discovery changes.
+	// Research authoring is deferred to research-orchestration; the engine should
+	// not create a placeholder body in either the root or bound worktree bundle.
 	researchPath := filepath.Join(root, "artifacts", "changes", change.Slug, "research.md")
 	_, err = os.Stat(researchPath)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {

@@ -3,9 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
@@ -13,7 +10,6 @@ import (
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	"github.com/signalridge/slipway/internal/stringutil"
 	"github.com/spf13/cobra"
 )
 
@@ -100,15 +96,9 @@ func makePresetCmd() *cobra.Command {
 				// downstream artifacts from empty templates. Keep only intent.md;
 				// S1_PLAN/bundle scaffolds the full bundle from confirmed intent.
 				if needsScaffold {
-					projectCtx := change.ProjectContext
-					if projectCtx.IsZero() {
-						// Fallback for legacy/pure-TTY changes that did not persist
-						// a caller-supplied or creation-time scaffold context.
-						projectCtx = progression.InferProjectContext(root)
-					}
 					var scaffoldErr error
 					if change.CurrentState == model.StateS0Intake {
-						scaffoldErr = artifact.ScaffoldIntentForChangeWithContext(root, change, projectCtx)
+						scaffoldErr = artifact.ScaffoldIntentForChange(root, change)
 					} else {
 						resolution := progression.ResolveChangeSchemaDiagnostics(change)
 						if len(resolution.Blockers) > 0 {
@@ -125,19 +115,7 @@ func makePresetCmd() *cobra.Command {
 							}
 							return err
 						}
-						docs, err := docSectionsFromIntent(root, change)
-						if err != nil {
-							err = fmt.Errorf("extracting doc sections from intent: %w", err)
-							if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
-								return errors.Join(err, restoreErr)
-							}
-							return err
-						}
-						if docs.Scope != "" || docs.Constraints != "" || docs.Acceptance != "" {
-							scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContextAndDocs(root, change, policy.EffectivePreset, projectCtx, docs, resolution.Schema)
-						} else {
-							scaffoldErr = artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, policy.EffectivePreset, projectCtx, resolution.Schema)
-						}
+						scaffoldErr = artifact.ScaffoldGovernedBundleForChange(root, change, policy.EffectivePreset, resolution.Schema)
 					}
 					if scaffoldErr != nil {
 						if restoreErr := restorePresetOnScaffoldFailure(root, &change, origPreset, origSuggested); restoreErr != nil {
@@ -180,26 +158,6 @@ func makePresetCmd() *cobra.Command {
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().Bool("json", false, "JSON output")
 	return cmd
-}
-
-func docSectionsFromIntent(root string, change model.Change) (artifact.DocSections, error) {
-	paths, err := state.ResolveChangePaths(root, change)
-	if err != nil {
-		return artifact.DocSections{}, err
-	}
-	intentPath := filepath.Join(paths.GovernedBundleDir, "intent.md")
-	data, err := os.ReadFile(intentPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return artifact.DocSections{}, nil
-		}
-		return artifact.DocSections{}, err
-	}
-	return artifact.DocSections{
-		Scope:       stringutil.LastMarkdownSectionContent(string(data), "## In Scope"),
-		Constraints: stringutil.LastMarkdownSectionContent(string(data), "## Constraints"),
-		Acceptance:  stringutil.LastMarkdownSectionContent(string(data), "## Acceptance Signals"),
-	}, nil
 }
 
 // restorePresetOnScaffoldFailure restores the pre-command preset state after

@@ -49,86 +49,6 @@ func TestAdvance_NoChangeFile(t *testing.T) {
 	}
 }
 
-func TestEnsureGovernedBundleScaffoldedSeedsFromConfirmedIntent(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	change := model.NewChange("ci-release-maintenance")
-	change.Description = "add CI release and maintenance workflow support"
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.ProjectContext = model.ProjectContext{
-		TechStack: "Go, GitHub Actions",
-		TestCmd:   "go test ./...",
-		BuildCmd:  "go build ./...",
-		Languages: []string{"Go"},
-	}
-
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	if err != nil {
-		t.Fatalf("bundle dir: %v", err)
-	}
-	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
-		t.Fatalf("mkdir bundle: %v", err)
-	}
-	intent := `# Intent
-
-## Summary
-Add CI, release, and maintenance automation.
-
-## In Scope
-- add GitHub Actions CI workflow coverage
-- add release-please and GoReleaser release automation
-
-## Out of Scope
-- configure real publishing secrets
-
-## Constraints
-- keep CLI runtime behavior unchanged
-
-## Acceptance Signals
-- go test ./...
-- go build ./...
-
-## Approved Summary
-Confirmed scope.
-`
-	if err := os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte(intent), 0o644); err != nil {
-		t.Fatalf("write intent: %v", err)
-	}
-
-	if err := ensureGovernedBundleScaffolded(root, &change); err != nil {
-		t.Fatalf("ensure bundle scaffolded: %v", err)
-	}
-
-	requirementsRaw, err := os.ReadFile(filepath.Join(bundleDir, "requirements.md"))
-	if err != nil {
-		t.Fatalf("read requirements: %v", err)
-	}
-	requirements := strings.ToLower(string(requirementsRaw))
-	if !strings.Contains(requirements, "github actions ci workflow coverage") {
-		t.Fatalf("requirements not seeded from intent scope:\n%s", string(requirementsRaw))
-	}
-	if !strings.Contains(string(requirementsRaw), "Tech Stack: Go, GitHub Actions") {
-		t.Fatalf("requirements did not preserve project context:\n%s", string(requirementsRaw))
-	}
-
-	decisionRaw, err := os.ReadFile(filepath.Join(bundleDir, "decision.md"))
-	if err != nil {
-		t.Fatalf("read decision: %v", err)
-	}
-	if !strings.Contains(strings.ToLower(string(decisionRaw)), "keep cli runtime behavior unchanged") {
-		t.Fatalf("decision not seeded from intent constraints:\n%s", string(decisionRaw))
-	}
-
-	tasksRaw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
-	if err != nil {
-		t.Fatalf("read tasks: %v", err)
-	}
-	if !strings.Contains(strings.ToLower(string(tasksRaw)), "release-please and goreleaser release automation") {
-		t.Fatalf("tasks not seeded from intent scope:\n%s", string(tasksRaw))
-	}
-}
-
 func TestAdvance_DispatchS1Plan(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -799,11 +719,11 @@ S1 research must require fresh research evidence.
 	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
 		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
 	}
-	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
-		t.Fatalf("expected research artifact to be scaffolded, got %+v", summary.SideEffects)
+	if !hasSideEffect(summary.SideEffects, "deferred_research_authoring") {
+		t.Fatalf("expected research artifact authoring to be deferred, got %+v", summary.SideEffects)
 	}
-	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
-		t.Fatalf("expected research.md to exist after S1 research handoff: %v", err)
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected research.md to remain absent until research-orchestration authors it, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected stale research verification to be removed, err=%v", err)
@@ -997,12 +917,42 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChange(root, change, ""); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	if err != nil {
 		t.Fatalf("bundle dir: %v", err)
+	}
+	// requirements.md/decision.md are authored by the host skill, not scaffolded
+	// (issue #119); write real ones so the lifecycle does not fail closed on
+	// missing_required_artifact before reaching the task-evidence check.
+	if err := os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Change authority
+REQ-001: Sync MUST NOT rewrite unchanged change authority during advance.
+`), 0o644); err != nil {
+		t.Fatalf("write requirements.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(`# Decision
+
+## Alternatives Considered
+- A: Rewrite change.yaml on every sync.
+- B: Skip the write when authority is unchanged.
+
+## Selected Approach
+Use B.
+
+## Interfaces and Data Flow
+Advance reconciles change authority and only persists it on a real change.
+
+## Rollout and Rollback
+Limited to the sync write path and revertible directly.
+
+## Risk
+Low; an unchanged authority simply skips the persist.
+`), 0o644); err != nil {
+		t.Fatalf("write decision.md: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
@@ -1091,8 +1041,47 @@ func TestAdvanceGoverned_S2PassesWithCompleteRuntimeTaskEvidence(t *testing.T) {
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, "", model.ProjectContext{}); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChange(root, change, ""); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
+	}
+	// requirements.md/decision.md are authored by the host skill, not scaffolded
+	// (issue #119); write real ones so S2 does not fail closed on
+	// missing_required_artifact before reaching the task-evidence check.
+	s2BundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		t.Fatalf("bundle dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(s2BundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Runtime task evidence
+REQ-001: S2 MUST advance to S3 when every wave task carries complete passing runtime evidence.
+
+#### Scenario: Complete runtime evidence advances
+GIVEN all wave tasks have fresh passing evidence
+WHEN governed advance runs at S2
+THEN the change advances to S3.
+`), 0o644); err != nil {
+		t.Fatalf("write requirements.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(s2BundleDir, "decision.md"), []byte(`# Decision
+
+## Alternatives Considered
+- A: Require manual recovery before advancing.
+- B: Advance directly when runtime evidence is complete.
+
+## Selected Approach
+Use B.
+
+## Interfaces and Data Flow
+S2 advance reads per-task runtime evidence and wave-orchestration verification.
+
+## Rollout and Rollback
+Limited to the S2 advance path and revertible directly.
+
+## Risk
+Low; incomplete or stale evidence still blocks the advance.
+`), 0o644); err != nil {
+		t.Fatalf("write decision.md: %v", err)
 	}
 
 	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
@@ -1212,7 +1201,7 @@ func TestAdvanceGoverned_AppliesWorktreePreflightBeforeRequiredActionBlockers(t 
 	if err := state.SaveChange(root, change); err != nil {
 		t.Fatalf("save change: %v", err)
 	}
-	if err := artifact.ScaffoldGovernedBundleForChangeWithContext(root, change, model.WorkflowPresetStrict, model.ProjectContext{}); err != nil {
+	if err := artifact.ScaffoldGovernedBundleForChange(root, change, model.WorkflowPresetStrict); err != nil {
 		t.Fatalf("scaffold bundle: %v", err)
 	}
 	bundleDir, err := state.GovernedBundleDir(root, change)
@@ -1353,7 +1342,7 @@ func TestAdvanceIntake_ConfirmToS1Plan(t *testing.T) {
 	}
 }
 
-func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *testing.T) {
+func TestAdvanceIntake_ConfirmToS1PlanResearchDefersResearchAuthoring(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
@@ -1397,14 +1386,14 @@ func TestAdvanceIntake_ConfirmToS1PlanResearchMaterializesResearchArtifact(t *te
 	if summary.ToState != model.StateS1Plan || summary.ToSubStep != string(model.PlanSubStepResearch) {
 		t.Fatalf("expected transition to S1_PLAN/research, got state=%s substep=%s", summary.ToState, summary.ToSubStep)
 	}
-	if !hasSideEffect(summary.SideEffects, "scaffolded_research") {
-		t.Fatalf("expected scaffolded_research side effect, got %+v", summary.SideEffects)
+	if !hasSideEffect(summary.SideEffects, "deferred_research_authoring") {
+		t.Fatalf("expected deferred_research_authoring side effect, got %+v", summary.SideEffects)
 	}
 	if !hasSideEffect(summary.SideEffects, "cleared_verification") {
 		t.Fatalf("expected stale research verification to be cleared, got %+v", summary.SideEffects)
 	}
-	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); err != nil {
-		t.Fatalf("expected research.md to exist after intake confirmation: %v", err)
+	if _, err := os.Stat(filepath.Join(bundleDir, "research.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected research.md to remain absent until research-orchestration authors it, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundleDir, "verification", SkillResearchOrchestration+".yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected stale research verification to be removed, err=%v", err)
@@ -1493,6 +1482,57 @@ Internal docs.
 			if strings.Contains(b.Code, "worktree") || strings.Contains(b.Code, "dedicated_worktree") {
 				t.Fatalf("G_scope must not block on missing worktree at S1_PLAN/research: %v", summary.Blockers)
 			}
+		}
+	}
+}
+
+func TestEvaluateScopeGateReportsMissingResearchArtifact(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("missing-research-artifact")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	change.IntakeSubStep = model.IntakeSubStepNone
+	change.NeedsDiscovery = true
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	for _, file := range []string{"intent.md", "requirements.md", "tasks.md", "assurance.md", "decision.md"} {
+		if err := os.WriteFile(filepath.Join(bundleDir, file), []byte("# "+file+"\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", file, err)
+		}
+	}
+
+	evaluation, err := EvaluateScopeGate(root, change, map[string]model.VerificationRecord{
+		SkillResearchOrchestration: {
+			Verdict:    model.VerificationVerdictPass,
+			Timestamp:  change.CreatedAt,
+			RunVersion: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evaluation.Status != model.GateStatusBlocked {
+		t.Fatalf("expected missing research.md to block, got %+v", evaluation)
+	}
+	if !hasAdvanceReasonDetail(evaluation.ReasonCodes, "missing_required_artifact", "research.md") {
+		t.Fatalf("expected missing_required_artifact:research.md blocker, got %+v", evaluation.ReasonCodes)
+	}
+	for _, blocker := range evaluation.ReasonCodes {
+		if blocker.Code == "research_structure_invalid" {
+			t.Fatalf("missing research.md must not be reported as a structure error: %+v", evaluation.ReasonCodes)
 		}
 	}
 }
