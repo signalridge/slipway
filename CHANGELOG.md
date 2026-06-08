@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0](https://github.com/signalridge/slipway/compare/v0.11.6...v0.12.0) (2026-06-08)
+
+
+### Features
+
+* **cleanup:** add `slipway delete` for abandoned governed changes and worktrees ([#138](https://github.com/signalridge/slipway/issues/138)) ([fc95992](https://github.com/signalridge/slipway/commit/fc9599250ae71a95ed9b0a1902468c9769862f0f))
+
+
+### Dependencies
+
+* **docker:** bump golang from `91eda97` to `f23e8b2` ([#133](https://github.com/signalridge/slipway/issues/133)) ([78ae1cf](https://github.com/signalridge/slipway/commit/78ae1cf148b8a635461f69cf88712b6eff33dd73))
+
 ## [0.11.6](https://github.com/signalridge/slipway/compare/v0.11.5...v0.11.6) (2026-06-08)
 
 
