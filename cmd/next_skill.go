@@ -17,7 +17,7 @@ import (
 // governance registry and artifact state, replacing level-conditional logic in
 // skill templates.
 // governedChange is the already-loaded unified Change (nil for intake-only mode).
-func buildSkillConstraints(root string, def skill.Definition, governedChange *model.Change) *skillConstraints {
+func buildSkillConstraints(root string, def skill.Definition, governedChange *model.Change, planLocked bool) *skillConstraints {
 	sc := &skillConstraints{
 		MitigationTarget: def.Mitigation,
 		RunSummaryBound:  def.RunSummaryBound,
@@ -26,9 +26,18 @@ func buildSkillConstraints(root string, def skill.Definition, governedChange *mo
 	if governedChange != nil {
 		sc.GuardrailDomain = governedChange.GuardrailDomain
 
-		// Parse locked decisions from decision.md (canonical source for selected approach).
+		// Parse the selected approach/direction from decision.md and route it by
+		// lifecycle lock state: a decision is "locked" only once the G_plan gate
+		// has approved the plan. While the plan is not yet locked, a recommended
+		// Selected Approach is still pending fresh user confirmation and must be
+		// surfaced as pending, never as a locked decision (issue #140).
 		if paths, err := state.ResolveChangePaths(root, *governedChange); err == nil {
-			sc.LockedDecisions = parseLockedDecisions(filepath.Join(paths.GovernedBundleDir, "decision.md"))
+			decisions := parseDecisionItems(filepath.Join(paths.GovernedBundleDir, "decision.md"))
+			if planLocked {
+				sc.LockedDecisions = decisions
+			} else {
+				sc.PendingDecisions = decisions
+			}
 		}
 
 		// Surface the exact high-risk reference tokens goal-verification must
@@ -56,9 +65,20 @@ func requiredHighRiskTokenHints(domain string) []string {
 	return out
 }
 
-// parseLockedDecisions extracts locked decision items from decision.md.
-// Returns nil if the file is absent or only contains scaffolded draft text.
-func parseLockedDecisions(decisionPath string) []string {
+// planLockedFromGates reports whether the lifecycle has locked the plan — the
+// G_plan gate is approved. Decisions parsed from decision.md are only "locked"
+// once this is true; before plan approval a recommended Selected Approach is
+// still pending fresh confirmation and is surfaced as pending (issue #140).
+func planLockedFromGates(readiness progression.GovernanceReadiness) bool {
+	eval, ok := readiness.GateEvaluations[gate.GatePlan]
+	return ok && eval.Status == model.GateStatusApproved
+}
+
+// parseDecisionItems extracts the selected approach/direction items from
+// decision.md. Returns nil if the file is absent or only contains scaffolded
+// draft text. Whether these items are reported as locked or pending is decided
+// by the caller from the lifecycle G_plan gate state (issue #140).
+func parseDecisionItems(decisionPath string) []string {
 	data, err := os.ReadFile(decisionPath)
 	if err != nil {
 		return nil
