@@ -6,26 +6,26 @@
       :root{
         --text:#0f172a; --muted:#64748b; --line:#94a3b8;
         --rail-bg:#f8fafc; --rail-border:#e2e8f0; --rail-label:#64748b;
-        --entry-fill:#ecfdf5; --entry-stroke:#047857; --entry-pill:#047857;
-        --plan-fill:#ecfdf5;  --plan-stroke:#059669;  --plan-pill:#059669;
-        --exec-fill:#f0fdf4;  --exec-stroke:#16a34a;  --exec-pill:#16a34a;
-        --review-fill:#f7fee7;--review-stroke:#4d7c0f;--review-pill:#4d7c0f;
-        --verify-fill:#f7fee7;--verify-stroke:#65a30d;--verify-pill:#65a30d;
+        --entry-fill:#fff6e6; --entry-stroke:#d98a13; --entry-pill:#d98a13;
+        --plan-fill:#fff0ea;  --plan-stroke:#f2643b;  --plan-pill:#f2643b;
+        --exec-fill:#ffedf3;  --exec-stroke:#e23b6f;  --exec-pill:#e23b6f;
+        --review-fill:#ffe7f0;--review-stroke:#c81e63;--review-pill:#c81e63;
+        --verify-fill:#e7faf6;--verify-stroke:#0e8077;--verify-pill:#0e8077;
         --term-fill:#0f172a;  --term-stroke:#0f172a; --term-text:#ffffff;
-        --new-fill:#ffffff;   --new-stroke:#047857;  --new-text:#047857;
+        --new-fill:#ffffff;   --new-stroke:#d98a13;  --new-text:#d98a13;
         --chip-fill:#ffffff;  --chip-border:#e2e8f0;
       }
       @media (prefers-color-scheme: dark){
         :root{
           --text:#e6edf3; --muted:#8b949e; --line:#475569;
           --rail-bg:#0d1117; --rail-border:#21262d; --rail-label:#8b949e;
-          --entry-fill:#053024; --entry-stroke:#34d399; --entry-pill:#10b981;
-          --plan-fill:#052e1c;  --plan-stroke:#4ade80;  --plan-pill:#16a34a;
-          --exec-fill:#0d2f12;  --exec-stroke:#86efac;  --exec-pill:#22c55e;
-          --review-fill:#1c2e08;--review-stroke:#a3e635;--review-pill:#65a30d;
-          --verify-fill:#222b06;--verify-stroke:#bef264;--verify-pill:#84cc16;
+          --entry-fill:#3a2606; --entry-stroke:#fbbf24; --entry-pill:#d98a13;
+          --plan-fill:#3a1a10;  --plan-stroke:#ff8a5c;  --plan-pill:#f2643b;
+          --exec-fill:#360f1d;  --exec-stroke:#ff6b97;  --exec-pill:#e23b6f;
+          --review-fill:#330a1b;--review-stroke:#ff5e9a;--review-pill:#c81e63;
+          --verify-fill:#04302b;--verify-stroke:#4fd6c6;--verify-pill:#0e8077;
           --term-fill:#e6edf3;  --term-stroke:#e6edf3; --term-text:#0d1117;
-          --new-fill:#0d1117;   --new-stroke:#34d399;  --new-text:#34d399;
+          --new-fill:#0d1117;   --new-stroke:#fbbf24;  --new-text:#fbbf24;
           --chip-fill:#161b22;  --chip-border:#30363d;
         }
       }
