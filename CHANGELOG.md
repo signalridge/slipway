@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.6](https://github.com/signalridge/slipway/compare/v0.11.5...v0.11.6) (2026-06-08)
+
+
+### Refactoring
+
+* **artifacts:** defer planning artifact authoring ([#128](https://github.com/signalridge/slipway/issues/128)) ([0d3626e](https://github.com/signalridge/slipway/commit/0d3626e3179dea66786f28d230b9c7977c61f35f))
+
 ## [0.11.5](https://github.com/signalridge/slipway/compare/v0.11.4...v0.11.5) (2026-06-07)
 
 
