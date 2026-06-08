@@ -113,6 +113,10 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		// path free of them preserves the narrow handoff contract.
 		nextSkillEvidence = readiness.PassingSkills
 		nextSkillArtifactProjection = readiness.ArtifactProjection
+		// A parsed decision.md selection is only a locked skill_constraint once the
+		// G_plan gate is approved; otherwise it is carried as pending so the
+		// handoff payload stays consistent with the full next view (issue #140).
+		view.planLocked = planLockedFromGates(readiness)
 	}
 
 	if view.CurrentState == model.StateDone {
@@ -256,6 +260,7 @@ func cloneSkillConstraints(in *skillConstraints) *skillConstraints {
 	}
 	return &skillConstraints{
 		LockedDecisions:  append([]string(nil), in.LockedDecisions...),
+		PendingDecisions: append([]string(nil), in.PendingDecisions...),
 		GuardrailDomain:  in.GuardrailDomain,
 		MitigationTarget: in.MitigationTarget,
 		RunSummaryBound:  in.RunSummaryBound,

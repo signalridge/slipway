@@ -51,6 +51,10 @@ type nextView struct {
 	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
 
 	consumeActiveCheckpoint bool
+	// planLocked records whether the lifecycle G_plan gate has approved the plan.
+	// It is unexported (never serialized) and drives whether a parsed decision.md
+	// selection is reported as a locked or pending skill_constraint (issue #140).
+	planLocked bool
 }
 
 type confirmationRequirement struct {
@@ -119,7 +123,14 @@ type nextSkillView struct {
 // skillConstraints carries per-skill metadata from the Go registry
 // and state context, replacing level-conditional logic in skill templates.
 type skillConstraints struct {
-	LockedDecisions  []string `json:"locked_decisions,omitempty"`
+	LockedDecisions []string `json:"locked_decisions,omitempty"`
+	// PendingDecisions carries the recommended-but-unconfirmed selected
+	// approach/direction parsed from decision.md while the lifecycle has NOT yet
+	// locked the plan (the G_plan gate is not approved). It is surfaced
+	// separately from LockedDecisions so a host still sees the recommendation but
+	// knows it is pending fresh confirmation and must not treat it as locked
+	// (issue #140).
+	PendingDecisions []string `json:"pending_decisions,omitempty"`
 	GuardrailDomain  string   `json:"guardrail_domain,omitempty"`
 	MitigationTarget string   `json:"mitigation_target,omitempty"`
 	RunSummaryBound  bool     `json:"run_summary_bound,omitempty"`
@@ -388,6 +399,7 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		nextSkillArtifactProjection = readiness.ArtifactProjection
 		applyReadinessToNextContext(&view, readiness)
 		applyGovernanceSurfaceToNext(readiness, &view)
+		view.planLocked = planLockedFromGates(readiness)
 	}
 
 	// Attach wave plan when at S2_EXECUTE for governed changes.

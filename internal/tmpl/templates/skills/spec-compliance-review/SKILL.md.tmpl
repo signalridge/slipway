@@ -89,6 +89,12 @@ If `skill_constraints.locked_decisions` is present:
 2. verify the implementation honors it without workaround or reinterpretation
 3. flag violations as `decision_fidelity:violated:<decision_summary>`
 
+Enforce fidelity ONLY against `skill_constraints.locked_decisions`.
+`skill_constraints.pending_decisions` carries a recommended-but-unconfirmed
+selected approach (the lifecycle has not yet locked the plan): treat it as
+advisory context, not a contract. Do not raise `decision_fidelity:violated`
+against a pending decision — the implementation is not yet bound to it.
+
 ### Stub Detection
 Block zero-value or hardcoded production responses, TODO/FIXME/HACK in claimed
 complete code, assertion-free tests, handlers that only log, placeholder API

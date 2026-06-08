@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
@@ -32,7 +34,7 @@ func TestBuildSkillConstraintsSurfacesHighRiskTokensForGoalVerification(t *testi
 	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
 	def := skill.Definition{Name: progression.SkillGoalVerification}
 
-	sc := buildSkillConstraints(t.TempDir(), def, &change)
+	sc := buildSkillConstraints(t.TempDir(), def, &change, true)
 	require.NotNil(t, sc)
 	assert.Contains(t, sc.RequiredHighRiskTokens, "high_risk_check:external_api_contracts.safety_baseline=pass")
 }
@@ -42,15 +44,15 @@ func TestBuildSkillConstraintsNoHighRiskTokensWithoutGuardrailDomain(t *testing.
 	change := model.NewChange("plain-change") // no guardrail domain
 	def := skill.Definition{Name: progression.SkillGoalVerification}
 
-	sc := buildSkillConstraints(t.TempDir(), def, &change)
+	sc := buildSkillConstraints(t.TempDir(), def, &change, true)
 	require.NotNil(t, sc)
 	assert.Empty(t, sc.RequiredHighRiskTokens)
 }
 
-func TestParseLockedDecisions(t *testing.T) {
+func TestParseDecisionItems(t *testing.T) {
 	t.Parallel()
 	t.Run("absent file returns nil", func(t *testing.T) {
-		result := parseLockedDecisions("/nonexistent/decision.md")
+		result := parseDecisionItems("/nonexistent/decision.md")
 		assert.Nil(t, result)
 	})
 
@@ -58,7 +60,7 @@ func TestParseLockedDecisions(t *testing.T) {
 		tmp := t.TempDir()
 		p := filepath.Join(tmp, "decision.md")
 		require.NoError(t, os.WriteFile(p, []byte("## Objectives\n- obj1\n"), 0o644))
-		result := parseLockedDecisions(p)
+		result := parseDecisionItems(p)
 		assert.Nil(t, result)
 	})
 
@@ -66,7 +68,7 @@ func TestParseLockedDecisions(t *testing.T) {
 		tmp := t.TempDir()
 		p := filepath.Join(tmp, "decision.md")
 		require.NoError(t, os.WriteFile(p, []byte("## Alternatives Considered\n\n## Selected Approach\n\n## Risk\n"), 0o644))
-		result := parseLockedDecisions(p)
+		result := parseDecisionItems(p)
 		assert.Nil(t, result)
 	})
 
@@ -83,7 +85,7 @@ Use Go modules with a clean interface boundary for the new subsystem.
 - Low risk overall
 `
 		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-		result := parseLockedDecisions(p)
+		result := parseDecisionItems(p)
 		require.NotNil(t, result)
 		assert.Contains(t, result[0], "Selected Approach:")
 	})
@@ -108,7 +110,7 @@ Use the refactor-first path and keep the external contract stable.
 - Medium risk overall
 `
 		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-		result := parseLockedDecisions(p)
+		result := parseDecisionItems(p)
 		require.Len(t, result, 2)
 		assert.Contains(t, result[0], "Selected Direction:")
 		assert.Contains(t, result[1], "Selected Approach:")
@@ -144,23 +146,31 @@ func TestSkillConstraintsPopulatedInNextOutput(t *testing.T) {
 		assert.Equal(t, "stale or incomplete plan bundle", sc.MitigationTarget)
 		assert.False(t, sc.RunSummaryBound)
 		assert.Nil(t, sc.LockedDecisions, "fresh scaffolded seeded decision text must not be treated as a locked human-reviewed decision")
+		assert.Nil(t, sc.PendingDecisions, "scaffolded placeholder decision text is neither locked nor pending")
 	})
 }
 
-func TestSkillConstraintsLockedDecisionsFromDecision(t *testing.T) {
+// TestSkillConstraintsPendingDecisionsBeforePlanLock reproduces issue #140: a
+// real, author-written Selected Approach in decision.md while the plan is NOT
+// yet locked (G_plan not approved at S1_PLAN/audit, no plan-audit evidence)
+// must be surfaced as a PENDING decision, never as a locked one — in both the
+// full next view and the compact handoff payload.
+func TestSkillConstraintsPendingDecisionsBeforePlanLock(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "locked decisions test")
+		slug := createGovernedRequest(t, root, "L2", "pending decisions test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
+		// S1_PLAN/audit without plan-audit evidence: the plan is not locked, so
+		// G_plan is not approved.
 		change.CurrentState = model.StateS1Plan
 		change.PlanSubStep = model.PlanSubStepAudit
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Write decision.md with selected approach (canonical source for locked decisions).
+		// Write decision.md with a concrete (non-placeholder) selected approach.
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "decision.md"), []byte(`## Alternatives Considered
@@ -190,8 +200,11 @@ Low risk.
 		require.NotNil(t, view.NextSkill)
 		require.NotNil(t, view.NextSkill.SkillConstraints)
 
-		require.NotNil(t, view.NextSkill.SkillConstraints.LockedDecisions)
-		assert.Contains(t, view.NextSkill.SkillConstraints.LockedDecisions[0], "Selected Approach:")
+		// The plan is not locked: the recommended approach is pending, not locked.
+		assert.Empty(t, view.NextSkill.SkillConstraints.LockedDecisions,
+			"a recommended approach must not appear as locked before the plan is locked (issue #140)")
+		require.NotEmpty(t, view.NextSkill.SkillConstraints.PendingDecisions)
+		assert.Contains(t, view.NextSkill.SkillConstraints.PendingDecisions[0], "Selected Approach:")
 
 		var handoffOut bytes.Buffer
 		handoffCmd := makeNextCmd()
@@ -203,9 +216,162 @@ Low risk.
 		require.NoError(t, json.Unmarshal(handoffOut.Bytes(), &handoff))
 		require.NotNil(t, handoff.NextSkill)
 		require.NotNil(t, handoff.NextSkill.SkillConstraints)
-		require.NotEmpty(t, handoff.NextSkill.SkillConstraints.LockedDecisions)
-		assert.Contains(t, handoff.NextSkill.SkillConstraints.LockedDecisions[0], "Selected Approach:")
+		// The handoff clone preserves the pending field and never promotes it to locked.
+		assert.Empty(t, handoff.NextSkill.SkillConstraints.LockedDecisions)
+		require.NotEmpty(t, handoff.NextSkill.SkillConstraints.PendingDecisions)
+		assert.Contains(t, handoff.NextSkill.SkillConstraints.PendingDecisions[0], "Selected Approach:")
 	})
+}
+
+// TestSkillConstraintsLockedDecisionsAfterPlanLock verifies the confirmed path
+// through real next JSON output: once G_plan is approved, the selected approach
+// moves from pending_decisions to locked_decisions.
+func TestSkillConstraintsLockedDecisionsAfterPlanLock(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
+
+		slug := createGovernedRequest(t, root, "L2", "locked decisions test")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Execute
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, root, change)
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte(`# Decision
+## Alternatives Considered
+### Option A
+Keep reporting parsed decision text as locked.
+
+### Option B
+Use the G_plan gate as the lock signal.
+
+## Selected Approach
+Use the G_plan gate state as the locked-vs-pending decision authority.
+
+## Interfaces and Data Flow
+Readiness GateEvaluations[G_plan] sets planLocked before skill constraints are assembled.
+
+## Rollout and Rollback
+Roll forward by preserving the recommendation under pending_decisions until G_plan is approved.
+
+## Risk
+Low risk; the public field split is additive and fail-closed before approval.
+`)))
+		writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+			Verdict:   model.VerificationVerdictPass,
+			Blockers:  []model.ReasonCode{},
+			Timestamp: time.Now().UTC(),
+		})
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillPlanAudit)
+
+		var out bytes.Buffer
+		cmd := makeNextCmd()
+		cmd.SetArgs([]string{"--json", "--diagnostics"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill.SkillConstraints)
+		assert.Equal(t, "approved", view.InputContext.GateStatus[string(gate.GatePlan)])
+
+		require.NotEmpty(t, view.NextSkill.SkillConstraints.LockedDecisions)
+		assert.Contains(t, view.NextSkill.SkillConstraints.LockedDecisions[0], "Selected Approach:")
+		assert.Empty(t, view.NextSkill.SkillConstraints.PendingDecisions)
+	})
+}
+
+// TestBuildSkillConstraintsLockedVsPending pins the routing contract directly:
+// the same parsed decision is reported as locked iff the plan is locked
+// (G_plan approved), as pending otherwise, and placeholder/empty decision text
+// is neither (issue #140).
+func TestBuildSkillConstraintsLockedVsPending(t *testing.T) {
+	t.Parallel()
+	def := skill.Definition{Name: progression.SkillWaveOrchestration}
+
+	writeDecision := func(t *testing.T, root string, change model.Change, body string) {
+		t.Helper()
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "decision.md"), []byte(body), 0o644))
+	}
+
+	realDecision := `## Alternatives Considered
+List approaches.
+
+## Selected Approach
+Use event-driven architecture with Go channels.
+
+## Risk
+Low risk.
+`
+
+	t.Run("planLocked routes to locked_decisions", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		change := model.NewChange("locked-routing")
+		writeDecision(t, root, change, realDecision)
+
+		sc := buildSkillConstraints(root, def, &change, true)
+		require.NotNil(t, sc)
+		require.NotEmpty(t, sc.LockedDecisions)
+		assert.Contains(t, sc.LockedDecisions[0], "Selected Approach:")
+		assert.Empty(t, sc.PendingDecisions)
+	})
+
+	t.Run("not planLocked routes to pending_decisions", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		change := model.NewChange("pending-routing")
+		writeDecision(t, root, change, realDecision)
+
+		sc := buildSkillConstraints(root, def, &change, false)
+		require.NotNil(t, sc)
+		assert.Empty(t, sc.LockedDecisions)
+		require.NotEmpty(t, sc.PendingDecisions)
+		assert.Contains(t, sc.PendingDecisions[0], "Selected Approach:")
+	})
+
+	t.Run("placeholder decision is neither locked nor pending", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		change := model.NewChange("placeholder-routing")
+		writeDecision(t, root, change, "## Selected Approach\nConfirm or replace this after research and user selection.\n")
+
+		scLocked := buildSkillConstraints(root, def, &change, true)
+		require.NotNil(t, scLocked)
+		assert.Empty(t, scLocked.LockedDecisions)
+		assert.Empty(t, scLocked.PendingDecisions)
+
+		scPending := buildSkillConstraints(root, def, &change, false)
+		require.NotNil(t, scPending)
+		assert.Empty(t, scPending.LockedDecisions)
+		assert.Empty(t, scPending.PendingDecisions)
+	})
+}
+
+// TestPlanLockedFromGates pins the lock signal: locked iff the G_plan gate is
+// approved (issue #140).
+func TestPlanLockedFromGates(t *testing.T) {
+	t.Parallel()
+	approved := progression.GovernanceReadiness{
+		GateEvaluations: map[gate.GateID]gate.GateEvaluation{
+			gate.GatePlan: {GateID: gate.GatePlan, Status: model.GateStatusApproved},
+		},
+	}
+	blocked := progression.GovernanceReadiness{
+		GateEvaluations: map[gate.GateID]gate.GateEvaluation{
+			gate.GatePlan: {GateID: gate.GatePlan, Status: model.GateStatusBlocked},
+		},
+	}
+	assert.True(t, planLockedFromGates(approved))
+	assert.False(t, planLockedFromGates(blocked))
+	assert.False(t, planLockedFromGates(progression.GovernanceReadiness{}), "missing G_plan evaluation is not locked")
 }
 
 func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {

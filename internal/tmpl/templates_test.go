@@ -1062,6 +1062,24 @@ func TestSpecComplianceReviewGuardsAgainstTestPresenceOverTrust(t *testing.T) {
 	assert.Contains(t, specTrace, "exercises the literal clause it maps to")
 }
 
+// TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory pins issue #140:
+// the Decision Fidelity Check must enforce fidelity only against
+// locked_decisions and treat pending_decisions (a recommended-but-unconfirmed
+// approach) as advisory, never raising decision_fidelity:violated against it.
+func TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+
+	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+	assert.Contains(t, specCompliance, "skill_constraints.pending_decisions")
+	assert.Contains(t, specCompliance, "Enforce fidelity ONLY against `skill_constraints.locked_decisions`")
+	assert.Contains(t, specCompliance, "Do not raise `decision_fidelity:violated`")
+	assert.Contains(t, specCompliance, "against a pending decision")
+	assert.Contains(t, specCompliance, "treat it as\nadvisory context, not a contract")
+}
+
 func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
 	t.Parallel()
 
