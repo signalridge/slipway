@@ -329,7 +329,7 @@ func assembleSkillViewWithOptions(
 	}
 
 	if def, ok := skill.LookupDefinitionInRegistry(registry, nextSkillName); ok {
-		ns.SkillConstraints = buildSkillConstraints(root, def, governedChange)
+		ns.SkillConstraints = buildSkillConstraints(root, def, governedChange, view.planLocked)
 	}
 
 	view.NextSkill = ns

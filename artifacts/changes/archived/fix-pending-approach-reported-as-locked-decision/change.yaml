@@ -1,0 +1,50 @@
+version: 1
+slug: fix-pending-approach-reported-as-locked-decision
+description: fix pending approach reported as locked decision
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-08T14:31:28.249966Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/fix-pending-approach-reported-as-locked-decision
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 33de3f53d5ff5a2f430725f9834d1d88299eaa361ee91ae46370ba821d160968
+        updated_at: 2026-06-08T16:16:57.549889089Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: a7abf804bdd95d52e3120b8ecfee77ef8d555babaf312dd0c03517372e98fb06
+        updated_at: 2026-06-08T14:51:11.798846259Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 31b255c12fa0131e71adc8b01a4e6c28892cdbde17fafb98bd26b87843c8342a
+        updated_at: 2026-06-08T16:21:20.700379435Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: c43c11133983e1e03f869d21d90471591bba1a2874435f5f7b34a3690ebf31c4
+        updated_at: 2026-06-08T14:50:43.2389941Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: cad30a0736620d574582de9e6224c9e154e937817d333a111b97802ea21b0e67
+        updated_at: 2026-06-08T16:21:30.818962654Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 3701ff510e4c5334a1477619ca2eb761abe32fd4adde70bc1475e31779a5c58d
+        updated_at: 2026-06-08T15:20:37.624120175Z
