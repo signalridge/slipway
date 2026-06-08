@@ -1,0 +1,31 @@
+version: 1
+slug: fix-136-make-s2-scope-contract-drift-non-destructive-an-out
+description: 'Fix #136: make S2 scope_contract_drift non-destructive. An out-of-scope changed file in the worktree (e.g. an untracked scratch file or the dogfooded `slipway` build binary) currently makes `slipway run` silently reopen S2 in place and delete wave-orchestration.yaml + execution-summary.yaml, masking the real cause behind a ''wave-orchestration missing'' blocker. Change the scope-contract advance gate so drift-only failures block visibly with actionable remediation (remove/ignore the file, or `slipway pivot --rescope`) while preserving recorded wave evidence; missing task changed-file evidence still reopens to S2 to re-record. Also makes `slipway run` surface scope_contract_drift instead of masking it.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-08T13:20:48.839614Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-136-make-s2-scope-contract-drift-non-destructive-an-out
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 8db14dd37efa52718a209300583c9ac257656be359979621ec9ce4890c26171c
+        updated_at: 2026-06-08T13:31:40.749306659Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 3bdae36201bcb76ad200ddf905382e775c1d465bee7bf6a5883557df8ab5b35b
+        updated_at: 2026-06-08T13:33:04.235335576Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 80d78de1ee76940d63a52428dd0d6a6a218180638e4b3c3715c8ddef34dd5f63
+        updated_at: 2026-06-08T13:53:49.6959777Z
