@@ -82,7 +82,7 @@ type GovernanceReadinessOptions struct {
 	IncludeShipSurface        bool
 }
 
-const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: fix tasks.md target_files or execution scope first; if a planning artifact structurally changes, stale_evidence recovery reopens the owning authority via `slipway run`; strict target_files-only drift rebuilds compatible generated evidence in S2."
+const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift is non-destructive and preserves the recorded wave evidence; remove the out-of-scope file, rely on an existing ignore/local exclude, or include the file or tracked .gitignore rule in the plan with `slipway pivot --rescope` (which edits tasks.md target_files), then re-run; a task missing its changed-file evidence instead reopens to S2_EXECUTE via `slipway run` to re-record it."
 
 type ArtifactReadinessReader interface {
 	Evaluate(root string, change model.Change) (ArtifactReadiness, error)

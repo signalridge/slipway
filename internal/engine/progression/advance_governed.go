@@ -126,13 +126,21 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 
 	// Scope Contract gate (owned by S2_EXECUTE): a satisfied execution summary
-	// must also satisfy the Scope Contract. On failure, reopen to S2_EXECUTE so
-	// the agent re-records task evidence in the owning stage instead of advancing
-	// into S3_REVIEW, where the failure is detected but cannot be repaired (task
-	// evidence is only recordable during S2_EXECUTE) — which would strand the change.
+	// must also satisfy the Scope Contract. Out-of-scope drift (a changed file
+	// outside the plan — typically an untracked scratch file or build artifact)
+	// does not invalidate the recorded wave evidence, so it blocks visibly with
+	// remediation while leaving wave-orchestration/execution-summary intact;
+	// re-running after the file is removed or the plan is rescoped advances
+	// normally (issue #136). Missing task changed-file evidence, by contrast, can
+	// only be repaired by re-recording in the owning stage, so it reopens to
+	// S2_EXECUTE instead of stranding the failure in S3_REVIEW where task evidence
+	// is no longer recordable.
 	if target, err := scopeContractReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
+		if scopeContractDriftOnly(target.Blockers) {
+			return blockedAdvanceSummary(fromState, target.Blockers), nil
+		}
 		return reopenToStaleStage(root, &change, target, fromState)
 	}
 

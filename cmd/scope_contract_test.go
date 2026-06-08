@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +40,8 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	diagnostics := strings.Join(validateView.Diagnostics, "\n")
 	assert.Contains(t, diagnostics, "scope_contract_recovery_guidance")
 	assert.Contains(t, diagnostics, "tasks.md target_files")
-	assert.Contains(t, diagnostics, "stale_evidence")
+	assert.Contains(t, diagnostics, "preserves the recorded wave evidence")
+	assert.Contains(t, diagnostics, "slipway pivot --rescope")
 	assert.Contains(t, diagnostics, "slipway run")
 
 	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
@@ -46,7 +50,8 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	warnings := strings.Join(nextView.Warnings, "\n")
 	assert.Contains(t, warnings, "scope_contract_recovery_guidance")
 	assert.Contains(t, warnings, "tasks.md target_files")
-	assert.Contains(t, warnings, "stale_evidence")
+	assert.Contains(t, warnings, "preserves the recorded wave evidence")
+	assert.Contains(t, warnings, "slipway pivot --rescope")
 	assert.Contains(t, warnings, "slipway run")
 }
 
@@ -76,6 +81,112 @@ func TestReviewFailsOnScopeContractDrift(t *testing.T) {
 	assert.Equal(t, "fail", view.Verdict)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
 	assert.Contains(t, strings.Join(view.Gaps.ArtifactToCode, "\n"), "scope_contract_drift")
+}
+
+// writeAdvanceableS2Fixture builds a governed change at S2_EXECUTE whose recorded
+// execution + wave evidence is fresh and in-scope, recorded through the canonical
+// `slipway evidence task` path so a plain `slipway run` reaches the Scope Contract
+// advance gate (rather than blocking earlier on execution-summary freshness). The
+// fixture wave-plan's single in-scope target is cmd/lifecycle_commands_test.go.
+func writeAdvanceableS2Fixture(t *testing.T, root string) string {
+	t.Helper()
+	slug, _ := createEvidenceTaskFixture(t, root)
+	capturedAt := time.Now().UTC()
+	cmd := commandForRoot(t, root, makeEvidenceCmd())
+	cmd.SetArgs([]string{
+		"task", "--json",
+		"--task-id", "t-01",
+		"--run-summary-version", "1",
+		"--task-kind", "verification",
+		"--verdict", "pass",
+		"--evidence-ref", "test:scope-drift",
+		"--changed-file", "cmd/lifecycle_commands_test.go",
+		"--target-file", "cmd/lifecycle_commands_test.go",
+		"--captured-at", capturedAt.Format(time.RFC3339Nano),
+		"--session-id", "session-a",
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Execute())
+	writeSkillVerification(t, root, slug, progression.SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt.Add(time.Second),
+		RunVersion: 1,
+		References: []string{"task:evidence:t-01"},
+	})
+	return slug
+}
+
+// An untracked, out-of-scope file in the worktree — the common developer case
+// from issue #136 (a scratch file, or the dogfooded `slipway` build binary) —
+// must block `slipway run` visibly with the real scope_contract_drift cause and
+// must NOT clear the earned wave evidence. Before the fix, the gate reopened S2
+// in place and deleted wave-orchestration.yaml + execution-summary.yaml, which
+// then masked the drift behind a "wave-orchestration missing" blocker.
+func TestRunScopeContractDriftBlocksWithoutClearingWaveEvidence(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := writeAdvanceableS2Fixture(t, root)
+
+		waveOrchestrationPath := filepath.Join(
+			state.VerificationDir(root, slug),
+			progression.SkillWaveOrchestration+".yaml",
+		)
+		executionSummaryPath := filepath.Join(
+			state.VerificationDir(root, slug),
+			state.ExecutionSummaryFileName,
+		)
+		require.FileExists(t, waveOrchestrationPath)
+
+		// Drop an untracked file outside the plan's target_files into the worktree.
+		require.NoError(t, os.WriteFile(filepath.Join(root, "scratch.txt"), []byte("scratch\n"), 0o644))
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var buf bytes.Buffer
+		runCmd.SetOut(&buf)
+		require.NoError(t, runCmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+
+		// The real cause is surfaced (not masked) and the change stays in its
+		// owning stage rather than being reopened-in-place.
+		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+		specs := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
+		assert.Contains(t, specs, "scope_contract_drift")
+		assert.Contains(t, specs, "scratch.txt")
+
+		// Non-destructive: the earned wave evidence survives (the reopen/clear path
+		// would have deleted wave-orchestration.yaml and masked the cause).
+		require.FileExists(t, waveOrchestrationPath)
+		require.FileExists(t, executionSummaryPath)
+		if view.Advanced != nil {
+			assert.NotEqual(t, "stale_evidence_recovery_started", view.Advanced.Reason,
+				"scope drift must not trigger the stale-evidence reopen/clear path")
+			for _, effect := range view.Advanced.SideEffects {
+				assert.NotEqual(t, "cleared_stale_generated_evidence", effect.Kind,
+					"scope drift must not clear generated wave evidence")
+			}
+		}
+
+		// Removing the out-of-scope file clears the drift and advancement resumes
+		// on the preserved evidence (no re-run of wave-orchestration).
+		require.NoError(t, os.Remove(filepath.Join(root, "scratch.txt")))
+		resumeCmd := commandForRoot(t, root, makeRunCmd())
+		resumeCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var resumeBuf bytes.Buffer
+		resumeCmd.SetOut(&resumeBuf)
+		require.NoError(t, resumeCmd.Execute())
+
+		var resumeView nextView
+		require.NoError(t, json.Unmarshal(resumeBuf.Bytes(), &resumeView))
+		assert.Equal(t, model.StateS3Review, resumeView.CurrentState,
+			"removing the out-of-scope file advances on the preserved evidence")
+		assert.NotContains(t, strings.Join(model.ReasonSpecs(resumeView.Blockers), "\n"), "scope_contract_drift")
+	})
 }
 
 func writeScopeContractDriftFixture(t *testing.T) (string, string) {
