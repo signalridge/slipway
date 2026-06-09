@@ -384,12 +384,12 @@ func findEvidenceWavePlanTask(plan model.WavePlan, taskID string) (model.WavePla
 
 func normalizeEvidencePaths(paths []string) ([]string, error) {
 	out := make([]string, 0, len(paths))
-	for _, path := range paths {
-		trimmed := strings.TrimSpace(filepath.ToSlash(path))
+	for _, rawPath := range paths {
+		trimmed := model.NormalizePublicPath(rawPath)
 		if trimmed == "" {
 			continue
 		}
-		if err := validateEvidencePath(trimmed); err != nil {
+		if err := validateEvidencePath(rawPath); err != nil {
 			return nil, err
 		}
 		out = append(out, trimmed)
@@ -399,14 +399,14 @@ func normalizeEvidencePaths(paths []string) ([]string, error) {
 }
 
 func validateEvidencePath(path string) error {
-	trimmed := strings.TrimSpace(path)
+	trimmed := model.NormalizePublicPath(path)
 	if trimmed == "" {
 		return nil
 	}
-	if filepath.IsAbs(trimmed) || strings.HasPrefix(trimmed, "/") {
+	if model.PublicPathIsAbs(path) {
 		return fmt.Errorf("path must be workspace-relative: %q", path)
 	}
-	for _, segment := range strings.Split(trimmed, "/") {
+	for _, segment := range strings.Split(strings.ReplaceAll(path, "\\", "/"), "/") {
 		if segment == "" || segment == "." || segment == ".." {
 			return fmt.Errorf("path must not contain empty, current, or parent segments: %q", path)
 		}

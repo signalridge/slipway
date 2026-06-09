@@ -535,7 +535,7 @@ func TestCollectHealthReportReportsIncompleteWaveRuns(t *testing.T) {
 		TaskKind:     model.TaskKindCode,
 		ChangedFiles: []string{"cmd/run.go"},
 		CapturedAt:   now,
-	}})
+	}}, nil)
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
 	require.NoError(t, SaveWaveRuns(root, change.Slug, 1, runs[:1]))

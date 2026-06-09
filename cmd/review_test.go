@@ -1014,7 +1014,7 @@ func materializeWaveExecutionForSummary(t *testing.T, root, slug string) {
 	plan, err := state.MaterializeWavePlan(root, change)
 	require.NoError(t, err)
 
-	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, nil)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs))
 }

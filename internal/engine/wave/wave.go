@@ -3,7 +3,9 @@ package wave
 import (
 	"cmp"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
 )
@@ -108,14 +110,118 @@ func PlanWaves(nodes []Node) ([]Wave, error) {
 }
 
 func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {
-	targetOwners := map[string]string{}
+	type targetOwner struct {
+		target string
+		taskID string
+	}
+
+	targetOwners := []targetOwner{}
 	for _, node := range nodes {
 		for _, file := range node.TargetFiles {
-			if existing, exists := targetOwners[file]; exists && existing != node.TaskID {
-				return fmt.Errorf("wave %d has static target conflict: %q and %q both target %q", waveIndex, existing, node.TaskID, file)
+			target := normalizeTargetFileForConflict(file)
+			for _, existing := range targetOwners {
+				if existing.taskID == node.TaskID {
+					continue
+				}
+				if targetFilesConflict(existing.target, target) {
+					return fmt.Errorf("wave %d has static target conflict: %q targets %q and %q targets %q", waveIndex, existing.taskID, existing.target, node.TaskID, target)
+				}
 			}
-			targetOwners[file] = node.TaskID
+			targetOwners = append(targetOwners, targetOwner{target: target, taskID: node.TaskID})
 		}
 	}
 	return nil
+}
+
+func targetFilesConflict(left, right string) bool {
+	if left == right || targetFileContains(left, right) || targetFileContains(right, left) {
+		return true
+	}
+	return targetPatternConflicts(left, right)
+}
+
+func targetFileContains(parent, child string) bool {
+	if parent == "" || child == "" {
+		return false
+	}
+	if parent == "." || parent == "/" {
+		return child != parent
+	}
+	return strings.HasPrefix(child, parent+"/")
+}
+
+func normalizeTargetFileForConflict(file string) string {
+	normalized := model.NormalizePublicPath(file)
+	if normalized == "" {
+		return ""
+	}
+	// Be conservative across case-insensitive developer filesystems: same-wave
+	// targets that differ only by case must not be auto-parallelized.
+	return strings.ToLower(normalized)
+}
+
+func targetPatternConflicts(left, right string) bool {
+	leftPattern := targetHasPatternMeta(left)
+	rightPattern := targetHasPatternMeta(right)
+	switch {
+	case leftPattern && rightPattern:
+		return targetPatternPrefixesOverlap(left, right)
+	case leftPattern:
+		return targetPatternMatches(left, right)
+	case rightPattern:
+		return targetPatternMatches(right, left)
+	default:
+		return false
+	}
+}
+
+func targetHasPatternMeta(target string) bool {
+	return strings.ContainsAny(target, "*?[")
+}
+
+func targetPatternMatches(pattern, target string) bool {
+	if pattern == "" || target == "" {
+		return false
+	}
+	if strings.HasSuffix(pattern, "/**") {
+		prefix := strings.TrimSuffix(pattern, "/**")
+		return prefix == "" || target == prefix || targetFileContains(prefix, target)
+	}
+	if strings.Contains(pattern, "**") {
+		return targetOverlapsPatternStaticPrefix(pattern, target)
+	}
+	matched, err := path.Match(pattern, target)
+	if err != nil {
+		return true
+	}
+	return matched
+}
+
+func targetPatternPrefixesOverlap(left, right string) bool {
+	leftPrefix := targetPatternStaticPrefix(left)
+	rightPrefix := targetPatternStaticPrefix(right)
+	if leftPrefix == "" || rightPrefix == "" {
+		return true
+	}
+	return leftPrefix == rightPrefix ||
+		targetFileContains(leftPrefix, rightPrefix) ||
+		targetFileContains(rightPrefix, leftPrefix)
+}
+
+func targetOverlapsPatternStaticPrefix(pattern, target string) bool {
+	prefix := targetPatternStaticPrefix(pattern)
+	return prefix == "" || target == prefix || targetFileContains(prefix, target)
+}
+
+func targetPatternStaticPrefix(pattern string) string {
+	patternIndex := strings.IndexAny(pattern, "*?[")
+	if patternIndex < 0 {
+		return strings.TrimSuffix(pattern, "/")
+	}
+	prefix := pattern[:patternIndex]
+	slashIndex := strings.LastIndex(prefix, "/")
+	if slashIndex < 0 {
+		return ""
+	}
+	return strings.TrimSuffix(prefix[:slashIndex+1], "/")
 }

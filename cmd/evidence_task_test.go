@@ -117,6 +117,22 @@ func TestEvidenceTaskRejectsUnsafeTaskID(t *testing.T) {
 	})
 }
 
+func TestNormalizeEvidencePathsUsesPublicSlashPaths(t *testing.T) {
+	t.Parallel()
+
+	got, err := normalizeEvidencePaths([]string{`cmd\run.go`, "cmd/run.go"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cmd/run.go"}, got)
+}
+
+func TestNormalizeEvidencePathsRejectsWindowsAbsolutePath(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeEvidencePaths([]string{`C:\tmp\file.go`})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "workspace-relative")
+}
+
 func TestEvidenceTaskRejectsInvalidVerdictWithoutWritingEvidence(t *testing.T) {
 	t.Parallel()
 

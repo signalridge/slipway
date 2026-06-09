@@ -140,6 +140,85 @@ func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
 	assert.Empty(t, blocked)
 }
 
+func TestRepairExecutionStateUsesEffectiveParallelWhenRecoveringWaveRuns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		slug              string
+		config            string
+		persistedParallel bool
+		want              model.WaveDispatchMode
+	}{
+		{
+			name:              "default forced parallel overrides stale persisted false",
+			slug:              "wave-repair-effective-parallel-default",
+			persistedParallel: false,
+			want:              model.WaveDispatchParallel,
+		},
+		{
+			name:              "parallelization off suppresses stale persisted true",
+			slug:              "wave-repair-effective-parallel-off",
+			config:            "execution:\n  parallelization: off\n",
+			persistedParallel: true,
+			want:              "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root, change, plan := seedWavePlanRepairChange(t, tt.slug, twoIndependentTasksMD)
+			if tt.config != "" {
+				require.NoError(t, os.WriteFile(ConfigPath(root), []byte(tt.config), 0o644))
+			}
+			require.Len(t, plan.Waves, 1)
+			plan.Waves[0].Parallel = tt.persistedParallel
+			require.NoError(t, SaveWavePlan(root, change.Slug, plan))
+
+			writeVerificationForTest(t, root, change.Slug, "wave-orchestration", model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  waveMaterializeTime,
+				RunVersion: 1,
+			})
+			require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+				RunSummaryVersion: 1,
+				CapturedAt:        waveMaterializeTime,
+				Tasks: []model.ExecutionTaskSummary{
+					{
+						TaskID:       "t-01",
+						Verdict:      model.TaskVerdictPass,
+						TaskKind:     model.TaskKindCode,
+						ChangedFiles: []string{"a.go"},
+						TargetFiles:  []string{"a.go"},
+						CapturedAt:   waveMaterializeTime,
+					},
+					{
+						TaskID:       "t-02",
+						Verdict:      model.TaskVerdictPass,
+						TaskKind:     model.TaskKindCode,
+						ChangedFiles: []string{"b.go"},
+						TargetFiles:  []string{"b.go"},
+						CapturedAt:   waveMaterializeTime,
+					},
+				},
+			}))
+
+			result, err := RepairExecutionState(root, waveMaterializeTime.Add(time.Minute), time.Hour)
+			require.NoError(t, err)
+			assert.Contains(t, result.RecoveredWaveRuns, change.Slug)
+
+			runs, err := LoadWaveRuns(root, change.Slug, 1)
+			require.NoError(t, err)
+			require.Len(t, runs, 1)
+			assert.Equal(t, tt.want, runs[0].DispatchMode)
+		})
+	}
+}
+
 func TestDiagnoseBundleConsistencyAssuranceMissingErrorInReview(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

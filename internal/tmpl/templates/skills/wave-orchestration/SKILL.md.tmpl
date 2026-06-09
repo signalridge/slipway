@@ -67,14 +67,40 @@ Report the wave plan before execution: description, total tasks, wave count,
 and one row per wave with task IDs plus a 3-8 word build summary.
 
 ## Execute Waves
-Execute waves in sequence. Within a wave, dispatch tasks in parallel when the
-tool supports it. For each wave: describe the build goal before spawning, wait
+Execute waves in sequence. **Within a wave, dispatch every task concurrently by
+default.** Wave planning already guarantees a wave's tasks are dependency-free
+and file-disjoint, and `slipway next --json` marks such a wave `parallel: true`
+in `input_context.wave_plan.waves[]`; do not serialize a `parallel: true` wave
+for convenience. Fall back to sequential only when the host genuinely cannot run
+concurrent executors, and when you do, say so in the wave report and the
+wave-orchestration verification `references` as
+`dispatch_mode:wave=<wave_index>:degraded_sequential`, with the same fact in
+`notes`, so the degradation stays visible — it does not block completion.
+Notes/prose alone are human-readable context and are not parsed as dispatch
+evidence. A `parallel: false` wave (a single task, or
+`execution.parallelization: off`) runs sequentially with nothing to note.
+
+For each wave: describe the build goal before spawning, wait
 for all executors, spot-check the first 2 files from each task's
 `changed_files`, check blocker evidence, report what the wave enables next, and
 after any checkpoint pause continue with a **fresh** subagent context.
 
+## Post-Wave Integration Gate
+Before starting the next wave, run a post-wave integration gate against the
+merged current worktree. For any wave with `task_kind=code` or `task_kind=test`,
+run the narrowest meaningful build/test command that can catch cross-task
+integration failures; if the safe target is unclear, run the repository's normal
+build/test suite. For docs/config/ops-only waves, run the relevant formatter,
+lint, validation, or state why no executable gate exists. If the gate fails or
+times out, record a blocker and do not start the next wave until the failure is
+fixed or the user explicitly redirects. Passing per-task self-checks are not a
+substitute for this post-wave integration gate. Do not run
+shared-worktree-wide integration commands such as `go build ./...` concurrently
+inside each task executor; leave merged-state build/test/lint checks to this
+gate unless a task owns a genuinely isolated command.
+
 ## Dispatch Contract
-- Use one isolated executor context per task when supported; otherwise execute sequentially.
+- Dispatch one isolated executor per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host cannot run concurrent executors (note that degradation, as above).
 - Pass file paths only; executors read source files in their own context.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
@@ -134,7 +160,14 @@ notes: |
 ```
 
 References should include the task evidence command outputs or stable refs for
-each recorded task.
+each recorded task. If any `parallel: true` wave degraded to sequential because
+the host lacked concurrent executors, include one structured reference per
+affected wave:
+
+```yaml
+references:
+  - dispatch_mode:wave=<wave_index>:degraded_sequential
+```
 
 ## Present and Advance
 Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
@@ -144,12 +177,15 @@ After confirmation, advance with `slipway run`.
 ## DO NOT SKIP
 1. Dependency ordering before execution.
 2. File conflict detection after each wave.
-3. Runtime task evidence via `slipway evidence task`.
-4. Post-execution verification.
+3. Post-wave integration gate before starting the next wave.
+4. Runtime task evidence via `slipway evidence task`.
+5. Post-execution verification.
 
 ## Block If
 - Dependency ordering is incomplete or cyclic.
 - File conflicts remain unresolved after a wave.
+- The post-wave integration gate fails, times out, or is skipped without a
+  recorded no-executable-gate rationale.
 - Retry budget is exhausted.
 - A checkpoint resumes without a fresh subagent context.
 - Task evidence was not recorded through the supported CLI.

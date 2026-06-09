@@ -24,7 +24,7 @@ func authoritativeWavePlanView(root string, change model.Change) *wavePlanView {
 	plan, err := state.LoadOptionalWavePlanForChange(root, change)
 	switch {
 	case err == nil && plan != nil:
-		return wavePlanViewFromModel(*plan)
+		return wavePlanViewFromModel(*plan, state.EffectiveForcedParallel(root))
 	case err == nil:
 		return &wavePlanView{ParseError: "authoritative wave-plan.yaml is missing; run `slipway repair`"}
 	default:
@@ -61,6 +61,7 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 		}
 	}
 
+	forcedParallel := state.EffectiveForcedParallel(root)
 	planView := &wavePlanView{
 		WaveCount: len(waves),
 		Waves:     make([]waveView, len(waves)),
@@ -79,6 +80,7 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 		}
 		planView.Waves[i] = waveView{
 			WaveIndex: i + 1,
+			Parallel:  forcedParallel && len(w.Nodes) > 1,
 			Tasks:     tasks,
 		}
 		planView.TotalTasks += len(w.Nodes)
@@ -87,8 +89,8 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 	return planView
 }
 
-func wavePlanViewFromModel(plan model.WavePlan) *wavePlanView {
-	plan.Normalize()
+func wavePlanViewFromModel(plan model.WavePlan, forcedParallel bool) *wavePlanView {
+	plan = state.ApplyEffectiveParallel(plan, forcedParallel)
 	if len(plan.Waves) == 0 {
 		return nil
 	}
@@ -111,6 +113,7 @@ func wavePlanViewFromModel(plan model.WavePlan) *wavePlanView {
 		}
 		view.Waves[i] = waveView{
 			WaveIndex: plannedWave.WaveIndex,
+			Parallel:  plannedWave.Parallel,
 			Tasks:     tasks,
 		}
 	}

@@ -1,0 +1,50 @@
+version: 1
+slug: force-within-wave-parallel-execution-as-the-default-in-wave
+description: 'Force within-wave parallel execution as the default in wave-orchestration. The engine already guarantees same-wave tasks are dependency-free and file-disjoint (PlanWaves + validateWaveStaticConflicts), so make parallel the mandatory default rather than a host-conditional option: (1) flip the wave-orchestration skill from ''parallel when supported'' to parallel-by-default; (2) add an explicit parallel signal to wave-plan.yaml and surface it in slipway next --json input_context.wave_plan; (3) record dispatch mode per wave run (parallel vs degraded_sequential) so lost parallelism is visible. Single working tree relying on the file-disjoint guarantee; no engine executor — stay host-driven, not a harness.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-09T08:11:55.492855Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/force-within-wave-parallel-execution-as-the-default-in-wave
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: f7da795f09f1e82787e4bd69edf91e074669ce9ff9fb035c729e985f7ee462da
+        updated_at: 2026-06-09T11:19:02Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: c3327811399a56b1a3f987a13b1f417785fa79e967252d6e39db1b9e5281cd6f
+        updated_at: 2026-06-09T08:45:24.509400041Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 9aea4143a88e1e375835b62dff20820e40c3452230f8071c686e82bf83fa5d2b
+        updated_at: 2026-06-09T08:36:20.44406293Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8442b4986a680ea8a49324681d1fd0da468544b8d9d461c45ec34c6d89404ebd
+        updated_at: 2026-06-09T08:45:01.961492524Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: b158bbb0aba3b52d61240ba7d71f1d7cafa7c44265b70080ef9b2641ee7e66d7
+        updated_at: 2026-06-09T08:38:55.741518696Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: ca1c9430bd68c6bf6da64a849d63957f3bf67e266cff7915a839d2db94e0857b
+        updated_at: 2026-06-09T09:27:33.974135985Z
