@@ -103,7 +103,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 			} else {
 				hasPlaceholderTarget := false
 				for _, file := range task.TargetFiles {
-					target := strings.TrimSpace(file)
+					target := model.NormalizePublicPath(file)
 					if target == "" {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_invalid_target:%s", id))
 						continue
@@ -112,7 +112,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 						hasPlaceholderTarget = true
 						continue
 					}
-					if filepath.IsAbs(target) || strings.Contains(target, "..") {
+					if model.PublicPathIsAbs(file) || model.PublicPathHasParentTraversal(file) {
 						result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_scope_out_of_bounds_target:%s:%s", id, target))
 					}
 				}

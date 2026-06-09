@@ -2,7 +2,9 @@ package model
 
 import (
 	"fmt"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,8 +24,14 @@ type WavePlan struct {
 }
 
 type WavePlanWave struct {
-	WaveIndex int            `yaml:"wave_index" json:"wave_index"`
-	Tasks     []WavePlanTask `yaml:"tasks,omitempty" json:"tasks,omitempty"`
+	WaveIndex int `yaml:"wave_index" json:"wave_index"`
+	// Parallel marks a wave whose tasks are dependency-free and file-disjoint
+	// (guaranteed by wave planning), so the host is expected to dispatch them
+	// concurrently by default. Derived at materialization from the task count and
+	// the effective parallelization mode; it is intentionally excluded from the
+	// wave-plan freshness hashes.
+	Parallel bool           `yaml:"parallel,omitempty" json:"parallel,omitempty"`
+	Tasks    []WavePlanTask `yaml:"tasks,omitempty" json:"tasks,omitempty"`
 }
 
 type WavePlanTask struct {
@@ -136,6 +144,9 @@ func (w WavePlanWave) Validate(expectedIndex int, seen map[string]struct{}) erro
 	if w.WaveIndex != expectedIndex {
 		return fmt.Errorf("wave_index must be %d", expectedIndex)
 	}
+	if w.Parallel && len(w.Tasks) < 2 {
+		return fmt.Errorf("parallel wave must contain at least 2 tasks")
+	}
 	for i, task := range w.Tasks {
 		if err := task.Validate(); err != nil {
 			return fmt.Errorf("tasks[%d]: %w", i, err)
@@ -155,6 +166,9 @@ func (t *WavePlanTask) Normalize() {
 	if t.TargetFiles == nil {
 		t.TargetFiles = []string{}
 	}
+	for i := range t.TargetFiles {
+		t.TargetFiles[i] = NormalizePublicPath(t.TargetFiles[i])
+	}
 	slices.Sort(t.DependsOn)
 	slices.Sort(t.TargetFiles)
 }
@@ -167,6 +181,46 @@ func (t WavePlanTask) Validate() error {
 		return fmt.Errorf("invalid task_kind %q", t.TaskKind)
 	}
 	return nil
+}
+
+// NormalizePublicPath canonicalizes workspace-relative public path strings.
+// Slipway artifacts use slash paths even when an agent supplies Windows-style
+// separators, so comparisons stay platform-independent.
+func NormalizePublicPath(raw string) string {
+	value := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if value == "" {
+		return ""
+	}
+	cleaned := path.Clean(value)
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
+}
+
+func PublicPathIsAbs(raw string) bool {
+	value := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "/") {
+		return true
+	}
+	return len(value) >= 2 && value[1] == ':' && isASCIILetter(value[0])
+}
+
+func PublicPathHasParentTraversal(raw string) bool {
+	value := strings.ReplaceAll(raw, "\\", "/")
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func isASCIILetter(b byte) bool {
+	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
 type TaskRunRef struct {
@@ -202,13 +256,78 @@ func (v WaveVerdict) IsValid() bool {
 	}
 }
 
+// WaveDispatchMode records the dispatch mode for a wave that has started, so a
+// host that could not run a parallel-eligible wave concurrently records the
+// degradation instead of losing it silently. Pending waves leave this empty.
+type WaveDispatchMode string
+
+const (
+	WaveDispatchParallel           WaveDispatchMode = "parallel"
+	WaveDispatchDegradedSequential WaveDispatchMode = "degraded_sequential"
+
+	WaveDispatchReferencePrefix = "dispatch_mode:wave="
+)
+
+func (m WaveDispatchMode) IsValid() bool {
+	switch m {
+	case WaveDispatchParallel, WaveDispatchDegradedSequential:
+		return true
+	default:
+		return false
+	}
+}
+
+// WaveDispatchModesFromVerification extracts structured per-wave dispatch
+// evidence from wave-orchestration verification references.
+func WaveDispatchModesFromVerification(record VerificationRecord) (map[int]WaveDispatchMode, error) {
+	modes := map[int]WaveDispatchMode{}
+	conflicted := map[int]struct{}{}
+	for _, ref := range record.References {
+		collectWaveDispatchMode(modes, conflicted, ref)
+	}
+	if len(modes) == 0 {
+		return nil, nil
+	}
+	return modes, nil
+}
+
+func collectWaveDispatchMode(modes map[int]WaveDispatchMode, conflicted map[int]struct{}, raw string) {
+	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
+	if !strings.HasPrefix(raw, WaveDispatchReferencePrefix) {
+		return
+	}
+	rest := strings.TrimPrefix(raw, WaveDispatchReferencePrefix)
+	waveRaw, modeRaw, ok := strings.Cut(rest, ":")
+	if !ok {
+		return
+	}
+	waveIndex, err := strconv.Atoi(strings.TrimSpace(waveRaw))
+	if err != nil || waveIndex < 1 {
+		return
+	}
+	if _, exists := conflicted[waveIndex]; exists {
+		return
+	}
+	mode := WaveDispatchMode(strings.TrimSpace(modeRaw))
+	if !mode.IsValid() {
+		return
+	}
+	if existing, exists := modes[waveIndex]; exists && existing != mode {
+		delete(modes, waveIndex)
+		conflicted[waveIndex] = struct{}{}
+		return
+	}
+	modes[waveIndex] = mode
+}
+
 type WaveRun struct {
-	WaveIndex         int          `yaml:"wave_index" json:"wave_index"`
-	RunSummaryVersion int          `yaml:"run_summary_version" json:"run_summary_version"`
-	StartedAt         time.Time    `yaml:"started_at,omitempty" json:"started_at,omitempty"`
-	CompletedAt       time.Time    `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
-	TaskRuns          []TaskRunRef `yaml:"task_runs,omitempty" json:"task_runs,omitempty"`
-	Verdict           WaveVerdict  `yaml:"verdict" json:"verdict"`
+	WaveIndex         int              `yaml:"wave_index" json:"wave_index"`
+	RunSummaryVersion int              `yaml:"run_summary_version" json:"run_summary_version"`
+	StartedAt         time.Time        `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	CompletedAt       time.Time        `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
+	TaskRuns          []TaskRunRef     `yaml:"task_runs,omitempty" json:"task_runs,omitempty"`
+	Verdict           WaveVerdict      `yaml:"verdict" json:"verdict"`
+	DispatchMode      WaveDispatchMode `yaml:"dispatch_mode,omitempty" json:"dispatch_mode,omitempty"`
 }
 
 func (r *WaveRun) Normalize() {
@@ -238,6 +357,9 @@ func (r WaveRun) Validate(expectedIndex int) error {
 	}
 	if !r.Verdict.IsValid() {
 		return fmt.Errorf("invalid verdict %q", r.Verdict)
+	}
+	if r.DispatchMode != "" && !r.DispatchMode.IsValid() {
+		return fmt.Errorf("invalid dispatch_mode %q", r.DispatchMode)
 	}
 	for i, ref := range r.TaskRuns {
 		if err := ref.Validate(); err != nil {

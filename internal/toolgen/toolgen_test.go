@@ -1057,6 +1057,33 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	assert.Equal(t, "Finalize a done-ready change and archive it", commandDescriptions["done"])
 }
 
+func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	cfg := toolRegistry["claude"]
+	body, err := os.ReadFile(filepath.Join(root, cfg.SkillsDir, "slipway-wave-orchestration", "SKILL.md"))
+	require.NoError(t, err)
+	skill := strings.Join(strings.Fields(string(body)), " ")
+
+	assert.Contains(t, skill, "concurrently by default",
+		"wave-orchestration must instruct parallel-by-default dispatch")
+	assert.Contains(t, skill, "parallel: true",
+		"wave-orchestration must reference the per-wave parallel signal from next --json")
+	assert.Contains(t, skill, "degradation",
+		"wave-orchestration must require noting a degraded sequential fallback")
+	assert.Contains(t, skill, "parallelization: off",
+		"wave-orchestration must describe the parallelization off-switch")
+	assert.Contains(t, skill, "post-wave integration gate",
+		"wave-orchestration must require a post-wave integration gate before the next wave")
+	assert.Contains(t, skill, "Do not run shared-worktree-wide integration commands",
+		"wave-orchestration must keep shared-worktree build/test commands out of task executors")
+	assert.Contains(t, skill, "Notes/prose alone",
+		"wave-orchestration must make the structured dispatch reference contract explicit")
+	assert.Contains(t, skill, "do not start the next wave",
+		"wave-orchestration must block subsequent waves when integration fails")
+}
+
 func TestCodexPromptsUseCommandSpecificPrerequisites(t *testing.T) {
 	root := t.TempDir()
 	codexHome := t.TempDir()

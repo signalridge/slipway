@@ -51,6 +51,7 @@ type nextHandoffContext struct {
 	CodebaseMapDocs      map[string]string `json:"codebase_map_docs,omitempty"`
 	CodebaseMapStatus    string            `json:"codebase_map_status,omitempty"`
 	CodebaseMapDocStates map[string]string `json:"codebase_map_doc_states,omitempty"`
+	WavePlan             *wavePlanView     `json:"wave_plan,omitempty"`
 	ResumeCheckpoint     *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
 }
 
@@ -117,6 +118,9 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		// G_plan gate is approved; otherwise it is carried as pending so the
 		// handoff payload stays consistent with the full next view (issue #140).
 		view.planLocked = planLockedFromGates(readiness)
+	}
+	if view.CurrentState == model.StateS2Execute && governedChange != nil {
+		view.InputContext.WavePlan = buildWavePlan(root, governedChange, view.InputContext.ArtifactBundle)
 	}
 
 	if view.CurrentState == model.StateDone {
@@ -229,6 +233,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			CodebaseMapDocs:      view.InputContext.CodebaseMapDocs,
 			CodebaseMapStatus:    view.InputContext.CodebaseMapStatus,
 			CodebaseMapDocStates: view.InputContext.CodebaseMapDocStates,
+			WavePlan:             view.InputContext.WavePlan,
 			ResumeCheckpoint:     view.InputContext.ResumeCheckpoint,
 		},
 		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),

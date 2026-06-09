@@ -33,6 +33,88 @@ func TestPlanWavesRejectsStaticConflictsInsideDeclaredWave(t *testing.T) {
 	assert.Contains(t, err.Error(), "static target conflict")
 }
 
+func TestPlanWavesRejectsStaticConflictsWithPathAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{"a.go"}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"./a.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "a.go")
+}
+
+func TestPlanWavesRejectsStaticConflictsWithBackslashPathAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{`internal\engine\wave.go`}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"internal/engine/wave.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "internal/engine/wave.go")
+}
+
+func TestPlanWavesRejectsStaticConflictsWithCaseAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{"Foo.go"}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"foo.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "foo.go")
+}
+
+func TestPlanWavesRejectsStaticConflictsWithParentChildTargets(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{"internal/engine/progression"}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"internal/engine/progression/advance.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "internal/engine/progression")
+	assert.Contains(t, err.Error(), "internal/engine/progression/advance.go")
+}
+
+func TestPlanWavesRejectsStaticConflictsWithGlobTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		left  string
+		right string
+	}{
+		{name: "star overlaps concrete file", left: "cmd/*.go", right: "cmd/next.go"},
+		{name: "double star overlaps nested file", left: "docs/**", right: "docs/guides/workflow.md"},
+		{name: "concrete file overlaps star", left: "internal/engine/wave/wave.go", right: "internal/engine/wave/*.go"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := PlanWaves([]Node{
+				{TaskID: "a", WaveIndex: 1, TargetFiles: []string{tt.left}, TaskKind: model.TaskKindCode},
+				{TaskID: "b", WaveIndex: 1, TargetFiles: []string{tt.right}, TaskKind: model.TaskKindCode},
+			})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "static target conflict")
+		})
+	}
+}
+
 func TestPlanWavesAllowsTaskIDThatLooksLikeLegacyRunSuffix(t *testing.T) {
 	t.Parallel()
 

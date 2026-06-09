@@ -233,8 +233,11 @@ type wavePlanView struct {
 }
 
 type waveView struct {
-	WaveIndex int            `json:"wave_index"`
-	Tasks     []waveTaskView `json:"tasks"`
+	WaveIndex int  `json:"wave_index"`
+	Parallel  bool `json:"parallel"`
+	// Tasks in a parallel wave are dependency-free and file-disjoint, so the host
+	// dispatches them concurrently by default unless parallelization is off.
+	Tasks []waveTaskView `json:"tasks"`
 }
 
 type waveTaskView struct {

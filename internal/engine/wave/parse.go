@@ -312,7 +312,7 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 			Objective:      b.objective,
 			WaveIndex:      b.waveIndex,
 			DependsOn:      append([]string(nil), b.dependsOn...),
-			TargetFiles:    append([]string(nil), b.targetFiles...),
+			TargetFiles:    normalizeTargetFiles(b.targetFiles),
 			TaskKind:       kind,
 			CheckpointType: b.checkpointType,
 		},
@@ -322,6 +322,14 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 		Acceptance:       b.acceptance,
 		taskKindDeclared: strings.TrimSpace(b.taskKind) != "",
 	}, nil
+}
+
+func normalizeTargetFiles(files []string) []string {
+	out := make([]string, len(files))
+	for i, file := range files {
+		out[i] = model.NormalizePublicPath(file)
+	}
+	return out
 }
 
 func parseTaskCheckboxLine(line string) (string, string, bool, bool) {

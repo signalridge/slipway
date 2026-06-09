@@ -137,6 +137,22 @@ type ConfigExecution struct {
 	LockStaleAfterSeconds    int `yaml:"lock_stale_after_seconds" json:"lock_stale_after_seconds"`
 	CancelGracePeriodSeconds int `yaml:"cancel_grace_period_seconds" json:"cancel_grace_period_seconds"`
 	MaxPlanAuditIterations   int `yaml:"max_plan_audit_iterations" json:"max_plan_audit_iterations"`
+	// Parallelization controls whether within-wave parallel execution is forced.
+	// Empty (unset) and "forced" mean a multi-task wave is dispatched concurrently
+	// by default; "off" opts the project out so the host may run waves sequentially
+	// without recording a degradation.
+	Parallelization string `yaml:"parallelization,omitempty" json:"parallelization,omitempty"`
+}
+
+const (
+	ParallelizationForced = "forced"
+	ParallelizationOff    = "off"
+)
+
+// ForcedParallel reports whether forced within-wave parallel execution is in
+// effect. Default (unset) is forced; only an explicit "off" disables it.
+func (e ConfigExecution) ForcedParallel() bool {
+	return e.Parallelization != ParallelizationOff
 }
 
 func DefaultConfig() Config {
@@ -218,6 +234,11 @@ func (c Config) Validate() error {
 	}
 	if err := c.Governance.Thresholds.Validate(); err != nil {
 		return err
+	}
+	switch c.Execution.Parallelization {
+	case "", ParallelizationForced, ParallelizationOff:
+	default:
+		return fmt.Errorf("execution.parallelization must be unset or one of: forced, off")
 	}
 	return nil
 }

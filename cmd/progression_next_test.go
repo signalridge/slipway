@@ -2694,7 +2694,7 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		require.NoError(t, err)
 		summary, err := state.LoadExecutionSummary(root, slug)
 		require.NoError(t, err)
-		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, nil)
 		require.NoError(t, err)
 		require.Len(t, runs, 2, "expected one persisted run per planned wave")
 		require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))
@@ -3111,6 +3111,88 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		assert.Equal(t, "code", firstTask["task_kind"])
 		assert.Equal(t, []any{"cmd/next.go"}, firstTask["target_files"])
 	})
+}
+
+func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		config       string
+		wantParallel bool
+	}{
+		{
+			name:         "default forced parallelization",
+			wantParallel: true,
+		},
+		{
+			name:         "parallelization off",
+			config:       "execution:\n  parallelization: off\n",
+			wantParallel: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			withCommandWorkspace(t, root, func() {
+				initTestWorkspace(t, root)
+				if tt.config != "" {
+					require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(tt.config), 0o644))
+				}
+
+				slug := createGovernedRequest(t, root, "L2", tt.name)
+				change, err := state.LoadChange(root, slug)
+				require.NoError(t, err)
+
+				change.CurrentState = model.StateS2Execute
+				change.PlanSubStep = model.PlanSubStepNone
+				require.NoError(t, state.SaveChange(root, change))
+
+				bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+				require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
+- [ ] `+"`t-01`"+` first handoff wave task
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+- [ ] `+"`t-02`"+` second handoff wave task
+  - wave: 1
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+				_, err = state.MaterializeWavePlan(root, change)
+				require.NoError(t, err)
+
+				cmd := commandForRoot(t, root, makeNextCmd())
+				cmd.SetArgs([]string{"--json", "--change", slug})
+				var buf bytes.Buffer
+				cmd.SetOut(&buf)
+				require.NoError(t, cmd.Execute())
+
+				var payload map[string]any
+				require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+
+				inputContext, ok := payload["input_context"].(map[string]any)
+				require.True(t, ok, "expected input_context in next output")
+
+				wavePlan, ok := inputContext["wave_plan"].(map[string]any)
+				require.True(t, ok, "expected wave_plan in handoff next output")
+
+				rawWaves, ok := wavePlan["waves"].([]any)
+				require.True(t, ok)
+				require.NotEmpty(t, rawWaves)
+
+				firstWave, ok := rawWaves[0].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, tt.wantParallel, firstWave["parallel"])
+			})
+		})
+	}
 }
 
 func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {

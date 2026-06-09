@@ -178,7 +178,7 @@ func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing
 			{TaskID: "task-b", Verdict: model.TaskVerdictPass, CapturedAt: time.Now().UTC()},
 		},
 	}
-	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, nil)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveWaveRuns(root, change.Slug, summary.RunSummaryVersion, runs))
 

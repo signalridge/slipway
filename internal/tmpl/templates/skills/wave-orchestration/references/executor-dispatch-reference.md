@@ -32,8 +32,10 @@ non-durable for that document, and report stale or irrelevant map guidance in
 map content out of the coordinator context.
 
 ## Runtime Boundary
-- Tools with subagent support should use one fresh executor per task.
-- Tools without subagent support execute tasks inline sequentially.
+- A `parallel: true` wave (from `slipway next --json`) is dispatched concurrently by default: one fresh executor per task, spawned together, then wait for the whole wave.
+- Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support — in the latter case note the degradation in the wave report and record `dispatch_mode:wave=<wave_index>:degraded_sequential` in the wave-orchestration verification references (it does not block completion). Notes/prose alone are human-readable context and are not parsed as dispatch evidence.
+- Executors share the same worktree. Do not run shared-worktree-wide integration commands such as `go build ./...` concurrently inside each task executor; leave merged-state build/test/lint checks to the post-wave integration gate unless a task owns a genuinely isolated command.
+- After all executors in a wave finish, run a post-wave integration gate on the merged current worktree before starting the next wave. Use the narrowest meaningful build/test command for code/test waves, the relevant formatter/lint/validation for docs/config/ops-only waves, or record why no executable gate exists.
 - HARD RULE markers describe high-impact behavioral constraints; the engine does not enforce them automatically.
 
 ## Tool-Specific Dispatch Examples

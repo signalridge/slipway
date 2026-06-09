@@ -93,6 +93,43 @@ func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, erro
 	return MaterializeWavePlanAt(root, change, time.Now().UTC())
 }
 
+func EffectiveForcedParallel(root string) bool {
+	forcedParallel := true
+	if cfg, cfgErr := model.LoadConfig(ConfigPath(root)); cfgErr == nil {
+		forcedParallel = cfg.Execution.ForcedParallel()
+	}
+	return forcedParallel
+}
+
+// ApplyEffectiveParallel returns a wave plan whose parallel flags match the
+// current effective parallelization mode.
+func ApplyEffectiveParallel(plan model.WavePlan, forcedParallel bool) model.WavePlan {
+	plan = cloneWavePlanForEffectiveParallel(plan)
+	plan.Normalize()
+	for i := range plan.Waves {
+		plan.Waves[i].Parallel = forcedParallel && len(plan.Waves[i].Tasks) > 1
+	}
+	return plan
+}
+
+func cloneWavePlanForEffectiveParallel(plan model.WavePlan) model.WavePlan {
+	if plan.Waves == nil {
+		return plan
+	}
+	plan.Waves = append([]model.WavePlanWave(nil), plan.Waves...)
+	for i := range plan.Waves {
+		if plan.Waves[i].Tasks == nil {
+			continue
+		}
+		plan.Waves[i].Tasks = append([]model.WavePlanTask(nil), plan.Waves[i].Tasks...)
+		for j := range plan.Waves[i].Tasks {
+			plan.Waves[i].Tasks[j].DependsOn = append([]string(nil), plan.Waves[i].Tasks[j].DependsOn...)
+			plan.Waves[i].Tasks[j].TargetFiles = append([]string(nil), plan.Waves[i].Tasks[j].TargetFiles...)
+		}
+	}
+	return plan
+}
+
 func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
 	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	if err != nil {
@@ -113,6 +150,10 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 		TotalTasks:              len(nodes),
 		Waves:                   make([]model.WavePlanWave, len(waves)),
 	}
+	// Forced within-wave parallelism is the default; a project opts out with
+	// execution.parallelization: off. A missing/unreadable config defaults to
+	// forced.
+	forcedParallel := EffectiveForcedParallel(root)
 	for i, plannedWave := range waves {
 		tasks := make([]model.WavePlanTask, len(plannedWave.Nodes))
 		for j, node := range plannedWave.Nodes {
@@ -129,6 +170,11 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 			Tasks:     tasks,
 		}
 	}
+	// Mark multi-task waves parallel so the host dispatches them concurrently by
+	// default: wave planning already guarantees these tasks are dependency-free
+	// and file-disjoint. The flag is derived here and is not part of the
+	// freshness hashes above (which derive from tasks.md).
+	plan = ApplyEffectiveParallel(plan, forcedParallel)
 	if err := SaveWavePlan(root, change.Slug, plan); err != nil {
 		return model.WavePlan{}, err
 	}
@@ -378,9 +424,17 @@ func ResetWaveExecution(root, slug string) error {
 	return nil
 }
 
-func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.ExecutionTaskSummary) ([]model.WaveRun, error) {
+func BuildWaveRuns(
+	plan model.WavePlan,
+	runSummaryVersion int,
+	tasks []model.ExecutionTaskSummary,
+	dispatchByWave map[int]model.WaveDispatchMode,
+) ([]model.WaveRun, error) {
 	if runSummaryVersion < 1 {
 		return nil, fmt.Errorf("run_summary_version must be >= 1")
+	}
+	if dispatchByWave == nil {
+		dispatchByWave = map[int]model.WaveDispatchMode{}
 	}
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
@@ -414,8 +468,39 @@ func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.Exe
 			TaskRuns:          refs,
 			Verdict:           determineWaveVerdict(len(plannedWave.Tasks), present),
 		}
+		dispatchMode := waveRunDispatchMode(plannedWave, len(present) > 0, dispatchByWave)
+		if dispatchMode != "" {
+			runs[i].DispatchMode = dispatchMode
+		}
 	}
 	return runs, nil
+}
+
+func waveRunDispatchMode(
+	plannedWave model.WavePlanWave,
+	started bool,
+	dispatchByWave map[int]model.WaveDispatchMode,
+) model.WaveDispatchMode {
+	if !started {
+		return ""
+	}
+	dispatchMode, hasDispatchMode := dispatchByWave[plannedWave.WaveIndex]
+	if !hasDispatchMode || dispatchMode == "" {
+		if plannedWave.Parallel {
+			return model.WaveDispatchParallel
+		}
+		return ""
+	}
+	if !dispatchMode.IsValid() {
+		if plannedWave.Parallel {
+			return model.WaveDispatchParallel
+		}
+		return ""
+	}
+	if !plannedWave.Parallel {
+		return ""
+	}
+	return dispatchMode
 }
 
 func ResumeWaveIndex(plan model.WavePlan, runs []model.WaveRun) int {
