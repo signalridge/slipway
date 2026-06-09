@@ -41,9 +41,14 @@ captured at S4 goal-verification.
 ## Residual Risks and Exceptions
 - Host degradation is recorded as a structured
   `dispatch_mode:wave=<wave_index>:degraded_sequential` verification reference
-  plus notes, then recovered into `WaveRun.dispatch_mode`. A future evidence
-  `--dispatch-mode` flag could make capture more ergonomic, but the structured
-  contract is no longer deferred.
+  plus notes, then recovered into `WaveRun.dispatch_mode`. There is no dedicated
+  `slipway evidence --dispatch-mode` flag yet; such a flag would improve capture
+  ergonomics only. The structured contract itself is implemented through
+  wave-orchestration verification references.
+- The engine does not independently observe host scheduler behavior. A
+  parallel-eligible wave defaults to `dispatch_mode: parallel` unless the host
+  records the degraded-sequential reference above. This is the current
+  host-driven evidence boundary and does not create a completion blocker.
 - Same-Go-package tasks in one wave are file-disjoint but not safe to compile
   concurrently; this is a known limitation of the single-tree, file-disjoint
   choice (surfaced honestly in the wave-orchestration evidence for Wave 1).
