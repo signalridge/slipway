@@ -713,6 +713,7 @@ func waveRunsEqual(left, right []model.WaveRun) bool {
 			!l.StartedAt.Equal(r.StartedAt) ||
 			!l.CompletedAt.Equal(r.CompletedAt) ||
 			l.Verdict != r.Verdict ||
+			l.DispatchMode != r.DispatchMode ||
 			!slices.Equal(l.TaskRuns, r.TaskRuns) {
 			return false
 		}

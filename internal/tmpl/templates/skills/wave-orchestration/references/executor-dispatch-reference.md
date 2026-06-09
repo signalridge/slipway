@@ -32,8 +32,8 @@ non-durable for that document, and report stale or irrelevant map guidance in
 map content out of the coordinator context.
 
 ## Runtime Boundary
-- Tools with subagent support should use one fresh executor per task.
-- Tools without subagent support execute tasks inline sequentially.
+- A `parallel: true` wave (from `slipway next --json`) is dispatched concurrently by default: one fresh executor per task, spawned together, then wait for the whole wave.
+- Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support — in the latter case note the degradation in the wave report and the wave-orchestration verification notes (it does not block completion).
 - HARD RULE markers describe high-impact behavioral constraints; the engine does not enforce them automatically.
 
 ## Tool-Specific Dispatch Examples

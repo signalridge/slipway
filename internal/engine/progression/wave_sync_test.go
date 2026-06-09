@@ -1420,3 +1420,26 @@ func waveReasonMessage(reasons []model.ReasonCode, code string) string {
 	}
 	return ""
 }
+
+func TestWaveRunsEqualDetectsDispatchModeChange(t *testing.T) {
+	t.Parallel()
+
+	base := []model.WaveRun{{
+		WaveIndex:         1,
+		RunSummaryVersion: 1,
+		Verdict:           model.WaveVerdictPass,
+		DispatchMode:      model.WaveDispatchParallel,
+	}}
+	// Identical except DispatchMode. waveRunsEqual gates whether wave-run evidence
+	// is re-persisted, so a dispatch-mode flip (e.g. parallelization off->forced)
+	// must register as a difference or the stale mode is never written to disk.
+	flipped := []model.WaveRun{{
+		WaveIndex:         1,
+		RunSummaryVersion: 1,
+		Verdict:           model.WaveVerdictPass,
+		DispatchMode:      "",
+	}}
+
+	assert.True(t, waveRunsEqual(base, base), "identical runs are equal")
+	assert.False(t, waveRunsEqual(base, flipped), "a dispatch_mode change must not be treated as equal")
+}

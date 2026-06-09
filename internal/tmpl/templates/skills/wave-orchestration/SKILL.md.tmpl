@@ -67,14 +67,23 @@ Report the wave plan before execution: description, total tasks, wave count,
 and one row per wave with task IDs plus a 3-8 word build summary.
 
 ## Execute Waves
-Execute waves in sequence. Within a wave, dispatch tasks in parallel when the
-tool supports it. For each wave: describe the build goal before spawning, wait
+Execute waves in sequence. **Within a wave, dispatch every task concurrently by
+default.** Wave planning already guarantees a wave's tasks are dependency-free
+and file-disjoint, and `slipway next --json` marks such a wave `parallel: true`
+in `input_context.wave_plan.waves[]`; do not serialize a `parallel: true` wave
+for convenience. Fall back to sequential only when the host genuinely cannot run
+concurrent executors, and when you do, say so in the wave report and the
+wave-orchestration verification `notes` so the degradation stays visible — it does
+not block completion. A `parallel: false` wave (a single task, or
+`execution.parallelization: off`) runs sequentially with nothing to note.
+
+For each wave: describe the build goal before spawning, wait
 for all executors, spot-check the first 2 files from each task's
 `changed_files`, check blocker evidence, report what the wave enables next, and
 after any checkpoint pause continue with a **fresh** subagent context.
 
 ## Dispatch Contract
-- Use one isolated executor context per task when supported; otherwise execute sequentially.
+- Dispatch one isolated executor per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host cannot run concurrent executors (note that degradation, as above).
 - Pass file paths only; executors read source files in their own context.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.

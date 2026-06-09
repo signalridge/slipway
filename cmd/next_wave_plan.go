@@ -61,6 +61,10 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 		}
 	}
 
+	forcedParallel := true
+	if cfg, cfgErr := model.LoadConfig(state.ConfigPath(root)); cfgErr == nil {
+		forcedParallel = cfg.Execution.ForcedParallel()
+	}
 	planView := &wavePlanView{
 		WaveCount: len(waves),
 		Waves:     make([]waveView, len(waves)),
@@ -79,6 +83,7 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 		}
 		planView.Waves[i] = waveView{
 			WaveIndex: i + 1,
+			Parallel:  forcedParallel && len(w.Nodes) > 1,
 			Tasks:     tasks,
 		}
 		planView.TotalTasks += len(w.Nodes)
@@ -111,6 +116,7 @@ func wavePlanViewFromModel(plan model.WavePlan) *wavePlanView {
 		}
 		view.Waves[i] = waveView{
 			WaveIndex: plannedWave.WaveIndex,
+			Parallel:  plannedWave.Parallel,
 			Tasks:     tasks,
 		}
 	}

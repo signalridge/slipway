@@ -4,7 +4,7 @@ Slipway routes work through a governed lifecycle:
 
 1. `S0_INTAKE`: capture intent, scope, open questions, and initial evidence.
 2. `S1_PLAN`: produce research, requirements, decision, task, and plan-audit artifacts.
-3. `S2_EXECUTE`: execute dependency-ordered waves from `tasks.md`.
+3. `S2_EXECUTE`: execute dependency-ordered waves from `tasks.md`. A wave's tasks are dependency-free and file-disjoint, so they are dispatched concurrently by default — `slipway next --json` marks such a wave `parallel: true`. Set `execution.parallelization: off` in `.slipway.yaml` to run waves sequentially instead.
 4. Review and closeout stages: verify implementation against artifacts, run quality checks, author the `assurance.md` closeout record, and finalize done-ready work.
 
 The active lifecycle state is stored in `artifacts/changes/<slug>/change.yaml`.

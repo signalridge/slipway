@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,4 +111,105 @@ func TestMaterializeWavePlanGeneratedAtUsesMaterializationTime(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, materializedAt.Equal(plan.GeneratedAt))
 	assert.False(t, tasksMTime.Equal(plan.GeneratedAt))
+}
+
+const (
+	twoIndependentTasksMD = "# Tasks\n\n" +
+		"- [ ] `t-01` first\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n" +
+		"- [ ] `t-02` second\n  - wave: 1\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"
+	oneTaskMD = "# Tasks\n\n- [ ] `t-01` solo\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+)
+
+var waveMaterializeTime = time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
+
+func writeBundleTasksForTest(t *testing.T, root string, change model.Change, tasksMD string) {
+	t.Helper()
+	bundleDir, err := GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksMD), 0o644))
+}
+
+func TestMaterializeWavePlanMarksMultiTaskWaveParallel(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-parallel-multi")
+	writeBundleTasksForTest(t, root, change, twoIndependentTasksMD)
+
+	plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+	require.NoError(t, err)
+	require.Len(t, plan.Waves, 1)
+	require.Len(t, plan.Waves[0].Tasks, 2)
+	assert.True(t, plan.Waves[0].Parallel, "a multi-task wave is forced parallel by default")
+}
+
+func TestMaterializeWavePlanSingleTaskWaveNotParallel(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-parallel-single")
+	writeBundleTasksForTest(t, root, change, oneTaskMD)
+
+	plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+	require.NoError(t, err)
+	require.Len(t, plan.Waves, 1)
+	assert.False(t, plan.Waves[0].Parallel, "a single-task wave is never parallel")
+}
+
+func TestMaterializeWavePlanParallelizationOff(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-parallel-off")
+	require.NoError(t, os.WriteFile(ConfigPath(root), []byte("execution:\n  parallelization: off\n"), 0o644))
+	writeBundleTasksForTest(t, root, change, twoIndependentTasksMD)
+
+	plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+	require.NoError(t, err)
+	require.Len(t, plan.Waves, 1)
+	assert.False(t, plan.Waves[0].Parallel, "parallelization: off suppresses the forced-parallel signal")
+}
+
+func TestMaterializeWavePlanParallelDoesNotChangeHashes(t *testing.T) {
+	t.Parallel()
+
+	rootForced := createRuntimeLayout(t)
+	cForced := saveActiveChangeForTest(t, rootForced, "wave-parallel-hash-forced")
+	writeBundleTasksForTest(t, rootForced, cForced, twoIndependentTasksMD)
+	forced, err := MaterializeWavePlanAt(rootForced, cForced, waveMaterializeTime)
+	require.NoError(t, err)
+
+	rootOff := createRuntimeLayout(t)
+	cOff := saveActiveChangeForTest(t, rootOff, "wave-parallel-hash-off")
+	require.NoError(t, os.WriteFile(ConfigPath(rootOff), []byte("execution:\n  parallelization: off\n"), 0o644))
+	writeBundleTasksForTest(t, rootOff, cOff, twoIndependentTasksMD)
+	off, err := MaterializeWavePlanAt(rootOff, cOff, waveMaterializeTime)
+	require.NoError(t, err)
+
+	require.NotEqual(t, forced.Waves[0].Parallel, off.Waves[0].Parallel, "the parallel signal differs")
+	assert.Equal(t, forced.TasksPlanHash, off.TasksPlanHash, "but the freshness hash is unaffected")
+	assert.Equal(t, forced.TasksPlanStructuralHash, off.TasksPlanStructuralHash)
+	assert.Equal(t, forced.TasksPlanScopeHash, off.TasksPlanScopeHash)
+	assert.Equal(t, forced.TasksPlanSemanticHash, off.TasksPlanSemanticHash)
+}
+
+func TestBuildWaveRunsDerivesParallelDispatchMode(t *testing.T) {
+	t.Parallel()
+
+	plan := model.WavePlan{
+		Version:     model.WavePlanVersion,
+		GeneratedAt: waveMaterializeTime,
+		TotalTasks:  3,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}}},
+			{WaveIndex: 2, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "t-03"}}},
+		},
+	}
+
+	runs, err := BuildWaveRuns(plan, 1, nil)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	assert.Equal(t, model.WaveDispatchParallel, runs[0].DispatchMode, "parallel wave records its dispatch mode")
+	assert.Equal(t, model.WaveDispatchMode(""), runs[1].DispatchMode, "sequential wave records no dispatch mode")
 }

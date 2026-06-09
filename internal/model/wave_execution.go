@@ -22,8 +22,14 @@ type WavePlan struct {
 }
 
 type WavePlanWave struct {
-	WaveIndex int            `yaml:"wave_index" json:"wave_index"`
-	Tasks     []WavePlanTask `yaml:"tasks,omitempty" json:"tasks,omitempty"`
+	WaveIndex int `yaml:"wave_index" json:"wave_index"`
+	// Parallel marks a wave whose tasks are dependency-free and file-disjoint
+	// (guaranteed by wave planning), so the host is expected to dispatch them
+	// concurrently by default. Derived at materialization from the task count and
+	// the effective parallelization mode; it is intentionally excluded from the
+	// wave-plan freshness hashes.
+	Parallel bool           `yaml:"parallel,omitempty" json:"parallel,omitempty"`
+	Tasks    []WavePlanTask `yaml:"tasks,omitempty" json:"tasks,omitempty"`
 }
 
 type WavePlanTask struct {
@@ -136,6 +142,9 @@ func (w WavePlanWave) Validate(expectedIndex int, seen map[string]struct{}) erro
 	if w.WaveIndex != expectedIndex {
 		return fmt.Errorf("wave_index must be %d", expectedIndex)
 	}
+	if w.Parallel && len(w.Tasks) < 2 {
+		return fmt.Errorf("parallel wave must contain at least 2 tasks")
+	}
 	for i, task := range w.Tasks {
 		if err := task.Validate(); err != nil {
 			return fmt.Errorf("tasks[%d]: %w", i, err)
@@ -202,13 +211,33 @@ func (v WaveVerdict) IsValid() bool {
 	}
 }
 
+// WaveDispatchMode records how a wave's tasks were actually dispatched, so a
+// host that could not run a parallel-eligible wave concurrently records the
+// degradation instead of losing it silently.
+type WaveDispatchMode string
+
+const (
+	WaveDispatchParallel           WaveDispatchMode = "parallel"
+	WaveDispatchDegradedSequential WaveDispatchMode = "degraded_sequential"
+)
+
+func (m WaveDispatchMode) IsValid() bool {
+	switch m {
+	case WaveDispatchParallel, WaveDispatchDegradedSequential:
+		return true
+	default:
+		return false
+	}
+}
+
 type WaveRun struct {
-	WaveIndex         int          `yaml:"wave_index" json:"wave_index"`
-	RunSummaryVersion int          `yaml:"run_summary_version" json:"run_summary_version"`
-	StartedAt         time.Time    `yaml:"started_at,omitempty" json:"started_at,omitempty"`
-	CompletedAt       time.Time    `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
-	TaskRuns          []TaskRunRef `yaml:"task_runs,omitempty" json:"task_runs,omitempty"`
-	Verdict           WaveVerdict  `yaml:"verdict" json:"verdict"`
+	WaveIndex         int              `yaml:"wave_index" json:"wave_index"`
+	RunSummaryVersion int              `yaml:"run_summary_version" json:"run_summary_version"`
+	StartedAt         time.Time        `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	CompletedAt       time.Time        `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
+	TaskRuns          []TaskRunRef     `yaml:"task_runs,omitempty" json:"task_runs,omitempty"`
+	Verdict           WaveVerdict      `yaml:"verdict" json:"verdict"`
+	DispatchMode      WaveDispatchMode `yaml:"dispatch_mode,omitempty" json:"dispatch_mode,omitempty"`
 }
 
 func (r *WaveRun) Normalize() {
@@ -238,6 +267,9 @@ func (r WaveRun) Validate(expectedIndex int) error {
 	}
 	if !r.Verdict.IsValid() {
 		return fmt.Errorf("invalid verdict %q", r.Verdict)
+	}
+	if r.DispatchMode != "" && !r.DispatchMode.IsValid() {
+		return fmt.Errorf("invalid dispatch_mode %q", r.DispatchMode)
 	}
 	for i, ref := range r.TaskRuns {
 		if err := ref.Validate(); err != nil {

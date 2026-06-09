@@ -113,6 +113,13 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 		TotalTasks:              len(nodes),
 		Waves:                   make([]model.WavePlanWave, len(waves)),
 	}
+	// Forced within-wave parallelism is the default; a project opts out with
+	// execution.parallelization: off. A missing/unreadable config defaults to
+	// forced.
+	forcedParallel := true
+	if cfg, cfgErr := model.LoadConfig(ConfigPath(root)); cfgErr == nil {
+		forcedParallel = cfg.Execution.ForcedParallel()
+	}
 	for i, plannedWave := range waves {
 		tasks := make([]model.WavePlanTask, len(plannedWave.Nodes))
 		for j, node := range plannedWave.Nodes {
@@ -124,8 +131,13 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 				TaskKind:    node.TaskKind,
 			}
 		}
+		// Mark a multi-task wave parallel so the host dispatches it concurrently
+		// by default: wave planning already guarantees these tasks are
+		// dependency-free and file-disjoint. The flag is derived here and is not
+		// part of the freshness hashes above (which derive from tasks.md).
 		plan.Waves[i] = model.WavePlanWave{
 			WaveIndex: i + 1,
+			Parallel:  forcedParallel && len(tasks) > 1,
 			Tasks:     tasks,
 		}
 	}
@@ -413,6 +425,12 @@ func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.Exe
 			CompletedAt:       waveCompletedAt(len(plannedWave.Tasks), present),
 			TaskRuns:          refs,
 			Verdict:           determineWaveVerdict(len(plannedWave.Tasks), present),
+		}
+		// A wave planned for forced parallel dispatch records its dispatch mode as
+		// evidence. The host surfaces a blocker when it has to degrade a parallel
+		// wave to sequential, so the loss stays visible.
+		if plannedWave.Parallel {
+			runs[i].DispatchMode = model.WaveDispatchParallel
 		}
 	}
 	return runs, nil
