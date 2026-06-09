@@ -512,6 +512,9 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 
 	blockers := append([]string{}, resolution.Blockers...)
 	for _, name := range required {
+		if existenceOwnedByDedicatedGate(name) {
+			continue
+		}
 		path := artifact.ResolveArtifactPath(base, name)
 		if _, err := os.Stat(path); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -522,6 +525,19 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 		}
 	}
 	return stringutil.UniqueSorted(blockers)
+}
+
+// existenceOwnedByDedicatedGate reports whether a required artifact's existence is
+// enforced by a dedicated lifecycle gate rather than the generic bundle/readiness
+// existence checks. assurance.md is a review/verify-phase deliverable deferred to
+// S3_REVIEW authoring (issue #141); its existence and structure are owned solely by
+// AssuranceContractBlockers, which fails closed at S3_REVIEW and later. The generic
+// gates run before S3 too, so they must skip it — otherwise a deferred (and thus
+// absent) assurance.md would surface as missing_required_artifact and strand the
+// change at S1_PLAN/S2_EXECUTE. Skipping it here also avoids double-reporting the
+// same gap at S3+ (assurance_contract_missing is the specific, owning blocker).
+func existenceOwnedByDedicatedGate(name string) bool {
+	return name == "assurance.md"
 }
 
 // AssuranceContractBlockers validates the assurance.md body-first contract:

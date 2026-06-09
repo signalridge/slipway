@@ -82,7 +82,7 @@ type GovernanceReadinessOptions struct {
 	IncludeShipSurface        bool
 }
 
-const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift is non-destructive and preserves the recorded wave evidence; remove the out-of-scope file, rely on an existing ignore/local exclude, or include the file or tracked .gitignore rule in the plan with `slipway pivot --rescope` (which edits tasks.md target_files), then re-run; a task missing its changed-file evidence instead reopens to S2_EXECUTE via `slipway run` to re-record it."
+const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift preserves recorded wave evidence. Remove a build-artifact/scratch file or rely on an ignore/local exclude; to keep a legitimate change, amend the owning task's target_files in tasks.md and re-run — scope is re-derived from the plan and only review/verify evidence covering the change is re-certified (non-destructive). Reserve `slipway pivot --rescope` for a full re-plan: it resets the change to S0_INTAKE and clears the Approved Summary. A task missing its changed-file evidence instead reopens to S2_EXECUTE via `slipway run` to re-record it."
 
 type ArtifactReadinessReader interface {
 	Evaluate(root string, change model.Change) (ArtifactReadiness, error)
@@ -574,6 +574,12 @@ func evaluateArtifactReadinessWithContext(root string, change model.Change, ctx 
 	}
 
 	for _, name := range required {
+		// assurance.md existence is owned by AssuranceContractBlockers at
+		// S3_REVIEW+ (issue #141); the generic pre-S3 readiness gate must not
+		// report it missing and strand the change before review.
+		if existenceOwnedByDedicatedGate(name) {
+			continue
+		}
 		path := artifact.ResolveArtifactPath(base, name)
 		if _, err := os.Stat(path); err != nil {
 			switch {

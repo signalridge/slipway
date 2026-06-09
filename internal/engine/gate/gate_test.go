@@ -135,14 +135,23 @@ func TestEvaluateGPivot(t *testing.T) {
 		assert.True(t, hasGateReasonCode(eval.ReasonCodes, "pivot_state_invalid"), "reroute state %s", state)
 	}
 
-	eval = EvaluateGPivot(PivotKindRescope, true, model.StateS2Execute)
-	assert.Equal(t, model.GateStatusApproved, eval.Status)
-	assert.Empty(t, eval.ReasonCodes)
-
+	// Rescope is reachable once execution has begun; it resets to S0_INTAKE
+	// regardless of the starting state, so S3_REVIEW/S4_VERIFY must be accepted —
+	// otherwise scope-drift recovery is unreachable after a stale-evidence reopen.
 	for _, state := range []model.WorkflowState{
-		model.StateS1Plan,
+		model.StateS2Execute,
 		model.StateS3Review,
 		model.StateS4Verify,
+	} {
+		eval := EvaluateGPivot(PivotKindRescope, true, state)
+		assert.Equal(t, model.GateStatusApproved, eval.Status, "rescope state %s", state)
+		assert.Empty(t, eval.ReasonCodes, "rescope state %s", state)
+	}
+
+	for _, state := range []model.WorkflowState{
+		model.StateS0Intake,
+		model.StateS1Plan,
+		model.StateDone,
 	} {
 		eval := EvaluateGPivot(PivotKindRescope, true, state)
 		assert.Equal(t, model.GateStatusBlocked, eval.Status, "rescope state %s", state)

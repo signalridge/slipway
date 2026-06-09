@@ -345,10 +345,9 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 		return err
 	}
 	seenAny := false
-	// assurance.md is intentionally excluded: plan-audit (S1) never audits the
-	// assurance contract — AssuranceContractBlockers enforces it only at S3_REVIEW
-	// and later — so a late assurance.md edit must not retroactively stale the
-	// plan-audit digest. assurance.md remains an input to the final-closeout digest.
+	// assurance.md is not a plan-audit input: it is deferred to S3_REVIEW authoring
+	// (issue #141) and does not exist at plan-audit time. It remains an input to the
+	// final-closeout digest.
 	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md"} {
 		path := filepath.Join(bundleDir, rel)
 		if _, err := os.Stat(path); err != nil {

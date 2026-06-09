@@ -320,17 +320,20 @@ func DiagnoseBundleConsistency(root string, change model.Change) BundleConsisten
 			"tasks.md missing in governed bundle — execution target file required")
 	}
 
-	// assurance.md remains optional on the light effective preset.
-	// Standard/strict keep the earlier "required later, hard-required in review/done" behavior.
+	// assurance.md is deferred to S3_REVIEW authoring (issue #141): before review
+	// its absence is the expected deferred state, not a partial-write
+	// inconsistency, so this diagnostic stays silent pre-S3 — mirroring the other
+	// deferred artifacts (requirements/decision/tasks/research) it does not flag
+	// here. From S3_REVIEW onward assurance.md is hard-required (its existence is
+	// owned by AssuranceContractBlockers), so a missing file there is a real
+	// bundle consistency error. Optional on the light effective preset.
 	assuranceRequired := bundleConsistencyRequiresAssurance(root, change)
-	if assuranceRequired && !assuranceExists && changeYamlExists {
-		if change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify || change.CurrentState == model.StateDone {
-			result.Errors = append(result.Errors,
-				"assurance.md missing in governed bundle — required for review/verify/done phase")
-		} else {
-			result.Warnings = append(result.Warnings,
-				"assurance.md missing in governed bundle — will be required for review phase")
-		}
+	assuranceEnforced := change.CurrentState == model.StateS3Review ||
+		change.CurrentState == model.StateS4Verify ||
+		change.CurrentState == model.StateDone
+	if assuranceRequired && assuranceEnforced && !assuranceExists && changeYamlExists {
+		result.Errors = append(result.Errors,
+			"assurance.md missing in governed bundle — required for review/verify/done phase")
 	}
 
 	return result

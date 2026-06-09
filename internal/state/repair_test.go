@@ -61,7 +61,11 @@ func TestDiagnoseBundleConsistencyTasksMissing(t *testing.T) {
 	assert.Contains(t, result.Errors[0], "tasks.md missing")
 }
 
-func TestDiagnoseBundleConsistencyAssuranceMissingWarningPreReview(t *testing.T) {
+// assurance.md is deferred to S3_REVIEW authoring (issue #141): before review its
+// absence is the expected deferred state, so the bundle-consistency diagnostic
+// must stay silent pre-S3 — neither error nor warning — rather than reporting a
+// by-design deferral as a partial-write inconsistency.
+func TestDiagnoseBundleConsistencyAssuranceDeferredPreReviewIsSilent(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	change := model.NewChange("no-assurance-early")
@@ -74,8 +78,7 @@ func TestDiagnoseBundleConsistencyAssuranceMissingWarningPreReview(t *testing.T)
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Empty(t, result.Errors)
-	require.Len(t, result.Warnings, 1)
-	assert.Contains(t, result.Warnings[0], "assurance.md missing")
+	assert.Empty(t, result.Warnings, "deferred assurance.md must not be flagged before S3_REVIEW")
 }
 
 // seedWavePlanRepairChange writes a tasks.md, materializes its wave-plan, and

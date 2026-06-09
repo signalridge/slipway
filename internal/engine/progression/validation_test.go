@@ -12,6 +12,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -523,7 +524,13 @@ func TestDecisionContractBlockers(t *testing.T) {
 	})
 }
 
-func TestGovernedBundleBlockers_UsesEffectivePresetForAssuranceRequirement(t *testing.T) {
+// After issue #141, assurance.md existence is owned solely by
+// AssuranceContractBlockers at S3_REVIEW and later — not the generic
+// GovernedBundleBlockers existence gate, which also runs before review. Even when
+// the effective preset (via MinPreset) upgrades a light change to standard, the
+// generic gate must NOT report a deferred assurance.md as missing and strand the
+// change before S3; the dedicated contract gate fails closed once review begins.
+func TestGovernedBundleBlockers_DefersAssuranceToContractGate(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -544,17 +551,14 @@ func TestGovernedBundleBlockers_UsesEffectivePresetForAssuranceRequirement(t *te
 		ArtifactSchema: model.ArtifactSchemaCore,
 		WorkflowPreset: model.WorkflowPresetLight,
 	}
-	blockers := GovernedBundleBlockers(root, change)
-	found := false
-	for _, blocker := range blockers {
-		if blocker == "missing_required_artifact:assurance.md" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected missing_required_artifact:assurance.md under effective standard preset, got %v", blockers)
-	}
+
+	// Pre-S3: the generic bundle gate does not strand the change on a deferred
+	// assurance.md, even under the upgraded effective standard preset.
+	assert.NotContains(t, GovernedBundleBlockers(root, change), "missing_required_artifact:assurance.md")
+
+	// At S3_REVIEW the dedicated contract gate owns it and fails closed when absent.
+	change.CurrentState = model.StateS3Review
+	assert.Contains(t, AssuranceContractBlockers(root, change), "assurance_contract_missing")
 }
 
 func TestValidatePlanningReadinessChecksBoundWorktreeWithoutDiscovery(t *testing.T) {

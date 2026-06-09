@@ -10,12 +10,11 @@ func validatePivotPreconditions(kind string, currentState model.WorkflowState) e
 		return nil
 	}
 
-	if kind == string(gate.PivotKindRescope) &&
-		currentState != model.StateS2Execute {
+	if kind == string(gate.PivotKindRescope) && !isPivotState(currentState) {
 		return newGovernanceBlockedError(
 			"rescope_state_invalid",
-			"rescope requires governed S2_EXECUTE",
-			"Rescope is only available during wave execution (S2_EXECUTE).",
+			"rescope requires governed S2_EXECUTE, S3_REVIEW, or S4_VERIFY",
+			"Rescope is available once wave execution has begun (S2_EXECUTE, S3_REVIEW, or S4_VERIFY); it resets the change to S0_INTAKE for re-planning. Before execution, use governed reroute from S1_PLAN.",
 			"",
 			nil,
 		)
