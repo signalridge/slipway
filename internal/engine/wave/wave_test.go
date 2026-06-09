@@ -46,6 +46,20 @@ func TestPlanWavesRejectsStaticConflictsWithPathAliases(t *testing.T) {
 	assert.Contains(t, err.Error(), "a.go")
 }
 
+func TestPlanWavesRejectsStaticConflictsWithParentChildTargets(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{"internal/engine/progression"}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"internal/engine/progression/advance.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "internal/engine/progression")
+	assert.Contains(t, err.Error(), "internal/engine/progression/advance.go")
+}
+
 func TestPlanWavesAllowsTaskIDThatLooksLikeLegacyRunSuffix(t *testing.T) {
 	t.Parallel()
 

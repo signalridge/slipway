@@ -110,17 +110,41 @@ func PlanWaves(nodes []Node) ([]Wave, error) {
 }
 
 func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {
-	targetOwners := map[string]string{}
+	type targetOwner struct {
+		target string
+		taskID string
+	}
+
+	targetOwners := []targetOwner{}
 	for _, node := range nodes {
 		for _, file := range node.TargetFiles {
 			target := normalizeTargetFileForConflict(file)
-			if existing, exists := targetOwners[target]; exists && existing != node.TaskID {
-				return fmt.Errorf("wave %d has static target conflict: %q and %q both target %q", waveIndex, existing, node.TaskID, target)
+			for _, existing := range targetOwners {
+				if existing.taskID == node.TaskID {
+					continue
+				}
+				if targetFilesConflict(existing.target, target) {
+					return fmt.Errorf("wave %d has static target conflict: %q targets %q and %q targets %q", waveIndex, existing.taskID, existing.target, node.TaskID, target)
+				}
 			}
-			targetOwners[target] = node.TaskID
+			targetOwners = append(targetOwners, targetOwner{target: target, taskID: node.TaskID})
 		}
 	}
 	return nil
+}
+
+func targetFilesConflict(left, right string) bool {
+	return left == right || targetFileContains(left, right) || targetFileContains(right, left)
+}
+
+func targetFileContains(parent, child string) bool {
+	if parent == "" || child == "" {
+		return false
+	}
+	if parent == "." || parent == "/" {
+		return child != parent
+	}
+	return strings.HasPrefix(child, parent+"/")
 }
 
 func normalizeTargetFileForConflict(file string) string {

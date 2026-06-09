@@ -189,6 +189,32 @@ func TestLoadWavePlanForChangePreservesMaterializedParallel(t *testing.T) {
 	assert.True(t, loaded.Waves[0].Parallel, "loaded wave plans preserve the materialized dispatch evidence")
 }
 
+func TestApplyEffectiveParallelDoesNotMutateInputPlan(t *testing.T) {
+	t.Parallel()
+
+	plan := model.WavePlan{
+		Version:     model.WavePlanVersion,
+		GeneratedAt: waveMaterializeTime,
+		TotalTasks:  2,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  false,
+			Tasks: []model.WavePlanTask{
+				{TaskID: "t-02", TargetFiles: []string{"b.go", "a.go"}},
+				{TaskID: "t-01", DependsOn: []string{"x", "a"}},
+			},
+		}},
+	}
+
+	effective := ApplyEffectiveParallel(plan, true)
+
+	require.Len(t, effective.Waves, 1)
+	assert.True(t, effective.Waves[0].Parallel)
+	assert.False(t, plan.Waves[0].Parallel, "effective conversion must not mutate the caller's persisted plan value")
+	assert.Equal(t, []string{"b.go", "a.go"}, plan.Waves[0].Tasks[0].TargetFiles, "normalization must not sort through caller-owned slices")
+	assert.Equal(t, []string{"x", "a"}, plan.Waves[0].Tasks[1].DependsOn, "normalization must not sort through caller-owned slices")
+}
+
 func TestMaterializeWavePlanParallelDoesNotChangeHashes(t *testing.T) {
 	t.Parallel()
 

@@ -101,6 +101,35 @@ func EffectiveForcedParallel(root string) bool {
 	return forcedParallel
 }
 
+// ApplyEffectiveParallel returns a wave plan whose parallel flags match the
+// current effective parallelization mode.
+func ApplyEffectiveParallel(plan model.WavePlan, forcedParallel bool) model.WavePlan {
+	plan = cloneWavePlanForEffectiveParallel(plan)
+	plan.Normalize()
+	for i := range plan.Waves {
+		plan.Waves[i].Parallel = forcedParallel && len(plan.Waves[i].Tasks) > 1
+	}
+	return plan
+}
+
+func cloneWavePlanForEffectiveParallel(plan model.WavePlan) model.WavePlan {
+	if plan.Waves == nil {
+		return plan
+	}
+	plan.Waves = append([]model.WavePlanWave(nil), plan.Waves...)
+	for i := range plan.Waves {
+		if plan.Waves[i].Tasks == nil {
+			continue
+		}
+		plan.Waves[i].Tasks = append([]model.WavePlanTask(nil), plan.Waves[i].Tasks...)
+		for j := range plan.Waves[i].Tasks {
+			plan.Waves[i].Tasks[j].DependsOn = append([]string(nil), plan.Waves[i].Tasks[j].DependsOn...)
+			plan.Waves[i].Tasks[j].TargetFiles = append([]string(nil), plan.Waves[i].Tasks[j].TargetFiles...)
+		}
+	}
+	return plan
+}
+
 func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
 	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	if err != nil {
@@ -136,16 +165,16 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 				TaskKind:    node.TaskKind,
 			}
 		}
-		// Mark a multi-task wave parallel so the host dispatches it concurrently
-		// by default: wave planning already guarantees these tasks are
-		// dependency-free and file-disjoint. The flag is derived here and is not
-		// part of the freshness hashes above (which derive from tasks.md).
 		plan.Waves[i] = model.WavePlanWave{
 			WaveIndex: i + 1,
-			Parallel:  forcedParallel && len(tasks) > 1,
 			Tasks:     tasks,
 		}
 	}
+	// Mark multi-task waves parallel so the host dispatches them concurrently by
+	// default: wave planning already guarantees these tasks are dependency-free
+	// and file-disjoint. The flag is derived here and is not part of the
+	// freshness hashes above (which derive from tasks.md).
+	plan = ApplyEffectiveParallel(plan, forcedParallel)
 	if err := SaveWavePlan(root, change.Slug, plan); err != nil {
 		return model.WavePlan{}, err
 	}

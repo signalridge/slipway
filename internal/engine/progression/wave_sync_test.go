@@ -529,6 +529,114 @@ func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
 	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
 }
 
+func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		slug              string
+		config            string
+		persistedParallel bool
+		want              model.WaveDispatchMode
+	}{
+		{
+			name:              "default forced parallel overrides stale persisted false",
+			slug:              "wave-effective-parallel-default",
+			persistedParallel: false,
+			want:              model.WaveDispatchParallel,
+		},
+		{
+			name:              "parallelization off suppresses stale persisted true",
+			slug:              "wave-effective-parallel-off",
+			config:            "execution:\n  parallelization: off\n",
+			persistedParallel: true,
+			want:              "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			recordedAt := time.Date(2026, 6, 9, 2, 0, 0, 0, time.UTC)
+			change := model.NewChange(tt.slug)
+			change.CurrentState = model.StateS2Execute
+			change.PlanSubStep = model.PlanSubStepNone
+			require.NoError(t, state.SaveChange(root, change))
+			if tt.config != "" {
+				require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(tt.config), 0o644))
+			}
+			bundleDir, err := state.GovernedBundleDir(root, change)
+			require.NoError(t, err)
+			require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+
+- [x] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/run.go"]
+  - wave: 1
+  - task_kind: code
+`), 0o644))
+			writeVerificationForTest(t, root, tt.slug, SkillWaveOrchestration, model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  recordedAt,
+				RunVersion: 1,
+			})
+			require.NoError(t, state.SaveWavePlan(root, tt.slug, model.WavePlan{
+				Version:     model.WavePlanVersion,
+				GeneratedAt: recordedAt.Add(-time.Hour),
+				TotalTasks:  2,
+				Waves: []model.WavePlanWave{{
+					WaveIndex: 1,
+					Parallel:  tt.persistedParallel,
+					Tasks: []model.WavePlanTask{
+						{TaskID: "task-a", TargetFiles: []string{"cmd/next.go"}, TaskKind: model.TaskKindCode},
+						{TaskID: "task-b", TargetFiles: []string{"cmd/run.go"}, TaskKind: model.TaskKindCode},
+					},
+				}},
+			}))
+
+			writeTaskEvidence := func(taskID string, changedFile string) {
+				t.Helper()
+				taskEvidence := map[string]any{
+					"task_id":             taskID,
+					"run_summary_version": 1,
+					"task_kind":           "code",
+					"verdict":             "pass",
+					"changed_files":       []string{changedFile},
+					"blockers":            []string{},
+					"evidence_ref":        "test:" + taskID,
+					"captured_at":         recordedAt.Add(-time.Minute).Format(time.RFC3339Nano),
+					"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
+				}
+				raw, err := json.Marshal(taskEvidence)
+				require.NoError(t, err)
+				taskPath := filepath.Join(state.EvidenceTasksDir(root, tt.slug), taskID+".json")
+				require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+				require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+			}
+			writeTaskEvidence("task-a", "cmd/next.go")
+			writeTaskEvidence("task-b", "cmd/run.go")
+
+			result, err := SyncGovernedWaveExecution(root, change)
+			require.NoError(t, err)
+			require.Empty(t, result.Blockers)
+
+			runs, err := state.LoadWaveRuns(root, tt.slug, 1)
+			require.NoError(t, err)
+			require.Len(t, runs, 1)
+			assert.Equal(t, tt.want, runs[0].DispatchMode)
+		})
+	}
+}
+
 func TestSyncGovernedWaveExecution_PersistsIncompleteExecutionBlockerInSummary(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

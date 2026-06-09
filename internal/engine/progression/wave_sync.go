@@ -142,6 +142,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		wavePlan = materialized
 		previousTasksPlanHash = wavePlanStructuralHash(wavePlan)
 	}
+	wavePlan = state.ApplyEffectiveParallel(wavePlan, state.EffectiveForcedParallel(root))
 	dispatchModes, err := model.WaveDispatchModesFromVerification(record)
 	if err != nil {
 		return WaveSyncResult{}, err

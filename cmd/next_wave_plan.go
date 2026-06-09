@@ -90,7 +90,7 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 }
 
 func wavePlanViewFromModel(plan model.WavePlan, forcedParallel bool) *wavePlanView {
-	plan.Normalize()
+	plan = state.ApplyEffectiveParallel(plan, forcedParallel)
 	if len(plan.Waves) == 0 {
 		return nil
 	}
@@ -113,7 +113,7 @@ func wavePlanViewFromModel(plan model.WavePlan, forcedParallel bool) *wavePlanVi
 		}
 		view.Waves[i] = waveView{
 			WaveIndex: plannedWave.WaveIndex,
-			Parallel:  forcedParallel && len(plannedWave.Tasks) > 1,
+			Parallel:  plannedWave.Parallel,
 			Tasks:     tasks,
 		}
 	}
