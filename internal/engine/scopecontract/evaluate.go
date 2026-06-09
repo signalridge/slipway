@@ -239,20 +239,12 @@ func matchesTarget(target, file string) bool {
 }
 
 func normalizePathPattern(input string) string {
-	value := strings.TrimSpace(input)
+	value := model.NormalizePublicPath(input)
 	if value == "" {
 		return ""
 	}
-	value = filepath.ToSlash(value)
-	value = strings.TrimPrefix(value, "./")
-	for strings.Contains(value, "//") {
-		value = strings.ReplaceAll(value, "//", "/")
-	}
-	cleaned := path.Clean(value)
-	if cleaned == "." {
-		return ""
-	}
-	if strings.HasSuffix(value, "/") && !strings.HasSuffix(cleaned, "/") {
+	cleaned := value
+	if strings.HasSuffix(strings.ReplaceAll(input, "\\", "/"), "/") && !strings.HasSuffix(cleaned, "/") {
 		cleaned += "/"
 	}
 	return cleaned

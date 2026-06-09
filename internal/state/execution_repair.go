@@ -276,6 +276,7 @@ func recoverWaveRunsFromSummary(root, slug string, plan model.WavePlan, summary 
 	if err != nil {
 		return false, err
 	}
+	plan = ApplyEffectiveParallel(plan, EffectiveForcedParallel(root))
 	recovered, err := BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, dispatchModes)
 	if err != nil {
 		return false, err

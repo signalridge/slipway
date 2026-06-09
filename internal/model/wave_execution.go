@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,6 +166,9 @@ func (t *WavePlanTask) Normalize() {
 	if t.TargetFiles == nil {
 		t.TargetFiles = []string{}
 	}
+	for i := range t.TargetFiles {
+		t.TargetFiles[i] = NormalizePublicPath(t.TargetFiles[i])
+	}
 	slices.Sort(t.DependsOn)
 	slices.Sort(t.TargetFiles)
 }
@@ -177,6 +181,46 @@ func (t WavePlanTask) Validate() error {
 		return fmt.Errorf("invalid task_kind %q", t.TaskKind)
 	}
 	return nil
+}
+
+// NormalizePublicPath canonicalizes workspace-relative public path strings.
+// Slipway artifacts use slash paths even when an agent supplies Windows-style
+// separators, so comparisons stay platform-independent.
+func NormalizePublicPath(raw string) string {
+	value := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if value == "" {
+		return ""
+	}
+	cleaned := path.Clean(value)
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
+}
+
+func PublicPathIsAbs(raw string) bool {
+	value := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "/") {
+		return true
+	}
+	return len(value) >= 2 && value[1] == ':' && isASCIILetter(value[0])
+}
+
+func PublicPathHasParentTraversal(raw string) bool {
+	value := strings.ReplaceAll(raw, "\\", "/")
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func isASCIILetter(b byte) bool {
+	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
 type TaskRunRef struct {
@@ -212,9 +256,9 @@ func (v WaveVerdict) IsValid() bool {
 	}
 }
 
-// WaveDispatchMode records how a wave's tasks were actually dispatched, so a
+// WaveDispatchMode records the dispatch mode for a wave that has started, so a
 // host that could not run a parallel-eligible wave concurrently records the
-// degradation instead of losing it silently.
+// degradation instead of losing it silently. Pending waves leave this empty.
 type WaveDispatchMode string
 
 const (

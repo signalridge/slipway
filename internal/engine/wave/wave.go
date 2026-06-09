@@ -3,7 +3,7 @@ package wave
 import (
 	"cmp"
 	"fmt"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -134,7 +134,10 @@ func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {
 }
 
 func targetFilesConflict(left, right string) bool {
-	return left == right || targetFileContains(left, right) || targetFileContains(right, left)
+	if left == right || targetFileContains(left, right) || targetFileContains(right, left) {
+		return true
+	}
+	return targetPatternConflicts(left, right)
 }
 
 func targetFileContains(parent, child string) bool {
@@ -148,9 +151,77 @@ func targetFileContains(parent, child string) bool {
 }
 
 func normalizeTargetFileForConflict(file string) string {
-	file = strings.TrimSpace(file)
-	if file == "" {
+	normalized := model.NormalizePublicPath(file)
+	if normalized == "" {
 		return ""
 	}
-	return strings.ToLower(filepath.ToSlash(filepath.Clean(file)))
+	// Be conservative across case-insensitive developer filesystems: same-wave
+	// targets that differ only by case must not be auto-parallelized.
+	return strings.ToLower(normalized)
+}
+
+func targetPatternConflicts(left, right string) bool {
+	leftPattern := targetHasPatternMeta(left)
+	rightPattern := targetHasPatternMeta(right)
+	switch {
+	case leftPattern && rightPattern:
+		return targetPatternPrefixesOverlap(left, right)
+	case leftPattern:
+		return targetPatternMatches(left, right)
+	case rightPattern:
+		return targetPatternMatches(right, left)
+	default:
+		return false
+	}
+}
+
+func targetHasPatternMeta(target string) bool {
+	return strings.ContainsAny(target, "*?[")
+}
+
+func targetPatternMatches(pattern, target string) bool {
+	if pattern == "" || target == "" {
+		return false
+	}
+	if strings.HasSuffix(pattern, "/**") {
+		prefix := strings.TrimSuffix(pattern, "/**")
+		return prefix == "" || target == prefix || targetFileContains(prefix, target)
+	}
+	if strings.Contains(pattern, "**") {
+		return targetOverlapsPatternStaticPrefix(pattern, target)
+	}
+	matched, err := path.Match(pattern, target)
+	if err != nil {
+		return true
+	}
+	return matched
+}
+
+func targetPatternPrefixesOverlap(left, right string) bool {
+	leftPrefix := targetPatternStaticPrefix(left)
+	rightPrefix := targetPatternStaticPrefix(right)
+	if leftPrefix == "" || rightPrefix == "" {
+		return true
+	}
+	return leftPrefix == rightPrefix ||
+		targetFileContains(leftPrefix, rightPrefix) ||
+		targetFileContains(rightPrefix, leftPrefix)
+}
+
+func targetOverlapsPatternStaticPrefix(pattern, target string) bool {
+	prefix := targetPatternStaticPrefix(pattern)
+	return prefix == "" || target == prefix || targetFileContains(prefix, target)
+}
+
+func targetPatternStaticPrefix(pattern string) string {
+	patternIndex := strings.IndexAny(pattern, "*?[")
+	if patternIndex < 0 {
+		return strings.TrimSuffix(pattern, "/")
+	}
+	prefix := pattern[:patternIndex]
+	slashIndex := strings.LastIndex(prefix, "/")
+	if slashIndex < 0 {
+		return ""
+	}
+	return strings.TrimSuffix(prefix[:slashIndex+1], "/")
 }

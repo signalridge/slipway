@@ -64,6 +64,38 @@ func TestWaveRunValidateDispatchMode(t *testing.T) {
 	assert.Contains(t, err.Error(), "dispatch_mode")
 }
 
+func TestNormalizePublicPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "slash path", raw: "internal/engine/wave.go", want: "internal/engine/wave.go"},
+		{name: "windows separators", raw: `internal\engine\wave.go`, want: "internal/engine/wave.go"},
+		{name: "dot segments", raw: `./internal/engine/../model/wave_execution.go`, want: "internal/model/wave_execution.go"},
+		{name: "blank", raw: "  ", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, NormalizePublicPath(tt.raw))
+		})
+	}
+}
+
+func TestPublicPathValidationHelpers(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, PublicPathIsAbs("/tmp/file"))
+	assert.True(t, PublicPathIsAbs(`C:\tmp\file`))
+	assert.False(t, PublicPathIsAbs(`cmd\run.go`))
+	assert.True(t, PublicPathHasParentTraversal(`cmd\..\run.go`))
+	assert.False(t, PublicPathHasParentTraversal(`cmd\run.go`))
+}
+
 func TestWaveDispatchModesFromVerification(t *testing.T) {
 	t.Parallel()
 

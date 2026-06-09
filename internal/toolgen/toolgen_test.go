@@ -1076,6 +1076,10 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must describe the parallelization off-switch")
 	assert.Contains(t, skill, "post-wave integration gate",
 		"wave-orchestration must require a post-wave integration gate before the next wave")
+	assert.Contains(t, skill, "Do not run shared-worktree-wide integration commands",
+		"wave-orchestration must keep shared-worktree build/test commands out of task executors")
+	assert.Contains(t, skill, "Notes/prose alone",
+		"wave-orchestration must make the structured dispatch reference contract explicit")
 	assert.Contains(t, skill, "do not start the next wave",
 		"wave-orchestration must block subsequent waves when integration fails")
 }

@@ -6,11 +6,16 @@ wave-orchestration. The engine marks a multi-task wave `parallel` at
 materialization (guaranteed dependency-free and file-disjoint, with same-wave
 static conflicts hardened for path aliases, parent/child targets, and
 case-only aliases), surfaces the per-wave `parallel` signal in `slipway
-next --json`, records the wave `dispatch_mode`, and the template-generated
+next --json`, records started-wave `dispatch_mode`, and the template-generated
 wave-orchestration skill instructs hosts to dispatch a wave concurrently by
 default. `execution.parallelization: off` opts a project out. Delivered across
 7 tasks / 3 waves; no engine-side executor was added (Slipway stays
 host-driven).
+
+Post-review repairs tightened two edge cases without changing the selected
+architecture: public artifact paths are slash-normalized before parsing,
+conflict checks, evidence capture, and scope-contract evaluation; pending waves
+with no task evidence no longer claim `dispatch_mode: parallel`.
 
 ## Verification Verdict
 Pass. `go build ./...`, `go vet ./...`, and the changed-package test suites
@@ -26,11 +31,17 @@ captured at S4 goal-verification.
 - Tests: `TestWavePlanWaveParallelRequiresMultipleTasks`, `TestWaveRunValidateDispatchMode`,
   `TestWaveDispatchModesFromVerification`, `TestConfig*Parallelization*`,
   `TestMaterializeWavePlan*Parallel*`,
+  `TestMaterializeWavePlanNormalizesBackslashTargetFiles`,
   `TestLoadWavePlanForChangePreservesMaterializedParallel`,
   `TestBuildWaveRuns*DispatchMode`, `TestBuildWaveRunsDropsStaleDispatchModes`,
+  `TestBuildWaveRunsDoesNotRecordDispatchForPendingWave`,
   `TestPlanWavesRejectsStaticConflictsWithPathAliases`,
+  `TestPlanWavesRejectsStaticConflictsWithBackslashPathAliases`,
   `TestPlanWavesRejectsStaticConflictsWithParentChildTargets`,
   `TestPlanWavesRejectsStaticConflictsWithCaseAliases`,
+  `TestNormalizeEvidencePathsUsesPublicSlashPaths`,
+  `TestNormalizeEvidencePathsRejectsWindowsAbsolutePath`,
+  `TestEvaluateNormalizesBackslashPlannedTargets`,
   `TestWavePlanViewFromModelSurfacesParallel`,
   `TestAuthoritativeWavePlanViewReDerivesParallelFromCurrentConfig`,
   `TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode`,
@@ -48,17 +59,19 @@ captured at S4 goal-verification.
 ## Residual Risks and Exceptions
 - Host degradation is recorded as a structured
   `dispatch_mode:wave=<wave_index>:degraded_sequential` verification reference
-  and may be explained in notes, then recovered into `WaveRun.dispatch_mode`.
+  and may be explained in notes, then recovered into `WaveRun.dispatch_mode`
+  after that wave has started.
   There is no dedicated
   `slipway evidence --dispatch-mode` flag yet; such a flag would improve capture
   ergonomics only. The structured contract itself is implemented through
   wave-orchestration verification references. Malformed, conflicting,
-  unknown-wave, or no-longer-parallel advisory dispatch references are ignored
-  rather than blocking execution sync.
+  unknown-wave, no-longer-parallel, or not-yet-started advisory dispatch
+  references are ignored rather than blocking execution sync.
 - The engine does not independently observe host scheduler behavior. A
-  parallel-eligible wave defaults to `dispatch_mode: parallel` unless the host
-  records the degraded-sequential reference above. This is the current
-  host-driven evidence boundary and does not create a completion blocker.
+  started parallel-eligible wave defaults to `dispatch_mode: parallel` unless
+  the host records the degraded-sequential reference above. Pending waves leave
+  `dispatch_mode` empty. This is the current host-driven evidence boundary and
+  does not create a completion blocker.
 - Same-Go-package tasks in one wave are file-disjoint but not safe to compile
   concurrently; this is a known limitation of the single-tree, file-disjoint
   choice (surfaced honestly in the wave-orchestration evidence for Wave 1).

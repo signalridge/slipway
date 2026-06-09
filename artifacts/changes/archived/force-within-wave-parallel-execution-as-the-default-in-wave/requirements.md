@@ -27,7 +27,7 @@ WHEN its dispatch section is read
 THEN it states that a multi-task wave is dispatched concurrently by default, and names sequential execution only as a recorded fallback.
 
 ### Requirement: Dispatch mode is recorded
-REQ-004: A wave run MUST record its dispatch mode as `parallel` or `degraded_sequential`, and the `WaveRun` model MUST reject any other value, so that lost parallelism is visible rather than silent. Dispatch-mode recovery from wave-orchestration verification references MUST be fail-open: malformed, invalid, conflicting, unknown-wave, or no-longer-parallel advisory references are ignored rather than blocking execution sync.
+REQ-004: A wave run that has started MUST record its dispatch mode as `parallel` or `degraded_sequential`, and the `WaveRun` model MUST reject any other value, so that lost parallelism is visible rather than silent. A pending wave with no recorded task evidence MUST leave `dispatch_mode` empty. Dispatch-mode recovery from wave-orchestration verification references MUST be fail-open: malformed, invalid, conflicting, unknown-wave, no-longer-parallel, or not-yet-started advisory references are ignored rather than blocking execution sync.
 
 #### Scenario: WaveRun validates dispatch mode
 GIVEN a `WaveRun` value
@@ -37,7 +37,12 @@ THEN validation passes; WHEN it is any other non-empty string THEN validation fa
 #### Scenario: Advisory dispatch references do not block sync
 GIVEN a wave-orchestration verification record with a malformed, invalid, conflicting, stale, or unknown-wave `dispatch_mode` reference
 WHEN execution sync builds wave runs
-THEN the bad advisory reference is ignored and the wave falls back to its effective default dispatch mode.
+THEN the bad advisory reference is ignored and a started wave falls back to its effective default dispatch mode.
+
+#### Scenario: Pending waves do not claim dispatch
+GIVEN a multi-task parallel wave with no recorded task evidence
+WHEN execution sync builds wave runs
+THEN that wave has a pending verdict and no `dispatch_mode`.
 
 ### Requirement: Parallelization off-switch
 REQ-005: A `parallelization` configuration setting MUST default to forced and MUST accept `off`; when `off`, the wave plan and skill surfaces MUST reflect a non-forced mode so a project can opt out.
@@ -56,9 +61,9 @@ WHEN the wave plan is materialized with the `parallel` signal set
 THEN `tasks_plan_hash` equals the hash computed for the same tasks plan independent of the signal.
 
 ### Requirement: Static conflict guarantee is hardened for default parallelism
-REQ-007: Same-wave static conflict detection MUST reject target-file aliases, parent/child target overlaps, and case-only aliases before a wave is treated as safe for default parallel dispatch.
+REQ-007: Same-wave static conflict detection MUST reject target-file aliases, including slash/backslash aliases, parent/child target overlaps, and case-only aliases before a wave is treated as safe for default parallel dispatch.
 
 #### Scenario: Alias targets cannot share a parallel wave
-GIVEN two same-wave tasks that target `./a.go` and `a.go`, `internal/pkg` and `internal/pkg/file.go`, or `Foo.go` and `foo.go`
+GIVEN two same-wave tasks that target `./a.go` and `a.go`, `internal\pkg\file.go` and `internal/pkg/file.go`, `internal/pkg` and `internal/pkg/file.go`, or `Foo.go` and `foo.go`
 WHEN the wave plan is built
 THEN the plan is rejected with a static target conflict.

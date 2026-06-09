@@ -24,6 +24,19 @@ func TestEvaluatePassesWhenChangedFilesAreWithinPlannedTargets(t *testing.T) {
 	assert.Equal(t, []string{"cmd/validate.go", "docs/guide.md", "internal/engine/scopecontract/evaluate.go"}, report.ChangedFiles)
 }
 
+func TestEvaluateNormalizesBackslashPlannedTargets(t *testing.T) {
+	t.Parallel()
+
+	report := EvaluateWithChangedFiles(wave.TaskPlan{Tasks: []wave.TaskNode{
+		task("t-01", model.TaskKindCode, `cmd\validate.go`),
+	}}, summary(taskRun("t-01", model.TaskKindCode, "cmd/validate.go")), nil)
+
+	assert.Equal(t, StatusPass, report.Status)
+	assert.Empty(t, report.Blockers)
+	assert.Equal(t, []string{"cmd/validate.go"}, report.PlannedTargets)
+	assert.Equal(t, []string{"cmd/validate.go"}, report.ChangedFiles)
+}
+
 func TestEvaluateReportsScopeDriftDeterministically(t *testing.T) {
 	t.Parallel()
 

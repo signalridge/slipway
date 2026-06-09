@@ -238,7 +238,7 @@ func (c Config) Validate() error {
 	switch c.Execution.Parallelization {
 	case "", ParallelizationForced, ParallelizationOff:
 	default:
-		return fmt.Errorf("execution.parallelization must be one of: forced, off")
+		return fmt.Errorf("execution.parallelization must be unset or one of: forced, off")
 	}
 	return nil
 }

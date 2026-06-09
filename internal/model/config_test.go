@@ -29,6 +29,7 @@ func TestConfigValidateParallelization(t *testing.T) {
 	err := cfg.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parallelization")
+	assert.Contains(t, err.Error(), "unset")
 }
 
 func TestConfigParallelizationYAMLRoundTrip(t *testing.T) {

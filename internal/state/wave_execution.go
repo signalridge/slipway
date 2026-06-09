@@ -468,7 +468,7 @@ func BuildWaveRuns(
 			TaskRuns:          refs,
 			Verdict:           determineWaveVerdict(len(plannedWave.Tasks), present),
 		}
-		dispatchMode := waveRunDispatchMode(plannedWave, dispatchByWave)
+		dispatchMode := waveRunDispatchMode(plannedWave, len(present) > 0, dispatchByWave)
 		if dispatchMode != "" {
 			runs[i].DispatchMode = dispatchMode
 		}
@@ -478,8 +478,12 @@ func BuildWaveRuns(
 
 func waveRunDispatchMode(
 	plannedWave model.WavePlanWave,
+	started bool,
 	dispatchByWave map[int]model.WaveDispatchMode,
 ) model.WaveDispatchMode {
+	if !started {
+		return ""
+	}
 	dispatchMode, hasDispatchMode := dispatchByWave[plannedWave.WaveIndex]
 	if !hasDispatchMode || dispatchMode == "" {
 		if plannedWave.Parallel {
