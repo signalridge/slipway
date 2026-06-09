@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0](https://github.com/signalridge/slipway/compare/v0.13.0...v0.14.0) (2026-06-09)
+
+
+### Features
+
+* **execution:** force within-wave parallel dispatch by default ([#147](https://github.com/signalridge/slipway/issues/147)) ([c7e301c](https://github.com/signalridge/slipway/commit/c7e301cc832dc5e7b86ca66f0d088dbcc263681a))
+
 ## [0.13.0](https://github.com/signalridge/slipway/compare/v0.12.0...v0.13.0) (2026-06-09)
 
 
