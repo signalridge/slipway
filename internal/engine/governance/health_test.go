@@ -851,7 +851,7 @@ func writePlanningTasksChecklist(t *testing.T, bundleDir, content string) {
 func TestTraceabilityCoherenceHealthIsStageAware(t *testing.T) {
 	t.Parallel()
 
-	writeBundle := func(t *testing.T) (root, slug, bundleDir string) {
+	writeBundle := func(t *testing.T, includeAssurance bool) (root, slug, bundleDir string) {
 		t.Helper()
 		root = t.TempDir()
 		slug = "stage-aware-health"
@@ -868,10 +868,12 @@ REQ-002: Something else. INT-001
 - [ ] `+"`t-01`"+` first task
   covers: [REQ-001, REQ-002]
 `)
-		writeFile(t, filepath.Join(bundleDir, "assurance.md"), `# Assurance
+		if includeAssurance {
+			writeFile(t, filepath.Join(bundleDir, "assurance.md"), `# Assurance
 ## Requirement Coverage
 REQ-001: verified via tests
 `)
+		}
 		return root, slug, bundleDir
 	}
 
@@ -887,10 +889,11 @@ REQ-001: verified via tests
 	}
 
 	const assuranceIssue = "requirement missing assurance coverage verdict"
+	const missingAssuranceIssue = "assurance.md missing at review/verify phase"
 
 	t.Run("S2_EXECUTE reports WARN, not a blocking incident", func(t *testing.T) {
 		t.Parallel()
-		root, slug, bundleDir := writeBundle(t)
+		root, slug, bundleDir := writeBundle(t, true)
 		change := model.Change{
 			Slug:           slug,
 			CurrentState:   model.StateS2Execute,
@@ -920,7 +923,7 @@ REQ-001: verified via tests
 
 	t.Run("S3_REVIEW fails closed", func(t *testing.T) {
 		t.Parallel()
-		root, slug, bundleDir := writeBundle(t)
+		root, slug, bundleDir := writeBundle(t, true)
 		change := model.Change{
 			Slug:           slug,
 			CurrentState:   model.StateS3Review,
@@ -934,5 +937,62 @@ REQ-001: verified via tests
 		check := traceCheck(t, report)
 		assert.Equal(t, "FAIL", check.Status)
 		assert.True(t, hasBlockingGapIssue(check.TraceabilityGaps, assuranceIssue), "assurance gap must fail closed at review")
+	})
+
+	t.Run("S3_REVIEW missing assurance fails closed", func(t *testing.T) {
+		t.Parallel()
+		root, slug, bundleDir := writeBundle(t, false)
+		change := model.Change{
+			Slug:           slug,
+			CurrentState:   model.StateS3Review,
+			WorkflowPreset: model.WorkflowPresetStandard,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+		}
+		snap, err := PreviewGovernanceSnapshot(root, change, bundleDir)
+		require.NoError(t, err)
+		report := CollectGovernanceHealthWithSnapshot(root, change, snap)
+
+		check := traceCheck(t, report)
+		assert.Equal(t, "FAIL", check.Status)
+		assert.True(t, hasBlockingGapIssue(check.TraceabilityGaps, missingAssuranceIssue),
+			"missing assurance.md must fail closed at review")
+	})
+
+	t.Run("DONE missing assurance fails closed", func(t *testing.T) {
+		t.Parallel()
+		root, slug, bundleDir := writeBundle(t, false)
+		change := model.Change{
+			Slug:           slug,
+			CurrentState:   model.StateDone,
+			WorkflowPreset: model.WorkflowPresetStandard,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+		}
+		snap, err := PreviewGovernanceSnapshot(root, change, bundleDir)
+		require.NoError(t, err)
+		report := CollectGovernanceHealthWithSnapshot(root, change, snap)
+
+		check := traceCheck(t, report)
+		assert.Equal(t, "FAIL", check.Status)
+		assert.True(t, hasBlockingGapIssue(check.TraceabilityGaps, missingAssuranceIssue),
+			"missing assurance.md must fail closed at done")
+	})
+
+	t.Run("S3_REVIEW light preset keeps missing assurance optional", func(t *testing.T) {
+		t.Parallel()
+		root, slug, bundleDir := writeBundle(t, false)
+		change := model.Change{
+			Slug:           slug,
+			CurrentState:   model.StateS3Review,
+			WorkflowPreset: model.WorkflowPresetLight,
+			ArtifactSchema: model.ArtifactSchemaExpanded,
+		}
+		snap, err := PreviewGovernanceSnapshot(root, change, bundleDir)
+		require.NoError(t, err)
+		report := CollectGovernanceHealthWithSnapshot(root, change, snap)
+
+		check := traceCheck(t, report)
+		assert.Equal(t, "OK", check.Status)
+		assert.False(t, hasGapIssue(check.TraceabilityGaps, missingAssuranceIssue),
+			"light preset keeps assurance.md optional")
 	})
 }

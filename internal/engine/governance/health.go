@@ -457,17 +457,18 @@ func deriveGovernanceControls(
 	bundleDir string,
 	existingControls []model.ControlActivation,
 ) (control.DeriveControlsResult, model.TraceabilitySummary, error) {
-	traceability := EvaluateTraceability(TraceabilityInput{
-		BundleDir:      bundleDir,
-		Slug:           change.Slug,
-		SchemaName:     change.ArtifactSchema,
-		LifecycleState: change.CurrentState,
-	})
-
 	presetPolicy, err := ResolvePresetPolicy(root, change)
 	if err != nil {
-		return control.DeriveControlsResult{}, traceability, err
+		return control.DeriveControlsResult{}, model.TraceabilitySummary{}, err
 	}
+
+	traceability := EvaluateTraceability(TraceabilityInput{
+		BundleDir:         bundleDir,
+		Slug:              change.Slug,
+		SchemaName:        change.ArtifactSchema,
+		LifecycleState:    change.CurrentState,
+		AssuranceOptional: presetPolicy.EffectivePreset == model.WorkflowPresetLight,
+	})
 
 	// Light effective preset: downgrade non-intent blocking gaps to advisory.
 	// Uses EffectivePreset (not raw WorkflowPreset) so that min_preset and

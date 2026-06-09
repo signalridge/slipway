@@ -546,7 +546,8 @@ func existenceOwnedByDedicatedGate(name string) bool {
 // scaffold (issue #47). Returns nil before enforcement begins: light effective
 // preset (assurance optional), or states earlier than S3_REVIEW. Once enforcing
 // at S3_REVIEW and later, a missing file yields assurance_contract_missing and a
-// template-only/scaffold body is rejected per-section rather than passing.
+// template-only/scaffold body is rejected per-section rather than passing. Unknown
+// states fail closed.
 func AssuranceContractBlockers(root string, change model.Change) []string {
 	// Light effective preset: assurance.md is optional.
 	// Uses EffectivePreset so min_preset and guardrail-domain upgrades are respected.
@@ -554,10 +555,10 @@ func AssuranceContractBlockers(root string, change model.Change) []string {
 		return nil
 	}
 	switch change.CurrentState {
-	case model.StateS3Review, model.StateS4Verify:
-		// enforce
-	default:
+	case model.StateS0Intake, model.StateS1Plan, model.StateS2Execute:
 		return nil
+	default:
+		// enforce
 	}
 
 	bundleDir, err := state.GovernedBundleDir(root, change)

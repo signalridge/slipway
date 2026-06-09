@@ -486,6 +486,25 @@ REQ-001: verified via tests
 	return dir, slug
 }
 
+func writeAssuranceDeferredBundle(t *testing.T, assuranceBody *string) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	slug := "assurance-deferred"
+	writeFile(t, filepath.Join(dir, "intent.md"), `INT-001: Intent`)
+	writeFile(t, resolveTestArtifact(dir, slug), `# Requirements
+### Requirement: Something
+REQ-001: Something. INT-001
+`)
+	writeFile(t, filepath.Join(dir, "tasks.md"), `# Tasks
+- [ ] `+"`t-01`"+` first task
+  covers: [REQ-001]
+`)
+	if assuranceBody != nil {
+		writeFile(t, filepath.Join(dir, "assurance.md"), *assuranceBody)
+	}
+	return dir, slug
+}
+
 func TestTraceabilityAssuranceCoverageGapIsStageAware(t *testing.T) {
 	t.Parallel()
 
@@ -529,6 +548,79 @@ func TestTraceabilityAssuranceCoverageGapIsStageAware(t *testing.T) {
 		assert.Equal(t, model.TraceabilityStatusFail, result.Status)
 		assert.True(t, hasBlockingGapIssue(result.Gaps, issue), "unknown lifecycle state must fail closed")
 	})
+}
+
+func TestTraceabilityMissingOrEmptyAssuranceIsStageAware(t *testing.T) {
+	t.Parallel()
+
+	const missingIssue = "assurance.md missing at review/verify phase"
+	const emptyIssue = "assurance.md empty at review/verify phase"
+	emptyBody := ""
+
+	t.Run("missing assurance is deferred before review", func(t *testing.T) {
+		t.Parallel()
+		dir, slug := writeAssuranceDeferredBundle(t, nil)
+		result := EvaluateTraceability(TraceabilityInput{
+			BundleDir:      dir,
+			Slug:           slug,
+			LifecycleState: model.StateS2Execute,
+		})
+		assert.Equal(t, model.TraceabilityStatusOK, result.Status)
+		assert.False(t, hasGapIssue(result.Gaps, missingIssue))
+	})
+
+	for _, tc := range []struct {
+		name          string
+		state         model.WorkflowState
+		assuranceBody *string
+		issue         string
+	}{
+		{
+			name:  "missing at S3_REVIEW",
+			state: model.StateS3Review,
+			issue: missingIssue,
+		},
+		{
+			name:  "missing at S4_VERIFY",
+			state: model.StateS4Verify,
+			issue: missingIssue,
+		},
+		{
+			name:  "missing at DONE",
+			state: model.StateDone,
+			issue: missingIssue,
+		},
+		{
+			name:  "missing at unknown state",
+			state: "S5_UNKNOWN",
+			issue: missingIssue,
+		},
+		{
+			name:          "empty at DONE",
+			state:         model.StateDone,
+			assuranceBody: &emptyBody,
+			issue:         emptyIssue,
+		},
+		{
+			name:          "empty at unknown state",
+			state:         "S5_UNKNOWN",
+			assuranceBody: &emptyBody,
+			issue:         emptyIssue,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir, slug := writeAssuranceDeferredBundle(t, tc.assuranceBody)
+			result := EvaluateTraceability(TraceabilityInput{
+				BundleDir:      dir,
+				Slug:           slug,
+				LifecycleState: tc.state,
+			})
+			assert.Equal(t, model.TraceabilityStatusFail, result.Status)
+			assert.True(t, hasBlockingGapIssue(result.Gaps, tc.issue), "gap must fail closed")
+		})
+	}
 }
 
 func TestTraceabilityAssuranceNoREQIDsIsStageAware(t *testing.T) {

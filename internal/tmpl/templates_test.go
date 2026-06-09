@@ -1116,6 +1116,16 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		}
 	})
 
+	t.Run("pivot rescope surface matches S2 through S4 contract", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "pivot", "command-pivot-body", "claude")
+		assert.Contains(t, content, "`--rescope` is valid in `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`")
+		assert.Contains(t, content, "Before execution")
+		assert.Contains(t, content, "terminal states are blocked")
+		assert.Contains(t, content, "valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY")
+		assert.NotContains(t, content, "valid only in `S2_EXECUTE`")
+		assert.NotContains(t, content, "valid only in S2_EXECUTE")
+	})
+
 	t.Run("include helper renders", func(t *testing.T) {
 		templateFS := fstest.MapFS{
 			"templates/main.tmpl":           &fstest.MapFile{Data: []byte(`before {{ include "demo" . }} after`)},

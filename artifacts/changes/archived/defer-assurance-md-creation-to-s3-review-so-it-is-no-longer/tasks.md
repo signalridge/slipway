@@ -9,10 +9,10 @@
   - task_kind: code
   - covers: [REQ-001]
 
-- [x] `t-02` Make `AssuranceContractBlockers` the sole owner of assurance.md existence by skipping it in the generic pre-S3 existence gates (`GovernedBundleBlockers` and the artifact-readiness evaluator) via one shared predicate
+- [x] `t-02` Make `AssuranceContractBlockers` the sole owner of assurance.md existence by skipping it in the generic pre-S3 existence gates (`GovernedBundleBlockers` and the artifact-readiness evaluator) via one shared predicate, and keep health/traceability fail-closed for missing assurance at S3_REVIEW and later
   - wave: 1
   - depends_on: []
-  - target_files: [internal/engine/progression/validation.go, internal/engine/progression/readiness.go, internal/state/repair.go]
+  - target_files: [internal/engine/progression/validation.go, internal/engine/progression/readiness.go, internal/state/repair.go, internal/engine/governance/health.go, internal/engine/governance/traceability.go]
   - task_kind: code
   - covers: [REQ-002, REQ-003]
 
@@ -40,7 +40,7 @@
 - [x] `t-06` Align end-user docs that describe assurance.md scaffolding/timing, and the pivot/rescope command docs (valid rescope states and the non-destructive scope-drift recovery path)
   - wave: 2
   - depends_on: [t-01, t-02]
-  - target_files: [docs/workflow.md, docs/design.md, docs/commands.md, docs/operator-guide.md, docs/index.md]
+  - target_files: [docs/workflow.md, docs/design.md, docs/commands.md, docs/operator-guide.md, docs/index.md, internal/tmpl/templates/_partials/command-pivot-body.tmpl]
   - task_kind: doc
   - covers: [REQ-004, REQ-006]
 
@@ -58,9 +58,9 @@
   - task_kind: code
   - covers: [REQ-006]
 
-- [x] `t-07` Add/update tests for the deferred behavior and realign pinned tests broken by the surface changes: assurance.md not scaffolded on standard/strict and absent on light; no missing-block before S3; fail-closed (missing/scaffold) at S3+; bundle-readiness no longer requires assurance.md; instructions guidance describes deferred authoring; plan-audit digest excludes assurance without special-case prose; repair diagnostic silent pre-S3 and error at S3+; rescope reachable from S2/S3/S4 and rejected before execution; scope-drift guidance leads with the non-destructive path and describes rescope honestly
+- [x] `t-07` Add/update tests for the deferred behavior and realign pinned tests broken by the surface changes: assurance.md not scaffolded on standard/strict and absent on light; no missing-block before S3; fail-closed (missing/scaffold) at S3+ including DONE/unknown lifecycle states; bundle-readiness no longer requires assurance.md; instructions guidance describes deferred authoring; plan-audit digest excludes assurance without special-case prose; repair diagnostic silent pre-S3 and error at S3+; health/doctor exposes missing assurance at review/verify/done; rescope reachable from S2/S3/S4 and rejected before execution; scope-drift guidance leads with the non-destructive path and describes rescope honestly
   - wave: 3
   - depends_on: [t-01, t-02, t-03, t-08, t-09]
-  - target_files: [internal/engine/artifact/manager_test.go, internal/engine/progression/validation_test.go, internal/engine/progression/evidence_digests_test.go, cmd/instructions_test.go, cmd/progression_next_test.go, internal/state/repair_test.go, internal/engine/gate/gate_test.go, cmd/pivot_validation_test.go, cmd/lifecycle_commands_test.go, cmd/scope_contract_test.go]
+  - target_files: [internal/engine/artifact/manager_test.go, internal/engine/progression/validation_test.go, internal/engine/progression/evidence_digests_test.go, cmd/instructions_test.go, cmd/progression_next_test.go, internal/state/repair_test.go, internal/engine/gate/gate_test.go, cmd/pivot_validation_test.go, cmd/lifecycle_commands_test.go, cmd/scope_contract_test.go, cmd/health_test.go, internal/engine/governance/health_test.go, internal/engine/governance/traceability_test.go, internal/tmpl/templates_test.go]
   - task_kind: test
   - covers: [REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006]

@@ -787,7 +787,7 @@ func TestResolveChangeSchemaDiagnosticsBlocksWhenChangeHasNoFrozenSchema(t *test
 func TestAssuranceContractBlockers_SkippedBeforeReview(t *testing.T) {
 	t.Parallel()
 	// AssuranceContractBlockers should return nil for states before S3_REVIEW.
-	for _, st := range []model.WorkflowState{model.StateS1Plan, model.StateS2Execute} {
+	for _, st := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Execute} {
 		change := model.Change{
 			Slug:         "test-slug",
 			CurrentState: st,
@@ -801,17 +801,28 @@ func TestAssuranceContractBlockers_SkippedBeforeReview(t *testing.T) {
 
 func TestAssuranceContractBlockers_MissingFile(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	change := model.Change{
-		Slug:         "test-slug",
-		CurrentState: model.StateS3Review,
-	}
-	blockers := AssuranceContractBlockers(root, change)
-	if len(blockers) != 1 {
-		t.Fatalf("expected 1 blocker for missing assurance.md, got %v", blockers)
-	}
-	if blockers[0] != "assurance_contract_missing" {
-		t.Fatalf("expected assurance_contract_missing, got %s", blockers[0])
+	for _, st := range []model.WorkflowState{
+		model.StateS3Review,
+		model.StateS4Verify,
+		model.StateDone,
+		"S5_UNKNOWN",
+	} {
+		st := st
+		t.Run("state "+string(st), func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			change := model.Change{
+				Slug:         "test-slug",
+				CurrentState: st,
+			}
+			blockers := AssuranceContractBlockers(root, change)
+			if len(blockers) != 1 {
+				t.Fatalf("expected 1 blocker for missing assurance.md, got %v", blockers)
+			}
+			if blockers[0] != "assurance_contract_missing" {
+				t.Fatalf("expected assurance_contract_missing, got %s", blockers[0])
+			}
+		})
 	}
 }
 

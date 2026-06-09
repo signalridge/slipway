@@ -26,7 +26,8 @@ complex
 
 ## Out of Scope
 - The placeholder/scaffold floor (`assuranceSectionLooksScaffold`, issue #47): retained as a defense-in-depth backstop, demoted from primary guard — NOT removed.
-- `AssuranceContractBlockers` enforcement semantics and the S3_REVIEW/S4_VERIFY enforcement window: unchanged (already returns `assurance_contract_missing` for an absent file).
+- The #47 scaffold-placeholder floor: retained as a defense-in-depth backstop, not removed.
+- The assurance enforcement window: missing/empty/scaffold-only assurance remains fail-closed at S3_REVIEW and later, now explicitly including DONE and explicit unknown lifecycle states.
 - Converting any other artifact's creation timing, or any change to requirements/decision/tasks/research deferral.
 - The embedded `assurance.md` template content itself (still the source for `slipway instructions assurance`).
 
@@ -56,7 +57,7 @@ Defer `assurance.md` creation from S1_PLAN/bundle to S3_REVIEW, where the review
 
 Bundled in (discovered while dogfooding this change, confirmed by the user to fix here): (1) the `slipway repair` / doctor bundle-consistency diagnostic (`internal/state/repair.go`) stays silent on a deferred-absent assurance.md before S3_REVIEW while keeping the S3+/done consistency error; (2) the out-of-scope drift recovery path — `slipway pivot --rescope` is made reachable from S2_EXECUTE/S3_REVIEW/S4_VERIFY (it resets to S0_INTAKE regardless of starting state) so review-time out-of-scope edits can reach the documented recovery, and the `scope_contract_drift` guidance is rewritten to lead with the non-destructive amend-`tasks.md`-`target_files` path and to describe `pivot --rescope` honestly as a reset to S0_INTAKE; `docs/commands.md` is aligned.
 
-Out of scope (explicit exclusions): the #47 scaffold-placeholder floor stays as a backstop (not removed); `AssuranceContractBlockers` enforcement semantics and the S3/S4 enforcement window are unchanged; rescope's S0_INTAKE-reset semantics are unchanged (only its reachable states broaden); no other artifact's timing changes.
+Out of scope (explicit exclusions): the #47 scaffold-placeholder floor stays as a backstop (not removed); rescope's S0_INTAKE-reset semantics are unchanged (only its reachable states broaden); no other artifact's timing changes. The assurance enforcement window remains fail-closed at S3_REVIEW and later, and the post-review repair explicitly covers DONE and explicit unknown lifecycle states.
 
 Primary acceptance signal: on standard/strict preset, `assurance.md` does not exist on disk before S3_REVIEW; the host authors it at S3; advancing past S3 stays blocked until it is authored; closeout remains fail-closed for missing/empty/scaffold bodies; the repair diagnostic and rescope reachability behave per the new requirements; `go build/vet/test ./...` green.
 
