@@ -51,7 +51,7 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway review` | mutation | Run explicit artifact-code alignment review (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY, after execution-summary evidence exists). |
 | `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_EXECUTE; `--task-id` required, `--allowed-responses` required for `--type decision`). |
 | `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
-| `slipway pivot` | mutation | Reroute an active change (S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY) or rescope it (S2_EXECUTE back to S0_INTAKE). |
+| `slipway pivot` | mutation | Reroute an active change (S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY) or rescope it (S2_EXECUTE/S3_REVIEW/S4_VERIFY back to S0_INTAKE). |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
@@ -141,9 +141,12 @@ aligned with the CLI by a reverse flag-contract test:
 - `done --all-ready` archives every active change that is currently done-ready.
 - `pivot --reroute` re-evaluates the routing/discovery decision and re-enters
   S1_PLAN (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY); `pivot --rescope`
-  (valid only in S2_EXECUTE) returns the change to S0_INTAKE to amend scope,
-  clearing the Approved Summary for re-confirmation. Both set
-  `needs_discovery=true`.
+  (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY) returns the change to S0_INTAKE to
+  amend scope, clearing the Approved Summary for re-confirmation. Both set
+  `needs_discovery=true`. To simply bring a legitimately-changed out-of-scope
+  file into the plan, amend the owning task's `target_files` in `tasks.md` and
+  re-run — that is non-destructive and preserves wave evidence; reserve
+  `--rescope` for a full re-plan.
 
 ## Useful JSON Invocations
 

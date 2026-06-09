@@ -1692,23 +1692,63 @@ func TestGovernanceDoctorActionsSuppressNonBlockingTraceabilityWarning(t *testin
 		"a gapless traceability WARN (missing/unreadable governance data) must still surface as a doctor action")
 }
 
-// TestHealthCommandDoctorTracksAssuranceCoverageBlockingState is the end-to-end
-// regression for #92: at S2_EXECUTE incomplete assurance coverage is an advisory
-// WARN with no doctor action, while at S3_REVIEW the same gap fails closed and
-// surfaces a doctor action. The bundle is authored so the assurance gap is the
-// only traceability gap, so the WARN/FAIL difference is attributable to the
+// TestHealthCommandDoctorTracksAssuranceBlockingState is the end-to-end
+// regression for #92 and issue #141's deferred assurance file: at S2_EXECUTE
+// incomplete assurance coverage is an advisory WARN with no doctor action,
+// while at S3_REVIEW incomplete or missing assurance fails closed and surfaces a
+// doctor action. The bundle is authored so the assurance gap is the only
+// traceability gap, so the WARN/FAIL difference is attributable to the
 // stage-aware rule alone.
-func TestHealthCommandDoctorTracksAssuranceCoverageBlockingState(t *testing.T) {
+func TestHealthCommandDoctorTracksAssuranceBlockingState(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name       string
-		state      model.WorkflowState
-		wantStatus string
-		wantAction bool
+		name           string
+		state          model.WorkflowState
+		writeAssurance bool
+		assuranceBody  string
+		wantStatus     string
+		wantAction     bool
+		wantGapIssue   string
 	}{
-		{"S2 assurance pending is advisory", model.StateS2Execute, "WARN", false},
-		{"S3 assurance pending blocks", model.StateS3Review, "FAIL", true},
+		{
+			name:           "S2 assurance pending is advisory",
+			state:          model.StateS2Execute,
+			writeAssurance: true,
+			assuranceBody: `# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+`,
+			wantStatus:   "WARN",
+			wantAction:   false,
+			wantGapIssue: "requirement missing assurance coverage verdict",
+		},
+		{
+			name:           "S3 assurance pending blocks",
+			state:          model.StateS3Review,
+			writeAssurance: true,
+			assuranceBody: `# Assurance
+## Requirement Coverage
+REQ-001: verified via tests
+`,
+			wantStatus:   "FAIL",
+			wantAction:   true,
+			wantGapIssue: "requirement missing assurance coverage verdict",
+		},
+		{
+			name:         "S3 missing assurance blocks",
+			state:        model.StateS3Review,
+			wantStatus:   "FAIL",
+			wantAction:   true,
+			wantGapIssue: "assurance.md missing at review/verify phase",
+		},
+		{
+			name:         "DONE missing assurance blocks",
+			state:        model.StateDone,
+			wantStatus:   "FAIL",
+			wantAction:   true,
+			wantGapIssue: "assurance.md missing at review/verify phase",
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -1740,10 +1780,12 @@ REQ-002: Second requirement. Traces to INT-001.
 - [ ] `+"`t-01`"+` do the work
   covers: [REQ-001, REQ-002]
 `), 0o644))
-				require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte(`# Assurance
-## Requirement Coverage
-REQ-001: verified via tests
-`), 0o644))
+				assurancePath := filepath.Join(bundleDir, "assurance.md")
+				if tc.writeAssurance {
+					require.NoError(t, os.WriteFile(assurancePath, []byte(tc.assuranceBody), 0o644))
+				} else if err := os.Remove(assurancePath); err != nil && !os.IsNotExist(err) {
+					require.NoError(t, err)
+				}
 
 				// Persist a snapshot at the change's current state so the health
 				// command has authoritative governance state to report even if
@@ -1763,13 +1805,17 @@ REQ-001: verified via tests
 				require.NotNil(t, view.Doctor)
 
 				var traceStatus string
+				var traceGaps []model.TraceabilityGap
 				for _, c := range view.Governance.Checks {
 					if c.Name == "traceability_coherence" {
 						traceStatus = c.Status
+						traceGaps = c.TraceabilityGaps
 					}
 				}
 				assert.Equal(t, tc.wantStatus, traceStatus,
-					"assurance coverage gap should be the only traceability gap")
+					"assurance gap should be the only traceability gap")
+				assert.True(t, hasTraceabilityGapIssue(traceGaps, tc.wantGapIssue),
+					"traceability gap should identify the assurance problem")
 
 				hasTraceAction := false
 				for _, action := range view.Doctor.Actions {
@@ -1782,4 +1828,13 @@ REQ-001: verified via tests
 			})
 		})
 	}
+}
+
+func hasTraceabilityGapIssue(gaps []model.TraceabilityGap, issue string) bool {
+	for _, gap := range gaps {
+		if gap.Issue == issue {
+			return true
+		}
+	}
+	return false
 }

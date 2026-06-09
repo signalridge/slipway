@@ -24,7 +24,6 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	// The engine still scaffolds the artifacts whose bodies it owns.
 	for _, file := range []string{
 		"intent.md",
-		"assurance.md",
 	} {
 		_, err := os.Stat(ResolveArtifactPath(base, file))
 		require.NoError(t, err, file)
@@ -33,11 +32,14 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	// requirements.md/decision.md/tasks.md are authored directly by the host
 	// skill via `slipway instructions`; the engine defers their creation so an
 	// un-authored required artifact surfaces as missing/fail-closed rather than a
-	// placeholder body the skill must overwrite (issue #119).
+	// placeholder body the skill must overwrite (issue #119). assurance.md is
+	// deferred for the same reason but authored later, at S3_REVIEW (issue #141):
+	// the engine no longer seeds an early scaffold at S1_PLAN/bundle.
 	for _, file := range []string{
 		"requirements.md",
 		"decision.md",
 		"tasks.md",
+		"assurance.md",
 	} {
 		_, err := os.Stat(ResolveArtifactPath(base, file))
 		require.Error(t, err, file)
@@ -51,6 +53,37 @@ func TestScaffoldGovernedBundleL2CreatesRequiredFiles(t *testing.T) {
 	_, err = os.Stat(filepath.Join(base, "research.md"))
 	require.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
+}
+
+// assurance.md is deferred to S3_REVIEW authoring (issue #141): the engine must
+// not seed an early scaffold at S1_PLAN/bundle, on any preset where it would
+// otherwise be required. On light preset it is not required at all, so its absence
+// is the unchanged no-op.
+func TestScaffoldGovernedBundleDefersAssurance(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, deferredToSkillAuthoring("assurance.md"),
+		"assurance.md must be deferred to skill authoring")
+
+	for _, preset := range []model.WorkflowPreset{
+		model.WorkflowPresetStandard,
+		model.WorkflowPresetStrict,
+		model.WorkflowPresetLight,
+	} {
+		preset := preset
+		t.Run(string(preset), func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			change := model.NewChange("assurance-defer-" + string(preset))
+			change.WorkflowPreset = preset
+			require.NoError(t, ScaffoldGovernedBundleForChange(root, change, preset))
+
+			base := filepath.Join(root, "artifacts", "changes", change.Slug)
+			_, err := os.Stat(ResolveArtifactPath(base, "assurance.md"))
+			require.Error(t, err, "assurance.md must not be scaffolded on %s preset", preset)
+			assert.True(t, os.IsNotExist(err))
+		})
+	}
 }
 
 func TestScaffoldGovernedBundleNeedsDiscoveryDefersResearchAuthoring(t *testing.T) {

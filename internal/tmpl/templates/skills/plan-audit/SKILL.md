@@ -96,13 +96,14 @@ Verify the **required artifact set** exists and is structurally valid:
   `needs_discovery` in `slipway next --json` / `slipway validate`): `research.md`.
   A missing one is a blocker (`missing_required_artifact:research.md`). On
   non-discovery changes `research.md` is absent and not required.
-- Required on standard/strict effective preset: `assurance.md` — at S1 plan-audit
-  this only needs to be **present**; its structural validity is enforced later at
-  `S3_REVIEW`.
+- `assurance.md` is NOT audited at S1 plan-audit. It is a review/verify-phase
+  deliverable deferred to `S3_REVIEW` authoring (it does not exist yet at plan
+  time and must not be authored now). Its existence and structure are enforced
+  solely at `S3_REVIEW` and later by the assurance contract gate.
 
-Each required artifact except `assurance.md` must be non-empty, structurally
-valid, free of stale code references, and consistent with the stale-propagation
-graph. Tasks must have clear acceptance criteria.
+Each required plan artifact must be non-empty, structurally valid, free of stale
+code references, and consistent with the stale-propagation graph. Tasks must have
+clear acceptance criteria.
 
 If `research.md` is present, also verify that:
 - `## Alternatives Considered` is consistent with the selected approach in `decision.md`

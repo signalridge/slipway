@@ -39,9 +39,12 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(validateView.Blockers), "scope_contract_drift:cmd/review.go")
 	diagnostics := strings.Join(validateView.Diagnostics, "\n")
 	assert.Contains(t, diagnostics, "scope_contract_recovery_guidance")
-	assert.Contains(t, diagnostics, "tasks.md target_files")
-	assert.Contains(t, diagnostics, "preserves the recorded wave evidence")
+	assert.Contains(t, diagnostics, "target_files in tasks.md")
+	assert.Contains(t, diagnostics, "non-destructive")
 	assert.Contains(t, diagnostics, "slipway pivot --rescope")
+	// rescope must be described honestly as a full re-plan that resets to intake,
+	// not as a non-destructive target_files edit.
+	assert.Contains(t, diagnostics, "S0_INTAKE")
 	assert.Contains(t, diagnostics, "slipway run")
 
 	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
@@ -49,9 +52,10 @@ func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(nextView.Blockers), "scope_contract_drift:cmd/review.go")
 	warnings := strings.Join(nextView.Warnings, "\n")
 	assert.Contains(t, warnings, "scope_contract_recovery_guidance")
-	assert.Contains(t, warnings, "tasks.md target_files")
-	assert.Contains(t, warnings, "preserves the recorded wave evidence")
+	assert.Contains(t, warnings, "target_files in tasks.md")
+	assert.Contains(t, warnings, "non-destructive")
 	assert.Contains(t, warnings, "slipway pivot --rescope")
+	assert.Contains(t, warnings, "S0_INTAKE")
 	assert.Contains(t, warnings, "slipway run")
 }
 

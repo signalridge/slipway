@@ -85,7 +85,7 @@ func makePresetCmd() *cobra.Command {
 
 				needsScaffold := change.WorkflowPresetConfirmationPending() || !change.WorkflowPreset.IsValid() ||
 					!progression.CheckGovernedBundleReady(root, change) ||
-					preset != change.WorkflowPreset // Re-scaffold on preset upgrade to materialize artifacts (e.g. assurance.md)
+					preset != change.WorkflowPreset // re-scaffold when the preset changes to materialize any preset-specific engine-owned artifacts (idempotent; deferred artifacts such as assurance.md are authored by their host, never seeded here)
 				change.WorkflowPreset = preset
 				change.SuggestedWorkflowPreset = ""
 				if err := state.SaveChange(root, change); err != nil {

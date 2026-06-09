@@ -34,6 +34,9 @@ type TraceabilityInput struct {
 	// S3_REVIEW they remain blocking. An empty/unknown state stays fail-closed
 	// (blocking).
 	LifecycleState model.WorkflowState
+	// AssuranceOptional is true when the effective workflow preset does not
+	// require assurance.md. The zero value preserves standard/strict behavior.
+	AssuranceOptional bool
 	// ArtifactNames maps logical names (e.g., "intent.md") to their resolved paths.
 	// When nil, default artifact resolution is used.
 	ArtifactResolver func(artifactName string) string
@@ -51,6 +54,21 @@ func assuranceVerdictsExpectedLater(state model.WorkflowState) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func assuranceArtifactRequiredNow(state model.WorkflowState) bool {
+	switch state {
+	case model.StateS3Review, model.StateS4Verify, model.StateDone:
+		return true
+	case "":
+		// Empty state means the caller did not provide lifecycle context, which is
+		// still used by standalone traceability scans. Preserve that mode: if an
+		// assurance file exists, its contents are checked below, but mere absence is
+		// not a lifecycle blocker without an explicit review/verify/done state.
+		return false
+	default:
+		return !assuranceVerdictsExpectedLater(state)
 	}
 }
 
@@ -108,7 +126,8 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	taskCovers := extractCoversRefs(tasksContent)
 
 	// Scan assurance artifact for per-requirement coverage.
-	assuranceContent := readArtifactContent(resolve("assurance.md"))
+	assurancePath := resolve("assurance.md")
+	assuranceContent, assuranceReadErr := readArtifactContentWithError(assurancePath)
 	assuranceCoverage := extractMarkdownSectionBody(assuranceContent, "## Requirement Coverage")
 	assuranceREQs := extractIDs(assuranceCoverage, requirementIDPattern)
 
@@ -235,6 +254,31 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	// missing verdict is expected and reported as a non-blocking warning; at and
 	// after review (and for an unknown state) it fails closed.
 	assuranceBlocking := !assuranceVerdictsExpectedLater(input.LifecycleState)
+	assuranceRequiredNow := assuranceBlocking &&
+		!input.AssuranceOptional &&
+		assuranceArtifactRequiredNow(input.LifecycleState)
+	switch {
+	case assuranceRequiredNow && assuranceReadErr != nil:
+		gapID := "assurance-unreadable"
+		issue := "assurance.md unreadable at review/verify phase"
+		if os.IsNotExist(assuranceReadErr) {
+			gapID = "assurance-missing"
+			issue = "assurance.md missing at review/verify phase"
+		}
+		gaps = append(gaps, model.TraceabilityGap{
+			ID:       gapID,
+			Type:     "assurance",
+			Issue:    issue,
+			Blocking: true,
+		})
+	case assuranceRequiredNow && strings.TrimSpace(assuranceContent) == "":
+		gaps = append(gaps, model.TraceabilityGap{
+			ID:       "assurance-empty",
+			Type:     "assurance",
+			Issue:    "assurance.md empty at review/verify phase",
+			Blocking: true,
+		})
+	}
 	if strings.TrimSpace(assuranceContent) != "" && len(requireIDs) > 0 {
 		if len(assuranceREQs) == 0 {
 			gaps = append(gaps, model.TraceabilityGap{
@@ -412,14 +456,19 @@ func extractBlocksByID(content string, ids []string, prefix string) map[string]s
 }
 
 func readArtifactContent(path string) string {
+	content, _ := readArtifactContentWithError(path)
+	return content
+}
+
+func readArtifactContentWithError(path string) (string, error) {
 	if path == "" {
-		return ""
+		return "", os.ErrNotExist
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
 func extractIDs(content string, pattern *regexp.Regexp) []string {

@@ -102,7 +102,14 @@ func EvaluateGPivot(kind PivotKind, approved bool, state model.WorkflowState) Ga
 			reasonCodes = append(reasonCodes, model.NewReasonCode("pivot_state_invalid", string(state)))
 		}
 	case PivotKindRescope:
-		if state != model.StateS2Execute {
+		switch state {
+		case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+			// OK: rescope is reachable once execution has begun. It resets the
+			// change to S0_INTAKE regardless of the starting state, so restricting
+			// it to S2_EXECUTE only stranded changes whose stale review/verify
+			// evidence had already reopened them to S3_REVIEW/S4_VERIFY, leaving the
+			// documented scope-drift recovery (`slipway pivot --rescope`) unreachable.
+		default:
 			reasonCodes = append(reasonCodes, model.NewReasonCode("rescope_state_invalid", string(state)))
 		}
 	}

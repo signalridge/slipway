@@ -9,40 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidatePivotPreconditionsAllowsRescopeOnlyAtExecute(t *testing.T) {
+func TestValidatePivotPreconditionsAllowsRescopeFromS2ThroughS4(t *testing.T) {
 	t.Parallel()
 
-	err := validatePivotPreconditions(
-		string(gate.PivotKindRescope),
+	for _, state := range []model.WorkflowState{
 		model.StateS2Execute,
-	)
-	require.NoError(t, err)
-}
-
-func TestValidatePivotPreconditionsRejectsNonPivotState(t *testing.T) {
-	t.Parallel()
-
-	err := validatePivotPreconditions(
-		string(gate.PivotKindRescope),
-		model.StateS1Plan,
-	)
-	require.Error(t, err)
-	cliErr := asCLIError(err)
-	require.NotNil(t, cliErr)
-	assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
-	assert.Contains(t, err.Error(), "rescope requires governed S2_EXECUTE")
-}
-
-func TestValidatePivotPreconditionsRejectsRescopeOutsideExecute(t *testing.T) {
-	t.Parallel()
-
-	for _, state := range []model.WorkflowState{model.StateS3Review, model.StateS4Verify} {
+		model.StateS3Review,
+		model.StateS4Verify,
+	} {
 		err := validatePivotPreconditions(
 			string(gate.PivotKindRescope),
 			state,
 		)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "rescope requires governed S2_EXECUTE")
+		require.NoError(t, err, "state %s", state)
+	}
+}
+
+func TestValidatePivotPreconditionsRejectsRescopeBeforeExecution(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan} {
+		err := validatePivotPreconditions(
+			string(gate.PivotKindRescope),
+			state,
+		)
+		require.Error(t, err, "state %s", state)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
+		assert.Contains(t, err.Error(), "rescope requires governed S2_EXECUTE, S3_REVIEW, or S4_VERIFY")
 	}
 }
 

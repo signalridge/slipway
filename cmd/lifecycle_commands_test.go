@@ -1330,7 +1330,7 @@ func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(summary.OpenBlockers), "tasks_plan_changed_since_task_evidence:t-01")
 }
 
-func TestPivotRescopeRejectedOutsideS2(t *testing.T) {
+func TestPivotRescopeReachableFromS3Review(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -1345,15 +1345,16 @@ func TestPivotRescopeRejectedOutsideS2(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
+		// Rescope must be reachable from S3_REVIEW: scope-drift recovery was
+		// stranded when stale review evidence reopened a change to S3 while rescope
+		// still required S2. Rescope resets the change to S0_INTAKE for re-planning.
 		pivotCmd := commandForRoot(t, root, makePivotCmd())
 		pivotCmd.SetArgs([]string{"--rescope"})
-		err = pivotCmd.Execute()
-		require.Error(t, err)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "rescope_state_invalid", cliErr.ErrorCode)
-		assert.Equal(t, categoryGovernanceBlocked, cliErr.Category)
-		assert.Equal(t, exitCodeGovernanceBlocked, cliErr.ExitCode)
+		require.NoError(t, pivotCmd.Execute())
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS0Intake, reloaded.CurrentState)
 	})
 }
 
