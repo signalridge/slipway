@@ -3,7 +3,9 @@ package wave
 import (
 	"cmp"
 	"fmt"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
 )
@@ -111,11 +113,20 @@ func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {
 	targetOwners := map[string]string{}
 	for _, node := range nodes {
 		for _, file := range node.TargetFiles {
-			if existing, exists := targetOwners[file]; exists && existing != node.TaskID {
-				return fmt.Errorf("wave %d has static target conflict: %q and %q both target %q", waveIndex, existing, node.TaskID, file)
+			target := normalizeTargetFileForConflict(file)
+			if existing, exists := targetOwners[target]; exists && existing != node.TaskID {
+				return fmt.Errorf("wave %d has static target conflict: %q and %q both target %q", waveIndex, existing, node.TaskID, target)
 			}
-			targetOwners[file] = node.TaskID
+			targetOwners[target] = node.TaskID
 		}
 	}
 	return nil
+}
+
+func normalizeTargetFileForConflict(file string) string {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Clean(file))
 }

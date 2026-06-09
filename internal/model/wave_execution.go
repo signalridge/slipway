@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -219,6 +220,8 @@ type WaveDispatchMode string
 const (
 	WaveDispatchParallel           WaveDispatchMode = "parallel"
 	WaveDispatchDegradedSequential WaveDispatchMode = "degraded_sequential"
+
+	WaveDispatchReferencePrefix = "dispatch_mode:wave="
 )
 
 func (m WaveDispatchMode) IsValid() bool {
@@ -228,6 +231,62 @@ func (m WaveDispatchMode) IsValid() bool {
 	default:
 		return false
 	}
+}
+
+// WaveDispatchModesFromVerification extracts structured per-wave dispatch
+// evidence from wave-orchestration verification references and notes.
+func WaveDispatchModesFromVerification(record VerificationRecord) (map[int]WaveDispatchMode, error) {
+	modes := map[int]WaveDispatchMode{}
+	for _, ref := range record.References {
+		if err := collectWaveDispatchMode(modes, ref); err != nil {
+			return nil, err
+		}
+	}
+	for _, token := range dispatchModeTokens(record.Notes) {
+		if err := collectWaveDispatchMode(modes, token); err != nil {
+			return nil, err
+		}
+	}
+	if len(modes) == 0 {
+		return nil, nil
+	}
+	return modes, nil
+}
+
+func collectWaveDispatchMode(modes map[int]WaveDispatchMode, raw string) error {
+	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
+	if !strings.HasPrefix(raw, WaveDispatchReferencePrefix) {
+		return nil
+	}
+	rest := strings.TrimPrefix(raw, WaveDispatchReferencePrefix)
+	waveRaw, modeRaw, ok := strings.Cut(rest, ":")
+	if !ok {
+		return fmt.Errorf("invalid wave dispatch reference %q", raw)
+	}
+	waveIndex, err := strconv.Atoi(strings.TrimSpace(waveRaw))
+	if err != nil || waveIndex < 1 {
+		return fmt.Errorf("invalid wave dispatch reference %q: wave index must be >= 1", raw)
+	}
+	mode := WaveDispatchMode(strings.TrimSpace(modeRaw))
+	if !mode.IsValid() {
+		return fmt.Errorf("invalid wave dispatch reference %q: invalid dispatch_mode %q", raw, mode)
+	}
+	if existing, exists := modes[waveIndex]; exists && existing != mode {
+		return fmt.Errorf("conflicting dispatch_mode for wave %d: %q and %q", waveIndex, existing, mode)
+	}
+	modes[waveIndex] = mode
+	return nil
+}
+
+func dispatchModeTokens(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\r', '\n', ',', ';', '|':
+			return true
+		default:
+			return false
+		}
+	})
 }
 
 type WaveRun struct {

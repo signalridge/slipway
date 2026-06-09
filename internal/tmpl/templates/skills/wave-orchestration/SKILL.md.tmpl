@@ -73,8 +73,10 @@ and file-disjoint, and `slipway next --json` marks such a wave `parallel: true`
 in `input_context.wave_plan.waves[]`; do not serialize a `parallel: true` wave
 for convenience. Fall back to sequential only when the host genuinely cannot run
 concurrent executors, and when you do, say so in the wave report and the
-wave-orchestration verification `notes` so the degradation stays visible — it does
-not block completion. A `parallel: false` wave (a single task, or
+wave-orchestration verification `references` as
+`dispatch_mode:wave=<wave_index>:degraded_sequential`, with the same fact in
+`notes`, so the degradation stays visible — it does not block completion. A
+`parallel: false` wave (a single task, or
 `execution.parallelization: off`) runs sequentially with nothing to note.
 
 For each wave: describe the build goal before spawning, wait
@@ -143,7 +145,14 @@ notes: |
 ```
 
 References should include the task evidence command outputs or stable refs for
-each recorded task.
+each recorded task. If any `parallel: true` wave degraded to sequential because
+the host lacked concurrent executors, include one structured reference per
+affected wave:
+
+```yaml
+references:
+  - dispatch_mode:wave=<wave_index>:degraded_sequential
+```
 
 ## Present and Advance
 Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>

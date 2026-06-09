@@ -16,8 +16,8 @@ artifacts:
         id: assurance
         path: assurance.md
         state: frozen
-        content_hash: 8bd5c6b1f13fe0e23931b5c3f73908aad745249230c492e0675263cac5a714a5
-        updated_at: 2026-06-09T09:18:45.032973593Z
+        content_hash: f7da795f09f1e82787e4bd69edf91e074669ce9ff9fb035c729e985f7ee462da
+        updated_at: 2026-06-09T11:19:02Z
     decision:
         id: decision
         path: decision.md

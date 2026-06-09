@@ -63,3 +63,86 @@ func TestWaveRunValidateDispatchMode(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "dispatch_mode")
 }
+
+func TestWaveDispatchModesFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		record  VerificationRecord
+		want    map[int]WaveDispatchMode
+		wantErr string
+	}{
+		{
+			name: "references token",
+			record: VerificationRecord{
+				References: []string{"dispatch_mode:wave=2:degraded_sequential"},
+			},
+			want: map[int]WaveDispatchMode{2: WaveDispatchDegradedSequential},
+		},
+		{
+			name: "notes token with punctuation",
+			record: VerificationRecord{
+				Notes: "degraded `dispatch_mode:wave=1:degraded_sequential`, then continued",
+			},
+			want: map[int]WaveDispatchMode{1: WaveDispatchDegradedSequential},
+		},
+		{
+			name: "no tokens",
+			record: VerificationRecord{
+				References: []string{"tool:go-test"},
+				Notes:      "all waves used the default path",
+			},
+		},
+		{
+			name: "malformed token",
+			record: VerificationRecord{
+				References: []string{"dispatch_mode:wave=1"},
+			},
+			wantErr: "invalid wave dispatch reference",
+		},
+		{
+			name: "invalid wave index",
+			record: VerificationRecord{
+				References: []string{"dispatch_mode:wave=0:degraded_sequential"},
+			},
+			wantErr: "wave index must be >= 1",
+		},
+		{
+			name: "invalid mode",
+			record: VerificationRecord{
+				References: []string{"dispatch_mode:wave=1:sequential"},
+			},
+			wantErr: "invalid dispatch_mode",
+		},
+		{
+			name: "conflicting mode",
+			record: VerificationRecord{
+				References: []string{
+					"dispatch_mode:wave=1:degraded_sequential",
+					"dispatch_mode:wave=1:parallel",
+				},
+			},
+			wantErr: "conflicting dispatch_mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := WaveDispatchModesFromVerification(tt.record)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

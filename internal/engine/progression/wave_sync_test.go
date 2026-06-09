@@ -464,6 +464,71 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	}
 }
 
+func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "wave-sync-degraded-dispatch"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+		References: []string{
+			"dispatch_mode:wave=1:degraded_sequential",
+		},
+	})
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - wave: 1
+  - task_kind: code
+
+- [x] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/run.go"]
+  - wave: 1
+  - task_kind: code
+`)
+
+	writeTaskEvidence := func(taskID string, changedFile string) {
+		t.Helper()
+		taskEvidence := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"changed_files":       []string{changedFile},
+			"blockers":            []string{},
+			"evidence_ref":        "test:" + taskID,
+			"captured_at":         recordedAt.Format(time.RFC3339Nano),
+			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(taskEvidence)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	}
+	writeTaskEvidence("task-a", "cmd/next.go")
+	writeTaskEvidence("task-b", "cmd/run.go")
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, result.Updated)
+
+	runs, err := state.LoadWaveRuns(root, slug, 1)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
+}
+
 func TestSyncGovernedWaveExecution_PersistsIncompleteExecutionBlockerInSummary(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

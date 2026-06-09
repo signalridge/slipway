@@ -93,6 +93,14 @@ func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, erro
 	return MaterializeWavePlanAt(root, change, time.Now().UTC())
 }
 
+func EffectiveForcedParallel(root string) bool {
+	forcedParallel := true
+	if cfg, cfgErr := model.LoadConfig(ConfigPath(root)); cfgErr == nil {
+		forcedParallel = cfg.Execution.ForcedParallel()
+	}
+	return forcedParallel
+}
+
 func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
 	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	if err != nil {
@@ -116,10 +124,7 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 	// Forced within-wave parallelism is the default; a project opts out with
 	// execution.parallelization: off. A missing/unreadable config defaults to
 	// forced.
-	forcedParallel := true
-	if cfg, cfgErr := model.LoadConfig(ConfigPath(root)); cfgErr == nil {
-		forcedParallel = cfg.Execution.ForcedParallel()
-	}
+	forcedParallel := EffectiveForcedParallel(root)
 	for i, plannedWave := range waves {
 		tasks := make([]model.WavePlanTask, len(plannedWave.Nodes))
 		for j, node := range plannedWave.Nodes {
@@ -390,9 +395,21 @@ func ResetWaveExecution(root, slug string) error {
 	return nil
 }
 
-func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.ExecutionTaskSummary) ([]model.WaveRun, error) {
+func BuildWaveRuns(
+	plan model.WavePlan,
+	runSummaryVersion int,
+	tasks []model.ExecutionTaskSummary,
+	dispatchModes ...map[int]model.WaveDispatchMode,
+) ([]model.WaveRun, error) {
 	if runSummaryVersion < 1 {
 		return nil, fmt.Errorf("run_summary_version must be >= 1")
+	}
+	if len(dispatchModes) > 1 {
+		return nil, fmt.Errorf("at most one dispatch mode map is supported")
+	}
+	dispatchByWave := map[int]model.WaveDispatchMode{}
+	if len(dispatchModes) == 1 && dispatchModes[0] != nil {
+		dispatchByWave = dispatchModes[0]
 	}
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
@@ -404,6 +421,7 @@ func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.Exe
 		taskByID[task.TaskID] = task
 	}
 	runs := make([]model.WaveRun, len(plan.Waves))
+	seenDispatchModes := map[int]struct{}{}
 	for i, plannedWave := range plan.Waves {
 		refs := make([]model.TaskRunRef, 0, len(plannedWave.Tasks))
 		present := make([]model.ExecutionTaskSummary, 0, len(plannedWave.Tasks))
@@ -426,14 +444,41 @@ func BuildWaveRuns(plan model.WavePlan, runSummaryVersion int, tasks []model.Exe
 			TaskRuns:          refs,
 			Verdict:           determineWaveVerdict(len(plannedWave.Tasks), present),
 		}
-		// A wave planned for forced parallel dispatch records its dispatch mode as
-		// evidence. The host surfaces a blocker when it has to degrade a parallel
-		// wave to sequential, so the loss stays visible.
-		if plannedWave.Parallel {
-			runs[i].DispatchMode = model.WaveDispatchParallel
+		dispatchMode, dispatchErr := waveRunDispatchMode(plannedWave, dispatchByWave)
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+		if dispatchMode != "" {
+			seenDispatchModes[plannedWave.WaveIndex] = struct{}{}
+			runs[i].DispatchMode = dispatchMode
+		}
+	}
+	for waveIndex := range dispatchByWave {
+		if _, ok := seenDispatchModes[waveIndex]; !ok {
+			return nil, fmt.Errorf("dispatch_mode recorded for unknown wave %d", waveIndex)
 		}
 	}
 	return runs, nil
+}
+
+func waveRunDispatchMode(
+	plannedWave model.WavePlanWave,
+	dispatchByWave map[int]model.WaveDispatchMode,
+) (model.WaveDispatchMode, error) {
+	dispatchMode, hasDispatchMode := dispatchByWave[plannedWave.WaveIndex]
+	if !hasDispatchMode || dispatchMode == "" {
+		if plannedWave.Parallel {
+			return model.WaveDispatchParallel, nil
+		}
+		return "", nil
+	}
+	if !dispatchMode.IsValid() {
+		return "", fmt.Errorf("invalid dispatch_mode %q for wave %d", dispatchMode, plannedWave.WaveIndex)
+	}
+	if !plannedWave.Parallel {
+		return "", fmt.Errorf("dispatch_mode %q recorded for non-parallel wave %d", dispatchMode, plannedWave.WaveIndex)
+	}
+	return dispatchMode, nil
 }
 
 func ResumeWaveIndex(plan model.WavePlan, runs []model.WaveRun) int {

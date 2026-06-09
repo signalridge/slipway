@@ -272,7 +272,11 @@ func repairCheckpointAgainstWavePlan(change *model.Change, plan *model.WavePlan,
 func recoverWaveRunsFromSummary(root, slug string, plan model.WavePlan, summary model.ExecutionSummary) (bool, error) {
 	existing, err := LoadOptionalWaveRuns(root, slug, summary.RunSummaryVersion)
 	unreadable := err != nil
-	recovered, err := BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+	dispatchModes, err := waveDispatchModesForSummary(root, slug, summary)
+	if err != nil {
+		return false, err
+	}
+	recovered, err := BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, dispatchModes)
 	if err != nil {
 		return false, err
 	}
@@ -283,6 +287,27 @@ func recoverWaveRunsFromSummary(root, slug string, plan model.WavePlan, summary 
 		return false, err
 	}
 	return true, nil
+}
+
+func waveDispatchModesForSummary(
+	root, slug string,
+	summary model.ExecutionSummary,
+) (map[int]model.WaveDispatchMode, error) {
+	record, err := LoadVerification(root, slug, "wave-orchestration")
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load wave-orchestration verification for dispatch modes: %w", err)
+	}
+	if !record.IsPassing() || record.RunVersion != summary.RunSummaryVersion {
+		return nil, nil
+	}
+	dispatchModes, err := model.WaveDispatchModesFromVerification(record)
+	if err != nil {
+		return nil, fmt.Errorf("parse wave-orchestration dispatch modes: %w", err)
+	}
+	return dispatchModes, nil
 }
 
 func waveRunsEquivalent(left, right []model.WaveRun) bool {
@@ -301,6 +326,7 @@ func waveRunsEquivalent(left, right []model.WaveRun) bool {
 			!leftCopy[i].StartedAt.Equal(rightCopy[i].StartedAt) ||
 			!leftCopy[i].CompletedAt.Equal(rightCopy[i].CompletedAt) ||
 			leftCopy[i].Verdict != rightCopy[i].Verdict ||
+			leftCopy[i].DispatchMode != rightCopy[i].DispatchMode ||
 			!slices.Equal(leftCopy[i].TaskRuns, rightCopy[i].TaskRuns) {
 			return false
 		}

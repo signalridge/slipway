@@ -171,6 +171,24 @@ func TestMaterializeWavePlanParallelizationOff(t *testing.T) {
 	assert.False(t, plan.Waves[0].Parallel, "parallelization: off suppresses the forced-parallel signal")
 }
 
+func TestLoadWavePlanForChangePreservesMaterializedParallel(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-parallel-load-persisted")
+	writeBundleTasksForTest(t, root, change, twoIndependentTasksMD)
+
+	materialized, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+	require.NoError(t, err)
+	require.True(t, materialized.Waves[0].Parallel)
+
+	require.NoError(t, os.WriteFile(ConfigPath(root), []byte("execution:\n  parallelization: off\n"), 0o644))
+	loaded, err := LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+	require.Len(t, loaded.Waves, 1)
+	assert.True(t, loaded.Waves[0].Parallel, "loaded wave plans preserve the materialized dispatch evidence")
+}
+
 func TestMaterializeWavePlanParallelDoesNotChangeHashes(t *testing.T) {
 	t.Parallel()
 
@@ -212,4 +230,51 @@ func TestBuildWaveRunsDerivesParallelDispatchMode(t *testing.T) {
 	require.Len(t, runs, 2)
 	assert.Equal(t, model.WaveDispatchParallel, runs[0].DispatchMode, "parallel wave records its dispatch mode")
 	assert.Equal(t, model.WaveDispatchMode(""), runs[1].DispatchMode, "sequential wave records no dispatch mode")
+}
+
+func TestBuildWaveRunsRecordsDegradedDispatchMode(t *testing.T) {
+	t.Parallel()
+
+	plan := model.WavePlan{
+		Version:     model.WavePlanVersion,
+		GeneratedAt: waveMaterializeTime,
+		TotalTasks:  2,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks: []model.WavePlanTask{
+				{TaskID: "t-01"},
+				{TaskID: "t-02"},
+			},
+		}},
+	}
+
+	runs, err := BuildWaveRuns(
+		plan,
+		1,
+		nil,
+		map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential},
+	)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
+}
+
+func TestWaveRunsEquivalentDetectsDispatchModeChange(t *testing.T) {
+	t.Parallel()
+
+	base := []model.WaveRun{{
+		WaveIndex:         1,
+		RunSummaryVersion: 1,
+		Verdict:           model.WaveVerdictPass,
+		DispatchMode:      model.WaveDispatchParallel,
+	}}
+	withoutDispatch := []model.WaveRun{{
+		WaveIndex:         1,
+		RunSummaryVersion: 1,
+		Verdict:           model.WaveVerdictPass,
+	}}
+
+	assert.True(t, waveRunsEquivalent(base, base))
+	assert.False(t, waveRunsEquivalent(base, withoutDispatch))
 }

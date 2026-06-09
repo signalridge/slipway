@@ -22,23 +22,28 @@ captured at S4 goal-verification.
   `verification/research-orchestration.yaml`, `verification/intake-clarification.yaml`.
 - `verification/execution-summary.yaml` (engine-generated).
 - Tests: `TestWavePlanWaveParallelRequiresMultipleTasks`, `TestWaveRunValidateDispatchMode`,
-  `TestConfig*Parallelization*`, `TestMaterializeWavePlan*Parallel*`,
-  `TestBuildWaveRunsDerivesParallelDispatchMode`, `TestWavePlanViewFromModelSurfacesParallel`,
+  `TestWaveDispatchModesFromVerification`, `TestConfig*Parallelization*`,
+  `TestMaterializeWavePlan*Parallel*`,
+  `TestLoadWavePlanForChangePreservesMaterializedParallel`,
+  `TestBuildWaveRuns*DispatchMode`, `TestWavePlanViewFromModelSurfacesParallel`,
+  `TestAuthoritativeWavePlanViewReDerivesParallelFromCurrentConfig`,
+  `TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode`,
   `TestWaveOrchestrationSkillForcesParallelByDefault`.
 
 ## Requirement Coverage
 - REQ-001 (per-wave parallel signal) — `t-01`, `t-03`; materialize + model tests.
 - REQ-002 (next --json surfaces it) — `t-04`; `cmd` view test.
 - REQ-003 (skill parallel-by-default) — `t-05`, `t-06`, `t-07`; toolgen contract test.
-- REQ-004 (dispatch_mode recorded + validated) — `t-01`, `t-03`; model + BuildWaveRuns tests.
+- REQ-004 (dispatch_mode recorded + validated) — `t-01`, `t-03`; model, parser, BuildWaveRuns, and wave-sync tests.
 - REQ-005 (`parallelization` off-switch) — `t-02`, `t-03`, `t-05`; config + materialize tests.
 - REQ-006 (signal excluded from freshness hashes) — `t-01`, `t-03`; hash-stability test.
 
 ## Residual Risks and Exceptions
-- Host degradation is recorded as verification prose, not a structured per-wave
-  field; the engine derives `dispatch_mode: parallel` for parallel waves. A
-  structured host-recorded dispatch mode (evidence `--dispatch-mode` flag) is an
-  accepted deferred follow-up (noted in intent.md Deferred Ideas).
+- Host degradation is recorded as a structured
+  `dispatch_mode:wave=<wave_index>:degraded_sequential` verification reference
+  plus notes, then recovered into `WaveRun.dispatch_mode`. A future evidence
+  `--dispatch-mode` flag could make capture more ergonomic, but the structured
+  contract is no longer deferred.
 - Same-Go-package tasks in one wave are file-disjoint but not safe to compile
   concurrently; this is a known limitation of the single-tree, file-disjoint
   choice (surfaced honestly in the wave-orchestration evidence for Wave 1).
@@ -49,7 +54,7 @@ forced, and the skill wording is template-only. Rollback = revert the branch; no
 data migration. Verification command: `go build ./... && go vet ./... && go test ./... -count=1`.
 
 ## Archive Decision
-Not yet archivable. Archive readiness requires fresh S4 goal-verification and a
-final `validate --json` freshness/readiness proof captured on the active change
-before `done`; this assurance record is authored at S3_REVIEW and does not claim
-post-archive revalidation.
+Archived as `done`. Final closeout passed after S4 goal verification with
+`closeout:evidence_freshness=pass`, `closeout:test_suite=pass:23/23`, and
+`closeout:assurance_complete=pass`; the archived `change.yaml` records
+`status: done` / `current_state: DONE`.

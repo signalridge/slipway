@@ -142,7 +142,11 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		wavePlan = materialized
 		previousTasksPlanHash = wavePlanStructuralHash(wavePlan)
 	}
-	waveRuns, err := state.BuildWaveRuns(wavePlan, record.RunVersion, tasks)
+	dispatchModes, err := model.WaveDispatchModesFromVerification(record)
+	if err != nil {
+		return WaveSyncResult{}, err
+	}
+	waveRuns, err := state.BuildWaveRuns(wavePlan, record.RunVersion, tasks, dispatchModes)
 	if err != nil {
 		return WaveSyncResult{}, err
 	}
