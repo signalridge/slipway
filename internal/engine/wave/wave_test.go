@@ -46,6 +46,19 @@ func TestPlanWavesRejectsStaticConflictsWithPathAliases(t *testing.T) {
 	assert.Contains(t, err.Error(), "a.go")
 }
 
+func TestPlanWavesRejectsStaticConflictsWithCaseAliases(t *testing.T) {
+	t.Parallel()
+
+	_, err := PlanWaves([]Node{
+		{TaskID: "a", WaveIndex: 1, TargetFiles: []string{"Foo.go"}, TaskKind: model.TaskKindCode},
+		{TaskID: "b", WaveIndex: 1, TargetFiles: []string{"foo.go"}, TaskKind: model.TaskKindCode},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "static target conflict")
+	assert.Contains(t, err.Error(), "foo.go")
+}
+
 func TestPlanWavesRejectsStaticConflictsWithParentChildTargets(t *testing.T) {
 	t.Parallel()
 

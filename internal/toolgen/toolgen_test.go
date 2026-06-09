@@ -1074,6 +1074,10 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must require noting a degraded sequential fallback")
 	assert.Contains(t, skill, "parallelization: off",
 		"wave-orchestration must describe the parallelization off-switch")
+	assert.Contains(t, skill, "post-wave integration gate",
+		"wave-orchestration must require a post-wave integration gate before the next wave")
+	assert.Contains(t, skill, "do not start the next wave",
+		"wave-orchestration must block subsequent waves when integration fails")
 }
 
 func TestCodexPromptsUseCommandSpecificPrerequisites(t *testing.T) {

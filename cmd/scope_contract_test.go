@@ -245,7 +245,7 @@ func writeScopeContractDriftFixtureInState(t *testing.T, workflowState model.Wor
 		CompletedTasks:    []string{"t-01"},
 		Tasks:             summaryTasks,
 	})
-	runs, err := state.BuildWaveRuns(plan, 1, summaryTasks)
+	runs, err := state.BuildWaveRuns(plan, 1, summaryTasks, nil)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
 	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{

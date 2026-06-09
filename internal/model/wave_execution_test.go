@@ -68,10 +68,9 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		record  VerificationRecord
-		want    map[int]WaveDispatchMode
-		wantErr string
+		name   string
+		record VerificationRecord
+		want   map[int]WaveDispatchMode
 	}{
 		{
 			name: "references token",
@@ -81,11 +80,10 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 			want: map[int]WaveDispatchMode{2: WaveDispatchDegradedSequential},
 		},
 		{
-			name: "notes token with punctuation",
+			name: "notes token is ignored",
 			record: VerificationRecord{
-				Notes: "degraded `dispatch_mode:wave=1:degraded_sequential`, then continued",
+				Notes: "no degraded `dispatch_mode:wave=1:degraded_sequential` was needed",
 			},
-			want: map[int]WaveDispatchMode{1: WaveDispatchDegradedSequential},
 		},
 		{
 			name: "no tokens",
@@ -95,35 +93,51 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 			},
 		},
 		{
-			name: "malformed token",
+			name: "malformed token is ignored",
 			record: VerificationRecord{
 				References: []string{"dispatch_mode:wave=1"},
 			},
-			wantErr: "invalid wave dispatch reference",
 		},
 		{
-			name: "invalid wave index",
+			name: "invalid wave index is ignored",
 			record: VerificationRecord{
 				References: []string{"dispatch_mode:wave=0:degraded_sequential"},
 			},
-			wantErr: "wave index must be >= 1",
 		},
 		{
-			name: "invalid mode",
+			name: "invalid mode is ignored",
 			record: VerificationRecord{
 				References: []string{"dispatch_mode:wave=1:sequential"},
 			},
-			wantErr: "invalid dispatch_mode",
 		},
 		{
-			name: "conflicting mode",
+			name: "conflicting mode is dropped",
 			record: VerificationRecord{
 				References: []string{
 					"dispatch_mode:wave=1:degraded_sequential",
 					"dispatch_mode:wave=1:parallel",
 				},
 			},
-			wantErr: "conflicting dispatch_mode",
+		},
+		{
+			name: "conflicting wave stays dropped after later valid token",
+			record: VerificationRecord{
+				References: []string{
+					"dispatch_mode:wave=1:degraded_sequential",
+					"dispatch_mode:wave=1:parallel",
+					"dispatch_mode:wave=1:degraded_sequential",
+				},
+			},
+		},
+		{
+			name: "valid token survives unrelated invalid token",
+			record: VerificationRecord{
+				References: []string{
+					"dispatch_mode:wave=1:degraded_sequential",
+					"dispatch_mode:wave=2:sequential",
+				},
+			},
+			want: map[int]WaveDispatchMode{1: WaveDispatchDegradedSequential},
 		},
 	}
 
@@ -132,11 +146,6 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 			t.Parallel()
 
 			got, err := WaveDispatchModesFromVerification(tt.record)
-			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
-				return
-			}
 			require.NoError(t, err)
 			if tt.want == nil {
 				assert.Nil(t, got)

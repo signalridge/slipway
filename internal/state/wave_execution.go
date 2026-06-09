@@ -428,17 +428,13 @@ func BuildWaveRuns(
 	plan model.WavePlan,
 	runSummaryVersion int,
 	tasks []model.ExecutionTaskSummary,
-	dispatchModes ...map[int]model.WaveDispatchMode,
+	dispatchByWave map[int]model.WaveDispatchMode,
 ) ([]model.WaveRun, error) {
 	if runSummaryVersion < 1 {
 		return nil, fmt.Errorf("run_summary_version must be >= 1")
 	}
-	if len(dispatchModes) > 1 {
-		return nil, fmt.Errorf("at most one dispatch mode map is supported")
-	}
-	dispatchByWave := map[int]model.WaveDispatchMode{}
-	if len(dispatchModes) == 1 && dispatchModes[0] != nil {
-		dispatchByWave = dispatchModes[0]
+	if dispatchByWave == nil {
+		dispatchByWave = map[int]model.WaveDispatchMode{}
 	}
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
@@ -450,7 +446,6 @@ func BuildWaveRuns(
 		taskByID[task.TaskID] = task
 	}
 	runs := make([]model.WaveRun, len(plan.Waves))
-	seenDispatchModes := map[int]struct{}{}
 	for i, plannedWave := range plan.Waves {
 		refs := make([]model.TaskRunRef, 0, len(plannedWave.Tasks))
 		present := make([]model.ExecutionTaskSummary, 0, len(plannedWave.Tasks))
@@ -473,18 +468,9 @@ func BuildWaveRuns(
 			TaskRuns:          refs,
 			Verdict:           determineWaveVerdict(len(plannedWave.Tasks), present),
 		}
-		dispatchMode, dispatchErr := waveRunDispatchMode(plannedWave, dispatchByWave)
-		if dispatchErr != nil {
-			return nil, dispatchErr
-		}
+		dispatchMode := waveRunDispatchMode(plannedWave, dispatchByWave)
 		if dispatchMode != "" {
-			seenDispatchModes[plannedWave.WaveIndex] = struct{}{}
 			runs[i].DispatchMode = dispatchMode
-		}
-	}
-	for waveIndex := range dispatchByWave {
-		if _, ok := seenDispatchModes[waveIndex]; !ok {
-			return nil, fmt.Errorf("dispatch_mode recorded for unknown wave %d", waveIndex)
 		}
 	}
 	return runs, nil
@@ -493,21 +479,24 @@ func BuildWaveRuns(
 func waveRunDispatchMode(
 	plannedWave model.WavePlanWave,
 	dispatchByWave map[int]model.WaveDispatchMode,
-) (model.WaveDispatchMode, error) {
+) model.WaveDispatchMode {
 	dispatchMode, hasDispatchMode := dispatchByWave[plannedWave.WaveIndex]
 	if !hasDispatchMode || dispatchMode == "" {
 		if plannedWave.Parallel {
-			return model.WaveDispatchParallel, nil
+			return model.WaveDispatchParallel
 		}
-		return "", nil
+		return ""
 	}
 	if !dispatchMode.IsValid() {
-		return "", fmt.Errorf("invalid dispatch_mode %q for wave %d", dispatchMode, plannedWave.WaveIndex)
+		if plannedWave.Parallel {
+			return model.WaveDispatchParallel
+		}
+		return ""
 	}
 	if !plannedWave.Parallel {
-		return "", fmt.Errorf("dispatch_mode %q recorded for non-parallel wave %d", dispatchMode, plannedWave.WaveIndex)
+		return ""
 	}
-	return dispatchMode, nil
+	return dispatchMode
 }
 
 func ResumeWaveIndex(plan model.WavePlan, runs []model.WaveRun) int {

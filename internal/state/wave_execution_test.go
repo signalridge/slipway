@@ -251,7 +251,7 @@ func TestBuildWaveRunsDerivesParallelDispatchMode(t *testing.T) {
 		},
 	}
 
-	runs, err := BuildWaveRuns(plan, 1, nil)
+	runs, err := BuildWaveRuns(plan, 1, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
 	assert.Equal(t, model.WaveDispatchParallel, runs[0].DispatchMode, "parallel wave records its dispatch mode")
@@ -284,6 +284,65 @@ func TestBuildWaveRunsRecordsDegradedDispatchMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, runs, 1)
 	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
+}
+
+func TestBuildWaveRunsDropsStaleDispatchModes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		wave         model.WavePlanWave
+		dispatchByID map[int]model.WaveDispatchMode
+		wantMode     model.WaveDispatchMode
+	}{
+		{
+			name: "unknown wave is ignored",
+			wave: model.WavePlanWave{
+				WaveIndex: 1,
+				Parallel:  true,
+				Tasks:     []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}},
+			},
+			dispatchByID: map[int]model.WaveDispatchMode{2: model.WaveDispatchDegradedSequential},
+			wantMode:     model.WaveDispatchParallel,
+		},
+		{
+			name: "non parallel wave ignores stale dispatch",
+			wave: model.WavePlanWave{
+				WaveIndex: 1,
+				Parallel:  false,
+				Tasks:     []model.WavePlanTask{{TaskID: "t-01"}},
+			},
+			dispatchByID: map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential},
+		},
+		{
+			name: "invalid dispatch falls back to parallel default",
+			wave: model.WavePlanWave{
+				WaveIndex: 1,
+				Parallel:  true,
+				Tasks:     []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}},
+			},
+			dispatchByID: map[int]model.WaveDispatchMode{1: model.WaveDispatchMode("sequential")},
+			wantMode:     model.WaveDispatchParallel,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := model.WavePlan{
+				Version:     model.WavePlanVersion,
+				GeneratedAt: waveMaterializeTime,
+				TotalTasks:  len(tt.wave.Tasks),
+				Waves:       []model.WavePlanWave{tt.wave},
+			}
+
+			runs, err := BuildWaveRuns(plan, 1, nil, tt.dispatchByID)
+			require.NoError(t, err)
+			require.Len(t, runs, 1)
+			assert.Equal(t, tt.wantMode, runs[0].DispatchMode)
+		})
+	}
 }
 
 func TestWaveRunsEquivalentDetectsDispatchModeChange(t *testing.T) {

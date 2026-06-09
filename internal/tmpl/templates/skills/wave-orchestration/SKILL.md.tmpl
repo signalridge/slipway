@@ -84,6 +84,17 @@ for all executors, spot-check the first 2 files from each task's
 `changed_files`, check blocker evidence, report what the wave enables next, and
 after any checkpoint pause continue with a **fresh** subagent context.
 
+## Post-Wave Integration Gate
+Before starting the next wave, run a post-wave integration gate against the
+merged current worktree. For any wave with `task_kind=code` or `task_kind=test`,
+run the narrowest meaningful build/test command that can catch cross-task
+integration failures; if the safe target is unclear, run the repository's normal
+build/test suite. For docs/config/ops-only waves, run the relevant formatter,
+lint, validation, or state why no executable gate exists. If the gate fails or
+times out, record a blocker and do not start the next wave until the failure is
+fixed or the user explicitly redirects. Passing per-task self-checks are not a
+substitute for this post-wave integration gate.
+
 ## Dispatch Contract
 - Dispatch one isolated executor per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host cannot run concurrent executors (note that degradation, as above).
 - Pass file paths only; executors read source files in their own context.
@@ -162,12 +173,15 @@ After confirmation, advance with `slipway run`.
 ## DO NOT SKIP
 1. Dependency ordering before execution.
 2. File conflict detection after each wave.
-3. Runtime task evidence via `slipway evidence task`.
-4. Post-execution verification.
+3. Post-wave integration gate before starting the next wave.
+4. Runtime task evidence via `slipway evidence task`.
+5. Post-execution verification.
 
 ## Block If
 - Dependency ordering is incomplete or cyclic.
 - File conflicts remain unresolved after a wave.
+- The post-wave integration gate fails, times out, or is skipped without a
+  recorded no-executable-gate rationale.
 - Retry budget is exhausted.
 - A checkpoint resumes without a fresh subagent context.
 - Task evidence was not recorded through the supported CLI.

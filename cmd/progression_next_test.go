@@ -2694,7 +2694,7 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		require.NoError(t, err)
 		summary, err := state.LoadExecutionSummary(root, slug)
 		require.NoError(t, err)
-		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks)
+		runs, err := state.BuildWaveRuns(plan, summary.RunSummaryVersion, summary.Tasks, nil)
 		require.NoError(t, err)
 		require.Len(t, runs, 2, "expected one persisted run per planned wave")
 		require.NoError(t, state.SaveWaveRuns(root, slug, summary.RunSummaryVersion, runs[:1]))

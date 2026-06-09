@@ -13,7 +13,7 @@
   - `internal/toolgen/` — regenerates host adapter skills from the templates.
 - Dependency chain: `tasks.md` → parsed nodes → `wave.PlanWaves` → `MaterializeWavePlan` → `wave-plan.yaml` → `cmd/next_wave_plan.go` → `next --json input_context.wave_plan` → host reads `wave-orchestration` skill → `WaveRun` evidence.
 - Blast radius: additive engine field + additive `next --json` field + skill wording + additive config field. Confined to S2 execution governance; no sensitive domain.
-- Invariants to preserve: (1) same-wave tasks are dependency-free AND file-disjoint (the safety basis for concurrency — already enforced); (2) wave-plan freshness hashes (`tasks_plan_hash`, structural/scope/semantic) are derived from `tasks.md`, NOT from the wave grouping — the new signal must not feed them; (3) engine never executes work (host-driven).
+- Invariants to preserve: (1) same-wave tasks are dependency-free AND file-disjoint (the safety basis for concurrency — enforced by `PlanWaves` and hardened for path aliases, parent/child target overlaps, and case-only aliases); (2) wave-plan freshness hashes (`tasks_plan_hash`, structural/scope/semantic) are derived from `tasks.md`, NOT from the wave grouping — the new signal must not feed them; (3) engine never executes work (host-driven).
 
 ### Patterns
 - Additive struct fields with `omitempty` + defaulting in `Normalize()` is the established model pattern (see `WavePlan.Normalize`).
@@ -24,13 +24,14 @@
 ### Risks
 - **Wave-plan freshness entanglement (medium)** — if `parallel` were folded into the tasks-plan hash inputs it could strand materialized plans or churn freshness. Mitigation: derive `parallel` at materialize from task count and keep it OUT of the hash inputs (hashes already derive from `tasks.md`, not the wave grouping).
 - **Behavior change for existing projects (low/intended)** — defaulting `parallelization` to forced flips existing repos to parallel-by-default skill language. This is the requested behavior; the `off` knob is the escape hatch.
-- **Host without concurrent subagents (low)** — must degrade to sequential and record `dispatch_mode=degraded_sequential`; fail-open, never blocks `done`.
+- **Host without concurrent subagents (low)** — must degrade to sequential and record `dispatch_mode=degraded_sequential`; fail-open, never blocks `done`. Malformed, conflicting, stale, or unknown-wave advisory dispatch references are ignored instead of surfaced as naked sync errors.
+- **Static target aliasing under default parallelism (medium)** — aliasing such as `./a.go` vs `a.go`, a directory vs a child file, or `Foo.go` vs `foo.go` could let same-wave tasks write the same target concurrently. Mitigation: normalize and compare same-wave targets conservatively in `validateWaveStaticConflicts`.
 - Guardrail domains: none. Reversibility: high (additive + wording; revert = remove field/wording/config).
 
 ### Test Strategy
 - Existing coverage: `internal/engine/wave/wave_test.go` (PlanWaves), `internal/model` wave tests, `cmd` next-wave-plan tests, `internal/toolgen/toolgen_test.go` (skill contracts), config tests.
 - Infra needs: none new — extend existing suites.
-- Verification approach: unit test that `MaterializeWavePlan` sets `parallel` true for >1-task waves and false otherwise; model test that `WaveRun.dispatch_mode` validates `parallel`/`degraded_sequential` and rejects junk; `next --json` view test asserts the per-wave signal; toolgen/skill contract test asserts parallel-by-default + degraded_sequential wording; config test that `parallelization: off` flips the effective mode; freshness test that the new field does not change `tasks_plan_hash`.
+- Verification approach: unit test that `MaterializeWavePlan` sets `parallel` true for >1-task waves and false otherwise; model test that `WaveRun.dispatch_mode` validates `parallel`/`degraded_sequential` and rejects junk; parser/state/sync tests that malformed or stale dispatch references fail open; `PlanWaves` tests that alias, parent/child, and case-only target conflicts are rejected; `next --json` view test asserts the per-wave signal; toolgen/skill contract test asserts parallel-by-default + degraded_sequential wording; config test that `parallelization: off` flips the effective mode; freshness test that the new field does not change `tasks_plan_hash`.
 
 ### Options
 - **Option 1 (RECOMMENDED): persist a derived `parallel` flag per wave, excluded from freshness hashes; flip skill to parallel-by-default; add `WaveRun.dispatch_mode`; add `parallelization` config knob (default forced).** Tradeoffs: matches the intent (signal in BOTH `wave-plan.yaml` and `next --json`), smallest clean design, host-driven, no migration risk if the field is kept out of the hash inputs.
@@ -44,7 +45,7 @@
 - Remaining: None.
 
 ## Assumptions
-- Same-wave tasks are safe to run concurrently. Evidence: `internal/engine/wave/wave.go:110-115` `validateWaveStaticConflicts` rejects same-wave `target_files` overlap; `PlanWaves` puts dependents in later waves.
+- Same-wave tasks are safe to run concurrently after planning accepts them. Evidence: `internal/engine/wave/wave.go` `validateWaveStaticConflicts` rejects same-wave `target_files` overlap including aliases, parent/child targets, and case-only aliases; `PlanWaves` puts dependents in later waves.
 - The host (Claude Code etc.) realizes parallelism via subagent fan-out; the engine only signals/records. Evidence: `internal/tmpl/templates/skills/wave-orchestration/references/executor-dispatch-reference.md:35,42` ("one fresh executor per task", "Spawn one `Task` subagent per task").
 - Freshness hashes derive from `tasks.md`, not the wave grouping. Evidence: `internal/model/wave_execution.go:15-19` hash fields are tasks-plan-derived; to confirm exact inputs in plan-audit.
 

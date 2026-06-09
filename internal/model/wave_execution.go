@@ -234,18 +234,12 @@ func (m WaveDispatchMode) IsValid() bool {
 }
 
 // WaveDispatchModesFromVerification extracts structured per-wave dispatch
-// evidence from wave-orchestration verification references and notes.
+// evidence from wave-orchestration verification references.
 func WaveDispatchModesFromVerification(record VerificationRecord) (map[int]WaveDispatchMode, error) {
 	modes := map[int]WaveDispatchMode{}
+	conflicted := map[int]struct{}{}
 	for _, ref := range record.References {
-		if err := collectWaveDispatchMode(modes, ref); err != nil {
-			return nil, err
-		}
-	}
-	for _, token := range dispatchModeTokens(record.Notes) {
-		if err := collectWaveDispatchMode(modes, token); err != nil {
-			return nil, err
-		}
+		collectWaveDispatchMode(modes, conflicted, ref)
 	}
 	if len(modes) == 0 {
 		return nil, nil
@@ -253,40 +247,33 @@ func WaveDispatchModesFromVerification(record VerificationRecord) (map[int]WaveD
 	return modes, nil
 }
 
-func collectWaveDispatchMode(modes map[int]WaveDispatchMode, raw string) error {
+func collectWaveDispatchMode(modes map[int]WaveDispatchMode, conflicted map[int]struct{}, raw string) {
 	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
 	if !strings.HasPrefix(raw, WaveDispatchReferencePrefix) {
-		return nil
+		return
 	}
 	rest := strings.TrimPrefix(raw, WaveDispatchReferencePrefix)
 	waveRaw, modeRaw, ok := strings.Cut(rest, ":")
 	if !ok {
-		return fmt.Errorf("invalid wave dispatch reference %q", raw)
+		return
 	}
 	waveIndex, err := strconv.Atoi(strings.TrimSpace(waveRaw))
 	if err != nil || waveIndex < 1 {
-		return fmt.Errorf("invalid wave dispatch reference %q: wave index must be >= 1", raw)
+		return
+	}
+	if _, exists := conflicted[waveIndex]; exists {
+		return
 	}
 	mode := WaveDispatchMode(strings.TrimSpace(modeRaw))
 	if !mode.IsValid() {
-		return fmt.Errorf("invalid wave dispatch reference %q: invalid dispatch_mode %q", raw, mode)
+		return
 	}
 	if existing, exists := modes[waveIndex]; exists && existing != mode {
-		return fmt.Errorf("conflicting dispatch_mode for wave %d: %q and %q", waveIndex, existing, mode)
+		delete(modes, waveIndex)
+		conflicted[waveIndex] = struct{}{}
+		return
 	}
 	modes[waveIndex] = mode
-	return nil
-}
-
-func dispatchModeTokens(text string) []string {
-	return strings.FieldsFunc(text, func(r rune) bool {
-		switch r {
-		case ' ', '\t', '\r', '\n', ',', ';', '|':
-			return true
-		default:
-			return false
-		}
-	})
 }
 
 type WaveRun struct {

@@ -152,5 +152,5 @@ func normalizeTargetFileForConflict(file string) string {
 	if file == "" {
 		return ""
 	}
-	return filepath.ToSlash(filepath.Clean(file))
+	return strings.ToLower(filepath.ToSlash(filepath.Clean(file)))
 }

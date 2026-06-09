@@ -16,12 +16,12 @@
   - task_kind: code
   - covers: [REQ-005]
 
-- [x] `t-03` Stamp the per-wave `Parallel` flag in `MaterializeWavePlanAt` (derived from task count, excluded from freshness-hash inputs), honoring the `parallelization` config, with tests proving hashes are unchanged
+- [x] `t-03` Stamp the per-wave `Parallel` flag in `MaterializeWavePlanAt` (derived from task count, excluded from freshness-hash inputs), honor the `parallelization` config, harden same-wave static target conflicts for alias/parent-child/case-only overlaps, and test hash stability plus dispatch-evidence fail-open recovery
   - wave: 2
   - depends_on: [t-01, t-02]
-  - target_files: [internal/state/wave_execution.go, internal/state/wave_execution_test.go, internal/engine/progression/wave_sync.go, internal/engine/progression/wave_sync_test.go]
+  - target_files: [internal/state/wave_execution.go, internal/state/wave_execution_test.go, internal/engine/wave/wave.go, internal/engine/wave/wave_test.go, internal/engine/progression/wave_sync.go, internal/engine/progression/wave_sync_test.go]
   - task_kind: code
-  - covers: [REQ-001, REQ-005, REQ-006]
+  - covers: [REQ-001, REQ-004, REQ-005, REQ-006, REQ-007]
 
 - [x] `t-04` Surface the per-wave `parallel` signal in `slipway next --json` `input_context.wave_plan.waves[]`, with a view test
   - wave: 2
@@ -37,10 +37,10 @@
   - task_kind: doc
   - covers: [REQ-003, REQ-004, REQ-005]
 
-- [x] `t-06` Add a toolgen skill-contract test asserting parallel-by-default + `degraded_sequential`, and regenerate the committed host adapter skill
+- [x] `t-06` Add a toolgen skill-contract test asserting parallel-by-default + `degraded_sequential`, and verify generated host adapter output from the committed template
   - wave: 3
   - depends_on: [t-05]
-  - target_files: [internal/toolgen/toolgen_test.go, .claude/skills/slipway-wave-orchestration/SKILL.md]
+  - target_files: [internal/toolgen/toolgen_test.go, internal/tmpl/templates/skills/wave-orchestration/SKILL.md.tmpl]
   - task_kind: code
   - covers: [REQ-003, REQ-004]
 

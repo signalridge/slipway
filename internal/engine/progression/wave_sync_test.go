@@ -537,6 +537,7 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 		slug              string
 		config            string
 		persistedParallel bool
+		references        []string
 		want              model.WaveDispatchMode
 	}{
 		{
@@ -550,6 +551,21 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 			slug:              "wave-effective-parallel-off",
 			config:            "execution:\n  parallelization: off\n",
 			persistedParallel: true,
+			want:              "",
+		},
+		{
+			name:              "invalid dispatch reference does not block sync",
+			slug:              "wave-effective-parallel-invalid-dispatch",
+			persistedParallel: true,
+			references:        []string{"dispatch_mode:wave=1:sequential"},
+			want:              model.WaveDispatchParallel,
+		},
+		{
+			name:              "stale degraded dispatch is ignored when parallelization is off",
+			slug:              "wave-effective-parallel-off-stale-dispatch",
+			config:            "execution:\n  parallelization: off\n",
+			persistedParallel: true,
+			references:        []string{"dispatch_mode:wave=1:degraded_sequential"},
 			want:              "",
 		},
 	}
@@ -588,6 +604,7 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 				Blockers:   []model.ReasonCode{},
 				Timestamp:  recordedAt,
 				RunVersion: 1,
+				References: tt.references,
 			})
 			require.NoError(t, state.SaveWavePlan(root, tt.slug, model.WavePlan{
 				Version:     model.WavePlanVersion,
@@ -900,7 +917,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
-	runs, err := state.BuildWaveRuns(plan, 1, tasks)
+	runs, err := state.BuildWaveRuns(plan, 1, tasks, nil)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
 
@@ -963,7 +980,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	require.NoError(t, err)
 	require.NoError(t, state.SaveExecutionSummary(root, slug, matching))
 
-	runs, err := state.BuildWaveRuns(plan, 1, tasks)
+	runs, err := state.BuildWaveRuns(plan, 1, tasks, nil)
 	require.NoError(t, err)
 	require.NoError(t, state.SaveWaveRuns(root, slug, 1, runs))
 
