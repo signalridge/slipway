@@ -1,0 +1,37 @@
+version: 1
+slug: defer-assurance-md-creation-to-s3-review-so-it-is-no-longer
+description: 'Defer assurance.md creation to S3_REVIEW so it is no longer scaffolded early at S1_PLAN/bundle, aligning it with the #119 deferred-creation design (the lone remaining exception). Add assurance.md to deferredToSkillAuthoring; remove the plan-audit-digest exclusion special-case; the review/verify skill authors it at S3 where AssuranceContractBlockers already enforces it. Verify light preset and slipway preset re-scaffold paths.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-08T17:14:50.642993Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/defer-assurance-md-creation-to-s3-review-so-it-is-no-longer
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 10aa9059a19b8d4c33581d7b0de8617ce80e59713456c7bcd6c92f9121c81c65
+        updated_at: 2026-06-09T05:08:42.146696000Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 61e2c1152836921b5b0487ede1732548a27eba7d9e0bbe98a5c74c11a145ef5a
+        updated_at: 2026-06-09T05:10:57.467470000Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 11810b8bea226ece962698a351e49be277335aa373ca1eacd4d7de6cf03485be
+        updated_at: 2026-06-09T02:26:02.33075466Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b001994a35169926725b108307f22880a761929de080ecc868a61374dabbc9f2
+        updated_at: 2026-06-09T05:08:42.146696000Z

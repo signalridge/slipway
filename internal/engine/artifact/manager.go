@@ -314,9 +314,17 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 // scaffolded by the engine. The engine defers creation so an un-authored required
 // artifact surfaces as missing (fail-closed), not a passing placeholder the skill
 // must overwrite (issue #119).
+//
+// assurance.md is deferred too (issue #141): it is a review/verify-phase
+// deliverable with nothing to write before execution completes, so the engine no
+// longer seeds an early scaffold at S1_PLAN/bundle. The owning host authors it at
+// S3_REVIEW from `slipway instructions assurance`, and its existence is enforced
+// solely by AssuranceContractBlockers at S3_REVIEW and later — see
+// existenceOwnedByDedicatedGate in the progression package, which keeps the
+// pre-S3 bundle/readiness existence gates from stranding a change on its absence.
 func deferredToSkillAuthoring(name string) bool {
 	switch name {
-	case "requirements.md", "decision.md", "research.md", "tasks.md":
+	case "requirements.md", "decision.md", "research.md", "tasks.md", "assurance.md":
 		return true
 	default:
 		return false

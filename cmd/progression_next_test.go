@@ -3451,11 +3451,14 @@ func TestCheckGovernedBundleReadyL2(t *testing.T) {
 
 	change := model.Change{Slug: slug, ArtifactSchema: model.ArtifactSchemaExpanded}
 
-	// Missing files — expanded schema requires all 6 for L2
+	// Missing files — the planning bundle is not ready.
 	assert.False(t, progression.CheckGovernedBundleReady(root, change))
 
-	// L2 expanded schema: change.yaml, intent.md, requirements.md, decision.md, tasks.md, assurance.md
-	l2Required := []string{"change.yaml", "intent.md", "requirements.md", "decision.md", "tasks.md", "assurance.md"}
+	// L2 expanded schema bundle-readiness set: change.yaml, intent.md,
+	// requirements.md, decision.md, tasks.md. assurance.md is deferred to
+	// S3_REVIEW authoring and owned by the assurance contract gate (issue #141),
+	// so it is NOT part of the generic bundle-readiness existence check.
+	l2Required := []string{"change.yaml", "intent.md", "requirements.md", "decision.md", "tasks.md"}
 	for i, f := range l2Required {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, f, []byte("x")))
 		if i < len(l2Required)-1 {
@@ -3484,9 +3487,11 @@ func TestCheckGovernedBundleReadyL3(t *testing.T) {
 		ArtifactSchema: model.ArtifactSchemaExpanded,
 	}
 
-	// Discovery-mode expanded schema adds research.md to the base set
-	l2Files := []string{"change.yaml", "intent.md", "requirements.md", "decision.md", "tasks.md", "assurance.md"}
-	for _, f := range l2Files {
+	// Discovery-mode expanded schema adds research.md to the base set.
+	// assurance.md is deferred (issue #141) and not part of the bundle-readiness
+	// set, so research.md is the discovery differentiator under test.
+	baseFiles := []string{"change.yaml", "intent.md", "requirements.md", "decision.md", "tasks.md"}
+	for _, f := range baseFiles {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, f, []byte("x")))
 	}
 	assert.False(t, progression.CheckGovernedBundleReady(root, change))
@@ -3509,10 +3514,14 @@ Docs`), 0o644))
 	assert.True(t, progression.CheckGovernedBundleReady(root, change))
 }
 
-func TestCheckGovernedBundleReadyRequiresAssuranceArtifact(t *testing.T) {
+// After issue #141, assurance.md is deferred to S3_REVIEW authoring and its
+// existence is owned by AssuranceContractBlockers, not the generic bundle
+// readiness check. A planning bundle with no assurance.md is therefore ready —
+// the absence must not strand the change before review.
+func TestCheckGovernedBundleReadyDoesNotRequireAssuranceArtifact(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	slug := "test-bundle-requires-assurance"
+	slug := "test-bundle-defers-assurance"
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
 
@@ -3520,7 +3529,8 @@ func TestCheckGovernedBundleReadyRequiresAssuranceArtifact(t *testing.T) {
 	for _, f := range []string{"change.yaml", "intent.md", "requirements.md", "decision.md", "tasks.md"} {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, f, []byte("x")))
 	}
-	assert.False(t, progression.CheckGovernedBundleReady(root, change))
+	// No assurance.md on disk, yet the bundle is ready.
+	assert.True(t, progression.CheckGovernedBundleReady(root, change))
 }
 
 func TestCheckGovernedBundleReadyRejectsMissingDesignDependency(t *testing.T) {

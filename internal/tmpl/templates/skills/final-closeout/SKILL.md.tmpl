@@ -91,6 +91,12 @@ execution-summary.yaml do not agree on the same fresh run_version.
 ## Assurance Artifact Verification
 On light preset, skip this section — `assurance.md` is optional.
 
+`assurance.md` is deferred (issue #141): the engine does not pre-seed it. It is
+authored at `S3_REVIEW` from `slipway instructions assurance` and must exist with
+real content before the change can leave `S3_REVIEW` — a missing file fails closed
+as `assurance_contract_missing`. If it has not been authored yet, author it from
+that template before closeout.
+
 `assurance.md` MUST contain:
 - scope summary
 - verification verdict with references
@@ -101,9 +107,9 @@ On light preset, skip this section — `assurance.md` is optional.
 
 Judge each required section semantically, not structurally. For every section,
 decide whether the body is genuine, change-specific closeout content or merely
-the generated scaffold sentence — including the case where the seeded sentence
-was lightly reworded or padded but still says nothing concrete. A section that
-is structurally non-empty but semantically blank does NOT count as authored.
+the template scaffold sentence — including the case where a template sentence was
+lightly reworded or padded but still says nothing concrete. A section that is
+structurally non-empty but semantically blank does NOT count as authored.
 
 If any required section is empty, missing, or still scaffold/boilerplate, closeout is blocked.
 

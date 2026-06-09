@@ -102,7 +102,8 @@ func instructionsGuidance(name string) string {
 	case "assurance":
 		return "Author final closeout assurance from actual verification evidence: scope summary, verdict, " +
 			"evidence index, requirement coverage, residual risks, rollback readiness, and archive decision. " +
-			"The engine may create the scaffold; replace it with closeout substance before finalization."
+			"The engine does not seed this body; it is deferred until you author it at S3_REVIEW from this " +
+			"template. A missing, empty, or scaffold-only assurance is rejected at S3_REVIEW and later and cannot reach done."
 	default:
 		return "Author concrete, substantive content directly. The engine owns structure (the " +
 			"template) and you own substance."

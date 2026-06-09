@@ -66,7 +66,8 @@ func TestInstructionsJSONIncludesTemplateAndGuidance(t *testing.T) {
 func TestInstructionsGuidanceMatchesScaffoldOwnership(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"intent", "assurance"} {
+	// intent.md is genuinely engine-scaffolded during intake.
+	for _, name := range []string{"intent"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -81,7 +82,9 @@ func TestInstructionsGuidanceMatchesScaffoldOwnership(t *testing.T) {
 		})
 	}
 
-	for _, name := range []string{"requirements", "decision", "research", "tasks"} {
+	// assurance.md is deferred to S3_REVIEW authoring (issue #141): like the other
+	// skill-authored artifacts, its guidance must state the engine does not seed it.
+	for _, name := range []string{"requirements", "decision", "research", "tasks", "assurance"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
