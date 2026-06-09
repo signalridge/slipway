@@ -30,150 +30,153 @@
 
 # Slipway
 
-Slipway is a governance CLI for AI-assisted software delivery inside a local Git repository.
+**Governance that keeps your AI coding agent honest — "done" means proven, not promised. Driven in plain language, no slash commands to memorize.**
 
-It turns agent work into a durable, inspectable change record: intent, research, requirements, decisions, tasks, implementation evidence, review evidence, and final closeout all live next to the code. AI tools can help execute the work, but Slipway keeps the lifecycle authority in the repository.
+AI coding agents are fast, but they cut corners — they skip the tests, drift from the plan, and announce "done" on work that was never verified. Slipway is a local, Git-native governance layer that makes that hard to fake: it turns the agent's work into a durable, inspectable change record and holds the lifecycle authority itself, in the repository — not in a hosted service. Your AI tool does the work; Slipway decides when it's actually done. Works with **Claude Code, Codex, Cursor, Gemini, and OpenCode**.
 
-## Why Slipway
+- **The model can't fake "done."** Completion is gated on fresh review *and* verification evidence — checks compiled into the CLI, not advisory prompts the agent can rationalize past. If the evidence goes stale or the work drifts from the plan, Slipway reopens the change instead of waving it through.
+- **No commands to learn.** After a one-time `slipway init`, your AI tool picks up the governed lifecycle from a session hook and routes ordinary plain-language requests through it. You describe the change; the agent drives the process.
+- **Lighter on tokens.** The governance logic runs as compiled Go in the CLI — not as phase prompts your model re-reads and re-reasons every turn. One thin entry skill stays resident; stage skills load only when the CLI asks for them.
 
-AI coding tools are fast at changing files and weak at preserving accountable process. Slipway exists to make that process explicit.
+## See it in action
 
-| Need | Slipway answer |
-| --- | --- |
-| Know what the agent is allowed to do | Capture intent, scope, open questions, and guardrail classification before execution. |
-| Avoid plan drift | Bind implementation to `requirements.md`, `decision.md`, `tasks.md`, and review evidence. |
-| Keep state auditable | Store current authority in `change.yaml` and append mutating lifecycle events to `events/lifecycle.jsonl`. |
-| Work across AI tools | Generate adapter surfaces for Claude, Codex, Cursor, Gemini, and OpenCode. |
-| Finish with proof | Require fresh verification and assurance before `done`. |
+You talk to your AI tool the way you already do. The agent does the governance — you never type a Slipway command:
 
-## Design Philosophy
+```text
+You:  Add a --dry-run flag to the export command.
 
-- **Local-first governance**: the repository is the system of record. Slipway does not require a hosted service to explain what happened.
-- **One current authority**: `artifacts/changes/<slug>/change.yaml` owns lifecycle state; logs and Markdown files support it but do not replace it.
-- **Evidence before confidence**: tests, builds, review records, and assurance artifacts are proof surfaces, not after-the-fact notes.
-- **AI tools are adapters**: host-specific skills, commands, hooks, and prompts route back into the same CLI instead of creating parallel workflows.
-- **Human-readable, machine-checkable artifacts**: Markdown remains readable to people, while stable sections and YAML records give the runtime something deterministic to inspect.
-- **Smallest useful control plane**: Slipway stays narrower than adjacent spec, workflow, and agent frameworks by keeping governance authority in the CLI and repository artifacts.
+(Slipway's session hook has already told the agent this repo is governed
+ and that there's no active change — no action needed from you.)
 
-See [Design Philosophy](docs/design.md) for the longer architecture explanation.
+Agent (routing on its own):
+  → slipway new      captures intent, scope, and guardrail class
+  → slipway next     intake → planning; writes requirements / decision / tasks
+  → implements the flag, runs your test + build commands
+  → slipway run      spec review, quality review, goal verification
+  → done-ready ✓     every step backed by evidence committed beside the code
 
-## Core Capabilities
+You:  Looks good, finalize it.
 
-| Capability | What it gives you |
-| --- | --- |
-| Governed change lifecycle | Intake, planning, execution, review, goal verification, closeout, and archive steps instead of one unstructured agent session. |
-| Artifact bundle | `intent.md`, `research.md`, `requirements.md`, `decision.md`, `tasks.md`, `assurance.md`, and verification records under one change slug. |
-| JSON handoff surfaces | `next`, `run`, `status`, `review`, `validate`, and `done` support structured output for AI tools and scripts. |
-| Worktree-aware execution | Governed changes can run in dedicated `.worktrees/<slug>` checkouts while preserving local audit evidence. |
-| AI-tool adapters | Generated skills, commands, prompts, and hooks for Claude, Codex, Cursor, Gemini, and OpenCode. |
-| Repair and diagnostics | `health`, `validate`, `repair`, `stats`, and `codebase-map` help inspect or recover local governance state. |
+Agent:
+  → slipway done     archives the terminal state
 
-## Lifecycle
+You never typed a slash command. Slipway handed the agent the lifecycle;
+the agent drove it.
+```
+
+And if the agent had tried to call it `done` before the tests ran and the review evidence existed? `slipway done` refuses — the gate lives in the CLI, not in a prompt the agent can decide to skip.
+
+## How Slipway compares
+
+Spec, workflow, and skill toolkits for AI coding are all good at *structuring* work. The axis that sets Slipway apart is **where the rules live and whether the model can ignore them**: almost all of them encode the process as prompts or Markdown the agent is *asked* to follow, so the gates stay advisory. Slipway compiles the process into a deterministic CLI backed by repo evidence, so the gates fail closed.
+
+| Tool | How you drive it | Enforcement of "done" |
+| --- | --- | --- |
+| [Spec Kit](https://github.com/github/spec-kit) (GitHub) | `/speckit.*` slash command per phase | Advisory — an incomplete checklist passes on a "yes" |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `/opsx:*` slash commands | Advisory by design — "fluid, not rigid"; verify is optional |
+| [spec-kitty](https://github.com/Priivacy-ai/spec-kitty) | `/spec-kitty.*` plus a `spec-kitty next` autopilot loop | Partial — `merge` gates on status; review is an advisory "nudge" |
+| [gsd](https://github.com/gsd-build/get-shit-done) | 80+ `/gsd-*` slash commands | Advisory — hooks must not block; `--skip-*` / `--auto` bypass |
+| [superpowers](https://github.com/obra/superpowers) | Skills auto-fire from a session bootstrap (no commands) | Self-discipline — an "Iron Law" the model is *asked* to obey |
+| **Slipway** | **Plain language via a session hook** | **Compiled & fail-closed** — gates live in the CLI + repo evidence |
+
+The pattern is consistent: those tools enforce process by asking the model to comply; Slipway enforces it in code the model runs but can't rewrite. (superpowers is the closest on *experience* — it also auto-triggers from a session hook — but its rules live in the model's context, not in a binary.) On capability the lines blur — Slipway also runs dependency-ordered waves, dedicated worktrees, and TDD governance — so the real divide is enforcement, not feature count. Where the peers genuinely lead is **reach and ecosystem**: far more supported agents, more mileage, and models Slipway lacks, like OpenSpec's delta-specs or Spec Kit's large integration catalog.
+
+### What Slipway deliberately trades off
+
+Several of the differences above are intentional, not gaps. Slipway optimizes for *provable* outcomes on changes that matter, and accepts the costs that come with that:
+
+| Dimension | Most spec / skill toolkits | Slipway's deliberate choice | What the trade-off buys |
+| --- | --- | --- | --- |
+| Agent reach | 15–30+ agents via generated prompt files | 5 first-class adapters (growing) | A tested contract per tool, not a lowest-common-denominator prompt |
+| Install & runtime | `npx` / `uvx`, no binary | A single versioned Go binary | One deterministic engine; no per-session prompt or version drift |
+| State integrity | Repo or spec files the model maintains | Engine-owned state with freshness digests | Stale or hand-edited evidence is detected, not trusted |
+| Flexibility | Edit any artifact anytime ("fluid") | A staged lifecycle that reopens on drift | Plan and code can't silently diverge — at the cost of less freeform editing |
+| Speed vs. assurance | Fast by default; gates optional | Gates are mandatory and freshness-checked | Slower on throwaway edits; safe on the changes that matter |
+| Failure mode | Skipping a step degrades silently | Missing or stale evidence fails closed | You learn the work isn't done *before* you ship, not after |
+
+What is **not** a deliberate trade-off — just where Slipway is today — is mileage: it's younger and less battle-tested than Spec Kit or superpowers, and the five-tool list is still growing. The bet is that fail-closed depth is the harder thing to retrofit later; breadth and mileage come with time.
+
+## Depth, not just a gate
+
+A single "did you run the tests?" check is easy to fake. The point of Slipway is the depth behind the gate: a chain of stage-owned checkpoints that each demand their own evidence, so quality is enforced all the way through — not rubber-stamped at the end.
+
+- **Intake** fixes intent, scope, open questions, and a **guardrail class**. Sensitive domains — auth, credentials/PII, financial, schema migration, irreversible ops, external-API contracts — fail closed harder and get no bypass, force-close, or private attestation path.
+- **Planning** binds a `requirements.md` / `decision.md` / `tasks.md` bundle that execution is held to, so the agent can't quietly re-scope mid-flight.
+- **Review** is *two independent passes* — spec-compliance, then code-quality — read with fresh context, not by the agent that wrote the code.
+- **Goal verification** re-checks the acceptance criteria against fresh evidence before anything may claim done.
+- **Drift and freshness** are enforced, not trusted: edit the plan or let evidence go stale and Slipway reopens the *earliest* affected stage and re-walks it — a change can't limp to done on half-stale proof.
+
+That chain is what command-driven spec toolkits and in-context skill packs don't carry: not a single end-of-run checkbox, but an auditable trail of stage-owned evidence the next session — human or AI — can re-inspect and trust.
+
+## Quick start
+
+**1. Install** (pick one — full matrix in [Installation](docs/installation.md)):
+
+```bash
+brew install --cask signalridge/tap/slipway   # macOS
+scoop install slipway                          # Windows (after adding the bucket)
+go install github.com/signalridge/slipway@latest   # any platform with Go
+```
+
+Linux users also have `.deb` / `.rpm` / `.apk`, the `ghcr.io/signalridge/slipway` container image, AUR `slipway-bin`, and Nix. See [Installation](docs/installation.md) for every path and checksum verification.
+
+**2. Initialize your repo and generate the adapter for your AI tool:**
+
+```bash
+slipway init --tools claude        # or: codex, cursor, gemini, opencode
+slipway init --tools all           # generate every adapter
+```
+
+This writes `.slipway.yaml`, a managed `.gitignore` block, and — for each `--tools` target — a session hook plus governed skills that teach the AI tool how to enter the lifecycle. (Omit `--tools` to set up runtime only.)
+
+**3. Just talk to your AI tool.** Start a new session and describe what you want — "add a retry to the upload client", "fix the off-by-one in pagination", "refactor the auth middleware". The session hook surfaces governed state, the entry skill routes the request, and Slipway walks it from intake to done-ready. No command to remember.
+
+<details>
+<summary><strong>Prefer explicit control, or scripting?</strong> The same lifecycle is available command-first.</summary>
+
+<br/>
+
+```bash
+slipway new "refresh governance docs" --preset standard
+slipway next --json        # read-only handoff: what's next, what's blocking
+slipway run --json         # advance until a skill, blocker, or done-ready stop
+slipway status --json
+slipway done --json
+```
+
+</details>
+
+## How it works
 
 <div align="center">
   <img alt="Slipway governed lifecycle: new, S0 Intake, S1 Plan, S2 Execute, S3 Review, S4 Verify, done" src="docs/assets/diagrams/lifecycle.svg" width="920">
 </div>
 
-The primary lifecycle commands are `slipway new`, `slipway next`, `slipway run`, `slipway status`, and `slipway done`.
-If planning evidence drifts after execution or review, `slipway next` reports
-the recovery path without mutating state, while `slipway run` can reopen
-planning, clear stale planning/downstream verification evidence, and preserve
-runtime execution evidence for ordered refresh.
+A governed change moves through intake → planning → execution → review → verification → closeout. `change.yaml` holds the current authority; mutating lifecycle events append to `events/lifecycle.jsonl`; evidence accumulates beside the code. `slipway next`, `slipway status`, and `slipway validate` are read-only inspection surfaces; `slipway new`, `slipway run`, `slipway done`, and a few others are the explicit mutation surfaces.
 
-## Install
+The plain-language experience rests on two generated pieces per AI tool:
 
-Slipway can be installed or built several ways. The full platform matrix is in [Installation](docs/installation.md).
+- **A session-start hook** that, every session, asks the CLI for current governed state and injects a compact handoff — so the agent always knows whether a change is active and what step owns the next action, without you prompting it.
+- **A thin entry skill** whose description triggers on natural-language change requests and routes into the right CLI command. It never re-implements governance; it hands off to the CLI and the CLI decides state, readiness, recovery, and the next governed step.
 
-| Platform | Main paths |
-| --- | --- |
-| macOS | Direct `darwin_amd64` / `darwin_arm64` release archive, or Homebrew Cask when published |
-| Linux | Direct `linux_amd64` / `linux_arm64` release archive, `.deb`, `.rpm`, `.apk`, container image, or AUR when published |
-| Windows | Direct `windows_amd64` / `windows_arm64` release zip, or Scoop when published |
-| Developer fallback | `go install github.com/signalridge/slipway@latest`, Nix, or build from checkout |
+All these surfaces emit `--json`, so agents and scripts get structured handoffs, and `slipway health`, `repair`, `stats`, and `codebase-map` inspect or recover local state. When evidence drifts, `slipway next` shows the recovery path and `slipway run` re-walks it — the deeper JSON contracts live in the [Operator Guide](docs/operator-guide.md#diagnostic-json) and [Command Reference](docs/commands.md).
 
-Prefer published release artifacts or release-backed package-manager channels for normal installation. Treat GitHub Releases under `signalridge/slipway`, `ghcr.io/signalridge/slipway`, `signalridge/tap`, `signalridge/scoop-bucket`, and `slipway-bin` as the documented release sources; stop and verify before using same-name packages from unrelated registries. Use `go install`, Nix, or a local source build when you need a developer fallback, a not-yet-packaged platform path, or unreleased code.
+## Design philosophy
 
-## Quick Install
+- **One current authority** — a single `change.yaml` owns lifecycle state; logs and Markdown support it but never replace it.
+- **Human-readable, machine-checkable** — Markdown stays readable to people while stable sections and YAML give the runtime something deterministic to inspect.
+- **Smallest useful control plane** — Slipway stays narrower than adjacent spec, workflow, and agent frameworks by keeping authority in the CLI and repository artifacts.
 
-With Go:
+See [Design Philosophy](docs/design.md) for the longer architecture explanation.
 
-```bash
-go install github.com/signalridge/slipway@latest
-slipway --help
-```
+## AI tool adapters
 
-From a local checkout for development:
+Generate host-tool surfaces with `slipway init --tools <id>` (`claude`, `codex`, `cursor`, `gemini`, `opencode`, `all`, or `none`). Use `--refresh` to regenerate managed files deterministically.
 
-```bash
-go build -o ./bin/slipway .
-./bin/slipway --help
-```
+<details>
+<summary>Generated surfaces per tool</summary>
 
-Initialize Slipway in a repository:
-
-```bash
-slipway init --tools codex
-slipway init --tools claude,cursor,opencode
-slipway init --tools all
-```
-
-Omitting `--tools` creates only `.slipway.yaml`. Use `--refresh` to regenerate already managed adapters deterministically.
-
-## AI-Agent Install
-
-Paste the prompt below into an AI coding tool to have it install and initialize Slipway for the current repository. Read it before pasting and supervise the agent while it runs. The prompt is short on purpose — it points the agent at the canonical [AI Tool Installation Prompt](docs/installation.md#ai-tool-installation-prompt) section, which carries the full Discovery / Install / Initialize / Verify / Report guidance.
-
-```text
-Install Slipway for this repository.
-
-Read https://signalridge.github.io/slipway/installation/ — specifically the
-"AI Tool Installation Prompt" section — and follow it.
-
-Before installing, detect the operating system and CPU architecture, and run
-`slipway --version` to see if Slipway is already on PATH. Prefer documented
-release sources owned by the Slipway project (the `signalridge` org). Do NOT
-install same-name packages from unrelated registries. If no documented path
-applies, stop and report.
-
-After installing, run `slipway --version`, `slipway status --json`, and
-`git status --short --branch`. Report which install path succeeded and what
-files were generated (especially `.slipway.yaml` and adapter directories).
-```
-
-## Quick Workflow
-
-```bash
-slipway new "refresh governance docs" --preset standard
-slipway next --json
-# execute the surfaced skill or resolve blockers
-slipway run --json --diagnostics
-slipway status --json
-slipway done --json
-```
-
-`next`, `status`, and `validate` are read-only inspection surfaces. `run`, `new`, `preset`, `pivot`, `review`, `checkpoint`, `repair`, `cancel`, `abort`, `evidence`, and `done` can mutate local governed state (plus `init` and `codebase-map`, which write workspace/map files).
-The blocked/stale `next` and `validate` views, the `run --json` handoff, and
-governance-blocked `CLIError` envelopes carry an additive, read-only `recovery`
-object whenever a listed blocker — or a ready-to-advance/finalize next action —
-maps to a known remediation: a `primary_command` / `primary_action` (the single
-highest-priority next action) plus `steps[]` — one entry per `(code, subject)`
-group, with `code`, `subject`, the collected `details`, `remediation`, and
-`command`, so one skill's many stale artifacts surface as a single step. The
-object is derived from the blockers and never
-written to evidence; it is `omitempty` (absent only when no listed blocker has a
-recovery vocabulary) and presentation-only — it never changes which blockers
-apply or any gate decision.
-Diagnostic JSON uses explicit review and freshness contracts: review evidence
-must record exact layer tokens such as `layer:R0=pass` or `layer:IR1=pass`, and
-execution freshness is based on structural task inputs plus semantic
-`tasks_plan_hash` / content digests rather than file mtimes or legacy
-`evidence_input_hash`; legacy hash-only summaries remain parseable only so
-diagnostics can mark them stale. `wave-plan.yaml` still records `generated_at`
-for display and audit, but freshness does not compare against that timestamp.
-
-## AI Tool Adapters
-
-Generate host-tool surfaces with `slipway init --tools`.
+<br/>
 
 | Tool | Generated surfaces |
 | --- | --- |
@@ -183,25 +186,28 @@ Generate host-tool surfaces with `slipway init --tools`.
 | Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start.sh`, `.gemini/settings.json` |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start.sh` |
 
-The AI-tool installation prompt in [Installation](docs/installation.md#ai-tool-installation-prompt) is written for copy-paste use in tools such as OpenCode, Codex, and Claude Code.
+</details>
 
-## Runtime Files
+Want an agent to install and initialize Slipway for you? Paste the [AI Tool Installation Prompt](docs/installation.md#ai-tool-installation-prompt) into Claude Code, Codex, OpenCode, or another tool — read it first and supervise the run. See [AI Tool Adapters](docs/ai-tools.md) for invocation spellings and safety rules.
 
-- `artifacts/changes/`: governed change bundles. `artifacts/changes/<slug>/change.yaml` and top-level Markdown artifacts are project records. Active records are runtime authority; archived records stay in the owning workspace in a Git-safe form with archive-local artifact paths.
-- `artifacts/changes/**/evidence/`, `artifacts/changes/**/events/`, and `artifacts/changes/**/verification/` are raw local proof directories by default. Keep them for local audit and validation; they are ignored by Slipway-managed `.gitignore` rules.
-- `artifacts/changes/**/verification/evidence-digests.yaml` is engine-owned local freshness state. Slipway writes it when accepted skill evidence is consumed and uses it to detect which certified input changed. Each entry records the accepted verification verdict timestamp so a later re-run verdict can replace a stale digest during mutating advancement; the timestamp is not used as the content freshness signal. Diff-class review entries certify the current working diff (`git diff HEAD` plus non-ignored untracked reviewable files, excluding Slipway governed/runtime artifacts under `artifacts/changes/**`), so committing reviewed changes before finalization can transiently stale read-only projections until the owning review stage is run again through `slipway run` at the new diff boundary. Host tools should not hand-edit skill verification files to add digest fields.
-- `artifacts/codebase/` contains advisory repo-scoped codebase maps generated by `slipway codebase-map`; they are git-tracked by default so durable brownfield context is reviewed and shared rather than hidden as local-only state. Existing repositories auto-migrate the next time `slipway new`, `slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore` block.
-- `.worktrees/` contains dedicated governed worktrees and is local-only by default.
+## Runtime files
+
+- `artifacts/changes/` — governed change bundles: `change.yaml` plus the Markdown artifacts (intent, research, requirements, decision, tasks, assurance) and verification records for each change. Active records are runtime authority; archived records stay Git-safe in the owning workspace.
+- `artifacts/changes/**/evidence/`, `events/`, `verification/` — raw local proof directories, ignored by Slipway-managed `.gitignore` rules; keep them for local audit and validation.
+- `artifacts/codebase/` — advisory repo-scoped codebase maps from `slipway codebase-map`, git-tracked by default so brownfield context is shared rather than hidden.
+- `.worktrees/` — dedicated governed worktrees, local-only by default.
+
+See the [Operator Guide](docs/operator-guide.md) for state authority, freshness state, and recovery details.
 
 ## Documentation
 
-- [Installation](docs/installation.md): platform packages, source builds, repository initialization, and AI-tool install prompt.
-- [Design Philosophy](docs/design.md): governing principles, authority boundaries, and adjacent-system tradeoffs.
-- [Governed Workflow](docs/workflow.md): lifecycle states, read-only surfaces, mutating commands, and Open Questions semantics.
-- [Command Reference](docs/commands.md): core, situational, and diagnostics commands.
-- [AI Tool Adapters](docs/ai-tools.md): generated paths and host invocation styles.
-- [Operator Guide](docs/operator-guide.md): worktrees, state authority, health, repair, verification, and closeout.
-- [Contributing](docs/contributing.md): repo layout, docs build, adapter contracts, and governance tests.
+- [Installation](docs/installation.md) — platform packages, source builds, repo initialization, and the AI-tool install prompt.
+- [Design Philosophy](docs/design.md) — governing principles, authority boundaries, and adjacent-system tradeoffs.
+- [Governed Workflow](docs/workflow.md) — lifecycle states, read-only surfaces, mutating commands, and Open Questions semantics.
+- [Command Reference](docs/commands.md) — core, situational, and diagnostics commands.
+- [AI Tool Adapters](docs/ai-tools.md) — generated paths and host invocation styles.
+- [Operator Guide](docs/operator-guide.md) — worktrees, state authority, health, repair, verification, and closeout.
+- [Contributing](docs/contributing.md) — repo layout, docs build, adapter contracts, and governance tests.
 
 ## Verification
 
@@ -216,6 +222,6 @@ mkdocs build --strict
 
 CI also runs Markdown/YAML/action linting, Go tests across platforms, race tests, build checks, security scans, release checks, Nix checks, and the docs workflow in `.github/workflows/docs.yml`.
 
-## Repository Status
+## Repository status
 
 ![Repobeats analytics image](https://repobeats.axiom.co/api/embed/20e468225cab8a858d9bc969314a0e9c3d12bddb.svg "Repobeats analytics image")
