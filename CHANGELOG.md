@@ -5,6 +5,19 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0](https://github.com/signalridge/slipway/compare/v0.12.0...v0.13.0) (2026-06-09)
+
+
+### Features
+
+* **governance:** defer assurance.md creation to S3_REVIEW ([#145](https://github.com/signalridge/slipway/issues/145)) ([182c55d](https://github.com/signalridge/slipway/commit/182c55dd70a6b810aac0027e5db087cdb858e0c8))
+
+
+### Bug Fixes
+
+* **governance:** make S2 scope drift non-destructive ([#142](https://github.com/signalridge/slipway/issues/142)) ([1d814a0](https://github.com/signalridge/slipway/commit/1d814a0a8877bae18f731866e6013f1ea556f1e7))
+* **next:** split pending decisions from locked decisions ([#144](https://github.com/signalridge/slipway/issues/144)) ([0b6b840](https://github.com/signalridge/slipway/commit/0b6b8403ed416b47439930994738ef1807feed06))
+
 ## [0.12.0](https://github.com/signalridge/slipway/compare/v0.11.6...v0.12.0) (2026-06-08)
 
 
