@@ -1,0 +1,31 @@
+version: 1
+slug: resolve-github-issue-152-add-a-live-context-pressure-posttoo
+description: 'Resolve GitHub issue #152: add a live context-pressure PostToolUse hook that classifies context utilization and suggests checkpoint without blocking.'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-10T01:20:45.375509Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/resolve-github-issue-152-add-a-live-context-pressure-posttoo
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 0c15f6ac62ed9d1d28e24b9436a93277e0a158fef415760d2439bf5879c62105
+        updated_at: 2026-06-10T01:30:19.400013732Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: d21d61e7a26cc4649882f76a1e153591cee89c019b09306d45948118ed7b6d71
+        updated_at: 2026-06-10T01:30:19.400247399Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 82535f8240966f082955b0c0ea1add35439444f5a07195c38c819fd224b8043a
+        updated_at: 2026-06-10T01:46:27.394557097Z

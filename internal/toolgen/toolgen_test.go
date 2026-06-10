@@ -430,7 +430,12 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NoError(t, err, "%s: missing settings file", toolID)
 			settings := string(content)
 			assert.Contains(t, settings, "SessionStart", "%s: missing session-start registration", toolID)
-			assert.NotContains(t, settings, "slipway-context-monitor", "%s: unexpected post-tool registration", toolID)
+			if toolID == "claude" {
+				assert.Contains(t, settings, "PostToolUse", "%s: missing post-tool registration", toolID)
+				assert.Contains(t, settings, "slipway-context-pressure-post-tool-use.sh", "%s: missing context-pressure hook", toolID)
+			} else {
+				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use.sh", "%s: unexpected post-tool registration", toolID)
+			}
 		default:
 			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
 			_, err := os.Stat(settingsPath)
@@ -982,11 +987,15 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeSettings), "SessionStart")
 	assert.Contains(t, string(claudeSettings), "slipway-session-start.sh")
+	assert.Contains(t, string(claudeSettings), "PostToolUse")
+	assert.Contains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use.sh")
 
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiSettings), "SessionStart")
 	assert.Contains(t, string(geminiSettings), "slipway-session-start.sh")
+	assert.NotContains(t, string(geminiSettings), "PostToolUse")
+	assert.NotContains(t, string(geminiSettings), "slipway-context-pressure-post-tool-use.sh")
 }
 
 func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {

@@ -31,6 +31,8 @@ type ToolConfig struct {
 	SettingsPath   string
 	SessionEvent   string
 	SessionHook    string
+	PostToolEvent  string
+	PostToolHook   string
 	TriggerPrefix  string
 	TriggerStyle   string
 	AutoDetectPath []string
@@ -47,6 +49,8 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".claude/hooks/slipway-session-start.sh",
+		PostToolEvent: "PostToolUse",
+		PostToolHook:  ".claude/hooks/slipway-context-pressure-post-tool-use.sh",
 		TriggerPrefix: "/slipway",
 		TriggerStyle:  "slash-colon",
 		AutoDetectPath: []string{
@@ -933,6 +937,16 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return err
 		}
 	}
+	if strings.TrimSpace(cfg.PostToolHook) != "" {
+		content, err := renderPostToolHook(cfg)
+		if err != nil {
+			return fmt.Errorf("render post-tool hook for %s: %w", cfg.ID, err)
+		}
+		p := filepath.Join(root, cfg.PostToolHook)
+		if err := writeDeterministic(p, content, refresh); err != nil {
+			return err
+		}
+	}
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
 		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
 			return err
@@ -1642,6 +1656,13 @@ func renderSessionHook(cfg ToolConfig) (string, error) {
 	return tmpl.Render(path.Join("hooks", "session-start.sh.tmpl"), data)
 }
 
+func renderPostToolHook(cfg ToolConfig) (string, error) {
+	data := map[string]string{
+		"ToolID": cfg.ID,
+	}
+	return tmpl.Render(path.Join("hooks", "context-pressure-post-tool-use.sh.tmpl"), data)
+}
+
 func writeDeterministic(path, content string, refresh bool) error {
 	if !refresh {
 		if _, err := os.Stat(path); err == nil {
@@ -1688,6 +1709,9 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
 		mergeHookEventCommand(hooks, cfg.SessionEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.SessionHook)))
+	}
+	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.PostToolHook)))
 	}
 	settings["hooks"] = hooks
 
