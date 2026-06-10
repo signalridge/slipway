@@ -1075,6 +1075,36 @@ func TestSpecComplianceReviewGuardsAgainstTestPresenceOverTrust(t *testing.T) {
 	assert.Contains(t, specTrace, "exercises the literal clause it maps to")
 }
 
+// TestSpecTraceRecordsUncheckableCoverageGaps pins issue #157: spec-trace must
+// provide a per-item uncertain status instead of forcing "could not check"
+// mappings into covered/skipped/drift, and spec-compliance-review must not pass
+// unresolved uncertainty as full bidirectional alignment.
+func TestSpecTraceRecordsUncheckableCoverageGaps(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+
+	specTrace, err := Content("skills/spec-trace/SKILL.md")
+	require.NoError(t, err)
+	assert.Contains(t, specTrace, "status: covered | skipped | drift | ambiguous | uncheckable")
+	assert.Contains(t, specTrace, "reason: \"<why this mapping is ambiguous or uncheckable>\"")
+	assert.Contains(t, specTrace, "coverage_gaps:")
+
+	checklist, err := Content("skills/spec-trace/CHECKLIST.tmpl")
+	require.NoError(t, err)
+	assert.Contains(t, checklist, "`ambiguous`")
+	assert.Contains(t, checklist, "`uncheckable`")
+	assert.Contains(t, checklist, "must include a reason")
+	assert.Contains(t, checklist, "coverage gaps")
+
+	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	require.NoError(t, err)
+	normalizedSpecCompliance := strings.Join(strings.Fields(specCompliance), " ")
+	assert.Contains(t, specCompliance, "ambiguous` or `uncheckable`")
+	assert.Contains(t, specCompliance, "must not be treated as full bidirectional alignment")
+	assert.Contains(t, normalizedSpecCompliance, "block or request changes")
+}
+
 // TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory pins issue #140:
 // the Decision Fidelity Check must enforce fidelity only against
 // locked_decisions and treat pending_decisions (a recommended-but-unconfirmed

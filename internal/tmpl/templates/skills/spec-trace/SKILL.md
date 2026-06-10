@@ -42,14 +42,24 @@ verdict: pass | changes-requested | blocked
 bottom_line: "<one-sentence summary>"
 spec_to_code:
   - spec_item: "<quoted plan line>"
+    status: covered | skipped | drift | ambiguous | uncheckable
     realized_by: "<path:line or test name>"
+    reason: "<why this mapping is ambiguous or uncheckable>"
   - spec_item: "<quoted plan line>"
+    status: skipped
     skipped_justification: "<reason reviewer accepted>"
 code_to_spec:
   - diff_hunk: "<path:line-range>"
+    status: covered | skipped | drift | ambiguous | uncheckable
     plan_item: "<quoted plan line>"
+    reason: "<why this mapping is ambiguous or uncheckable>"
   - diff_hunk: "<path:line-range>"
+    status: drift
     drift: "<why this is outside scope>"
+coverage_gaps:
+  - item: "<spec item or diff hunk>"
+    status: ambiguous | uncheckable
+    reason: "<why this mapping could not be verified>"
 scope_contract:
   status: pass | fail | not_applicable
   reference: "scope_contract:pass or scope_contract:fail:<reason>"
@@ -61,3 +71,5 @@ scope_contract:
 - Diff hunks accepted as "refactor" without a plan line to cite.
 - Changed files accepted despite `scope_contract:fail:<reason>` evidence.
 - Verdict `pass` when a skipped spec item has no justification.
+- Verdict `pass` when `ambiguous` or `uncheckable` rows remain unresolved or
+  are missing from `coverage_gaps`.

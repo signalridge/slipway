@@ -1,0 +1,51 @@
+version: 1
+slug: resolve-github-issue-157-add-uncheckable-inconclusive-per-it
+description: 'Resolve GitHub issue #157: add uncheckable/inconclusive per-item status and coverage accounting for spec verification.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-10T11:22:18.644303Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-157-add-uncheckable-inconclusive-per-it
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 30289ccebf7d9e3b265c3814f155c8ad28be20ba38f62033ba7477ef97159665
+        updated_at: 2026-06-10T11:48:13.941604386Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: fc6552d034f06da6ddd9a7532fb215f15629ebdb9bb3d4b070d3f97f679235ac
+        updated_at: 2026-06-10T11:33:22.228776529Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: e9592197c1cc36e3b2ef740044926e97b149d8db31434d25020dd671eebf4bbd
+        updated_at: 2026-06-10T11:29:14.932611108Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 30f9082f5a856bdbede169d358e813adb552bb06c5169b4666cd813b79a5e92e
+        updated_at: 2026-06-10T11:33:22.228567821Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: ce67d4f7f8fc131f117b1df666b3be9ef4b6a11f340fb76149cddac0718a6280
+        updated_at: 2026-06-10T11:32:17.070886784Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 944fdeeeeb4c8d9f11944325a40e50db6098e91f74925c37455f5c54b8a280c3
+        updated_at: 2026-06-10T11:40:34.610384329Z

@@ -1,52 +1,39 @@
 # Architecture
 
-Re-authored for change `resolve-github-issue-137-add-go-source-sast-ci-and-triage-th`
-(issue #137). This map scopes to adding Go-source SAST coverage and triaging the
-reported gosec baseline.
+Re-authored for change `resolve-github-issue-157-add-uncheckable-inconclusive-per-it`
+(GitHub issue #157).
 
-- Module responsibilities:
-  - `.github/workflows/security.yaml` — existing security CI authority. It
-    currently runs `govulncheck`, Trivy filesystem scan, SBOM generation, and
-    license reporting with SARIF uploads for vulnerability scanners, but it has
-    no Go-source static application security testing job.
-  - `cmd/pivot_execution.go` — contains the reported `G703`/`G306` path/write
-    finding in `clearApprovedSummaryForPivot`, which rewrites `intent.md` under
-    the governed bundle resolved by `state.ResolveChangePaths`.
-  - `internal/state/lifecycle.go` — contains archive/copy helpers and the
-    reported `G122`/`G301`/`G304` findings around recursive bundle copy and
-    archive migration.
-  - `cmd/done.go` — contains the reported `G122`/`G304` finding while scanning
-    governed-bundle remediation references during finalization.
-  - `internal/state`, `cmd`, `internal/model`, `internal/toolgen`, and
-    `internal/tmpl` — the issue's changed-package gosec baseline scope.
+Question: where should per-item ambiguous/uncheckable spec verification status
+be expressed so "could not check" is auditable and never silently passes?
+
+- Affected modules:
+  - `internal/tmpl/templates/skills/spec-trace/SKILL.md:39` defines the
+    spec-trace report schema consumed by review users.
+  - `internal/tmpl/templates/skills/spec-trace/CHECKLIST.tmpl:11` defines the
+    mandatory coverage matrix and currently limits item status to
+    `covered`, `skipped`, and `drift`.
+  - `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl:43`
+    tells reviewers to use the attached spec-trace checklist while performing
+    Stage 1 governed review.
+  - `internal/tmpl/templates_test.go:1041` already pins review-template contract
+    wording, making it the focused regression-test seam for this change.
+  - `internal/toolgen/toolgen.go:254` and `internal/toolgen/toolgen.go:369`
+    export governance/technique skills; spec-trace is an exported technique
+    helper rather than a lifecycle-owned host.
 - Dependency flow:
-  - CLI commands resolve project/change paths through `state.ResolveChangePaths`
-    before reading/writing governed artifacts.
-  - Security workflow jobs use GitHub Actions permissions at the workflow level
-    (`actions: read`, `contents: read`, `security-events: write`) and upload
-    SARIF through `github/codeql-action/upload-sarif@v4`.
-  - Gosec and CodeQL should remain CI/reporting additions; they must not alter
-    Slipway runtime lifecycle behavior.
+  - Authored templates under `internal/tmpl/templates/skills/...` are the source
+    of truth.
+  - Template rendering tests read authored content directly or render `.tmpl`
+    files and assert required contract text.
+  - Tool generation exports the authored skill surfaces; this change should not
+    edit generated copies directly.
 - Coupling hotspots:
-  - Path-handling fixes in archive/finalization code can affect `slipway done`,
-    archive migration, and governed bundle recovery.
-  - Broad permission changes from `0755`/`0644` to private modes can change
-    whether generated user-facing artifacts remain inspectable; permission
-    triage must distinguish repository artifacts from git-scoped runtime state.
-  - Adding CodeQL to the existing Security workflow shares the same
-    `security-events: write` permission used by current SARIF upload jobs.
-- Current change blast radius:
-  - Expected implementation files: `.github/workflows/security.yaml`, targeted
-    Go files carrying full-repository gosec findings, and local triage comments
-    or narrow suppressions for every current unsuppressed full-repository
-    finding.
-  - Expected governed files: this codebase map, `research.md`,
-    `requirements.md`, `decision.md`, `tasks.md`, `assurance.md`, and
-    verification evidence under the active bundle.
-- Notes / source references:
-  - `.github/workflows/security.yaml`
-  - `cmd/pivot_execution.go`
-  - `cmd/done.go`
-  - `internal/state/lifecycle.go`
-  - `/tmp/slipway-issue137-gosec-changed-packages.json`
-  - `/tmp/slipway-issue137-gosec-full.json`
+  - `spec-compliance-review` depends on spec-trace for the trace matrix contract,
+    so changing spec-trace wording is the main architectural fix.
+  - Adding runtime parsing or schema validation would widen the blast radius into
+    engine capability and verification-state code; Issue #157 explicitly steers
+    away from engine prose heuristics.
+- Blast radius:
+  - Low implementation blast radius: authored skill templates and focused tests.
+  - Higher workflow semantics sensitivity: the wording controls how review
+    agents classify uncertain mappings in governed review.
