@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0](https://github.com/signalridge/slipway/compare/v0.14.0...v0.15.0) (2026-06-10)
+
+
+### Features
+
+* **security:** add Go SAST baseline gate ([#149](https://github.com/signalridge/slipway/issues/149)) ([f1357c1](https://github.com/signalridge/slipway/commit/f1357c1874e7bad42885638cc7b0bd54950c61e7))
+
 ## [0.14.0](https://github.com/signalridge/slipway/compare/v0.13.0...v0.14.0) (2026-06-09)
 
 
