@@ -18,7 +18,7 @@ import (
 
 func RepairCorruptConfig(root string, now time.Time) (string, error) {
 	configPath := ConfigPath(root)
-	raw, err := os.ReadFile(configPath)
+	raw, err := os.ReadFile(configPath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return repairMissingConfig(configPath)
@@ -303,7 +303,7 @@ func DiagnoseBundleConsistency(root string, change model.Change) BundleConsisten
 	if !changeYamlExists {
 		result.Errors = append(result.Errors,
 			"change.yaml missing in governed bundle — authority file required; run repair to regenerate")
-	} else if raw, err := os.ReadFile(changeYamlPath); err != nil {
+	} else if raw, err := os.ReadFile(changeYamlPath); err != nil { // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 		result.Errors = append(result.Errors,
 			fmt.Sprintf("change.yaml unreadable in governed bundle: %v", err))
 	} else {

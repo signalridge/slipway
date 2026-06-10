@@ -364,7 +364,7 @@ func orphanTaskEvidence(root, slug string, runVersion int, allowed map[string]st
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 		if err != nil {
 			issues = append(issues, taskEvidenceScanIssue{Path: path, Err: err})
 			continue

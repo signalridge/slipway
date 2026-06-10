@@ -50,6 +50,50 @@ jobs:
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
+  gosec:
+    name: Gosec SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run gosec
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -fmt=sarif -out=gosec.sarif ./...
+      - name: Upload gosec SARIF artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gosec-sarif
+          path: gosec.sarif
+          retention-days: 30
+      - name: Upload gosec SARIF report
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+  codeql:
+    name: CodeQL Go Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go"
   trivy:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest

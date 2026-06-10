@@ -38,14 +38,14 @@ func EnsureWorkspaceScopeConfig(projectRoot, workspaceRoot string) error {
 	}
 
 	sourcePath := ConfigPath(projectRoot)
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(ConfigPath(targetRoot)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(ConfigPath(targetRoot)), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	return fsutil.WriteFileAtomic(ConfigPath(targetRoot), raw, 0o644)

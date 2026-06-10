@@ -1,0 +1,51 @@
+version: 1
+slug: resolve-github-issue-137-add-go-source-sast-ci-and-triage-th
+description: 'Resolve GitHub issue #137: add Go-source SAST CI and triage the gosec baseline findings until done ready'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-09T16:59:33.987768Z
+guardrail_domain: irreversible_operations
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-137-add-go-source-sast-ci-and-triage-th
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 322970bca2a4c95d4252d5f5d187ad8f4cbe0cedfacc5fe443698b699fe7b2c2
+        updated_at: 2026-06-10T00:22:25.133268913Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: a1203193fd34f7d061ac926de3fbfaf77497bbd4043233c97bf1536396c36be3
+        updated_at: 2026-06-09T17:15:30.402259211Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 2c477cbc203f38566858ce36e41ccccb3806603c187dca4bd39cbc5f21e7e294
+        updated_at: 2026-06-09T17:11:25.738383696Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 6d32f5f572db7e5c50f5b4ea14abfac3e07bce381a3bc554ce442a07047727b6
+        updated_at: 2026-06-09T17:15:10.970842586Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 94790542f6cf84f16cd51f9cba29b23459b0d1ea38bdc6b9cbecdd7508e2f6fd
+        updated_at: 2026-06-09T17:13:32.999702582Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 33afbbd9aa69e688b19b30b64fda7df4dc5e10ef5f965f0612e0547ee041de75
+        updated_at: 2026-06-10T00:03:28.094637923Z

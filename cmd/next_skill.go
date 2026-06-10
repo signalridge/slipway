@@ -79,7 +79,7 @@ func planLockedFromGates(readiness progression.GovernanceReadiness) bool {
 // draft text. Whether these items are reported as locked or pending is decided
 // by the caller from the lifecycle G_plan gate state (issue #140).
 func parseDecisionItems(decisionPath string) []string {
-	data, err := os.ReadFile(decisionPath)
+	data, err := os.ReadFile(decisionPath) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 	if err != nil {
 		return nil
 	}

@@ -252,7 +252,7 @@ func artifactSectionHasSubstantiveContent(root string, change model.Change, arti
 	if err != nil {
 		return false
 	}
-	content, err := os.ReadFile(filepath.Join(paths.GovernedBundleDir, artifactName))
+	content, err := os.ReadFile(filepath.Join(paths.GovernedBundleDir, artifactName)) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return false
 	}

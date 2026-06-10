@@ -194,7 +194,7 @@ func codebaseMapDocFileName(nameOrKey string) string {
 
 func EnsureCodebaseMapDocs(root string) (created []string, err error) {
 	dir := state.CodebaseMapDir(root)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return nil, err
 	}
 	baselines := codebaseMapBaselines(root)
@@ -205,9 +205,9 @@ func EnsureCodebaseMapDocs(root string) (created []string, err error) {
 			return nil, fmt.Errorf("missing codebase map template for %s", name)
 		}
 		baseline := baselines[name]
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := os.ReadFile(path); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 			if CodebaseMapDocIsScaffoldOnly(name, string(data)) || codebaseMapDocIsLegacyGenerated(name, string(data)) {
-				if err := os.WriteFile(path, []byte(baseline), 0o644); err != nil {
+				if err := os.WriteFile(path, []byte(baseline), 0o644); err != nil { // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 					return nil, err
 				}
 			}
@@ -216,7 +216,7 @@ func EnsureCodebaseMapDocs(root string) (created []string, err error) {
 			return nil, err
 		}
 
-		if err := os.WriteFile(path, []byte(baseline), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(baseline), 0o644); err != nil { // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 			return nil, err
 		}
 		created = append(created, path)
@@ -238,13 +238,13 @@ type codebaseMapFacts struct {
 func inspectCodebaseMapFacts(root string) codebaseMapFacts {
 	facts := codebaseMapFacts{}
 	recordRootLayoutFacts(root, &facts)
-	if data, err := os.ReadFile(filepath.Join(root, "go.mod")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(root, "go.mod")); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		inspectGoModFacts(string(data), &facts)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "Cargo.toml")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(root, "Cargo.toml")); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		inspectCargoFacts(string(data), &facts)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "package.json")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(root, "package.json")); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		inspectPackageJSONFacts(root, data, &facts)
 	} else if _, err := os.Stat(filepath.Join(root, "tsconfig.json")); err == nil {
 		facts.addLanguage("TypeScript")
@@ -362,7 +362,7 @@ func inspectPythonFacts(root string, facts *codebaseMapFacts) {
 		hasPythonManifest = true
 		facts.addEntryPoint("setup.py")
 	}
-	if data, err := os.ReadFile(requirements); err == nil {
+	if data, err := os.ReadFile(requirements); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		hasPythonManifest = true
 		facts.addEntryPoint("requirements.txt")
 		for _, line := range strings.Split(string(data), "\n") {
@@ -711,7 +711,7 @@ func AssessCodebaseMapDocs(root string) (CodebaseMapAssessment, error) {
 	for _, name := range codebaseMapDocNames {
 		key := codebaseMapDocKeys[name]
 		path := filepath.Join(dir, name)
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		if err != nil {
 			if os.IsNotExist(err) {
 				assessment.DocStates[key] = CodebaseMapStatusMissing

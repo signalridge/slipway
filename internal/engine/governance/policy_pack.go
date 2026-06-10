@@ -30,7 +30,7 @@ type AdvisoryPolicyPack struct {
 // LoadAdvisoryPolicyPack parses a policy pack and rejects any blocking-policy
 // declarations. The parsed result is intentionally bounded for handoff use.
 func LoadAdvisoryPolicyPack(name, path string) (AdvisoryPolicyPack, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return AdvisoryPolicyPack{}, fmt.Errorf("policy pack %q unreadable: %v", name, err)
 	}

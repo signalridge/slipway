@@ -365,12 +365,12 @@ func RemoveChangeWorktree(root, slug, worktreePath string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("resolve git worktree root: %w", err)
 	}
-	out, err := exec.Command("git", "-C", repoRoot, "worktree", "remove", "--force", worktreePath).CombinedOutput()
+	out, err := exec.Command("git", "-C", repoRoot, "worktree", "remove", "--force", worktreePath).CombinedOutput() // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	if err != nil {
 		return fmt.Errorf("git worktree remove failed: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	// Best-effort prune of administrative metadata for the removed worktree.
-	_ = exec.Command("git", "-C", repoRoot, "worktree", "prune").Run()
+	_ = exec.Command("git", "-C", repoRoot, "worktree", "prune").Run() // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	invalidateWorktreeListCache(repoRoot)
 	return nil
 }
@@ -446,7 +446,7 @@ func worktreeHasUncommittedTrackedChanges(worktreePath string) (bool, error) {
 		{"-C", worktreePath, "diff", "--quiet"},
 		{"-C", worktreePath, "diff", "--cached", "--quiet"},
 	} {
-		err := exec.Command("git", args...).Run()
+		err := exec.Command("git", args...).Run() // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 		if err == nil {
 			continue
 		}
@@ -489,7 +489,7 @@ func worktreeUnsafeUntrackedFiles(worktreePath, slug string) ([]string, error) {
 	// Include ignored files: `git worktree remove --force` deletes the whole
 	// worktree, so ignored local files need the same fail-closed treatment as
 	// ordinary untracked files unless they are known generated Slipway paths.
-	out, err := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "-z").Output()
+	out, err := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "-z").Output() // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files --others in worktree %q: %w", worktreePath, err)
 	}

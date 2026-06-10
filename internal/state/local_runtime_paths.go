@@ -168,7 +168,7 @@ func gitCommonDirFromMetadata(normalizedRoot string) (string, bool) {
 	}
 
 	commondirPath := filepath.Join(gitDir, "commondir")
-	raw, err := os.ReadFile(commondirPath)
+	raw, err := os.ReadFile(commondirPath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if os.IsNotExist(err) {
 			return filepath.Clean(gitDir), true
@@ -196,7 +196,7 @@ func gitBranchFromMetadata(normalizedRoot string) (string, bool) {
 		return "", false
 	}
 
-	raw, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	raw, err := os.ReadFile(filepath.Join(gitDir, "HEAD")) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return "", false
 	}
@@ -256,7 +256,7 @@ func gitMetadataProbeForPath(path string) gitMetadataProbe {
 	}
 
 	probe.Kind = "file"
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return probe
 	}
@@ -273,7 +273,7 @@ func gitDirPathFromMetadata(normalizedRoot, gitMetadataPath string) string {
 		return filepath.Clean(gitMetadataPath)
 	}
 
-	raw, err := os.ReadFile(gitMetadataPath)
+	raw, err := os.ReadFile(gitMetadataPath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return ""
 	}
@@ -352,10 +352,10 @@ func ensureScopeMarkerFile(path string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
-	return os.WriteFile(path, []byte("slipway scope marker\n"), 0o644)
+	return os.WriteFile(path, []byte("slipway scope marker\n"), 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 }
 
 // GitRuntimeDir returns the git-internal directory for local runtime-only state.

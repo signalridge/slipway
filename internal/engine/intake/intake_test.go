@@ -1,6 +1,8 @@
 package intake
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -88,6 +90,26 @@ Describe the change objective.
 	assert.Contains(t, updated, "## Acceptance Signals\n- verify idle sessions expire after 15 minutes")
 	assert.Contains(t, updated, "### Source Document")
 	assert.Contains(t, updated, "# Session timeout")
+}
+
+func TestSeedIntentFileRefusesSymlinkIntentPath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	external := filepath.Join(t.TempDir(), "outside.md")
+	require.NoError(t, os.WriteFile(external, []byte("# Intent\n\n## Summary\noutside\n"), 0o644))
+	intentPath := filepath.Join(root, "intent.md")
+	if err := os.Symlink(external, intentPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	err := SeedIntentFile(intentPath, "# Source\n", DocSeed{Summary: "source"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink")
+
+	externalContent, readErr := os.ReadFile(external)
+	require.NoError(t, readErr)
+	assert.Equal(t, "# Intent\n\n## Summary\noutside\n", string(externalContent))
 }
 
 func TestSeedIntentContentDoesNotOverwriteNonEmptySections(t *testing.T) {

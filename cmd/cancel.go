@@ -130,7 +130,7 @@ func makeCancelCmd() *cobra.Command {
 
 func loadActiveTaskPIDs(root, slug string) ([]int, error) {
 	path := state.TaskPIDFilePath(root, slug)
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
@@ -162,7 +162,7 @@ func writePreemptionEvidence(root, slug, action string, interrupted, forceKilled
 		return "", fmt.Errorf("preemption action is required")
 	}
 	dir := filepath.Join(state.ChangeDir(root, slug), "evidence", "tasks", action)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return "", err
 	}
 	payload := map[string]any{
@@ -178,7 +178,7 @@ func writePreemptionEvidence(root, slug, action string, interrupted, forceKilled
 		return "", err
 	}
 	path := filepath.Join(dir, fmt.Sprintf("%d.json", time.Now().UTC().UnixNano()))
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
+	if err := os.WriteFile(path, raw, 0o644); err != nil { // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 		return "", err
 	}
 	return path, nil

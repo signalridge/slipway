@@ -362,7 +362,7 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 		}
 	}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	raw, err := os.ReadFile(tasksPath)
+	raw, err := os.ReadFile(tasksPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) && !seenAny {
 			return errDigestInputsUnavailable
@@ -392,7 +392,7 @@ func addGovernedFileInput(root string, change model.Change, rel string, inputs m
 }
 
 func computeProseFileInputHash(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return "", err
 	}

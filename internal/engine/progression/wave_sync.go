@@ -240,7 +240,7 @@ func syncCompletedTaskCheckboxes(root string, change model.Change, runs map[stri
 		return false, err
 	}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	raw, err := os.ReadFile(tasksPath)
+	raw, err := os.ReadFile(tasksPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -394,7 +394,7 @@ func LoadExecutionTasksFromEvidence(root, slug string, runSummaryVersion int) ([
 }
 
 func taskEvidenceRunVersion(path string) (int, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return 0, err
 	}
@@ -442,7 +442,7 @@ func taskFreshnessInputDiffSummary(expected, current model.ExecutionTaskFreshnes
 
 // ParseTaskEvidence parses a single task evidence file into an execution task summary.
 func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (model.ExecutionTaskSummary, time.Time, string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}

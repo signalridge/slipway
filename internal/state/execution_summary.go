@@ -125,7 +125,7 @@ func LoadExecutionSummaryForChange(root string, change model.Change) (model.Exec
 }
 
 func loadExecutionSummaryFromPath(path string) (model.ExecutionSummary, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return model.ExecutionSummary{}, err
 	}
@@ -245,7 +245,7 @@ func SaveExecutionSummary(root, slug string, summary model.ExecutionSummary) err
 		return fmt.Errorf("resolve execution summary dir for %q: %w", slug, err)
 	}
 	path := filepath.Join(dir, ExecutionSummaryFileName)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	raw, err := yaml.Marshal(summary)
@@ -511,7 +511,7 @@ func taskFreshnessInputDiffs(root string, change model.Change, summary *model.Ex
 
 func taskEvidenceCapturedAt(root, slug string, runSummaryVersion int, taskID string) (time.Time, bool, error) {
 	path := filepath.Join(EvidenceTasksDir(root, slug), strings.TrimSpace(taskID)+".json")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return time.Time{}, false, nil
@@ -670,7 +670,7 @@ func nextActionForPlanningStage(path string) string {
 // is exactly the bug, so it is never consulted: an unreadable record or one
 // without an embedded timestamp reports a zero (unknown) capture time.
 func stageEvidenceCapturedAt(path string) time.Time {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return time.Time{}
 	}

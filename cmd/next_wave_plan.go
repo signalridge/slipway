@@ -39,7 +39,7 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 		return nil
 	}
 	tasksPath := filepath.Join(resolveInputContextPath(root, root, artifactBundle), "tasks.md")
-	content, err := os.ReadFile(tasksPath)
+	content, err := os.ReadFile(tasksPath) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 	if err != nil {
 		return nil
 	}

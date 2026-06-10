@@ -1,49 +1,52 @@
 # Architecture
 
-Re-authored for change `fix-pending-approach-reported-as-locked-decision`
-(issue #140). The prior map described issue #114 (skill-template thinning) and
-was out of scope; this scopes to the `slipway next --json` skill_constraints
-path.
+Re-authored for change `resolve-github-issue-137-add-go-source-sast-ci-and-triage-th`
+(issue #137). This map scopes to adding Go-source SAST coverage and triaging the
+reported gosec baseline.
 
 - Module responsibilities:
-  - `cmd/next.go` — owns the `next`/`run` command, the `skillConstraints` JSON
-    struct (the public `next --json` contract), and `deriveConfirmationRequirement`.
-  - `cmd/next_skill.go` — `buildSkillConstraints` / `parseDecisionItems`:
-    parses selected decision text and routes it into
-    `skill_constraints.locked_decisions` or
-    `skill_constraints.pending_decisions` according to the G_plan gate.
-  - `cmd/next_skill_view.go` — `assembleSkillViewWithOptions` resolves the next
-    skill and calls `buildSkillConstraints` (the threading point for gate state).
-  - `cmd/next_handoff.go` — `cloneSkillConstraints` deep-copies the struct for
-    handoff payloads.
-  - `internal/engine/artifact/manager.go` — `ParseDecisionLockedDecisions` +
-    `LooksLikeTemplatePlaceholder`: parse decision.md sections; placeholder
-    detection (NOT confirmation detection).
-  - `internal/engine/gate/gate.go` — `G_plan` gate evaluation; the lifecycle
-    authority for "the plan/decision is locked in" (the chosen lock signal).
-  - `internal/tmpl/templates/skills/` — SOURCE OF TRUTH for generated skill
-    surfaces (e.g. spec-compliance-review). `.claude`/`.codex` copies are
-    regenerated via `internal/toolgen`; never hand-edited.
+  - `.github/workflows/security.yaml` — existing security CI authority. It
+    currently runs `govulncheck`, Trivy filesystem scan, SBOM generation, and
+    license reporting with SARIF uploads for vulnerability scanners, but it has
+    no Go-source static application security testing job.
+  - `cmd/pivot_execution.go` — contains the reported `G703`/`G306` path/write
+    finding in `clearApprovedSummaryForPivot`, which rewrites `intent.md` under
+    the governed bundle resolved by `state.ResolveChangePaths`.
+  - `internal/state/lifecycle.go` — contains archive/copy helpers and the
+    reported `G122`/`G301`/`G304` findings around recursive bundle copy and
+    archive migration.
+  - `cmd/done.go` — contains the reported `G122`/`G304` finding while scanning
+    governed-bundle remediation references during finalization.
+  - `internal/state`, `cmd`, `internal/model`, `internal/toolgen`, and
+    `internal/tmpl` — the issue's changed-package gosec baseline scope.
 - Dependency flow:
-  - `next`/`run` RunE → `buildNextView` → `buildNextContextByMode` (loads Change
-    + readiness + `GateEvaluations` incl. G_plan) → `assembleSkillView` →
-    `assembleSkillViewWithOptions` → `buildSkillConstraints` →
-    `parseDecisionItems` → `artifact.ParseDecisionLockedDecisions`; the
-    returned items are locked only when G_plan is approved and pending otherwise.
-  - Ordering: `view.ConfirmationRequirement` is derived in `finalize()` AFTER
-    skill assembly; the readiness gate evaluations are computed BEFORE it, so
-    G_plan status (not confirmation_requirement) is the usable signal.
+  - CLI commands resolve project/change paths through `state.ResolveChangePaths`
+    before reading/writing governed artifacts.
+  - Security workflow jobs use GitHub Actions permissions at the workflow level
+    (`actions: read`, `contents: read`, `security-events: write`) and upload
+    SARIF through `github/codeql-action/upload-sarif@v4`.
+  - Gosec and CodeQL should remain CI/reporting additions; they must not alter
+    Slipway runtime lifecycle behavior.
 - Coupling hotspots:
-  - `skill_constraints.locked_decisions` is read by the `spec-compliance-review`
-    host (Decision Fidelity Check); `pending_decisions` is advisory context.
-    Both fields are cloned in handoff payloads and must stay in sync.
+  - Path-handling fixes in archive/finalization code can affect `slipway done`,
+    archive migration, and governed bundle recovery.
+  - Broad permission changes from `0755`/`0644` to private modes can change
+    whether generated user-facing artifacts remain inspectable; permission
+    triage must distinguish repository artifacts from git-scoped runtime state.
+  - Adding CodeQL to the existing Security workflow shares the same
+    `security-events: write` permission used by current SARIF upload jobs.
 - Current change blast radius:
-  - `skillConstraints` struct (+`pending_decisions`), `buildSkillConstraints`
-    signature/logic, the assembleSkillView threading, `cloneSkillConstraints`,
-    the spec-compliance-review template + toolgen regeneration, and tests.
-  - No engine gate weakening; decision parser placeholder logic unchanged.
+  - Expected implementation files: `.github/workflows/security.yaml`, targeted
+    Go files carrying full-repository gosec findings, and local triage comments
+    or narrow suppressions for every current unsuppressed full-repository
+    finding.
+  - Expected governed files: this codebase map, `research.md`,
+    `requirements.md`, `decision.md`, `tasks.md`, `assurance.md`, and
+    verification evidence under the active bundle.
 - Notes / source references:
-  - `cmd/next.go`, `cmd/next_skill.go`, `cmd/next_skill_view.go`,
-    `cmd/next_handoff.go`, `internal/engine/artifact/manager.go`,
-    `internal/engine/gate/gate.go`,
-    `internal/tmpl/templates/skills/` (spec-compliance-review).
+  - `.github/workflows/security.yaml`
+  - `cmd/pivot_execution.go`
+  - `cmd/done.go`
+  - `internal/state/lifecycle.go`
+  - `/tmp/slipway-issue137-gosec-changed-packages.json`
+  - `/tmp/slipway-issue137-gosec-full.json`

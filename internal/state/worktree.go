@@ -219,7 +219,7 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 	} else if readErr != nil && !os.IsNotExist(readErr) {
 		return DefaultWorktreeBinding{}, readErr
 	}
-	if err := os.MkdirAll(filepath.Dir(normalizedPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(normalizedPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return DefaultWorktreeBinding{}, err
 	}
 
@@ -233,7 +233,7 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 		}
 		args = append(args, "-b", branch, normalizedPath, baseRef)
 	}
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return DefaultWorktreeBinding{}, fmt.Errorf("git worktree add failed: %w (%s)", err, strings.TrimSpace(string(out)))
@@ -254,12 +254,12 @@ func gitBranchExists(repoRoot, branch string) bool {
 	if strings.TrimSpace(branch) == "" {
 		return false
 	}
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	return cmd.Run() == nil
 }
 
 func gitHasHead(repoRoot string) bool {
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD")
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	return cmd.Run() == nil
 }
 
@@ -333,7 +333,7 @@ func ValidateWorktreeAuthenticityReasons(repoRoot, worktreePath, expectedBranch 
 
 	actualBranch, ok := gitBranchFromMetadata(normalizedPath)
 	if !ok {
-		cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
+		cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
@@ -384,7 +384,7 @@ func resolveWorktreeActualBranch(worktreePath string) (string, error) {
 	if actualBranch, ok := gitBranchFromMetadata(normalizedPath); ok {
 		return strings.TrimSpace(actualBranch), nil
 	}
-	cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := exec.Command("git", "-C", normalizedPath, "rev-parse", "--abbrev-ref", "HEAD") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("resolve worktree branch: %w (%s)", err, strings.TrimSpace(string(out)))
@@ -516,7 +516,7 @@ func invalidateWorktreeListCache(repoRoot string) {
 }
 
 func listGitWorktreesUncached(repoRoot string) (map[string]struct{}, error) {
-	cmd := exec.Command("git", "-C", repoRoot, "worktree", "list", "--porcelain")
+	cmd := exec.Command("git", "-C", repoRoot, "worktree", "list", "--porcelain") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("list git worktrees: %w (%s)", err, strings.TrimSpace(string(out)))

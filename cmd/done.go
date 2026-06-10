@@ -14,6 +14,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
@@ -127,7 +128,7 @@ func detectRemediationSources(root string, change model.Change) []model.ArchiveR
 		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			return nil
 		}
-		data, readErr := os.ReadFile(path)
+		data, readErr := fsutil.ReadFileNoSymlink(path)
 		if readErr != nil {
 			return nil
 		}
@@ -580,7 +581,7 @@ func validateGovernedDoneArtifacts(root string, change model.Change) error {
 		return err
 	}
 	assurancePath := artifact.ResolveArtifactPath(paths.GovernedBundleDir, "assurance.md")
-	content, err := os.ReadFile(assurancePath)
+	content, err := os.ReadFile(assurancePath) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 	if err != nil {
 		return newGovernanceBlockedError(
 			"assurance_missing",
