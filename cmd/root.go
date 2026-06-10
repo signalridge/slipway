@@ -172,6 +172,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeRepairCmd())
 	cmd.AddCommand(makeCheckpointCmd())
 	cmd.AddCommand(makeEvidenceCmd())
+	cmd.AddCommand(makeHookCmd())
 	cmd.SetHelpCommand(&cobra.Command{
 		Use:   "help [command]",
 		Short: "Show help for a command",

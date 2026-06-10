@@ -283,6 +283,40 @@ esac
 	assert.Contains(t, string(out), "hook_diagnostic: slipway root failed: root resolution failed")
 }
 
+func TestContextPressurePostToolUseHookDelegatesToSlipwayHookCommand(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	logPath, binDir := installHookTestSlipwayScript(t, root, `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s|%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
+case "$*" in
+  "hook context-pressure")
+    cat >/dev/null
+    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"CONTEXT CRITICAL: run slipway checkpoint"}}'
+    ;;
+esac
+`)
+	scriptPath := writeRenderedHook(t, root, "hooks/context-pressure-post-tool-use.sh.tmpl", map[string]string{
+		"ToolID": "claude",
+	})
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = root
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PostToolUse"}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SLIPWAY_HOOK_LOG="+logPath,
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	assert.Contains(t, string(out), "hookSpecificOutput")
+	assert.Contains(t, string(out), "CONTEXT CRITICAL")
+	logContent := readHookLog(t, logPath)
+	assert.Contains(t, logContent, hookObservedPath(t, root)+"|hook context-pressure")
+}
+
 func installHookTestSlipway(t *testing.T, canonicalRoot string) (string, string) {
 	t.Helper()
 
