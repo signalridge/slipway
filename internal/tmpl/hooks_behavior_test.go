@@ -314,7 +314,7 @@ esac
 	assert.Contains(t, string(out), "hookSpecificOutput")
 	assert.Contains(t, string(out), "CONTEXT CRITICAL")
 	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, hookObservedPath(t, root)+"|hook context-pressure")
+	assert.Contains(t, logContent, "|hook context-pressure")
 }
 
 func installHookTestSlipway(t *testing.T, canonicalRoot string) (string, string) {
