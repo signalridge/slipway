@@ -1,39 +1,39 @@
 # Architecture
 
-Re-authored for change `resolve-github-issue-157-add-uncheckable-inconclusive-per-it`
-(GitHub issue #157).
+Re-authored for change
+`resolve-github-issue-151-thin-host-disk-handoff-return-contr`
+(GitHub issue #151).
 
-Question: where should per-item ambiguous/uncheckable spec verification status
-be expressed so "could not check" is auditable and never silently passes?
+Question: how should remaining heavy governed hosts adopt a disk-handoff
+contract without letting subagents self-stamp evidence?
 
-- Affected modules:
-  - `internal/tmpl/templates/skills/spec-trace/SKILL.md:39` defines the
-    spec-trace report schema consumed by review users.
-  - `internal/tmpl/templates/skills/spec-trace/CHECKLIST.tmpl:11` defines the
-    mandatory coverage matrix and currently limits item status to
-    `covered`, `skipped`, and `drift`.
-  - `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl:43`
-    tells reviewers to use the attached spec-trace checklist while performing
-    Stage 1 governed review.
-  - `internal/tmpl/templates_test.go:1041` already pins review-template contract
-    wording, making it the focused regression-test seam for this change.
-  - `internal/toolgen/toolgen.go:254` and `internal/toolgen/toolgen.go:369`
-    export governance/technique skills; spec-trace is an exported technique
-    helper rather than a lifecycle-owned host.
+- Affected host surfaces:
+  - `internal/tmpl/templates/skills/research-orchestration/SKILL.md:23`
+    currently asks the host to read governed artifacts directly and later
+    author `research.md`.
+  - `internal/tmpl/templates/skills/plan-audit/SKILL.md:18` owns S1 plan bundle
+    audit and writes `verification/plan-audit.yaml`.
+  - `internal/tmpl/templates/skills/intake-clarification/SKILL.md:20` owns
+    intent clarification and writes `verification/intake-clarification.yaml`.
+  - `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl` and
+    `internal/tmpl/templates/skills/code-quality-review/SKILL.md.tmpl` are the
+    S3 review hosts that produce review certificates.
+- Established thin-host precedent:
+  - `internal/tmpl/thin_host_content_test.go:11` already pins
+    goal-verification delegation for bulky evidence.
+  - `internal/tmpl/thin_host_content_test.go:37` pins worktree-preflight bounded
+    baseline summaries.
+  - `internal/tmpl/thin_host_content_test.go:56` pins wave-orchestration
+    path-based delegation and executor-owned codebase-map reads.
 - Dependency flow:
   - Authored templates under `internal/tmpl/templates/skills/...` are the source
     of truth.
-  - Template rendering tests read authored content directly or render `.tmpl`
-    files and assert required contract text.
-  - Tool generation exports the authored skill surfaces; this change should not
-    edit generated copies directly.
-- Coupling hotspots:
-  - `spec-compliance-review` depends on spec-trace for the trace matrix contract,
-    so changing spec-trace wording is the main architectural fix.
-  - Adding runtime parsing or schema validation would widen the blast radius into
-    engine capability and verification-state code; Issue #157 explicitly steers
-    away from engine prose heuristics.
+  - `internal/tmpl` renders static and templated skill content for tests and
+    generated exports.
+  - Evidence authority remains in Slipway CLI and governed verification files;
+    template prose must not introduce a bypass where a subagent return line
+    becomes evidence.
 - Blast radius:
-  - Low implementation blast radius: authored skill templates and focused tests.
-  - Higher workflow semantics sensitivity: the wording controls how review
-    agents classify uncertain mappings in governed review.
+  - Medium to high workflow semantics: five host surfaces are touched, but the
+    implementation should stay in template contracts and tests rather than
+    runtime lifecycle state.

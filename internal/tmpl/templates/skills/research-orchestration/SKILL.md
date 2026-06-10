@@ -24,6 +24,19 @@ Discovery-required governed changes only, at `S1_PLAN/research` substep.
 Run `slipway next --json` and examine the governed change artifacts.
 Read the `research.md` artifact for existing discovery notes.
 
+## Disk-Handoff Contract
+For bulky research artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The host must inspect the written
+  files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
+
 ## Structured Research Dimensions
 Investigate the following dimensions systematically:
 
@@ -94,16 +107,17 @@ If the codebase map is **missing** (`status: missing`), run the
 semantically stale, re-author the affected sections inline (above) — do not rerun
 the technique skill, which only scaffolds a missing or non-durable set.
 
-## Write Verification
-```yaml
-# Write to: artifacts/changes/{slug}/verification/research-orchestration.yaml
-verdict: pass
-blockers: []
-timestamp: "<ISO-8601-UTC>"
-run_version: 0
-references: []
-notes: |
-  <verification notes>
+## Record Verification
+Write bulky research notes to disk, then record the verdict through the CLI so
+Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
+Do not hand-edit `verification/research-orchestration.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill research-orchestration \
+  --verdict pass \
+  --reference "research:pass" \
+  --notes-file artifacts/changes/{slug}/verification/research-orchestration-notes.md
 ```
 
 ## Surface Findings
