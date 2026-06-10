@@ -571,7 +571,7 @@ func TestHealthCommandReportsMissingHostSkillSurface(t *testing.T) {
 			for _, reason := range finding.Reasons {
 				if reason.Code == "skill_prompt_surface_missing" {
 					found = true
-					assert.Contains(t, finding.Message, "missing host skill surface")
+					assert.Contains(t, reason.Detail, "slipway-intake-clarification")
 					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
 				}
 			}
@@ -605,7 +605,7 @@ func TestHealthCommandReportsInvalidHostSkillRegistry(t *testing.T) {
 			for _, reason := range finding.Reasons {
 				if reason.Code == "skill_registry_invalid" {
 					found = true
-					assert.Contains(t, finding.Message, "Governance skill registry is invalid")
+					assert.NotEmpty(t, reason.Detail)
 					assert.Contains(t, finding.RepairHint, "Inspect generated host skill surfaces")
 				}
 			}
@@ -682,8 +682,8 @@ func TestHealthCommandReportsInvalidHostSkillRegistryFromInvocationWorktree(t *t
 		for _, reason := range finding.Reasons {
 			if reason.Code == "skill_registry_invalid" {
 				found = true
-				assert.Contains(t, reason.Message, "missing frontmatter")
-				assert.Contains(t, reason.Message, "health-worktree")
+				assert.Contains(t, reason.Detail, "missing frontmatter")
+				assert.Contains(t, reason.Detail, "health-worktree")
 			}
 		}
 	}
@@ -716,7 +716,7 @@ func TestHealthCommandReportsUnreadableHostSkillSurface(t *testing.T) {
 			for _, reason := range finding.Reasons {
 				if reason.Code == "skill_prompt_surface_unreadable" {
 					found = true
-					assert.Contains(t, finding.Message, "unreadable host skill surface")
+					assert.Contains(t, reason.Detail, "slipway-intake-clarification")
 					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
 				}
 			}
@@ -743,7 +743,6 @@ func TestHealthCommandDoesNotReportToolResolutionFailureForMultiAdapterWorkspace
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 
 		for _, finding := range view.Findings {
-			assert.NotEqual(t, "Tool adapter resolution failed", finding.Message)
 			for _, reason := range finding.Reasons {
 				assert.NotEqual(t, "tool_resolution_failed", reason.Code)
 			}
@@ -772,11 +771,11 @@ func TestHealthCommandIgnoresMissingProjectAgentSurface(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 
 		for _, finding := range view.Findings {
-			assert.NotContains(t, finding.Message, ".claude/agents/slipway-planner.md")
+			assert.NotContains(t, model.ReasonSpecs(finding.Reasons), ".claude/agents/slipway-planner.md")
 			for _, reason := range finding.Reasons {
 				assert.NotEqual(t, "agent_generated_surface_missing", reason.Code)
 				assert.NotEqual(t, "agent_generated_surface_unreadable", reason.Code)
-				assert.NotEqual(t, ".claude/agents/slipway-planner.md", reason.Message)
+				assert.NotEqual(t, ".claude/agents/slipway-planner.md", reason.Detail)
 			}
 		}
 	})
@@ -806,7 +805,7 @@ func TestHealthCommandReportsMissingHostSkillSurfaceForMultiAdapterWorkspace(t *
 			for _, reason := range finding.Reasons {
 				if reason.Code == "skill_prompt_surface_missing" {
 					found = true
-					assert.Contains(t, finding.Message, "missing host skill surface for claude")
+					assert.Contains(t, reason.Detail, ".claude")
 					assert.Contains(t, finding.RepairHint, "slipway init --tools claude --refresh")
 				}
 			}

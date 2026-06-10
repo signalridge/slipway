@@ -101,14 +101,29 @@ const defaultRecoveryPriority = 100
 // codes and prefix families. It is the recovery-facing companion to
 // canonicalReasonDefinitions, scoped to recovery-relevant tokens.
 var blockerRemediations = map[string]blockerRemediation{
+	"archive_failed": {
+		Remediation:     "Inspect the archive failure detail, repair the governed bundle or filesystem issue, then re-run bulk finalization.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
 	"artifact_not_ready": {
 		Remediation:     "Complete the governed artifact readiness issue named in the blocker detail, then re-run the workflow.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassSatisfyControl,
 	},
+	"artifact_reconcile_failed": {
+		Remediation:     "Repair artifact reconciliation for the governed bundle, then re-run finalization.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
 	"artifact_schema_missing": {
 		Remediation:     "Repair or regenerate the governed artifact schema before continuing.",
 		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"artifact_validation_failed": {
+		Remediation:     "Fix the invalid done artifact named in the failure detail, then re-run finalization.",
+		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"assurance_structure_invalid": {
@@ -161,6 +176,11 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        15,
+	},
+	"change_not_active": {
+		Remediation:     "Inspect active changes and ignore or remove skipped non-active records before re-running bulk finalization.",
+		CommandTemplate: "slipway status",
+		Class:           RecoveryClassSatisfyControl,
 	},
 	"dedicated_worktree_branch_mismatch": {
 		Remediation:     "Run `slipway run` to reconcile the recorded branch to the bound worktree's actual branch and continue.",
@@ -222,6 +242,21 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},
+	"lifecycle_event_write_failed": {
+		Remediation:     "Repair lifecycle event logging or filesystem permissions, then re-run finalization.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"list_changes_failed": {
+		Remediation:     "Repair change state so active changes can be listed, then re-run bulk finalization.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"load_change_failed": {
+		Remediation:     "Repair the governed change state named in the failure detail, then re-run bulk finalization.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
 	"manifest_r0_invalid": {
 		Remediation:     "Fix the R0 review manifest evidence and re-run review.",
 		CommandTemplate: "slipway review",
@@ -246,6 +281,11 @@ var blockerRemediations = map[string]blockerRemediation{
 		Remediation:     "Resolve the failing task evidence for task {subject}, then re-run wave-orchestration.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
+	},
+	"not_done_ready": {
+		Remediation:     "Complete the governed workflow gates before finalizing this change.",
+		CommandTemplate: "slipway next",
+		Class:           RecoveryClassRerunSkill,
 	},
 	"orphaned_change_bundle": {
 		// Emitted as orphaned_change_bundle:<slug>. The governed bundle directory
@@ -528,8 +568,83 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
+	"unknown_reason_code": {
+		Remediation:     "A blocker used an unrecognized reason code. Inspect the original token in the blocker detail, update the producer to emit a canonical reason code, then re-run validation.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_execution_blocked": {
+		Remediation:     "Resolve the reported wave execution blocker, then re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_execution_unavailable": {
+		Remediation:     "Repair the wave execution context before re-running wave-orchestration.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_plan_drift": {
+		Remediation:     "Refresh the wave plan from the current tasks.md before continuing execution.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_plan_load_failed": {
+		Remediation:     "Repair wave-plan.yaml so status can load the authoritative wave plan.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
 	"wave_plan_missing": {
 		Remediation:     "Materialize the wave plan from tasks.md before wave execution.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_plan_repair_blocked": {
+		Remediation:     "Fix the blocking wave plan issue before attempting repair again.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_plan_unreadable": {
+		Remediation:     "Fix wave-plan.yaml so it is readable, then re-run validation.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassFixScope,
+	},
+	"wave_run_missing": {
+		Remediation:     "Record passing wave run evidence by re-running wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_run_version_mismatch": {
+		Remediation:     "Repair or regenerate wave run evidence so its run_summary_version matches the requested execution summary.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_runs_incomplete": {
+		Remediation:     "Complete missing wave run evidence by re-running wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_runs_invalid_count": {
+		Remediation:     "Repair wave run evidence so the recorded run count matches the execution summary.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_runs_load_failed": {
+		Remediation:     "Repair wave run evidence so status can load the authoritative run records.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"wave_runs_missing": {
+		Remediation:     "Re-run wave-orchestration to record wave run evidence for the latest execution summary.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_runs_unreadable": {
+		Remediation:     "Fix unreadable wave run evidence, then re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"wave_task_linkage_mismatch": {
+		Remediation:     "Re-run wave-orchestration so wave run task linkage matches wave-plan.yaml.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},

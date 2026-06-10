@@ -135,15 +135,15 @@ func TestLoadVerificationAcceptsStructuredReasonCodes(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, "plan-audit.yaml"),
-		[]byte("verdict: fail\nblockers:\n  - code: missing_coverage\n    severity: error\n    message: Missing coverage\n    detail: integration\ntimestamp: 2026-04-08T00:00:00Z\n"),
+		[]byte("verdict: fail\nblockers:\n  - code: missing_required_artifact\n    severity: error\n    message: Missing required artifact\n    detail: research.md\ntimestamp: 2026-04-08T00:00:00Z\n"),
 		0o644,
 	))
 
 	loaded, err := LoadVerification(root, slug, "plan-audit")
 	require.NoError(t, err)
 	require.Len(t, loaded.Blockers, 1)
-	assert.Equal(t, "missing_coverage", loaded.Blockers[0].Code)
-	assert.Equal(t, "integration", loaded.Blockers[0].Detail)
+	assert.Equal(t, "missing_required_artifact", loaded.Blockers[0].Code)
+	assert.Equal(t, "research.md", loaded.Blockers[0].Detail)
 }
 
 func TestListVerificationsEmpty(t *testing.T) {

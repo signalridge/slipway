@@ -78,7 +78,7 @@ func TestCollectHealthReportReportsUnreadableChangeAuthority(t *testing.T) {
 			continue
 		}
 		found = true
-		assert.Contains(t, finding.Message, "unreadable")
+		assert.True(t, healthFindingHasReasonCode(finding, "change_bundle_unreadable"))
 		assert.False(t, finding.Repairable)
 	}
 	assert.True(t, found, "expected unreadable authority finding")
@@ -108,7 +108,7 @@ func TestCollectHealthReportReportsUnreadableHiddenWorktreeAuthority(t *testing.
 			continue
 		}
 		found = true
-		assert.Contains(t, finding.Message, "unreadable")
+		assert.True(t, healthFindingHasReasonCode(finding, "change_bundle_unreadable"))
 		assert.False(t, finding.Repairable)
 	}
 	assert.True(t, found, "expected hidden unreadable authority finding")
@@ -136,7 +136,7 @@ func TestCollectHealthReportReportsUnreadableExecutionSummary(t *testing.T) {
 			continue
 		}
 		found = true
-		assert.Contains(t, finding.Message, "Execution summary")
+		assert.True(t, healthFindingHasReasonCode(finding, "execution_summary_unreadable"))
 		assert.False(t, finding.Repairable)
 	}
 	assert.True(t, found, "expected execution summary integrity finding")
@@ -305,7 +305,7 @@ func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 			if reason.Code == "wave_plan_repair_blocked" {
 				found = true
 				assert.False(t, finding.Repairable)
-				assert.Contains(t, finding.Message, "cannot be safely reconstructed")
+				assert.NotEmpty(t, reason.Detail)
 			}
 		}
 	}
@@ -425,7 +425,7 @@ func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifte
 			if reason.Code == "wave_plan_repair_blocked" {
 				found = true
 				assert.False(t, finding.Repairable)
-				assert.Contains(t, finding.Message, "cannot be safely reconstructed")
+				assert.NotEmpty(t, reason.Detail)
 			}
 		}
 	}
@@ -810,7 +810,7 @@ func TestCollectHealthReportMarksInvalidWorktreeBindingNonRepairable(t *testing.
 		}
 		found = true
 		assert.False(t, finding.Repairable, "invalid bound worktree should require explicit operator action")
-		assert.Contains(t, finding.Message, "Dedicated worktree binding is invalid")
+		assert.True(t, healthFindingHasReasonCode(finding, WorktreeReasonDedicatedRequired))
 	}
 	assert.True(t, found, "expected worktree integrity finding")
 }
@@ -846,6 +846,15 @@ func TestCollectHealthReportReportsMissingBoundWorktreeScopeConfig(t *testing.T)
 		}
 	}
 	assert.True(t, found, "expected missing bound-worktree scope config finding")
+}
+
+func healthFindingHasReasonCode(finding HealthFinding, code string) bool {
+	for _, reason := range finding.Reasons {
+		if reason.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCollectHealthReportFailsWhenWorkspaceDiscoveryFails(t *testing.T) {

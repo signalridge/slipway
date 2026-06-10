@@ -546,7 +546,7 @@ func (s *stubArtifactReadinessReader) Evaluate(root string, change model.Change)
 	return ArtifactReadiness{
 		Ready:       false,
 		Required:    []string{"intent.md"},
-		Blockers:    []model.ReasonCode{model.NewReasonCode("artifact_reader_contract_blocker", "")},
+		Blockers:    []model.ReasonCode{model.NewReasonCode("missing_required_artifact", "tasks.md")},
 		Diagnostics: []string{"artifact_reader_contract_diagnostic"},
 	}, nil
 }
@@ -594,7 +594,7 @@ func TestEvaluateGovernanceReadinessRoutesArtifactStateThroughReaderContracts(t 
 	require.NoError(t, err)
 	assert.Equal(t, 1, readinessReader.calls)
 	assert.Equal(t, 1, projectionReader.calls)
-	assert.True(t, hasAdvanceReasonCode(readiness.Blockers, "artifact_reader_contract_blocker"))
+	assert.True(t, hasAdvanceReasonCode(readiness.Blockers, "missing_required_artifact"))
 	assert.Contains(t, readiness.Diagnostics, "artifact_reader_contract_diagnostic")
 	require.NotNil(t, readiness.ArtifactProjection)
 	require.Len(t, readiness.ArtifactProjection.Nodes, 1)

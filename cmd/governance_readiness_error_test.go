@@ -70,8 +70,7 @@ func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 		assert.Equal(t, "verification_load_failed", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Message, "evaluate next skill evidence")
-		assert.Contains(t, cliErr.Message, "parse verification plan-audit")
+		assert.Equal(t, "evaluate next skill evidence", cliErr.Details["operation"])
 		assert.Equal(t, verificationReadPathForTest(root, slug, "plan-audit"), cliErr.Details["path"])
 	})
 }
@@ -100,8 +99,7 @@ func TestNextReadinessFailureEnvelopeJSON(t *testing.T) {
 		assert.Equal(t, categoryStateIntegrity, payload.Category)
 		assert.Equal(t, exitCodeStateIntegrity, payload.ExitCode)
 		assert.Equal(t, "verification_load_failed", payload.ErrorCode)
-		assert.Contains(t, payload.Message, "evaluate next skill evidence")
-		assert.Contains(t, payload.Message, "parse verification plan-audit")
+		assert.Equal(t, "evaluate next skill evidence", payload.Details["operation"])
 		assert.Equal(t, verificationReadPathForTest(root, slug, "plan-audit"), payload.Details["path"])
 	})
 }
@@ -133,8 +131,8 @@ func TestStatusReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 		assert.Equal(t, "verification_load_failed", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Message, "build status view")
-		assert.Contains(t, cliErr.Message, "parse verification plan-audit")
+		assert.Equal(t, "build status view", cliErr.Details["operation"])
+		assert.Equal(t, verificationReadPathForTest(root, slug, "plan-audit"), cliErr.Details["path"])
 	})
 }
 
@@ -165,8 +163,8 @@ func TestValidateReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 		assert.Equal(t, "verification_load_failed", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Message, "validate readiness")
-		assert.Contains(t, cliErr.Message, "parse verification plan-audit")
+		assert.Equal(t, "validate readiness", cliErr.Details["operation"])
+		assert.Equal(t, verificationReadPathForTest(root, slug, "plan-audit"), cliErr.Details["path"])
 	})
 }
 
@@ -200,8 +198,8 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 		assert.Equal(t, "verification_load_failed", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Message, "evaluate review prerequisites")
-		assert.Contains(t, cliErr.Message, "parse verification plan-audit")
+		assert.Equal(t, "evaluate review prerequisites", cliErr.Details["operation"])
+		assert.Equal(t, verificationReadPathForTest(root, slug, "plan-audit"), cliErr.Details["path"])
 	})
 }
 
@@ -236,8 +234,7 @@ func TestNextDiagnosticsProjectionFailureUsesGovernanceReadinessEnvelope(t *test
 		assert.Equal(t, "governance_readiness_failed", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Message, "evaluate next skill evidence")
-		assert.Contains(t, cliErr.Message, "intent.md")
+		assert.Equal(t, "evaluate next skill evidence", cliErr.Details["operation"])
 	})
 }
 

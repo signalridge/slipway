@@ -260,25 +260,25 @@ func TestWaveReasonCodesCarryRemediation(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		code            string
-		detail          string
-		messageContains string
+		code   string
+		detail string
 	}{
-		{"wave_orchestration_stale_task_evidence", "task-a", "rerun wave-orchestration to refresh the wave record"},
-		{"wave_orchestration_run_summary_version_invalid", "", "rerun wave-orchestration to produce a versioned run summary"},
-		{"missing_task_evidence_for_run_summary", "", "rerun wave-orchestration to capture task evidence"},
-		{"wave_plan_missing", "slug-a", "materialize the wave plan from tasks.md"},
+		{"wave_orchestration_stale_task_evidence", "task-a"},
+		{"wave_orchestration_run_summary_version_invalid", ""},
+		{"missing_task_evidence_for_run_summary", ""},
+		{"wave_plan_missing", "slug-a"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
 			t.Parallel()
 			reason := NewReasonCode(tc.code, tc.detail)
+			assert.Equal(t, tc.code, reason.Code)
+			assert.Equal(t, tc.detail, reason.Detail)
 			assert.Equal(t, ReasonSeverityError, reason.Severity)
-			assert.Contains(t, reason.Message, tc.messageContains,
+			definition, ok := canonicalReasonDefinitions[reason.Code]
+			require.True(t, ok)
+			assert.NotEqualf(t, testHumanizeReasonCode(reason.Code), definition.Message,
 				"wave reason code %q must carry an actionable remediation, not a humanized fallback", tc.code)
-			if tc.detail != "" {
-				assert.Contains(t, reason.Message, tc.detail)
-			}
 		})
 	}
 }
@@ -291,8 +291,9 @@ func TestRequiredSkillStaleCarriesRemediation(t *testing.T) {
 	assert.Equal(t, "required_skill_stale", reason.Code)
 	assert.Equal(t, "plan-audit:tasks.md", reason.Detail)
 	assert.Equal(t, ReasonSeverityError, reason.Severity)
-	assert.Contains(t, reason.Message, "rerun the skill to re-certify the named artifact")
-	assert.Contains(t, reason.Message, "plan-audit:tasks.md")
+	definition, ok := canonicalReasonDefinitions[reason.Code]
+	require.True(t, ok)
+	assert.NotEqual(t, testHumanizeReasonCode(reason.Code), definition.Message)
 }
 
 func TestPhaseForMapsWorkflowStates(t *testing.T) {
