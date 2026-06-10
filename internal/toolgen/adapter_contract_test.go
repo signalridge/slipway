@@ -34,6 +34,7 @@ type frozenToolContract struct {
 	TriggerStyle  string
 	SettingsPath  string
 	SessionHook   frozenHookContract
+	PostToolHook  frozenHookContract
 }
 
 var frozenAdapterCommandIDs = []string{
@@ -80,6 +81,11 @@ var frozenToolContracts = map[string]frozenToolContract{
 		SessionHook: frozenHookContract{
 			Event:      "SessionStart",
 			Path:       ".claude/hooks/slipway-session-start.sh",
+			Registered: true,
+		},
+		PostToolHook: frozenHookContract{
+			Event:      "PostToolUse",
+			Path:       ".claude/hooks/slipway-context-pressure-post-tool-use.sh",
 			Registered: true,
 		},
 	},
@@ -142,6 +148,7 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 			contract := frozenToolContracts[toolID]
 			assertFrozenCommandSet(t, root, codexHome, toolID, contract)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.SessionHook)
+			assertFrozenHookContract(t, root, contract.SettingsPath, contract.PostToolHook)
 		})
 	}
 }
