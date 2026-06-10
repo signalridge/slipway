@@ -807,7 +807,6 @@ func TestNewJSONStdinRejectsGuardrailWithTrivialOverride(t *testing.T) {
 		require.ErrorAs(t, err, &cliErr)
 		assert.Equal(t, "invalid_classification", cliErr.ErrorCode)
 		assert.Equal(t, "complexity", cliErr.Details["field"])
-		assert.Contains(t, cliErr.Message, "requires complexity >= complex")
 
 		changes, listErr := state.ListChanges(root)
 		require.NoError(t, listErr)
@@ -1407,7 +1406,7 @@ func TestNewCommandRejectsWhenActiveChangeIsBoundToCurrentWorktree(t *testing.T)
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "active_change_exists", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Message, "bound to this worktree")
+		assert.Equal(t, slug, cliErr.Slug)
 		assert.Contains(t, cliErr.Remediation, "before creating a new change from that worktree")
 	})
 }

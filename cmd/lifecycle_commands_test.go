@@ -666,7 +666,7 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
-		assert.Contains(t, strings.ToLower(cliErr.Message), "review_layer_missing:ir1")
+		assert.Contains(t, model.ReasonSpecs(cliErr.Reasons), "review_layer_missing:IR1")
 		require.NotNil(t, cliErr.Recovery)
 		assert.Contains(t, recoveryStepCodes(cliErr.Recovery), "review_layer_missing")
 		assert.NotEmpty(t, cliErr.Recovery.PrimaryCommand)
@@ -706,8 +706,8 @@ func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Message, "session_isolation_warning")
-		assert.NotContains(t, cliErr.Message, "stale_execution_evidence")
+		assert.Contains(t, model.ReasonSpecs(cliErr.Reasons), blocker)
+		assert.NotContains(t, model.ReasonSpecs(cliErr.Reasons), "stale_execution_evidence")
 
 		_, loadErr := state.LoadChange(root, slug)
 		require.NoError(t, loadErr)
@@ -739,7 +739,7 @@ func TestDoneRejectsChecklistBlockersBeforeArchive(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "ship_gate_blocked", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Message, "tasks_checklist_empty")
+		assert.Contains(t, model.ReasonSpecs(cliErr.Reasons), "tasks_checklist_empty")
 
 		_, loadErr := state.LoadChange(root, slug)
 		require.NoError(t, loadErr)
@@ -787,6 +787,84 @@ func TestDoneRejectsAllReadyWithExplicitRequest(t *testing.T) {
 		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
 		assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
 	})
+}
+
+func TestDoneBulkFallbackReasonCodesAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		item doneBulkItem
+		code string
+	}{
+		{
+			name: "list changes failed",
+			item: newDoneBulkFailed("", "list_changes_failed", "permission denied"),
+			code: "list_changes_failed",
+		},
+		{
+			name: "load change failed",
+			item: newDoneBulkFailed("bulk-load-failed", "load_change_failed", "parse error"),
+			code: "load_change_failed",
+		},
+		{
+			name: "change not active",
+			item: newDoneBulkSkipped("bulk-cancelled", string(model.ChangeStatusCancelled), "change_not_active"),
+			code: "change_not_active",
+		},
+		{
+			name: "not done ready",
+			item: newDoneBulkSkipped("bulk-not-ready", string(model.StateS2Execute), "not_done_ready"),
+			code: "not_done_ready",
+		},
+		{
+			name: "artifact reconcile failed",
+			item: newDoneBulkFailed("bulk-reconcile-failed", "artifact_reconcile_failed", "permission denied"),
+			code: "artifact_reconcile_failed",
+		},
+		{
+			name: "artifact validation failed",
+			item: newDoneBulkFailed("bulk-artifact-invalid", "artifact_validation_failed", "assurance.md missing"),
+			code: "artifact_validation_failed",
+		},
+		{
+			name: "lifecycle event write failed",
+			item: newDoneBulkFailed("bulk-event-failed", "lifecycle_event_write_failed", "permission denied"),
+			code: "lifecycle_event_write_failed",
+		},
+		{
+			name: "archive failed",
+			item: newDoneBulkFailed("bulk-archive-failed", "archive_failed", "rename failed"),
+			code: "archive_failed",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Len(t, tt.item.ReasonCodes, 1)
+			assert.Equal(t, tt.code, tt.item.ReasonCodes[0].Code)
+			assert.NotEqual(t, "unknown_reason_code", tt.item.ReasonCodes[0].Code)
+			step, ok := recoveryStepByCode(tt.item.ReasonCodes, tt.code)
+			require.Truef(t, ok, "%s must remain recovery-routable", tt.code)
+			assert.NotEmpty(t, step.Remediation)
+		})
+	}
+}
+
+func recoveryStepByCode(reasons []model.ReasonCode, code string) (model.RecoveryStep, bool) {
+	recovery := model.BuildRecovery(reasons)
+	if recovery == nil {
+		return model.RecoveryStep{}, false
+	}
+	for _, step := range recovery.Steps {
+		if step.Code == code {
+			return step, true
+		}
+	}
+	return model.RecoveryStep{}, false
 }
 
 func TestDoneRejectsMalformedConfigBeforeLockProtectedMutation(t *testing.T) {

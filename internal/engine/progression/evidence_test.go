@@ -1,6 +1,8 @@
 package progression
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,60 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidateChangeYamlR0ReturnsCanonicalManifestBlockers(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "missing manifest",
+			content: "",
+			want:    "manifest_missing",
+		},
+		{
+			name:    "parse invalid",
+			content: "slug: [",
+			want:    "manifest_parse_invalid",
+		},
+		{
+			name: "slug mismatch",
+			content: `slug: other-change
+base_ref: HEAD
+`,
+			want: "manifest_slug_mismatch",
+		},
+		{
+			name: "base ref missing",
+			content: `slug: expected-change
+`,
+			want: "manifest_base_ref_missing",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "change.yaml")
+			if tc.content != "" {
+				require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600))
+			}
+
+			ok, blockers := ValidateChangeYamlR0(path, "expected-change")
+			require.False(t, ok)
+			require.Equal(t, []string{"manifest_r0_invalid:" + tc.want}, blockers)
+
+			reasons := model.ReasonCodesFromSpecs(blockers)
+			require.Len(t, reasons, 1)
+			assert.Equal(t, "manifest_r0_invalid", reasons[0].Code)
+			assert.Equal(t, tc.want, reasons[0].Detail)
+		})
+	}
+}
 
 func TestEvaluateRequiredSkills_NoRegistry(t *testing.T) {
 	t.Parallel()

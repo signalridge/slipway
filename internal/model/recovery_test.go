@@ -109,9 +109,13 @@ func TestInScopeProducedBlockersResolveToCanonicalRecovery(t *testing.T) {
 	// that can reach an in-scope user surface before it is added to the canonical
 	// reason and remediation tables.
 	for _, spec := range inScopeProducedRecoverySpecs() {
+		producedCode, _, _ := strings.Cut(spec, ":")
+		producedCode = normalizeReasonCode(producedCode)
+		definition, hasCanonical := canonicalReasonDefinitions[producedCode]
+		require.Truef(t, hasCanonical, "produced blocker %q must have a canonical reason message", producedCode)
+
 		rc := ReasonCodeFromSpec(spec)
-		_, hasCanonical := canonicalReasonDefinitions[rc.Code]
-		assert.Truef(t, hasCanonical, "produced blocker %q must have a canonical reason message", rc.Code)
+		require.Equalf(t, producedCode, rc.Code, "produced blocker %q must not collapse to %q", spec, unknownReasonCode)
 
 		step, ok := recoveryStepFor(rc)
 		require.Truef(t, ok, "produced blocker %q must produce a recovery step", rc.Key())
@@ -119,7 +123,7 @@ func TestInScopeProducedBlockersResolveToCanonicalRecovery(t *testing.T) {
 		assert.NotEmptyf(t, strings.TrimSpace(step.Command), "produced blocker %q must produce a command", rc.Key())
 		assert.NotContainsf(t, step.Remediation, "{", "produced blocker %q remediation must not leak a placeholder", rc.Key())
 		assert.NotContainsf(t, step.Command, "{", "produced blocker %q command must not leak a placeholder", rc.Key())
-		assert.NotEqualf(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+		assert.NotEqualf(t, testHumanizeReasonCode(rc.Code), definition.Message,
 			"produced blocker %q must not render through humanize fallthrough", rc.Key())
 	}
 }
@@ -141,19 +145,27 @@ func inScopeProducedRecoverySpecs() []string {
 		"high_risk_check_missing:external_api_contracts.safety_baseline",
 		"high_risk_check_failed:external_api_contracts.safety_baseline",
 		"closeout_goal_verification_reuse_invalid:goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout",
+		"manifest_r0_invalid:manifest_missing",
+		"manifest_r0_invalid:manifest_parse_invalid",
+		"manifest_r0_invalid:manifest_slug_mismatch",
+		"manifest_r0_invalid:manifest_base_ref_missing",
 		"worktree_metadata_persist_failed:permission denied",
 	}
 }
 
 func recoveryRelevantCanonicalCodes() []string {
 	exact := map[string]bool{
+		"archive_failed":                           true,
 		"assurance_structure_invalid":              true,
 		"assurance_contract_missing":               true,
 		"assurance_contract_path_invalid":          true,
 		"assurance_contract_unreadable":            true,
 		"assurance_section_placeholder":            true,
 		"artifact_not_ready":                       true,
+		"artifact_reconcile_failed":                true,
 		"artifact_schema_missing":                  true,
+		"artifact_validation_failed":               true,
+		"change_not_active":                        true,
 		"closeout_assurance_attestation_missing":   true,
 		"closeout_goal_verification_reuse_invalid": true,
 		"dedicated_worktree_branch_mismatch":       true,
@@ -172,6 +184,9 @@ func recoveryRelevantCanonicalCodes() []string {
 		"intake_clarification_incomplete":          true,
 		"intake_confirmation_incomplete":           true,
 		"intake_substep_invalid":                   true,
+		"lifecycle_event_write_failed":             true,
+		"list_changes_failed":                      true,
+		"load_change_failed":                       true,
 		"manifest_r0_invalid":                      true,
 		"missing_discovery_evidence":               true,
 		"missing_required_artifact":                true,
@@ -179,6 +194,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"missing_worktree_branch":                  true,
 		"missing_worktree_path":                    true,
 		"non_pass_task":                            true,
+		"not_done_ready":                           true,
 		"preset_confirmation_required":             true,
 		"research_structure_invalid":               true,
 		"research_section_placeholder":             true,
@@ -186,6 +202,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"run_slipway_run_to_advance":               true,
 		"ship_gate_blocked":                        true,
 		"tasks_checklist_invalid_format":           true,
+		"unknown_reason_code":                      true,
 		"verification_evidence_missing":            true,
 		"worktree_metadata_persist_failed":         true,
 		"worktree_validation_error":                true,
@@ -425,7 +442,9 @@ func TestRecoveryTokensUseCanonicalMessages(t *testing.T) {
 	}
 	for _, spec := range specs {
 		rc := ReasonCodeFromSpec(spec)
-		assert.NotEqualf(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+		definition, ok := canonicalReasonDefinitions[rc.Code]
+		require.True(t, ok)
+		assert.NotEqualf(t, testHumanizeReasonCode(rc.Code), definition.Message,
 			"message for %q must be canonical, not the humanize fallthrough", spec)
 	}
 }
@@ -537,8 +556,10 @@ func TestCloseoutAttestationMissingResolvesToRecovery(t *testing.T) {
 		[]string{"final-closeout must record closeout:assurance_complete=pass on standard/strict"},
 		step.Details,
 		"the colon-bearing attestation token must stay intact in Details")
-	// Canonical message, not the humanizeReasonCode fallthrough.
-	assert.NotEqual(t, humanizeReasonCode(rc.Code), strings.TrimSuffix(rc.Message, ": "+rc.Detail),
+	// Canonical message, not the old humanize fallback.
+	definition, ok := canonicalReasonDefinitions[rc.Code]
+	require.True(t, ok)
+	assert.NotEqual(t, testHumanizeReasonCode(rc.Code), definition.Message,
 		"message must be the written canonical sentence")
 }
 
@@ -670,7 +691,8 @@ func TestMissingTargetFilesRecoveryAppliesToEveryTaskKind(t *testing.T) {
 	rc := NewReasonCode("plan_dimension_key_links_missing_target_files", "t-01")
 	step, ok := recoveryStepFor(rc)
 	require.True(t, ok)
-	assert.Equal(t, "A task is missing target files: t-01", rc.Message)
+	assert.Equal(t, "plan_dimension_key_links_missing_target_files", rc.Code)
+	assert.Equal(t, "t-01", rc.Detail)
 	assert.Contains(t, step.Remediation, "every task")
 	assert.NotContains(t, step.Remediation, "code task")
 }

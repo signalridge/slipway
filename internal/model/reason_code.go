@@ -35,14 +35,32 @@ type ReasonDefinition struct {
 	Message  string         `json:"message"`
 }
 
+const unknownReasonCode = "unknown_reason_code"
+
 var canonicalReasonDefinitions = map[string]ReasonDefinition{
+	"archive_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Bulk finalization could not archive a governed change",
+	},
 	"artifact_not_ready": {
 		Severity: ReasonSeverityError,
 		Message:  "Required governed artifacts are not ready",
 	},
+	"artifact_reconcile_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Done artifact reconciliation failed",
+	},
 	"artifact_schema_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The governed change is missing a frozen artifact schema",
+	},
+	"artifact_validation_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Done artifact validation failed",
+	},
+	"archived_lifecycle_event_scan_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Unable to list archived changes for lifecycle event health",
 	},
 	"assurance_structure_invalid": {
 		Severity: ReasonSeverityError,
@@ -71,6 +89,54 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"closeout_goal_verification_reuse_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Final-closeout cannot reuse the recorded goal-verification evidence",
+	},
+	"change_bundle_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Change bundle authority is unreadable",
+	},
+	"change_is_done": {
+		Severity: ReasonSeverityInfo,
+		Message:  "The governed change is already done",
+	},
+	"change_not_active": {
+		Severity: ReasonSeverityError,
+		Message:  "Bulk finalization skipped a non-active governed change",
+	},
+	"checkpoint_stale": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Active checkpoint has exceeded the stale threshold",
+	},
+	"checkpoint_task_missing_from_wave_plan": {
+		Severity: ReasonSeverityError,
+		Message:  "Checkpoint task is not present in the current wave plan",
+	},
+	"checkpoint_wave_index_drift": {
+		Severity: ReasonSeverityError,
+		Message:  "Checkpoint wave index does not match the current wave plan",
+	},
+	"codebase_map_freshness_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Repo-scoped codebase map is missing",
+	},
+	"codebase_map_freshness_partial": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Repo-scoped codebase map is partially populated",
+	},
+	"codebase_map_freshness_scaffold_only": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Repo-scoped codebase map is scaffold-only",
+	},
+	"codebase_map_freshness_stale": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Repo-scoped codebase map is stale",
+	},
+	"codebase_map_freshness_unknown": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Repo-scoped codebase map freshness is unknown",
+	},
+	"config_parse_failure": {
+		Severity: ReasonSeverityError,
+		Message:  "Config parsing failed",
 	},
 	"dedicated_worktree_branch_mismatch": {
 		Severity: ReasonSeverityError,
@@ -108,6 +174,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityWarning,
 		Message:  "Governed execution was interrupted",
 	},
+	"execution_summary_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Execution summary authority is unreadable",
+	},
+	"execution_verdict_fail": {
+		Severity: ReasonSeverityError,
+		Message:  "Execution verdict failed",
+	},
 	"governance_action_required": {
 		Severity: ReasonSeverityError,
 		Message:  "A required governance control must be satisfied before continuing",
@@ -127,6 +201,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"incomplete_execution_task": {
 		Severity: ReasonSeverityError,
 		Message:  "A planned execution task has no recorded passing evidence",
+	},
+	"intent_drift": {
+		Severity: ReasonSeverityError,
+		Message:  "Implementation intent drift was detected",
+	},
+	"invalid_blocker": {
+		Severity: ReasonSeverityError,
+		Message:  "A blocker token is invalid",
 	},
 	"invalid_pivot_kind": {
 		Severity: ReasonSeverityError,
@@ -148,6 +230,30 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The governed change manifest failed R0 validation",
 	},
+	"lifecycle_event_log_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Lifecycle event log is unreadable",
+	},
+	"lifecycle_event_scan_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Unable to list active changes for lifecycle event health",
+	},
+	"lifecycle_event_scan_skipped": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Skipped lifecycle event health because change authority is unreadable",
+	},
+	"lifecycle_event_write_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Bulk finalization could not record a lifecycle event",
+	},
+	"list_changes_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Bulk finalization could not list active changes",
+	},
+	"load_change_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Bulk finalization could not load a governed change",
+	},
 	"missing_discovery_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Required discovery evidence is missing",
@@ -159,6 +265,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"missing_task_evidence_for_run_summary": {
 		Severity: ReasonSeverityError,
 		Message:  "Task evidence is missing for the recorded run summary; rerun wave-orchestration to capture task evidence",
+	},
+	"missing_run_summary": {
+		Severity: ReasonSeverityError,
+		Message:  "The execution run summary is missing",
 	},
 	"missing_worktree_branch": {
 		Severity: ReasonSeverityError,
@@ -176,13 +286,37 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A governed task did not pass",
 	},
+	"multiple_active_changes": {
+		Severity: ReasonSeverityError,
+		Message:  "Multiple active changes are present",
+	},
+	"non_pass_wave": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed execution wave did not pass",
+	},
+	"not_done_ready": {
+		Severity: ReasonSeverityError,
+		Message:  "The governed change is not ready for finalization",
+	},
 	"orphaned_change_bundle": {
 		Severity: ReasonSeverityError,
 		Message:  "A governed bundle directory is missing its change.yaml authority",
 	},
+	"orphan_bundle_directory": {
+		Severity: ReasonSeverityError,
+		Message:  "Bundle directory exists without change.yaml",
+	},
+	"orphan_task_evidence": {
+		Severity: ReasonSeverityError,
+		Message:  "Orphan task evidence exists outside the current wave plan",
+	},
 	"stale_runtime_binding": {
 		Severity: ReasonSeverityError,
 		Message:  "A per-change runtime binding remains after its governed bundle was removed",
+	},
+	"pivot_required": {
+		Severity: ReasonSeverityError,
+		Message:  "A pivot is required before continuing",
 	},
 	"pivot_not_approved": {
 		Severity: ReasonSeverityError,
@@ -356,9 +490,29 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract is missing required target files",
 	},
+	"session_isolation_warning": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Session isolation warning detected in task evidence",
+	},
 	"ship_gate_blocked": {
 		Severity: ReasonSeverityError,
 		Message:  "The ship gate blocked finalization",
+	},
+	"skill_prompt_surface_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Governance skill points to a missing host skill surface",
+	},
+	"skill_prompt_surface_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Governance skill points to an unreadable host skill surface",
+	},
+	"skill_registry_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Governance skill registry is invalid",
+	},
+	"stale_checkpoint_state": {
+		Severity: ReasonSeverityWarning,
+		Message:  "Active checkpoint exists outside S2_EXECUTE",
 	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
@@ -400,9 +554,37 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The governed tasks checklist contains a duplicate task ID",
 	},
+	"task": {
+		Severity: ReasonSeverityError,
+		Message:  "A task-scoped execution blocker is present",
+	},
+	"task_blocker": {
+		Severity: ReasonSeverityError,
+		Message:  "A task-scoped wave blocker is present",
+	},
+	"task_blockers": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed task reported blockers",
+	},
+	"task_blockers_invalid_key": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed task blocker key is invalid",
+	},
+	"task_evidence_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Task evidence is invalid",
+	},
+	"task_evidence_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Task evidence is unreadable",
+	},
 	"tasks_plan_changed_since_task_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "The tasks plan changed after this task's evidence was captured; rerun wave-orchestration for the affected task",
+	},
+	unknownReasonCode: {
+		Severity: ReasonSeverityError,
+		Message:  "An unrecognized reason code was produced",
 	},
 	"verification_evidence_missing": {
 		Severity: ReasonSeverityError,
@@ -416,9 +598,73 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Task evidence was captured after the wave verification record; rerun wave-orchestration to refresh the wave record",
 	},
+	"wave_execution_blocked": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave execution is blocked",
+	},
+	"wave_execution_unavailable": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave execution is unavailable",
+	},
+	"wave_plan_drift": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave plan drift detected against tasks.md",
+	},
+	"wave_plan_load_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave plan authority could not be loaded",
+	},
 	"wave_plan_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The wave plan is missing; materialize the wave plan from tasks.md before wave execution",
+	},
+	"wave_plan_repair_blocked": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave plan repair is blocked",
+	},
+	"wave_plan_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave plan authority is unreadable",
+	},
+	"wave_run_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A planned wave has no recorded run evidence",
+	},
+	"wave_run_version_mismatch": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run evidence does not match the requested run version",
+	},
+	"wave_runs_incomplete": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run evidence is incomplete for the current wave plan",
+	},
+	"wave_runs_invalid_count": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run evidence count is invalid",
+	},
+	"wave_runs_load_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run evidence could not be loaded",
+	},
+	"wave_runs_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave runs are missing for the latest execution summary",
+	},
+	"wave_runs_unreadable": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run evidence is unreadable",
+	},
+	"wave_task_linkage_mismatch": {
+		Severity: ReasonSeverityError,
+		Message:  "Wave run task linkage does not match wave-plan.yaml",
+	},
+	"workspace_scope_config_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Bound worktree scope config is missing",
+	},
+	"workspace_scope_marker_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Bound worktree scope marker is missing",
 	},
 	"worktree_validation_error": {
 		Severity: ReasonSeverityError,
@@ -430,19 +676,24 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 }
 
+func IsCanonicalReasonCode(code string) bool {
+	_, ok := canonicalReasonDefinitions[normalizeReasonCode(strings.TrimSpace(code))]
+	return ok
+}
+
 func NewReasonCode(code, detail string) ReasonCode {
-	code = normalizeReasonCode(code)
+	rawCode := strings.TrimSpace(code)
+	code = normalizeReasonCode(rawCode)
 	detail = strings.TrimSpace(detail)
 	definition, ok := canonicalReasonDefinitions[code]
+	if !ok {
+		return newUnknownReasonCode(rawCode, detail)
+	}
 	reason := ReasonCode{
 		Code:     code,
-		Severity: ReasonSeverityError,
-		Message:  humanizeReasonCode(code),
+		Severity: definition.Severity,
+		Message:  definition.Message,
 		Detail:   detail,
-	}
-	if ok {
-		reason.Severity = definition.Severity
-		reason.Message = definition.Message
 	}
 	if detail != "" {
 		reason.Message = reason.Message + ": " + detail
@@ -483,29 +734,48 @@ func (r *ReasonCode) Normalize() {
 	if r == nil {
 		return
 	}
-	r.Code = normalizeReasonCode(r.Code)
+	rawCode := strings.TrimSpace(r.Code)
+	r.Code = normalizeReasonCode(rawCode)
 	r.Detail = strings.TrimSpace(r.Detail)
 	r.Message = strings.TrimSpace(r.Message)
-	if definition, ok := canonicalReasonDefinitions[r.Code]; ok {
-		if !r.Severity.IsValid() {
-			r.Severity = definition.Severity
-		}
-		if r.Message == "" {
-			r.Message = definition.Message
-			if r.Detail != "" {
-				r.Message = r.Message + ": " + r.Detail
-			}
-		}
+	definition, ok := canonicalReasonDefinitions[r.Code]
+	if !ok {
+		unknown := newUnknownReasonCode(rawCode, r.Detail)
+		*r = unknown
+		return
 	}
 	if !r.Severity.IsValid() {
-		r.Severity = ReasonSeverityError
+		r.Severity = definition.Severity
 	}
 	if r.Message == "" {
-		r.Message = humanizeReasonCode(r.Code)
+		r.Message = definition.Message
 		if r.Detail != "" {
 			r.Message = r.Message + ": " + r.Detail
 		}
 	}
+}
+
+func newUnknownReasonCode(code, detail string) ReasonCode {
+	code = strings.TrimSpace(code)
+	detail = strings.TrimSpace(detail)
+	if code == "" {
+		code = "empty"
+	}
+	unknownDetail := code
+	if detail != "" {
+		unknownDetail += ": " + detail
+	}
+	definition := canonicalReasonDefinitions[unknownReasonCode]
+	reason := ReasonCode{
+		Code:     unknownReasonCode,
+		Severity: definition.Severity,
+		Message:  definition.Message,
+		Detail:   unknownDetail,
+	}
+	if reason.Detail != "" {
+		reason.Message += ": " + reason.Detail
+	}
+	return reason
 }
 
 func (r ReasonCode) Validate() error {
@@ -614,17 +884,4 @@ func normalizeReasonCode(input string) string {
 		}
 	}
 	return strings.Trim(b.String(), "_")
-}
-
-func humanizeReasonCode(code string) string {
-	code = normalizeReasonCode(code)
-	if code == "" {
-		return "Unspecified workflow blocker"
-	}
-	parts := strings.Fields(strings.ReplaceAll(code, "_", " "))
-	if len(parts) == 0 {
-		return "Workflow blocker"
-	}
-	parts[0] = strings.ToUpper(parts[0][:1]) + parts[0][1:]
-	return strings.Join(parts, " ")
 }

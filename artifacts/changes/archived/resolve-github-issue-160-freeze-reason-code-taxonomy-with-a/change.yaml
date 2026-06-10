@@ -1,0 +1,38 @@
+version: 1
+slug: resolve-github-issue-160-freeze-reason-code-taxonomy-with-a
+description: 'Resolve GitHub issue #160: freeze reason-code taxonomy with a snapshot test and add a test lint that bans assertions against ReasonCode/JSON message prose.'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-10T02:14:42.826451Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-160-freeze-reason-code-taxonomy-with-a
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 8f5085ff7ff3e044fce51395c1ece1d1b4b6e5032ce51a33d3b8ae881059df27
+        updated_at: 2026-06-10T10:48:19.670052469Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: bf5c3c32f223e83c1219f80994a009215f575a7d66dcf0fadb4ed43449b1584b
+        updated_at: 2026-06-10T02:17:21.2619038Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 548baf01a403daeb675fed1a39b718616b59a7effdc4b02eaf214e1e3e36bc30
+        updated_at: 2026-06-10T02:20:17.696919529Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 3a3b96b4f892bd5f45e2560fa9545a8a74b0a3b91f6a8a93a89265daf9801b06
+        updated_at: 2026-06-10T10:02:11.772902351Z

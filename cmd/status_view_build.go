@@ -251,10 +251,26 @@ func statusWaveExecutionIssues(err error) ([]model.ReasonCode, []string) {
 		if len(cliErr.Reasons) > 0 {
 			return append([]model.ReasonCode(nil), cliErr.Reasons...), diagnostics
 		}
-		return []model.ReasonCode{model.NewReasonCode(cliErr.ErrorCode, cliErr.Message)}, diagnostics
+		return []model.ReasonCode{statusReasonFromCLIError(cliErr)}, diagnostics
 	}
 
 	return []model.ReasonCode{model.NewReasonCode("wave_execution_unavailable", err.Error())}, diagnostics
+}
+
+func statusReasonFromCLIError(cliErr *CLIError) model.ReasonCode {
+	code := strings.TrimSpace(cliErr.ErrorCode)
+	detail := strings.TrimSpace(cliErr.Message)
+	if model.IsCanonicalReasonCode(code) {
+		return model.NewReasonCode(code, detail)
+	}
+	if code != "" {
+		if detail != "" {
+			detail = code + ": " + detail
+		} else {
+			detail = code
+		}
+	}
+	return model.NewReasonCode("wave_execution_unavailable", detail)
 }
 
 // governedSourceStateFile returns the display path for the authoritative

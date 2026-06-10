@@ -715,7 +715,7 @@ overall_verdict: fail
 non_pass_tasks:
   - task-b
 open_blockers:
-  - code: task_non_pass
+  - code: non_pass_task
     severity: error
     message: "Task did not pass: task-b"
     detail: task-b
@@ -723,18 +723,19 @@ tasks:
   - task_id: task-b
     verdict: fail
     blockers:
-      - code: lint_failed
+      - code: required_skill_missing
         severity: error
-        message: "Lint failed"
+        message: "Required governance skill evidence is missing"
+        detail: plan-audit
 `), 0o644))
 
 	loaded, err := LoadExecutionSummary(root, "demo")
 	require.NoError(t, err)
 	require.Len(t, loaded.OpenBlockers, 1)
-	assert.Equal(t, "task_non_pass", loaded.OpenBlockers[0].Code)
+	assert.Equal(t, "non_pass_task", loaded.OpenBlockers[0].Code)
 	require.Len(t, loaded.Tasks, 1)
 	require.Len(t, loaded.Tasks[0].Blockers, 1)
-	assert.Equal(t, "lint_failed", loaded.Tasks[0].Blockers[0].Code)
+	assert.Equal(t, "required_skill_missing", loaded.Tasks[0].Blockers[0].Code)
 }
 
 func TestExecutionSummaryReadyAllowsSummaryLevelBlockers(t *testing.T) {

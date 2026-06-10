@@ -114,7 +114,6 @@ func TestResolveExplicitChangeRejectsArchivedSlugWithConcreteDiagnostic(t *testi
 	assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
 	assert.Equal(t, true, cliErr.Details["archived"])
 	assert.Contains(t, fmt.Sprint(cliErr.Details["archive_path"]), filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml")))
-	assert.Contains(t, cliErr.Message, slug)
 	assert.Contains(t, cliErr.Remediation, "archived")
 }
 
@@ -254,6 +253,58 @@ func TestGovernanceReadinessErrorCodeRecognizesVerificationLoadError(t *testing.
 		Err:  fmt.Errorf("parse verification plan-audit: broken"),
 	}
 	assert.Equal(t, "verification_load_failed", governanceReadinessErrorCode(err))
+}
+
+func TestStatusWaveExecutionIssuesPreserveCanonicalCLIErrorCodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		code string
+	}{
+		{name: "wave plan load failed", code: "wave_plan_load_failed"},
+		{name: "wave runs load failed", code: "wave_runs_load_failed"},
+		{name: "wave runs invalid count", code: "wave_runs_invalid_count"},
+		{name: "wave run version mismatch", code: "wave_run_version_mismatch"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			reasons, diagnostics := statusWaveExecutionIssues(newStateIntegrityError(
+				tt.code,
+				"wave execution artifact error",
+				"Run `slipway repair`.",
+				"status-wave",
+				nil,
+			))
+
+			require.Len(t, reasons, 1)
+			assert.Equal(t, tt.code, reasons[0].Code)
+			assert.NotEqual(t, "unknown_reason_code", reasons[0].Code)
+			assert.NotEmpty(t, diagnostics)
+		})
+	}
+}
+
+func TestStatusWaveExecutionIssuesWrapNonReasonCLIErrorCodes(t *testing.T) {
+	t.Parallel()
+
+	reasons, diagnostics := statusWaveExecutionIssues(newPreconditionError(
+		"change_bound_to_other_worktree",
+		"active change is bound to another worktree",
+		"Use --change.",
+		"",
+		nil,
+	))
+
+	require.Len(t, reasons, 1)
+	assert.Equal(t, "wave_execution_unavailable", reasons[0].Code)
+	assert.Contains(t, reasons[0].Detail, "change_bound_to_other_worktree")
+	assert.NotEqual(t, "unknown_reason_code", reasons[0].Code)
+	assert.NotEmpty(t, diagnostics)
 }
 
 func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChange(t *testing.T) {
