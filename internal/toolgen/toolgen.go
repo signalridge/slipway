@@ -197,8 +197,8 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime evidence for governed execution", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE with a materialized wave plan."}},
+		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_EXECUTE with a materialized wave plan.", "`skill` requires an active governed change; run-summary-bound skills also require execution-summary.yaml."}},
 	// Diagnostics (5)
 	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--preview] [--json]",

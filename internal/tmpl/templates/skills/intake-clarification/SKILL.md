@@ -21,6 +21,19 @@ over-scoping.
 Use `slipway next --json` for the current state and governed bundle path, then
 read `intent.md`.
 
+### Disk-Handoff Contract
+For bulky intake artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The host must inspect the written
+  files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
+
 Carry this scope posture while reading:
 - surface the unspoken assumption before the next question
 - prefer one well-targeted question over scattered batches
@@ -71,16 +84,17 @@ Once scope is clear:
 3. Confirm it names at least one out-of-scope item and keeps unresolved technical unknowns under `## Open Questions`.
 4. <HARD-GATE>Wait for explicit user confirmation before writing the approved summary.</HARD-GATE>
 
-### 6. Write Verification
-```yaml
-# Write to: artifacts/changes/{slug}/verification/intake-clarification.yaml
-verdict: pass
-blockers: []
-timestamp: "<ISO-8601-UTC>"
-run_version: 0
-references: []
-notes: |
-  <verification notes>
+### 6. Record Verification
+Write bulky clarification notes to disk, then record the verdict through the CLI
+so Slipway owns the timestamp, `run_version`, freshness inputs, and digest
+stamp. Do not hand-edit `verification/intake-clarification.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill intake-clarification \
+  --verdict pass \
+  --reference "intake:pass" \
+  --notes-file artifacts/changes/{slug}/verification/intake-clarification-notes.md
 ```
 
 ### 7. Advance

@@ -53,6 +53,19 @@ Populated is not the same as relevant. For a `partial` map, also inspect
 Use `slipway-coding-discipline` as the execution-shape bar: plans should stay
 simple, goal-scoped, and sliced for surgical implementation.
 
+## Disk-Handoff Contract
+For bulky audit artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies or codebase-map documents into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The host must inspect the written
+  files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
+
 ## Author Substance First
 The engine owns each plan artifact's structure; you own its substance. Author the
 real plan artifacts in schema dependency order: `requirements.md` first,
@@ -143,16 +156,17 @@ Audit tasks as execution units, not prose:
 - for guardrail-domain work, require a RED test plan before execution
 - keep non-goals explicit, including scope and rollout boundaries
 
-## Write Verification
-```yaml
-# Write to: artifacts/changes/{slug}/verification/plan-audit.yaml
-verdict: pass
-blockers: []
-timestamp: "<ISO-8601-UTC>"
-run_version: 0
-references: []
-notes: |
-  <verification notes>
+## Record Verification
+Write bulky audit notes to disk, then record the verdict through the CLI so
+Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
+Do not hand-edit `verification/plan-audit.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill plan-audit \
+  --verdict pass \
+  --reference "plan-audit:pass" \
+  --notes-file artifacts/changes/{slug}/verification/plan-audit-notes.md
 ```
 
 ## Present and Advance

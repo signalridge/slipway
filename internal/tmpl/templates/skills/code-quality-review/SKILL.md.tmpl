@@ -37,13 +37,26 @@ verification. Use fresh context; do not carry assumptions from Stage 1.
 Run `slipway next --json`. Read `verification/spec-compliance-review.yaml` and
 verify it has `verdict: pass` with empty `blockers` (this per-skill file — NOT
 `execution-summary.yaml` — is the authority for the prior Stage 1 verdict). Read
-`verification/execution-summary.yaml` only for the current `run_summary_version`
-(the value your verification's `run_version` must equal). Read
+`verification/execution-summary.yaml` only for the current `run_summary_version`;
+`slipway evidence skill` will stamp the verification record with that value. Read
 `next_skill.review_context.required_implementation_layers` for required review
 tokens and the top-level `confirmation_requirement` object for stop boundaries.
 Those fields are the source of truth for this handoff.
 Use `slipway-coding-discipline` as the baseline review posture for simplicity,
 small diffs, and goal-driven execution.
+
+## Disk-Handoff Contract
+For bulky review artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies, diffs, or command output into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The review host must inspect the
+  written files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
 
 ## Required Checks
 ### Code Quality
@@ -87,21 +100,21 @@ Do not use `layer:QUALITY=pass` as a gate-satisfying substitute. It may be a
 prose category in notes, but governance gates consume the exact `IR*` layer
 tokens.
 
-## Write Verification
-```yaml
-# Write to: artifacts/changes/{slug}/verification/code-quality-review.yaml
-verdict: pass
-blockers: []
-timestamp: "<ISO-8601-UTC>"
-run_version: <run_summary_version from verification/execution-summary.yaml>  # must equal the current execution-summary run_summary_version, not a literal 1
-references:
-  - "layer:IR1=pass"
-  - "layer:IR3=pass" # include only when review_context requires IR3
-  - "toolchain_compat:pass" # include when dependency/toolchain files changed
-notes: |
-  Gaps (code_to_artifact): <code patterns not reflected in artifacts>
-  Gaps (artifact_to_code): <artifact expectations not met by code>
+## Record Verification
+Write bulky review notes to disk, then record the verdict through the CLI so
+Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
+Do not hand-edit `verification/code-quality-review.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill code-quality-review \
+  --verdict pass \
+  --reference "layer:IR1=pass" \
+  --notes-file artifacts/changes/{slug}/verification/code-quality-review-notes.md
 ```
+
+Add `--reference "toolchain_compat:pass"` when dependency, manifest, lockfile,
+or generated tool-surface changes required compatibility verification.
 
 The `notes` field SHOULD include gap analysis. Empty gaps indicate full
 cross-artifact consistency.

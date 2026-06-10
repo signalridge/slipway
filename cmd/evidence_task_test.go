@@ -93,6 +93,136 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 	})
 }
 
+func TestEvidenceSkillRecordsCLIStampedVerificationAndDigest(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writePassingExecutionSummary(t, root, slug, 2, "t-01")
+		writePassingWaveEvidence(t, root, slug, 2)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		notesPath := filepath.Join(root, "review-notes.md")
+		require.NoError(t, os.WriteFile(notesPath, []byte("review notes from disk\n"), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", "pass",
+			"--reference", "layer:R0=pass",
+			"--reference", "scope_contract:pass",
+			"--notes-file", "review-notes.md",
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.Skill)
+		assert.Equal(t, 2, view.RunVersion)
+		assert.True(t, view.Recorded)
+		assert.True(t, view.Stamped)
+		assert.Contains(t, view.Path, "verification/"+progression.SkillSpecComplianceReview+".yaml")
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillSpecComplianceReview)
+		require.NoError(t, err)
+		assert.Equal(t, model.VerificationVerdictPass, rec.Verdict)
+		assert.Equal(t, 2, rec.RunVersion)
+		assert.False(t, rec.Timestamp.IsZero())
+		assert.Equal(t, "review notes from disk", rec.Notes)
+		assert.Equal(t, []string{"layer:R0=pass", "scope_contract:pass"}, rec.References)
+
+		digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
+		require.NoError(t, err)
+		require.NotNil(t, digests)
+		assert.Contains(t, digests.Skills, progression.SkillSpecComplianceReview)
+	})
+}
+
+func TestEvidenceSkillRejectsUnknownSkillWithoutWritingEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--skill", "../escape",
+			"--verdict", "pass",
+		})
+		err := cmd.Execute()
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_invalid", cliErr.ErrorCode)
+
+		_, statErr := os.Stat(state.VerificationFilePath(root, slug, "../escape"))
+		require.Error(t, statErr)
+	})
+}
+
+func TestEvidenceSkillRejectsRunSummaryBoundSkillWithoutExecutionSummary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "skill evidence command")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", "pass",
+		})
+		err = cmd.Execute()
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_run_summary_missing", cliErr.ErrorCode)
+	})
+}
+
+func TestEvidenceSkillRejectsWrongWorkflowStateWithoutWritingEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS2Execute
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", "pass",
+		})
+		err := cmd.Execute()
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
+
+		_, statErr := os.Stat(state.VerificationFilePath(root, slug, progression.SkillSpecComplianceReview))
+		require.Error(t, statErr)
+	})
+}
+
 func TestEvidenceTaskRejectsUnsafeTaskID(t *testing.T) {
 	t.Parallel()
 

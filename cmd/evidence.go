@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -25,12 +26,209 @@ type evidenceTaskView struct {
 	FreshnessInputs   model.ExecutionTaskFreshnessInputs `json:"freshness_inputs"`
 }
 
+type evidenceSkillView struct {
+	Slug       string   `json:"slug"`
+	Skill      string   `json:"skill"`
+	RunVersion int      `json:"run_version"`
+	Path       string   `json:"path"`
+	Recorded   bool     `json:"recorded"`
+	Stamped    bool     `json:"stamped"`
+	References []string `json:"references,omitempty"`
+}
+
 func makeEvidenceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "evidence",
 		Short: desc("evidence"),
 	}
 	cmd.AddCommand(makeEvidenceTaskCmd())
+	cmd.AddCommand(makeEvidenceSkillCmd())
+	return cmd
+}
+
+func makeEvidenceSkillCmd() *cobra.Command {
+	var (
+		jsonOutput bool
+		changeSlug string
+		skillName  string
+		verdictRaw string
+		references []string
+		blockers   []string
+		notes      string
+		notesFile  string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "skill",
+		Short: "Record CLI-stamped governance skill verification evidence",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			root, err := projectRootFromCommand(cmd)
+			if err != nil {
+				return err
+			}
+			ref, err := resolveActiveChangeRef(root, changeSlug)
+			if err != nil {
+				return err
+			}
+
+			return withChangeStateLock(root, ref.Slug, "evidence skill", func() error {
+				change, err := loadActiveChange(
+					root,
+					ref.Slug,
+					"cannot record skill evidence for governed status %q",
+					"Skill evidence can only be recorded for an active governed change.",
+				)
+				if err != nil {
+					return err
+				}
+
+				skillName = strings.TrimSpace(skillName)
+				def, err := validateEvidenceSkillName(root, skillName)
+				if err != nil {
+					return err
+				}
+				if err := validateEvidenceSkillStage(change, def); err != nil {
+					return err
+				}
+
+				verdict := strings.TrimSpace(verdictRaw)
+				switch verdict {
+				case model.VerificationVerdictPass, model.VerificationVerdictFail:
+				case "":
+					return newInvalidUsageError(
+						"evidence_skill_verdict_required",
+						"--verdict is required",
+						"Pass pass or fail.",
+						nil,
+					)
+				default:
+					return newInvalidUsageError(
+						"evidence_skill_verdict_invalid",
+						fmt.Sprintf("invalid skill verdict: %q", verdict),
+						"Pass pass or fail.",
+						map[string]any{"verdict": verdict},
+					)
+				}
+
+				blockerCodes := model.ReasonCodesFromSpecs(blockers)
+				for i, blocker := range blockerCodes {
+					if err := blocker.Validate(); err != nil {
+						return newInvalidUsageError(
+							"evidence_skill_blocker_invalid",
+							fmt.Sprintf("blocker %d is invalid: %v", i, err),
+							"Pass blockers as code or code:detail values.",
+							nil,
+						)
+					}
+				}
+				if verdict == model.VerificationVerdictPass && len(blockerCodes) > 0 {
+					return newInvalidUsageError(
+						"evidence_skill_pass_with_blockers",
+						"pass verdict cannot include blockers",
+						"Use --verdict fail when blockers are present, or remove --blocker values.",
+						nil,
+					)
+				}
+
+				notesText, err := resolveEvidenceSkillNotes(root, notes, notesFile)
+				if err != nil {
+					return err
+				}
+				runVersion, err := evidenceSkillRunVersion(root, change, def)
+				if err != nil {
+					return err
+				}
+				references = stringutil.UniqueSorted(trimNonEmptyStrings(references))
+				record := model.VerificationRecord{
+					Verdict:    verdict,
+					Blockers:   blockerCodes,
+					Timestamp:  time.Now().UTC(),
+					RunVersion: runVersion,
+					References: references,
+					Notes:      notesText,
+				}
+				path, err := state.SaveVerification(root, change.Slug, skillName, record)
+				if err != nil {
+					return newStateIntegrityError(
+						"evidence_skill_write_failed",
+						fmt.Sprintf("failed to write %s verification evidence: %v", skillName, err),
+						"Fix the verification record inputs and rerun `slipway evidence skill`.",
+						change.Slug,
+						map[string]any{"skill": skillName},
+					)
+				}
+
+				stamped := false
+				if record.IsPassing() {
+					summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+					if err != nil {
+						return newStateIntegrityError(
+							"evidence_skill_execution_summary_load_failed",
+							fmt.Sprintf("failed to load execution summary for %q: %v", change.Slug, err),
+							"Repair execution-summary.yaml or record non-passing skill evidence.",
+							change.Slug,
+							nil,
+						)
+					}
+					if err := progression.StampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
+						return newStateIntegrityError(
+							"evidence_skill_digest_stamp_failed",
+							fmt.Sprintf("failed to stamp %s evidence digest: %v", skillName, err),
+							"Resolve missing or stale digest inputs before recording passing skill evidence.",
+							change.Slug,
+							map[string]any{"skill": skillName},
+						)
+					}
+					stamped = true
+				}
+
+				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+					Command:     "evidence skill",
+					EventType:   "skill.evidence_recorded",
+					Action:      "recorded",
+					Result:      verdict,
+					BeforeState: change.CurrentState,
+					AfterState:  change.CurrentState,
+					SkillID:     skillName,
+					Diagnostics: []string{
+						fmt.Sprintf("skill=%s", skillName),
+						fmt.Sprintf("run_version=%d", runVersion),
+						"path=" + state.DisplayPath(root, path),
+					},
+				}); err != nil {
+					return err
+				}
+
+				view := evidenceSkillView{
+					Slug:       change.Slug,
+					Skill:      skillName,
+					RunVersion: runVersion,
+					Path:       state.DisplayPath(root, path),
+					Recorded:   true,
+					Stamped:    stamped,
+					References: references,
+				}
+				if jsonOutput {
+					return encodeJSONResponse(cmd, view)
+				}
+
+				writer := newFormatWriter(cmd.OutOrStdout())
+				writer.Writef("Skill evidence recorded: %s\n", view.Path)
+				return writer.Err()
+			})
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
+	cmd.Flags().StringVar(&skillName, "skill", "", "Governance skill name, for example spec-compliance-review (required)")
+	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Skill verdict: pass or fail (required)")
+	cmd.Flags().StringArrayVar(&references, "reference", nil, "Verification reference token; may be repeated")
+	cmd.Flags().StringArrayVar(&blockers, "blocker", nil, "Verification blocker as code or code:detail; may be repeated")
+	cmd.Flags().StringVar(&notes, "notes", "", "Bounded verification notes")
+	cmd.Flags().StringVar(&notesFile, "notes-file", "", "Workspace-relative file containing verification notes")
+
 	return cmd
 }
 
@@ -314,6 +512,145 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "Optional executor session identifier")
 
 	return cmd
+}
+
+func validateEvidenceSkillName(root, skillName string) (skill.Definition, error) {
+	if skillName == "" {
+		return skill.Definition{}, newInvalidUsageError(
+			"evidence_skill_required",
+			"--skill is required",
+			"Pass a governance skill name such as plan-audit or spec-compliance-review.",
+			nil,
+		)
+	}
+	if strings.ContainsAny(skillName, `/\`) || skillName == "." || skillName == ".." {
+		return skill.Definition{}, newInvalidUsageError(
+			"evidence_skill_invalid",
+			fmt.Sprintf("skill must be a safe governance skill name: %q", skillName),
+			"Pass a governance skill name without path separators.",
+			map[string]any{"skill": skillName},
+		)
+	}
+	registry, err := skill.LoadGovernanceRegistry(root)
+	if err != nil {
+		return skill.Definition{}, newStateIntegrityError(
+			"evidence_skill_registry_load_failed",
+			fmt.Sprintf("failed to load governance skill registry: %v", err),
+			"Repair generated governance skill metadata and retry.",
+			"",
+			nil,
+		)
+	}
+	def, ok := skill.LookupDefinitionInRegistry(registry, skillName)
+	if !ok {
+		return skill.Definition{}, newInvalidUsageError(
+			"evidence_skill_unknown",
+			fmt.Sprintf("unknown governance skill %q", skillName),
+			"Use a governance skill registered in the active Slipway skill registry.",
+			map[string]any{"skill": skillName},
+		)
+	}
+	return def, nil
+}
+
+func evidenceSkillRunVersion(root string, change model.Change, def skill.Definition) (int, error) {
+	if !def.RunSummaryBound {
+		return 0, nil
+	}
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	if err != nil {
+		return 0, newStateIntegrityError(
+			"evidence_skill_execution_summary_load_failed",
+			fmt.Sprintf("failed to load execution summary for %q: %v", change.Slug, err),
+			"Repair execution-summary.yaml before recording run-summary-bound skill evidence.",
+			change.Slug,
+			nil,
+		)
+	}
+	if summary == nil || summary.RunSummaryVersion < 1 {
+		return 0, newInvalidUsageError(
+			"evidence_skill_run_summary_missing",
+			fmt.Sprintf("%s evidence requires execution-summary.yaml with run_summary_version >= 1", def.Name),
+			"Run wave execution first so Slipway can bind this verification to the current execution summary.",
+			map[string]any{"skill": def.Name},
+		)
+	}
+	return summary.RunSummaryVersion, nil
+}
+
+func validateEvidenceSkillStage(change model.Change, def skill.Definition) error {
+	if change.CurrentState != def.State {
+		return newInvalidUsageError(
+			"evidence_skill_wrong_state",
+			fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
+			fmt.Sprintf("Run the lifecycle to %s before recording %s evidence.", def.State, def.Name),
+			map[string]any{
+				"skill":    def.Name,
+				"expected": def.State,
+				"current":  change.CurrentState,
+			},
+		)
+	}
+	if def.State == model.StateS1Plan && def.PlanSubStep != model.PlanSubStepNone && change.PlanSubStep != def.PlanSubStep {
+		return newInvalidUsageError(
+			"evidence_skill_wrong_plan_substep",
+			fmt.Sprintf("%s evidence requires S1_PLAN/%s, current substep: %s", def.Name, def.PlanSubStep, change.PlanSubStep),
+			fmt.Sprintf("Run the lifecycle to S1_PLAN/%s before recording %s evidence.", def.PlanSubStep, def.Name),
+			map[string]any{
+				"skill":    def.Name,
+				"expected": def.PlanSubStep,
+				"current":  change.PlanSubStep,
+			},
+		)
+	}
+	return nil
+}
+
+func resolveEvidenceSkillNotes(root, notes, notesFile string) (string, error) {
+	notes = strings.TrimSpace(notes)
+	notesFile = strings.TrimSpace(notesFile)
+	if notes != "" && notesFile != "" {
+		return "", newInvalidUsageError(
+			"evidence_skill_notes_conflict",
+			"pass either --notes or --notes-file, not both",
+			"Use --notes for a bounded inline summary or --notes-file for a disk handoff.",
+			nil,
+		)
+	}
+	if notesFile == "" {
+		return notes, nil
+	}
+	if err := validateEvidencePath(notesFile); err != nil {
+		return "", newInvalidUsageError(
+			"evidence_skill_notes_file_invalid",
+			err.Error(),
+			"Pass a workspace-relative notes file path without absolute paths, empty segments, or parent traversal.",
+			nil,
+		)
+	}
+	path := filepath.Join(root, filepath.FromSlash(model.NormalizePublicPath(notesFile)))
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is validated as workspace-relative before reading.
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_skill_notes_file_read_failed",
+			fmt.Sprintf("failed to read notes file %q: %v", notesFile, err),
+			"Write the delegated review or verification notes to the referenced workspace-relative path and retry.",
+			"",
+			map[string]any{"path": notesFile},
+		)
+	}
+	return strings.TrimSpace(string(raw)), nil
+}
+
+func trimNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func validateEvidenceTaskID(taskID string) error {
