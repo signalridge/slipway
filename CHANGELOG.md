@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0](https://github.com/signalridge/slipway/compare/v0.16.0...v0.17.0) (2026-06-10)
+
+
+### Features
+
+* **context:** add thin-host disk handoff evidence ([#176](https://github.com/signalridge/slipway/issues/176)) ([8850d12](https://github.com/signalridge/slipway/commit/8850d12c5160d5c9b53a91e9cbff0453d8b51793))
+* **verify:** add uncheckable trace coverage status ([#174](https://github.com/signalridge/slipway/issues/174)) ([e20aac5](https://github.com/signalridge/slipway/commit/e20aac52b76fa33ad08ec2672fcaafd270f7eb3e))
+
 ## [0.16.0](https://github.com/signalridge/slipway/compare/v0.15.0...v0.16.0) (2026-06-10)
 
 
