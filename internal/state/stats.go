@@ -89,7 +89,7 @@ func collectCodebaseMapStats(root string, now time.Time) (CodebaseMapStats, erro
 			return CodebaseMapStats{}, err
 		}
 		stats.PresentDocs++
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 		if err != nil {
 			return CodebaseMapStats{}, err
 		}

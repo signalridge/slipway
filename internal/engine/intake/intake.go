@@ -2,9 +2,9 @@ package intake
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/stringutil"
 )
@@ -62,12 +62,12 @@ func ExtractSummary(doc string) string {
 
 // SeedIntentFile applies document-derived content to a scaffolded intent.md.
 func SeedIntentFile(intentPath, docContent string, doc DocSeed) error {
-	data, err := os.ReadFile(intentPath)
+	data, err := fsutil.ReadFileNoSymlink(intentPath)
 	if err != nil {
 		return fmt.Errorf("intent.md not found after scaffold: %w — this should not happen", err)
 	}
 	updated := SeedIntentContent(string(data), docContent, doc)
-	return os.WriteFile(intentPath, []byte(updated), 0o644)
+	return fsutil.WriteFileNoSymlink(intentPath, []byte(updated), 0o644)
 }
 
 // SeedIntentContent mutates the scaffolded intent.md content deterministically.

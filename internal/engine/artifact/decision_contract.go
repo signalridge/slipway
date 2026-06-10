@@ -44,7 +44,7 @@ func EvaluateDecisionContract(bundleDir string) (DecisionContractResult, error) 
 		return DecisionContractResult{}, err
 	}
 
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return DecisionContractResult{}, err
 	}

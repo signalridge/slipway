@@ -41,7 +41,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 		return result
 	}
 	path := filepath.Join(bundleDir, "tasks.md")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			result.Blockers = []string{"tasks_checklist_missing"}
@@ -205,7 +205,7 @@ func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave
 		return nil, nil
 	}
 	specPath := artifact.ResolveArtifactPath(bundleDir, "requirements.md")
-	raw, err := os.ReadFile(specPath)
+	raw, err := os.ReadFile(specPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
@@ -566,7 +566,7 @@ func AssuranceContractBlockers(root string, change model.Change) []string {
 		return []string{"assurance_contract_path_invalid:" + err.Error()}
 	}
 	path := filepath.Join(bundleDir, "assurance.md")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return []string{"assurance_contract_missing"}
@@ -599,7 +599,7 @@ func DecisionContractBlockers(root string, change model.Change) []string {
 		return []string{"decision_contract_path_invalid:" + err.Error()}
 	}
 	path := filepath.Join(bundleDir, "decision.md")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil

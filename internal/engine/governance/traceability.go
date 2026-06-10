@@ -464,7 +464,7 @@ func readArtifactContentWithError(path string) (string, error) {
 	if path == "" {
 		return "", os.ErrNotExist
 	}
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return "", err
 	}

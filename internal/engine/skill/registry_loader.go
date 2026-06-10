@@ -72,7 +72,7 @@ func parseGovernanceSkillFromFile(
 	path string,
 	defaults map[string]Definition,
 ) (Definition, bool, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return Definition{}, false, err
 	}

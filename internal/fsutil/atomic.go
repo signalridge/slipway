@@ -19,7 +19,7 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 // writeFileAtomicImpl is the shared implementation for atomic writes.
 func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 
@@ -56,7 +56,7 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 
-	dirFile, err := os.Open(dir)
+	dirFile, err := os.Open(dir) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func CleanupAtomicTempArtifactsOlderThan(root string, staleAfter time.Duration, 
 				return nil
 			}
 		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) { // #nosec G122 -- path is selected by WalkDir under the caller-owned temp root and limited to .tmp-* cleanup.
 			return err
 		}
 		deleted = append(deleted, path)

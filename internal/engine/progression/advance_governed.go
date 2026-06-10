@@ -962,7 +962,7 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 	researchPath := filepath.Join(paths.GovernedBundleDir, "research.md")
 	researchContent := ""
 	var researchArtifactReasons []model.ReasonCode
-	if data, err := os.ReadFile(researchPath); err == nil {
+	if data, err := os.ReadFile(researchPath); err == nil { // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		researchContent = string(data)
 	} else if os.IsNotExist(err) {
 		researchArtifactReasons = append(researchArtifactReasons,

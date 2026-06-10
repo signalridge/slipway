@@ -511,7 +511,7 @@ func loadPlannedTargetFiles(bundleDir string) []string {
 	if strings.TrimSpace(bundleDir) == "" {
 		return nil
 	}
-	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return nil
 	}

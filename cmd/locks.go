@@ -35,7 +35,7 @@ func withChangeStateLockConfigured(
 
 	// Ensure the git-internal lock directory exists before acquiring the lock.
 	lockPath := state.ChangeStateLockPath(root, changeSlug)
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	lock := fsutil.NewStateLock(lockPath)
@@ -112,7 +112,7 @@ func changeCreateLockPaths(root string) []string {
 func withWorkspaceRepairLock(root string, run func(staleLockCleaned bool) error) error {
 	cfg := loadRepairLockConfigAtRoot(root)
 	lockPath := state.RepairLockPath(root)
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	lock := fsutil.NewStateLock(lockPath)

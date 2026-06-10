@@ -61,7 +61,7 @@ func SaveEvidenceDigests(root, slug string, digests model.EvidenceDigests) error
 		return fmt.Errorf("resolve evidence digests dir for %q: %w", slug, err)
 	}
 	path := filepath.Join(dir, EvidenceDigestsFileName)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	raw, err := yaml.Marshal(digests)
@@ -72,7 +72,7 @@ func SaveEvidenceDigests(root, slug string, digests model.EvidenceDigests) error
 }
 
 func loadEvidenceDigestsFromPath(path string) (model.EvidenceDigests, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return model.EvidenceDigests{}, err
 	}

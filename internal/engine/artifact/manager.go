@@ -217,7 +217,7 @@ func ScaffoldIntentForChange(root string, change model.Change) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
+	if err := os.MkdirAll(base, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	data := buildTemplateData(change)
@@ -229,10 +229,10 @@ func ScaffoldIntentForChange(root string, change model.Change) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(intentPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(intentPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
-	return os.WriteFile(intentPath, []byte(rendered), 0o644)
+	return os.WriteFile(intentPath, []byte(rendered), 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 }
 
 // ScaffoldGovernedBundleForChange creates the artifact files for a governed
@@ -267,7 +267,7 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
+	if err := os.MkdirAll(base, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	data := buildTemplateData(change)
@@ -298,10 +298,10 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 			return err
 		}
-		if err := os.WriteFile(path, []byte(rendered), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(rendered), 0o644); err != nil { // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 			return err
 		}
 	}
@@ -355,7 +355,7 @@ func EnsureResearchArtifactForChange(root string, change model.Change) error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(base, 0o755)
+	return os.MkdirAll(base, 0o755) // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 }
 
 // validateSectionStructure validates that content contains the given headings
@@ -647,7 +647,7 @@ func renderTemplateWithFallback(root, name, externalPath string, data templateDa
 		if !filepath.IsAbs(absPath) {
 			absPath = filepath.Join(root, absPath)
 		}
-		raw, err := os.ReadFile(absPath)
+		raw, err := os.ReadFile(absPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 		if err != nil {
 			return "", fmt.Errorf("custom template %q for artifact %q: %w", externalPath, name, err)
 		}

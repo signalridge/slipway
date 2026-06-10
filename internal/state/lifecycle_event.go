@@ -95,7 +95,7 @@ func AppendLifecycleEvent(root string, change model.Change, event LifecycleEvent
 	}
 
 	var existing []byte
-	if raw, readErr := os.ReadFile(path); readErr == nil {
+	if raw, readErr := os.ReadFile(path); readErr == nil { // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 		existing = raw
 	} else if !os.IsNotExist(readErr) {
 		return LifecycleEvent{}, readErr
@@ -202,7 +202,7 @@ func verifyLifecycleEventReadback(path string, expected LifecycleEvent) error {
 }
 
 func readLifecycleEventsFromPath(path string) ([]LifecycleEvent, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

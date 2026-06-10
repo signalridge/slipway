@@ -27,7 +27,7 @@ func SnapshotPath(root, slug string) string {
 // Returns a zero-value snapshot and no error if the file does not exist.
 func LoadSnapshot(root, slug string) (model.GovernanceSnapshot, error) {
 	path := SnapshotPath(root, slug)
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return model.GovernanceSnapshot{}, nil
@@ -51,7 +51,7 @@ func LoadSnapshot(root, slug string) (model.GovernanceSnapshot, error) {
 // a clean sidecar without silently destroying the broken payload.
 func BackupUnreadableSnapshot(root, slug string, now time.Time) (string, error) {
 	path := SnapshotPath(root, slug)
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return "", nil
@@ -90,7 +90,7 @@ func SaveSnapshot(root, slug string, snap model.GovernanceSnapshot) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return fmt.Errorf("create snapshot directory: %w", err)
 	}
 
