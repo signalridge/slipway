@@ -17,10 +17,9 @@ func TestWrongSurfaceDiscoveryFlagsFailAtParseTime(t *testing.T) {
 		initTestWorkspace(t, root)
 
 		cases := []struct {
-			args    []string
-			wantMsg string
+			args []string
 		}{
-			{args: []string{"review", "--list-views"}, wantMsg: "unknown flag: --list-views"},
+			{args: []string{"review", "--list-views"}},
 		}
 
 		for _, tc := range cases {
@@ -31,7 +30,7 @@ func TestWrongSurfaceDiscoveryFlagsFailAtParseTime(t *testing.T) {
 			var payload CLIError
 			require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
 			assert.Equal(t, categoryInvalidUsage, payload.Category)
-			assert.Contains(t, payload.Message, tc.wantMsg)
+			assert.Equal(t, "invalid_usage", payload.ErrorCode)
 		}
 	})
 }
@@ -58,7 +57,7 @@ func TestLegacyRawModeFlagFailsAtParseTime(t *testing.T) {
 			var payload CLIError
 			require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
 			assert.Equal(t, categoryInvalidUsage, payload.Category)
-			assert.Contains(t, payload.Message, "unknown flag: --mode")
+			assert.Equal(t, "invalid_usage", payload.ErrorCode)
 		}
 	})
 }

@@ -101,7 +101,6 @@ func TestEmitHydrateBlocksMissingReferenceFailsDeterministically(t *testing.T) {
 	if cliErr.ErrorCode != "hydrate_reference_missing" {
 		t.Fatalf("unexpected error code %q", cliErr.ErrorCode)
 	}
-	assert.Contains(t, cliErr.Message, "built-in reference set")
 	assert.Contains(t, cliErr.Remediation, "Fix the hydrate reference declaration")
 	assert.Equal(t, map[string]any{"key": "security-review/this-file-does-not-exist.md"}, cliErr.Details)
 }
@@ -390,7 +389,5 @@ func TestLoadHydrateBodyFailsWhenEmbeddedReferenceIsMissing(t *testing.T) {
 	if cliErr == nil || cliErr.ErrorCode != "hydrate_reference_missing" {
 		t.Fatalf("expected hydrate_reference_missing, got %v", err)
 	}
-	assert.Contains(t, cliErr.Message, "built-in reference set")
-	assert.NotContains(t, cliErr.Message, "skills/security-review/references")
 	assert.Equal(t, map[string]any{"key": "security-review/this-file-does-not-exist.md"}, cliErr.Details)
 }

@@ -2738,7 +2738,6 @@ func TestRunResumeUnavailableExplainsLifecycleBoundary(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "resume_unavailable", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Message, "current_state=S3_REVIEW")
 		assert.Equal(t, model.StateS3Review, cliErr.Details["current_state"])
 		assert.Contains(t, cliErr.Remediation, "S2_EXECUTE")
 	})

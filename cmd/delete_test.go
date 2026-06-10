@@ -110,7 +110,10 @@ func assertOrphanStatusDeleteRecovery(t *testing.T, payload map[string]any, slug
 func assertOrphanErrorDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
 	t.Helper()
 	assert.Equal(t, "orphaned_change_bundle", payload["error_code"])
-	assert.Contains(t, payload["message"], slug)
+	assert.Equal(t, slug, payload["slug"])
+	details, ok := payload["details"].(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, details["orphaned_change_bundles"], slug)
 	assert.Contains(t, payload["remediation"], "slipway delete --change "+slug)
 
 	recovery, ok := payload["recovery"].(map[string]any)
@@ -137,7 +140,10 @@ func assertStaleRuntimeStatusDeleteRecovery(t *testing.T, payload map[string]any
 func assertStaleRuntimeErrorDeleteRecovery(t *testing.T, payload map[string]any, slug string) {
 	t.Helper()
 	assert.Equal(t, "stale_runtime_binding", payload["error_code"])
-	assert.Contains(t, payload["message"], slug)
+	assert.Equal(t, slug, payload["slug"])
+	details, ok := payload["details"].(map[string]any)
+	require.True(t, ok)
+	assert.Contains(t, details["stale_runtime_bindings"], slug)
 	assert.Contains(t, payload["remediation"], "slipway delete --change "+slug)
 
 	recovery, ok := payload["recovery"].(map[string]any)

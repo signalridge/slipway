@@ -92,13 +92,13 @@ func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkill(t *test
 		assert.Equal(t, categoryStateIntegrity, payload.Category)
 		assert.Equal(t, exitCodeStateIntegrity, payload.ExitCode)
 		assert.Equal(t, "skill_registry_invalid", payload.ErrorCode)
-		assert.Contains(t, payload.Message, "evaluate next skill evidence")
-		assert.Contains(t, payload.Message, "parse skill frontmatter")
+		assert.Equal(t, "evaluate next skill evidence", payload.Details["operation"])
+		assert.NotEmpty(t, payload.Details["path"])
 		assert.Contains(t, payload.Remediation, "repair")
 	})
 }
 
-func assertMalformedGovernanceSkillCommandFailsStateIntegrity(t *testing.T, command, description, wantMessage string) {
+func assertMalformedGovernanceSkillCommandFailsStateIntegrity(t *testing.T, command, description, wantOperation string) {
 	t.Helper()
 
 	root := t.TempDir()
@@ -127,36 +127,36 @@ func assertMalformedGovernanceSkillCommandFailsStateIntegrity(t *testing.T, comm
 		assert.Equal(t, categoryStateIntegrity, payload.Category)
 		assert.Equal(t, exitCodeStateIntegrity, payload.ExitCode)
 		assert.Equal(t, "skill_registry_invalid", payload.ErrorCode)
-		assert.Contains(t, payload.Message, wantMessage)
-		assert.Contains(t, payload.Message, "parse skill frontmatter")
+		assert.Equal(t, wantOperation, payload.Details["operation"])
+		assert.NotEmpty(t, payload.Details["path"])
 		assert.Contains(t, payload.Remediation, "repair")
 	})
 }
 
 func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkillStateCommands(t *testing.T) {
 	tests := []struct {
-		name        string
-		command     string
-		description string
-		wantMessage string
+		name          string
+		command       string
+		description   string
+		wantOperation string
 	}{
 		{
-			name:        "review",
-			command:     "review",
-			description: "review malformed governance skill through review",
-			wantMessage: "evaluate review prerequisites",
+			name:          "review",
+			command:       "review",
+			description:   "review malformed governance skill through review",
+			wantOperation: "evaluate review prerequisites",
 		},
 		{
-			name:        "validate",
-			command:     "validate",
-			description: "review malformed governance skill through validate",
-			wantMessage: "validate readiness",
+			name:          "validate",
+			command:       "validate",
+			description:   "review malformed governance skill through validate",
+			wantOperation: "validate readiness",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertMalformedGovernanceSkillCommandFailsStateIntegrity(t, tt.command, tt.description, tt.wantMessage)
+			assertMalformedGovernanceSkillCommandFailsStateIntegrity(t, tt.command, tt.description, tt.wantOperation)
 		})
 	}
 }

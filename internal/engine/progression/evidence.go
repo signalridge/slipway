@@ -207,19 +207,23 @@ func ParseHighRiskCheckReference(reference string) (checkID string, pass bool, o
 func ValidateChangeYamlR0(changeYamlPath string, slug string) (bool, []string) {
 	raw, err := os.ReadFile(changeYamlPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
-		return false, []string{"manifest_missing"}
+		return false, []string{manifestR0Blocker("manifest_missing")}
 	}
 	var change model.Change
 	if err := yaml.Unmarshal(raw, &change); err != nil {
-		return false, []string{"manifest_parse_invalid"}
+		return false, []string{manifestR0Blocker("manifest_parse_invalid")}
 	}
 
 	reasons := []string{}
 	if strings.TrimSpace(change.Slug) != strings.TrimSpace(slug) {
-		reasons = append(reasons, "manifest_slug_mismatch")
+		reasons = append(reasons, manifestR0Blocker("manifest_slug_mismatch"))
 	}
 	if change.BaseRef == "" {
-		reasons = append(reasons, "manifest_base_ref_missing")
+		reasons = append(reasons, manifestR0Blocker("manifest_base_ref_missing"))
 	}
 	return len(reasons) == 0, stringutil.UniqueSorted(reasons)
+}
+
+func manifestR0Blocker(reason string) string {
+	return "manifest_r0_invalid:" + strings.TrimSpace(reason)
 }

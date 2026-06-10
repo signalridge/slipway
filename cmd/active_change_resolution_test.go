@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -31,8 +32,8 @@ func TestResolveActiveChangeRefReportsBoundElsewhereFromRoot(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
 		assert.Equal(t, categoryPrecondition, cliErr.Category)
-		assert.Contains(t, cliErr.Message, "bound-change")
-		assert.Contains(t, cliErr.Message, normalizedWorktreePath)
+		assert.Contains(t, fmt.Sprint(cliErr.Details["bound_changes"]), "bound-change")
+		assert.Contains(t, fmt.Sprint(cliErr.Details["bound_changes"]), normalizedWorktreePath)
 		assert.Contains(t, cliErr.Remediation, "--change bound-change")
 		assert.Contains(t, cliErr.Remediation, normalizedWorktreePath)
 	})

@@ -84,6 +84,26 @@ Missing task evidence blockers include the runtime task evidence directory and
 the required flat JSON fields:
 `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`.
 
+Reason-code `code` values are the stable machine contract for blockers,
+recovery routing, JSON consumers, and generated skills. The canonical enum is
+the key set in `internal/model/reason_code.go`'s
+`canonicalReasonDefinitions`, and `internal/model/reason_code_contract_test.go`
+freezes that set and each code's severity with snapshot tests. Treat `message`
+as presentation prose: reason/error payload tests and skill logic must assert
+stable fields such as `code`, `detail`, `error_code`, `category`, `exit_code`,
+or structured details instead of matching message text. The repo-local AST lint
+enforces that rule for syntactically recognizable reason/error payload surfaces
+(`ReasonCode`,
+`CLIError`, `HealthFinding`, known constructors/helpers, and blocker/reason
+collections); other fields named `Message` remain review-owned unless they
+become part of that reason/error payload surface. If a producer emits an
+unrecognized token, normalization fails closed to `unknown_reason_code` and
+preserves the original token in `detail` so the producer can be fixed and added
+to the canonical enum. Bridges from CLI errors to reason payloads must only
+preserve canonical reason codes directly; non-reason-domain `error_code` values
+must be carried in the detail of a canonical wrapper reason instead of being
+normalized as standalone reason codes.
+
 Review handoffs use exact layer tokens. Spec-compliance evidence records
 `layer:R0=pass` and, when the guardrail domain requires it, `layer:R3=pass`.
 Code-quality evidence records `layer:IR1=pass` and, when required,
