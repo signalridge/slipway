@@ -42,7 +42,9 @@ and the top-level `confirmation_requirement` object for stop boundaries. Those
 fields are the source of truth for this handoff.
 Apply the shared requirements checklist from `references/checklist-quality.md`
 (shipped next to this skill). Use the attached `spec-trace` checklist to
-enumerate the forward and reverse trace edges you must verify.
+enumerate the forward and reverse trace edges you must verify. Any
+`ambiguous` or `uncheckable` spec-trace row must be recorded with a reason and
+must not be treated as full bidirectional alignment.
 Use `slipway-coding-discipline` as a posture check when judging whether the
 implemented change stayed simple, surgical, and goal-driven.
 
@@ -59,6 +61,9 @@ implemented change stayed simple, surgical, and goal-driven.
   code gap or require the requirement prose to be tightened to match the built
   behavior. "Related tests exist" does not close this gap.
 - no spec requirement is silently dropped or deferred without explicit tracking
+- no uncertain mapping is silently accepted: unresolved `ambiguous` or
+  `uncheckable` spec-trace rows must remain coverage gaps and block or request
+  changes until resolved
 
 ### Reverse Alignment (Code -> Spec)
 - no undocumented features or behaviors
@@ -149,3 +154,5 @@ After confirmation, advance with `slipway run`; the engine re-resolves S3_REVIEW
 - Locked decisions are violated.
 - Claimed-complete work is still stubbed, placeholder-only, or assertion-free.
 - Requirement-named negative/error paths lack tests or runtime evidence.
+- Unresolved `ambiguous` or `uncheckable` trace rows remain in the spec-trace
+  matrix; they must not be treated as full bidirectional alignment.

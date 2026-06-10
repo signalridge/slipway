@@ -1,19 +1,12 @@
 # Integrations
 
-- External APIs:
-  - GitHub issue #114 is the external problem statement and acceptance context.
-- Infrastructure bindings:
-  - Generated skill surfaces target multiple agent runtimes; Codex, Claude,
-    Cursor, Gemini, and other supported tools may expose different subagent
-    mechanics.
-- Datastores and queues:
-  - Not applicable.
-- File formats and protocols:
-  - Governance verification artifacts are YAML files under
-    `artifacts/changes/<slug>/verification/`.
-  - Runtime task evidence is recorded through `slipway evidence task` and
-    referenced from wave verification.
-- Notes:
-  - Runtime portability is part of the design constraint: instructions should
-    describe delegated verifier/executor context without requiring a
-    Claude-only API name as the only satisfy path.
+- No external network, database, or service integration is expected.
+- User-facing integration surface:
+  - Generated/exported skill prompts for `spec-trace` and
+    `spec-compliance-review`.
+  - Governed review flows that embed spec-trace during spec-compliance review.
+- Internal integration surface:
+  - Template rendering (`internal/tmpl`) and tool generation (`internal/toolgen`)
+    consume authored skill files.
+  - Capability registry bindings in `internal/engine/capability/registry_b2.go:72`
+    identify spec-trace as a host-embedded checklist for spec-compliance review.

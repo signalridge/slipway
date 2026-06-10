@@ -11,12 +11,25 @@
 ## Coverage matrix
 Produce one row per mapping, direction explicit. `status` is `covered`
 (spec item realized / hunk approved), `skipped` (spec item intentionally
-deferred with justification), or `drift` (hunk has no plan item).
+deferred with justification), `drift` (hunk has no plan item), `ambiguous`
+(available evidence points to multiple plausible mappings), or `uncheckable`
+(the reviewer cannot verify the mapping from available evidence).
 
-| direction | spec_item / diff_hunk | realized_by / plan_item | status |
-|-----------|------------------------|--------------------------|--------|
-| spec-to-code | "<quoted plan line>" | "<path:line or test>" | covered / skipped |
-| code-to-spec | "<path:line-range>" | "<quoted plan line>" | covered / drift |
+Rows marked `ambiguous` or `uncheckable` must include a reason and must be
+listed as coverage gaps, not counted as pass evidence. Use `ambiguous` when the
+evidence conflicts or maps to more than one plausible target. Use `uncheckable`
+when the reviewer cannot determine the mapping from accessible artifacts, code,
+or test output.
+
+| direction | spec_item / diff_hunk | realized_by / plan_item | status | reason |
+|-----------|------------------------|--------------------------|--------|--------|
+| spec-to-code | "<quoted plan line>" | "<path:line or test>" | covered / skipped / ambiguous / uncheckable | "<required for skipped, ambiguous, or uncheckable>" |
+| code-to-spec | "<path:line-range>" | "<quoted plan line>" | covered / drift / ambiguous / uncheckable | "<required for drift, ambiguous, or uncheckable>" |
+
+## Coverage gaps
+List every skipped, drift, ambiguous, or uncheckable row that is not full pass
+coverage. `ambiguous` and `uncheckable` gaps must stay visible until resolved;
+they are never silently promoted to `covered`.
 
 The matrix is the reviewable primary artifact; prose summaries substitute
 for it only when no rows would change after write-up.

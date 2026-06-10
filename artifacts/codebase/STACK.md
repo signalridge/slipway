@@ -1,7 +1,10 @@
 # Stack
 
-- Languages: Go, Python
-- Frameworks and runtimes: Go module github.com/signalridge/slipway
-- Build and test tooling: go build ./...; go test ./...
-- Key dependencies: github.com/davecgh/go-spew, github.com/gofrs/flock, github.com/google/uuid, github.com/inconshreveable/mousetrap, github.com/kr/text, github.com/pmezard/go-difflib
-- Notes: go.mod declares Go 1.26.3
+- Language: Go.
+- Template/content layer: markdown skill files and Go template rendering under
+  `internal/tmpl`.
+- Test framework: Go `testing` plus `testify` assertions already used in
+  `internal/tmpl/templates_test.go`.
+- Verification commands expected for this change: targeted `go test` for
+  `internal/tmpl`, broader Go tests, `go test -count=1 ./...`, `go build ./...`,
+  `go vet ./...`, `git diff --check`, and Slipway governance validation.

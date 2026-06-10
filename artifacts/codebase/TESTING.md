@@ -1,37 +1,21 @@
 # Testing
 
-Re-authored for change `resolve-github-issue-137-add-go-source-sast-ci-and-triage-th`
-(issue #137). This map scopes to SAST workflow coverage and gosec baseline
-triage.
-
-- Test layout:
-  - Go unit tests live in package-local `*_test.go` files.
-  - Workflow changes are YAML-only and should be validated by static inspection,
-    current GitHub Actions conventions, and branch/PR CI after push.
-- Baseline security scans:
-  - Changed-package baseline command used during research:
-    `go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -fmt=json -out=/tmp/slipway-issue137-gosec-changed-packages.json ./cmd ./internal/state ./internal/model ./internal/toolgen ./internal/tmpl`
-  - Current changed-package result: 72 findings across `G122`, `G703`, `G304`,
-    `G301`, `G204`, and `G306`.
-  - Full-repo visibility command used during research:
-    `go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -fmt=json -out=/tmp/slipway-issue137-gosec-full.json ./...`
-  - Current full-repo result: 136 findings. User clarified that all current
-    findings must be resolved in this change, so final gosec verification is
-    full-repository.
-- Verification commands expected before closeout:
-  - `go test -count=1 ./...`
-  - `go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -fmt=json -out=<path> ./...`
-  - `go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -fmt=sarif -out=<path> ./...`
-  - `go run . validate --json`
-  - `go run . health --governance --json`
-- Coverage hotspots:
-  - `cmd/done.go` and `internal/state/lifecycle.go` for symlink/WalkDir
-    high-severity findings.
-  - `cmd/pivot_execution.go` and `internal/engine/intake/intake.go` for gosec
-    taint/path write findings in full-repo scans.
-  - `.github/workflows/security.yaml` for gosec/CodeQL job configuration and
-    SARIF/code-scanning upload behavior.
-- Residual risk:
-  - Local CodeQL analysis is not normally runnable without the GitHub CodeQL
-    action environment; verification is workflow-structure inspection plus CI
-    execution after push.
+- Existing coverage:
+  - `internal/tmpl/templates_test.go:1041` verifies review-template guidance for
+    negative-path evidence.
+  - `internal/tmpl/templates_test.go:1063` verifies spec-compliance-review and
+    spec-trace contract wording around literal clause coverage.
+  - `internal/tmpl/templates_test.go:1082` verifies pending-decision guidance.
+  - `internal/toolgen/toolgen_test.go:1718` verifies generated skill typed parts
+    include the expected spec-trace checklist section.
+- Gap for Issue #157:
+  - No focused regression currently asserts `ambiguous` or `uncheckable` item
+    statuses, required reasons, or coverage-gap accounting in spec-trace.
+  - No focused regression currently asserts spec-compliance-review blocks pass
+    claims when unresolved ambiguity remains.
+- Planned verification:
+  - Add a targeted failing test in `internal/tmpl/templates_test.go` before
+    template edits.
+  - Run the targeted test after edits.
+  - Run broader relevant tests (`go test ./internal/tmpl ./internal/toolgen`),
+    then full repository verification before closeout.
