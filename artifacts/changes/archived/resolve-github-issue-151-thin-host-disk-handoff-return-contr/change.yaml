@@ -1,0 +1,31 @@
+version: 1
+slug: resolve-github-issue-151-thin-host-disk-handoff-return-contr
+description: 'Resolve GitHub issue #151: thin-host disk-handoff return contract for heavy stages, with CLI-owned ingest/stamping and measurable host-context reduction'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-10T12:12:57.572742Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/resolve-github-issue-151-thin-host-disk-handoff-return-contr
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: eab34f21d3961cc63e144ae93437572cb3314b24891660b0d9d3716fb8865efa
+        updated_at: 2026-06-10T12:14:49.067438119Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 55568889893f77ad97b3554bd612b5209b24b56cbe15a0d24caa4997e70becb5
+        updated_at: 2026-06-10T12:55:41.10454884Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: ba7d23393e0a727662ee75e0ad7848a4b6bcd5c16cc238a3f9bee65107d872ba
+        updated_at: 2026-06-10T13:09:07.112578668Z

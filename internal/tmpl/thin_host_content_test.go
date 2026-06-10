@@ -91,6 +91,77 @@ func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	assert.Contains(t, flatRef, "relevance/staleness self-check")
 }
 
+func TestRemainingHeavyHostsUseDiskHandoffContract(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:test",
+		"Description": "test",
+	}
+	hosts := []struct {
+		name    string
+		content string
+		err     error
+	}{
+		{
+			name:    "research-orchestration",
+			content: mustContent(t, "skills/research-orchestration/SKILL.md"),
+		},
+		{
+			name:    "plan-audit",
+			content: mustContent(t, "skills/plan-audit/SKILL.md"),
+		},
+		{
+			name:    "intake-clarification",
+			content: mustContent(t, "skills/intake-clarification/SKILL.md"),
+		},
+		{
+			name:    "spec-compliance-review",
+			content: mustRender(t, "skills/spec-compliance-review/SKILL.md.tmpl", data),
+		},
+		{
+			name:    "code-quality-review",
+			content: mustRender(t, "skills/code-quality-review/SKILL.md.tmpl", data),
+		},
+	}
+
+	for _, host := range hosts {
+		t.Run(host.name, func(t *testing.T) {
+			t.Parallel()
+
+			flat := thinHostFlatten(host.content)
+			assert.Contains(t, flat, "Disk-Handoff Contract")
+			assert.Contains(t, flat, "writes bulky artifacts directly to disk under `artifacts/changes/<slug>/`")
+			assert.Contains(t, flat, "returns only a short confirmation")
+			assert.Contains(t, flat, "confirmation is a claim, not evidence")
+			assert.Contains(t, flat, "Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict stamping")
+			assert.Contains(t, flat, "required-reading paths")
+			assert.Contains(t, flat, "record the verdict through `slipway evidence skill`")
+			assert.Contains(t, flat, "Do not hand-edit")
+			assert.NotContains(t, flat, `timestamp: "<ISO-8601-UTC>"`)
+			assert.NotContains(t, flat, "run_version: 0")
+			assert.NotContains(t, flat, "run_version: <run_summary_version")
+		})
+	}
+}
+
+func mustContent(t *testing.T, name string) string {
+	t.Helper()
+
+	content, err := Content(name)
+	require.NoError(t, err)
+	return content
+}
+
+func mustRender(t *testing.T, name string, data map[string]string) string {
+	t.Helper()
+
+	content, err := Render(name, data)
+	require.NoError(t, err)
+	return content
+}
+
 func thinHostFlatten(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
