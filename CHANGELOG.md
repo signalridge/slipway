@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0](https://github.com/signalridge/slipway/compare/v0.15.0...v0.16.0) (2026-06-10)
+
+
+### Features
+
+* **hooks:** add context pressure PostToolUse hook ([#171](https://github.com/signalridge/slipway/issues/171)) ([021f053](https://github.com/signalridge/slipway/commit/021f05352d768f5da13f302eab8735ba759b1e23))
+
+
+### Bug Fixes
+
+* **model:** freeze reason-code taxonomy ([#173](https://github.com/signalridge/slipway/issues/173)) ([f88b63d](https://github.com/signalridge/slipway/commit/f88b63d1edcc4057ab253a795e22b444acd0981a))
+
 ## [0.15.0](https://github.com/signalridge/slipway/compare/v0.14.0...v0.15.0) (2026-06-10)
 
 
