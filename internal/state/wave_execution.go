@@ -41,7 +41,7 @@ func LoadWavePlanForChange(root string, change model.Change) (model.WavePlan, er
 }
 
 func loadWavePlanFromPath(path string) (model.WavePlan, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return model.WavePlan{}, err
 	}
@@ -79,7 +79,7 @@ func SaveWavePlan(root, slug string, plan model.WavePlan) error {
 		return fmt.Errorf("resolve wave plan dir for %q: %w", slug, err)
 	}
 	path := filepath.Join(dir, WavePlanFileName)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	raw, err := yaml.Marshal(plan)
@@ -208,7 +208,7 @@ func currentTaskPlanHashesAndNodes(root string, change model.Change) (currentTas
 		return currentTaskPlanHashes{}, nil, err
 	}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
-	raw, err := os.ReadFile(tasksPath)
+	raw, err := os.ReadFile(tasksPath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return currentTaskPlanHashes{}, nil, err
 	}
@@ -259,7 +259,7 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 	slices.Sort(paths)
 	runs := make([]model.WaveRun, 0, len(paths))
 	for _, path := range paths {
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +396,7 @@ func SaveWaveRuns(root, slug string, runVersion int, runs []model.WaveRun) error
 	if len(runs) == 0 {
 		return nil
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	for _, run := range runs {

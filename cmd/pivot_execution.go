@@ -11,6 +11,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 )
@@ -149,7 +150,7 @@ func clearApprovedSummaryForRescope(root string, change model.Change) error {
 		return err
 	}
 	intentPath := filepath.Join(paths.GovernedBundleDir, "intent.md")
-	data, err := os.ReadFile(intentPath)
+	data, err := fsutil.ReadFileNoSymlink(intentPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // no intent.md to clear
@@ -180,7 +181,7 @@ func clearApprovedSummaryForRescope(root string, change model.Change) error {
 		"\n<!-- Cleared by rescope pivot — re-confirm after amendment -->\n" +
 		content[sectionEnd:]
 
-	return os.WriteFile(intentPath, []byte(cleared), 0o644)
+	return fsutil.WriteFileNoSymlink(intentPath, []byte(cleared), 0o644)
 }
 
 func deactivateGovernanceControlsForPivot(root string, change model.Change, bundleDir string) error {

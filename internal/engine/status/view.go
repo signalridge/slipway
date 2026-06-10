@@ -254,7 +254,7 @@ func checklistProgress(plan wave.TaskPlan) (completed, total int) {
 }
 
 func readTaskPlanFromBundle(bundleDir string) (wave.TaskPlan, error) {
-	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return wave.TaskPlan{}, err
 	}

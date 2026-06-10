@@ -205,7 +205,7 @@ func ParseHighRiskCheckReference(reference string) (checkID string, pass bool, o
 // ValidateChangeYamlR0 validates the change.yaml in the governed bundle
 // against the expected slug.
 func ValidateChangeYamlR0(changeYamlPath string, slug string) (bool, []string) {
-	raw, err := os.ReadFile(changeYamlPath)
+	raw, err := os.ReadFile(changeYamlPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return false, []string{"manifest_missing"}
 	}

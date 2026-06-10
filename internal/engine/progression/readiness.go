@@ -864,7 +864,7 @@ func generatedOnlyLocalStateChangedFile(workspaceRoot, file string) bool {
 }
 
 func generatedOnlyGitIgnoreChange(workspaceRoot string) bool {
-	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore"))
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore")) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return false
 	}
@@ -884,7 +884,7 @@ func generatedOnlyProjectConfigChange(workspaceRoot string) bool {
 	if _, ok := gitHeadFileContent(workspaceRoot, fsutil.ProjectConfigFileName); ok {
 		return false
 	}
-	raw, err := os.ReadFile(filepath.Join(workspaceRoot, fsutil.ProjectConfigFileName))
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, fsutil.ProjectConfigFileName)) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return false
 	}
@@ -904,7 +904,7 @@ func generatedOnlyProjectConfigChange(workspaceRoot string) bool {
 }
 
 func scopeContractGeneratedOnlyGitIgnore(workspaceRoot string) bool {
-	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore"))
+	raw, err := os.ReadFile(filepath.Join(workspaceRoot, ".gitignore")) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return false
 	}
@@ -917,7 +917,7 @@ func normalizeLineEndings(content string) string {
 }
 
 func gitHeadFileContent(workspaceRoot, file string) (string, bool) {
-	cmd := exec.Command("git", "-C", workspaceRoot, "show", "HEAD:"+filepath.ToSlash(file))
+	cmd := exec.Command("git", "-C", workspaceRoot, "show", "HEAD:"+filepath.ToSlash(file)) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.Output()
 	if err != nil {
 		return "", false
@@ -926,7 +926,7 @@ func gitHeadFileContent(workspaceRoot, file string) (string, bool) {
 }
 
 func gitNameOnly(workspaceRoot string, args ...string) []string {
-	cmd := exec.Command("git", append([]string{"-C", workspaceRoot}, args...)...)
+	cmd := exec.Command("git", append([]string{"-C", workspaceRoot}, args...)...) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.Output()
 	if err != nil {
 		return nil

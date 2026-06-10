@@ -9,7 +9,7 @@ import (
 
 const (
 	autoPassReasonNoBlockingReviewObligations  = "no_blocking_review_obligations"
-	autoPassReasonNoBlockingReleaseObligations = "no_blocking_release_obligations"
+	autoPassReasonNoBlockingReleaseObligations = "no_blocking_release_obligations" // #nosec G101 -- auto-pass reason constants are lifecycle status strings, not credentials.
 )
 
 func attemptAutoPassSequence(

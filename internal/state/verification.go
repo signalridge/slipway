@@ -307,7 +307,7 @@ func decodeVerificationStrict(raw []byte, rec *model.VerificationRecord) error {
 // loadVerificationFromPath reads and validates a verification record from a
 // specific file path, avoiding redundant directory resolution.
 func loadVerificationFromPath(path, skillName string) (model.VerificationRecord, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return model.VerificationRecord{}, err
 	}

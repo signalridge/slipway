@@ -292,7 +292,7 @@ func readIntentContent(root string, change model.Change) (string, error) {
 		return "", err
 	}
 	intentPath := filepath.Join(paths.GovernedBundleDir, "intent.md")
-	data, err := os.ReadFile(intentPath)
+	data, err := os.ReadFile(intentPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("intent.md not found at %s — run `slipway new` to create the change scaffold", intentPath)

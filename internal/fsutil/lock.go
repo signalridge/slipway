@@ -50,7 +50,7 @@ type HeldLock struct {
 }
 
 func (s *StateLock) Acquire(ctx context.Context, timeout time.Duration, command string) (*HeldLock, error) {
-	if err := os.MkdirAll(filepath.Dir(s.lockPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.lockPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return nil, err
 	}
 

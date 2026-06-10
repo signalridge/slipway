@@ -1075,7 +1075,7 @@ func existingChangeWorkspaceRoot(root string, ch model.Change) (string, error) {
 }
 
 func gitWorkspaceHasHead(repoRoot string) bool {
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD")
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "HEAD") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	return cmd.Run() == nil
 }
 

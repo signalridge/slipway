@@ -45,7 +45,7 @@ func EvaluateTasksContract(bundleDir string) (TasksContractResult, error) {
 		return TasksContractResult{}, err
 	}
 
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return TasksContractResult{}, err
 	}

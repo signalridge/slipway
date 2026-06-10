@@ -176,7 +176,7 @@ func normalizeGitPath(baseDir, value, label string) (string, error) {
 
 func runGitRevParse(dir, label string, args ...string) (string, error) {
 	cmdArgs := append([]string{"-C", dir, "rev-parse"}, args...)
-	cmd := exec.Command("git", cmdArgs...)
+	cmd := exec.Command("git", cmdArgs...) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(out))

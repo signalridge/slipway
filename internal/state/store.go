@@ -536,7 +536,7 @@ func SaveChange(root string, st model.Change) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
@@ -574,7 +574,7 @@ func decodeAndValidateChange(raw []byte) (model.Change, error) {
 }
 
 func loadChangeCandidate(path string) (model.Change, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err != nil {
 		return model.Change{}, err
 	}
@@ -858,7 +858,7 @@ func restoreChangeAuthorityIfNeeded(root string, expected model.Change) error {
 		return err
 	}
 
-	raw, err := os.ReadFile(bundlePath)
+	raw, err := os.ReadFile(bundlePath) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
 	if err == nil {
 		current, decodeErr := decodeAndValidateChange(raw)
 		if decodeErr == nil {

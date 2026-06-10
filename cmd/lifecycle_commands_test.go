@@ -415,6 +415,48 @@ func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 	})
 }
 
+func TestDoneRemediationSourceScanDoesNotFollowBundleSymlink(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		source := model.NewChange("external-archived-workflow")
+		source.Description = "external archived workflow"
+		require.NoError(t, state.SaveChange(root, source))
+		_, err := state.ArchiveChange(root, source, model.ChangeStatusDone)
+		require.NoError(t, err)
+
+		slug := createGovernedRequest(t, root, "L2", "fix archived workflow feedback")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		markChangeReadyForDone(t, root, &change)
+
+		externalDir := t.TempDir()
+		external := filepath.Join(externalDir, "outside.md")
+		require.NoError(t, os.WriteFile(external, []byte("Remediates artifacts/changes/archived/external-archived-workflow/workflow-feedback.md\n"), 0o644))
+		linkPath := filepath.Join(root, "artifacts", "changes", slug, "intent.md")
+		require.NoError(t, os.Remove(linkPath))
+		if err := os.Symlink(external, linkPath); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		var out bytes.Buffer
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
+		doneCmd.SetOut(&out)
+		doneCmd.SetArgs([]string{"--json"})
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Empty(t, view.RemediationSources)
+	})
+}
+
 func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
 	t.Parallel()
 

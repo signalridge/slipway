@@ -11,7 +11,7 @@ import (
 
 // ComputeFileContentHash returns SHA-256 hex digest of a file's content.
 func ComputeFileContentHash(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return "", err
 	}

@@ -420,7 +420,7 @@ func validateEvidencePath(path string) error {
 }
 
 func writeEvidenceTaskPayload(path string, payload progression.TaskEvidencePayload) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	raw, err := json.MarshalIndent(payload, "", "  ")

@@ -82,7 +82,7 @@ func EvaluateBundleWithChangedFiles(bundleDir string, summary *model.ExecutionSu
 		return report, nil
 	}
 
-	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md"))
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return Report{}, err
 	}

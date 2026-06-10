@@ -1648,7 +1648,7 @@ func writeDeterministic(path, content string, refresh bool) error {
 			return nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	mode := os.FileMode(0o644)
@@ -1667,7 +1667,7 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 
 	settings := map[string]any{}
-	existing, err := os.ReadFile(settingsPath)
+	existing, err := os.ReadFile(settingsPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err == nil {
 		if err := json.Unmarshal(existing, &settings); err != nil {
 			return fmt.Errorf("parse %s: %w", cfg.SettingsPath, err)
@@ -1691,7 +1691,7 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 	settings["hooks"] = hooks
 
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	content, err := json.MarshalIndent(settings, "", "  ")
@@ -1699,7 +1699,7 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 		return err
 	}
 	content = append(content, '\n')
-	return os.WriteFile(settingsPath, content, 0o644)
+	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 }
 
 func mergeHookEventCommand(hooks map[string]any, eventName, command string) {

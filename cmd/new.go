@@ -192,7 +192,7 @@ func makeNewCmd() *cobra.Command {
 
 			if description == "" && fromDoc != "" {
 				// --from-doc without description: extract summary from document
-				data, err := os.ReadFile(fromDoc)
+				data, err := os.ReadFile(fromDoc) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 				if err != nil {
 					return newInvalidUsageError(
 						"from_doc_read_failed",
@@ -335,7 +335,7 @@ func createDirectGovernedChange(
 	var fromDocContent string
 	var extractedFromDoc intake.DocSeed
 	if fromDoc != "" {
-		data, err := os.ReadFile(fromDoc)
+		data, err := os.ReadFile(fromDoc) // #nosec G304 -- path is resolved from CLI/project authority before this read.
 		if err != nil {
 			return newInvalidUsageError(
 				"from_doc_read_failed",

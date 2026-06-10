@@ -248,6 +248,41 @@ User approved this on 2026-04-01.
 	assert.False(t, strings.Contains(content, "User approved this on 2026-04-01"), "old approval text should be removed")
 }
 
+func TestClearApprovedSummaryForRescopeRefusesSymlinkIntentPath(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "rescope intent amendment")
+
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	external := filepath.Join(t.TempDir(), "outside.md")
+	externalContent := []byte(`# Intent
+## Summary
+External target.
+## Approved Summary
+Do not rewrite this file.
+`)
+	require.NoError(t, os.WriteFile(external, externalContent, 0o644))
+	intentPath := filepath.Join(bundleDir, "intent.md")
+	require.NoError(t, os.Remove(intentPath))
+	if err := os.Symlink(external, intentPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	err = clearApprovedSummaryForRescope(root, change)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink")
+
+	got, readErr := os.ReadFile(external)
+	require.NoError(t, readErr)
+	assert.Equal(t, string(externalContent), string(got))
+}
+
 func TestExecuteGovernedPivotClearsDerivedRuntimeEvidenceAndPreservesTaskEvidence(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
