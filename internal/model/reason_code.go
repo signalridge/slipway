@@ -166,6 +166,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The decision artifact still contains a placeholder section",
 	},
+	"decision_status_rejected": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact status is rejected for planning",
+	},
+	"decision_status_unknown": {
+		Severity: ReasonSeverityError,
+		Message:  "The decision artifact status is unknown",
+	},
 	"decision_structure_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "The decision artifact structure is invalid",

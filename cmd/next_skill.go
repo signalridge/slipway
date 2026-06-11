@@ -85,12 +85,11 @@ func parseDecisionItems(decisionPath string) []string {
 	}
 	content := string(data)
 
-	// decision.md uses "Selected Approach" as its canonical section
-	decisions := artifact.ParseDecisionLockedDecisions(content)
-	if len(decisions) == 0 {
+	parsed := artifact.ParseDecisionContract(content)
+	if len(parsed.StatusBlockers) > 0 || len(parsed.Decisions) == 0 {
 		return nil
 	}
-	return decisions
+	return parsed.Decisions
 }
 
 func buildReviewContext(change *model.Change, projection *progression.ArtifactProjection, reviewAll bool, skillName string) *reviewContextView {

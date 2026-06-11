@@ -663,6 +663,40 @@ Primary risk for update auth middleware timeout strategy is hidden coupling in t
 	assert.Nil(t, ParseDecisionLockedDecisions(content))
 }
 
+func TestParseDecisionLockedDecisionsRejectsDeadStatus(t *testing.T) {
+	t.Parallel()
+
+	content := `# Decision
+
+## Status
+Superseded
+
+## Alternatives Considered
+### Approach A
+Keep the current parser.
+
+### Approach B
+Use the shared parsed decision contract.
+
+### Selected Direction
+Approach B because status handling must be shared.
+
+## Selected Approach
+Use the shared parsed decision contract.
+
+## Interfaces and Data Flow
+decision.md -> ParseDecisionContract -> callers.
+
+## Rollout and Rollback
+Revert this parser change if needed.
+
+## Risk
+Low risk.
+`
+
+	assert.Nil(t, ParseDecisionLockedDecisions(content))
+}
+
 func TestStalePropagationOrderBFS(t *testing.T) {
 	t.Parallel()
 	order, err := stalePropagationOrderFromGraph("intent.md", DefaultStaleGraph())

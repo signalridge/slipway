@@ -1,60 +1,46 @@
 # Architecture
 
-Re-authored for change `resolve-github-issue-164-implement-transactional-multi-file`
-(GitHub issue #164).
+Re-authored for change `resolve-issue-163-decisions-gate` (GitHub issue #163).
 
-Question: where should transactional multi-file stage-transition writes live so
-Slipway cannot leave partial governed bundle or evidence state when a later
-write fails?
+Question: where should Slipway parse `decision.md` status and fail closed when a
+stage would build on a superseded or deprecated decision?
 
 - Affected modules:
-  - `internal/fsutil/atomic.go:14` exposes the current single-file durability
-    primitive, `WriteFileAtomic`, using temp-in-dir, fsync, rename, and parent
-    sync. The new work should compose with this primitive rather than weaken it.
-  - `internal/engine/progression/advance_governed.go:337` through
-    `internal/engine/progression/advance_governed.go:355` advances S1 plan
-    substeps, scaffolds the governed bundle when entering `bundle`, and only
-    then persists `change.yaml`.
-  - `internal/engine/artifact/manager.go:241` through
-    `internal/engine/artifact/manager.go:309` resolves required artifacts and
-    writes missing scaffold-owned files in a loop with direct file writes.
-  - `internal/state/store.go:511` through `internal/state/store.go:550`
-    persists `change.yaml` and then records the machine-local worktree binding.
-  - `internal/engine/progression/advance_governed.go:403` through
-    `internal/engine/progression/advance_governed.go:424` materializes
-    `wave-plan.yaml` before the S1-to-S2 transition state is saved.
-  - `internal/state/wave_execution.go:72` through
-    `internal/state/wave_execution.go:90` writes `wave-plan.yaml`; lines 133
-    through 181 build and save that plan from `tasks.md`.
-  - `internal/engine/progression/stale_evidence_recovery.go:137` through
-    `internal/engine/progression/stale_evidence_recovery.go:182` removes stale
-    skill verification, wave plan, and execution-summary files before
-    `internal/engine/progression/stale_evidence_recovery.go:238` saves the
-    reopened lifecycle state.
-  - `internal/engine/progression/advance_governed.go:521` through
-    `internal/engine/progression/advance_governed.go:541` owns evidence removal
-    helpers that also prune digest records.
+  - `internal/engine/artifact/decision_contract.go:34` through
+    `internal/engine/artifact/decision_contract.go:64` evaluates decision
+    artifact substance for `validate --json` and instruction-readiness surfaces.
+  - `internal/engine/artifact/decision_contract.go:78` through
+    `internal/engine/artifact/decision_contract.go:96` enforces required
+    decision sections and template-placeholder rejection.
+  - `internal/engine/artifact/manager.go:463` through
+    `internal/engine/artifact/manager.go:488` parses selected direction and
+    selected approach text from `decision.md`.
+  - `cmd/next_skill.go:20` through `cmd/next_skill.go:40` injects parsed
+    decision text into next-skill constraints as pending or locked depending on
+    `G_plan`.
+  - `internal/engine/progression/validation.go:587` through
+    `internal/engine/progression/validation.go:610` wires decision contract
+    blockers into plan-audit and post-plan readiness.
+  - `internal/model/reason_code.go` and `internal/model/recovery.go` own the
+    canonical diagnostics and recovery guidance for new fail-closed blockers.
 - Dependency flow:
-  - S1 bundle progression: `AdvanceGoverned` changes the plan substep,
-    scaffolds non-deferred governed artifacts, then saves `change.yaml`.
-  - S1-to-S2 progression: `AdvanceGoverned` materializes a wave plan, changes
-    lifecycle state, then saves `change.yaml`.
-  - Stale reopen: `reopenToStaleStage` removes evidence files and digest
-    entries, mutates change state, then saves `change.yaml`.
-  - Single-file persistence already routes through `fsutil.WriteFileAtomic`;
-    issue #164 needs an all-or-nothing boundary around ordered sets of those
-    file mutations.
+  - Artifact parsing belongs in `internal/engine/artifact` so `cmd` and
+    progression can share the same structured decision result.
+  - Progression readiness should consume the parsed decision contract to block
+    `S1_PLAN/audit` and later when status is dead.
+  - Next-skill constraints should stop surfacing pending or locked decisions when
+    the decision status is dead, and should use the same parser as readiness.
 - Architectural boundary:
-  - Add a focused file transaction helper in `internal/fsutil`.
-  - Adapt transition call sites to express file writes/removes inside a
-    transaction boundary.
-  - Keep directory archive and bundle relocation outside this change unless
-    tests prove the same file-set failure class; archive already has directory
-    rollback coverage.
-- Blast radius:
-  - `internal/fsutil` for transaction mechanics and rollback diagnostics.
-  - `internal/engine/progression` for transition wrapping.
-  - `internal/engine/artifact` for scaffold-owned artifact write integration.
-  - `internal/state` only where wave-plan materialization needs a transaction
-    seam or operation builder.
-  - Targeted tests in the same packages.
+  - Keep status parsing independent from lifecycle gate approval. Status answers
+    whether the decision is usable; `G_plan` still answers whether an otherwise
+    usable decision is pending or locked.
+  - Preserve #119 behavior: missing, unreadable, structurally empty, and
+    template-only decisions stay on existing contract paths.
+  - Do not move decision authoring into research; `research.md` remains upstream
+    input and `decision.md` is authored by plan-audit.
+- GSD reference:
+  - Local GSD Core has a status reject set for `superseded`, `rejected`, and
+    `deprecated`, status-heading aliases, and a normalizing
+    `shouldRejectAdrStatus` helper in
+    `/Users/yixianlu/ghq/github.com/open-gsd/gsd-core/src/adr-parser.cts`.
+  - Slipway should borrow the pattern, not the ADR file model.

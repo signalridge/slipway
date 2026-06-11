@@ -464,27 +464,14 @@ func artifactSectionBodyLooksPlaceholder(body string) bool {
 // It reads "Selected Approach" as the primary decision, and "Alternatives Considered"
 // for the selected direction marker. Ignores template placeholder text,
 // including scaffolded seeded-draft defaults that have not been confirmed by
-// research or explicit user selection yet.
+// research or explicit user selection yet. Explicit rejected or unknown decision
+// statuses are not usable locked decisions.
 func ParseDecisionLockedDecisions(content string) []string {
-	var decisions []string
-
-	// Extract selected direction from Alternatives Considered table/section
-	_, selected := parseResearchAlternatives(markdownSectionLines(content, "Alternatives Considered"))
-	if selected != "" && !LooksLikeTemplatePlaceholder(selected) {
-		decisions = append(decisions, "Selected Direction: "+selected)
-	}
-
-	// Extract content from Selected Approach section as a locked decision
-	approachLines := markdownSectionLines(content, "Selected Approach")
-	approach := strings.TrimSpace(strings.Join(approachLines, "\n"))
-	if approach != "" && !LooksLikeTemplatePlaceholder(approach) {
-		decisions = append(decisions, "Selected Approach: "+approach)
-	}
-
-	if len(decisions) == 0 {
+	parsed := ParseDecisionContract(content)
+	if len(parsed.StatusBlockers) > 0 || len(parsed.Decisions) == 0 {
 		return nil
 	}
-	return decisions
+	return parsed.Decisions
 }
 
 // LooksLikeTemplatePlaceholder returns true if the text looks like unedited

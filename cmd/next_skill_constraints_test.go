@@ -115,6 +115,51 @@ Use the refactor-first path and keep the external contract stable.
 		assert.Contains(t, result[0], "Selected Direction:")
 		assert.Contains(t, result[1], "Selected Approach:")
 	})
+
+	t.Run("unusable statuses return nil", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			heading string
+			status  string
+		}{
+			{name: "superseded", heading: "## Status", status: "Superseded"},
+			{name: "lowercase superseded heading", heading: "## status", status: "Superseded"},
+			{name: "inactive", heading: "## Status", status: "Inactive"},
+			{name: "unaccepted", heading: "## Status", status: "unaccepted"},
+			{name: "drafted", heading: "## Status", status: "drafted"},
+			{name: "mixed accepted superseded", heading: "## Status", status: "Accepted, superseded by DEC-001"},
+			{
+				name: "accepted status superseded by lifecycle",
+				heading: `## Status
+Accepted
+
+## Lifecycle`,
+				status: "Superseded by DEC-001",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				tmp := t.TempDir()
+				p := filepath.Join(tmp, "decision.md")
+				content := tt.heading + `
+` + tt.status + `
+
+## Alternatives Considered
+List approaches.
+
+## Selected Approach
+Use Go modules with a clean interface boundary for the new subsystem.
+
+## Risk
+- Low risk overall
+`
+				require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+				result := parseDecisionItems(p)
+				assert.Nil(t, result)
+			})
+		}
+	})
 }
 
 func TestSkillConstraintsPopulatedInNextOutput(t *testing.T) {
@@ -352,6 +397,60 @@ Low risk.
 		require.NotNil(t, scPending)
 		assert.Empty(t, scPending.LockedDecisions)
 		assert.Empty(t, scPending.PendingDecisions)
+	})
+
+	t.Run("unusable status is neither locked nor pending", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name    string
+			heading string
+			status  string
+		}{
+			{name: "deprecated", heading: "## Status", status: "Deprecated"},
+			{name: "lowercase superseded heading", heading: "## status", status: "Superseded"},
+			{name: "inactive", heading: "## Status", status: "Inactive"},
+			{name: "unaccepted", heading: "## Status", status: "unaccepted"},
+			{name: "drafted", heading: "## Status", status: "drafted"},
+			{name: "mixed accepted superseded", heading: "## Status", status: "Accepted, superseded by DEC-001"},
+			{
+				name: "accepted status superseded by lifecycle",
+				heading: `## Status
+Accepted
+
+## Lifecycle`,
+				status: "Superseded by DEC-001",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				root := t.TempDir()
+				change := model.NewChange("unusable-status-routing")
+				writeDecision(t, root, change, tt.heading+`
+`+tt.status+`
+
+## Alternatives Considered
+List approaches.
+
+## Selected Approach
+Use event-driven architecture with Go channels.
+
+## Risk
+Low risk.
+`)
+
+				scLocked := buildSkillConstraints(root, def, &change, true)
+				require.NotNil(t, scLocked)
+				assert.Empty(t, scLocked.LockedDecisions)
+				assert.Empty(t, scLocked.PendingDecisions)
+
+				scPending := buildSkillConstraints(root, def, &change, false)
+				require.NotNil(t, scPending)
+				assert.Empty(t, scPending.LockedDecisions)
+				assert.Empty(t, scPending.PendingDecisions)
+			})
+		}
 	})
 }
 
