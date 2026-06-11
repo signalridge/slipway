@@ -78,6 +78,21 @@ Diagnostics prompt-backed commands:
 Every CLI command ships a prompt-backed surface, so an agent never has to fall
 back to guessing one; the workflow skill's command reference indexes them all.
 
+## Surface Manifest
+
+`docs/SURFACE-MANIFEST.json` is the committed inventory for generated adapter,
+command, skill, JSON, and documentation surfaces. It is regenerated from
+Slipway-owned Go authorities, not hand-edited:
+
+```bash
+go run ./internal/toolgen/cmd/gen-surface-manifest --write
+go run ./internal/toolgen/cmd/gen-surface-manifest --check
+```
+
+Run `--write` after adding a generated tool, command, skill, JSON contract, or
+documentation surface, then keep the matching documentation token in the file
+named by the manifest row.
+
 ## OpenCode Notes
 
 OpenCode stores project commands as Markdown files under `.opencode/commands/`. Slipway generates flat OpenCode command files under:

@@ -1,0 +1,50 @@
+version: 1
+slug: resolve-github-issue-158-add-a-generated-surface-inventory-m
+description: 'Resolve GitHub issue #158: add a generated surface inventory manifest and fail-closed sync checks so generated skills, CLI commands, JSON contracts, and docs stay represented together.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-10T13:43:01.143773Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-158-add-a-generated-surface-inventory-m
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: d3cee9ff815ba29b3e49fab599df3993647523a9432245546a6397fee2087b0d
+        updated_at: 2026-06-10T16:57:27.033868832Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: f89a8da86b020b1e1a8aa1c7240f6a3b5ddc1deb5a85ec2c5aef2d1a8c5439a9
+        updated_at: 2026-06-10T16:27:05.651850537Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 9972a2d16de1aedcb0402f447477036c61d270120a9c2c4fadf2e2aaa49b3ba1
+        updated_at: 2026-06-10T13:54:06.967617035Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8241195d90a6365671e1503ffad89c38b34dcf81ff53d8ae0848afb842e4f91c
+        updated_at: 2026-06-10T16:27:05.651429327Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 8a141e28a6ac321f648a0175c54d741fe3e131bc2386f0eca452a870bf3f7987
+        updated_at: 2026-06-10T16:27:05.652210329Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 697a22de217d622c7108a33dde793c7a3068d22cd7135dac342467744fe46308
+        updated_at: 2026-06-10T16:27:05.651662453Z

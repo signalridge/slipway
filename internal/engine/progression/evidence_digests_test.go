@@ -345,6 +345,66 @@ func TestMissingWaveDigestEntryStampsCurrentRuntimeTaskEvidenceWithoutTimestampR
 	assert.Contains(t, digests.Skills[SkillWaveOrchestration].Inputs, "runtime_task_evidence")
 }
 
+func TestStampPassingSkillDigestsDoesNotBlockCurrentStageOnFutureAcceptedEvidence(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	change.CurrentState = model.StateS2Execute
+	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	writeTasksAndMaterializeWavePlan(t, root, change, uncheckedDigestTasks())
+	plan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+
+	capturedAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
+	writeWaveDigestTaskEvidence(t, root, change, plan.TasksPlanHash, "test:wave", capturedAt)
+	tasks, issues, err := LoadExecutionTasksFromEvidence(root, change.Slug, 1)
+	require.NoError(t, err)
+	require.Empty(t, issues)
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     plan.TasksPlanHash,
+		Tasks:             tasks,
+	}
+	summary.SyncDerivedFields()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	waveRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt.Add(time.Minute),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillWaveOrchestration, waveRecord)
+
+	reviewRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt.Add(2 * time.Minute),
+		RunVersion: 1,
+		References: []string{"layer:R0=pass"},
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillSpecComplianceReview, reviewRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillSpecComplianceReview, reviewRecord, summary))
+	_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+		EventType: "skill.evidence_recorded",
+		SkillID:   SkillSpecComplianceReview,
+		Result:    "recorded",
+		Reason:    "verification_evidence_consumed",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n\nconst changedForFutureReview = true\n"), 0o644))
+	result, err := stampPassingSkillDigests(root, change, map[string]model.VerificationRecord{
+		SkillWaveOrchestration: waveRecord,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, result.Blockers, "future-stage review evidence must not block S2 wave digest stamping")
+}
+
 func TestStampPassingSkillDigestsStampsPreviouslyConsumedEvidenceWithoutLegacyEvent(t *testing.T) {
 	t.Parallel()
 

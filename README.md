@@ -187,6 +187,21 @@ Generate host-tool surfaces with `slipway init --tools <id>` (`claude`, `codex`,
 | Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start.sh`, `.gemini/settings.json` |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start.sh` |
 
+Exported generated skill rows are pinned by public skill directory:
+`slipway/SKILL.md`, `slipway-ci-triage/SKILL.md`,
+`slipway-code-quality-review/SKILL.md`, `slipway-codebase-mapping/SKILL.md`,
+`slipway-coding-discipline/SKILL.md`, `slipway-context-assembly/SKILL.md`,
+`slipway-coverage-analysis/SKILL.md`, `slipway-final-closeout/SKILL.md`,
+`slipway-git-recovery/SKILL.md`, `slipway-goal-verification/SKILL.md`,
+`slipway-incident-response/SKILL.md`, `slipway-independent-review/SKILL.md`,
+`slipway-intake-clarification/SKILL.md`, `slipway-plan-audit/SKILL.md`,
+`slipway-research-orchestration/SKILL.md`,
+`slipway-root-cause-tracing/SKILL.md`, `slipway-security-review/SKILL.md`,
+`slipway-spec-compliance-review/SKILL.md`, `slipway-spec-trace/SKILL.md`,
+`slipway-tdd-governance/SKILL.md`, `slipway-test-design/SKILL.md`,
+`slipway-wave-orchestration/SKILL.md`, and
+`slipway-worktree-preflight/SKILL.md`.
+
 Every tool gets the entry skill. Codex enters the lifecycle through its skill and prompt surfaces; the other four also get an auto-injecting session-start hook (Codex has no session-hook surface to attach to, so its agent pulls governed state via `slipway status --json` instead).
 
 </details>
@@ -209,6 +224,7 @@ See the [Operator Guide](docs/operator-guide.md) for state authority, freshness 
 - [Governed Workflow](docs/workflow.md): lifecycle states, read-only surfaces, mutating commands, and Open Questions semantics.
 - [Command Reference](docs/commands.md): core, situational, and diagnostics commands.
 - [AI Tool Adapters](docs/ai-tools.md): generated paths and host invocation styles.
+- [Surface Manifest](docs/SURFACE-MANIFEST.json): generated inventory of adapter, command, skill, JSON, and documentation surfaces.
 - [Operator Guide](docs/operator-guide.md): worktrees, state authority, health, repair, verification, and closeout.
 - [Contributing](docs/contributing.md): repo layout, docs build, adapter contracts, and governance tests.
 
@@ -217,6 +233,7 @@ See the [Operator Guide](docs/operator-guide.md) for state authority, freshness 
 Use focused package tests while developing, then run the full local proof before closeout:
 
 ```bash
+go run ./internal/toolgen/cmd/gen-surface-manifest --check
 go test -timeout=20m ./... -count=1
 go build ./...
 go vet ./...

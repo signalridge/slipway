@@ -195,6 +195,68 @@ func TestEvidenceSkillRejectsRunSummaryBoundSkillWithoutExecutionSummary(t *test
 	})
 }
 
+func TestEvidenceSkillRecordsWaveOrchestrationBeforeExecutionSummary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createEvidenceTaskFixture(t, root)
+
+		taskCmd := commandForRoot(t, root, makeEvidenceCmd())
+		taskCmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "verification",
+			"--verdict", "pass",
+			"--evidence-ref", "test:wave-bootstrap-task",
+			"--changed-file", "cmd/lifecycle_commands_test.go",
+			"--target-file", "cmd/lifecycle_commands_test.go",
+		})
+		require.NoError(t, taskCmd.Execute())
+
+		summary, err := state.LoadOptionalExecutionSummary(root, slug)
+		require.NoError(t, err)
+		require.Nil(t, summary)
+
+		notesPath := filepath.Join(root, "wave-notes.md")
+		require.NoError(t, os.WriteFile(notesPath, []byte("wave evidence from task ledger\n"), 0o644))
+		skillCmd := commandForRoot(t, root, makeEvidenceCmd())
+		skillCmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--skill", progression.SkillWaveOrchestration,
+			"--verdict", "pass",
+			"--reference", "wave-orchestration:pass",
+			"--notes-file", "wave-notes.md",
+		})
+		var out bytes.Buffer
+		skillCmd.SetOut(&out)
+		require.NoError(t, skillCmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+		assert.Equal(t, progression.SkillWaveOrchestration, view.Skill)
+		assert.Equal(t, 1, view.RunVersion)
+		assert.True(t, view.Recorded)
+		assert.True(t, view.Stamped)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillWaveOrchestration)
+		require.NoError(t, err)
+		assert.Equal(t, model.VerificationVerdictPass, rec.Verdict)
+		assert.Equal(t, 1, rec.RunVersion)
+		assert.Equal(t, "wave evidence from task ledger", rec.Notes)
+
+		digests, err := state.LoadOptionalEvidenceDigestsForChange(root, model.NewChange(slug))
+		require.NoError(t, err)
+		require.NotNil(t, digests)
+		assert.Contains(t, digests.Skills, progression.SkillWaveOrchestration)
+	})
+}
+
 func TestEvidenceSkillRejectsWrongWorkflowStateWithoutWritingEvidence(t *testing.T) {
 	t.Parallel()
 
