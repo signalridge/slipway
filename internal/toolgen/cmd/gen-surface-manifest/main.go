@@ -61,7 +61,7 @@ func runWithOptions(repoRoot string, opts manifestCommandOptions) error {
 
 	switch {
 	case opts.write:
-		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil { // #nosec G301 -- docs directory is a committed project artifact location.
 			return fmt.Errorf("create manifest directory: %w", err)
 		}
 		if err := os.WriteFile(manifestPath, live, 0o644); err != nil { // #nosec G306 -- committed docs artifact.
@@ -70,7 +70,7 @@ func runWithOptions(repoRoot string, opts manifestCommandOptions) error {
 		fmt.Fprintf(opts.stdout, "wrote %s\n", toolgen.SurfaceManifestPath)
 		return nil
 	case opts.check:
-		committed, err := os.ReadFile(manifestPath)
+		committed, err := os.ReadFile(manifestPath) // #nosec G304 -- manifestPath is repo root plus docs/SURFACE-MANIFEST.json.
 		if err != nil {
 			return fmt.Errorf("%s is missing or unreadable; run `go run ./internal/toolgen/cmd/gen-surface-manifest --write`: %w",
 				toolgen.SurfaceManifestPath,

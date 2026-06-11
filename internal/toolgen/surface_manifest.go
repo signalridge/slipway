@@ -221,7 +221,7 @@ func documentationRows() []SurfaceManifestRow {
 			Name:   "docs/commands.md",
 			Source: "docs/commands.md",
 			Docs:   "docs/commands.md",
-			Token:  "Command Reference",
+			Token:  "Command Reference", // #nosec G101 -- manifest token is a docs search string, not a credential.
 		},
 		{
 			Kind:   "documentation",
