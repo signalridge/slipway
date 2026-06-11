@@ -135,7 +135,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				runVersion, err := evidenceSkillRunVersion(root, change, def)
+				runVersion, digestSummary, err := evidenceSkillRunContext(root, change, def)
 				if err != nil {
 					return err
 				}
@@ -161,17 +161,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 
 				stamped := false
 				if record.IsPassing() {
-					summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-					if err != nil {
-						return newStateIntegrityError(
-							"evidence_skill_execution_summary_load_failed",
-							fmt.Sprintf("failed to load execution summary for %q: %v", change.Slug, err),
-							"Repair execution-summary.yaml or record non-passing skill evidence.",
-							change.Slug,
-							nil,
-						)
-					}
-					if err := progression.StampEvidenceDigestForSkill(root, change, skillName, record, summary); err != nil {
+					if err := progression.StampEvidenceDigestForSkill(root, change, skillName, record, digestSummary); err != nil {
 						return newStateIntegrityError(
 							"evidence_skill_digest_stamp_failed",
 							fmt.Sprintf("failed to stamp %s evidence digest: %v", skillName, err),
@@ -553,13 +543,13 @@ func validateEvidenceSkillName(root, skillName string) (skill.Definition, error)
 	return def, nil
 }
 
-func evidenceSkillRunVersion(root string, change model.Change, def skill.Definition) (int, error) {
+func evidenceSkillRunContext(root string, change model.Change, def skill.Definition) (int, *model.ExecutionSummary, error) {
 	if !def.RunSummaryBound {
-		return 0, nil
+		return 0, nil, nil
 	}
 	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
 	if err != nil {
-		return 0, newStateIntegrityError(
+		return 0, nil, newStateIntegrityError(
 			"evidence_skill_execution_summary_load_failed",
 			fmt.Sprintf("failed to load execution summary for %q: %v", change.Slug, err),
 			"Repair execution-summary.yaml before recording run-summary-bound skill evidence.",
@@ -567,15 +557,134 @@ func evidenceSkillRunVersion(root string, change model.Change, def skill.Definit
 			nil,
 		)
 	}
-	if summary == nil || summary.RunSummaryVersion < 1 {
-		return 0, newInvalidUsageError(
-			"evidence_skill_run_summary_missing",
-			fmt.Sprintf("%s evidence requires execution-summary.yaml with run_summary_version >= 1", def.Name),
-			"Run wave execution first so Slipway can bind this verification to the current execution summary.",
-			map[string]any{"skill": def.Name},
+	if summary != nil && summary.RunSummaryVersion >= 1 {
+		return summary.RunSummaryVersion, summary, nil
+	}
+	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Execute {
+		runVersion, err := waveOrchestrationTaskEvidenceRunVersion(root, change)
+		if err != nil {
+			return 0, nil, err
+		}
+		return runVersion, &model.ExecutionSummary{
+			Version:           model.ExecutionSummaryVersion,
+			RunSummaryVersion: runVersion,
+			CapturedAt:        time.Now().UTC(),
+		}, nil
+	}
+	return 0, nil, newInvalidUsageError(
+		"evidence_skill_run_summary_missing",
+		fmt.Sprintf("%s evidence requires execution-summary.yaml with run_summary_version >= 1", def.Name),
+		"Run wave execution first so Slipway can bind this verification to the current execution summary.",
+		map[string]any{"skill": def.Name},
+	)
+}
+
+func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (int, error) {
+	dir := state.EvidenceTasksDir(root, change.Slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, newInvalidUsageError(
+				"evidence_skill_run_summary_missing",
+				"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
+				"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+				map[string]any{"skill": progression.SkillWaveOrchestration},
+			)
+		}
+		return 0, newStateIntegrityError(
+			"evidence_skill_task_evidence_load_failed",
+			fmt.Sprintf("failed to read task evidence for %q: %v", change.Slug, err),
+			"Repair the runtime task evidence directory before recording wave-orchestration evidence.",
+			change.Slug,
+			map[string]any{"path": state.DisplayPath(root, dir)},
 		)
 	}
-	return summary.RunSummaryVersion, nil
+
+	versions := map[int]bool{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway runtime evidence authority.
+		if err != nil {
+			return 0, newStateIntegrityError(
+				"evidence_skill_task_evidence_load_failed",
+				fmt.Sprintf("failed to read task evidence %q: %v", state.DisplayPath(root, path), err),
+				"Repair the runtime task evidence file before recording wave-orchestration evidence.",
+				change.Slug,
+				map[string]any{"path": state.DisplayPath(root, path)},
+			)
+		}
+		var payload struct {
+			RunSummaryVersion int `json:"run_summary_version"`
+		}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return 0, newStateIntegrityError(
+				"evidence_skill_task_evidence_invalid",
+				fmt.Sprintf("failed to parse task evidence %q: %v", state.DisplayPath(root, path), err),
+				"Regenerate task evidence with `slipway evidence task` before recording wave-orchestration evidence.",
+				change.Slug,
+				map[string]any{"path": state.DisplayPath(root, path)},
+			)
+		}
+		if payload.RunSummaryVersion < 1 {
+			return 0, newStateIntegrityError(
+				"evidence_skill_task_evidence_invalid",
+				fmt.Sprintf("task evidence %q has invalid run_summary_version %d", state.DisplayPath(root, path), payload.RunSummaryVersion),
+				"Regenerate task evidence with a run_summary_version >= 1 before recording wave-orchestration evidence.",
+				change.Slug,
+				map[string]any{"path": state.DisplayPath(root, path)},
+			)
+		}
+		versions[payload.RunSummaryVersion] = true
+	}
+	if len(versions) == 0 {
+		return 0, newInvalidUsageError(
+			"evidence_skill_run_summary_missing",
+			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
+			"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+			map[string]any{"skill": progression.SkillWaveOrchestration},
+		)
+	}
+	if len(versions) > 1 {
+		return 0, newInvalidUsageError(
+			"evidence_skill_task_evidence_run_summary_ambiguous",
+			"task evidence contains multiple run_summary_version values",
+			"Re-record task evidence for a single wave-orchestration run_version before recording wave-orchestration evidence.",
+			map[string]any{"skill": progression.SkillWaveOrchestration},
+		)
+	}
+
+	runVersion := 0
+	for version := range versions {
+		runVersion = version
+	}
+	if tasks, issues, err := progression.LoadExecutionTasksFromEvidence(root, change.Slug, runVersion); err != nil {
+		return 0, newStateIntegrityError(
+			"evidence_skill_task_evidence_load_failed",
+			fmt.Sprintf("failed to load task evidence for run_summary_version=%d: %v", runVersion, err),
+			"Repair runtime task evidence before recording wave-orchestration evidence.",
+			change.Slug,
+			map[string]any{"run_summary_version": runVersion},
+		)
+	} else if len(issues) > 0 {
+		return 0, newStateIntegrityError(
+			"evidence_skill_task_evidence_invalid",
+			fmt.Sprintf("task evidence for run_summary_version=%d is invalid: %s", runVersion, strings.Join(issues, "; ")),
+			"Regenerate invalid task evidence before recording wave-orchestration evidence.",
+			change.Slug,
+			map[string]any{"run_summary_version": runVersion},
+		)
+	} else if len(tasks) == 0 {
+		return 0, newInvalidUsageError(
+			"evidence_skill_run_summary_missing",
+			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
+			"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+			map[string]any{"skill": progression.SkillWaveOrchestration},
+		)
+	}
+	return runVersion, nil
 }
 
 func validateEvidenceSkillStage(change model.Change, def skill.Definition) error {

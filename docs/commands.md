@@ -117,6 +117,19 @@ map-consuming planning skill (research-orchestration or plan-audit) is next and
 the status is `scaffold_only` or `baseline`, `warnings` carries a non-blocking
 codebase-map advisory.
 
+`docs/SURFACE-MANIFEST.json` is the committed generated-surface inventory for
+adapter, command, skill, JSON, and documentation rows. The manifest is rebuilt
+from Slipway-owned Go authorities and checked in CI-facing Go tests:
+
+```bash
+go run ./internal/toolgen/cmd/gen-surface-manifest --check
+go run ./internal/toolgen/cmd/gen-surface-manifest --write
+```
+
+When adding a command, skill, JSON output contract, or docs-facing surface, run
+`--write` and keep the manifest row's documentation token present in the named
+docs file. A stale manifest or missing docs token fails `go test ./internal/toolgen`.
+
 ## Output And Hydration Flags
 
 Query and review commands share a consistent output-and-hydration surface, kept
@@ -160,6 +173,32 @@ slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --
 slipway health --doctor --json
 ```
 
+Stable manifest tokens for JSON contract coverage:
+
+| Contract | Token |
+| --- | --- |
+| abort JSON | `slipway abort --json` |
+| cancel JSON | `slipway cancel --json` |
+| checkpoint JSON | `slipway checkpoint --task-id <id> --json` |
+| codebase-map JSON | `slipway codebase-map --json` |
+| delete JSON | `slipway delete --change <slug> --json` |
+| done JSON | `slipway done --json` |
+| evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
+| evidence task JSON | `slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json` |
+| health JSON | `slipway health --json` |
+| instructions JSON | `slipway instructions <artifact> --json` |
+| learn JSON | `slipway learn --json` |
+| new JSON | `slipway new --json` |
+| next JSON | `slipway next --json` |
+| pivot JSON | `slipway pivot --json` |
+| preset JSON | `slipway preset <level> --json` |
+| repair JSON | `slipway repair --json` |
+| review JSON | `slipway review --json` |
+| run JSON | `slipway run --json` |
+| stats JSON | `slipway stats --json` |
+| status JSON | `slipway status --json` |
+| validate JSON | `slipway validate --json` |
+
 `next --json` includes `next_skill.name` for AI-tool handoff. The host tool derives the local `SKILL.md` path from its own adapter conventions.
 
 When diagnostics are enabled, review-state handoff JSON can also include:
@@ -199,6 +238,15 @@ validates task kind/verdict/blockers, and refuses unknown or path-unsafe task ID
 instead of relying on hand-written JSON.
 `freshness_inputs` includes the current wave-plan `tasks_plan_hash` so task
 evidence cannot be reused after `tasks.md` semantically changes.
+
+`slipway evidence skill --skill wave-orchestration` is the S2 bootstrap for
+execution-summary evidence. Before `execution-summary.yaml` exists, it derives
+the wave run version from the current flat task evidence ledger, requires all
+task evidence to use a single valid `run_summary_version`, and stamps the
+wave-orchestration digest from that ledger. Later run-summary-bound skills such
+as `spec-compliance-review`, `code-quality-review`, `goal-verification`, and
+`final-closeout` still require an existing execution summary and fail closed
+with `evidence_skill_run_summary_missing` when it is absent.
 
 Accepted governance skill evidence is additionally bound by
 `verification/evidence-digests.yaml`, an engine-owned local file that records the
