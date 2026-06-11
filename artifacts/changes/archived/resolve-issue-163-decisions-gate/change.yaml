@@ -1,0 +1,60 @@
+version: 1
+slug: resolve-issue-163-decisions-gate
+description: resolve issue 163 decisions gate
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-11T14:04:39.998865Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/resolve-issue-163-decisions-gate
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 66bdbca6d9d65276dfaeaae6c3c4e1df400d529851d7106a1470001daaa39034
+        updated_at: 2026-06-11T16:05:01.691013471Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 8897f01eb0d5f0c973887702be051f7f94f5aea7f68da274b796968d7c267fee
+        updated_at: 2026-06-11T14:12:25.491140984Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 7bc6251c163efd9cdc23feea9fd4aa8a05dd07425da20c6380bab319a823509b
+        updated_at: 2026-06-11T14:10:46.804670957Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: dd133813445730a0291523cfeda11502ff4194cf0702a99cc8fd0c9d0e0981a2
+        updated_at: 2026-06-11T14:12:25.490684197Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: c3c8675c0de835ece4dc8a160aa7cbf096d6c28350e406169852c4eef8dfc8d3
+        updated_at: 2026-06-11T14:10:38.559032369Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: d6be297a2abd173279ac3075149438ebe71955bb4de8fa0265a9708b398d5587
+        updated_at: 2026-06-11T14:33:08.366177556Z
+evidence_refs:
+    code-quality-review: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/code-quality-review.yaml
+    final-closeout: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/final-closeout.yaml
+    goal-verification: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/goal-verification.yaml
+    intake-clarification: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/intake-clarification.yaml
+    plan-audit: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/plan-audit.yaml
+    research-orchestration: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/resolve-issue-163-decisions-gate/artifacts/changes/resolve-issue-163-decisions-gate/verification/wave-orchestration.yaml

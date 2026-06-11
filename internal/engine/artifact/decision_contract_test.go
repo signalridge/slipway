@@ -3,6 +3,7 @@ package artifact
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,4 +120,264 @@ func TestEvaluateDecisionContract(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, DecisionContractStatusValid, res.Status)
 	})
+}
+
+func TestParseDecisionContractStatus(t *testing.T) {
+	t.Parallel()
+
+	authored := func(statusSection string) string {
+		return "# Decision\n\n" +
+			statusSection +
+			"## Alternatives Considered\nA vs B; B wins.\n\n" +
+			"## Selected Approach\nB.\n\n" +
+			"## Interfaces and Data Flow\nnone\n\n" +
+			"## Rollout and Rollback\nFlag flip; verify tests.\n\n" +
+			"## Risk\nLow.\n"
+	}
+
+	tests := []struct {
+		name           string
+		content        string
+		expectedStatus string
+		statusExplicit bool
+		statusKnown    bool
+		rejected       bool
+		expectedBlock  string
+	}{
+		{
+			name:           "missing status stays compatible",
+			content:        authored(""),
+			expectedStatus: "",
+			statusExplicit: false,
+			statusKnown:    true,
+			rejected:       false,
+		},
+		{
+			name:           "accepted status is live",
+			content:        authored("## Status\nAccepted\n\n"),
+			expectedStatus: "accepted",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       false,
+		},
+		{
+			name:           "status label accepts live status",
+			content:        authored("## Status\nStatus: Accepted\n\n"),
+			expectedStatus: "accepted",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       false,
+		},
+		{
+			name:           "earlier live status remains compatible before later live status",
+			content:        authored("## Status\nAccepted\n\n## State\nProposed\n\n"),
+			expectedStatus: "accepted",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       false,
+		},
+		{
+			name:           "state alias parses proposed",
+			content:        authored("## State\nProposed\n\n"),
+			expectedStatus: "proposed",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       false,
+		},
+		{
+			name:           "superseded status is rejected",
+			content:        authored("## Lifecycle\nSuperseded by DEC-001\n\n"),
+			expectedStatus: "superseded",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:superseded",
+		},
+		{
+			name:           "deprecated status is rejected",
+			content:        authored("## Stage\nDeprecated\n\n"),
+			expectedStatus: "deprecated",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:deprecated",
+		},
+		{
+			name:           "mixed live and superseded status is rejected",
+			content:        authored("## Status\nAccepted, superseded by DEC-001\n\n"),
+			expectedStatus: "superseded",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:superseded",
+		},
+		{
+			name:           "later lifecycle alias can reject accepted status",
+			content:        authored("## Status\nAccepted\n\n## Lifecycle\nSuperseded by DEC-001\n\n"),
+			expectedStatus: "superseded",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:superseded",
+		},
+		{
+			name:           "earlier rejected status wins over later unknown status",
+			content:        authored("## Status\nSuperseded by DEC-001\n\n## State\nRetired-ish\n\n"),
+			expectedStatus: "superseded",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:superseded",
+		},
+		{
+			name:           "later state alias can fail closed after accepted status",
+			content:        authored("## Status\nAccepted\n\n## State\nRetired-ish\n\n"),
+			expectedStatus: "retired ish",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:retired ish",
+		},
+		{
+			name:           "lowercase status heading is explicit",
+			content:        authored("## status\nSuperseded\n\n"),
+			expectedStatus: "superseded",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:superseded",
+		},
+		{
+			name:           "punctuated status heading is explicit",
+			content:        authored("## Status:\nRetired-ish\n\n"),
+			expectedStatus: "retired ish",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:retired ish",
+		},
+		{
+			name:           "uppercase lifecycle heading with closing hashes is explicit",
+			content:        authored("## LIFECYCLE ##\nDeprecated\n\n"),
+			expectedStatus: "deprecated",
+			statusExplicit: true,
+			statusKnown:    true,
+			rejected:       true,
+			expectedBlock:  "decision_status_rejected:deprecated",
+		},
+		{
+			name:           "unknown explicit status fails closed",
+			content:        authored("## Status\nRetired-ish\n\n"),
+			expectedStatus: "retired ish",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:retired ish",
+		},
+		{
+			name:           "inactive is not active",
+			content:        authored("## Status\nInactive\n\n"),
+			expectedStatus: "inactive",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:inactive",
+		},
+		{
+			name:           "unaccepted is not accepted",
+			content:        authored("## Status\nunaccepted\n\n"),
+			expectedStatus: "unaccepted",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:unaccepted",
+		},
+		{
+			name:           "drafted is not draft",
+			content:        authored("## Status\ndrafted\n\n"),
+			expectedStatus: "drafted",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:drafted",
+		},
+		{
+			name:           "empty explicit status fails closed",
+			content:        authored("## Status\n\n"),
+			expectedStatus: "",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:empty",
+		},
+		{
+			name:           "empty status alias can fail closed before accepted status",
+			content:        authored("## Status\n\n## State\nAccepted\n\n"),
+			expectedStatus: "",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:empty",
+		},
+		{
+			name:           "comment only status alias can fail closed before accepted status",
+			content:        authored("## Status\n<!-- guidance -->\n\n## State\nAccepted\n\n"),
+			expectedStatus: "",
+			statusExplicit: true,
+			statusKnown:    false,
+			rejected:       false,
+			expectedBlock:  "decision_status_unknown:empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			parsed := ParseDecisionContract(tt.content)
+
+			assert.Equal(t, tt.expectedStatus, parsed.Status)
+			assert.Equal(t, tt.statusExplicit, parsed.StatusExplicit)
+			assert.Equal(t, tt.statusKnown, parsed.StatusKnown)
+			assert.Equal(t, tt.rejected, parsed.StatusRejected)
+			require.NotEmpty(t, parsed.Decisions)
+			assert.Contains(t, parsed.Decisions[0], "Selected Approach:")
+			if tt.expectedBlock == "" {
+				assert.Empty(t, parsed.StatusBlockers)
+			} else {
+				assert.Contains(t, parsed.StatusBlockers, tt.expectedBlock)
+			}
+		})
+	}
+}
+
+func TestShouldRejectDecisionStatusNormalizationProperties(t *testing.T) {
+	t.Parallel()
+
+	rejectedStatuses := []string{"superseded", "deprecated", "rejected"}
+	variants := []func(string) string{
+		func(s string) string { return s },
+		strings.ToUpper,
+		func(s string) string { return "  " + s + "  " },
+		func(s string) string { return s + "." },
+		func(s string) string { return "[" + s + "]" },
+		func(s string) string { return "status: " + s },
+		func(s string) string { return "accepted, " + s + " by DEC-001" },
+	}
+
+	for _, status := range rejectedStatuses {
+		for _, variant := range variants {
+			input := variant(status)
+			t.Run(input, func(t *testing.T) {
+				t.Parallel()
+				assert.True(t, ShouldRejectDecisionStatus(input), "variant %q must reject", input)
+			})
+		}
+	}
+
+	for _, live := range []string{"accepted", "approved", "proposed", "draft", "active", ""} {
+		t.Run("live "+live, func(t *testing.T) {
+			t.Parallel()
+			assert.False(t, ShouldRejectDecisionStatus(live))
+		})
+	}
 }

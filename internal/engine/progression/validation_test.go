@@ -458,6 +458,114 @@ func TestDecisionContractBlockers(t *testing.T) {
 		require.Empty(t, DecisionContractBlockers(root, expandedAudit("dec-ok")))
 	})
 
+	t.Run("superseded status blocks at plan audit", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-superseded", authored+"## Status\nSuperseded by DEC-001\n")
+		blockers := DecisionContractBlockers(root, expandedAudit("dec-superseded"))
+		require.Contains(t, blockers, "decision_status_rejected:superseded")
+	})
+
+	t.Run("lowercase superseded status heading blocks at plan audit", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-superseded-lowercase-heading", authored+"## status\nSuperseded by DEC-001\n")
+		blockers := DecisionContractBlockers(root, expandedAudit("dec-superseded-lowercase-heading"))
+		require.Contains(t, blockers, "decision_status_rejected:superseded")
+	})
+
+	t.Run("unknown explicit status blocks at plan audit", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-unknown-status", authored+"## Status\nRetired-ish\n")
+		blockers := DecisionContractBlockers(root, expandedAudit("dec-unknown-status"))
+		require.Contains(t, blockers, "decision_status_unknown:retired ish")
+	})
+
+	t.Run("conflicting status aliases fail closed at plan audit", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name     string
+			content  string
+			expected string
+		}{
+			{
+				name: "accepted status superseded by lifecycle",
+				content: authored + `## Status
+Accepted
+
+## Lifecycle
+Superseded by DEC-001
+`,
+				expected: "decision_status_rejected:superseded",
+			},
+			{
+				name: "accepted status unknown by state",
+				content: authored + `## Status
+Accepted
+
+## State
+Retired-ish
+`,
+				expected: "decision_status_unknown:retired ish",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				root := writeDecision(t, "dec-conflicting-status", tt.content)
+				blockers := DecisionContractBlockers(root, expandedAudit("dec-conflicting-status"))
+				require.Contains(t, blockers, tt.expected)
+			})
+		}
+	})
+
+	t.Run("status near misses block at plan audit", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name     string
+			status   string
+			expected string
+		}{
+			{
+				name:     "inactive is unknown",
+				status:   "Inactive",
+				expected: "decision_status_unknown:inactive",
+			},
+			{
+				name:     "unaccepted is unknown",
+				status:   "unaccepted",
+				expected: "decision_status_unknown:unaccepted",
+			},
+			{
+				name:     "drafted is unknown",
+				status:   "drafted",
+				expected: "decision_status_unknown:drafted",
+			},
+			{
+				name:     "mixed accepted superseded is rejected",
+				status:   "Accepted, superseded by DEC-001",
+				expected: "decision_status_rejected:superseded",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				root := writeDecision(t, "dec-near-miss", authored+"## Status\n"+tt.status+"\n")
+				blockers := DecisionContractBlockers(root, expandedAudit("dec-near-miss"))
+				require.Contains(t, blockers, tt.expected)
+			})
+		}
+	})
+
+	t.Run("status blockers are canonical readiness reasons", func(t *testing.T) {
+		t.Parallel()
+		root := writeDecision(t, "dec-status-canonical", authored+"## Status\nDeprecated\n")
+		reasons := model.ReasonCodesFromSpecs(DecisionContractBlockers(root, expandedAudit("dec-status-canonical")))
+		require.Len(t, reasons, 1)
+		assert.Equal(t, "decision_status_rejected", reasons[0].Code)
+		assert.Equal(t, "deprecated", reasons[0].Detail)
+	})
+
 	t.Run("pre-audit draft stays lenient", func(t *testing.T) {
 		t.Parallel()
 		root := writeDecision(t, "dec-pre", template)
