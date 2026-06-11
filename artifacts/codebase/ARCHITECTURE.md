@@ -1,39 +1,61 @@
 # Architecture
 
-Re-authored for change `resolve-github-issue-157-add-uncheckable-inconclusive-per-it`
-(GitHub issue #157).
+Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
+(GitHub issue #156).
 
-Question: where should per-item ambiguous/uncheckable spec verification status
-be expressed so "could not check" is auditable and never silently passes?
+Question: where should "sensitive file changed implies owning evidence" be
+checked so it complements freshness and scope-contract readiness without
+creating a bypass path?
 
 - Affected modules:
-  - `internal/tmpl/templates/skills/spec-trace/SKILL.md:39` defines the
-    spec-trace report schema consumed by review users.
-  - `internal/tmpl/templates/skills/spec-trace/CHECKLIST.tmpl:11` defines the
-    mandatory coverage matrix and currently limits item status to
-    `covered`, `skipped`, and `drift`.
-  - `internal/tmpl/templates/skills/spec-compliance-review/SKILL.md.tmpl:43`
-    tells reviewers to use the attached spec-trace checklist while performing
-    Stage 1 governed review.
-  - `internal/tmpl/templates_test.go:1041` already pins review-template contract
-    wording, making it the focused regression-test seam for this change.
-  - `internal/toolgen/toolgen.go:254` and `internal/toolgen/toolgen.go:369`
-    export governance/technique skills; spec-trace is an exported technique
-    helper rather than a lifecycle-owned host.
+  - `internal/engine/progression/readiness.go:184` resolves the bound governed
+    bundle path before computing readiness.
+  - `internal/engine/progression/readiness.go:211` loads passing required skill
+    verification records.
+  - `internal/engine/progression/readiness.go:275` only invokes the current
+    scope-contract gate after an execution summary exists.
+  - `internal/engine/progression/advance_governed.go:146` enforces the same
+    sensitive-evidence result on mutating advancement so S2 cannot advance past
+    missing sensitive proof and later stages reopen to S2 for repair.
+  - `internal/engine/progression/stale_evidence_recovery.go:477` builds the
+    S2 recovery target for sensitive-evidence failures.
+  - `internal/engine/scopecontract/evaluate.go:41` evaluates planned targets
+    versus changed files but has no sensitive-evidence category logic.
+  - `internal/engine/sensitiveevidence/evaluate.go:49` classifies sensitive
+    changed files and checks passed task evidence references for category
+    markers.
+  - `internal/state/verification.go` owns validated skill-verification record
+    persistence under the authoritative governed bundle.
+  - `internal/model/execution_summary.go:28` stores task evidence fields,
+    including `ChangedFiles`, `TargetFiles`, `EvidenceRef`, and `TaskKind`.
+  - `cmd/evidence.go` writes runtime task evidence from
+    `slipway evidence task` and governance skill verification from
+    `slipway evidence skill`.
+  - `internal/toolgen/toolgen.go` and
+    `internal/tmpl/templates/_partials/command-evidence-body.tmpl` publish the
+    same `evidence task` and `evidence skill` surfaces to generated command
+    references and prompts.
 - Dependency flow:
-  - Authored templates under `internal/tmpl/templates/skills/...` are the source
-    of truth.
-  - Template rendering tests read authored content directly or render `.tmpl`
-    files and assert required contract text.
-  - Tool generation exports the authored skill surfaces; this change should not
-    edit generated copies directly.
-- Coupling hotspots:
-  - `spec-compliance-review` depends on spec-trace for the trace matrix contract,
-    so changing spec-trace wording is the main architectural fix.
-  - Adding runtime parsing or schema validation would widen the blast radius into
-    engine capability and verification-state code; Issue #157 explicitly steers
-    away from engine prose heuristics.
+  - `slipway evidence task` records runtime task evidence.
+  - Runtime task evidence materializes into `verification/execution-summary.yaml`.
+  - Host verification evidence is recorded through `slipway evidence skill`,
+    which writes `verification/<skill>.yaml` and records the change evidence
+    reference without advancing lifecycle state.
+  - `EvaluateGovernanceReadiness` consumes that summary, existing skill
+    verifications, and artifact state to produce blockers for `status`,
+    `validate`, `next`, `run`, and review surfaces.
+  - `AdvanceGoverned` reuses the same evaluator before normal state transition,
+    preserving the read-only and mutating contract.
+- Architectural boundary:
+  - Scope-contract should continue to own planned-target and changed-file drift.
+  - Sensitive evidence should be a sibling readiness evaluator that reuses the
+    same execution-summary changed files but reports its own reason code and
+    remediation.
+  - Generated host instructions must record skill verification through public
+    CLI commands, not hand-edited verification YAML.
 - Blast radius:
-  - Low implementation blast radius: authored skill templates and focused tests.
-  - Higher workflow semantics sensitivity: the wording controls how review
-    agents classify uncertain mappings in governed review.
+  - Runtime readiness and reason-code/remediation contracts.
+  - Public evidence command surface for skill verification.
+  - Generated adapter command metadata for the `evidence` command.
+  - Unit tests in a new focused evaluator package plus a narrow progression
+    integration test if wiring requires it.

@@ -1,10 +1,17 @@
 # Stack
 
+Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
+(GitHub issue #156).
+
 - Language: Go.
-- Template/content layer: markdown skill files and Go template rendering under
-  `internal/tmpl`.
-- Test framework: Go `testing` plus `testify` assertions already used in
-  `internal/tmpl/templates_test.go`.
-- Verification commands expected for this change: targeted `go test` for
-  `internal/tmpl`, broader Go tests, `go test -count=1 ./...`, `go build ./...`,
-  `go vet ./...`, `git diff --check`, and Slipway governance validation.
+- CLI framework: Cobra command tree under `cmd/`.
+- Persistence: YAML governed bundle records under `artifacts/changes/<slug>/`
+  and runtime task evidence under `.git/slipway/runtime/changes/<slug>/`.
+- Template/content layer: generated command prompt bodies from
+  `internal/tmpl/templates/_partials` and command metadata from
+  `internal/toolgen`.
+- Test framework: Go `testing` plus `testify` assertions.
+- Verification commands expected for this change: focused Go package tests,
+  `go test ./cmd -count=1`, `go test ./internal/toolgen -count=1`,
+  `go test ./... -count=1`, `git diff --check`, and Slipway governance
+  validation.

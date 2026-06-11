@@ -1,14 +1,19 @@
 {{- define "command-evidence-body" -}}
 # Evidence
 
-Record runtime task evidence for the active execution run. The wave-orchestration
-host calls this once per completed task during `S2_EXECUTE`. The verdict is a host
-judgment the engine consumes to advance the wave, so it cannot be inferred.
+Record runtime task evidence for the active execution run, or governance skill
+verification evidence for the current lifecycle host. The wave-orchestration
+host calls `evidence task` once per completed task during `S2_EXECUTE`.
+Governance hosts call `evidence skill` to write `verification/<skill>.yaml`
+through the CLI instead of hand-editing verification files.
 
 ## Invocation
 ```bash
 slipway evidence task --task-id <id> --run-summary-version <n> --task-kind <kind> \
   --verdict <pass|fail|blocked|incomplete|timeout> --evidence-ref "<ref>" --json
+
+slipway evidence skill --skill <name> --verdict <pass|fail> \
+  --reference "<ref>" --notes-file <path> --json
 ```
 
 ## Contract
@@ -17,8 +22,17 @@ slipway evidence task --task-id <id> --run-summary-version <n> --task-kind <kind
 - `--target-file` defaults to the planned task's target files when omitted.
 - The engine computes `freshness_inputs`; never hand-write the evidence JSON.
 - For a non-pass verdict, record blockers with `--blocker <code[:detail]>`.
+- `evidence skill` validates the requested skill against the current lifecycle
+  state and plan substep, and run-summary-bound skills require a ready
+  `execution-summary.yaml`.
+- `evidence skill` writes the verification record, updates the change evidence
+  reference, and does not advance lifecycle state; advance separately with
+  `slipway run`.
 
 ## Flags
+
+### `evidence task`
+
 - `--task-id <id>`: task ID from `wave-plan.yaml` (required)
 - `--run-summary-version <n>`: current wave-orchestration run_version (required)
 - `--task-kind <kind>`: code, test, doc, ops, verification, investigation, other (required)
@@ -29,6 +43,17 @@ slipway evidence task --task-id <id> --run-summary-version <n> --task-kind <kind
 - `--blocker <code[:detail]>`: task blocker (repeatable)
 - `--captured-at <RFC3339Nano>`: evidence timestamp (defaults to now)
 - `--session-id <id>`: executor session identifier
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+
+### `evidence skill`
+
+- `--skill <name>`: governance skill returned by `slipway next --json` (required)
+- `--verdict <v>`: pass or fail (required)
+- `--reference "<ref>"`: stable verification reference (repeatable)
+- `--blocker <code[:detail]>`: skill blocker (repeatable)
+- `--notes <text>`: inline verification notes
+- `--notes-file <path>`: file containing verification notes
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 {{- end -}}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"gopkg.in/yaml.v3"
 )
@@ -227,6 +228,32 @@ func verificationDirPathForRead(root, slug string) string {
 // path are authoritative.
 func VerificationFilePath(root, slug, skillName string) string {
 	return filepath.Join(resolveVerificationDir(root, slug), skillName+".yaml")
+}
+
+// SaveVerification writes a validated skill verification record to the
+// authoritative governed bundle for the active change.
+func SaveVerification(root, slug, skillName string, rec model.VerificationRecord) (string, error) {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" {
+		return "", fmt.Errorf("skill name is required")
+	}
+	rec.Normalize()
+	if err := rec.Validate(); err != nil {
+		return "", err
+	}
+	dir, err := resolveVerificationDirForWrite(root, slug)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, skillName+".yaml")
+	raw, err := yaml.Marshal(rec)
+	if err != nil {
+		return "", err
+	}
+	if err := fsutil.WriteFileAtomic(path, raw, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // LoadVerification reads a skill verification record.

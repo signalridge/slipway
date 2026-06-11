@@ -1,0 +1,59 @@
+version: 1
+slug: resolve-github-issue-156-add-a-change-implies-evidence-gate
+description: 'Resolve GitHub issue #156: add a change-implies-evidence gate'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-10T13:49:00.743389Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-156-add-a-change-implies-evidence-gate
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: f02c05ee6d2e48ee2137b714d6200c34375355de3837e58f50face2c60089d1d
+        updated_at: 2026-06-10T17:16:36.541846678Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: c0e55209d8570ad890a5c7a41d43d717a79235b6fa4981b04e1b37190cc25684
+        updated_at: 2026-06-10T16:12:22.845537221Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: cfc987183473aca8ed10435c8e10ffcac85e225456b46e941825bed88173c654
+        updated_at: 2026-06-10T13:52:33.81918111Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 87fd69228313d14bd7e9d554dfef9be4ddc202f6667d222a069a8146d7001c72
+        updated_at: 2026-06-10T16:12:06.057627753Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: e3ed092a4f3bf3ec491a8b8616b71ae66d9891864ea5f16727e3800782b367a2
+        updated_at: 2026-06-10T13:53:51.950913055Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 48bf93d4de3c14280d176525cf982a421adbfa3363b328c8dd4118d16c5a2c68
+        updated_at: 2026-06-10T16:01:11.095699952Z
+evidence_refs:
+    code-quality-review: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/code-quality-review.yaml
+    final-closeout: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/final-closeout.yaml
+    goal-verification: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/goal-verification.yaml
+    plan-audit: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/resolve-github-issue-156-add-a-change-implies-evidence-gate/artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/verification/wave-orchestration.yaml

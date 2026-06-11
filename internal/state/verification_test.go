@@ -53,6 +53,32 @@ func TestSaveLoadVerificationRoundTrip(t *testing.T) {
 	assert.Empty(t, loaded.Blockers)
 }
 
+func TestSaveVerificationWritesValidatedRecord(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeLayout(t)
+	slug := "save-verification"
+	saveActiveChangeForTest(t, root, slug)
+
+	rec := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  time.Now().UTC().Truncate(time.Second),
+		References: []string{"plan-audit:pass"},
+		Notes:      "Plan audit passed.",
+	}
+	path, err := SaveVerification(root, slug, "plan-audit", rec)
+	require.NoError(t, err)
+	expectedPath, err := NormalizePath(filepath.Join(VerificationDir(root, slug), "plan-audit.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, expectedPath, path)
+
+	loaded, err := LoadVerification(root, slug, "plan-audit")
+	require.NoError(t, err)
+	assert.Equal(t, model.VerificationVerdictPass, loaded.Verdict)
+	assert.Empty(t, loaded.Blockers)
+	assert.Equal(t, []string{"plan-audit:pass"}, loaded.References)
+	assert.Equal(t, "Plan audit passed.", loaded.Notes)
+}
+
 func TestSaveVerificationOverwritesExisting(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
