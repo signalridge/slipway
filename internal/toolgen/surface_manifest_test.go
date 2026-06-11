@@ -1,0 +1,153 @@
+package toolgen
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
+	t.Parallel()
+
+	manifest := BuildSurfaceManifest()
+	raw, err := EncodeSurfaceManifest(manifest)
+	require.NoError(t, err)
+
+	var decoded SurfaceManifest
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	assert.Equal(t, manifest, decoded)
+
+	assert.Equal(t, 1, manifest.Version)
+	assert.NotEmpty(t, manifest.Rows)
+	assert.True(t, slices.IsSortedFunc(manifest.Rows, compareSurfaceManifestRows),
+		"manifest rows must be sorted for deterministic JSON")
+
+	rowsByKey := map[string]SurfaceManifestRow{}
+	for _, row := range manifest.Rows {
+		require.NotEmpty(t, row.Kind)
+		require.NotEmpty(t, row.Name)
+		require.NotEmpty(t, row.Source)
+		require.NotEmpty(t, row.Docs)
+		require.NotEmpty(t, row.Token)
+		rowsByKey[row.Kind+"/"+row.Name] = row
+	}
+
+	for _, id := range commandIDs() {
+		row, ok := rowsByKey["command/"+id]
+		require.Truef(t, ok, "missing command row for %s", id)
+		assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", row.Source)
+		assert.Equal(t, "docs/commands.md", row.Docs)
+		assert.Equal(t, "slipway "+id, row.Token)
+	}
+
+	for _, cfg := range Registry() {
+		row, ok := rowsByKey["adapter/"+cfg.ID]
+		require.Truef(t, ok, "missing adapter row for %s", cfg.ID)
+		assert.Equal(t, "internal/toolgen/toolgen.go:toolRegistry", row.Source)
+		assert.Equal(t, "docs/ai-tools.md", row.Docs)
+		assert.Equal(t, "`"+cfg.ID+"`", row.Token)
+	}
+
+	for _, id := range governanceSurfaceIDs(func(governanceSurfaceDescriptor) bool { return true }) {
+		row, ok := rowsByKey["skill/"+adapterSkillName(id)]
+		require.Truef(t, ok, "missing governance skill row for %s", id)
+		assert.Equal(t, "internal/toolgen/toolgen.go:governanceSurfaceDescriptors", row.Source)
+		assert.Equal(t, "README.md", row.Docs)
+		assert.Equal(t, skillDocsToken(adapterSkillName(id)), row.Token)
+	}
+
+	for _, id := range append(append([]string{}, standaloneNames...), techniqueNames...) {
+		if !shouldExportAsHostSkill(id) {
+			continue
+		}
+		row, ok := rowsByKey["skill/"+adapterSkillName(id)]
+		require.Truef(t, ok, "missing standalone or technique skill row for %s", id)
+		assert.Equal(t, "internal/toolgen/toolgen.go:hostSkillExportAllowlist", row.Source)
+		assert.Equal(t, "README.md", row.Docs)
+		assert.Equal(t, skillDocsToken(adapterSkillName(id)), row.Token)
+	}
+
+	for _, id := range catalogSkillIDs {
+		if !shouldExportAsHostSkill(id) {
+			continue
+		}
+		row, ok := rowsByKey["skill/"+adapterSkillName(id)]
+		require.Truef(t, ok, "missing exported catalog skill row for %s", id)
+		assert.Equal(t, "internal/engine/capability.DefaultRegistry", row.Source)
+	}
+
+	for _, def := range commandRegistry {
+		if !strings.Contains(def.Arguments, "--json") {
+			continue
+		}
+		if def.ID == "evidence" {
+			for _, id := range []string{"evidence-task-json", "evidence-skill-json"} {
+				row, ok := rowsByKey["json-contract/"+id]
+				require.Truef(t, ok, "missing json contract row for %s", id)
+				assert.Equal(t, "cmd/evidence.go", row.Source)
+				assert.Equal(t, "docs/commands.md", row.Docs)
+				assert.Contains(t, row.Token, "json")
+			}
+			continue
+		}
+		row, ok := rowsByKey["json-contract/"+def.ID+"-json"]
+		require.Truef(t, ok, "missing json contract row for %s", def.ID)
+		assert.Equal(t, commandSourcePath(def.ID), row.Source)
+		assert.Equal(t, "docs/commands.md", row.Docs)
+		assert.Contains(t, row.Token, "json")
+	}
+
+	for _, path := range []string{"README.md", "docs/ai-tools.md", "docs/commands.md", "docs/operator-guide.md"} {
+		key := "documentation/" + path
+		row, ok := rowsByKey[key]
+		require.Truef(t, ok, "missing documentation row for %s", path)
+		assert.Equal(t, path, row.Docs)
+		assert.Equal(t, path, row.Name)
+	}
+}
+
+func TestCommittedSurfaceManifestMatchesBuilder(t *testing.T) {
+	t.Parallel()
+
+	live, err := EncodeSurfaceManifest(BuildSurfaceManifest())
+	require.NoError(t, err)
+
+	committedPath := filepath.Join(toolgenRepoRoot(t), SurfaceManifestPath)
+	committed := readSurfaceManifestFixture(t, committedPath)
+	if string(live) != committed {
+		t.Fatalf("%s is stale; run `go run ./internal/toolgen/cmd/gen-surface-manifest --write`.\n--- diff sample ---\n%s",
+			SurfaceManifestPath,
+			firstNDiffLines(committed, string(live), 20))
+	}
+}
+
+func TestSurfaceManifestDocsTokensExist(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := toolgenRepoRoot(t)
+	docsCache := map[string]string{}
+
+	for _, row := range BuildSurfaceManifest().Rows {
+		content, ok := docsCache[row.Docs]
+		if !ok {
+			content = readSurfaceManifestFixture(t, filepath.Join(repoRoot, row.Docs))
+			docsCache[row.Docs] = content
+		}
+		assert.Containsf(t, content, row.Token,
+			"%s/%s expects token %q in %s", row.Kind, row.Name, row.Token, row.Docs)
+	}
+}
+
+func readSurfaceManifestFixture(t *testing.T, path string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return strings.ReplaceAll(string(raw), "\r\n", "\n")
+}

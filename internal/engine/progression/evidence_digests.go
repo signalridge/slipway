@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -304,6 +305,11 @@ func passingAndPreviouslyAcceptedSkillRecords(
 	if err != nil {
 		return nil, err
 	}
+	currentPosition := currentStaleEvidencePosition(change)
+	recordedPositions, err := recordedSkillEvidencePositions(root)
+	if err != nil {
+		return nil, err
+	}
 	for skillName, record := range verifications {
 		skillName = strings.TrimSpace(skillName)
 		if skillName == SkillIntakeClarification {
@@ -315,11 +321,31 @@ func passingAndPreviouslyAcceptedSkillRecords(
 		if skillName == "" || !recorded[skillName] || !record.IsPassing() {
 			continue
 		}
+		position, ok := recordedPositions[skillName]
+		if ok && compareStaleEvidencePosition(position, currentPosition) > 0 {
+			continue
+		}
 		if _, exists := out[skillName]; !exists {
 			out[skillName] = record
 		}
 	}
 	return out, nil
+}
+
+func recordedSkillEvidencePositions(root string) (map[string]staleEvidencePosition, error) {
+	registry, err := skill.LoadGovernanceRegistry(root)
+	if err != nil {
+		return nil, err
+	}
+	positions := map[string]staleEvidencePosition{}
+	for _, def := range registry {
+		position, ok := staleEvidencePositionForDefinition(def)
+		if !ok {
+			continue
+		}
+		positions[strings.TrimSpace(def.Name)] = position
+	}
+	return positions, nil
 }
 
 func recordedSkillEvidenceSet(root string, change model.Change) (map[string]bool, error) {
