@@ -113,6 +113,24 @@ func StampEvidenceDigestForSkill(
 	return state.SaveEvidenceDigests(root, change.Slug, next)
 }
 
+// CheckEvidenceDigestInputsForSkill validates that the current engine-owned
+// digest inputs for a skill are available before writing a verification record.
+func CheckEvidenceDigestInputsForSkill(
+	root string,
+	change model.Change,
+	skillName string,
+	summary *model.ExecutionSummary,
+) error {
+	_, err := certifiedSkillInputDigest(root, change, skillName, summary)
+	return err
+}
+
+// PruneEvidenceDigestForSkill removes a skill's digest entry when the
+// verification record no longer represents an accepted passing verdict.
+func PruneEvidenceDigestForSkill(root string, change model.Change, skillName string) error {
+	return pruneEvidenceDigestForSkill(root, change, skillName)
+}
+
 // pruneEvidenceDigestForSkill removes a skill's entry from evidence-digests.yaml
 // when present. It is the digest half of removing a verification record, so a
 // digest entry never outlives the record it certifies.
@@ -697,10 +715,19 @@ func addWaveOrchestrationInputs(
 		}
 		summary = loaded
 	}
-	if summary == nil || summary.RunSummaryVersion < 1 {
+	runVersion := 0
+	if state.ExecutionSummaryReady(summary) {
+		runVersion = summary.RunSummaryVersion
+	} else {
+		runVersion, err = LatestTaskEvidenceRunVersion(root, change.Slug)
+		if err != nil {
+			return err
+		}
+	}
+	if runVersion < 1 {
 		return errDigestInputsUnavailable
 	}
-	tasks, issues, err := LoadExecutionTasksFromEvidence(root, change.Slug, summary.RunSummaryVersion)
+	tasks, issues, err := LoadExecutionTasksFromEvidence(root, change.Slug, runVersion)
 	if err != nil {
 		return err
 	}
@@ -711,7 +738,7 @@ func addWaveOrchestrationInputs(
 		return errDigestInputsUnavailable
 	}
 	taskHash, err := model.ComputeInputHash(map[string]any{
-		"run_summary_version": summary.RunSummaryVersion,
+		"run_summary_version": runVersion,
 		"tasks":               tasks,
 	})
 	if err != nil {
@@ -719,6 +746,35 @@ func addWaveOrchestrationInputs(
 	}
 	inputs["runtime_task_evidence"] = taskHash
 	return nil
+}
+
+// LatestTaskEvidenceRunVersion returns the highest run_summary_version present
+// in runtime task evidence. Wave-orchestration uses this before it can produce
+// execution-summary.yaml.
+func LatestTaskEvidenceRunVersion(root, slug string) (int, error) {
+	dir := state.EvidenceTasksDir(root, slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	latest := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		runVersion, err := taskEvidenceRunVersion(path)
+		if err != nil {
+			return 0, fmt.Errorf("load task evidence run version from %s: %w", state.DisplayPath(root, path), err)
+		}
+		if runVersion > latest {
+			latest = runVersion
+		}
+	}
+	return latest, nil
 }
 
 func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths) []string {

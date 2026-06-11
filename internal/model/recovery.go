@@ -533,6 +533,12 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
+	"sensitive_evidence_missing": {
+		Remediation:     "Sensitive changed file {detail} is missing owning evidence for {subject}. Run the workflow to stay in or reopen S2_EXECUTE, then record task evidence with `slipway evidence task` using the required marker: schema_migration uses `migration-applied:<command>`, auth_authz uses `auth-review:<review-ref>`, and api_contract uses `contract-test:<test-command>`.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+		SplitDetail:     true,
+	},
 	"tasks_checklist_invalid_format": {
 		Remediation:     "Fix the tasks.md checklist format before continuing.",
 		CommandTemplate: "slipway validate",

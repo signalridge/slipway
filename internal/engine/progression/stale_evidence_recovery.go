@@ -12,6 +12,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/action"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
+	"github.com/signalridge/slipway/internal/engine/sensitiveevidence"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -247,6 +248,7 @@ func reopenToStaleStage(
 		SideEffects:   sideEffects,
 		ClearedFields: stringutil.UniqueSorted(cleared),
 		Message:       "Reopened " + target.Label() + " for stale evidence recovery.",
+		Blockers:      target.Blockers,
 	}, nil
 }
 
@@ -462,6 +464,32 @@ func scopeContractReopenTarget(root string, change model.Change, summary *model.
 		scopeContractWorkspaceChangedFiles(paths),
 	)
 	if err != nil || len(report.Blockers) == 0 {
+		return StaleEvidenceTarget{}, nil
+	}
+	return StaleEvidenceTarget{
+		SkillName:   SkillWaveOrchestration,
+		State:       model.StateS2Execute,
+		PlanSubStep: model.PlanSubStepNone,
+		Blockers:    report.Blockers,
+	}, nil
+}
+
+func sensitiveEvidenceReopenTarget(root string, change model.Change, summary *model.ExecutionSummary) (StaleEvidenceTarget, error) {
+	if !state.ExecutionSummaryReady(summary) {
+		return StaleEvidenceTarget{}, nil
+	}
+	if compareStaleEvidencePosition(
+		currentStaleEvidencePosition(change),
+		staleEvidencePositionFor(model.StateS2Execute, model.PlanSubStepNone),
+	) < 0 {
+		return StaleEvidenceTarget{}, nil
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return StaleEvidenceTarget{}, err
+	}
+	report := sensitiveevidence.Evaluate(summary, scopeContractWorkspaceChangedFiles(paths))
+	if len(report.Blockers) == 0 {
 		return StaleEvidenceTarget{}, nil
 	}
 	return StaleEvidenceTarget{

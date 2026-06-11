@@ -494,6 +494,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityWarning,
 		Message:  "Session isolation warning detected in task evidence",
 	},
+	"sensitive_evidence_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Sensitive changed file is missing owning evidence",
+	},
 	"ship_gate_blocked": {
 		Severity: ReasonSeverityError,
 		Message:  "The ship gate blocked finalization",
