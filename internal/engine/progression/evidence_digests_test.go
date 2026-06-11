@@ -830,6 +830,69 @@ func TestStoredGoalDigestStalesWhenInputContentChanges(t *testing.T) {
 	assert.Contains(t, blockers, "required_skill_stale:goal-verification:tracked.go")
 }
 
+func TestGoalAndCloseoutDigestIgnoresEvidenceRefOnlyChangeYAMLMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, skillName := range []string{SkillGoalVerification, SkillFinalCloseout} {
+		t.Run(skillName, func(t *testing.T) {
+			t.Parallel()
+
+			root, change := createReviewInputDigestFixture(t)
+			change.CurrentState = model.StateS4Verify
+			require.NoError(t, state.SaveChange(root, change))
+			changeYAMLRel := filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "change.yaml"))
+			summary := digestPolicyExecutionSummary(change, []string{changeYAMLRel})
+			require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+			record := model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
+				RunVersion: 1,
+			}
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
+
+			change.RecordEvidenceRef(skillName, filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "verification", skillName+".yaml")))
+			require.NoError(t, state.SaveChange(root, change))
+
+			blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
+			require.NoError(t, err)
+			assert.NotContains(t, blockers, "required_skill_stale:"+skillName+":"+changeYAMLRel)
+			assert.Empty(t, blockers)
+
+			change.Description = "meaningful change.yaml mutation after evidence"
+			require.NoError(t, state.SaveChange(root, change))
+
+			blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
+			require.NoError(t, err)
+			assert.Contains(t, blockers, "required_skill_stale:"+skillName+":"+changeYAMLRel)
+		})
+	}
+}
+
+func TestDefaultContentDigestKeepsRawChangeYAMLHash(t *testing.T) {
+	t.Parallel()
+
+	const skillName = "custom-runtime-review"
+	root, change := createReviewInputDigestFixture(t)
+	changeYAMLRel := filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "change.yaml"))
+	summary := digestPolicyExecutionSummary(change, []string{changeYAMLRel})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
+
+	change.RecordEvidenceRef(skillName, filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "verification", skillName+".yaml")))
+	require.NoError(t, state.SaveChange(root, change))
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:"+skillName+":"+changeYAMLRel)
+}
+
 func TestStoredReviewDigestStalesWhenInputContentChanges(t *testing.T) {
 	t.Parallel()
 

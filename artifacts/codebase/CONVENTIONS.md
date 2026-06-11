@@ -1,20 +1,18 @@
 # Conventions
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change
+`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
+(GitHub issue #185).
 
-- Gate-bearing readiness checks should use canonical `model.ReasonCode` values,
-  not free-form blocker prose.
-- Recovery text must name a legal public command for the current lifecycle
-  position. For `sensitive_evidence_missing`, recovery starts with
-  `slipway run` so the workflow stays in or reopens to S2 before using
-  `slipway evidence task`.
-- Runtime task evidence is recorded through `slipway evidence task`; governance
-  skill verification is recorded through `slipway evidence skill`. Do not
-  hand-edit engine-owned freshness state or verification records as a normal
-  workflow path.
-- Generated command surfaces are backed by `internal/toolgen/toolgen.go` and
-  command body templates. When a Cobra flag is added, update the generated
-  command metadata in the same change.
-- Sensitive evidence markers are lowercase hyphenated prefixes such as
-  `migration-applied`, `auth-review`, and `contract-test`.
+- Keep public CLI command behavior stable unless the issue requires a surface
+  change. #185 can be fixed in digest input semantics without changing flags or
+  command ordering.
+- Required skill freshness must fail closed for real input changes and report
+  canonical `required_skill_stale:<skill>:<input>` details.
+- Verification YAML, `evidence-digests.yaml`, timestamps, run versions, and
+  evidence refs remain engine-owned. Tests may use helpers, but normal workflow
+  should not hand-edit these files.
+- Use focused package tests for digest behavior before broadening to full
+  repository tests.
+- Special-case logic should be path-scoped and skill-scoped; avoid broad
+  exclusions that make unrelated content invisible to freshness checks.

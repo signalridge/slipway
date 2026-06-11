@@ -1,17 +1,17 @@
 # Stack
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change
+`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
+(GitHub issue #185).
 
 - Language: Go.
 - CLI framework: Cobra command tree under `cmd/`.
-- Persistence: YAML governed bundle records under `artifacts/changes/<slug>/`
-  and runtime task evidence under `.git/slipway/runtime/changes/<slug>/`.
-- Template/content layer: generated command prompt bodies from
-  `internal/tmpl/templates/_partials` and command metadata from
-  `internal/toolgen`.
-- Test framework: Go `testing` plus `testify` assertions.
-- Verification commands expected for this change: focused Go package tests,
-  `go test ./cmd -count=1`, `go test ./internal/toolgen -count=1`,
-  `go test ./... -count=1`, `git diff --check`, and Slipway governance
-  validation.
+- Persistence: YAML governed bundle authority under
+  `artifacts/changes/<slug>/change.yaml`, verification YAML under
+  `artifacts/changes/<slug>/verification/`, and runtime task evidence under
+  `.git/slipway/runtime/changes/<slug>/`.
+- Serialization: `gopkg.in/yaml.v3` for strict authority decoding and
+  `encoding/json` via `model.ComputeInputHash` for canonical digest payloads.
+- Tests: Go `testing` plus `testify`.
+- Expected checks: focused progression tests, full Go test suite, `git diff
+  --check`, and Slipway `validate --json`.

@@ -1,35 +1,23 @@
 # Structure
 
-Re-authored for change `resolve-issue-163-decisions-gate` (GitHub issue #163).
+Re-authored for change
+`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
+(GitHub issue #185).
 
-- `internal/engine/artifact/`
-  - `decision_contract.go`: decision artifact contract status, structured
-    evaluation, substance blockers, and the planned parsed-decision status
-    helper.
-  - `decision_contract_test.go`: artifact-level tests for section substance and
-    the planned parser/status behavior.
-  - `manager.go`: existing selected-decision extraction helpers and markdown
-    section utilities reused by artifact contracts.
-  - `schemas.yaml`: authoritative required-section list for `decision.md`;
-    status parsing must remain compatible because status is not currently a
-    required schema section.
-- `internal/engine/progression/`
-  - `validation.go`: planning readiness gate that already invokes
-    `DecisionContractBlockers` and should receive dead-status blockers.
-  - `validation_test.go`: lifecycle-timing tests for decision blockers and the
-    planned superseded/deprecated/unknown status regressions.
 - `cmd/`
-  - `next_skill.go`: next-skill constraint assembly currently reads decision
-    text and routes it to pending or locked based on `G_plan`.
-  - `next_skill_constraints_test.go`: existing pending-vs-locked coverage and
-    planned dead-status handoff regressions.
+  - `evidence.go`: public `slipway evidence skill` command. It remains
+    unchanged; it demonstrates why digest stamping happens before
+    `EvidenceRefs` are written.
+- `internal/engine/progression/`
+  - `evidence_digests.go`: owned implementation surface for #185. S4
+    goal/closeout digest helpers live here.
+  - `evidence_digests_test.go`: focused regression location for the self-stale
+    and meaningful-change cases.
+  - `authority.go`: source of the changed/target paths reused by
+    goal-verification and final-closeout.
 - `internal/model/`
-  - `reason_code.go`: canonical reason-code definitions for new decision status
-    blockers.
-  - `reason_code_contract_test.go`: frozen taxonomy snapshot that must be
-    updated when new reason codes are added.
-  - `recovery.go` and `recovery_test.go`: operator remediation for the new
-    fail-closed diagnostics.
-- `artifacts/changes/resolve-issue-163-decisions-gate/`
-  - Governed artifact bundle for this change. `assurance.md` remains deferred
-    until review/verify stages.
+  - `change.go`: `Change.EvidenceRefs` is the engine-owned runtime pointer map
+    stored in `change.yaml`.
+  - `evidence.go`: `ComputeInputHash` provides canonical structured hashing.
+- `artifacts/changes/resolve-github-issue-185-prevent-s4-goal-verification-from-s/`
+  - Governed artifact bundle for #185.
