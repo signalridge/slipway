@@ -13,11 +13,14 @@ import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 )
 
 const planAuditLastCheckerFeedbackKey = "plan_audit.last_checker_feedback"
+
+var applyGovernedFileTransaction = fsutil.ApplyFileTransaction
 
 func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary AdvanceSummary, err error) {
 	var options AdvanceOptions
@@ -341,16 +344,19 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			// Advance substep within S1_PLAN.
 			change.AdvancePlanSubStep(nextSub)
 			var sideEffects []SideEffect
+			transactionOps := make([]fsutil.FileTransactionOp, 0, 2)
 			if nextSub == model.PlanSubStepBundle {
-				if err := ensureGovernedBundleScaffolded(root, &change); err != nil {
+				scaffoldOps, err := governedBundleScaffoldTransactionOps(root, &change)
+				if err != nil {
 					return AdvanceSummary{}, err
 				}
+				transactionOps = append(transactionOps, scaffoldOps...)
 				sideEffects = append(sideEffects, SideEffect{
 					Kind:   "scaffolded_bundle",
 					Detail: "governed bundle artifacts created or verified",
 				})
 			}
-			if err := state.SaveChange(root, change); err != nil {
+			if err := applyGovernedChangeTransaction(root, change, transactionOps); err != nil {
 				return AdvanceSummary{}, err
 			}
 			sideEffects = append(append([]SideEffect(nil), preTransitionSideEffects...), sideEffects...)
@@ -401,10 +407,17 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 
 	sideEffects := append([]SideEffect(nil), preTransitionSideEffects...)
+	transactionOps := make([]fsutil.FileTransactionOp, 0, 2)
 	if toState == model.StateS2Execute {
-		if _, err := state.MaterializeWavePlan(root, change); err != nil {
+		generatedAt := change.CreatedAt
+		if planAudit, ok := passingSkills[SkillPlanAudit]; ok && !planAudit.Timestamp.IsZero() {
+			generatedAt = planAudit.Timestamp
+		}
+		_, wavePlanOp, err := state.MaterializeWavePlanTransactionOpAt(root, change, generatedAt)
+		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		transactionOps = append(transactionOps, wavePlanOp)
 		sideEffects = append(sideEffects, SideEffect{
 			Kind:   "materialized_wave_plan",
 			Detail: "wave plan materialized from tasks.md",
@@ -420,8 +433,14 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if change.ClearAutoPassHistory() {
 		cleared = append(cleared, "last_auto_passed_states")
 	}
-	if err := state.SaveChange(root, change); err != nil {
-		return AdvanceSummary{}, err
+	if len(transactionOps) > 0 {
+		if err := applyGovernedChangeTransaction(root, change, transactionOps); err != nil {
+			return AdvanceSummary{}, err
+		}
+	} else {
+		if err := state.SaveChange(root, change); err != nil {
+			return AdvanceSummary{}, err
+		}
 	}
 
 	return AdvanceSummary{
@@ -497,16 +516,6 @@ func computeNextPlanSubStep(current model.PlanSubStep) model.PlanSubStep {
 	return planSubStepOrder[idx+1]
 }
 
-func removeFileIfExists(path string) (bool, error) {
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
 // recoveryEvidenceFile pairs a verification artifact path with the skill that
 // owns it. The skill is empty for non-skill artifacts (wave-plan.yaml,
 // execution-summary.yaml), which have no evidence-digest entry of their own.
@@ -515,45 +524,30 @@ type recoveryEvidenceFile struct {
 	skill string
 }
 
-// clearRecoveryEvidence deletes a recovery evidence file. When the file is a
-// skill verification record, its evidence-digest entry is pruned in the same
-// step so a digest never outlives its record.
-func clearRecoveryEvidence(root string, change model.Change, ev recoveryEvidenceFile) (bool, error) {
-	if strings.TrimSpace(ev.skill) != "" {
-		return removeVerificationRecordAndDigest(root, change, ev.path, ev.skill)
-	}
-	return removeFileIfExists(ev.path)
-}
-
-// removeVerificationRecordAndDigest deletes a skill's verification record file
-// and, when the file existed, prunes its evidence-digest entry so a digest entry
-// never outlives the record it certifies.
-func removeVerificationRecordAndDigest(root string, change model.Change, path, skillName string) (bool, error) {
-	removed, err := removeFileIfExists(path)
-	if err != nil {
-		return false, err
-	}
-	if removed {
-		if err := pruneEvidenceDigestForSkill(root, change, skillName); err != nil {
-			return false, err
-		}
-	}
-	return removed, nil
-}
-
-func ensureGovernedBundleScaffolded(root string, change *model.Change) error {
+func governedBundleScaffoldTransactionOps(root string, change *model.Change) ([]fsutil.FileTransactionOp, error) {
 	if change == nil {
-		return fmt.Errorf("change is required")
+		return nil, fmt.Errorf("change is required")
 	}
 	resolution := ResolveChangeSchemaDiagnostics(*change)
 	if len(resolution.Blockers) > 0 {
-		return fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
+		return nil, fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
 	}
 	policy, err := governance.ResolvePresetPolicy(root, *change)
 	if err != nil {
+		return nil, err
+	}
+	return artifact.ScaffoldGovernedBundleTransactionOpsForChange(root, *change, policy.EffectivePreset, resolution.Schema)
+}
+
+func applyGovernedChangeTransaction(root string, change model.Change, ops []fsutil.FileTransactionOp) error {
+	changeOps, err := state.SaveChangeTransactionOps(root, change)
+	if err != nil {
 		return err
 	}
-	return artifact.ScaffoldGovernedBundleForChange(root, *change, policy.EffectivePreset, resolution.Schema)
+	transactionOps := make([]fsutil.FileTransactionOp, 0, len(ops)+len(changeOps))
+	transactionOps = append(transactionOps, ops...)
+	transactionOps = append(transactionOps, changeOps...)
+	return applyGovernedFileTransaction(transactionOps)
 }
 
 // ComputeNextGovernedState determines the next workflow state for a governed change.

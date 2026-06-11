@@ -1,61 +1,60 @@
 # Architecture
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change `resolve-github-issue-164-implement-transactional-multi-file`
+(GitHub issue #164).
 
-Question: where should "sensitive file changed implies owning evidence" be
-checked so it complements freshness and scope-contract readiness without
-creating a bypass path?
+Question: where should transactional multi-file stage-transition writes live so
+Slipway cannot leave partial governed bundle or evidence state when a later
+write fails?
 
 - Affected modules:
-  - `internal/engine/progression/readiness.go:184` resolves the bound governed
-    bundle path before computing readiness.
-  - `internal/engine/progression/readiness.go:211` loads passing required skill
-    verification records.
-  - `internal/engine/progression/readiness.go:275` only invokes the current
-    scope-contract gate after an execution summary exists.
-  - `internal/engine/progression/advance_governed.go:146` enforces the same
-    sensitive-evidence result on mutating advancement so S2 cannot advance past
-    missing sensitive proof and later stages reopen to S2 for repair.
-  - `internal/engine/progression/stale_evidence_recovery.go:477` builds the
-    S2 recovery target for sensitive-evidence failures.
-  - `internal/engine/scopecontract/evaluate.go:41` evaluates planned targets
-    versus changed files but has no sensitive-evidence category logic.
-  - `internal/engine/sensitiveevidence/evaluate.go:49` classifies sensitive
-    changed files and checks passed task evidence references for category
-    markers.
-  - `internal/state/verification.go` owns validated skill-verification record
-    persistence under the authoritative governed bundle.
-  - `internal/model/execution_summary.go:28` stores task evidence fields,
-    including `ChangedFiles`, `TargetFiles`, `EvidenceRef`, and `TaskKind`.
-  - `cmd/evidence.go` writes runtime task evidence from
-    `slipway evidence task` and governance skill verification from
-    `slipway evidence skill`.
-  - `internal/toolgen/toolgen.go` and
-    `internal/tmpl/templates/_partials/command-evidence-body.tmpl` publish the
-    same `evidence task` and `evidence skill` surfaces to generated command
-    references and prompts.
+  - `internal/fsutil/atomic.go:14` exposes the current single-file durability
+    primitive, `WriteFileAtomic`, using temp-in-dir, fsync, rename, and parent
+    sync. The new work should compose with this primitive rather than weaken it.
+  - `internal/engine/progression/advance_governed.go:337` through
+    `internal/engine/progression/advance_governed.go:355` advances S1 plan
+    substeps, scaffolds the governed bundle when entering `bundle`, and only
+    then persists `change.yaml`.
+  - `internal/engine/artifact/manager.go:241` through
+    `internal/engine/artifact/manager.go:309` resolves required artifacts and
+    writes missing scaffold-owned files in a loop with direct file writes.
+  - `internal/state/store.go:511` through `internal/state/store.go:550`
+    persists `change.yaml` and then records the machine-local worktree binding.
+  - `internal/engine/progression/advance_governed.go:403` through
+    `internal/engine/progression/advance_governed.go:424` materializes
+    `wave-plan.yaml` before the S1-to-S2 transition state is saved.
+  - `internal/state/wave_execution.go:72` through
+    `internal/state/wave_execution.go:90` writes `wave-plan.yaml`; lines 133
+    through 181 build and save that plan from `tasks.md`.
+  - `internal/engine/progression/stale_evidence_recovery.go:137` through
+    `internal/engine/progression/stale_evidence_recovery.go:182` removes stale
+    skill verification, wave plan, and execution-summary files before
+    `internal/engine/progression/stale_evidence_recovery.go:238` saves the
+    reopened lifecycle state.
+  - `internal/engine/progression/advance_governed.go:521` through
+    `internal/engine/progression/advance_governed.go:541` owns evidence removal
+    helpers that also prune digest records.
 - Dependency flow:
-  - `slipway evidence task` records runtime task evidence.
-  - Runtime task evidence materializes into `verification/execution-summary.yaml`.
-  - Host verification evidence is recorded through `slipway evidence skill`,
-    which writes `verification/<skill>.yaml` and records the change evidence
-    reference without advancing lifecycle state.
-  - `EvaluateGovernanceReadiness` consumes that summary, existing skill
-    verifications, and artifact state to produce blockers for `status`,
-    `validate`, `next`, `run`, and review surfaces.
-  - `AdvanceGoverned` reuses the same evaluator before normal state transition,
-    preserving the read-only and mutating contract.
+  - S1 bundle progression: `AdvanceGoverned` changes the plan substep,
+    scaffolds non-deferred governed artifacts, then saves `change.yaml`.
+  - S1-to-S2 progression: `AdvanceGoverned` materializes a wave plan, changes
+    lifecycle state, then saves `change.yaml`.
+  - Stale reopen: `reopenToStaleStage` removes evidence files and digest
+    entries, mutates change state, then saves `change.yaml`.
+  - Single-file persistence already routes through `fsutil.WriteFileAtomic`;
+    issue #164 needs an all-or-nothing boundary around ordered sets of those
+    file mutations.
 - Architectural boundary:
-  - Scope-contract should continue to own planned-target and changed-file drift.
-  - Sensitive evidence should be a sibling readiness evaluator that reuses the
-    same execution-summary changed files but reports its own reason code and
-    remediation.
-  - Generated host instructions must record skill verification through public
-    CLI commands, not hand-edited verification YAML.
+  - Add a focused file transaction helper in `internal/fsutil`.
+  - Adapt transition call sites to express file writes/removes inside a
+    transaction boundary.
+  - Keep directory archive and bundle relocation outside this change unless
+    tests prove the same file-set failure class; archive already has directory
+    rollback coverage.
 - Blast radius:
-  - Runtime readiness and reason-code/remediation contracts.
-  - Public evidence command surface for skill verification.
-  - Generated adapter command metadata for the `evidence` command.
-  - Unit tests in a new focused evaluator package plus a narrow progression
-    integration test if wiring requires it.
+  - `internal/fsutil` for transaction mechanics and rollback diagnostics.
+  - `internal/engine/progression` for transition wrapping.
+  - `internal/engine/artifact` for scaffold-owned artifact write integration.
+  - `internal/state` only where wave-plan materialization needs a transaction
+    seam or operation builder.
+  - Targeted tests in the same packages.

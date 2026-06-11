@@ -1,46 +1,39 @@
 # Structure
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change `resolve-github-issue-164-implement-transactional-multi-file`
+(GitHub issue #164).
 
-- `internal/engine/sensitiveevidence/`
-  - `evaluate.go`: focused evaluator for sensitive changed-file categories,
-    marker extraction, and `sensitive_evidence_missing` blockers.
-  - `evaluate_test.go`: category, marker, separate-verification, and no-bypass
-    regressions.
+- `internal/fsutil/`
+  - `atomic.go`: existing atomic single-file write helper and temp artifact
+    cleanup. Planned transaction work belongs here as a small sibling helper,
+    likely `transaction.go` plus package tests.
+- `internal/engine/artifact/`
+  - `manager.go`: governed artifact schema resolution and scaffold-owned file
+    materialization. The current scaffold loop creates missing non-deferred
+    artifacts before the caller persists lifecycle state.
+  - Planned tests should prove scaffold writes participate in a transaction
+    when used from governed progression.
 - `internal/engine/progression/`
-  - `readiness.go`: read-only governance readiness aggregation, now exposing
-    `SensitiveEvidence` and appending sensitive-evidence blockers after
-    execution-summary readiness.
-  - `advance_governed.go`: mutating lifecycle transition path, now blocking in
-    S2_EXECUTE or reopening later stages to S2 when sensitive evidence is
-    missing.
-  - `stale_evidence_recovery.go`: recovery target construction for stale and
-    S2-owned evidence failures.
-  - `readiness_test.go` and `scope_contract_gate_test.go`: integration
-    regressions for readiness, S2 blocking, and S3-to-S2 reopen behavior.
-- `internal/model/`
-  - `reason_code.go`: canonical reason-code taxonomy entry.
-  - `recovery.go`: operator recovery mapping to `slipway run`, with
-    evidence-task marker guidance once the workflow is in S2.
-  - Contract tests pin canonical reason-code and recovery behavior.
+  - `advance_governed.go`: primary mutating lifecycle transition function.
+    It owns S1 plan substep progression, S1-to-S2 wave-plan materialization,
+    and evidence/digest removal helpers.
+  - `stale_evidence_recovery.go`: recovery reopen path that removes stale
+    evidence and then saves reopened lifecycle state.
+  - Planned tests should cover injected failure after at least one transition
+    file mutation for both artifact creation and evidence removal.
 - `internal/state/`
-  - `verification.go`: load and save verified skill records from the
-    authoritative governed bundle.
-  - `verification_test.go`: persistence regressions for validated
-    `SaveVerification` records.
+  - `store.go`: `SaveChange` persists the governed `change.yaml` authority
+    with `fsutil.WriteFileAtomic`.
+  - `wave_execution.go`: wave-plan generation and persistence from `tasks.md`.
+    The implementation may need a transaction-aware save path or operation
+    builder so `wave-plan.yaml` and the following state save are atomic as a
+    file set.
+  - `lifecycle_test.go`: existing archive rollback tests cover directory
+    promotion, which is related evidence but not the issue #164 file-set class.
 - `cmd/`
-  - `evidence.go`: public evidence command surface, now including
-    `evidence task` for runtime task evidence and `evidence skill` for
-    governance skill verification.
-  - `evidence_skill_test.go`: Cobra-level regressions for plan-audit recording,
-    wrong-state rejection, run-summary-bound skill rejection, and notes-source
-    conflict handling.
-  - `template_flag_contract_test.go`: generated command reference to Cobra flag
-    drift check covering both `evidence` subcommands.
-- `internal/toolgen/` and `internal/tmpl/templates/_partials/`
-  - `toolgen.go` and `command-evidence-body.tmpl`: adapter-facing command
-    metadata and prompt body for `slipway evidence task` plus
-    `slipway evidence skill`.
-- `artifacts/changes/resolve-github-issue-156-add-a-change-implies-evidence-gate/`
-  - Governed artifact bundle and verification evidence for this change.
+  - `preset_test.go`: contains a preset-specific scaffold rollback regression,
+    useful as prior art but not sufficient for generic governed stage
+    transition file-set rollback.
+- `artifacts/changes/resolve-github-issue-164-implement-transactional-multi-file/`
+  - Governed artifact bundle for this change. The plan targets code and tests;
+    `assurance.md` remains deferred until review/verify stages.

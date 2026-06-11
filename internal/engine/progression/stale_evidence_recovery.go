@@ -14,9 +14,11 @@ import (
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/engine/sensitiveevidence"
 	"github.com/signalridge/slipway/internal/engine/skill"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"gopkg.in/yaml.v3"
 )
 
 type StaleEvidenceTarget struct {
@@ -134,18 +136,20 @@ func reopenToStaleStage(
 	verificationDir := filepath.Join(paths.GovernedBundleDir, "verification")
 	sideEffects := []SideEffect{}
 	clearedSkills := []string{}
+	transactionOps := make([]fsutil.FileTransactionOp, 0, len(authorities)+3)
 	for _, authority := range authorities {
 		if compareStaleEvidencePosition(authority.position, targetPosition) < 0 {
 			continue
 		}
 		path := filepath.Join(verificationDir, authority.SkillName+".yaml")
-		removed, err := clearRecoveryEvidence(root, *change, recoveryEvidenceFile{
+		removed, ops, err := recoveryEvidenceTransactionOps(root, *change, recoveryEvidenceFile{
 			path:  path,
 			skill: authority.SkillName,
 		})
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		transactionOps = append(transactionOps, ops...)
 		if removed {
 			clearedSkills = append(clearedSkills, authority.SkillName)
 			sideEffects = append(sideEffects, SideEffect{
@@ -156,10 +160,11 @@ func reopenToStaleStage(
 	}
 	if shouldClearWavePlan(targetPosition) {
 		path := filepath.Join(verificationDir, state.WavePlanFileName)
-		removed, err := clearRecoveryEvidence(root, *change, recoveryEvidenceFile{path: path})
+		removed, ops, err := recoveryEvidenceTransactionOps(root, *change, recoveryEvidenceFile{path: path})
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		transactionOps = append(transactionOps, ops...)
 		if removed {
 			sideEffects = append(sideEffects, SideEffect{
 				Kind:   "cleared_stale_generated_evidence",
@@ -169,10 +174,11 @@ func reopenToStaleStage(
 	}
 	if shouldClearExecutionSummary(targetPosition) {
 		path := filepath.Join(verificationDir, state.ExecutionSummaryFileName)
-		removed, err := clearRecoveryEvidence(root, *change, recoveryEvidenceFile{path: path})
+		removed, ops, err := recoveryEvidenceTransactionOps(root, *change, recoveryEvidenceFile{path: path})
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		transactionOps = append(transactionOps, ops...)
 		if removed {
 			sideEffects = append(sideEffects, SideEffect{
 				Kind:   "cleared_stale_generated_evidence",
@@ -235,7 +241,15 @@ func reopenToStaleStage(
 		}
 	}
 
-	if err := state.SaveChange(root, *change); err != nil {
+	digestOp, digestChanged, err := pruneEvidenceDigestsTransactionOp(root, *change, clearedSkills)
+	if err != nil {
+		return AdvanceSummary{}, err
+	}
+	if digestChanged {
+		transactionOps = append(transactionOps, digestOp)
+	}
+
+	if err := applyGovernedChangeTransaction(root, *change, transactionOps); err != nil {
 		return AdvanceSummary{}, err
 	}
 	return AdvanceSummary{
@@ -250,6 +264,75 @@ func reopenToStaleStage(
 		Message:       "Reopened " + target.Label() + " for stale evidence recovery.",
 		Blockers:      target.Blockers,
 	}, nil
+}
+
+func recoveryEvidenceTransactionOps(
+	root string,
+	change model.Change,
+	ev recoveryEvidenceFile,
+) (bool, []fsutil.FileTransactionOp, error) {
+	exists, err := recoveryEvidenceFileExists(ev.path)
+	if err != nil {
+		return false, nil, err
+	}
+	if !exists {
+		return false, nil, nil
+	}
+
+	return true, []fsutil.FileTransactionOp{fsutil.RemoveFileTransactionOp(ev.path)}, nil
+}
+
+func recoveryEvidenceFileExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func pruneEvidenceDigestsTransactionOp(
+	root string,
+	change model.Change,
+	skillNames []string,
+) (fsutil.FileTransactionOp, bool, error) {
+	skills := stringutil.UniqueSorted(skillNames)
+	if len(skills) == 0 {
+		return fsutil.FileTransactionOp{}, false, nil
+	}
+	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
+	if err != nil {
+		return fsutil.FileTransactionOp{}, false, err
+	}
+	if digests == nil {
+		return fsutil.FileTransactionOp{}, false, nil
+	}
+	digests.Normalize()
+	changed := false
+	for _, skillName := range skills {
+		if _, ok := digests.Skills[skillName]; !ok {
+			continue
+		}
+		delete(digests.Skills, skillName)
+		changed = true
+	}
+	if !changed {
+		return fsutil.FileTransactionOp{}, false, nil
+	}
+	if err := digests.Validate(); err != nil {
+		return fsutil.FileTransactionOp{}, false, err
+	}
+	raw, err := yaml.Marshal(*digests)
+	if err != nil {
+		return fsutil.FileTransactionOp{}, false, err
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return fsutil.FileTransactionOp{}, false, err
+	}
+	path := filepath.Join(paths.GovernedBundleDir, "verification", state.EvidenceDigestsFileName)
+	return fsutil.WriteFileTransactionOp(path, raw, 0o644), true, nil
 }
 
 func staleEvidenceAuthorities(root string, change model.Change, requiredOnly bool) ([]staleEvidenceAuthority, error) {

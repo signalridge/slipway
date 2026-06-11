@@ -70,23 +70,28 @@ func LoadOptionalWavePlanForChange(root string, change model.Change) (*model.Wav
 }
 
 func SaveWavePlan(root, slug string, plan model.WavePlan) error {
+	op, err := SaveWavePlanTransactionOp(root, slug, plan)
+	if err != nil {
+		return err
+	}
+	return fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op})
+}
+
+func SaveWavePlanTransactionOp(root, slug string, plan model.WavePlan) (fsutil.FileTransactionOp, error) {
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
-		return err
+		return fsutil.FileTransactionOp{}, err
 	}
 	dir, err := resolveVerificationDirForWrite(root, slug)
 	if err != nil {
-		return fmt.Errorf("resolve wave plan dir for %q: %w", slug, err)
+		return fsutil.FileTransactionOp{}, fmt.Errorf("resolve wave plan dir for %q: %w", slug, err)
 	}
 	path := filepath.Join(dir, WavePlanFileName)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-		return err
-	}
 	raw, err := yaml.Marshal(plan)
 	if err != nil {
-		return err
+		return fsutil.FileTransactionOp{}, err
 	}
-	return fsutil.WriteFileAtomic(path, raw, 0o644)
+	return fsutil.WriteFileTransactionOp(path, raw, 0o644), nil
 }
 
 func MaterializeWavePlan(root string, change model.Change) (model.WavePlan, error) {
@@ -131,13 +136,24 @@ func cloneWavePlanForEffectiveParallel(plan model.WavePlan) model.WavePlan {
 }
 
 func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, error) {
-	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
+	plan, op, err := MaterializeWavePlanTransactionOpAt(root, change, generatedAt)
 	if err != nil {
 		return model.WavePlan{}, err
 	}
+	if err := fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op}); err != nil {
+		return model.WavePlan{}, err
+	}
+	return plan, nil
+}
+
+func MaterializeWavePlanTransactionOpAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, fsutil.FileTransactionOp, error) {
+	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
+	if err != nil {
+		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
+	}
 	waves, err := wave.PlanWaves(nodes)
 	if err != nil {
-		return model.WavePlan{}, err
+		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
 	}
 	plan := model.WavePlan{
 		Version:                 model.WavePlanVersion,
@@ -175,10 +191,11 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 	// and file-disjoint. The flag is derived here and is not part of the
 	// freshness hashes above (which derive from tasks.md).
 	plan = ApplyEffectiveParallel(plan, forcedParallel)
-	if err := SaveWavePlan(root, change.Slug, plan); err != nil {
-		return model.WavePlan{}, err
+	op, err := SaveWavePlanTransactionOp(root, change.Slug, plan)
+	if err != nil {
+		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
 	}
-	return plan, nil
+	return plan, op, nil
 }
 
 func CurrentTasksPlanStructuralState(root string, change model.Change) (string, error) {

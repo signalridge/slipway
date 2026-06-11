@@ -12,6 +12,7 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -239,13 +240,19 @@ func ScaffoldIntentForChange(root string, change model.Change) error {
 // change. The engine owns structure only; project context is persisted on the
 // change and surfaced through `slipway instructions`, not copied into bodies.
 func ScaffoldGovernedBundleForChange(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) error {
-	return scaffoldGovernedBundleForChange(root, change, preset, schema...)
+	ops, err := ScaffoldGovernedBundleTransactionOpsForChange(root, change, preset, schema...)
+	if err != nil {
+		return err
+	}
+	return fsutil.ApplyFileTransaction(ops)
 }
 
-func scaffoldGovernedBundleForChange(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) error {
+// ScaffoldGovernedBundleTransactionOpsForChange returns the file operations
+// needed to create scaffold-owned governed artifacts without applying them.
+func ScaffoldGovernedBundleTransactionOpsForChange(root string, change model.Change, preset model.WorkflowPreset, schema ...[]ArtifactSpec) ([]fsutil.FileTransactionOp, error) {
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
-		return fmt.Errorf("slug is required")
+		return nil, fmt.Errorf("slug is required")
 	}
 
 	// Use provided schema or default to expanded.
@@ -265,12 +272,13 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 
 	base, err := state.GovernedBundleDir(root, change)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.MkdirAll(base, 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-		return err
+		return nil, err
 	}
 	data := buildTemplateData(change)
+	ops := make([]fsutil.FileTransactionOp, 0, len(files))
 
 	// Build a lookup from artifact name to template source path for custom schemas.
 	templatePaths := map[string]string{}
@@ -288,25 +296,34 @@ func scaffoldGovernedBundleForChange(root string, change model.Change, preset mo
 			continue
 		}
 		path := ResolveArtifactPath(base, file)
-		if _, err := os.Stat(path); err == nil {
+		if shouldWrite, err := shouldScaffoldArtifactPath(path); err != nil {
+			return nil, err
+		} else if !shouldWrite {
 			continue
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return err
 		}
 
 		rendered, err := renderTemplateWithFallback(root, file, templatePaths[file], data)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-			return err
-		}
-		if err := os.WriteFile(path, []byte(rendered), 0o644); err != nil { // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
-			return err
-		}
+		ops = append(ops, fsutil.WriteFileTransactionOp(path, []byte(rendered), 0o644))
 	}
 
-	return nil
+	return ops, nil
+}
+
+func shouldScaffoldArtifactPath(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, fmt.Errorf("refuse scaffold artifact symlink %s", path)
+	}
+	return false, nil
 }
 
 // deferredToSkillAuthoring reports whether an artifact's body is authored

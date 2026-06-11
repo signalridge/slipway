@@ -3,7 +3,6 @@ package state
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,24 +37,21 @@ func WorktreeBindingPath(root, slug string) string {
 	return filepath.Join(ChangeDir(root, slug), worktreeBindingFileName)
 }
 
-// writeWorktreeBinding persists (or clears) the git-local worktree binding for a
-// change. An empty WorktreePath removes any existing record so an unbound change
-// leaves no stale binding behind.
-func writeWorktreeBinding(root string, change model.Change) error {
+// worktreeBindingTransactionOp persists or clears the git-local worktree
+// binding. An empty WorktreePath removes any existing record so an unbound
+// change leaves no stale binding behind.
+func worktreeBindingTransactionOp(root string, change model.Change) (fsutil.FileTransactionOp, error) {
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
-		return errors.New("slug is required")
+		return fsutil.FileTransactionOp{}, errors.New("slug is required")
 	}
 	path := WorktreeBindingPath(root, slug)
 	if strings.TrimSpace(change.WorktreePath) == "" {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
+		return fsutil.RemoveFileTransactionOp(path), nil
 	}
 	normalizedWorktreePath, err := NormalizePath(change.WorktreePath)
 	if err != nil {
-		return fmt.Errorf("normalize worktree binding path: %w", err)
+		return fsutil.FileTransactionOp{}, fmt.Errorf("normalize worktree binding path: %w", err)
 	}
 
 	binding := worktreeBinding{
@@ -65,12 +61,9 @@ func writeWorktreeBinding(root string, change model.Change) error {
 	}
 	raw, err := yaml.Marshal(binding)
 	if err != nil {
-		return err
+		return fsutil.FileTransactionOp{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-		return err
-	}
-	return fsutil.WriteFileAtomic(path, raw, 0o644)
+	return fsutil.WriteFileTransactionOp(path, raw, 0o644), nil
 }
 
 // readWorktreeBinding returns the recorded worktree binding for slug. The second
