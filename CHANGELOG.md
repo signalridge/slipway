@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0](https://github.com/signalridge/slipway/compare/v0.18.0...v0.19.0) (2026-06-11)
+
+
+### Features
+
+* **robustness:** add transactional multi-file writes ([#181](https://github.com/signalridge/slipway/issues/181)) ([2e7cfec](https://github.com/signalridge/slipway/commit/2e7cfec06aaac8b084662ed7a451b36efd56e758))
+
 ## [0.18.0](https://github.com/signalridge/slipway/compare/v0.17.0...v0.18.0) (2026-06-11)
 
 
