@@ -68,6 +68,8 @@ func canonicalReasonCodeSnapshot() []string {
 		"decision_contract_path_invalid",
 		"decision_contract_unreadable",
 		"decision_section_placeholder",
+		"decision_status_rejected",
+		"decision_status_unknown",
 		"decision_structure_invalid",
 		"dedicated_worktree_branch_mismatch",
 		"dedicated_worktree_metadata_required",

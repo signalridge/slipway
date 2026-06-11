@@ -171,6 +171,16 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway instructions decision",
 		Class:           RecoveryClassSatisfyControl,
 	},
+	"decision_status_rejected": {
+		Remediation:     "Revise or replace the superseded, deprecated, or rejected decision.md status before continuing.",
+		CommandTemplate: "slipway instructions decision",
+		Class:           RecoveryClassSatisfyControl,
+	},
+	"decision_status_unknown": {
+		Remediation:     "Change decision.md to a supported status or remove the status section before continuing.",
+		CommandTemplate: "slipway instructions decision",
+		Class:           RecoveryClassSatisfyControl,
+	},
 	"closeout_goal_verification_reuse_invalid": {
 		Remediation:     "Final-closeout cannot safely reuse goal-verification evidence; re-run goal-verification, then re-run final-closeout.",
 		CommandTemplate: "slipway run",
