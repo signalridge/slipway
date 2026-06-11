@@ -16,6 +16,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
+	"github.com/signalridge/slipway/internal/engine/sensitiveevidence"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -63,6 +64,7 @@ type GovernanceReadiness struct {
 	ArtifactReadiness  ArtifactReadiness
 	ArtifactProjection *ArtifactProjection
 	ScopeContract      *scopecontract.Report
+	SensitiveEvidence  *sensitiveevidence.Report
 	ReviewSurface      *ReviewAuthority
 	reviewAuthority    *ReviewAuthority
 	ShipSurface        *ShipAuthority
@@ -273,10 +275,11 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 	}
 	if state.ExecutionSummaryReady(execCtx.Summary) {
+		workspaceChangedFiles := scopeContractWorkspaceChangedFiles(paths)
 		scopeReport, err := scopecontract.EvaluateBundleWithChangedFiles(
 			paths.GovernedBundleDir,
 			execCtx.Summary,
-			scopeContractWorkspaceChangedFiles(paths),
+			workspaceChangedFiles,
 		)
 		if err != nil {
 			readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(scopecontract.ReasonScopeContractEvaluationFailed, err.Error()))
@@ -290,6 +293,13 @@ func evaluateGovernanceReadinessBaseWithReaders(
 				readiness.Diagnostics = append(readiness.Diagnostics, scopeContractRecoveryGuidanceDiagnostic)
 			}
 		}
+
+		sensitiveReport := sensitiveevidence.Evaluate(execCtx.Summary, workspaceChangedFiles)
+		if sensitiveReport.Status != sensitiveevidence.StatusNotApplicable {
+			cloned := sensitiveReport
+			readiness.SensitiveEvidence = &cloned
+		}
+		readiness.Blockers = append(readiness.Blockers, sensitiveReport.Blockers...)
 	}
 
 	if opts.IncludeArtifactProjection {

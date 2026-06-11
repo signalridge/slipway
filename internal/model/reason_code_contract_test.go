@@ -152,6 +152,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"scope_contract_drift",
 		"scope_contract_evaluation_failed",
 		"scope_contract_missing",
+		"sensitive_evidence_missing",
 		"session_isolation_warning",
 		"ship_gate_blocked",
 		"skill_prompt_surface_missing",

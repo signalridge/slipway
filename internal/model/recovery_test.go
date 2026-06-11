@@ -149,6 +149,7 @@ func inScopeProducedRecoverySpecs() []string {
 		"manifest_r0_invalid:manifest_parse_invalid",
 		"manifest_r0_invalid:manifest_slug_mismatch",
 		"manifest_r0_invalid:manifest_base_ref_missing",
+		"sensitive_evidence_missing:schema_migration:db/migrations/001_create_users.sql",
 		"worktree_metadata_persist_failed:permission denied",
 	}
 }
@@ -215,6 +216,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"required_skill_",
 		"review_layer_",
 		"scope_contract_",
+		"sensitive_evidence_",
 		"stale_execution_",
 		"stale_planning_",
 		"tasks_checklist_",
@@ -300,6 +302,8 @@ func sampleRecoveryDetail(code string) string {
 		return "t-01"
 	case "scope_contract_drift":
 		return "cmd/next.go"
+	case "sensitive_evidence_missing":
+		return "schema_migration:db/migrations/001_create_users.sql"
 	case "tasks_checklist_duplicate_task_id":
 		return "t-01"
 	case "tasks_checklist_task_id_missing":
@@ -315,6 +319,20 @@ func sampleRecoveryDetail(code string) string {
 	default:
 		return ""
 	}
+}
+
+func TestSensitiveEvidenceRecoveryPointsToEvidenceTaskWithoutBypass(t *testing.T) {
+	t.Parallel()
+
+	step, ok := recoveryStepFor(NewReasonCode("sensitive_evidence_missing", "schema_migration:db/migrations/001_create_users.sql"))
+	require.True(t, ok)
+	assert.Equal(t, "slipway run", step.Command)
+	assert.Contains(t, step.Remediation, "S2_EXECUTE")
+	assert.Contains(t, step.Remediation, "slipway evidence task")
+	assert.Contains(t, step.Remediation, "migration-applied")
+	assert.Contains(t, step.Remediation, "db/migrations/001_create_users.sql")
+	assert.NotContains(t, step.Remediation, "GSD_SKIP_SCHEMA_CHECK")
+	assert.NotContains(t, step.Remediation, "bypass")
 }
 
 func TestRecoveryStepFillsSubjectIntoCommand(t *testing.T) {

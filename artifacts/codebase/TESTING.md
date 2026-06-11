@@ -1,30 +1,39 @@
 # Testing
 
-Re-authored for change
-`resolve-github-issue-151-thin-host-disk-handoff-return-contr`
-(GitHub issue #151).
+Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
+(GitHub issue #156).
 
-- Existing focused coverage:
-  - `internal/tmpl/thin_host_content_test.go:11` verifies
-    goal-verification thin-host delegation and host-owned verdict language.
-  - `internal/tmpl/thin_host_content_test.go:37` verifies worktree-preflight
-    keeps only bounded baseline summaries.
-  - `internal/tmpl/thin_host_content_test.go:56` verifies wave-orchestration
-    delegates source/map reads by path to task executors.
-  - `internal/tmpl/templates_test.go:17` verifies governance skills render and
-    keep required host sections.
-  - `internal/tmpl/templates_test.go:781` verifies run-version source language
-    for review and verification hosts.
-- Gap for issue #151:
-  - No focused regression currently asserts disk-handoff guidance for the
-    remaining heavy hosts named by the issue:
-    `research-orchestration`, `plan-audit`, `intake-clarification`,
-    `spec-compliance-review`, and `code-quality-review`.
-  - No focused regression currently asserts that a short subagent confirmation
-    is a claim, not evidence, across those remaining hosts.
+- Existing coverage:
+  - `internal/engine/scopecontract/evaluate_test.go:14` proves changed files
+    inside planned targets pass.
+  - `internal/engine/scopecontract/evaluate_test.go:40` proves out-of-scope
+    changed files block deterministically.
+  - `internal/engine/scopecontract/evaluate_test.go:91` proves missing
+    changed-file evidence is already a blocker.
+  - `internal/model/reason_code_contract_test.go:22` keeps canonical reason
+    code coverage stable.
+  - `internal/model/recovery_test.go:91` catches recovery-relevant reason codes
+    without remediation.
+- Gaps for issue #156:
+  - No test asserts that a sensitive changed file requires category-specific
+    owning evidence.
+  - No test asserts that matching owning evidence clears the sensitive blocker.
+  - No test asserts that sensitive blockers have precise remediation and no
+    bypass path.
+  - No test asserts that generated host verification can be recorded through the
+    public `slipway evidence skill` command.
 - Planned verification:
-  - Add a failing test that renders/loads the five remaining heavy host
-    surfaces and asserts path-based disk handoff, short confirmation, and
-    CLI-owned stamping/freshness language.
-  - Run the targeted test first, then `go test -count=1 ./internal/tmpl`, and
-    finish with `go test -count=1 ./...` before closeout.
+  - Add table-driven unit tests for a sensitive-evidence evaluator covering
+    schema migration, auth/authz, and API contract categories.
+  - Add progression tests for mutating lifecycle enforcement: block in
+    S2_EXECUTE when marker evidence is missing, reopen S3_REVIEW to S2_EXECUTE,
+    and pass when the category marker exists.
+  - Add reason-code and recovery-contract assertions for the new blocker.
+  - Add Cobra command tests for `slipway evidence skill`, including plan-audit
+    recording, wrong-state rejection, run-summary-bound skill rejection, and
+    notes-source conflict handling.
+  - Add state persistence coverage for `state.SaveVerification`.
+  - Extend command-template flag coverage so the generated `evidence` command
+    reference includes the new `evidence skill` flags.
+  - Run the targeted package tests first, then broader `go test ./internal/...`
+    and governed `validate --json` after implementation.

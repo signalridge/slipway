@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -28,6 +29,71 @@ func TestScopeContractRecoveryGuidanceHasSurfaceParity(t *testing.T) {
 
 	clean := scopecontract.Report{}
 	assert.False(t, scopeContractNeedsRecoveryGuidance(clean))
+}
+
+func TestEvaluateGovernanceReadinessBlocksSensitiveFilesWithoutOwningEvidence(t *testing.T) {
+	t.Parallel()
+
+	const migration = "db/migrations/001_create_users.sql"
+	readiness := evaluateSensitiveMigrationReadiness(t, "go-test:./...", migration)
+
+	assert.True(t, hasAdvanceReasonDetail(
+		readiness.Blockers,
+		"sensitive_evidence_missing",
+		"schema_migration:"+migration,
+	), "sensitive file changes must require owning evidence")
+}
+
+func TestEvaluateGovernanceReadinessPassesSensitiveFilesWithOwningEvidence(t *testing.T) {
+	t.Parallel()
+
+	readiness := evaluateSensitiveMigrationReadiness(t, "migration-applied:goose up", "db/migrations/001_create_users.sql")
+
+	assert.False(t, hasAdvanceReasonCode(readiness.Blockers, "sensitive_evidence_missing"))
+	require.NotNil(t, readiness.SensitiveEvidence)
+	assert.Equal(t, "pass", string(readiness.SensitiveEvidence.Status))
+}
+
+func evaluateSensitiveMigrationReadiness(t *testing.T, evidenceRef string, migration string) GovernanceReadiness {
+	t.Helper()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("readiness-sensitive-evidence")
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetLight
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [ ] `+"`t-01`"+` apply schema migration
+  - wave: 1
+  - target_files: ["`+migration+`"]
+  - task_kind: code
+`)
+
+	capturedAt := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{migration},
+			TargetFiles:  []string{migration},
+			EvidenceRef:  evidenceRef,
+			CapturedAt:   capturedAt,
+		}},
+	}))
+
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.NoError(t, err)
+	return readiness
 }
 
 func TestEvaluateArtifactReadinessWithContext_IgnoresDependenciesOutsideEligibleLevel(t *testing.T) {

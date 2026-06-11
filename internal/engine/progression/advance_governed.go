@@ -143,6 +143,14 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		}
 		return reopenToStaleStage(root, &change, target, fromState)
 	}
+	if target, err := sensitiveEvidenceReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
+		return AdvanceSummary{}, err
+	} else if target.SkillName != "" {
+		if fromState == model.StateS2Execute {
+			return blockedAdvanceSummary(fromState, target.Blockers), nil
+		}
+		return reopenToStaleStage(root, &change, target, fromState)
+	}
 
 	preTransitionSideEffects := make([]SideEffect, 0, 2)
 
