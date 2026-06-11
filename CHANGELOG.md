@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0](https://github.com/signalridge/slipway/compare/v0.17.0...v0.18.0) (2026-06-11)
+
+
+### Features
+
+* **coherence:** add generated surface manifest ([#178](https://github.com/signalridge/slipway/issues/178)) ([5ec2904](https://github.com/signalridge/slipway/commit/5ec29047146e281b7e8f3f88890c1edc8f76a59b))
+* **evidence:** add sensitive evidence gate ([#179](https://github.com/signalridge/slipway/issues/179)) ([cd7ecdb](https://github.com/signalridge/slipway/commit/cd7ecdbb87277d98430655a8fe1335e47d10c5c4))
+
 ## [0.17.0](https://github.com/signalridge/slipway/compare/v0.16.0...v0.17.0) (2026-06-10)
 
 
