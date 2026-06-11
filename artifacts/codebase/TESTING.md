@@ -1,39 +1,41 @@
 # Testing
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change `resolve-github-issue-164-implement-transactional-multi-file`
+(GitHub issue #164).
 
 - Existing coverage:
-  - `internal/engine/scopecontract/evaluate_test.go:14` proves changed files
-    inside planned targets pass.
-  - `internal/engine/scopecontract/evaluate_test.go:40` proves out-of-scope
-    changed files block deterministically.
-  - `internal/engine/scopecontract/evaluate_test.go:91` proves missing
-    changed-file evidence is already a blocker.
-  - `internal/model/reason_code_contract_test.go:22` keeps canonical reason
-    code coverage stable.
-  - `internal/model/recovery_test.go:91` catches recovery-relevant reason codes
-    without remediation.
-- Gaps for issue #156:
-  - No test asserts that a sensitive changed file requires category-specific
-    owning evidence.
-  - No test asserts that matching owning evidence clears the sensitive blocker.
-  - No test asserts that sensitive blockers have precise remediation and no
-    bypass path.
-  - No test asserts that generated host verification can be recorded through the
-    public `slipway evidence skill` command.
+  - `internal/fsutil/atomic.go:14` through `internal/fsutil/atomic.go:73`
+    implements the single-file atomic write primitive but does not test
+    multi-file all-or-nothing semantics.
+  - `cmd/preset_test.go:315` through `cmd/preset_test.go:340` covers a
+    preset-command scaffold failure rollback, but that is command-specific and
+    not a reusable governed stage-transition transaction.
+  - `internal/state/lifecycle_test.go:396` through
+    `internal/state/lifecycle_test.go:430` covers archive rollback when
+    persisting archived authority fails, but that path is directory promotion,
+    not ordered file writes/removes inside an active stage transition.
+- Gaps for issue #164:
+  - No package-level test proves an ordered file transaction restores original
+    bytes and removes newly-created files when a later operation fails.
+  - No test proves rollback-failure errors include the path requiring
+    inspection.
+  - No progression regression simulates failure after governed bundle scaffold
+    writes but before `change.yaml` persistence.
+  - No progression regression simulates failure after stale evidence deletion
+    but before reopened `change.yaml` persistence.
+  - No test proves S1-to-S2 `wave-plan.yaml` materialization is part of the same
+    file-set boundary as transition state persistence.
 - Planned verification:
-  - Add table-driven unit tests for a sensitive-evidence evaluator covering
-    schema migration, auth/authz, and API contract categories.
-  - Add progression tests for mutating lifecycle enforcement: block in
-    S2_EXECUTE when marker evidence is missing, reopen S3_REVIEW to S2_EXECUTE,
-    and pass when the category marker exists.
-  - Add reason-code and recovery-contract assertions for the new blocker.
-  - Add Cobra command tests for `slipway evidence skill`, including plan-audit
-    recording, wrong-state rejection, run-summary-bound skill rejection, and
-    notes-source conflict handling.
-  - Add state persistence coverage for `state.SaveVerification`.
-  - Extend command-template flag coverage so the generated `evidence` command
-    reference includes the new `evidence skill` flags.
-  - Run the targeted package tests first, then broader `go test ./internal/...`
-    and governed `validate --json` after implementation.
+  - Add `internal/fsutil` table-driven tests for write/write, remove/write, and
+    rollback-failure paths using deterministic injected failures.
+  - Add progression or artifact tests that trigger S1 bundle scaffold under an
+    injected later write failure and assert no scaffold-owned partial file
+    remains.
+  - Add stale-evidence recovery tests that delete verification evidence under an
+    injected later save failure and assert removed files and digest state are
+    restored.
+  - Add wave-plan transition coverage or state-level coverage proving a failed
+    state save does not leave a visible `wave-plan.yaml` from the failed S2
+    transition.
+  - Run targeted package tests first, then `go run . validate --json` and the
+    governed evidence commands selected by the current lifecycle.

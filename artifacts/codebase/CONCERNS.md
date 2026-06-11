@@ -1,33 +1,32 @@
 # Concerns
 
-Re-authored for change `resolve-github-issue-156-add-a-change-implies-evidence-gate`
-(GitHub issue #156).
+Re-authored for change `resolve-github-issue-164-implement-transactional-multi-file`
+(GitHub issue #164).
 
-- Stale map risk: populated codebase-map documents only help when their seams,
-  blast radius, and risks match the active change; stale map content is not
-  planning authority for this change.
-- Load-bearing invariant: freshness proves "when" evidence was produced, while
-  issue #156 requires proving that the right owning evidence exists for touched
-  sensitive files. The new gate must not replace existing freshness or
-  scope-contract checks.
-- Guardrail risk: sensitive-domain checks must fail closed. A missing marker for
-  migration-applied, auth-review, or contract-test evidence should block with a
-  canonical error reason and precise remediation.
-- Deadlock risk: requiring review-stage skill evidence during S2 execution could
-  strand the lifecycle before review can run. The first implementation should
-  use execution-summary task evidence markers, not post-review skill evidence,
-  for the change-implies-evidence proof.
-- Lifecycle bypass risk: read-only readiness alone is insufficient because
-  mutating advancement can otherwise move S2 evidence into review. The gate must
-  run inside `AdvanceGoverned` before normal state transition, reopening S3/S4
-  to S2 when repair requires `slipway evidence task`.
-- Compatibility risk: broad filename patterns can overmatch ordinary files. Keep
-  initial built-in patterns explicit and test category examples rather than
-  attempting a complete ecosystem catalog.
-- Recovery risk: new readiness blockers need entries in the canonical reason
-  code and recovery-remediation maps. The public recovery command must be
-  `slipway run`, because `slipway evidence task` is only legal from S2_EXECUTE.
-- Public-surface dead-end risk: generated host instructions require
-  `slipway evidence skill` to record verification evidence. If the command is
-  missing or accepts evidence in the wrong lifecycle state, agents either
-  hand-edit engine-owned YAML or get stranded before plan-audit can complete.
+- Load-bearing invariant: a governed lifecycle transition must not report
+  success unless its artifact/evidence side effects and authoritative
+  `change.yaml` state agree.
+- Partial scaffold risk: `advance_governed.go` can scaffold bundle artifacts
+  before saving `change.yaml`. If the save fails after a file is created, the
+  bundle can look partially materialized while the lifecycle authority remains
+  behind.
+- Partial stale-reopen risk: `stale_evidence_recovery.go` removes verification,
+  wave-plan, and execution-summary files before saving reopened state. A save
+  failure can otherwise remove evidence while the lifecycle still points past
+  the reopened stage.
+- Partial S2-entry risk: `wave_execution.go` writes `wave-plan.yaml` before the
+  transition to S2 is saved. A later save failure can otherwise leave a generated
+  plan that belongs to a transition that did not complete.
+- Rollback risk: rollback can fail too. Error reporting must include the
+  original failure and the file path requiring inspection, and irreversible
+  operations must fail closed without a force-pass path.
+- Scope risk: directory archive/relocation logic is tempting to fold into the
+  same abstraction, but the current issue and GSD reference are file-set
+  write/delete rollback. Keep directory movement out unless a failing regression
+  proves it belongs.
+- Durability boundary: the helper should compose with `fsutil.WriteFileAtomic`
+  for writes. It should not replace atomic single-file persistence with direct
+  best-effort writes.
+- Test reliability risk: chmod-based failures are platform-sensitive. Prefer a
+  deterministic failure seam in the transaction helper for cross-platform
+  regression tests.

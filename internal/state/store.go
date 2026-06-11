@@ -509,47 +509,56 @@ func changeVisibleFromRoot(root, workspaceRoot string, change model.Change, arch
 // SaveChange persists the change state for the given change (keyed by slug).
 // The governed bundle copy is the single authority.
 func SaveChange(root string, st model.Change) error {
+	ops, err := SaveChangeTransactionOps(root, st)
+	if err != nil {
+		return err
+	}
+	return fsutil.ApplyFileTransaction(ops)
+}
+
+// SaveChangeTransactionOps returns the file operations needed to persist the
+// governed bundle authority and its machine-local worktree binding.
+func SaveChangeTransactionOps(root string, st model.Change) ([]fsutil.FileTransactionOp, error) {
 	if st.Slug == "" {
-		return errors.New("slug is required")
+		return nil, errors.New("slug is required")
 	}
 
 	st.Normalize()
 	if err := st.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 	if strings.TrimSpace(st.WorktreePath) != "" {
 		if err := EnsureWorkspaceScopeMarker(root, st.WorktreePath); err != nil {
-			return err
+			return nil, err
 		}
 		if err := EnsureWorkspaceScopeConfig(root, st.WorktreePath); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	b, err := yaml.Marshal(st)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Write to bundle directory (canonical authority alongside plan artifacts).
 	bundlePath, err := bundleChangeFilePathForChange(root, st)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-		return err
-	}
-	if err := fsutil.WriteFileAtomic(bundlePath, b, 0o644); err != nil {
-		return err
-	}
+
 	// Record the machine-local worktree binding in git-local runtime state.
 	// The tracked bundle above carries no absolute path (Change.MarshalYAML
 	// strips it); this runtime record is the authority for resolving the bound
 	// worktree, with the bundle's own location as a self-healing fallback.
-	if err := writeWorktreeBinding(root, st); err != nil {
-		return err
+	bindingOp, err := worktreeBindingTransactionOp(root, st)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return []fsutil.FileTransactionOp{
+		fsutil.WriteFileTransactionOp(bundlePath, b, 0o644),
+		bindingOp,
+	}, nil
 }
 
 func decodeChangeStrict(raw []byte, change *model.Change) error {
