@@ -6,11 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 func testVerificationReason(code, detail string) model.ReasonCode {
@@ -20,16 +18,8 @@ func testVerificationReason(code, detail string) model.ReasonCode {
 func writeVerificationForTest(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {
 	t.Helper()
 
-	rec.Normalize()
-	require.NoError(t, rec.Validate())
-
-	dir, err := resolveVerificationDirForWrite(root, slug)
+	_, err := SaveVerification(root, slug, skillName, rec)
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-
-	raw, err := yaml.Marshal(rec)
-	require.NoError(t, err)
-	require.NoError(t, fsutil.WriteFileAtomic(filepath.Join(dir, skillName+".yaml"), raw, 0o644))
 }
 
 func TestSaveLoadVerificationRoundTrip(t *testing.T) {

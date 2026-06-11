@@ -35,8 +35,8 @@ claiming alignment.
 
 ## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.
-Read its current `run_summary_version`; your verification's `run_version` must
-equal that value, not a literal `1`. Read
+Read its current `run_summary_version`; `slipway evidence skill` will stamp the
+verification record with that value, not a literal `1`. Read
 `next_skill.review_context.required_artifact_layers` for required review tokens
 and the top-level `confirmation_requirement` object for stop boundaries. Those
 fields are the source of truth for this handoff.
@@ -47,6 +47,19 @@ enumerate the forward and reverse trace edges you must verify. Any
 must not be treated as full bidirectional alignment.
 Use `slipway-coding-discipline` as a posture check when judging whether the
 implemented change stayed simple, surgical, and goal-driven.
+
+## Disk-Handoff Contract
+For bulky review artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies, diffs, or command output into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The review host must inspect the
+  written files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
 
 ## Required Checks
 ### Forward Alignment (Spec -> Code)
@@ -115,21 +128,19 @@ Do not use `layer:CORRECTNESS=pass` or `layer:SAFETY=pass` as gate-satisfying
 substitutes. They may be prose categories in notes, but governance gates consume
 the exact `R*` layer tokens.
 
-## Write Verification
-```yaml
-# Write to: artifacts/changes/{slug}/verification/spec-compliance-review.yaml
-verdict: pass
-blockers: []
-timestamp: "<ISO-8601-UTC>"
-run_version: <run_summary_version from verification/execution-summary.yaml>  # must equal the current execution-summary run_summary_version, not a literal 1
-references:
-  - "layer:R0=pass"
-  - "layer:R3=pass" # include only when review_context requires R3
-  - "scope_contract:pass"
-  - "negative_path:pass" # include when requirements name negative/error paths
-notes: |
-  Gaps (code_to_artifact): <code behaviors not documented in spec>
-  Gaps (artifact_to_code): <spec requirements not implemented in code>
+## Record Verification
+Write bulky review notes to disk, then record the verdict through the CLI so
+Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
+Do not hand-edit `verification/spec-compliance-review.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill spec-compliance-review \
+  --verdict pass \
+  --reference "layer:R0=pass" \
+  --reference "scope_contract:pass" \
+  --reference "negative_path:pass" \
+  --notes-file artifacts/changes/{slug}/verification/spec-compliance-review-notes.md
 ```
 
 The `notes` field SHOULD include gap analysis. Empty gaps indicate full

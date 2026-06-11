@@ -787,39 +787,39 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 		"Description": "test",
 	}
 	tests := []struct {
-		name          string
-		templatePath  string
-		wantRunSource string
+		name           string
+		templatePath   string
+		wantRunSources []string
 	}{
 		{
-			name:          "wave orchestration",
-			templatePath:  "skills/wave-orchestration/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current wave-orchestration run_version>",
+			name:           "wave orchestration",
+			templatePath:   "skills/wave-orchestration/SKILL.md.tmpl",
+			wantRunSources: []string{"run_version: <current wave-orchestration run_version>"},
 		},
 		{
-			name:          "tdd governance",
-			templatePath:  "skills/tdd-governance/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current wave-orchestration run_version>",
+			name:           "tdd governance",
+			templatePath:   "skills/tdd-governance/SKILL.md.tmpl",
+			wantRunSources: []string{"run_version: <current wave-orchestration run_version>"},
 		},
 		{
-			name:          "spec compliance review",
-			templatePath:  "skills/spec-compliance-review/SKILL.md.tmpl",
-			wantRunSource: "run_version: <run_summary_version from verification/execution-summary.yaml>",
+			name:           "spec compliance review",
+			templatePath:   "skills/spec-compliance-review/SKILL.md.tmpl",
+			wantRunSources: []string{"slipway evidence skill", "current `run_summary_version`"},
 		},
 		{
-			name:          "code quality review",
-			templatePath:  "skills/code-quality-review/SKILL.md.tmpl",
-			wantRunSource: "run_version: <run_summary_version from verification/execution-summary.yaml>",
+			name:           "code quality review",
+			templatePath:   "skills/code-quality-review/SKILL.md.tmpl",
+			wantRunSources: []string{"slipway evidence skill", "current `run_summary_version`"},
 		},
 		{
-			name:          "goal verification",
-			templatePath:  "skills/goal-verification/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current run_summary_version from slipway status --json>",
+			name:           "goal verification",
+			templatePath:   "skills/goal-verification/SKILL.md.tmpl",
+			wantRunSources: []string{"run_version: <current run_summary_version from slipway status --json>"},
 		},
 		{
-			name:          "final closeout",
-			templatePath:  "skills/final-closeout/SKILL.md.tmpl",
-			wantRunSource: "run_version: <current run_summary_version from slipway status --json>",
+			name:           "final closeout",
+			templatePath:   "skills/final-closeout/SKILL.md.tmpl",
+			wantRunSources: []string{"run_version: <current run_summary_version from slipway status --json>"},
 		},
 	}
 
@@ -836,13 +836,15 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 				"%s must not guide agents to copy a stale literal run_version",
 				tt.templatePath,
 			)
-			assert.Contains(
-				t,
-				content,
-				tt.wantRunSource,
-				"%s must name the authoritative run_version source",
-				tt.templatePath,
-			)
+			for _, want := range tt.wantRunSources {
+				assert.Contains(
+					t,
+					content,
+					want,
+					"%s must name the authoritative run_version source",
+					tt.templatePath,
+				)
+			}
 		})
 	}
 }

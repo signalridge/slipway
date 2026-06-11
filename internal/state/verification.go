@@ -230,12 +230,13 @@ func VerificationFilePath(root, slug, skillName string) string {
 	return filepath.Join(resolveVerificationDir(root, slug), skillName+".yaml")
 }
 
-// SaveVerification writes a validated skill verification record to the
-// authoritative governed bundle for the active change.
+// SaveVerification writes a skill verification record to the authoritative
+// governed bundle. The caller owns the record contents; this helper owns only
+// path authority, normalization, validation, and atomic persistence.
 func SaveVerification(root, slug, skillName string, rec model.VerificationRecord) (string, error) {
 	skillName = strings.TrimSpace(skillName)
-	if skillName == "" {
-		return "", fmt.Errorf("skill name is required")
+	if skillName == "" || strings.ContainsAny(skillName, `/\`) || skillName == "." || skillName == ".." {
+		return "", fmt.Errorf("skill name must be a safe flat filename: %q", skillName)
 	}
 	rec.Normalize()
 	if err := rec.Validate(); err != nil {
@@ -245,11 +246,14 @@ func SaveVerification(root, slug, skillName string, rec model.VerificationRecord
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, skillName+".yaml")
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- governed artifact directories are intentionally user-readable/searchable.
+		return "", err
+	}
 	raw, err := yaml.Marshal(rec)
 	if err != nil {
 		return "", err
 	}
+	path := filepath.Join(dir, skillName+".yaml")
 	if err := fsutil.WriteFileAtomic(path, raw, 0o644); err != nil {
 		return "", err
 	}

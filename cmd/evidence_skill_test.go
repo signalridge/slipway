@@ -24,7 +24,8 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "evidence skill records plan audit")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
-		notesPath := filepath.Join(root, "artifacts", "changes", slug, "verification", "plan-audit-notes.md")
+		notesRel := filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "verification", "plan-audit-notes.md"))
+		notesPath := filepath.Join(root, filepath.FromSlash(notesRel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(notesPath), 0o755))
 		require.NoError(t, os.WriteFile(notesPath, []byte("Plan audit passed.\n"), 0o644))
 
@@ -36,7 +37,7 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 			"--skill", progression.SkillPlanAudit,
 			"--verdict", model.VerificationVerdictPass,
 			"--reference", "plan-audit:pass",
-			"--notes-file", notesPath,
+			"--notes-file", notesRel,
 		})
 		var out bytes.Buffer
 		cmd.SetOut(&out)
