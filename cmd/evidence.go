@@ -135,7 +135,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 					)
 				}
 
-				notesText, err := resolveEvidenceSkillNotes(root, notes, notesFile)
+				notesText, err := resolveEvidenceSkillNotes(root, change, notes, notesFile)
 				if err != nil {
 					return err
 				}
@@ -321,10 +321,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return err
 				}
 				if change.CurrentState != model.StateS2Execute {
-					remediation := "Record task evidence only during wave execution."
-					if change.CurrentState == model.StateS4Verify {
-						remediation = progression.S4VerificationRecoveryRemediation()
-					}
+					remediation := evidenceTaskWrongStateRemediation(change.CurrentState)
 					return newInvalidUsageError(
 						"evidence_task_wrong_state",
 						fmt.Sprintf("task evidence requires S2_EXECUTE state, current: %s", change.CurrentState),
@@ -753,7 +750,7 @@ func validateEvidenceSkillStage(change model.Change, def skill.Definition) error
 		return newInvalidUsageError(
 			"evidence_skill_wrong_state",
 			fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
-			fmt.Sprintf("Run the lifecycle to %s before recording %s evidence.", def.State, def.Name),
+			evidenceSkillWrongStateRemediation(change.CurrentState, def),
 			map[string]any{
 				"skill":          def.Name,
 				"expected":       def.State,
@@ -782,7 +779,53 @@ func validateEvidenceSkillStage(change model.Change, def skill.Definition) error
 	return nil
 }
 
-func resolveEvidenceSkillNotes(root, notes, notesFile string) (string, error) {
+func evidenceTaskWrongStateRemediation(current model.WorkflowState) string {
+	switch current {
+	case model.StateS3Review:
+		return postReviewReplacementEvidenceRemediation("task evidence")
+	case model.StateS4Verify:
+		return s4ReplacementEvidenceRemediation("task evidence")
+	default:
+		return "Record task evidence only during wave execution."
+	}
+}
+
+func evidenceSkillWrongStateRemediation(current model.WorkflowState, def skill.Definition) string {
+	switch current {
+	case model.StateS3Review:
+		if def.State == model.StateS2Execute {
+			return postReviewReplacementEvidenceRemediation(def.Name + " evidence")
+		}
+	case model.StateS4Verify:
+		if def.State == model.StateS2Execute || def.State == model.StateS3Review {
+			return s4ReplacementEvidenceRemediation(def.Name + " evidence")
+		}
+	}
+	return fmt.Sprintf("Run the lifecycle to %s before recording %s evidence.", def.State, def.Name)
+}
+
+func postReviewReplacementEvidenceRemediation(surface string) string {
+	return fmt.Sprintf(
+		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof in %s and %s evidence, then rerun %s and %s.",
+		surface,
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillGoalVerification,
+		progression.SkillFinalCloseout,
+	)
+}
+
+func s4ReplacementEvidenceRemediation(surface string) string {
+	return fmt.Sprintf(
+		"%s cannot be refreshed from S4_VERIFY. Record fresh proof in %s and %s evidence; %s.",
+		surface,
+		progression.SkillGoalVerification,
+		progression.SkillFinalCloseout,
+		progression.S4VerificationRecoveryRemediation(),
+	)
+}
+
+func resolveEvidenceSkillNotes(root string, change model.Change, notes, notesFile string) (string, error) {
 	notes = strings.TrimSpace(notes)
 	notesFile = strings.TrimSpace(notesFile)
 	if notes != "" && notesFile != "" {
@@ -804,15 +847,29 @@ func resolveEvidenceSkillNotes(root, notes, notesFile string) (string, error) {
 			nil,
 		)
 	}
-	path := filepath.Join(root, filepath.FromSlash(model.NormalizePublicPath(notesFile)))
+	workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_skill_notes_workspace_resolve_failed",
+			fmt.Sprintf("failed to resolve notes workspace for %q: %v", change.Slug, err),
+			"Repair the governed change worktree binding and retry.",
+			change.Slug,
+			map[string]any{"path": notesFile},
+		)
+	}
+	path := filepath.Join(workspaceRoot, filepath.FromSlash(model.NormalizePublicPath(notesFile)))
 	raw, err := os.ReadFile(path) // #nosec G304 -- path is validated as workspace-relative before reading.
 	if err != nil {
 		return "", newStateIntegrityError(
 			"evidence_skill_notes_file_read_failed",
 			fmt.Sprintf("failed to read notes file %q: %v", notesFile, err),
 			"Write the delegated review or verification notes to the referenced workspace-relative path and retry.",
-			"",
-			map[string]any{"path": notesFile},
+			change.Slug,
+			map[string]any{
+				"path":           notesFile,
+				"resolved_path":  state.DisplayPath(root, path),
+				"workspace_root": state.DisplayPath(root, workspaceRoot),
+			},
 		)
 	}
 	return strings.TrimSpace(string(raw)), nil

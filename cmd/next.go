@@ -720,7 +720,7 @@ func hardStopNextAction(reason string, resumeResponseSupported bool) string {
 		return "resume pending checkpoint with slipway run --resume-response"
 	}
 	if skillName, ok := strings.CutPrefix(reason, "skill_handoff:"); ok && strings.TrimSpace(skillName) != "" {
-		return "complete governance skill handoff: " + strings.TrimSpace(skillName)
+		return "run governance skill " + strings.TrimSpace(skillName) + " and record evidence; --resume-response is only for active checkpoints"
 	}
 	switch reason {
 	case "preset_confirmation_required":
