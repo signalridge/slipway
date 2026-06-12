@@ -334,7 +334,7 @@ func buildResumeCheckpoint(root string, change *model.Change, execCtx executionC
 		return newPreconditionError(
 			"no_active_checkpoint",
 			"--resume-response provided but no active checkpoint exists",
-			"Remove --resume-response when no checkpoint is pending.",
+			"Remove --resume-response; it is only valid for active checkpoint resume. For missing governance skill evidence, follow `slipway next --json` and record the required skill evidence instead.",
 			"",
 			nil,
 		)

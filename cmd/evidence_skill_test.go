@@ -83,6 +83,61 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 	})
 }
 
+func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "evidence skill bound notes file")
+		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		branch := "feat/" + slug
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch, "HEAD")
+
+		bound := change
+		require.NoError(t, state.PersistScopeWorktreeMetadata(&bound, worktreeRoot, branch))
+		require.NoError(t, state.RelocateGovernedBundle(root, change, bound))
+		require.NoError(t, state.SaveChange(root, bound))
+
+		notesRel := filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "verification", "plan-audit-notes.md"))
+		notesPath := filepath.Join(worktreeRoot, filepath.FromSlash(notesRel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(notesPath), 0o755))
+		require.NoError(t, os.WriteFile(notesPath, []byte("Bound worktree plan audit passed.\n"), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillPlanAudit,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "plan-audit:pass",
+			"--notes-file", notesRel,
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		expectedPath := state.DisplayPath(
+			root,
+			filepath.Join(worktreeRoot, "artifacts", "changes", slug, "verification", "plan-audit.yaml"),
+		)
+		assert.Equal(t, expectedPath, view.Path)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillPlanAudit)
+		require.NoError(t, err)
+		assert.Equal(t, "Bound worktree plan audit passed.", rec.Notes)
+	})
+}
+
 func TestEvidenceSkillFailOverwritesPlanAuditAndPrunesDigest(t *testing.T) {
 	t.Parallel()
 
@@ -310,6 +365,56 @@ func TestEvidenceSkillRejectsWrongState(t *testing.T) {
 		assert.Equal(t, progression.SkillSpecComplianceReview, cliErr.Details["skill"])
 		assert.Equal(t, string(model.StateS3Review), cliErr.Details["required_state"])
 		assert.Equal(t, string(model.StateS1Plan), cliErr.Details["current_state"])
+	})
+}
+
+func TestEvidenceSkillWrongStateForWaveOrchestrationInS3RoutesToReviewAndVerificationEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill wave wrong state in review")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillWaveOrchestration,
+			"--verdict", model.VerificationVerdictPass,
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, progression.SkillSpecComplianceReview)
+		assert.Contains(t, cliErr.Remediation, progression.SkillCodeQualityReview)
+		assert.Contains(t, cliErr.Remediation, progression.SkillGoalVerification)
+		assert.Contains(t, cliErr.Remediation, progression.SkillFinalCloseout)
+	})
+}
+
+func TestEvidenceSkillWrongStateForReviewEvidenceInS4RoutesToVerificationEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill review wrong state in verify")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS4Verify, model.PlanSubStepNone)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", model.VerificationVerdictPass,
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, progression.SkillGoalVerification)
+		assert.Contains(t, cliErr.Remediation, progression.SkillFinalCloseout)
 	})
 }
 

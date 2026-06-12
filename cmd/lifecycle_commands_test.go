@@ -1349,7 +1349,7 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
 	assert.Equal(t, "skill_handoff:"+progression.SkillSpecComplianceReview, syncView.ConfirmationRequirement.Reason)
 	assert.False(t, syncView.ConfirmationRequirement.ResumeResponseSupported)
-	assert.Equal(t, "complete governance skill handoff: "+progression.SkillSpecComplianceReview, syncView.ConfirmationRequirement.NextAction)
+	assert.Equal(t, "run governance skill "+progression.SkillSpecComplianceReview+" and record evidence; --resume-response is only for active checkpoints", syncView.ConfirmationRequirement.NextAction)
 }
 
 func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
