@@ -12,6 +12,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 * **wave:** add GSD-style subagent dispatch ([#190](https://github.com/signalridge/slipway/issues/190)) ([91e2be6](https://github.com/signalridge/slipway/commit/91e2be63f99243d17781ca2a9626143201fffd73))
 
+
+### Bug Fixes
+
+* **cli:** resolve Lattice workflow feedback ([#193](https://github.com/signalridge/slipway/issues/193)) ([f35e1d9](https://github.com/signalridge/slipway/commit/f35e1d9779ee57d992d4dedb5a42ff199d36c6c7))
+
 ## [0.20.0](https://github.com/signalridge/slipway/compare/v0.19.0...v0.20.0) (2026-06-12)
 
 
