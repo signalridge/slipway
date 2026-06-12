@@ -1720,6 +1720,8 @@ func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 		assert.Equal(t, "no_active_checkpoint", cliErr.ErrorCode)
 		assert.Equal(t, categoryPrecondition, cliErr.Category)
 		assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+		assert.Contains(t, cliErr.Remediation, "active checkpoint")
+		assert.Contains(t, cliErr.Remediation, "skill evidence")
 	})
 }
 
@@ -2078,7 +2080,7 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.False(t, handoff.PriorAuthorizationSufficient)
 	assert.Equal(t, "skill_handoff:code-quality-review", handoff.Reason)
 	assert.False(t, handoff.ResumeResponseSupported)
-	assert.Equal(t, "complete governance skill handoff: code-quality-review", handoff.NextAction)
+	assert.Equal(t, "run governance skill code-quality-review and record evidence; --resume-response is only for active checkpoints", handoff.NextAction)
 	assert.Equal(t, "skill_handoff", handoff.NextActionKind)
 	assert.Empty(t, handoff.NextCommand)
 
@@ -2162,7 +2164,7 @@ func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
 	confirmation := payload["confirmation_requirement"].(map[string]any)
 	require.Equal(t, "hard_stop", confirmation["boundary"])
 	assert.Equal(t, false, confirmation["resume_response_supported"])
-	assert.Equal(t, "complete governance skill handoff: code-quality-review", confirmation["next_action"])
+	assert.Equal(t, "run governance skill code-quality-review and record evidence; --resume-response is only for active checkpoints", confirmation["next_action"])
 	assert.Equal(t, "skill_handoff", confirmation["next_action_kind"])
 }
 

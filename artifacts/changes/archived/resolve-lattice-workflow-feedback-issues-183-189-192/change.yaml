@@ -1,0 +1,59 @@
+version: 1
+slug: resolve-lattice-workflow-feedback-issues-183-189-192
+description: resolve Lattice workflow feedback issues 183 189 192
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-12T07:01:04.229019Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-lattice-workflow-feedback-issues-183-189-192
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: e402f6992a570aaf937054415de020a5a5e9fac52ee4918e815c4082d022b77c
+        updated_at: 2026-06-12T12:27:48.382025943Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 32bda7d82933a3d8ecb26e1d1315cef48624f1a6f10c35239d6f3fb43aea20dc
+        updated_at: 2026-06-12T07:08:46.842856359Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: af1f5a24c78fb9c643cdb54785d3f1c8cb27b2ee49208c170713e90dfbe2ade9
+        updated_at: 2026-06-12T07:05:08.063411747Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: a286061c690dcef2b136cd42c30413c8c1a1a3ffa5f3af72884c0c5db865770f
+        updated_at: 2026-06-12T07:08:46.842635983Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 2204f5daefd065d60c0a914b759568a2a41cefff82ba96d21246cba4c3ccfccf
+        updated_at: 2026-06-12T07:07:25.826753331Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: cbcc9ac0c7b517b5a6589068040adf661c4529dd93ba4b54c5cd4512114fa814
+        updated_at: 2026-06-12T07:22:51.055220502Z
+evidence_refs:
+    code-quality-review: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/code-quality-review.yaml
+    final-closeout: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/final-closeout.yaml
+    goal-verification: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/goal-verification.yaml
+    intake-clarification: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/intake-clarification.yaml
+    plan-audit: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/plan-audit.yaml
+    research-orchestration: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/resolve-lattice-workflow-feedback-issues-183-189-192/artifacts/changes/resolve-lattice-workflow-feedback-issues-183-189-192/verification/wave-orchestration.yaml
