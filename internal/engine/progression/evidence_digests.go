@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"gopkg.in/yaml.v3"
 )
 
 var errDigestInputsUnavailable = errors.New("evidence digest inputs unavailable")
@@ -461,7 +463,7 @@ func addExecutionAndContentInputs(
 	if err := addExecutionSummaryInputs(summary, inputs); err != nil {
 		return err
 	}
-	if err := addContentPathInputs(root, change, summary, inputs); err != nil {
+	if err := addContentPathInputs(root, change, summary, inputs, false); err != nil {
 		return err
 	}
 	if len(inputs) == 0 {
@@ -492,7 +494,13 @@ func addExecutionSummaryInputs(summary *model.ExecutionSummary, inputs map[strin
 	return nil
 }
 
-func addContentPathInputs(root string, change model.Change, summary *model.ExecutionSummary, inputs map[string]string) error {
+func addContentPathInputs(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	inputs map[string]string,
+	normalizeCurrentChangeAuthority bool,
+) error {
 	if summary == nil {
 		return nil
 	}
@@ -524,7 +532,13 @@ func addContentPathInputs(root string, change model.Change, summary *model.Execu
 					key = filepath.ToSlash(display)
 				}
 			}
-			hash, err := workspacePathInputHash(path, key)
+			var hash string
+			var err error
+			if normalizeCurrentChangeAuthority {
+				hash, err = goalVerificationContentPathInputHash(change, path, key)
+			} else {
+				hash, err = workspacePathInputHash(path, key)
+			}
 			if err != nil {
 				return err
 			}
@@ -553,7 +567,7 @@ func addGoalVerificationInputs(
 	if err := addChangedTargetFileSetInput(change, summary, inputs); err != nil {
 		return err
 	}
-	if err := addContentPathInputs(root, change, summary, inputs); err != nil {
+	if err := addContentPathInputs(root, change, summary, inputs, true); err != nil {
 		return err
 	}
 	if len(inputs) == 0 {
@@ -863,6 +877,44 @@ func workspacePathInputHash(path, rel string) (string, error) {
 		"path":  filepath.ToSlash(strings.TrimSpace(rel)),
 		"type":  "directory",
 		"files": files,
+	})
+}
+
+func goalVerificationContentPathInputHash(change model.Change, path, rel string) (string, error) {
+	if currentChangeAuthorityInput(change, rel) {
+		return changeAuthorityInputHash(path, rel)
+	}
+	return workspacePathInputHash(path, rel)
+}
+
+func currentChangeAuthorityInput(change model.Change, rel string) bool {
+	rel = strings.Trim(strings.TrimSpace(filepath.ToSlash(rel)), "/")
+	if rel == "" || strings.TrimSpace(change.Slug) == "" {
+		return false
+	}
+	want := filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "change.yaml"))
+	return rel == want
+}
+
+func changeAuthorityInputHash(path, rel string) (string, error) {
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	if err != nil {
+		return "", err
+	}
+	var authority model.Change
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&authority); err != nil {
+		return "", err
+	}
+	authority.Normalize()
+	if err := authority.Validate(); err != nil {
+		return "", err
+	}
+	authority.EvidenceRefs = nil
+	return model.ComputeInputHash(map[string]any{
+		"path":             filepath.ToSlash(strings.TrimSpace(rel)),
+		"change_authority": authority,
 	})
 }
 
