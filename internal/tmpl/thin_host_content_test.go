@@ -91,6 +91,48 @@ func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	assert.Contains(t, flatRef, "relevance/staleness self-check")
 }
 
+func TestWaveOrchestrationDispatchReferenceDefinesRuntimeAdapters(t *testing.T) {
+	t.Parallel()
+
+	ref, err := Content("skills/wave-orchestration/references/executor-dispatch-reference.md")
+	require.NoError(t, err)
+	flatRef := thinHostFlatten(ref)
+
+	assert.Contains(t, flatRef, "spawn_agent")
+	assert.Contains(t, flatRef, "tool_search")
+	assert.Contains(t, flatRef, "fork_context: false")
+	assert.Contains(t, flatRef, "collect agent IDs")
+	assert.Contains(t, flatRef, "wait for all")
+	assert.Contains(t, flatRef, "close each agent")
+	assert.NotContains(t, flatRef, "codex -q --task")
+	assert.Contains(t, flatRef, "dispatch_mode:wave=<wave_index>:degraded_sequential")
+
+	for _, field := range []string{
+		"`task_id`",
+		"`verdict`",
+		"`changed_files`",
+		"`test_summary`",
+		"`evidence_ref`",
+		"`blockers`",
+	} {
+		assert.Contains(t, flatRef, field)
+	}
+
+	assert.Contains(t, flatRef, "capable runtime")
+	assert.Contains(t, flatRef, "must not silently execute")
+	assert.Contains(t, flatRef, "slipway evidence task")
+	assert.Contains(t, flatRef, "must not self-stamp")
+	assert.Contains(t, flatRef, "single worktree")
+	assert.Contains(t, flatRef, "target-overlap preflight")
+	assert.Contains(t, flatRef, "executor_agent:wave=<wave_index>:task=<task_id>:<handle>")
+	assert.Contains(t, flatRef, "executor_dispatch_stalled")
+	assert.Contains(t, flatRef, "executor_result_missing")
+	assert.Contains(t, flatRef, "explicit user authorization")
+	assert.Contains(t, flatRef, "post-result changed-file conflict")
+	assert.Contains(t, flatRef, ".git/config.lock")
+	assert.Contains(t, flatRef, "Do not wrap a spawner workflow inside another subagent")
+}
+
 func TestRemainingHeavyHostsUseDiskHandoffContract(t *testing.T) {
 	t.Parallel()
 

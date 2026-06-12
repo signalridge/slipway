@@ -1081,6 +1081,8 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must reference the per-wave parallel signal from next --json")
 	assert.Contains(t, skill, "degradation",
 		"wave-orchestration must require noting a degraded sequential fallback")
+	assert.Contains(t, skill, "dispatch_mode:wave=<wave_index>:degraded_sequential",
+		"wave-orchestration must require structured degraded dispatch evidence")
 	assert.Contains(t, skill, "parallelization: off",
 		"wave-orchestration must describe the parallelization off-switch")
 	assert.Contains(t, skill, "post-wave integration gate",
@@ -1091,6 +1093,62 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must make the structured dispatch reference contract explicit")
 	assert.Contains(t, skill, "do not start the next wave",
 		"wave-orchestration must block subsequent waves when integration fails")
+	assert.Contains(t, skill, "real executor subagent fan-out",
+		"wave-orchestration must require real fan-out for parallel waves")
+	assert.Contains(t, skill, "same-context inline execution",
+		"wave-orchestration must reject silent inline execution for capable runtimes")
+	assert.Contains(t, skill, "task_id",
+		"wave-orchestration must name the stable executor result contract")
+	assert.Contains(t, skill, "single worktree",
+		"wave-orchestration must describe the single-worktree execution boundary")
+	assert.Contains(t, skill, "target-overlap preflight",
+		"wave-orchestration must require a target-overlap preflight before spawning")
+	assert.Contains(t, skill, "post-result changed-file conflict",
+		"wave-orchestration must require post-result conflict detection before integration")
+	assert.Contains(t, skill, "executor_agent:wave=<wave_index>:task=<task_id>:<handle>",
+		"wave-orchestration must require per-task executor handle references")
+}
+
+func TestGeneratedWaveOrchestrationCodexDispatchUsesSpawnAgent(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	refPath := filepath.Join(
+		root,
+		cfg.SkillsDir,
+		"slipway-wave-orchestration",
+		"references",
+		"executor-dispatch-reference.md",
+	)
+	raw, err := os.ReadFile(refPath)
+	require.NoError(t, err)
+	ref := strings.Join(strings.Fields(string(raw)), " ")
+
+	assert.Contains(t, ref, "spawn_agent",
+		"generated Codex dispatch reference must use spawn_agent")
+	assert.Contains(t, ref, "tool_search",
+		"generated Codex dispatch reference must discover deferred tools")
+	assert.Contains(t, ref, "fork_context: false",
+		"generated Codex dispatch reference must request fresh-context execution")
+	assert.Contains(t, ref, "collect agent IDs",
+		"generated Codex dispatch reference must collect spawned agent handles")
+	assert.Contains(t, ref, "wait for all",
+		"generated Codex dispatch reference must wait for all executors")
+	assert.Contains(t, ref, "close each agent",
+		"generated Codex dispatch reference must close executors when supported")
+	assert.NotContains(t, ref, "codex -q --task",
+		"generated Codex dispatch reference must not include the old shell fan-out path")
+	assert.Contains(t, ref, "explicit user authorization",
+		"generated Codex dispatch reference must stop for authorization when required")
+	assert.Contains(t, ref, "executor_dispatch_stalled",
+		"generated Codex dispatch reference must define stalled-executor recovery")
+	assert.Contains(t, ref, "executor_result_missing",
+		"generated Codex dispatch reference must define missing-result recovery")
+	assert.Contains(t, ref, ".git/config.lock",
+		"generated dispatch reference must preserve safe background fan-out guidance")
+	assert.Contains(t, ref, "Do not wrap a spawner workflow inside another subagent",
+		"generated dispatch reference must preserve nested-spawner guidance")
 }
 
 func TestCodexPromptsUseCommandSpecificPrerequisites(t *testing.T) {
