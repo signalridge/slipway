@@ -1,24 +1,29 @@
 # Concerns
 
 Re-authored for change
-`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
-(GitHub issue #185).
+`resolve-github-issue-184-add-gsd-style-automatic-subagent-di`
+(GitHub issue #184).
 
-- Load-bearing invariant: required skill evidence must stale when certified
-  inputs materially change, but must not stale itself because the engine records
-  where that same evidence lives.
-- Self-stale risk: `cmd/evidence.go` stamps the digest before it writes the
-  evidence pointer to `change.yaml`; raw-byte hashing of current `change.yaml`
-  therefore makes a freshly-recorded S4 skill stale immediately.
-- Over-normalization risk: clearing more than `EvidenceRefs` could hide real
-  lifecycle, scope, preset, or artifact-state changes. The fix must clear only
-  `EvidenceRefs`.
-- Path scoping risk: a generic `change.yaml` filename elsewhere in the repo must
-  still use raw content hashing. The special case applies only to
-  `artifacts/changes/<current-slug>/change.yaml`.
-- Corruption risk: strict-decoding the current change authority during hashing
-  means malformed `change.yaml` fails the digest path. That is acceptable because
-  malformed authority should block governed progression.
-- Compatibility risk: old stored digests that used raw `change.yaml` bytes may
-  stale once after this change. Restamping through the normal evidence path is
-  acceptable; no migration or manual evidence editing is required.
+- Contract ambiguity risk: the current reference says a `parallel: true` wave is
+  concurrent by default, but the Codex section still points at `codex -q --task`.
+  That can let hosts degrade to shell-oriented or same-context execution while
+  the product surface implies real fan-out.
+- Governance weakening risk: if degraded sequential remains nonblocking for a
+  capable runtime, a coordinator can pollute its own context and still record a
+  passing wave. The fix should distinguish "runtime lacks a primitive" from
+  "runtime has a primitive but dispatch failed or was skipped".
+- Evidence ownership risk: executors may report refs, but `slipway evidence
+  task` remains the only task evidence ledger writer. Generated prose must not
+  imply subagents can self-stamp `captured_at`, freshness inputs, or governed
+  verification YAML.
+- Isolation overclaim risk: GSD's Claude worktree isolation model cannot be
+  copied into Codex guidance because GSD itself documents that Codex
+  `spawn_agent` has no direct `isolation="worktree"` mapping.
+- Test drift risk: this repository does not track generated `.claude`,
+  `.codex`, `.cursor`, `.gemini`, or `.opencode` adapter copies. Tests must
+  exercise template rendering and toolgen-generated temporary trees instead of
+  relying on committed generated files.
+- Manifest scope risk: `docs/SURFACE-MANIFEST.json` tracks public surface rows.
+  This change edits an existing surface contract and should not require a
+  manifest row update unless a new command, skill, JSON contract, adapter, or
+  documentation surface is added.
