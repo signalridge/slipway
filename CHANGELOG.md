@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0](https://github.com/signalridge/slipway/compare/v0.19.0...v0.20.0) (2026-06-12)
+
+
+### Features
+
+* **decisions:** add dead decision status gate ([#186](https://github.com/signalridge/slipway/issues/186)) ([bb9f0bf](https://github.com/signalridge/slipway/commit/bb9f0bf4ae2b43d3f296d8a68036267a8f25f33e))
+
+
+### Bug Fixes
+
+* **progression:** prevent S4 evidence self-stale ([#188](https://github.com/signalridge/slipway/issues/188)) ([56b05ee](https://github.com/signalridge/slipway/commit/56b05ee9bb3a67cd485634bbd22105c38b4b644f))
+
 ## [0.19.0](https://github.com/signalridge/slipway/compare/v0.18.0...v0.19.0) (2026-06-11)
 
 
