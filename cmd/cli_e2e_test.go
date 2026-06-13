@@ -477,6 +477,20 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, model.ChangeStatusDone, archived.Status)
 		assert.Equal(t, model.StateDone, archived.CurrentState)
+
+		statusOut := bytes.NewBuffer(nil)
+		statusCmd := commandForRoot(t, root, makeStatusCmd())
+		statusCmd.SetOut(statusOut)
+		statusCmd.SetErr(statusOut)
+		statusCmd.SetArgs([]string{"--json", "--change", slug})
+		require.NoError(t, statusCmd.Execute())
+
+		statusPayload := decodeJSONMap(t, statusOut.String())
+		assert.Equal(t, true, statusPayload["archived"])
+		assert.Equal(t, "done", statusPayload["lifecycle_status"])
+		assert.Equal(t, string(model.StateDone), statusPayload["current_state"])
+		assert.Contains(t, statusPayload["source_state_file"], filepath.Join("artifacts", "changes", "archived", slug, "change.yaml"))
+		assert.NotContains(t, statusOut.String(), "change_state_load_failed")
 	})
 }
 

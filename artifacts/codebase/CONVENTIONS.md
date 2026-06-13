@@ -1,18 +1,13 @@
 # Conventions
 
 Re-authored for change
-`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
-(GitHub issue #185).
+`resolve-github-issues-195-and-196-make-status-expose-done-re`
+(GitHub issues #195 and #196).
 
-- Keep public CLI command behavior stable unless the issue requires a surface
-  change. #185 can be fixed in digest input semantics without changing flags or
-  command ordering.
-- Required skill freshness must fail closed for real input changes and report
-  canonical `required_skill_stale:<skill>:<input>` details.
-- Verification YAML, `evidence-digests.yaml`, timestamps, run versions, and
-  evidence refs remain engine-owned. Tests may use helpers, but normal workflow
-  should not hand-edit these files.
-- Use focused package tests for digest behavior before broadening to full
-  repository tests.
-- Special-case logic should be path-scoped and skill-scoped; avoid broad
-  exclusions that make unrelated content invisible to freshness checks.
+- Keep active lifecycle state authoritative; status can project readiness, but
+  must not persist done-ready as a new terminal state.
+- Prefer optional additive JSON fields for new status facts when existing fields
+  have established meanings.
+- Reuse canonical reason codes and recovery summaries where possible.
+- Preserve existing delete/repair recovery for genuinely broken active state.
+- Use command/view tests in `cmd/` before broad repository verification.

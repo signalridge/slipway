@@ -1,29 +1,17 @@
 # Concerns
 
 Re-authored for change
-`resolve-github-issue-184-add-gsd-style-automatic-subagent-di`
-(GitHub issue #184).
+`resolve-github-issues-195-and-196-make-status-expose-done-re`
+(GitHub issues #195 and #196).
 
-- Contract ambiguity risk: the current reference says a `parallel: true` wave is
-  concurrent by default, but the Codex section still points at `codex -q --task`.
-  That can let hosts degrade to shell-oriented or same-context execution while
-  the product surface implies real fan-out.
-- Governance weakening risk: if degraded sequential remains nonblocking for a
-  capable runtime, a coordinator can pollute its own context and still record a
-  passing wave. The fix should distinguish "runtime lacks a primitive" from
-  "runtime has a primitive but dispatch failed or was skipped".
-- Evidence ownership risk: executors may report refs, but `slipway evidence
-  task` remains the only task evidence ledger writer. Generated prose must not
-  imply subagents can self-stamp `captured_at`, freshness inputs, or governed
-  verification YAML.
-- Isolation overclaim risk: GSD's Claude worktree isolation model cannot be
-  copied into Codex guidance because GSD itself documents that Codex
-  `spawn_agent` has no direct `isolation="worktree"` mapping.
-- Test drift risk: this repository does not track generated `.claude`,
-  `.codex`, `.cursor`, `.gemini`, or `.opencode` adapter copies. Tests must
-  exercise template rendering and toolgen-generated temporary trees instead of
-  relying on committed generated files.
-- Manifest scope risk: `docs/SURFACE-MANIFEST.json` tracks public surface rows.
-  This change edits an existing surface contract and should not require a
-  manifest row update unless a new command, skill, JSON contract, adapter, or
-  documentation surface is added.
+- Lifecycle ambiguity risk: status must make done-ready obvious without saying
+  the change is already done. `change.status` stays active until finalization.
+- False-corruption risk: an archived change with no active bundle must not be
+  reported as `change_state_load_failed` or remediated with generic repair.
+- Real-corruption risk: if neither active nor archived authority can be loaded,
+  existing delete/repair diagnostics should still surface.
+- Compatibility risk: adding optional JSON fields is lower risk than changing
+  existing `lifecycle_status` semantics from `active` to `done_ready`.
+- Text/JSON drift risk: if only JSON is changed, operators using text status
+  still see the ambiguous handoff. Text rendering should show the same
+  done-ready/archived facts.

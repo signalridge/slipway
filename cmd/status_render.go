@@ -62,6 +62,12 @@ func renderStatusText(view statusView) string {
 	label := view.Slug
 	writeLine("# %s\n\n", label)
 	writeLine("Phase: %s | Mode: %s | Status: %s\n", view.Phase, view.ExecutionMode, view.LifecycleStatus)
+	if view.DoneReady {
+		writeLine("Readiness: done-ready\n")
+	}
+	if view.Archived && view.ArchivePath != "" {
+		writeLine("Archive: %s\n", view.ArchivePath)
+	}
 	if strings.TrimSpace(view.Mode) != "" {
 		writeLine("Focus: %s\n", view.Mode)
 	}
@@ -285,6 +291,12 @@ var actionHints = map[model.WorkflowState]string{
 }
 
 func primaryActionHint(view statusView) string {
+	if view.Archived {
+		return "archived change; no active lifecycle action"
+	}
+	if view.DoneReady {
+		return "slipway done  (finalize and archive done-ready change)"
+	}
 	if view.PresetConfirmationPending {
 		return "slipway preset <light|standard|strict>  (confirm governance preset before continuing)"
 	}

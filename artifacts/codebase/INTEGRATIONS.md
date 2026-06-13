@@ -1,19 +1,17 @@
 # Integrations
 
 Re-authored for change
-`resolve-github-issue-185-prevent-s4-goal-verification-from-s`
-(GitHub issue #185).
+`resolve-github-issues-195-and-196-make-status-expose-done-re`
+(GitHub issues #195 and #196).
 
 - External integrations:
-  - None. The change is local CLI/governance engine behavior.
+  - None. The change is local CLI/governance state projection behavior.
 - Public CLI surfaces involved:
-  - `slipway evidence skill` records governance verification evidence.
-  - `slipway run`, `slipway next`, `slipway status`, and `slipway validate`
-    consume required-skill freshness and surface `required_skill_stale`
-    blockers.
+  - `slipway status --json`
+  - `slipway status --json --change <slug>`
+  - text `slipway status`
 - Internal integration points:
-  - `cmd/evidence.go` records verification and evidence refs.
-  - `internal/engine/progression/evidence_digests.go` stamps and evaluates
-    skill digest freshness.
-  - `internal/state` persists `change.yaml`, verification YAML, execution
-    summaries, and evidence digest records.
+  - `cmd/status.go` for route and view shape.
+  - `cmd/status_view_build.go` for governed readiness projection.
+  - `cmd/status_render.go` for text hints.
+  - `internal/state.LoadArchivedChange` for terminal records.
