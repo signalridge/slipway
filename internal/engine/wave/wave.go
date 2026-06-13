@@ -1,7 +1,6 @@
 package wave
 
 import (
-	"cmp"
 	"fmt"
 	"path"
 	"slices"
@@ -9,8 +8,6 @@ import (
 
 	"github.com/signalridge/slipway/internal/model"
 )
-
-func compareNodesByTaskID(a, b Node) int { return cmp.Compare(a.TaskID, b.TaskID) }
 
 type Node struct {
 	TaskID         string         `json:"task_id"`
