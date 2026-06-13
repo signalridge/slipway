@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.1](https://github.com/signalridge/slipway/compare/v0.22.0...v0.22.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **ci:** normalize archive path assertion ([#200](https://github.com/signalridge/slipway/issues/200)) ([005f76a](https://github.com/signalridge/slipway/commit/005f76a8ec3f8e19c50d2de1e59fc3158ed6cf37))
+
 ## [0.22.0](https://github.com/signalridge/slipway/compare/v0.21.0...v0.22.0) (2026-06-13)
 
 
