@@ -217,7 +217,6 @@ func writeScopeContractDriftFixtureInState(t *testing.T, workflowState model.Wor
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement validation surface
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/validate.go"]
   - task_kind: code

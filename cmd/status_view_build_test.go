@@ -615,13 +615,11 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
@@ -696,13 +694,11 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAre
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
@@ -744,13 +740,11 @@ func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testi
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
@@ -783,13 +777,11 @@ func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
@@ -823,13 +815,11 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: code
@@ -878,7 +868,6 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed only wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: verification

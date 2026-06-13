@@ -41,7 +41,6 @@ func TestStaleEvidenceRecoveryRestoresEvidenceWhenAuthorityWriteFails(t *testing
 ## Task List
 
 - [ ] `+"`t-01`"+` changed task plan
-  - wave: 1
   - target_files: ["internal/fsutil/transaction.go"]
   - task_kind: code
   - covers: [REQ-001]

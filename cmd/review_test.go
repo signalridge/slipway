@@ -239,7 +239,6 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` checked checklist must not unlock review
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -275,7 +274,6 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` preserve review contract
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -334,7 +332,6 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` preserve review contract
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -426,7 +423,6 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` preserve review contract
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -506,14 +502,12 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` preserve first review wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
   - covers: [REQ-001]
 
 - [x] `+"`t-02`"+` preserve second review wave
-  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -602,7 +596,6 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` review should fail on stale evidence
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -709,7 +702,6 @@ Auth regressions require guardrail review.
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` verify review scope
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -807,7 +799,6 @@ Missing optional artifacts can silently weaken guardrail review coverage.
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` verify optional review scope
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: verification
@@ -879,7 +870,6 @@ func TestReviewFailsWhenTasksChecklistCoverageDrifts(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/review.go"]
   - task_kind: code

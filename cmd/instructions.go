@@ -84,10 +84,17 @@ func instructionsGuidance(name string) string {
 			"until you author it; an empty or structure-only requirements file is rejected by " +
 			"the substance gate and cannot reach done."
 	case "tasks":
-		return "Author each task as a checklist line (- [ ] t-NN <objective>) with wave, " +
-			"depends_on, target_files, task_kind, and covers metadata. Every task names concrete target_files " +
-			"that bound the files or evidence targets it changes or verifies. The engine does not seed a body; an " +
-			"empty or placeholder tasks list is rejected by the substance gate."
+		return "Author each task as a checklist line (- [ ] t-NN <objective>) with depends_on, " +
+			"target_files, task_kind, and covers metadata. Every task names concrete target_files " +
+			"that bound the files or evidence targets it changes or verifies. Do not author a `wave:` " +
+			"line — the engine rejects it and assigns waves from depends_on and target_files, " +
+			"dispatching multi-task waves in parallel. Declare only real execution-order dependencies " +
+			"in depends_on (a scheduling input, not narrative order — fabricated dependencies " +
+			"serialize execution), name precise target_files (exact files over directories or globs — " +
+			"broad scopes are bumped apart on conflict and flatten parallelism), and absorb small " +
+			"steps that must touch the same file into one task instead of splitting them into " +
+			"serialized tasks. The engine does not seed a body; an empty or placeholder tasks list is " +
+			"rejected by the substance gate."
 	case "decision":
 		return "Author a concrete decision with alternatives, selected approach, interfaces and data flow, " +
 			"rollout/rollback, and risk. The engine does not seed this body; a missing or template-only decision " +

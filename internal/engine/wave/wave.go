@@ -15,7 +15,6 @@ func compareNodesByTaskID(a, b Node) int { return cmp.Compare(a.TaskID, b.TaskID
 type Node struct {
 	TaskID         string         `json:"task_id"`
 	Objective      string         `json:"objective,omitempty"`
-	WaveIndex      int            `json:"wave,omitempty"`
 	DependsOn      []string       `json:"depends_on,omitempty"`
 	TargetFiles    []string       `json:"target_files,omitempty"`
 	TaskKind       model.TaskKind `json:"task_kind,omitempty"`
@@ -53,14 +52,22 @@ type ExecutionResult struct {
 	Aborted       bool                     `json:"aborted,omitempty"`
 }
 
+// PlanWaves computes the wave assignment for the given tasks from their
+// declared depends_on edges and their target_files. Nothing is declared by
+// the author: wave(task) = 1 for roots, otherwise max(wave of each
+// dependency) + 1 before conflict adjustment. Waves are then filled in task-ID
+// order from tasks whose dependencies are already in earlier waves, deferring
+// any task that conflicts with an already accepted task in the current wave.
+// Conflicts are a same-wave-only concern because waves run sequentially. Depth
+// is minimal for pure dependency constraints; conflict bumping is deterministic
+// greedy placement, not a depth-optimal schedule (that is graph-coloring-hard).
+// The plan is deterministic across input orderings.
 func PlanWaves(nodes []Node) ([]Wave, error) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
 
 	nodeByID := map[string]Node{}
-	declaredWaves := map[int][]Node{}
-	maxWaveIndex := 0
 	for _, node := range nodes {
 		if err := model.ValidateTaskID(node.TaskID); err != nil {
 			return nil, err
@@ -68,45 +75,145 @@ func PlanWaves(nodes []Node) ([]Wave, error) {
 		if _, exists := nodeByID[node.TaskID]; exists {
 			return nil, fmt.Errorf("duplicate task_id %q", node.TaskID)
 		}
-		if node.WaveIndex < 1 {
-			return nil, fmt.Errorf("task %q missing required wave declaration", node.TaskID)
-		}
 		nodeByID[node.TaskID] = node
-		declaredWaves[node.WaveIndex] = append(declaredWaves[node.WaveIndex], node)
-		if node.WaveIndex > maxWaveIndex {
-			maxWaveIndex = node.WaveIndex
-		}
-	}
-
-	for waveIndex := 1; waveIndex <= maxWaveIndex; waveIndex++ {
-		layer, exists := declaredWaves[waveIndex]
-		if !exists || len(layer) == 0 {
-			return nil, fmt.Errorf("wave %d missing from declared wave plan", waveIndex)
-		}
 	}
 
 	for _, node := range nodes {
 		for _, dep := range node.DependsOn {
-			dependency, exists := nodeByID[dep]
-			if !exists {
+			if _, exists := nodeByID[dep]; !exists {
 				return nil, fmt.Errorf("task %q depends on unknown task %q", node.TaskID, dep)
-			}
-			if dependency.WaveIndex >= node.WaveIndex {
-				return nil, fmt.Errorf("task %q depends on %q in same or later wave", node.TaskID, dep)
 			}
 		}
 	}
 
-	waves := make([]Wave, 0, maxWaveIndex)
-	for waveIndex := 1; waveIndex <= maxWaveIndex; waveIndex++ {
-		layer := append([]Node(nil), declaredWaves[waveIndex]...)
-		slices.SortFunc(layer, compareNodesByTaskID)
+	ordered, err := topologicalTaskOrder(nodeByID)
+	if err != nil {
+		return nil, err
+	}
+
+	taskIDs := append([]string(nil), ordered...)
+	slices.Sort(taskIDs)
+	assignedWave := map[string]int{}
+	remaining := map[string]struct{}{}
+	for _, taskID := range taskIDs {
+		remaining[taskID] = struct{}{}
+	}
+
+	waves := []Wave{}
+	for waveIndex := 1; len(remaining) > 0; waveIndex++ {
+		layer := []Node{}
+		for _, taskID := range taskIDs {
+			if _, pending := remaining[taskID]; !pending {
+				continue
+			}
+			node := nodeByID[taskID]
+			if !dependenciesAssignedBeforeWave(node, assignedWave, waveIndex) {
+				continue
+			}
+			if nodeConflictsWithWave(layer, node) {
+				continue
+			}
+			layer = append(layer, node)
+			assignedWave[taskID] = waveIndex
+			delete(remaining, taskID)
+		}
+
+		if len(layer) == 0 {
+			return nil, fmt.Errorf("no schedulable tasks for wave %d", waveIndex)
+		}
+		// Internal invariant: conflict-driven placement above must have
+		// produced conflict-free waves; fail closed if it ever does not.
 		if err := validateWaveStaticConflicts(waveIndex, layer); err != nil {
 			return nil, err
 		}
 		waves = append(waves, Wave{Nodes: layer})
 	}
 	return waves, nil
+}
+
+func dependenciesAssignedBeforeWave(node Node, assignedWave map[string]int, waveIndex int) bool {
+	for _, dep := range node.DependsOn {
+		depWave, ok := assignedWave[dep]
+		if !ok || depWave >= waveIndex {
+			return false
+		}
+	}
+	return true
+}
+
+// topologicalTaskOrder returns every task ID in dependency order with
+// task-ID-ordered tiebreaks (Kahn's algorithm popping the smallest ready
+// ID), so wave assignment is deterministic regardless of input order.
+// Duplicate depends_on entries are tolerated; an unresolvable remainder is a
+// dependency cycle and fails the plan.
+func topologicalTaskOrder(nodeByID map[string]Node) ([]string, error) {
+	taskIDs := make([]string, 0, len(nodeByID))
+	for taskID := range nodeByID {
+		taskIDs = append(taskIDs, taskID)
+	}
+	slices.Sort(taskIDs)
+
+	pendingDeps := map[string]int{}
+	dependents := map[string][]string{}
+	for _, taskID := range taskIDs {
+		seenDeps := map[string]struct{}{}
+		for _, dep := range nodeByID[taskID].DependsOn {
+			if _, dup := seenDeps[dep]; dup {
+				continue
+			}
+			seenDeps[dep] = struct{}{}
+			pendingDeps[taskID]++
+			dependents[dep] = append(dependents[dep], taskID)
+		}
+	}
+
+	ready := make([]string, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
+		if pendingDeps[taskID] == 0 {
+			ready = append(ready, taskID)
+		}
+	}
+
+	ordered := make([]string, 0, len(taskIDs))
+	for len(ready) > 0 {
+		taskID := ready[0]
+		ready = ready[1:]
+		ordered = append(ordered, taskID)
+		for _, dependent := range dependents[taskID] {
+			pendingDeps[dependent]--
+			if pendingDeps[dependent] == 0 {
+				insertAt, _ := slices.BinarySearch(ready, dependent)
+				ready = slices.Insert(ready, insertAt, dependent)
+			}
+		}
+	}
+
+	if len(ordered) != len(taskIDs) {
+		stuck := make([]string, 0, len(taskIDs)-len(ordered))
+		for _, taskID := range taskIDs {
+			if pendingDeps[taskID] > 0 {
+				stuck = append(stuck, taskID)
+			}
+		}
+		return nil, fmt.Errorf("depends_on cycle detected among tasks %s; remove a circular depends_on reference so every task can be ordered", strings.Join(stuck, ", "))
+	}
+	return ordered, nil
+}
+
+// nodeConflictsWithWave reports whether the candidate's target files overlap
+// any target file already owned by another task assigned to the wave.
+func nodeConflictsWithWave(occupants []Node, candidate Node) bool {
+	for _, candidateFile := range candidate.TargetFiles {
+		candidateTarget := normalizeTargetFileForConflict(candidateFile)
+		for _, occupant := range occupants {
+			for _, occupantFile := range occupant.TargetFiles {
+				if targetFilesConflict(normalizeTargetFileForConflict(occupantFile), candidateTarget) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func validateWaveStaticConflicts(waveIndex int, nodes []Node) error {

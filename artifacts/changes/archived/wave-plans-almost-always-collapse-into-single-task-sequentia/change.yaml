@@ -1,0 +1,63 @@
+version: 1
+slug: wave-plans-almost-always-collapse-into-single-task-sequentia
+description: 'Wave plans almost always collapse into single-task sequential chains, so parallel:true waves rarely exist to dispatch: the planning surfaces (slipway instructions tasks guidance and the plan-audit skill) carry only format requirements and an upper wave-size bound (<=5 tasks), with no wave-width construction rules. Borrow GSD planner-side mechanisms into Slipway planning surfaces: minimal-wave assignment (wave = max(dependency waves)+1; independent file-disjoint tasks share a wave), a sequential-by-default plan warning at plan-audit, shared-files-to-same-task absorption guidance, and precise target_files scoping guidance, so multi-task parallel waves become the planned default where dependencies allow.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-12T16:26:37.309979Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/wave-plans-almost-always-collapse-into-single-task-sequentia
+artifact_schema: expanded
+remediation_sources:
+    - slug: resolve-github-issue-184-add-gsd-style-automatic-subagent-di
+      path: artifacts/changes/archived/resolve-github-issue-184-add-gsd-style-automatic-subagent-di
+      relation: remediates
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: f7fc3ed2daf2fdcc6128c1198993412b840d659279123922d0257c8f293ed6bc
+        updated_at: 2026-06-13T12:49:16.274716738Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 4ba30edf9c15bd72aeb2d1ed5ffcb1e92815861a2fa6cf33977244fdd0cb1a4c
+        updated_at: 2026-06-12T16:55:17.617014219Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 41296388528e4d73926d40a325215d31e7c146dc212fd9c6dd4a4751df50d12f
+        updated_at: 2026-06-12T16:49:27.917901988Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 1b254b6eb9998b9b32ead9ad4cf21d0b09651e817a139043f785e22f2b84f96c
+        updated_at: 2026-06-12T16:57:33.592135626Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 364724658ecb725a7b3edfbcccd7a2a1b0ec67c8828e684fbcf4e844ed41f5ce
+        updated_at: 2026-06-12T16:49:06.694819102Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 2afde8f44338f4c2e66bc168e616feb232abb4c27bc7c13c4959ccfe4ecdbf73
+        updated_at: 2026-06-12T18:42:03.762313929Z
+evidence_refs:
+    code-quality-review: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/code-quality-review.yaml
+    final-closeout: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/final-closeout.yaml
+    goal-verification: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/goal-verification.yaml
+    intake-clarification: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/intake-clarification.yaml
+    plan-audit: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/plan-audit.yaml
+    research-orchestration: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/wave-plans-almost-always-collapse-into-single-task-sequentia/artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/wave-orchestration.yaml

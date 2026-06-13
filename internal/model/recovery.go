@@ -319,11 +319,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
-	"plan_dimension_execution_missing_wave": {
-		Remediation:     "Fix tasks.md so every task declares an execution wave.",
-		CommandTemplate: "slipway validate",
-		Class:           RecoveryClassFixScope,
-	},
 	"plan_dimension_key_links_missing_target_files": {
 		Remediation:     "Fix tasks.md so every task declares target_files.",
 		CommandTemplate: "slipway validate",

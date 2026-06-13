@@ -109,6 +109,36 @@ func TestInstructionsTasksGuidanceMatchesTargetFilesGate(t *testing.T) {
 	assert.NotContains(t, view.Guidance, "A `task_kind: code` task")
 }
 
+// TestInstructionsTasksGuidanceTeachesComputedWaves pins the computed-wave
+// contract: wave is no longer authored metadata — the engine assigns waves from
+// depends_on and target_files and rejects a hand-declared `wave:` line — and the
+// guidance teaches the three width rules (real execution-order dependencies
+// only, precise target_files, absorb same-file steps into one task).
+func TestInstructionsTasksGuidanceTeachesComputedWaves(t *testing.T) {
+	t.Parallel()
+	out, err := runInstructions(t, "tasks", "--json")
+	require.NoError(t, err)
+
+	var view instructionsView
+	require.NoError(t, json.Unmarshal([]byte(out), &view))
+
+	// Authored metadata no longer includes wave.
+	assert.Contains(t, view.Guidance, "with depends_on, target_files, task_kind, and covers metadata")
+	assert.NotContains(t, view.Guidance, "with wave",
+		"wave must not be taught as authored task metadata")
+
+	// The engine owns wave assignment and rejects a hand-declared wave line.
+	assert.Contains(t, view.Guidance, "Do not author a `wave:` line")
+	assert.Contains(t, view.Guidance, "engine rejects it and assigns waves from depends_on and target_files")
+	assert.Contains(t, view.Guidance, "parallel")
+
+	// Width rules: real dependencies only, precise target_files, absorb
+	// same-file steps into one task.
+	assert.Contains(t, view.Guidance, "fabricated dependencies serialize execution")
+	assert.Contains(t, view.Guidance, "exact files over directories or globs")
+	assert.Contains(t, view.Guidance, "same file into one task")
+}
+
 func TestInstructionsUnknownArtifactErrors(t *testing.T) {
 	t.Parallel()
 	_, err := runInstructions(t, "not-an-artifact")

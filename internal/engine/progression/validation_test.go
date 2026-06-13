@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +37,6 @@ func TestValidateTasksChecklist_Valid(t *testing.T) {
 	content := `# Tasks
 
 - [ ] ` + "`t-01`" + ` do something
-  - wave: 1
   - target_files: [main.go]
   - task_kind: code
 `
@@ -87,7 +87,6 @@ func TestValidateTasksChecklist_RejectsInstructionPlaceholderTargetFilesAtPlanAu
 	content := `# Tasks
 
 - [ ] ` + "`t-01`" + ` implement target placeholder rejection
-  - wave: 1
   - target_files: [<path/to/file.go>]
   - task_kind: code
 `
@@ -120,7 +119,6 @@ func TestValidateTasksChecklist_RejectsPlaceholderObjectiveAtPlanAudit(t *testin
 	content := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Pending task objective
-  - wave: 1
   - target_files: [main.go]
   - task_kind: verification
 `
@@ -153,7 +151,6 @@ func assertChecklistCoverageBlocker(t *testing.T, slug, coverRef, specContent, w
 	content := fmt.Sprintf(`# Tasks
 
 - [ ] %s implement auth flow
-  - wave: 1
   - target_files: [main.go]
   - task_kind: code
   - covers: [%s]
@@ -261,7 +258,6 @@ func TestValidateTasksChecklistDetailed_DowngradesOptionalFieldsAndCoverageToWar
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth flow
-  - wave: 1
   - depends_on: []
   - target_files: [main.go]
 `), 0o644))
@@ -311,7 +307,6 @@ func writeSubstanceGateBundle(t *testing.T, root, slug, requirements string) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement auth flow
-  - wave: 1
   - depends_on: []
   - target_files: [main.go]
   - task_kind: code
@@ -395,6 +390,162 @@ REQ-001: The system handles authentication for requests.
 		require.False(t, contains(result.Warnings, "plan_dimension_coverage_requirements_invalid_warning"),
 			"requirements validity must not be downgraded to a warning, got warnings=%v", result.Warnings)
 	})
+}
+
+// The hand-declared `wave:` task metadata is retired: the engine computes
+// execution waves from depends_on + target_files. A checklist whose tasks
+// declare objective, depends_on, target_files, task_kind, and covers — but no
+// `wave:` lines — is therefore structurally complete, and validation must not
+// emit the retired plan_dimension_execution_missing_wave blocker for it, even
+// at plan-audit where enforcement is strictest.
+func TestValidateTasksChecklistDetailed_WavelessChecklistPassesStructuralValidation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "waveless-valid"
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement auth flow
+  - depends_on: []
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` test auth flow
+  - depends_on: [t-01]
+  - target_files: [main_test.go]
+  - task_kind: test
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`## Requirements
+
+### Requirement: Auth
+REQ-001: The system MUST authenticate requests.
+
+#### Scenario: Rejects anonymous request
+GIVEN a request without credentials
+WHEN it reaches a protected route
+THEN the system returns 401.
+`), 0o644))
+
+	change := model.Change{
+		Slug:           slug,
+		WorkflowPreset: model.WorkflowPresetStandard,
+		CurrentState:   model.StateS1Plan,
+		PlanSubStep:    model.PlanSubStepAudit,
+	}
+
+	result := ValidateTasksChecklistDetailed(root, change)
+	for _, blocker := range result.Blockers {
+		assert.NotContains(t, blocker, "plan_dimension_execution_missing_wave",
+			"the declared-wave blocker vocabulary is retired; waveless tasks must not be blocked for a missing wave")
+	}
+	require.Empty(t, result.Blockers,
+		"a checklist declaring objective, depends_on, target_files, task_kind, and covers but no wave: lines must pass structural validation")
+}
+
+func TestValidateTasksChecklistDetailed_InvalidFormatCarriesParserDetail(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "legacy-wave-detail"
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement auth flow
+  - depends_on: []
+  - target_files: [main.go]
+  - task_kind: code
+
+- [ ] `+"`t-02`"+` test auth flow
+  - wave: 2
+  - depends_on: [t-01]
+  - target_files: [main_test.go]
+  - task_kind: test
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(root, model.Change{Slug: slug})
+	require.Len(t, result.Blockers, 1)
+
+	blocker := result.Blockers[0]
+	assert.True(t, strings.HasPrefix(blocker, "tasks_checklist_invalid_format:"),
+		"invalid format blocker must carry the parser detail")
+	assert.Contains(t, blocker, "t-02")
+	assert.Contains(t, blocker, "retired metadata key")
+	assert.Contains(t, blocker, "delete the wave line")
+	assert.Contains(t, blocker, "depends_on")
+}
+
+func TestValidateTasksChecklistDetailed_DependencyPrecheckSuppressesDuplicateWavePlanBlocker(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		tasks       string
+		wantBlocker string
+	}{
+		{
+			name: "unknown dependency",
+			tasks: `# Tasks
+
+- [ ] ` + "`t-01`" + ` implement auth flow
+  - depends_on: [t-99]
+  - target_files: [main.go]
+  - task_kind: code
+`,
+			wantBlocker: "plan_dimension_dependency_unknown:t-01->t-99",
+		},
+		{
+			name: "self dependency",
+			tasks: `# Tasks
+
+- [ ] ` + "`t-01`" + ` implement auth flow
+  - depends_on: [t-01]
+  - target_files: [main.go]
+  - task_kind: code
+`,
+			wantBlocker: "plan_dimension_dependency_self_reference:t-01",
+		},
+		{
+			name: "dependency cycle",
+			tasks: `# Tasks
+
+- [ ] ` + "`t-01`" + ` implement auth flow
+  - depends_on: [t-02]
+  - target_files: [main.go]
+  - task_kind: code
+
+- [ ] ` + "`t-02`" + ` test auth flow
+  - depends_on: [t-01]
+  - target_files: [main_test.go]
+  - task_kind: test
+`,
+			wantBlocker: "plan_dimension_dependency_cycle_detected",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			slug := strings.ReplaceAll(tt.name, " ", "-")
+			bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+			require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tt.tasks), 0o644))
+
+			result := ValidateTasksChecklistDetailed(root, model.Change{Slug: slug})
+			assert.Contains(t, result.Blockers, tt.wantBlocker)
+			for _, blocker := range result.Blockers {
+				assert.Falsef(t, strings.HasPrefix(blocker, "plan_dimension_execution_invalid_wave_plan:"),
+					"dependency precheck failures should not be duplicated as wave-plan blockers: %v", result.Blockers)
+			}
+		})
+	}
 }
 
 func TestValidateTasksChecklistDetailed_ScaffoldedGuardrailRequirementsStayCovered(t *testing.T) {
