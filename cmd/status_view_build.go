@@ -130,6 +130,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 	}
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
+	applyDoneReadyProjection(change, readiness.GateEvaluations, &view)
 	if staleTarget, ok, err := progression.StaleEvidenceRecoveryAvailable(root, change, view.Blockers); err != nil {
 		return statusView{}, err
 	} else if ok {
@@ -326,6 +327,13 @@ func buildStatusNarrative(view statusView) string {
 		interruptSuffix = " The last governed execution was interrupted at " + view.InterruptedExecutionAt + "."
 	}
 	switch {
+	case view.Archived:
+		if view.ArchivePath != "" {
+			return "Archived change is " + view.LifecycleStatus + ". Active lifecycle actions are complete; inspect archived evidence at " + view.ArchivePath + "."
+		}
+		return "Archived change is " + view.LifecycleStatus + ". Active lifecycle actions are complete."
+	case view.DoneReady:
+		return "Done-ready in " + stateLabel + ". All governance gates passed; run `slipway done` to finalize."
 	case len(view.Blockers) > 0:
 		return "Blocked in " + stateLabel + "." + recoverySuffix + interruptSuffix + " Resolve the current blockers before running the next lifecycle action."
 	case len(view.SelectedPriorContext) > 0:
@@ -333,6 +341,26 @@ func buildStatusNarrative(view statusView) string {
 	default:
 		return "Active in " + stateLabel + "." + recoverySuffix + interruptSuffix + " Continue with the next lifecycle action."
 	}
+}
+
+func applyDoneReadyProjection(change model.Change, evaluations map[gate.GateID]gate.GateEvaluation, view *statusView) {
+	if view == nil || change.CurrentState != model.StateS4Verify {
+		return
+	}
+	for _, blocker := range view.Blockers {
+		if blocker.Severity == model.ReasonSeverityError {
+			return
+		}
+	}
+	evaluation, ok := evaluations[gate.GateShip]
+	if !ok || evaluation.Status != model.GateStatusApproved {
+		return
+	}
+	view.DoneReady = true
+	view.Blockers = appendReasonCodes(
+		view.Blockers,
+		[]model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
+	)
 }
 
 func buildMultiChangeSummaryView(changes []model.Change) multiChangeSummaryView {

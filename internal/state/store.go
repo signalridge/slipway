@@ -23,6 +23,12 @@ var (
 	errAmbiguousWorktreeBinding = errors.New("ambiguous worktree binding")
 )
 
+// IsMissingBundleAuthority reports whether err means a bundle directory exists
+// but its change.yaml authority file is absent.
+func IsMissingBundleAuthority(err error) bool {
+	return errors.Is(err, errMissingBundleAuthority)
+}
+
 type BoundChangeRef struct {
 	Slug         string
 	WorktreePath string

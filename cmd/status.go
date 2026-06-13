@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +31,9 @@ type statusView struct {
 	NeedsDiscovery            bool                                 `json:"needs_discovery,omitempty"`
 	Phase                     model.UserPhase                      `json:"phase,omitempty"`
 	LifecycleStatus           string                               `json:"lifecycle_status,omitempty"`
+	DoneReady                 bool                                 `json:"done_ready,omitempty"`
+	Archived                  bool                                 `json:"archived,omitempty"`
+	ArchivePath               string                               `json:"archive_path,omitempty"`
 	CurrentState              model.WorkflowState                  `json:"current_state,omitempty"`
 	IntakeSubStep             model.IntakeSubStep                  `json:"intake_substep,omitempty"`
 	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
@@ -209,12 +214,15 @@ func makeStatusCmd() *cobra.Command {
 						return err
 					}
 				}
-				change, err := loadChangeBySlug(root, changeSlug)
+				change, archived, err := loadStatusChangeBySlug(root, changeSlug)
 				if err != nil {
 					if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
 						return printStatusView(cmd, root, *diag, outputFormat, hydrate)
 					}
 					return err
+				}
+				if archived {
+					return showArchivedStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 				}
 				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 			}
@@ -393,6 +401,65 @@ func showStatusForChange(cmd *cobra.Command, root string, change model.Change, o
 		view.HydrateReferences = hydrateKeys
 		return printStatusView(cmd, root, view, outputFormat, hydrate)
 	})
+}
+
+func showArchivedStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool) error {
+	view := buildArchivedStatusView(root, change)
+	view.Mode = requestedView
+	view.HydrateReferences = hydrateKeys
+	return printStatusView(cmd, root, view, outputFormat, hydrate)
+}
+
+func buildArchivedStatusView(root string, change model.Change) statusView {
+	archivePath := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", change.Slug, "change.yaml"))
+	if path, err := state.ArchivedChangeFilePathForRead(root, change.Slug); err == nil {
+		archivePath = state.DisplayPath(root, path)
+	}
+	view := statusView{
+		ExecutionMode:     "archived",
+		Slug:              change.Slug,
+		Phase:             model.PhaseFor(change.CurrentState),
+		LifecycleStatus:   string(change.Status),
+		Archived:          true,
+		ArchivePath:       archivePath,
+		CurrentState:      change.CurrentState,
+		EvidenceFreshness: "unknown",
+		SourceStateFile:   archivePath,
+	}
+	view.Narrative = buildStatusNarrative(view)
+	return view
+}
+
+func loadStatusChangeBySlug(root, slug string) (model.Change, bool, error) {
+	change, err := state.LoadChange(root, slug)
+	if err == nil {
+		return change, false, nil
+	}
+	if shouldFallbackToArchivedStatus(err) {
+		if archived, archiveErr := state.LoadArchivedChange(root, slug); archiveErr == nil {
+			return archived, true, nil
+		}
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+			return model.Change{}, false, recoveryErr
+		}
+		return model.Change{}, false, newPreconditionError(
+			"change_not_found",
+			fmt.Sprintf("no change found for slug %q", slug),
+			"Check the slug with `slipway status`.",
+			slug,
+			nil,
+		)
+	}
+	if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+		return model.Change{}, false, recoveryErr
+	}
+	return model.Change{}, false, newChangeStateLoadFailedError(slug, err)
+}
+
+func shouldFallbackToArchivedStatus(activeLoadErr error) bool {
+	return errors.Is(activeLoadErr, os.ErrNotExist) || state.IsMissingBundleAuthority(activeLoadErr)
 }
 
 func resolveStatusFormat(format string, jsonFlag bool) (string, error) {

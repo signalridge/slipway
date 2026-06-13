@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,6 +124,97 @@ func TestBuildGovernedStatusViewPreAuditOmitsShipGateDebt(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, view.GateStatus, "G_ship")
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
+}
+
+func TestBuildGovernedStatusViewExposesDoneReadyReadiness(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "done-ready status projection")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	markChangeReadyForDone(t, root, &change)
+	writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 0,
+		References: []string{"plan-audit:pass"},
+	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillPlanAudit)
+
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+
+	raw, err := json.Marshal(buildStatusJSONResponse(view))
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+
+	assert.Equal(t, true, payload["done_ready"])
+	assert.Equal(t, "active", payload["lifecycle_status"])
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
+	assert.Contains(t, view.Narrative, "Done-ready")
+	assert.Contains(t, view.Narrative, "slipway done")
+	assert.Contains(t, renderStatusText(view), "slipway done")
+}
+
+func TestLoadStatusChangeBySlugFallsBackToArchivedForMissingActiveAuthority(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := "archived-missing-active-authority"
+	change := model.NewChange(slug)
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	_, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	activePath := state.BundleChangeFilePath(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(activePath), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(activePath), "notes.md"), []byte("orphaned active bundle\n"), 0o644))
+
+	loaded, archived, err := loadStatusChangeBySlug(root, slug)
+	require.NoError(t, err)
+	assert.True(t, archived)
+	assert.Equal(t, slug, loaded.Slug)
+	assert.Equal(t, model.ChangeStatusDone, loaded.Status)
+}
+
+func TestLoadStatusChangeBySlugDoesNotMaskMalformedActiveAuthorityWithArchive(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := "archived-malformed-active-authority"
+	change := model.NewChange(slug)
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	_, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	activePath := state.BundleChangeFilePath(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(activePath), 0o755))
+	require.NoError(t, os.WriteFile(activePath, []byte("slug: [\n"), 0o644))
+
+	_, archived, err := loadStatusChangeBySlug(root, slug)
+	require.Error(t, err)
+	assert.False(t, archived)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "change_state_load_failed", cliErr.ErrorCode)
 }
 
 func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing.T) {
