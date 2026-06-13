@@ -201,13 +201,11 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` checkpointed second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -251,13 +249,11 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave before abort
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` continue second wave after abort
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -338,7 +334,7 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(reqContent), 0o644))
 
 		// Write a substantive tasks.md so the tasks_contract surfaces as valid.
-		tasksContent := "# Tasks\n\n## Task List\n\n- [ ] `t-01` Implement token-based authentication for protected routes\n  - wave: 1\n  - target_files: [\"cmd/root.go\"]\n  - covers: [REQ-001]\n"
+		tasksContent := "# Tasks\n\n## Task List\n\n- [ ] `t-01` Implement token-based authentication for protected routes\n  - target_files: [\"cmd/root.go\"]\n  - covers: [REQ-001]\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksContent), 0o644))
 
 		stdout, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
@@ -426,7 +422,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		require.NoError(t, os.WriteFile(specPath, []byte("## Requirements\n\n### Requirement: ReviewE2E\n\nREQ-001: The system MUST support review from the CLI.\n\n#### Scenario: Review runs from the CLI\nGIVEN a governed change ready for review\nWHEN the reviewer runs the CLI review command\nTHEN the review result is produced.\n"), 0o644))
 
 		// Write tasks.md covering that requirement.
-		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte("# Tasks\n\n- [ ] `t-01` implement review e2e\n  - wave: 1\n  - depends_on: []\n  - target_files: [\"cmd/review.go\"]\n  - task_kind: code\n  - covers: [REQ-001]\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte("# Tasks\n\n- [ ] `t-01` implement review e2e\n  - depends_on: []\n  - target_files: [\"cmd/review.go\"]\n  - task_kind: code\n  - covers: [REQ-001]\n"), 0o644))
 
 		// Write passing evidence pack and execution summary AFTER all artifacts
 		// so that evidence timestamps post-date artifact modifications.

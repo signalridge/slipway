@@ -192,7 +192,6 @@ Rollback failure must be visible.
 ## Task List
 
 - [ ] `+"`t-01`"+` implement transaction
-  - wave: 1
   - target_files: ["internal/fsutil/transaction.go"]
   - task_kind: code
   - covers: [REQ-001]

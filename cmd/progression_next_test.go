@@ -518,7 +518,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte("# Proposal")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte("# Spec")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte("# Design")))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - wave: 1\n  - target_files: [\"cmd/done.go\"]\n  - task_kind: verification\n")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - target_files: [\"cmd/done.go\"]\n  - task_kind: verification\n")))
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -592,7 +592,7 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "intent.md", []byte("# Intent")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "requirements.md", []byte("# Requirements")))
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "decision.md", []byte("# Decision")))
-		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - wave: 1\n  - target_files: [\"cmd/next.go\"]\n  - task_kind: verification\n")))
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte("- [ ] `t-01` verify\n  - target_files: [\"cmd/next.go\"]\n  - task_kind: verification\n")))
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
@@ -1395,7 +1395,6 @@ THEN the change advances to S2_EXECUTE.
 `)))
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [ ] `+"`t-01`"+` implement plan audit checks
-  - wave: 1
   - target_files: ["internal/engine/example.go"]
   - task_kind: code
   - covers: [REQ-001]
@@ -1955,7 +1954,6 @@ func TestNextJSONDefaultOmitsFreshnessDiagnosticsWhenDiagnosticsViewHasThem(t *t
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [x] `+"`t-01`"+` handoff suppresses freshness diagnostics
-  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `), 0o644))
@@ -2372,13 +2370,11 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` preserve completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` continue next wave after abort
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -2439,13 +2435,11 @@ func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` checkpointed second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -2499,13 +2493,11 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -2592,13 +2584,11 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending checkpointed wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -2680,13 +2670,11 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` completed first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` pending second wave
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -2769,13 +2757,11 @@ func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` decision checkpoint
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -2934,7 +2920,6 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` refresh checkpoint freshness
-  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -2982,12 +2967,10 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`t-01`"+` implement bundle-first resume
-  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`t-02`"+` rerun verification
-  - wave: 2
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: verification
 `)))
@@ -3031,12 +3014,10 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`t-verify`"+` rerun verification
-  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: verification
 
 - [ ] `+"`t-next`"+` continue execution
-  - wave: 2
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -3072,7 +3053,6 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` execute schema-tightened wave task
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -3156,12 +3136,10 @@ func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
 				bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 				require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` first handoff wave task
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
 - [ ] `+"`t-02`"+` second handoff wave task
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -3214,7 +3192,6 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` authoritative wave task
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -3224,7 +3201,6 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [ ] `+"`t-01`"+` mutated tasks.md should not replace authoritative wave plan
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -3300,12 +3276,10 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
 - [x] `+"`task-01`"+` preserve preview checkpoint context
-  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-09`"+` pending checkpoint task
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
@@ -3358,13 +3332,11 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-01`"+` first wave
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
 - [ ] `+"`task-02`"+` active checkpoint task
-  - wave: 2
   - depends_on: ["task-01"]
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
@@ -3448,7 +3420,6 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
 - [x] `+"`task-01`"+` preserve stale freshness on resume
-  - wave: 1
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -3870,7 +3841,6 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-a`"+` materialize run summary
-  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))
@@ -3957,7 +3927,6 @@ func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-a`"+` Initial objective
-  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `)))
@@ -3978,7 +3947,6 @@ func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`task-a`"+` Updated objective
-  - wave: 1
   - target_files: ["cmd/status.go"]
   - task_kind: code
 `)))
@@ -4071,7 +4039,6 @@ func prepareStalePlanningRecoveryFixture(t *testing.T, root string, currentState
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` verify recovered planning chain
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/next.go", "cmd/run.go"]
   - task_kind: verification

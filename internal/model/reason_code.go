@@ -362,10 +362,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A task is missing a concrete objective",
 	},
-	"plan_dimension_execution_missing_wave": {
-		Severity: ReasonSeverityError,
-		Message:  "A task is missing an execution wave",
-	},
 	"plan_dimension_key_links_missing_target_files": {
 		Severity: ReasonSeverityError,
 		Message:  "A task is missing target files",

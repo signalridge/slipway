@@ -1,0 +1,59 @@
+# Tasks
+
+## Task List
+- [x] `t-01` Author failing wave-package tests for computed assignment and the wave-key retirement
+  - depends_on: []
+  - target_files: [internal/engine/wave/wave_test.go, internal/engine/wave/parse_test.go]
+  - task_kind: test
+  - covers: [REQ-001, REQ-002, REQ-003, REQ-005]
+  - acceptance: New tests cover minimal-level assignment (roots wave 1, max(dep)+1, 3-independent-plus-1-dependent shape), deterministic conflict bumping across exact/parent-child/case-only/glob targets with repeat-run stability, cycle and unknown-dependency hard errors, the dedicated `wave:` retirement error message with task ID and remediation, and three-mode hash stability without wave inputs; tests compile and fail RED against the current engine.
+  - evidence: verdict
+- [x] `t-02` Author failing validation tests retiring the declared-wave blocker vocabulary
+  - depends_on: []
+  - target_files: [internal/engine/progression/validation_test.go, internal/model/reason_code_contract_test.go]
+  - task_kind: test
+  - covers: [REQ-004]
+  - acceptance: Tests assert a waveless tasks checklist passes structural validation at plan-audit enforcement with no missing-wave blocker, and the reason-code contract no longer registers plan_dimension_execution_missing_wave (registry and remediation vocabulary); tests fail RED against the current engine.
+  - evidence: verdict
+- [x] `t-03` Author failing CLI-level tests for waveless preview and materialization
+  - depends_on: []
+  - target_files: [cmd/next_wave_plan_test.go]
+  - task_kind: test
+  - covers: [REQ-001, REQ-003]
+  - acceptance: CLI-level tests cover the acceptance scenario (waveless tasks.md with three independent file-disjoint tasks plus one dependent task previews and materializes as wave 1 x3 parallel:true + wave 2 x1) and the retirement error surfacing through the wave-plan parse_error path for a legacy wave: line; tests fail RED against the current engine.
+  - evidence: verdict
+- [x] `t-06` Rewrite the instructions tasks guidance to the computed-wave contract
+  - depends_on: []
+  - target_files: [cmd/instructions.go, cmd/instructions_test.go]
+  - task_kind: code
+  - covers: [REQ-006]
+  - acceptance: instructionsGuidance("tasks") no longer asks for a wave value, states the engine assigns waves from depends_on and target_files, and carries the honest-dependency (scheduling input, not narrative order), precise-target-files (exact files over directories/globs), and same-file-absorption rules; pinned guidance test updated RED then GREEN.
+  - evidence: verdict
+- [x] `t-07` Rewrite plan-audit template, workflow docs, and surface pins to the computed-wave contract
+  - depends_on: []
+  - target_files: [internal/tmpl/templates/skills/plan-audit/SKILL.md, docs/workflow.md, docs/SURFACE-MANIFEST.json, internal/toolgen/toolgen_test.go, internal/tmpl/thin_host_content_test.go]
+  - task_kind: code
+  - covers: [REQ-006, REQ-007]
+  - acceptance: plan-audit skill drops the wave authoring requirement (metadata list and 8D Completeness), reframes Dependency Integrity as necessity judgment (no cycles, no fabricated or narrative-only dependencies), adds the three width-guidance rules; docs/workflow.md describes engine-computed waves; surface manifest and any template-pinning or toolgen contract tests that encode authored waves are regenerated or updated and green for the touched surfaces.
+  - evidence: verdict
+- [x] `t-04` Implement parser retirement and computed wave assignment in the wave package
+  - depends_on: [t-01, t-03]
+  - target_files: [internal/engine/wave/parse.go, internal/engine/wave/wave.go, internal/tmpl/templates/artifacts/tasks.md, internal/engine/artifact/tasks_contract_test.go, internal/engine/scopecontract/evaluate_test.go, internal/engine/status/view_test.go, internal/state/wave_execution_test.go, internal/state/wave_execution_transaction_test.go, internal/state/execution_summary_test.go, internal/state/health_test.go, internal/state/repair_test.go, internal/engine/progression/wave_sync_test.go, internal/engine/progression/evidence_digests_test.go]
+  - task_kind: code
+  - covers: [REQ-001, REQ-002, REQ-003, REQ-005]
+  - acceptance: wave leaves allowedMetadataKeys with a dedicated retirement error case in applyStrictMetadata; PlanWaves assigns waves constructively (task-ID-ordered topological order, max(dep)+1, monotone conflict bump reusing targetFilesConflict) with cycle/unknown-dep hard errors and validateWaveStaticConflicts retained as an internal invariant check; task-plan hash entries drop the wave field in all three modes; legacy wave-declaring fixtures in the engine-layer test files named in target_files (artifact, scopecontract, status, state, wave_sync, evidence_digests) are migrated to the computed-wave contract; t-01 and t-03 tests turn GREEN with no other test regressions in the touched packages.
+  - evidence: verdict
+- [x] `t-05` Retire the declared-wave validation blocker and its vocabulary
+  - depends_on: [t-02]
+  - target_files: [internal/engine/progression/validation.go, internal/model/reason_code.go, internal/model/recovery.go, internal/engine/progression/validation_test.go, internal/engine/progression/advance_transaction_test.go, internal/engine/progression/stale_evidence_recovery_transaction_test.go, internal/engine/progression/readiness_test.go, internal/engine/progression/advance_test.go, internal/engine/progression/scope_contract_gate_test.go, cmd/health_test.go, cmd/review_test.go, cmd/scope_contract_test.go, cmd/cli_e2e_test.go, cmd/governance_gate_consistency_test.go, cmd/validate_artifact_gate_test.go, cmd/progression_next_test.go, cmd/checkpoint_test.go, cmd/common_test.go, cmd/repair_test.go, cmd/lifecycle_commands_test.go, cmd/abort_test.go, cmd/status_view_build_test.go]
+  - task_kind: code
+  - covers: [REQ-004]
+  - acceptance: HasDeclaredWave consumption and the plan_dimension_execution_missing_wave blocker are removed from validation, the reason-code registry, and the remediation vocabulary; legacy wave-declaring fixtures in the progression and cmd test files named in target_files are migrated to the computed-wave contract; t-02 tests turn GREEN with no other test regressions in the touched packages.
+  - evidence: verdict
+- [x] `t-08` Run the integration gate and dogfood the computed-wave acceptance scenario
+  - depends_on: [t-04, t-05, t-06, t-07]
+  - target_files: [artifacts/changes/wave-plans-almost-always-collapse-into-single-task-sequentia/verification/integration-gate-notes.md]
+  - task_kind: verification
+  - covers: [REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007]
+  - acceptance: gofmt is clean and go build ./..., go vet ./..., go test ./... pass on the merged worktree; a worktree-built binary dogfoods the acceptance scenario (waveless fixture materializes as wave 1 x3 parallel:true + wave 2 x1, legacy wave: line yields the retirement error); regenerated instructions/plan-audit surfaces carry the new contract; findings recorded in the integration-gate notes file.
+  - evidence: verdict

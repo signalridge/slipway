@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -43,10 +42,6 @@ func (p TaskPlan) Nodes() []Node {
 
 func (t TaskNode) HasDeclaredTaskKind() bool {
 	return t.taskKindDeclared
-}
-
-func (t TaskNode) HasDeclaredWave() bool {
-	return t.WaveIndex > 0
 }
 
 // ParseTaskPlan parses the steady-state checkbox-native tasks.md contract.
@@ -108,7 +103,6 @@ func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 	for _, task := range plan.Tasks {
 		entry := map[string]any{
 			"task_id": task.TaskID,
-			"wave":    task.WaveIndex,
 		}
 		switch mode {
 		case taskPlanHashStructural:
@@ -143,7 +137,6 @@ func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 // allowedMetadataKeys is the union of required + optional keys accepted by
 // the checkbox-native contract.
 var allowedMetadataKeys = map[string]struct{}{
-	"wave":            {},
 	"depends_on":      {},
 	"target_files":    {},
 	"task_kind":       {},
@@ -226,7 +219,6 @@ func parseCheckboxTaskPlan(content string) (TaskPlan, error) {
 type taskNodeBuilder struct {
 	taskID         string
 	objective      string
-	waveIndex      int
 	dependsOn      []string
 	targetFiles    []string
 	taskKind       string
@@ -238,9 +230,13 @@ type taskNodeBuilder struct {
 	seenKeys       map[string]struct{}
 }
 
-// applyStrictMetadata enforces the checkbox-native contract: rejects unknown
-// keys and fails on duplicate metadata keys.
+// applyStrictMetadata enforces the checkbox-native contract: rejects the
+// retired wave key with dedicated remediation, rejects unknown keys, and
+// fails on duplicate metadata keys.
 func (b *taskNodeBuilder) applyStrictMetadata(key, value string) error {
+	if key == "wave" {
+		return fmt.Errorf("task %q declares retired metadata key %q; the engine now assigns waves from depends_on and target_files — delete the wave line and declare real depends_on for intentional ordering", b.taskID, key)
+	}
 	if _, allowed := allowedMetadataKeys[key]; !allowed {
 		return fmt.Errorf("task %q uses unknown metadata key %q", b.taskID, key)
 	}
@@ -271,12 +267,6 @@ func (b *taskNodeBuilder) applyMetadata(key, value string) error {
 		b.objective = cleanValue(value)
 	case "checkpoint_type":
 		b.checkpointType = cleanValue(value)
-	case "wave":
-		waveIndex, err := parsePositiveInt(value)
-		if err != nil {
-			return fmt.Errorf("task %q has invalid wave %q: %w", b.taskID, cleanValue(value), err)
-		}
-		b.waveIndex = waveIndex
 	}
 	return nil
 }
@@ -310,7 +300,6 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 		Node: Node{
 			TaskID:         b.taskID,
 			Objective:      b.objective,
-			WaveIndex:      b.waveIndex,
 			DependsOn:      append([]string(nil), b.dependsOn...),
 			TargetFiles:    normalizeTargetFiles(b.targetFiles),
 			TaskKind:       kind,
@@ -461,15 +450,4 @@ func parseStringList(s string) []string {
 		}
 	}
 	return result
-}
-
-func parsePositiveInt(s string) (int, error) {
-	value, err := strconv.Atoi(cleanValue(s))
-	if err != nil {
-		return 0, err
-	}
-	if value < 1 {
-		return 0, fmt.Errorf("must be >= 1")
-	}
-	return value, nil
 }

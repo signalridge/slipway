@@ -97,7 +97,6 @@ func TestMaterializeWavePlanGeneratedAtUsesMaterializationTime(t *testing.T) {
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` prove generated_at boundary
-  - wave: 1
   - target_files: ["internal/state/wave_execution.go"]
   - task_kind: test
   - acceptance: generated_at is materialization time
@@ -115,9 +114,9 @@ func TestMaterializeWavePlanGeneratedAtUsesMaterializationTime(t *testing.T) {
 
 const (
 	twoIndependentTasksMD = "# Tasks\n\n" +
-		"- [ ] `t-01` first\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n" +
-		"- [ ] `t-02` second\n  - wave: 1\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"
-	oneTaskMD = "# Tasks\n\n- [ ] `t-01` solo\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+		"- [ ] `t-01` first\n  - target_files: [\"a.go\"]\n  - task_kind: code\n" +
+		"- [ ] `t-02` second\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"
+	oneTaskMD = "# Tasks\n\n- [ ] `t-01` solo\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
 )
 
 var waveMaterializeTime = time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
@@ -177,7 +176,7 @@ func TestMaterializeWavePlanNormalizesBackslashTargetFiles(t *testing.T) {
 	root := createRuntimeLayout(t)
 	change := saveActiveChangeForTest(t, root, "wave-normalize-backslash-target")
 	writeBundleTasksForTest(t, root, change, "# Tasks\n\n"+
-		"- [ ] `t-01` first\n  - wave: 1\n  - target_files: [\"cmd\\\\run.go\"]\n  - task_kind: code\n")
+		"- [ ] `t-01` first\n  - target_files: [\"cmd\\\\run.go\"]\n  - task_kind: code\n")
 
 	plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
 	require.NoError(t, err)

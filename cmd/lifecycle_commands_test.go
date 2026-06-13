@@ -1984,7 +1984,6 @@ Low risk; failures should surface as explicit readiness blockers.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` verify ship readiness parity
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/done.go"]
   - task_kind: verification
@@ -2074,7 +2073,6 @@ Low risk fixture.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` exercise command fixture
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/lifecycle_commands_test.go"]
   - task_kind: verification

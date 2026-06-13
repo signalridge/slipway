@@ -1360,7 +1360,6 @@ REQ-001: S4 ship gate approval reopens stale review digests. Traces to INT-001.
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 - [x] `+"`t-01`"+` update digest input
-  - wave: 1
   - depends_on: []
   - target_files: ["tracked.go"]
   - task_kind: code
@@ -1497,7 +1496,6 @@ func uncheckedDigestTasks() string {
 	return `# Tasks
 
 - [ ] ` + "`t-01`" + ` prove digest freshness
-  - wave: 1
   - target_files: ["internal/engine/progression/evidence_digests_test.go"]
   - task_kind: test
   - acceptance: digest contract is covered
@@ -1508,7 +1506,6 @@ func checkedDigestTasks() string {
 	return `# Tasks
 
 - [x] ` + "`t-01`" + ` prove digest freshness
-  - wave: 1
   - target_files: ["internal/engine/progression/evidence_digests_test.go"]
   - task_kind: test
   - acceptance: digest contract is covered
@@ -1519,7 +1516,6 @@ func scopeOnlyDigestTasks() string {
 	return `# Tasks
 
 - [ ] ` + "`t-01`" + ` prove digest freshness
-  - wave: 1
   - target_files: ["internal/engine/progression/stale_evidence_recovery.go"]
   - task_kind: test
   - acceptance: digest contract is covered
@@ -1530,7 +1526,6 @@ func realChangedDigestTasks() string {
 	return `# Tasks
 
 - [x] ` + "`t-01`" + ` prove changed digest freshness
-  - wave: 1
   - target_files: ["internal/engine/progression/evidence_digests_test.go"]
   - task_kind: test
   - acceptance: digest contract is covered

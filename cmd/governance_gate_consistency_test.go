@@ -75,7 +75,6 @@ Low risk.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` validate gate consistency
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/status_view_build.go"]
   - task_kind: verification

@@ -1,6 +1,7 @@
 package wave
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -14,19 +15,16 @@ func TestParseTaskPlan_CheckboxNativeCapturesCompletionState(t *testing.T) {
 ## Task List
 
 - [x] ` + "`t-01`" + ` Setup database schema
-  - wave: 1
   - depends_on: []
   - target_files: ["internal/db/schema.go", "internal/db/migrate.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Implement API handlers
-  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["internal/api/handler.go"]
   - task_kind: code
 
 - [ ] ` + "`t-03`" + ` Write documentation
-  - wave: 3
   - depends_on: ["t-01", "t-02"]
   - target_files: ["docs/api.md"]
   - task_kind: doc
@@ -60,7 +58,6 @@ func TestParseTaskPlan_CommaSeparatedDeps(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` First
-  - wave: 1
   - depends_on: t-02, t-03
   - target_files: src/main.go
   - task_kind: code
@@ -98,7 +95,6 @@ func TestParseTaskPlan_CheckpointType(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Manual task
-  - wave: 1
   - task_kind: other
   - checkpoint_type: human_verify
 `
@@ -114,7 +110,6 @@ func TestParseTaskPlan_AcceptsEvidenceAndAcceptanceMetadata(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - wave: 1
   - target_files: ["internal/engine/wave/parse.go"]
   - task_kind: code
   - evidence: verdict
@@ -132,7 +127,6 @@ func TestTaskPlanSemanticHashIncludesEvidenceAndAcceptance(t *testing.T) {
 	base := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - wave: 1
   - target_files: ["internal/engine/wave/parse.go"]
   - task_kind: code
   - evidence: verdict
@@ -141,7 +135,6 @@ func TestTaskPlanSemanticHashIncludesEvidenceAndAcceptance(t *testing.T) {
 	changed := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - wave: 1
   - target_files: ["internal/engine/wave/parse.go"]
   - task_kind: code
   - evidence: artifact
@@ -159,12 +152,10 @@ func TestParseTaskPlan_RejectsDuplicateTaskID(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` First task
-  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
 
 - [ ] ` + "`t-01`" + ` Duplicate task
-  - wave: 2
   - task_kind: code
   - target_files: ["b.go"]
 `
@@ -179,7 +170,6 @@ func TestParseTaskPlan_RejectsDuplicateMetadataKey(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Task with dup key
-  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
   - task_kind: test
@@ -195,7 +185,6 @@ func TestParseTaskPlan_RejectsUnknownMetadataKey(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Task with unknown key
-  - wave: 1
   - task_kind: code
   - target_files: ["a.go"]
   - some_random_key: value
@@ -207,22 +196,60 @@ func TestParseTaskPlan_RejectsUnknownMetadataKey(t *testing.T) {
 	assert.Contains(t, err.Error(), "some_random_key")
 }
 
+// TestParseTaskPlan_RejectsRetiredWaveKey pins the wave-key retirement
+// contract: ParseTaskPlan stays a pure format parser, and a task carrying a
+// `- wave:` metadata line fails parsing with a dedicated retirement error.
+//
+// Asserted error-message contract (the implementation must satisfy ALL):
+//  1. contains the offending task ID (here "t-02"),
+//  2. contains the word "wave" (case-insensitive),
+//  3. contains at least ONE of "delete", "remove", or "depends_on"
+//     (case-insensitive) — i.e. the remediation: delete the wave: line and
+//     declare real depends_on for intentional ordering, because the engine
+//     now assigns waves from depends_on and target_files.
+func TestParseTaskPlan_RejectsRetiredWaveKey(t *testing.T) {
+	md := `# Tasks
+
+- [ ] ` + "`t-01`" + ` Healthy task without wave metadata
+  - depends_on: []
+  - target_files: ["a.go"]
+  - task_kind: code
+
+- [ ] ` + "`t-02`" + ` Task still carrying retired wave metadata
+  - wave: 2
+  - depends_on: ["t-01"]
+  - target_files: ["b.go"]
+  - task_kind: code
+`
+
+	_, err := ParseTaskPlan(md)
+	require.Error(t, err, "wave: metadata is retired and must fail parsing")
+
+	msg := err.Error()
+	lowered := strings.ToLower(msg)
+	assert.Contains(t, msg, "t-02", "retirement error must name the offending task ID")
+	assert.Contains(t, lowered, "wave", "retirement error must name the retired wave key")
+	hasRemediation := strings.Contains(lowered, "delete") ||
+		strings.Contains(lowered, "remove") ||
+		strings.Contains(lowered, "depends_on")
+	assert.True(t, hasRemediation,
+		"retirement error must carry remediation containing one of %q, %q, %q; got: %q",
+		"delete", "remove", "depends_on", msg)
+}
+
 func TestParseTaskPlan_IntegrationWithPlanWaves(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Foundation
-  - wave: 1
   - target_files: ["a.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Depends on t-01
-  - wave: 2
   - depends_on: ["t-01"]
   - target_files: ["b.go"]
   - task_kind: code
 
 - [ ] ` + "`t-03`" + ` Independent
-  - wave: 1
   - target_files: ["c.go"]
   - task_kind: code
 `
@@ -234,32 +261,8 @@ func TestParseTaskPlan_IntegrationWithPlanWaves(t *testing.T) {
 
 	waves, err := PlanWaves(nodes)
 	require.NoError(t, err)
-	require.Len(t, waves, 2)
-
-	wave1IDs := make([]string, len(waves[0].Nodes))
-	for i, n := range waves[0].Nodes {
-		wave1IDs[i] = n.TaskID
-	}
-	assert.Contains(t, wave1IDs, "t-01")
-	assert.Contains(t, wave1IDs, "t-03")
-
-	assert.Len(t, waves[1].Nodes, 1)
-	assert.Equal(t, "t-02", waves[1].Nodes[0].TaskID)
-}
-
-func TestParseTaskPlan_CapturesDeclaredWave(t *testing.T) {
-	md := `# Tasks
-
-- [ ] ` + "`t-01`" + ` Foundation
-  - wave: 3
-  - depends_on: []
-  - target_files: ["a.go"]
-  - task_kind: code
-`
-
-	plan, err := ParseTaskPlan(md)
-	require.NoError(t, err)
-	require.Len(t, plan.Tasks, 1)
-	assert.Equal(t, 3, plan.Tasks[0].WaveIndex)
-	assert.True(t, plan.Tasks[0].HasDeclaredWave())
+	assert.Equal(t, [][]string{
+		{"t-01", "t-03"},
+		{"t-02"},
+	}, waveTaskIDGroups(waves))
 }
