@@ -1,41 +1,34 @@
 # Testing
 
 Re-authored for change
-`resolve-github-issue-184-add-gsd-style-automatic-subagent-di`
-(GitHub issue #184).
+`resolve-github-issues-195-and-196-make-status-expose-done-re`
+(GitHub issues #195 and #196).
 
 ## Existing Coverage
 
-- `internal/toolgen/toolgen_test.go:1069` through
-  `internal/toolgen/toolgen_test.go:1094` asserts generated
-  `slipway-wave-orchestration` text includes parallel-by-default dispatch,
-  `parallel: true`, degradation visibility, `parallelization: off`,
-  post-wave integration gate, and structured dispatch references.
-- `internal/tmpl/thin_host_content_test.go:56` through
-  `internal/tmpl/thin_host_content_test.go:92` renders
-  `wave-orchestration/SKILL.md.tmpl` and reads the executor dispatch reference.
-  It already checks that codebase-map content is passed by path rather than
-  inlined into the coordinator context.
-- `internal/tmpl/wave_isolation_content_test.go:11` through
-  `internal/tmpl/wave_isolation_content_test.go:27` checks rendered
-  wave-orchestration dispatch contract text around test-authoring isolation.
+- `cmd/progression_next_test.go:1727` through
+  `cmd/progression_next_test.go:1774` proves `next` already projects
+  done-ready for S4 with approved ship readiness.
+- `cmd/cli_e2e_test.go:448` through `cmd/cli_e2e_test.go:480` proves `done`
+  archives a ready change and `state.LoadArchivedChange` can load it afterward.
+- `cmd/status_view_build_test.go` contains focused status-view tests and is the
+  lowest-cost home for done-ready projection assertions.
+- `internal/state/lifecycle_test.go` covers archived load path behavior, so this
+  change should not need new state-layer archive tests unless archive discovery
+  changes.
 
-## Gaps For Issue #184
+## Gaps For Issues #195 And #196
 
-- No current test requires Codex guidance to use `spawn_agent`.
-- No current test rejects `codex -q --task` as the primary Codex fan-out path.
-- No current test requires spawn/wait/collect/close semantics, `fork_context:
-  false`, coordinator stop-work wording, or the full executor result field set.
-- Existing degradation assertions require visibility, but do not distinguish a
-  genuinely incapable runtime from a capable runtime that failed to dispatch.
+- No status-view test asserts a top-level done-ready signal after S4 ship
+  readiness passes.
+- No command test asserts `status --json --change <slug>` after `done` returns
+  an archived/done status view instead of `change_state_load_failed`.
 
 ## Verification Plan
 
-- Add focused content tests under `internal/tmpl` for the reference and rendered
-  host contract.
-- Expand `internal/toolgen/toolgen_test.go` so generated adapter output carries
-  the new contract, not just source templates.
-- Run `go test -count=1 ./internal/tmpl ./internal/toolgen` after template and
-  test edits.
-- Run `go test -count=1 ./...`, `git diff --check`, and
-  `go run . validate --json` before claiming done-ready.
+- Add a focused status-view test that builds an S4 ship-ready change and asserts
+  done-ready fields, finalization blocker, and narrative.
+- Add a command-level test that finalizes a ready change, runs
+  `status --json --change <slug>`, and asserts archived status metadata.
+- Run focused tests for `./cmd`.
+- Run `go test ./...`, `git diff --check`, and `go run . validate --json`.

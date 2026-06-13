@@ -1,28 +1,28 @@
 # Structure
 
 Re-authored for change
-`resolve-github-issue-184-add-gsd-style-automatic-subagent-di`
-(GitHub issue #184).
+`resolve-github-issues-195-and-196-make-status-expose-done-re`
+(GitHub issues #195 and #196).
 
-- `internal/tmpl/templates/skills/wave-orchestration/`
-  - `SKILL.md.tmpl`: primary host skill template for governed S2 execution.
-  - `references/executor-dispatch-reference.md`: runtime-specific executor
-    dispatch reference copied beside generated wave-orchestration skills.
-- `internal/tmpl/`
-  - `thin_host_content_test.go`: focused template/reference content tests.
-  - `wave_isolation_content_test.go`: existing dispatch-contract coverage for
-    test-authoring isolation and TDD sequencing.
-  - `templates_test.go`: broader rendered-template contract tests.
-- `internal/toolgen/`
-  - `toolgen.go`: adapter registry and skill generation authority.
-  - `toolgen_test.go`: generated tree contract tests, including existing
-    wave-orchestration parallel-by-default assertions.
-  - `support_files_test.go` and `testdata/skill_tree_inventory.codex.golden`:
-    generated support-file inventory checks for Codex.
-  - `surface_manifest.go` and `surface_manifest_test.go`: generated public
-    surface inventory; relevant only if a new surface row is introduced.
-- `docs/`
-  - `ai-tools.md`: documents `docs/SURFACE-MANIFEST.json` regeneration when new
-    public surface rows are added.
-  - `operator-guide.md`: documents `slipway init --tools all --refresh` after
-    template or command-contract changes.
+- `cmd/status.go`
+  - Defines `statusView`.
+  - Resolves explicit `--change` requests.
+  - Routes active status to `showStatusForChange`.
+  - Contains delete-recovery status diagnostics for broken active state.
+- `cmd/status_view_build.go`
+  - Builds governed status projections from readiness, execution context,
+    timeline, blockers, and recovery.
+  - Owns the status narrative.
+- `cmd/status_render.go`
+  - Renders status JSON through `statusJSONView` and text through
+    `renderStatusText`.
+  - Owns the first user-visible "what next" hint for text output.
+- `cmd/common.go`
+  - Provides shared active-change loaders and archived fallback behavior used by
+    validate-like active commands.
+- `cmd/status_view_build_test.go`
+  - Focused unit tests for status view projection.
+- `cmd/cli_e2e_test.go`
+  - Command-level e2e tests around `done` and JSON command behavior.
+- `internal/state/lifecycle.go` and `internal/state/store.go`
+  - Archive load and archive path discovery helpers.
