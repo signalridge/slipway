@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0](https://github.com/signalridge/slipway/compare/v0.21.0...v0.22.0) (2026-06-13)
+
+
+### Features
+
+* **wave:** compute wave plans from task graph ([#197](https://github.com/signalridge/slipway/issues/197)) ([8d38b82](https://github.com/signalridge/slipway/commit/8d38b82c22ffeb26f4c550a8a8911f4643925a48))
+
+
+### Bug Fixes
+
+* **status:** expose done-ready and archived status ([#199](https://github.com/signalridge/slipway/issues/199)) ([102cd74](https://github.com/signalridge/slipway/commit/102cd74a38d073f4401f463543b1c66c359b222a))
+
 ## [0.21.0](https://github.com/signalridge/slipway/compare/v0.20.0...v0.21.0) (2026-06-12)
 
 
