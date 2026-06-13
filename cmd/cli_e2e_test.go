@@ -489,7 +489,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 		assert.Equal(t, true, statusPayload["archived"])
 		assert.Equal(t, "done", statusPayload["lifecycle_status"])
 		assert.Equal(t, string(model.StateDone), statusPayload["current_state"])
-		assert.Contains(t, statusPayload["source_state_file"], filepath.Join("artifacts", "changes", "archived", slug, "change.yaml"))
+		assert.Contains(t, statusPayload["source_state_file"], filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml")))
 		assert.NotContains(t, statusOut.String(), "change_state_load_failed")
 	})
 }
