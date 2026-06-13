@@ -1,0 +1,59 @@
+version: 1
+slug: resolve-github-issue-155-knuth-invariant-overwrite-only-own
+description: 'Resolve GitHub issue #155: Knuth-invariant overwrite-only-own-defaults for prose artifact edit materiality and auto-reopen softening, referencing local gsd-core'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-12T16:18:37.222233Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/resolve-github-issue-155-knuth-invariant-overwrite-only-own
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 569beae6cc2dd71772a7212824fe4c5c61f486b1e6b7c72118e45ac533cb20b9
+        updated_at: 2026-06-12T16:34:59.001707755Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 6aa81914c9e9b80706b28113d872d893299f008b98dcac22421a13c39af5b5db
+        updated_at: 2026-06-12T16:26:40.406766864Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 9dc4eeee3e2ab4099a54df8d37036f1bb63f6b56b541bb99cc19b8461a2c5cfc
+        updated_at: 2026-06-12T16:24:43.330210408Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ab98c9f2ebdddd12890f49794bfbcb20481aec4e40e0a2bf0f86393005e1588e
+        updated_at: 2026-06-12T16:26:40.406587532Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 58c9729b1b3beb21106b98453079931b6e9ed3bd6940d25aeb2b2048f1612258
+        updated_at: 2026-06-12T16:24:34.791003Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 869bcd9123b3b3f502fdb6b21302e294d3c68ea688bace6d9296e202dce6c1aa
+        updated_at: 2026-06-12T16:34:06.925420777Z
+evidence_refs:
+    code-quality-review: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/code-quality-review.yaml
+    final-closeout: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/final-closeout.yaml
+    goal-verification: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/goal-verification.yaml
+    intake-clarification: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/intake-clarification.yaml
+    plan-audit: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/plan-audit.yaml
+    research-orchestration: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/resolve-github-issue-155-knuth-invariant-overwrite-only-own/artifacts/changes/resolve-github-issue-155-knuth-invariant-overwrite-only-own/verification/wave-orchestration.yaml

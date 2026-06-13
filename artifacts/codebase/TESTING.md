@@ -1,34 +1,46 @@
 # Testing
 
 Re-authored for change
-`resolve-github-issues-195-and-196-make-status-expose-done-re`
-(GitHub issues #195 and #196).
+`resolve-github-issue-155-knuth-invariant-overwrite-only-own`
+(GitHub issue #155).
 
 ## Existing Coverage
 
-- `cmd/progression_next_test.go:1727` through
-  `cmd/progression_next_test.go:1774` proves `next` already projects
-  done-ready for S4 with approved ship readiness.
-- `cmd/cli_e2e_test.go:448` through `cmd/cli_e2e_test.go:480` proves `done`
-  archives a ready change and `state.LoadArchivedChange` can load it afterward.
-- `cmd/status_view_build_test.go` contains focused status-view tests and is the
-  lowest-cost home for done-ready projection assertions.
-- `internal/state/lifecycle_test.go` covers archived load path behavior, so this
-  change should not need new state-layer archive tests unless archive discovery
-  changes.
+- `internal/engine/progression/evidence_digests_test.go:18` through
+  `internal/engine/progression/evidence_digests_test.go:57` already pins the
+  plan-audit digest policy: assurance is excluded, CRLF-only prose rewrites do
+  not stale, checkbox-only task edits do not stale, `target_files`-only task
+  edits do not stale, and objective changes do stale.
+- `internal/engine/progression/evidence_digests_test.go:136` through
+  `internal/engine/progression/evidence_digests_test.go:167` proves stale
+  evidence is content-digest based rather than mtime based.
+- `internal/engine/progression/evidence_digests_test.go:779` through
+  `internal/engine/progression/evidence_digests_test.go:807` proves
+  `research-orchestration` stales when `research.md` material content changes.
+- `internal/engine/artifact/requirements.go:35` through
+  `internal/engine/artifact/requirements.go:103` contains narrow requirements
+  placeholder detection, useful as a fail-closed warning against overbroad
+  scaffold classification.
+- `internal/engine/artifact/manager.go:559` through
+  `internal/engine/artifact/manager.go:640` derives assurance scaffold
+  detection from the embedded template, establishing a local pattern for
+  template-derived scaffold checks.
 
-## Gaps For Issues #195 And #196
+## Gaps For Issue #155
 
-- No status-view test asserts a top-level done-ready signal after S4 ship
-  readiness passes.
-- No command test asserts `status --json --change <slug>` after `done` returns
-  an archived/done status view instead of `change_state_load_failed`.
+- No test proves comment-only or scaffold-only prose artifact edits are
+  non-material for input digests.
+- No test proves human-authored prose edits still stale `plan-audit` and
+  `research-orchestration`.
+- No test covers the fail-closed unknown case: unknown non-empty prose must be
+  included in the material view rather than silently ignored.
 
 ## Verification Plan
 
-- Add a focused status-view test that builds an S4 ship-ready change and asserts
-  done-ready fields, finalization blocker, and narrative.
-- Add a command-level test that finalizes a ready change, runs
-  `status --json --change <slug>`, and asserts archived status metadata.
-- Run focused tests for `./cmd`.
-- Run `go test ./...`, `git diff --check`, and `go run . validate --json`.
+- Add focused unit tests in `internal/engine/progression/evidence_digests_test.go`.
+- Cover `intent.md`, `requirements.md`, `research.md`, and `decision.md` through
+  the plan-audit digest path.
+- Include a `research-orchestration` case so the research artifact digest still
+  reacts to authored research content.
+- Run `go test -count=1 ./internal/engine/progression` after implementation,
+  then broaden to `go test -count=1 ./...` before done-ready.

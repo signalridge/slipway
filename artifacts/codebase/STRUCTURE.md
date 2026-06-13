@@ -1,28 +1,28 @@
 # Structure
 
 Re-authored for change
-`resolve-github-issues-195-and-196-make-status-expose-done-re`
-(GitHub issues #195 and #196).
+`resolve-github-issue-155-knuth-invariant-overwrite-only-own`
+(GitHub issue #155).
 
-- `cmd/status.go`
-  - Defines `statusView`.
-  - Resolves explicit `--change` requests.
-  - Routes active status to `showStatusForChange`.
-  - Contains delete-recovery status diagnostics for broken active state.
-- `cmd/status_view_build.go`
-  - Builds governed status projections from readiness, execution context,
-    timeline, blockers, and recovery.
-  - Owns the status narrative.
-- `cmd/status_render.go`
-  - Renders status JSON through `statusJSONView` and text through
-    `renderStatusText`.
-  - Owns the first user-visible "what next" hint for text output.
-- `cmd/common.go`
-  - Provides shared active-change loaders and archived fallback behavior used by
-    validate-like active commands.
-- `cmd/status_view_build_test.go`
-  - Focused unit tests for status view projection.
-- `cmd/cli_e2e_test.go`
-  - Command-level e2e tests around `done` and JSON command behavior.
-- `internal/state/lifecycle.go` and `internal/state/store.go`
-  - Archive load and archive path discovery helpers.
+- `internal/engine/progression/`
+  - `evidence_digests.go`: skill input digest construction, named stale input
+    blockers, and the prose artifact digest seam for this change.
+  - `evidence_digests_test.go`: existing digest policy tests and the target for
+    new prose materiality regression coverage.
+  - `stale_evidence_recovery.go`: consumes stale digest blockers to reopen the
+    earliest affected lifecycle authority; not expected to change for issue
+    #155.
+- `internal/engine/artifact/`
+  - `manager.go`: artifact schemas, embedded template access, scaffold/deferred
+    artifact behavior, and existing template-derived scaffold detection pattern.
+  - `requirements.go`: narrow requirements placeholder detection, useful as a
+    warning against broad substring-based materiality suppression.
+  - `schemas.yaml`: expanded artifact graph for `intent.md`,
+    `requirements.md`, `decision.md`, `tasks.md`, `assurance.md`, and
+    discovery-only `research.md`.
+- `internal/tmpl/templates/artifacts/`
+  - `intent.md`, `requirements.md`, `research.md`, and `decision.md`: embedded
+    artifact templates whose comments and scaffold-only sections define
+    engine-owned prose defaults.
+- Local reference outside this repo:
+  `/Users/yixianlu/ghq/github.com/open-gsd/gsd-core/src/state-document.cts`.
