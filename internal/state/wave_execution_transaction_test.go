@@ -27,7 +27,6 @@ func TestMaterializeWavePlanTransactionOpDefersWriteUntilApplied(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement transaction
-  - wave: 1
   - target_files: ["internal/fsutil/transaction.go"]
   - task_kind: code
 `), 0o644))

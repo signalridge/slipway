@@ -150,7 +150,6 @@ func TestEvaluateBundleReadsTasksMarkdown(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` implement validation
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/validate.go"]
   - task_kind: code

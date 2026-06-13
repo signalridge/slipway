@@ -87,9 +87,19 @@ path; honor its `context`/`rules` but never copy them into the file:
   selected approach and evidence recorded in `research.md`; author the formal
   decision here after the requirements are real.
 - `slipway instructions tasks` — each task carries a concrete objective plus
-  `wave`, `depends_on`, `target_files`, `task_kind`, and `covers`. Every task
-  names concrete `target_files` that bound the files or evidence targets it
-  changes or verifies.
+  `depends_on`, `target_files`, `task_kind`, and `covers`. The engine assigns
+  waves from `depends_on` and `target_files`; do not author a `wave:` line — a
+  hand-declared wave is rejected fail-closed. Every task names concrete
+  `target_files` that bound the files or evidence targets it changes or
+  verifies.
+
+Author task width for the computed schedule. Keep `depends_on` honest: it is a
+scheduling input, not narrative order, and a dependency that is not a real
+execution-order constraint needlessly serializes the waves. Keep `target_files`
+precise: name exact files rather than directories or globs, because overlapping
+or broad targets bump tasks into later waves and flatten the schedule. Absorb
+small same-file steps into one task instead of splitting work that can never
+run concurrently.
 
 A mechanical or vacuous plan artifact cannot reach done. Re-run `slipway validate`
 until the substance gate passes, then audit.
@@ -130,8 +140,8 @@ more than 5 tasks; oversized waves are warnings, not blockers.
 Explicitly check all eight dimensions and record blocker/warning IDs by
 dimension:
 1. **Coverage (Nyquist Check)**: every `REQ-*` SHOULD be covered by at least one task. Standard/strict uncovered requirements block; light uncovered requirements warn.
-2. **Completeness**: each task has objective, `wave`, dependencies, and expected outputs.
-3. **Dependency Integrity**: `depends_on` references valid earlier-wave tasks and has no cycles.
+2. **Completeness**: each task has objective, dependencies, and expected outputs.
+3. **Dependency Integrity**: every `depends_on` reference resolves and has no cycles, and every dependency is a real execution-order dependency — reject fabricated or narrative-only dependencies that needlessly serialize the computed waves.
 4. **Key Links**: each task names concrete `target_files` for the files or evidence targets it changes or verifies.
 5. **Scope Control**: task targets stay inside declared scope.
 6. **Context Compliance**: task metadata supports context-safe execution (`task_kind` where present).

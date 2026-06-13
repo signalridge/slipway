@@ -130,7 +130,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"plan_dimension_dependency_self_reference",
 		"plan_dimension_dependency_unknown",
 		"plan_dimension_execution_invalid_wave_plan",
-		"plan_dimension_execution_missing_wave",
 		"plan_dimension_key_links_missing_target_files",
 		"plan_dimension_scope_invalid_target",
 		"plan_dimension_scope_out_of_bounds_target",
@@ -229,6 +228,30 @@ func canonicalReasonSeveritySnapshot(codes []string) map[string]ReasonSeverity {
 		severities[code] = severity
 	}
 	return severities
+}
+
+// The hand-declared `wave:` task metadata is retired — the engine computes
+// execution waves from depends_on + target_files — so validation no longer
+// demands a declared wave and the blocker vocabulary for it must be fully
+// removed: no canonical reason definition, no remediation vocabulary entry,
+// and no public recognition as a canonical code. The retired code is kept as
+// a string literal on purpose: any Go identifier for it is deleted together
+// with the vocabulary, and this contract must keep compiling after that.
+func TestDeclaredWaveBlockerVocabularyRetired(t *testing.T) {
+	t.Parallel()
+
+	const retired = "plan_dimension_execution_missing_wave"
+
+	_, inRegistry := canonicalReasonDefinitions[retired]
+	assert.Falsef(t, inRegistry,
+		"the canonical reason registry must not define the retired declared-wave blocker %q", retired)
+
+	_, inRemediations := blockerRemediations[retired]
+	assert.Falsef(t, inRemediations,
+		"the remediation vocabulary must not define the retired declared-wave blocker %q", retired)
+
+	assert.Falsef(t, IsCanonicalReasonCode(retired),
+		"%q must no longer be recognized as a canonical reason code", retired)
 }
 
 func TestNewReasonCodeMakesUnknownCodeExplicit(t *testing.T) {

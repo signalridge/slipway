@@ -217,7 +217,6 @@ THEN G_plan remains blocked with a decision contract blocker.
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` Enforce decision substance in plan readiness
-  - wave: 1
   - depends_on: []
   - target_files: ["internal/engine/progression/readiness.go"]
   - task_kind: code
@@ -592,7 +591,6 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` validate stale planning evidence
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/validate.go"]
   - task_kind: verification

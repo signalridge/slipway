@@ -70,7 +70,6 @@ func evaluateSensitiveMigrationReadiness(t *testing.T, evidenceRef string, migra
 	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
 
 - [ ] `+"`t-01`"+` apply schema migration
-  - wave: 1
   - target_files: ["`+migration+`"]
   - task_kind: code
 `)

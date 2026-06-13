@@ -100,7 +100,7 @@ func seedWavePlanRepairChange(t *testing.T, slug, tasksMD string) (string, model
 
 func TestWavePlanRepairDriftRebuildsOnStructuralDriftWhenSummaryNotReady(t *testing.T) {
 	t.Parallel()
-	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
 	root, change, plan := seedWavePlanRepairChange(t, "wave-repair-structural", tasksA)
 
 	// No drift before editing tasks.md.
@@ -113,7 +113,7 @@ func TestWavePlanRepairDriftRebuildsOnStructuralDriftWhenSummaryNotReady(t *test
 	// the readable-but-stale plan (#97 / REQ-006).
 	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
-		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: test\n"), 0o644))
+		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"a.go\"]\n  - task_kind: test\n"), 0o644))
 	changed, blocked, err = wavePlanRepairDrift(root, change, plan, nil)
 	require.NoError(t, err)
 	assert.True(t, changed, "structural drift with no ready summary must rebuild the wave-plan")
@@ -122,7 +122,7 @@ func TestWavePlanRepairDriftRebuildsOnStructuralDriftWhenSummaryNotReady(t *test
 
 func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
 	t.Parallel()
-	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
+	tasksA := "# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"a.go\"]\n  - task_kind: code\n"
 	root, change, plan := seedWavePlanRepairChange(t, "wave-repair-legacy-scope", tasksA)
 
 	// Simulate a plan materialized before the scope-hash field existed: structure
@@ -132,7 +132,7 @@ func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
 	// A target_files-only edit keeps the structure identical but changes scope.
 	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
-		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - wave: 1\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"), 0o644))
+		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"), 0o644))
 
 	changed, blocked, err := wavePlanRepairDrift(root, change, plan, nil)
 	require.NoError(t, err)

@@ -52,7 +52,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 	}
 	plan, err := wave.ParseTaskPlan(string(raw))
 	if err != nil {
-		result.Blockers = []string{"tasks_checklist_invalid_format"}
+		result.Blockers = []string{"tasks_checklist_invalid_format:" + err.Error()}
 		return result
 	}
 	if len(plan.Tasks) == 0 {
@@ -67,8 +67,8 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 	seen := map[string]struct{}{}
 	idSet := map[string]struct{}{}
 	dependencies := map[string][]string{}
+	dependencyGraphValid := true
 	coverageAsWarning := false
-	allTasksDeclareWave := true
 	if presetPolicy, presetErr := governance.ResolvePresetPolicy(root, change); presetErr == nil {
 		coverageAsWarning = presetPolicy.EffectivePreset == model.WorkflowPresetLight
 	}
@@ -92,10 +92,6 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 		// onward, mirroring target_files, so pre-audit drafts stay lenient.
 		if objective == "" || (enforceTargetFiles && artifact.LooksLikeTemplatePlaceholder(objective)) {
 			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_completeness_missing_objective:%s", id))
-		}
-		if !task.HasDeclaredWave() {
-			result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_execution_missing_wave:%s", id))
-			allTasksDeclareWave = false
 		}
 		if enforceTargetFiles {
 			if len(task.TargetFiles) == 0 {
@@ -141,18 +137,21 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 		for _, dep := range deps {
 			if dep == id {
 				result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_dependency_self_reference:%s", id))
+				dependencyGraphValid = false
 				continue
 			}
 			if _, exists := idSet[dep]; !exists {
 				result.Blockers = append(result.Blockers, fmt.Sprintf("plan_dimension_dependency_unknown:%s->%s", id, dep))
+				dependencyGraphValid = false
 			}
 		}
 	}
 
 	if HasDependencyCycle(dependencies) {
 		result.Blockers = append(result.Blockers, "plan_dimension_dependency_cycle_detected")
+		dependencyGraphValid = false
 	}
-	if allTasksDeclareWave {
+	if dependencyGraphValid {
 		if _, err := wave.PlanWaves(plan.Nodes()); err != nil {
 			result.Blockers = append(result.Blockers, "plan_dimension_execution_invalid_wave_plan:"+err.Error())
 		}

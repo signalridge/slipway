@@ -958,7 +958,6 @@ Low; an unchanged authority simply skips the persist.
 
 - [ ] `+"`task-a`"+` preserve change authority
   - target_files: ["cmd/next.go"]
-  - wave: 1
   - task_kind: code
 `), 0o644); err != nil {
 		t.Fatalf("write tasks.md: %v", err)
@@ -1087,18 +1086,15 @@ Low; incomplete or stale evidence still blocks the advance.
 	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
 
 - [ ] `+"`t-01`"+` add regression test
-  - wave: 1
   - target_files: ["internal/engine/progression/advance_test.go"]
   - task_kind: test
 
 - [ ] `+"`t-02`"+` implement change
-  - wave: 2
   - depends_on: [t-01]
   - target_files: ["internal/engine/progression/advance_governed.go"]
   - task_kind: code
 
 - [ ] `+"`t-03`"+` verify behavior
-  - wave: 3
   - depends_on: [t-02]
   - target_files: ["internal/engine/progression"]
   - task_kind: verification
@@ -1255,7 +1251,6 @@ Low; failed or missing evidence still returns the existing metadata blocker.
 	if err := os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 
 - [ ] `+"`t-01`"+` exercise worktree preflight ordering
-  - wave: 1
   - depends_on: []
   - target_files: ["a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go", "j.go", "k.go"]
   - task_kind: code

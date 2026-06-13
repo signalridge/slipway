@@ -42,7 +42,6 @@ func seedScopeContractChange(t *testing.T, state2 model.WorkflowState) (string, 
 	writeTasksAndMaterializeWavePlan(t, root, change, "# Tasks\n\n"+
 		"- [x] `task-a` Implement task A\n"+
 		"  - target_files: [\"cmd/next.go\"]\n"+
-		"  - wave: 1\n"+
 		"  - task_kind: code\n")
 	return root, change
 }
@@ -220,7 +219,6 @@ func seedSensitiveEvidenceExecution(
 
 - [x] `+"`t-01`"+` apply schema migration
   - target_files: ["`+migration+`"]
-  - wave: 1
   - task_kind: code
 `)
 

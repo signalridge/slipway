@@ -419,7 +419,6 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`
 - [x] `+"`t-01`"+` complete implementation
-  - wave: 1
   - depends_on: []
   - target_files: ["cmd/a.go"]
   - task_kind: code
@@ -476,7 +475,6 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
 	require.NoError(t, os.WriteFile(tasksPath, []byte(`
 - [x] `+"`task-a`"+` update diagnostics chain
-  - wave: 1
   - target_files: ["cmd/next.go"]
   - task_kind: code
 `), 0o644))
