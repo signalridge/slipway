@@ -252,7 +252,7 @@ func TestMaterializeWavePlanParallelDoesNotChangeHashes(t *testing.T) {
 	assert.Equal(t, forced.TasksPlanSemanticHash, off.TasksPlanSemanticHash)
 }
 
-func TestBuildWaveRunsDerivesParallelDispatchMode(t *testing.T) {
+func TestBuildWaveRunsLeavesDispatchModeEmptyWithoutEvidence(t *testing.T) {
 	t.Parallel()
 
 	plan := model.WavePlan{
@@ -271,10 +271,13 @@ func TestBuildWaveRunsDerivesParallelDispatchMode(t *testing.T) {
 		{TaskID: "t-03", Verdict: model.TaskVerdictPass, CapturedAt: waveMaterializeTime},
 	}
 
+	// No dispatch evidence: the engine must NOT infer a parallel dispatch mode for
+	// the started parallel wave (REQ-004). It records no dispatch mode; the
+	// fail-closed blocker is surfaced by DispatchEvidenceBlockers at the sync layer.
 	runs, err := BuildWaveRuns(plan, 1, tasks, nil)
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
-	assert.Equal(t, model.WaveDispatchParallel, runs[0].DispatchMode, "parallel wave records its dispatch mode")
+	assert.Equal(t, model.WaveDispatchMode(""), runs[0].DispatchMode, "started parallel wave without dispatch evidence records no inferred mode")
 	assert.Equal(t, model.WaveDispatchMode(""), runs[1].DispatchMode, "sequential wave records no dispatch mode")
 }
 
@@ -295,11 +298,16 @@ func TestBuildWaveRunsDoesNotRecordDispatchForPendingWave(t *testing.T) {
 		{TaskID: "t-02", Verdict: model.TaskVerdictPass, CapturedAt: waveMaterializeTime},
 	}
 
+	// Wave 1 declares a valid parallel token and is started; wave 2 declares a
+	// token too but is still pending, so it must record no dispatch mode.
 	runs, err := BuildWaveRuns(
 		plan,
 		1,
 		tasks,
-		map[int]model.WaveDispatchMode{2: model.WaveDispatchDegradedSequential},
+		map[int]model.WaveDispatchMode{
+			1: model.WaveDispatchParallel,
+			2: model.WaveDispatchDegradedSequential,
+		},
 	)
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
@@ -340,6 +348,10 @@ func TestBuildWaveRunsRecordsDegradedDispatchMode(t *testing.T) {
 	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
 }
 
+// TestBuildWaveRunsDropsStaleDispatchModes proves that a dispatch token that does
+// not apply to the wave — one keyed to another wave, or an invalid token — is
+// dropped. Dropping now means recording no dispatch mode (fail closed) rather than
+// falling back to an inferred parallel mode (REQ-004).
 func TestBuildWaveRunsDropsStaleDispatchModes(t *testing.T) {
 	t.Parallel()
 
@@ -350,14 +362,14 @@ func TestBuildWaveRunsDropsStaleDispatchModes(t *testing.T) {
 		wantMode     model.WaveDispatchMode
 	}{
 		{
-			name: "unknown wave is ignored",
+			name: "unknown wave records no mode",
 			wave: model.WavePlanWave{
 				WaveIndex: 1,
 				Parallel:  true,
 				Tasks:     []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}},
 			},
 			dispatchByID: map[int]model.WaveDispatchMode{2: model.WaveDispatchDegradedSequential},
-			wantMode:     model.WaveDispatchParallel,
+			wantMode:     "",
 		},
 		{
 			name: "non parallel wave ignores stale dispatch",
@@ -369,14 +381,14 @@ func TestBuildWaveRunsDropsStaleDispatchModes(t *testing.T) {
 			dispatchByID: map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential},
 		},
 		{
-			name: "invalid dispatch falls back to parallel default",
+			name: "invalid dispatch records no mode",
 			wave: model.WavePlanWave{
 				WaveIndex: 1,
 				Parallel:  true,
 				Tasks:     []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}},
 			},
 			dispatchByID: map[int]model.WaveDispatchMode{1: model.WaveDispatchMode("sequential")},
-			wantMode:     model.WaveDispatchParallel,
+			wantMode:     "",
 		},
 	}
 

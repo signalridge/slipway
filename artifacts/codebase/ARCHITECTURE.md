@@ -1,27 +1,51 @@
 # Architecture
 
-Re-authored for change `explain-domain-review-mapping` (GitHub issue #203).
+Re-authored for change
+`add-engine-enforced-fail-closed-safety-nets-for-shared-workt`.
 
-Question: where should Slipway preserve and expose the evidence source that satisfies a governance control?
+Question: which Slipway wave-execution seams must turn host-recorded evidence
+into fail-closed safety gates for shared-worktree parallel wave execution while
+preserving the engine-governs/host-executes boundary?
 
 ## Affected Seams
 
-- `internal/engine/governance/actions.go:7-14` defines `RequiredAction`. It currently stores `control_id`, `mode`, `scope`, `description`, and `satisfied`, but no reason or evidence source for a satisfied action.
-- `internal/engine/governance/actions.go:45-48` maps `domain-review` to `DomainReviewDone`. The policy decision is already abstracted as input to this layer.
-- `internal/engine/governance/actions.go:73-85` defines `RequiredActionsInput`. It currently accepts boolean satisfaction inputs, not the source evidence that produced them.
-- `internal/engine/governance/runtime_actions.go:15-20` defines runtime skill constants. `skillSpecComplianceReview` is the evidence skill used for domain review satisfaction.
-- `internal/engine/governance/runtime_actions.go:39-44` computes review-side satisfaction. `domainReviewDone` comes from `skillSatisfied(skillSpecComplianceReview, ...)`, while independent review comes from `skillCodeQualityReview`.
-- `internal/engine/governance/runtime_actions.go:64-75` passes only booleans into `ResolveRequiredActions`, losing the evidence-source mapping before CLI views are built.
-- `cmd/governance_surface.go:42-56` converts `governance.RequiredAction` into CLI `governanceActionView`; it cannot expose information not present on the engine action.
-- `cmd/status.go:94-99` defines the JSON shape used by status, validate, and next governance surfaces for each required action.
+- `internal/engine/wave/wave.go` owns wave planning, static target conflict
+  checks, target normalization, and the new coverage helper used by the
+  changed-file scope audit.
+- `internal/model/wave_execution.go` owns public wave execution data contracts:
+  dispatch-mode literals, verification-reference parsing, and wave-run JSON/YAML
+  shape.
+- `internal/state/wave_execution.go` builds per-wave run records from the
+  materialized plan and task evidence. It is the seam where silent dispatch-mode
+  inference is removed.
+- `internal/engine/progression/wave_sync.go` is the single assembly point for
+  task evidence, wave runs, execution summaries, and open blockers. The new
+  fail-closed gates attach here so `validate`, `next`, and `status --json`
+  observe the same blockers.
+- `cmd/next.go` and `cmd/next_wave_plan.go` own the public wave-plan view. The
+  new `advisories` field is view-only and must not enter `wave-plan.yaml` or
+  freshness hashes.
+- `internal/tmpl/templates/skills/wave-orchestration/` owns generated host
+  instructions for executor dispatch and evidence references.
 
 ## Dependency Flow
 
-`EvaluateGovernanceReadiness` computes runtime required actions, command builders map those actions through `cmd/governance_surface.go`, and `status`, `validate`, and `next --json --diagnostics` emit the resulting `required_actions` array. The issue #203 gap is not in control derivation; it is in runtime evidence attribution being reduced to a boolean before the JSON surface is rendered.
+`tasks.md` is parsed into wave nodes, materialized as `wave-plan.yaml`, then
+rendered through `slipway next --json` for host execution. The host records task
+evidence plus wave-orchestration references (`dispatch_mode:*`,
+`executor_agent:*`). `SyncGovernedWaveExecution` reads that evidence, builds
+`WaveRun` records, adds safety blockers to `ExecutionSummary.OpenBlockers`, and
+readiness surfaces those blockers without a separate JSON pipeline.
 
 ## Constraints And Invariants
 
-- Preserve current policy semantics: `spec-compliance-review` is allowed to satisfy `domain-review` when the verification is passing and current for the latest execution summary.
-- Keep stale or missing execution-summary behavior fail-closed; stale `spec-compliance-review` must not satisfy `domain-review`.
-- Add JSON fields in an additive way so existing consumers of `control_id`, `mode`, `description`, and `satisfied` keep working.
-- Keep action blockers based on unsatisfied blocking actions only; satisfied action explanations should not create new blockers.
+- The engine signals, records, and gates. It does not spawn executor agents.
+- Shared-worktree safety depends on accurate planned `target_files` and
+  exhaustive recorded `changed_files`.
+- Scope coverage must reuse the same target semantics as wave conflict
+  detection: exact path, parent/child scope, case-folded aliases, and glob scope.
+- Started parallel waves must not infer dispatch mode from plan metadata alone.
+- `parallel_subagents` is a public dispatch token; `degraded_sequential` remains
+  valid explicit evidence.
+- Plan-drift blockers own stale plan/evidence remediation, so the new safety
+  gates stay suppressed while plan drift is present.

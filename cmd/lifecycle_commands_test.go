@@ -2111,12 +2111,23 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 		materializeWaveExecutionForSummary(t, root, slug)
 	}
 
+	references := []string{fmt.Sprintf("run_summary_version=%d", runSummaryVersion)}
+	// Declare degraded_sequential dispatch for every planned wave so synthetic
+	// passing evidence clears the fail-closed dispatch-evidence gate. degraded
+	// (not parallel_subagents) is the honest minimal claim for single-threaded test
+	// fixtures and, unlike parallel_subagents, requires no per-task executor handles.
+	if plan, planErr := state.LoadWavePlanForChange(root, change); planErr == nil {
+		for _, planWave := range plan.Waves {
+			references = append(references, fmt.Sprintf("dispatch_mode:wave=%d:degraded_sequential", planWave.WaveIndex))
+		}
+	}
+
 	writeSkillVerification(t, root, slug, "wave-orchestration", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{fmt.Sprintf("run_summary_version=%d", runSummaryVersion)},
+		References: references,
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillWaveOrchestration)
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,12 +179,31 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 			executionSummary.SyncDerivedFields()
 		}
 	}
+	// Shared-worktree fail-closed safety nets, aggregated at the single governed
+	// wave-execution assembly point so every gate flows out through one path.
+	// Each turns already-recorded host evidence (target_files/changed_files, and
+	// the plan's per-wave Parallel flag) into a hard blocker. Mirrors the
+	// incompleteBlockers durability contract: surfaced in OpenBlockers so
+	// read-only readiness reports them, and suppressed under plan-drift, which
+	// owns its own remediation. Extended by later safety-net gates (C2/C3).
+	var safetyNetBlockers []model.ReasonCode
+	if len(planDriftBlockers) == 0 {
+		safetyNetBlockers = append(safetyNetBlockers, TaskChangedFileScopeEscapeBlockers(wavePlan, tasks)...)
+		safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
+		safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes)...)
+		safetyNetBlockers = append(safetyNetBlockers, ExecutorAgentBlockers(wavePlan, tasks, dispatchModes, model.ExecutorAgentHandlesFromVerification(record))...)
+		if len(safetyNetBlockers) > 0 {
+			executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, safetyNetBlockers...))
+			executionSummary.SyncDerivedFields()
+		}
+	}
 	if !mutate {
 		runs := executionSummary.TaskRunMap()
 		blockers := model.ReasonCodesFromSpecs(parseIssues)
 		blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 		blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
 		blockers = append(blockers, incompleteBlockers...)
+		blockers = append(blockers, safetyNetBlockers...)
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(blockers)}, nil
 	}
 
@@ -225,6 +245,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	blockers = append(blockers, model.ReasonCodesFromSpecs(planDriftBlockers)...)
 	blockers = append(blockers, CollectNonPassTaskBlockers(runs)...)
 	blockers = append(blockers, incompleteBlockers...)
+	blockers = append(blockers, safetyNetBlockers...)
 	return WaveSyncResult{
 		Updated:  updated,
 		Blockers: model.NormalizeReasonCodes(blockers),
@@ -591,6 +612,221 @@ func IncompleteExecutionTaskBlockers(plan model.WavePlan, runs map[string]model.
 	blockers := make([]model.ReasonCode, 0, len(missing))
 	for _, taskID := range missing {
 		blockers = append(blockers, model.NewReasonCode("incomplete_execution_task", taskID))
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// TaskChangedFileScopeEscapeBlockers reports, per task, every recorded changed
+// file that escapes that task's planned target_files. Under shared-worktree
+// fan-out, accurate target_files plus exhaustive changed_files are the safety
+// model: a task that writes a path it never declared can collide with a peer
+// executor that legitimately owns it. Coverage uses wave.TargetCoversPath, the
+// same directional scope predicate the wave planner's conflict detection relies
+// on, so "covers" and "conflicts" share one implementation (REQ-002). The
+// remedy is to fix target_files and re-record evidence, or rescope tasks.md.
+func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
+	if len(tasks) == 0 {
+		return nil
+	}
+	// Coverage is judged against the plan's target_files, never the host-recorded
+	// evidence target_files: a task could otherwise widen its own evidence targets
+	// to cover any path it wrote and silence the audit. The plan is the authority
+	// for what a task is allowed to touch (REQ-002).
+	plannedTargets := make(map[string][]string)
+	for _, planWave := range plan.Waves {
+		for _, planTask := range planWave.Tasks {
+			plannedTargets[planTask.TaskID] = planTask.TargetFiles
+		}
+	}
+	blockers := []model.ReasonCode{}
+	for _, task := range tasks {
+		targets, planned := plannedTargets[task.TaskID]
+		if !planned {
+			// Evidence for a task absent from the wave plan is an orphan, owned by a
+			// dedicated gate; this audit only adjudicates planned tasks.
+			continue
+		}
+		for _, changedFile := range task.ChangedFiles {
+			if strings.TrimSpace(changedFile) == "" {
+				continue
+			}
+			if wave.TargetCoversPath(targets, changedFile) {
+				continue
+			}
+			blockers = append(blockers, model.NewReasonCode(
+				"task_changed_file_scope_escape",
+				task.TaskID+":"+changedFile,
+			))
+		}
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// ParallelWaveChangedFileOverlapBlockers reports, for plan-parallel waves only,
+// any changed file that two or more tasks in the same wave both recorded. Tasks
+// in a parallel wave may run concurrently in the shared worktree, so two
+// executors writing the same path can clobber each other (REQ-003). Sequential
+// waves cannot run concurrently, so a shared file across them is allowed and not
+// reported. The plan's per-wave Parallel flag is authoritative here; a run that
+// later declared degraded_sequential still leaves a plan-quality defect if the
+// supposedly parallel-safe tasks wrote the same file. Callers pass the wave plan
+// after ApplyEffectiveParallel so the flag reflects the current effective
+// parallelization mode. Task ids in the detail are sorted and comma-joined for a
+// deterministic blocker.
+func ParallelWaveChangedFileOverlapBlockers(plan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
+	if len(tasks) == 0 || len(plan.Waves) == 0 {
+		return nil
+	}
+	changedByTask := make(map[string][]string, len(tasks))
+	for _, task := range tasks {
+		changedByTask[task.TaskID] = task.ChangedFiles
+	}
+
+	blockers := []model.ReasonCode{}
+	for _, wavePlanWave := range plan.Waves {
+		if !wavePlanWave.Parallel {
+			continue
+		}
+		// canonical file identity -> task ids in this wave that recorded it.
+		// Bucketing by wave.CanonicalConflictPath (not the raw recorded string)
+		// collapses slash/backslash and case-only path aliases to one file, so the
+		// audit uses the same "same file" notion as the planner's conflict
+		// detection instead of trusting raw-string equality (REQ-003).
+		owners := map[string][]string{}
+		display := map[string]string{}
+		for _, planTask := range wavePlanWave.Tasks {
+			for _, changedFile := range changedByTask[planTask.TaskID] {
+				if strings.TrimSpace(changedFile) == "" {
+					continue
+				}
+				key := wave.CanonicalConflictPath(changedFile)
+				if key == "" {
+					continue
+				}
+				owners[key] = append(owners[key], planTask.TaskID)
+				if existing, ok := display[key]; !ok || changedFile < existing {
+					display[key] = changedFile
+				}
+			}
+		}
+		keys := make([]string, 0, len(owners))
+		for key := range owners {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			taskIDs := stringutil.UniqueSorted(owners[key])
+			if len(taskIDs) < 2 {
+				continue
+			}
+			blockers = append(blockers, model.NewReasonCode(
+				"parallel_wave_changed_file_overlap",
+				fmt.Sprintf("%d:%s:%s", wavePlanWave.WaveIndex, display[key], strings.Join(taskIDs, ",")),
+			))
+		}
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// DispatchEvidenceBlockers reports each started parallel wave that recorded no
+// explicit, valid dispatch_mode token. The engine no longer infers parallel
+// dispatch for such a wave (REQ-004): under shared-worktree fan-out a started
+// parallel wave with no recorded dispatch evidence cannot be assumed to have run
+// its executors in parallel, so it fails closed to a blocker rather than a silent
+// assumption. A degraded_sequential token is explicit evidence and is accepted
+// without blocking; non-parallel waves never require dispatch evidence. A wave is
+// "started" once any of its planned tasks has recorded execution evidence — the
+// same condition BuildWaveRuns uses before recording a dispatch mode at all.
+// dispatchModes is the validity-filtered map from WaveDispatchModesFromVerification,
+// so a wave's presence in it already means a single valid token was recorded.
+func DispatchEvidenceBlockers(
+	plan model.WavePlan,
+	tasks []model.ExecutionTaskSummary,
+	dispatchModes map[int]model.WaveDispatchMode,
+) []model.ReasonCode {
+	if len(plan.Waves) == 0 {
+		return nil
+	}
+	recorded := make(map[string]struct{}, len(tasks))
+	for _, task := range tasks {
+		recorded[task.TaskID] = struct{}{}
+	}
+	blockers := []model.ReasonCode{}
+	for _, wavePlanWave := range plan.Waves {
+		if !wavePlanWave.Parallel {
+			continue
+		}
+		if !waveStarted(wavePlanWave, recorded) {
+			continue
+		}
+		if mode, ok := dispatchModes[wavePlanWave.WaveIndex]; ok && mode.IsValid() {
+			continue
+		}
+		blockers = append(blockers, model.NewReasonCode(
+			"dispatch_mode_absent_on_started_parallel_wave",
+			strconv.Itoa(wavePlanWave.WaveIndex),
+		))
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+func waveStarted(wavePlanWave model.WavePlanWave, recorded map[string]struct{}) bool {
+	for _, planTask := range wavePlanWave.Tasks {
+		if _, ok := recorded[planTask.TaskID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// ExecutorAgentBlockers reports, for every wave dispatched parallel_subagents,
+// each planned task that has no recorded executor_agent handle. A parallel_subagents
+// dispatch claims each task ran in its own subagent within the shared worktree;
+// without a handle for a planned task that claim is unverifiable, so the engine
+// fails closed (REQ-005). Waves dispatched degraded_sequential and non-parallel
+// waves require no handles and are skipped. dispatchModes and handles both come
+// from the same wave-orchestration verification references, so the parallel_subagents
+// claim and its handles are recorded together.
+func ExecutorAgentBlockers(
+	plan model.WavePlan,
+	tasks []model.ExecutionTaskSummary,
+	dispatchModes map[int]model.WaveDispatchMode,
+	handles map[int]map[string]string,
+) []model.ReasonCode {
+	if len(plan.Waves) == 0 {
+		return nil
+	}
+	recorded := make(map[string]struct{}, len(tasks))
+	for _, task := range tasks {
+		recorded[task.TaskID] = struct{}{}
+	}
+	blockers := []model.ReasonCode{}
+	for _, wavePlanWave := range plan.Waves {
+		// REQ-005: only parallel waves require handles. A non-parallel wave never
+		// requires them even if it carries a stale or contradictory
+		// parallel_subagents token (e.g. recorded while parallel, then
+		// parallelization turned off so ApplyEffectiveParallel cleared the flag),
+		// so skip it before consulting the dispatch mode — mirroring the
+		// DispatchEvidenceBlockers / ParallelWaveChangedFileOverlapBlockers guard.
+		if !wavePlanWave.Parallel {
+			continue
+		}
+		if dispatchModes[wavePlanWave.WaveIndex] != model.WaveDispatchParallel {
+			continue
+		}
+		if !waveStarted(wavePlanWave, recorded) {
+			continue
+		}
+		waveHandles := handles[wavePlanWave.WaveIndex]
+		for _, planTask := range wavePlanWave.Tasks {
+			if strings.TrimSpace(waveHandles[planTask.TaskID]) != "" {
+				continue
+			}
+			blockers = append(blockers, model.NewReasonCode(
+				"executor_agent_missing",
+				fmt.Sprintf("%d:%s", wavePlanWave.WaveIndex, planTask.TaskID),
+			))
+		}
 	}
 	return model.NormalizeReasonCodes(blockers)
 }

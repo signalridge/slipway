@@ -408,6 +408,185 @@ func TestTaskPlanSemanticHashRejectsMalformedPlan(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown metadata key")
 }
 
+func TestTargetCoversPath(t *testing.T) {
+	t.Parallel()
+
+	// Directional coverage: TargetCoversPath(targets, file) reports whether
+	// file is covered by ANY target, reusing the planner's conflict predicates
+	// (exact match, case-insensitive normalization, parent-directory scope, and
+	// glob scope). Coverage is the basis the changed-file scope-escape audit
+	// (REQ-002) builds on; conflict detection (REQ-003) shares the same
+	// predicates.
+	tests := []struct {
+		name    string
+		targets []string
+		file    string
+		want    bool
+	}{
+		{name: "exact match", targets: []string{"internal/a.go"}, file: "internal/a.go", want: true},
+		{name: "case insensitive match", targets: []string{"internal/Foo.go"}, file: "internal/foo.go", want: true},
+		{name: "normalization alias match", targets: []string{`internal\engine\wave.go`}, file: "internal/engine/wave.go", want: true},
+		{name: "parent directory covers child file", targets: []string{"internal/engine/"}, file: "internal/engine/wave/wave.go", want: true},
+		{name: "glob covers concrete match", targets: []string{"internal/engine/wave/*.go"}, file: "internal/engine/wave/parse.go", want: true},
+		{name: "double star covers nested file", targets: []string{"docs/**"}, file: "docs/guides/workflow.md", want: true},
+		{name: "malformed glob covers nothing", targets: []string{"internal/["}, file: "cmd/run.go", want: false},
+		{name: "covered by one of several targets", targets: []string{"internal/a.go", "internal/b.go"}, file: "internal/b.go", want: true},
+		{name: "file outside all targets", targets: []string{"internal/a.go"}, file: "internal/b.go", want: false},
+		{name: "sibling file not covered by concrete target", targets: []string{"internal/engine/wave/wave.go"}, file: "internal/engine/wave/parse.go", want: false},
+		{name: "child directory does not cover parent file", targets: []string{"internal/engine/wave/"}, file: "internal/engine/progression.go", want: false},
+		{name: "empty targets", targets: nil, file: "internal/a.go", want: false},
+		{name: "empty file", targets: []string{"internal/a.go"}, file: "", want: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, TargetCoversPath(tt.targets, tt.file))
+		})
+	}
+}
+
+func TestMalformedPatternConflictAndCoveragePolicies(t *testing.T) {
+	t.Parallel()
+
+	const malformedPattern = "internal/["
+
+	assert.True(t, targetPatternMatches(malformedPattern, "internal/a.go"),
+		"static conflict detection must treat malformed glob targets as broad to avoid unsafe parallel packing")
+	assert.False(t, targetPatternCovers(malformedPattern, "internal/a.go"),
+		"changed-file coverage must not let malformed glob targets authorize arbitrary writes")
+}
+
+func TestAnalyzeWaveNarrowingCauses(t *testing.T) {
+	t.Parallel()
+
+	// AnalyzeWaveNarrowingCauses surfaces conservative, deterministic,
+	// non-blocking cues: broad_target_files for glob/directory targets, and
+	// fully_serial_plan ONLY when a linear depends_on chain forces every node
+	// onto the dependency critical path. Conflict-driven serialization (tasks
+	// sharing a concrete file but no depends_on edge) must NOT be reported as
+	// fully_serial_plan (REQ-006 scenario 2).
+	tests := []struct {
+		name  string
+		nodes []Node
+		want  []string
+	}{
+		{
+			name: "broad directory target and linear chain report both advisories",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{"internal/engine/"}},
+				{TaskID: "t-02", DependsOn: []string{"t-01"}, TargetFiles: []string{"cmd/next.go"}},
+				{TaskID: "t-03", DependsOn: []string{"t-02"}, TargetFiles: []string{"cmd/run.go"}},
+			},
+			want: []string{"broad_target_files:t-01", "fully_serial_plan"},
+		},
+		{
+			name: "broad glob target is reported",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{"internal/engine/wave/*.go"}},
+				{TaskID: "t-02", TargetFiles: []string{"cmd/next.go"}},
+			},
+			want: []string{"broad_target_files:t-01"},
+		},
+		{
+			name: "file-conflict serialization does NOT report fully_serial_plan",
+			nodes: []Node{
+				// No depends_on edges: the only reason these serialize is the
+				// shared concrete file target, which is honest scheduling.
+				{TaskID: "t-01", TargetFiles: []string{"internal/x.go"}},
+				{TaskID: "t-02", TargetFiles: []string{"internal/x.go"}},
+				{TaskID: "t-03", TargetFiles: []string{"internal/x.go"}},
+			},
+			want: nil,
+		},
+		{
+			name: "clean file-disjoint parallel plan yields no advisories",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{"internal/a.go"}},
+				{TaskID: "t-02", TargetFiles: []string{"internal/b.go"}},
+				{TaskID: "t-03", TargetFiles: []string{"internal/c.go"}},
+			},
+			want: nil,
+		},
+		{
+			name: "deterministic broad ordering across multiple broad tasks",
+			nodes: []Node{
+				{TaskID: "t-03", TargetFiles: []string{"docs/**"}},
+				{TaskID: "t-01", TargetFiles: []string{"cmd"}},
+				{TaskID: "t-02", TargetFiles: []string{"internal/a.go"}},
+			},
+			want: []string{"broad_target_files:t-01", "broad_target_files:t-03"},
+		},
+		{
+			name: "dotted directory targets are reported",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{".github/"}},
+				{TaskID: "t-02", TargetFiles: []string{"config.d/"}},
+				{TaskID: "t-03", TargetFiles: []string{"cmd/main.go"}},
+			},
+			want: []string{"broad_target_files:t-01", "broad_target_files:t-02"},
+		},
+		{
+			name: "deep fan-in is not fully serial when depth is below node count",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{"internal/a.go"}},
+				{TaskID: "t-02", TargetFiles: []string{"internal/b.go"}},
+				{TaskID: "t-03", TargetFiles: []string{"internal/c.go"}},
+				// Depends on the three roots: critical path is 2, node count is
+				// 4, so the plan is not fully serial.
+				{TaskID: "t-04", DependsOn: []string{"t-01", "t-02", "t-03"}, TargetFiles: []string{"internal/d.go"}},
+			},
+			want: nil,
+		},
+		{
+			// A single-task plan has nothing to parallelize: critical path 1 ==
+			// node count 1 must NOT be reported as fully_serial_plan (acceptance:
+			// an honest single-task wave passes).
+			name:  "single-task plan is not fully serial",
+			nodes: []Node{{TaskID: "t-01", TargetFiles: []string{"internal/a.go"}}},
+			want:  nil,
+		},
+		{
+			// Conventional extensionless files name one concrete file, not a
+			// directory, so they must NOT raise broad_target_files (REQ-006
+			// high-confidence cue); bare extensionless directories like `cmd`
+			// above still do.
+			name: "conventional extensionless files are not broad targets",
+			nodes: []Node{
+				{TaskID: "t-01", TargetFiles: []string{"Makefile"}},
+				{TaskID: "t-02", TargetFiles: []string{"build/Dockerfile"}},
+				{TaskID: "t-03", TargetFiles: []string{".github/CODEOWNERS"}},
+			},
+			want: nil,
+		},
+		{
+			// Nested extensionless paths are ambiguous: scripts/deploy is commonly
+			// an executable file, not a directory. Keep the advisory high-confidence
+			// by requiring an explicit trailing slash for nested directory targets.
+			name:  "nested extensionless executable path is not broad",
+			nodes: []Node{{TaskID: "t-01", TargetFiles: []string{"scripts/deploy"}}},
+			want:  nil,
+		},
+		{
+			name:  "empty plan yields no advisories",
+			nodes: nil,
+			want:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := AnalyzeWaveNarrowingCauses(tt.nodes)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestExecutionResultJSONUsesTaskResultsKey(t *testing.T) {
 	t.Parallel()
 

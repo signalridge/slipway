@@ -178,6 +178,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The decision artifact structure is invalid",
 	},
+	"dispatch_mode_absent_on_started_parallel_wave": {
+		Severity: ReasonSeverityError,
+		Message:  "A started parallel wave recorded no valid dispatch_mode evidence; the engine will not infer parallel dispatch, so record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) and re-run",
+	},
 	"execution_interrupted": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Governed execution was interrupted",
@@ -189,6 +193,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"execution_verdict_fail": {
 		Severity: ReasonSeverityError,
 		Message:  "Execution verdict failed",
+	},
+	"executor_agent_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A parallel_subagents wave is missing the executor_agent handle for a planned task; record executor_agent:wave=<n>:task=<id>:<handle> for every task in the wave and re-run",
 	},
 	"governance_action_required": {
 		Severity: ReasonSeverityError,
@@ -317,6 +325,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"orphan_task_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Orphan task evidence exists outside the current wave plan",
+	},
+	"parallel_wave_changed_file_overlap": {
+		Severity: ReasonSeverityError,
+		Message:  "Two tasks in the same parallel wave recorded the same changed file; same-worktree parallel executors can clobber each other",
 	},
 	"stale_runtime_binding": {
 		Severity: ReasonSeverityError,
@@ -565,6 +577,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"task": {
 		Severity: ReasonSeverityError,
 		Message:  "A task-scoped execution blocker is present",
+	},
+	"task_changed_file_scope_escape": {
+		Severity: ReasonSeverityError,
+		Message:  "A task recorded a changed file outside its planned target_files; fix target_files and re-record evidence, or rescope tasks.md",
 	},
 	"task_blocker": {
 		Severity: ReasonSeverityError,
