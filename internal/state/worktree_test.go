@@ -289,7 +289,7 @@ func TestEnsureDefaultWorktreeForChange_ProvisionsNonDiscoveryByDefault(t *testi
 	change := model.NewChange("my-change")
 	change.NeedsDiscovery = false
 
-	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	binding, err := EnsureDefaultWorktreeForChange(root, &change, nil)
 	require.NoError(t, err)
 	assert.True(t, binding.Created, "non-discovery change should provision a worktree by default")
 	assert.Empty(t, binding.SkippedReason)
@@ -305,7 +305,7 @@ func TestEnsureDefaultWorktreeForChange_DisabledByConfig(t *testing.T) {
 		[]byte("governance:\n  auto_provision_worktree: false\n"), 0o644))
 
 	change := model.NewChange("my-change")
-	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	binding, err := EnsureDefaultWorktreeForChange(root, &change, nil)
 	require.NoError(t, err)
 	assert.False(t, binding.Created)
 	assert.Equal(t, "worktree_provisioning_disabled", binding.SkippedReason)
@@ -316,7 +316,7 @@ func TestEnsureDefaultWorktreeForChange_SkipsNonGitRepo(t *testing.T) {
 	root := t.TempDir() // never `git init`ed
 
 	change := model.NewChange("my-change")
-	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	binding, err := EnsureDefaultWorktreeForChange(root, &change, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "not_git_repository", binding.SkippedReason)
 	assert.False(t, binding.Created)

@@ -682,12 +682,33 @@ func DetectExistingTools(root string) []string {
 
 // Generate creates tool prompt surfaces and commands for the given tools.
 func Generate(root string, tools []string, refresh bool) error {
+	return generateWithOptions(root, tools, refresh, generateOptions{})
+}
+
+// GenerateWorktreeLocal generates only the worktree-local slipway-owned surfaces
+// for the given tools, skipping every host-global output (notably Codex prompts
+// under $CODEX_HOME / ~/.codex). Provisioning a git worktree must never mutate
+// shared host-level state: those prompts are not worktree-scoped and are owned
+// by `slipway init` on the host, so a worktree that rewrote them would clobber
+// every other checkout's prompts.
+func GenerateWorktreeLocal(root string, tools []string, refresh bool) error {
+	return generateWithOptions(root, tools, refresh, generateOptions{worktreeLocalOnly: true})
+}
+
+// generateOptions tunes a single generation pass.
+type generateOptions struct {
+	// worktreeLocalOnly suppresses host-global outputs so the pass writes only
+	// surfaces under root. Set when provisioning a worktree.
+	worktreeLocalOnly bool
+}
+
+func generateWithOptions(root string, tools []string, refresh bool, opts generateOptions) error {
 	for _, tool := range tools {
 		cfg, ok := toolRegistry[tool]
 		if !ok {
 			return fmt.Errorf("unsupported tool %q", tool)
 		}
-		if err := generateForTool(root, cfg, refresh); err != nil {
+		if err := generateForTool(root, cfg, refresh, opts); err != nil {
 			return err
 		}
 	}
@@ -739,7 +760,7 @@ func SkillIndexPath(cfg ToolConfig) string {
 	)
 }
 
-func generateForTool(root string, cfg ToolConfig, refresh bool) error {
+func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOptions) error {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	_, sentinelErr := os.Stat(sentinelPath)
 	hadGeneratedAdapter := sentinelErr == nil
@@ -912,7 +933,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	}
 
 	// Global prompts (Codex: ~/.codex/prompts/) — writes outside project root.
-	if cfg.PromptsStyle == "global" {
+	// Skipped for worktree-local passes: these prompts are host-global and shared
+	// across every checkout, so provisioning one worktree must not rewrite them.
+	if cfg.PromptsStyle == "global" && !opts.worktreeLocalOnly {
 		if err := generateCodexPrompts(cfg, refresh); err != nil {
 			return err
 		}

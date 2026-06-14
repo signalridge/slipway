@@ -1,0 +1,38 @@
+version: 1
+slug: provision-host-adapter-surfaces-into-git-worktrees-at-worktr
+description: 'Provision host-adapter surfaces into git worktrees: at worktree creation (and idempotently on reuse) copy each existing adapter dir (.claude/.cursor/.codex/.opencode/.gemini, excluding worktrees/, lock files, and generated sentinels) into the new worktree, then run toolgen.Generate(refresh) so slipway-owned skills/hooks/settings are regenerated from the worktree source. Fixes subagents in change worktrees losing hooks and being unable to read bundled skill references.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-14T03:27:11.715621Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/provision-host-adapter-surfaces-into-git-worktrees-at-worktr
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 1427895c6d044bcc7001dc66aa60558d31a1a7d9c30a71401be0694c70c8ed8c
+        updated_at: 2026-06-14T03:40:35.784769402Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8960f2d37ec9388692a54c5ca030bb7ed041be0ffe212013cf21bfc9a966a66b
+        updated_at: 2026-06-14T04:15:25.784542008Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 222b132db002f334386aee3f408ba2387fcdec024ccd21b03d1873c6b7c7d3e3
+        updated_at: 2026-06-14T04:22:15.595317489Z
+evidence_refs:
+    code-quality-review: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/code-quality-review.yaml
+    goal-verification: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/goal-verification.yaml
+    intake-clarification: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/intake-clarification.yaml
+    plan-audit: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/artifacts/changes/provision-host-adapter-surfaces-into-git-worktrees-at-worktr/verification/wave-orchestration.yaml
