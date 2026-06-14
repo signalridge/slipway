@@ -1237,11 +1237,17 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.NotContains(t, content, "Tool-Specific Dispatch")
 	})
 
-	t.Run("codex transport preserved", func(t *testing.T) {
-		content := renderPromptSurfaceForTest(t, "commands/command-entry.codex-prompt.md.tmpl", "new", "command-new-body", "codex")
-		assert.Contains(t, content, `argument-hint: "--json"`)
-		assert.Contains(t, content, "$ARGUMENTS")
+	t.Run("codex command skill renders body without prompt transport", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-skill.md.tmpl", "new", "command-new-body", "codex")
+		// The skill surface carries the body partial and skill frontmatter,
+		// not the retired global-prompt transport markers.
+		assert.Contains(t, content, "# Create Governed Change")
 		assert.Contains(t, content, "slipway new")
+		assert.Contains(t, content, `surface: "skill"`)
+		assert.Contains(t, content, "## Arguments")
+		assert.Contains(t, content, "```text\n--json\n```")
+		assert.NotContains(t, content, "argument-hint:")
+		assert.NotContains(t, content, "$ARGUMENTS")
 	})
 }
 

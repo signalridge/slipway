@@ -1,0 +1,24 @@
+---
+command_id: "{{.CommandID}}"
+trigger: "{{.Trigger}}"
+class: "{{.Class}}"
+tier: "{{.Tier}}"
+surface: "skill"
+---
+{{ include .BodyTemplate . }}
+{{- if .Arguments }}
+
+## Arguments
+```text
+{{ .Arguments }}
+```
+{{- end }}
+{{- if .Prerequisites }}
+
+## Prerequisites
+{{- range .Prerequisites }}
+- {{ . }}
+{{- end }}
+{{- end }}
+
+Invoke the authoritative `slipway {{.CommandID}}` CLI surface directly; do not reimplement Slipway lifecycle semantics.

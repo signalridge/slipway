@@ -367,6 +367,27 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-abort",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-abort"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-cancel",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-cancel"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-checkpoint",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-checkpoint"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-ci-triage",
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
@@ -378,6 +399,13 @@
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-code-quality-review/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-codebase-map",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-codebase-map"
     },
     {
       "kind": "skill",
@@ -409,6 +437,27 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-delete",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-delete"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-done",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-done"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-evidence",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-evidence"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-final-closeout",
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
@@ -430,6 +479,13 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-health",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-health"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-incident-response",
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
@@ -444,10 +500,52 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-init",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-init"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-instructions",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-instructions"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-intake-clarification",
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-intake-clarification/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-learn",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-learn"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-new",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-new"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-next",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-next"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-pivot",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-pivot"
     },
     {
       "kind": "skill",
@@ -458,6 +556,20 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-preset",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-preset"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-repair",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-repair"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-research-orchestration",
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
@@ -465,10 +577,24 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-review",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-review"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-root-cause-tracing",
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
       "token": "`slipway-root-cause-tracing/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-run",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-run"
     },
     {
       "kind": "skill",
@@ -493,6 +619,20 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-stats",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-stats"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-status",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-status"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-tdd-governance",
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
@@ -504,6 +644,13 @@
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
       "token": "`slipway-test-design/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-validate",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-validate"
     },
     {
       "kind": "skill",

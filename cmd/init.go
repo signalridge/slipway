@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/spf13/cobra"
@@ -35,6 +37,21 @@ func makeInitCmd() *cobra.Command {
 
 			writer := newFormatWriter(cmd.OutOrStdout())
 			writer.Writeln("initialized slipway workspace")
+
+			// Make the per-tool invocation surface explicit at setup time. When
+			// --tools was omitted with --refresh, the generated set is the
+			// auto-detected sentinelized adapters.
+			generatedTools := selectedTools
+			if len(generatedTools) == 0 && opts.refresh && !toolsSpecified {
+				generatedTools = toolgen.DetectExistingTools(root)
+			}
+			for _, toolID := range generatedTools {
+				cfg, ok := toolgen.LookupTool(toolID)
+				if !ok {
+					continue
+				}
+				writer.Writeln(fmt.Sprintf("  %s: %s", toolID, cfg.InvocationSummary()))
+			}
 			return writer.Err()
 		},
 	}

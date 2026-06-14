@@ -19,9 +19,10 @@ import (
 // are never clobbered) and then regenerates the slipway-owned surfaces with the
 // running Slipway binary's embedded templates via GenerateWorktreeLocal, so the
 // worktree carries freshly generated slipway-* surfaces rather than a stale copy
-// of the source adapter's generated output. Host-global outputs (Codex prompts
-// under $CODEX_HOME / ~/.codex) are deliberately skipped: they are shared across
-// every checkout and must not be rewritten when provisioning one worktree.
+// of the source adapter's generated output. Host-global cleanup, such as pruning
+// retired Codex prompts under $CODEX_HOME / ~/.codex, is deliberately skipped:
+// that state is shared across every checkout and must not be mutated when
+// provisioning one worktree.
 //
 // Detection is by directory existence rather than the generated sentinel: any
 // adapter root present in the repository is provisioned, even one a user created

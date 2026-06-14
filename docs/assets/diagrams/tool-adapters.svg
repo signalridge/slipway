@@ -65,7 +65,7 @@
   <rect class="box" x="238" y="218" width="156" height="94" rx="11"/>
   <circle cx="256" cy="242" r="4.5" fill="var(--exec-pill)"/>
   <text class="title" x="268" y="246" font-size="13">Codex</text>
-  <text class="mono" x="254" y="274" font-size="11">.codex/ + prompts</text>
+  <text class="mono" x="254" y="274" font-size="11">.codex/skills</text>
   <text class="inv" x="254" y="298" font-size="10.5">$slipway-&lt;cmd&gt;</text>
 
   <!-- card: Cursor -->
