@@ -60,6 +60,8 @@ func TestEnsureDefaultWorktreeForChange_CreateFailsClosedOnProvisionError(t *tes
 	_, err := EnsureDefaultWorktreeForChange(root, &change, stub)
 	require.Error(t, err, "the create branch must fail closed when provisioning errors")
 	assert.ErrorIs(t, err, boom, "the provisioner error must propagate to the binding caller")
+	assert.Empty(t, change.WorktreePath,
+		"a failed create-path provision must not persist a worktree binding (provision runs before persist)")
 }
 
 func TestEnsureDefaultWorktreeForChange_ReuseBackfillsPreservingLocalEdit(t *testing.T) {

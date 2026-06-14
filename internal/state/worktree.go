@@ -243,11 +243,16 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change, provision
 	}
 	invalidateWorktreeListCache(repoRoot)
 
-	if err := PersistScopeWorktreeMetadata(change, normalizedPath, branch); err != nil {
-		return DefaultWorktreeBinding{}, err
-	}
+	// Provision before persisting the binding: a failed provision on the create
+	// path must not leave change.yaml pointing at a half-provisioned worktree. The
+	// worktree dir git just created is still recoverable — a retry takes the reuse
+	// branch (it is now a registered worktree) and re-provisions idempotently.
+	// (The reuse branch persists first because its validation reads the metadata.)
 	if err := provision.provision(repoRoot, normalizedPath); err != nil {
 		return DefaultWorktreeBinding{}, fmt.Errorf("provision host-adapter surfaces into new worktree %s: %w", normalizedPath, err)
+	}
+	if err := PersistScopeWorktreeMetadata(change, normalizedPath, branch); err != nil {
+		return DefaultWorktreeBinding{}, err
 	}
 	return DefaultWorktreeBinding{
 		Path:    normalizedPath,
