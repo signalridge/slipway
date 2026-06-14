@@ -254,7 +254,11 @@ type waveTaskView struct {
 }
 
 type resumeCheckpoint struct {
-	RunSummaryVersion   int      `json:"run_summary_version"`
+	// RunSummaryVersion is omitted when zero. A resume checkpoint only exists once
+	// an execution run has been recorded, so a real version is >=1; zero is the
+	// "no summary yet" sentinel that `evidence task` rejects and must not be
+	// surfaced as a recorded version (issue #211).
+	RunSummaryVersion   int      `json:"run_summary_version,omitempty"`
 	CompletedTaskIDs    []string `json:"completed_task_ids,omitempty"`
 	Freshness           string   `json:"freshness,omitempty"`
 	ResumeWaveIndex     int      `json:"resume_wave_index,omitempty"`

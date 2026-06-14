@@ -343,7 +343,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return newInvalidUsageError(
 						"evidence_task_run_summary_version_invalid",
 						"--run-summary-version must be >= 1",
-						"Pass the current wave-orchestration run_version as --run-summary-version.",
+						"Pass the current wave-orchestration run_version as --run-summary-version; the first task-evidence run version is 1.",
 						nil,
 					)
 				}
@@ -546,7 +546,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().StringVar(&taskID, "task-id", "", "Task ID from wave-plan.yaml (required)")
-	cmd.Flags().IntVar(&runSummary, "run-summary-version", 0, "Current wave-orchestration run_version (required)")
+	cmd.Flags().IntVar(&runSummary, "run-summary-version", 0, "Run summary version to attribute this task evidence to (>= 1; the first task-evidence run version is 1 -- pass the current wave-orchestration run_version) (required)")
 	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Task kind: code, test, doc, ops, verification, investigation, other (required)")
 	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Task verdict: pass, fail, blocked, incomplete, timeout (required)")
 	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Stable transcript, command, artifact, or note reference (required)")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -8,6 +9,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEvidenceTaskRunSummaryVersionHelpAdvertisesFirstVersionIsOne(t *testing.T) {
+	t.Parallel()
+
+	flag := makeEvidenceTaskCmd().Flags().Lookup("run-summary-version")
+	require.NotNil(t, flag, "evidence task must expose a --run-summary-version flag")
+	assert.Contains(t, flag.Usage, ">= 1",
+		"--run-summary-version help must keep advertising the >= 1 rule, got %q", flag.Usage)
+	assert.Contains(t, strings.ToLower(flag.Usage), "first task-evidence run version is 1",
+		"--run-summary-version help must tell users the first task-evidence run version is 1, got %q", flag.Usage)
+}
+
+func TestEvidenceTaskRunSummaryVersionZeroIsRejected(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--task-id", "t-01",
+			"--run-summary-version", "0",
+			"--task-kind", "verification",
+			"--verdict", "pass",
+			"--evidence-ref", "test:zero-version",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_run_summary_version_invalid", cliErr.ErrorCode)
+	})
+}
 
 func TestEvidenceRestampCommandIsNotRegistered(t *testing.T) {
 	root := t.TempDir()

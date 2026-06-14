@@ -28,14 +28,20 @@ const (
 )
 
 type Report struct {
-	Status                  Status             `json:"status"`
-	PlannedTargets          []string           `json:"planned_targets,omitempty"`
-	ChangedFiles            []string           `json:"changed_files,omitempty"`
-	OutOfScopeFiles         []string           `json:"out_of_scope_files,omitempty"`
-	MissingContractTasks    []string           `json:"missing_contract_tasks,omitempty"`
-	MissingChangedFileTasks []string           `json:"missing_changed_file_tasks,omitempty"`
-	Blockers                []model.ReasonCode `json:"blockers,omitempty"`
-	Diagnostics             []string           `json:"diagnostics,omitempty"`
+	Status                  Status   `json:"status"`
+	PlannedTargets          []string `json:"planned_targets,omitempty"`
+	ChangedFiles            []string `json:"changed_files,omitempty"`
+	OutOfScopeFiles         []string `json:"out_of_scope_files,omitempty"`
+	MissingContractTasks    []string `json:"missing_contract_tasks,omitempty"`
+	MissingChangedFileTasks []string `json:"missing_changed_file_tasks,omitempty"`
+	// ExemptContextFiles discloses the dirty codebase-map (artifacts/codebase/**)
+	// files the scope-contract filter intentionally drops from ChangedFiles. The
+	// exemption is preserved (these files stay out of ChangedFiles /
+	// OutOfScopeFiles and never affect Status); this field only makes the
+	// otherwise-silent exemption observable.
+	ExemptContextFiles []string           `json:"exempt_context_files,omitempty"`
+	Blockers           []model.ReasonCode `json:"blockers,omitempty"`
+	Diagnostics        []string           `json:"diagnostics,omitempty"`
 }
 
 func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummary, extraChangedFiles []string) Report {
@@ -281,6 +287,7 @@ func (r Report) Clone() Report {
 		OutOfScopeFiles:         append([]string(nil), r.OutOfScopeFiles...),
 		MissingContractTasks:    append([]string(nil), r.MissingContractTasks...),
 		MissingChangedFileTasks: append([]string(nil), r.MissingChangedFileTasks...),
+		ExemptContextFiles:      append([]string(nil), r.ExemptContextFiles...),
 		Blockers:                append([]model.ReasonCode(nil), r.Blockers...),
 		Diagnostics:             append([]string(nil), r.Diagnostics...),
 	}

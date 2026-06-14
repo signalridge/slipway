@@ -228,6 +228,15 @@ an archived terminal change, the command fails with
 active-readiness contract: `validate` proves the currently active governed state
 before `done`; it is not a post-archive audit surface for frozen bundles.
 
+The durable codebase map under `artifacts/codebase/**` is exempt from
+scope-contract changed-file accounting. When only those context files are dirty,
+they stay out of `scope_contract.changed_files` and `scope_contract.out_of_scope_files`,
+and `scope_contract.status` stays `pass` — a refreshed codebase map alone does
+not trip scope-contract drift. To keep that filtering visible rather than
+inferred from a `git diff` disagreement, the exempted files are disclosed
+explicitly in the `scope_contract.exempt_context_files` field, surfaced by
+`slipway validate --json`, `slipway status --json`, and `slipway review --json`.
+
 `slipway evidence task` writes the flat runtime task JSON consumed by
 wave-orchestration sync. Required flags: `--task-id`, `--run-summary-version`,
 `--task-kind`, `--verdict`, `--evidence-ref`. Optional: `--changed-file` and

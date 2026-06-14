@@ -116,18 +116,22 @@ type artifactDAGNode struct {
 }
 
 type statusProgress struct {
-	Percentage        int            `json:"percentage"`
-	StageIndex        int            `json:"stage_index"`
-	StageTotal        int            `json:"stage_total"`
-	StageName         string         `json:"stage_name"`
-	CurrentWaveIndex  int            `json:"current_wave_index,omitempty"`
-	CompletedWaves    int            `json:"completed_waves,omitempty"`
-	TotalWaves        int            `json:"total_waves,omitempty"`
-	WavesByVerdict    map[string]int `json:"waves_by_verdict,omitempty"`
-	TasksCompleted    int            `json:"tasks_completed"`
-	TasksTotal        int            `json:"tasks_total"`
-	TasksByVerdict    map[string]int `json:"tasks_by_verdict,omitempty"`
-	RunSummaryVersion int            `json:"run_summary_version"`
+	Percentage       int            `json:"percentage"`
+	StageIndex       int            `json:"stage_index"`
+	StageTotal       int            `json:"stage_total"`
+	StageName        string         `json:"stage_name"`
+	CurrentWaveIndex int            `json:"current_wave_index,omitempty"`
+	CompletedWaves   int            `json:"completed_waves,omitempty"`
+	TotalWaves       int            `json:"total_waves,omitempty"`
+	WavesByVerdict   map[string]int `json:"waves_by_verdict,omitempty"`
+	TasksCompleted   int            `json:"tasks_completed"`
+	TasksTotal       int            `json:"tasks_total"`
+	TasksByVerdict   map[string]int `json:"tasks_by_verdict,omitempty"`
+	// RunSummaryVersion is omitted when zero. Zero is the "no execution summary
+	// recorded yet" sentinel that `evidence task` rejects, so surfacing
+	// run_summary_version=0 would mislead callers; any real recorded version is
+	// >=1 and still serializes (issue #211).
+	RunSummaryVersion int `json:"run_summary_version,omitempty"`
 }
 
 type statusEvidencePointers struct {

@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/bootstrap"
 	"github.com/signalridge/slipway/internal/engine/governance"
+	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -439,6 +441,116 @@ func TestScopeContractWorkspaceChangedFilesIncludesWorktreeDiffAndExcludesBundle
 	assert.NotContains(t, files, ".gitignore")
 	assert.NotContains(t, files, "artifacts/codebase/STRUCTURE.md")
 	assert.NotContains(t, files, "artifacts/changes/scope-drift/tasks.md")
+}
+
+func TestEvaluateGovernanceReadinessDisclosesExemptContextFilesWithoutScopeDrift(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+
+	const inScopeFile = "cmd/next.go"
+	const exemptFile = "artifacts/codebase/ARCHITECTURE.md"
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "codebase"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, inScopeFile), []byte("package cmd\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, exemptFile), []byte("# Architecture\n"), 0o644))
+	gitForReadinessOptimizationTests(t, root, "add", inScopeFile, exemptFile)
+	gitForReadinessOptimizationTests(t, root, "commit", "-m", "init")
+
+	change := model.NewChange("scope-contract-exempt-disclosure")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetLight
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(bundleDir, "intent.md"),
+		[]byte("# Intent\n\n## Summary\nDisclose exempted context files.\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(bundleDir, "requirements.md"),
+		[]byte("# Requirements\n\n### Requirement: Exempt disclosure\nREQ-001: Disclose.\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(bundleDir, "decision.md"),
+		[]byte("# Decision\n\n## Selected Approach\nDisclose.\n"),
+		0o644,
+	))
+	writeTasksAndMaterializeWavePlan(t, root, change, "# Tasks\n\n"+
+		"- [x] `t-01` Implement in-scope change\n"+
+		"  - target_files: [\""+inScopeFile+"\"]\n"+
+		"  - task_kind: code\n")
+
+	recordedAt := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	writeVerificationForTest(t, root, change.Slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	})
+
+	freshnessInputs := expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "t-01")
+	taskEvidence := map[string]any{
+		"task_id":             "t-01",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{inScopeFile},
+		"target_files":        []string{inScopeFile},
+		"blockers":            []model.ReasonCode{},
+		"evidence_ref":        "test:t-01",
+		"captured_at":         recordedAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    freshnessInputs,
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "t-01.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        recordedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindCode,
+			ChangedFiles: []string{inScopeFile},
+			TargetFiles:  []string{inScopeFile},
+			EvidenceRef:  "test:t-01",
+			CapturedAt:   recordedAt,
+		}},
+	}
+	summary.SyncDerivedFields()
+	summary.Normalize()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	// Dirty both a tracked in-scope file and a tracked exempt context-artifact
+	// file so the scope-contract evaluation observes both as workspace changes.
+	require.NoError(t, os.WriteFile(filepath.Join(root, inScopeFile), []byte("package cmd // changed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, exemptFile), []byte("# Architecture changed\n"), 0o644))
+
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, readiness.ScopeContract)
+
+	assert.Equal(t, scopecontract.StatusPass, readiness.ScopeContract.Status,
+		"exempting context-artifact files is a disclosure change and must keep the contract passing")
+	assert.Contains(t, readiness.ScopeContract.ExemptContextFiles, exemptFile,
+		"dirty context-artifact file must be disclosed in ExemptContextFiles")
+	assert.NotContains(t, readiness.ScopeContract.ChangedFiles, exemptFile,
+		"exempted context-artifact file must stay out of ChangedFiles")
+	assert.NotContains(t, readiness.ScopeContract.OutOfScopeFiles, exemptFile,
+		"exempted context-artifact file must not be reported as out-of-scope drift")
 }
 
 func TestWorkspaceChangedFilesForDoneArchiveExcludesBundleAndGeneratedLocalState(t *testing.T) {
