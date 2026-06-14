@@ -262,7 +262,7 @@ func (v WaveVerdict) IsValid() bool {
 type WaveDispatchMode string
 
 const (
-	WaveDispatchParallel           WaveDispatchMode = "parallel"
+	WaveDispatchParallel           WaveDispatchMode = "parallel_subagents"
 	WaveDispatchDegradedSequential WaveDispatchMode = "degraded_sequential"
 
 	WaveDispatchReferencePrefix = "dispatch_mode:wave="
@@ -318,6 +318,74 @@ func collectWaveDispatchMode(modes map[int]WaveDispatchMode, conflicted map[int]
 		return
 	}
 	modes[waveIndex] = mode
+}
+
+// WaveExecutorAgentReferencePrefix is the literal prefix of a wave-orchestration
+// verification reference that records the subagent handle a parallel-dispatched
+// task ran under: executor_agent:wave=<wave_index>:task=<task_id>:<handle>.
+const WaveExecutorAgentReferencePrefix = "executor_agent:wave="
+
+// ExecutorAgentHandlesFromVerification extracts per-wave, per-task executor agent
+// handles from wave-orchestration verification references of the form
+// executor_agent:wave=<wave_index>:task=<task_id>:<handle>. The result is keyed
+// wave index -> task id -> handle. Malformed references and blank handles are
+// ignored. Two references naming the same wave and task with different handles
+// are ambiguous evidence: the handle collapses to empty so the executor-agent
+// gate fails closed (REQ-005, exactly one handle per task) instead of letting
+// the last reference win; a repeated identical handle is idempotent.
+func ExecutorAgentHandlesFromVerification(record VerificationRecord) map[int]map[string]string {
+	handles := map[int]map[string]string{}
+	for _, ref := range record.References {
+		waveIndex, taskID, handle, ok := parseExecutorAgentReference(ref)
+		if !ok {
+			continue
+		}
+		if handles[waveIndex] == nil {
+			handles[waveIndex] = map[string]string{}
+		}
+		if existing, seen := handles[waveIndex][taskID]; seen && existing != handle {
+			// REQ-005 requires exactly one handle per planned task. Two references
+			// naming the same wave/task with different handles are ambiguous, so the
+			// engine fails closed: collapse the conflict to an empty (unsatisfied)
+			// handle that ExecutorAgentBlockers treats as missing, rather than
+			// silently letting the last reference win.
+			handles[waveIndex][taskID] = ""
+			continue
+		}
+		handles[waveIndex][taskID] = handle
+	}
+	if len(handles) == 0 {
+		return nil
+	}
+	return handles
+}
+
+func parseExecutorAgentReference(raw string) (waveIndex int, taskID, handle string, ok bool) {
+	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
+	if !strings.HasPrefix(raw, WaveExecutorAgentReferencePrefix) {
+		return 0, "", "", false
+	}
+	rest := strings.TrimPrefix(raw, WaveExecutorAgentReferencePrefix)
+	waveRaw, taskAndHandle, found := strings.Cut(rest, ":task=")
+	if !found {
+		return 0, "", "", false
+	}
+	index, err := strconv.Atoi(strings.TrimSpace(waveRaw))
+	if err != nil || index < 1 {
+		return 0, "", "", false
+	}
+	// task ids carry no colon, so the first colon separates the task id from the
+	// handle; any colons inside the handle itself are preserved.
+	taskID, handle, found = strings.Cut(taskAndHandle, ":")
+	if !found {
+		return 0, "", "", false
+	}
+	taskID = strings.TrimSpace(taskID)
+	handle = strings.TrimSpace(handle)
+	if taskID == "" || handle == "" {
+		return 0, "", "", false
+	}
+	return index, taskID, handle, true
 }
 
 type WaveRun struct {

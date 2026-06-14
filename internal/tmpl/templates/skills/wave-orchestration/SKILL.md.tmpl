@@ -85,17 +85,49 @@ human-readable context and are not parsed as dispatch evidence. A `parallel:
 false` wave (a single task, or `execution.parallelization: off`) runs
 sequentially with nothing to note.
 
-Single worktree fan-out means executor agents share the current worktree; this
-is not per-executor git worktree isolation. Before spawning a `parallel: true`
-wave, run a target-overlap preflight over the current wave's planned
-`target_files`. If any two tasks overlap by exact path, path alias, parent/child
-scope, case-insensitive match, or glob scope, do not spawn them in parallel.
-Record a blocker such as `dispatch_blocker:wave=<wave_index>:target_overlap`
-and rescope/replan before continuing. After executor results return, run a
-post-result changed-file conflict check across returned `changed_files`; if
-parallel executors touched the same file scope or escaped their declared target
-scope, record a post-result changed-file conflict and do not run the
-integration gate or start the next wave until it is resolved.
+## Target/Changed-File Safety Model
+Slipway dispatches a wave into a single shared worktree: executor agents edit
+the current worktree directly and there is no per-executor git worktree
+isolation. The only safety boundary inside a wave is each task's declared
+`target_files`, made true by each executor's exhaustive `changed_files`. Keep
+both accurate: an executor that writes outside its `target_files`, or two
+parallel tasks that write the same file, can clobber each other in the shared
+tree.
+
+The engine signals, records, and gates on this model; it does not spawn or
+execute agents (this host owns the dispatch). When the host's recorded evidence
+is missing or violates the model, Slipway records an open blocker and the change
+fails closed to rerun, review, and corrected evidence rather than advancing. The
+four engine-enforced wave blockers are:
+- `task_changed_file_scope_escape:<task_id>:<file>` — a task's recorded
+  `changed_files` includes a path not covered by that task's `target_files`
+  (post-result scope-escape audit). Fix `target_files` or the change, then
+  re-record evidence.
+- `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
+  in the same `parallel: true` wave recorded the same changed file. Sequential
+  waves sharing a file are allowed; a parallel overlap must be rescoped or
+  re-planned.
+- `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
+  parallel wave recorded no dispatch-mode evidence. The engine no longer infers
+  parallel dispatch silently; you must record
+  `dispatch_mode:wave=<wave_index>:parallel_subagents` (or
+  `:degraded_sequential`) for the wave.
+- `executor_agent_missing:<wave_index>:<task_id>` — a `parallel_subagents` wave
+  is missing a per-task `executor_agent` handle reference. Record exactly one
+  handle per planned task in the wave.
+
+To stay clear of these gates, run a target-overlap PREFLIGHT before spawning a
+`parallel: true` wave, then a post-result changed-file conflict check after.
+Before spawning, compare the current wave's planned `target_files`: if any two
+tasks overlap by exact path, path alias, parent/child scope, case-insensitive
+match, or glob scope, do not spawn them in parallel. Record a host blocker such
+as `dispatch_blocker:wave=<wave_index>:target_overlap` and rescope/replan before
+continuing. After executor results return, run the post-result changed-file
+conflict check across returned `changed_files`; if parallel executors touched
+the same file scope or escaped their declared target scope, record a post-result
+changed-file conflict and do not run the integration gate or start the next wave
+until it is resolved — this is the same condition the engine audits as
+`parallel_wave_changed_file_overlap` and `task_changed_file_scope_escape`.
 
 For each wave: describe the build goal before spawning, wait
 for all executors, spot-check the first 2 files from each task's

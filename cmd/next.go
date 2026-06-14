@@ -229,7 +229,12 @@ type wavePlanView struct {
 	TotalTasks int        `json:"total_tasks"`
 	WaveCount  int        `json:"wave_count"`
 	Waves      []waveView `json:"waves"`
-	ParseError string     `json:"parse_error,omitempty"`
+	// Advisories are non-blocking wave-narrowing cues (REQ-006) computed in the
+	// view layer only. They never block execution and are deliberately excluded
+	// from wave-plan.yaml and every freshness hash; they exist solely on the
+	// `slipway next` JSON so plan-audit can cite concrete evidence.
+	Advisories []string `json:"advisories,omitempty"`
+	ParseError string   `json:"parse_error,omitempty"`
 }
 
 type waveView struct {
