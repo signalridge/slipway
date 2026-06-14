@@ -369,9 +369,11 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	}
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
-	assert.LessOrEqual(t, len([]byte(content)), 4500, "session-start hook template must stay compact")
+	assert.LessOrEqual(t, len([]byte(content)), 5600, "session-start hook template must stay compact")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
 	assert.Contains(t, content, "slipway next --json")
+	assert.Contains(t, content, "change_bound_to_other_worktree")
+	assert.Contains(t, content, "session_handoff_info")
 	assert.NotContains(t, content, "--hook-lite")
 	assert.NotContains(t, content, "slipway status --json")
 	assert.Contains(t, content, `cd "${hook_cwd}" && slipway "$@"`)

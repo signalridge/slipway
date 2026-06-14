@@ -67,3 +67,27 @@ func TestNextChangeFlagFromRootTargetsBoundWorktree(t *testing.T) {
 		assert.Equal(t, "next-bound-change", view.Slug)
 	})
 }
+
+func TestRunFromRootReportsBoundElsewhere(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		worktreePath := filepath.Join(t.TempDir(), "run-bound-worktree")
+		runGit(t, root, "worktree", "add", worktreePath, "-b", "run-bound-worktree")
+		change := model.NewChange("run-bound-change")
+		change.WorktreePath = worktreePath
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeRunCmd())
+		cmd.SetArgs([]string{"--json"})
+		err := cmd.Execute()
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "--change run-bound-change")
+		assert.Contains(t, cliErr.Remediation, worktreePath)
+	})
+}

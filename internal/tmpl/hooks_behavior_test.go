@@ -210,6 +210,48 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	assert.Contains(t, string(out), "hook_diagnostic: slipway next --json failed: next contract broke")
 }
 
+func TestSessionStartHookTreatsBoundWorktreeChangeAsInformational(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, initHookGitRepo(root))
+	writeHookProjectConfig(t, root)
+	writeHookSharedScopeMarker(t, root, "")
+	boundWorktree := filepath.Join(root, ".worktrees", "bound-change")
+
+	logPath, binDir := installHookTestSlipwayScript(t, root, fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
+case "$*" in
+  "root")
+    printf '%%s\n' %q
+    ;;
+  "next --json")
+    printf '{"error_code":"change_bound_to_other_worktree","category":"precondition_blocked","message":"active change is bound to another worktree: bound-change at %s","remediation":"Use --change bound-change, or cd into %s.","exit_code":3,"details":{"bound_changes":[{"slug":"bound-change","worktree_path":"%s"}]}}'
+    exit 3
+    ;;
+esac
+`, root, boundWorktree, boundWorktree, boundWorktree))
+	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
+		"ToolID": "claude",
+	})
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SLIPWAY_HOOK_LOG="+logPath,
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	output := string(out)
+	assert.Contains(t, output, "session_handoff_info: no active change in this worktree")
+	assert.Contains(t, output, "active change bound-change is bound to "+boundWorktree)
+	assert.Contains(t, output, "use --change bound-change to act")
+	assert.NotContains(t, output, "hook_diagnostic: slipway next --json failed:")
+}
+
 func TestSessionStartHookSetsToolEnvForReadOnlyCommands(t *testing.T) {
 	t.Parallel()
 
