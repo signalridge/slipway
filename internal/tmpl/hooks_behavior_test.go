@@ -1,6 +1,7 @@
 package tmpl
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -208,6 +209,65 @@ printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
 	require.NoError(t, err)
 
 	assert.Contains(t, string(out), "hook_diagnostic: slipway next --json failed: next contract broke")
+}
+
+func TestSessionStartHookTreatsBoundWorktreeChangeAsInformational(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, initHookGitRepo(root))
+	writeHookProjectConfig(t, root)
+	writeHookSharedScopeMarker(t, root, "")
+	boundWorktree := filepath.Join(root, ".worktrees", "bound-change")
+	nextPayload := map[string]any{
+		"error_code":  "change_bound_to_other_worktree",
+		"category":    "precondition_blocked",
+		"message":     "active change is bound to another worktree: bound-change at " + boundWorktree,
+		"remediation": "Use --change bound-change, or cd into " + boundWorktree + ".",
+		"exit_code":   3,
+		"details": map[string]any{
+			"bound_changes": []map[string]string{{
+				"slug":          "bound-change",
+				"worktree_path": boundWorktree,
+			}},
+		},
+	}
+	nextJSON, err := json.Marshal(nextPayload)
+	require.NoError(t, err)
+
+	logPath, binDir := installHookTestSlipwayScript(t, root, fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%%s|%%s\n' "$PWD" "$*" >> "${SLIPWAY_HOOK_LOG}"
+case "$*" in
+  "root")
+    printf '%%s\n' %q
+    ;;
+  "next --json")
+    cat <<'SLIPWAY_NEXT_JSON'
+%s
+SLIPWAY_NEXT_JSON
+    exit 3
+    ;;
+esac
+`, root, string(nextJSON)))
+	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
+		"ToolID": "claude",
+	})
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SLIPWAY_HOOK_LOG="+logPath,
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	output := string(out)
+	assert.Contains(t, output, "session_handoff_info: no active change in this worktree")
+	assert.Contains(t, output, "active change bound-change is bound to "+boundWorktree)
+	assert.Contains(t, output, "use --change bound-change to act")
+	assert.NotContains(t, output, "hook_diagnostic: slipway next --json failed:")
 }
 
 func TestSessionStartHookSetsToolEnvForReadOnlyCommands(t *testing.T) {
