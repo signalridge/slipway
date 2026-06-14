@@ -36,16 +36,33 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 	// Intake clarification is a pre-execution scope-confirmation proof. It must
 	// remain satisfiable before the first execution summary exists, so it is not
 	// bound to run_summary_version.
-	intakeConfirmed, scopeIssues := verifications.skillSatisfied(skillIntakeClarification, executionSummaryCtx.LatestRunVersion, false)
+	intakeConfirmed, _, scopeIssues := verifications.skillSatisfied(
+		skillIntakeClarification,
+		executionSummaryCtx.LatestRunVersion,
+		false,
+		"intake-clarification confirms the scope for research",
+	)
 	// Review-side skills validate execution outputs. They are intentionally tied
 	// to the latest execution summary so stale review evidence cannot satisfy the
 	// current governed run.
-	domainReviewDone, domainIssues := verifications.skillSatisfied(skillSpecComplianceReview, executionSummaryCtx.LatestRunVersion, true)
-	independentReviewDone, independentIssues := verifications.skillSatisfied(skillCodeQualityReview, executionSummaryCtx.LatestRunVersion, true)
+	domainReviewDone, domainSatisfiedBy, domainIssues := verifications.skillSatisfied(
+		skillSpecComplianceReview,
+		executionSummaryCtx.LatestRunVersion,
+		true,
+		"spec-compliance-review provides the domain-aware review evidence for domain-review",
+	)
+	independentReviewDone, independentSatisfiedBy, independentIssues := verifications.skillSatisfied(
+		skillCodeQualityReview,
+		executionSummaryCtx.LatestRunVersion,
+		true,
+		"code-quality-review provides the independent review evidence for independent-review",
+	)
 	if len(executionSummaryCtx.Issues) > 0 {
 		domainReviewDone = false
+		domainSatisfiedBy = nil
 		domainIssues = stringutil.UniqueSorted(append(domainIssues, executionSummaryCtx.Issues...))
 		independentReviewDone = false
+		independentSatisfiedBy = nil
 		independentIssues = stringutil.UniqueSorted(append(independentIssues, executionSummaryCtx.Issues...))
 	}
 
@@ -62,16 +79,18 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 	researchOK := researchStructureSatisfied(root, change)
 
 	actions := ResolveRequiredActions(RequiredActionsInput{
-		ActiveControls:           snap.ActiveControls,
-		CurrentState:             change.CurrentState,
-		HasBlockingOpenQuestions: snap.Traceability.HasBlockingIntentGap(),
-		IntentExists:             artifactExistsInBundle(root, change, "intent.md"),
-		ScopeConfirmed:           changeScopeConfirmed(change, intakeConfirmed),
-		ResearchStructureOK:      researchOK,
-		DomainReviewDone:         domainReviewDone,
-		IndependentReviewDone:    independentReviewDone,
-		WorktreePreflightDone:    worktreeSatisfied,
-		RollbackSectionExists:    hasRollbackDocumentation(root, change),
+		ActiveControls:               snap.ActiveControls,
+		CurrentState:                 change.CurrentState,
+		HasBlockingOpenQuestions:     snap.Traceability.HasBlockingIntentGap(),
+		IntentExists:                 artifactExistsInBundle(root, change, "intent.md"),
+		ScopeConfirmed:               changeScopeConfirmed(change, intakeConfirmed),
+		ResearchStructureOK:          researchOK,
+		DomainReviewDone:             domainReviewDone,
+		DomainReviewSatisfiedBy:      domainSatisfiedBy,
+		IndependentReviewDone:        independentReviewDone,
+		IndependentReviewSatisfiedBy: independentSatisfiedBy,
+		WorktreePreflightDone:        worktreeSatisfied,
+		RollbackSectionExists:        hasRollbackDocumentation(root, change),
 	})
 	for idx := range actions {
 		if actions[idx].Satisfied {
@@ -176,37 +195,60 @@ func artifactExistsInBundle(root string, change model.Change, artifactName strin
 }
 
 type runtimeVerificationState struct {
-	bySkill     map[string]model.VerificationRecord
-	diagnostics []string
+	bySkill      map[string]model.VerificationRecord
+	evidenceRefs map[string]string
+	diagnostics  []string
 }
 
 func loadRuntimeVerificationState(root string, change model.Change) runtimeVerificationState {
 	verifications, err := state.ListVerificationsForChange(root, change)
 	st := runtimeVerificationState{
-		bySkill: verifications,
+		bySkill:      verifications,
+		evidenceRefs: verificationEvidenceRefs(root, change, verifications),
 	}
 	if err != nil {
 		st.bySkill = map[string]model.VerificationRecord{}
+		st.evidenceRefs = map[string]string{}
 		st.diagnostics = []string{"runtime_verification_load_failed"}
 	}
 	return st
 }
 
-func (s runtimeVerificationState) skillSatisfied(skillName string, latestRunVersion int, requireRunSummary bool) (bool, []string) {
+func verificationEvidenceRefs(root string, change model.Change, verifications map[string]model.VerificationRecord) map[string]string {
+	if len(verifications) == 0 {
+		return nil
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return nil
+	}
+	refs := make(map[string]string, len(verifications))
+	for skillName := range verifications {
+		refs[skillName] = state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "verification", skillName+".yaml"))
+	}
+	return refs
+}
+
+func (s runtimeVerificationState) skillSatisfied(skillName string, latestRunVersion int, requireRunSummary bool, reason string) (bool, []SatisfiedBy, []string) {
 	rec, ok := s.bySkill[skillName]
 	if !ok {
-		return false, nil
+		return false, nil, nil
 	}
 	if !rec.IsPassing() {
-		return false, []string{"runtime_verification_not_passed:" + skillName}
+		return false, nil, []string{"runtime_verification_not_passed:" + skillName}
 	}
 	if requireRunSummary && latestRunVersion < 1 {
-		return false, []string{"runtime_verification_not_ready:" + skillName + ":run_summary_missing"}
+		return false, nil, []string{"runtime_verification_not_ready:" + skillName + ":run_summary_missing"}
 	}
 	if latestRunVersion > 0 && rec.RunVersion != latestRunVersion {
-		return false, []string{fmt.Sprintf("runtime_verification_not_ready:%s:run_version_mismatch(got=%d,want=%d)", skillName, rec.RunVersion, latestRunVersion)}
+		return false, nil, []string{fmt.Sprintf("runtime_verification_not_ready:%s:run_version_mismatch(got=%d,want=%d)", skillName, rec.RunVersion, latestRunVersion)}
 	}
-	return true, nil
+	return true, []SatisfiedBy{{
+		Kind:        "skill_evidence",
+		Name:        skillName,
+		EvidenceRef: s.evidenceRefs[skillName],
+		Reason:      reason,
+	}}, nil
 }
 
 func hasRollbackDocumentation(root string, change model.Change) bool {

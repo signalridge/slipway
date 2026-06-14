@@ -50,6 +50,23 @@ func governanceActionViews(actions []governance.RequiredAction) []governanceActi
 			Mode:        string(action.Mode),
 			Description: action.Description,
 			Satisfied:   action.Satisfied,
+			SatisfiedBy: governanceActionSatisfactionViews(action.SatisfiedBy),
+		})
+	}
+	return out
+}
+
+func governanceActionSatisfactionViews(src []governance.SatisfiedBy) []governanceActionSatisfactionView {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]governanceActionSatisfactionView, 0, len(src))
+	for _, item := range src {
+		out = append(out, governanceActionSatisfactionView{
+			Kind:        item.Kind,
+			Name:        item.Name,
+			EvidenceRef: item.EvidenceRef,
+			Reason:      item.Reason,
 		})
 	}
 	return out
@@ -59,6 +76,11 @@ func applyGovernanceSurfaceToStatus(readiness progression.GovernanceReadiness, v
 	surface := buildGovernanceSurfaceViewWithReadiness(readiness)
 	view.GovernanceSignals = surface.GovernanceSignals
 	view.ActiveControls = surface.ActiveControls
+	view.RequiredActions = surface.RequiredActions
+}
+
+func applyGovernanceSurfaceToValidate(readiness progression.GovernanceReadiness, view *validateView) {
+	surface := buildGovernanceSurfaceViewWithReadiness(readiness)
 	view.RequiredActions = surface.RequiredActions
 }
 

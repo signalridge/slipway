@@ -46,6 +46,7 @@ type validateView struct {
 	Mode                      string                               `json:"mode,omitempty"`
 	HydrateReferences         []string                             `json:"hydrate_references,omitempty"`
 	ArtifactAmendments        []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
+	RequiredActions           []governanceActionView               `json:"required_actions,omitempty"`
 }
 
 type actionableNextSkillView struct {
@@ -295,6 +296,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)
+	applyGovernanceSurfaceToValidate(readiness, &view)
 	gateDetails := gateStatusFromEvaluations(readiness.GateEvaluations)
 	gateStatus := map[string]string{}
 	for name, gate := range gateDetails {

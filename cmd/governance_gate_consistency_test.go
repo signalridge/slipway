@@ -245,6 +245,39 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 	}
 }
 
+func TestSatisfiedDomainReviewAttributionStaysConsistentAcrossStatusValidateAndNext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "domain review attribution should stay aligned")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeAuthReviewGovernedBundle(t, root, slug)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	materializeWaveExecutionForSummary(t, root, slug)
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:R0=pass"},
+	})
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+
+	requireDomainReviewSatisfiedBySpecCompliance(t, statusResp.RequiredActions)
+	requireDomainReviewSatisfiedBySpecCompliance(t, validateResp.RequiredActions)
+	requireDomainReviewSatisfiedBySpecCompliance(t, nextResp.RequiredActions)
+}
+
 func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -537,4 +570,22 @@ func readGovernedChangeAuthorityBytes(t *testing.T, root, slug string) []byte {
 func requireChangeAuthorityStable(t *testing.T, root, slug string, before []byte) {
 	t.Helper()
 	assert.Equal(t, string(before), string(readGovernedChangeAuthorityBytes(t, root, slug)))
+}
+
+func requireDomainReviewSatisfiedBySpecCompliance(t *testing.T, actions []governanceActionView) {
+	t.Helper()
+
+	for _, action := range actions {
+		if action.ControlID != "domain-review" {
+			continue
+		}
+		require.True(t, action.Satisfied)
+		require.Len(t, action.SatisfiedBy, 1)
+		assert.Equal(t, "skill_evidence", action.SatisfiedBy[0].Kind)
+		assert.Equal(t, "spec-compliance-review", action.SatisfiedBy[0].Name)
+		assert.Contains(t, action.SatisfiedBy[0].EvidenceRef, "verification/spec-compliance-review.yaml")
+		assert.Equal(t, "spec-compliance-review provides the domain-aware review evidence for domain-review", action.SatisfiedBy[0].Reason)
+		return
+	}
+	t.Fatalf("domain-review action not found in %#v", actions)
 }
