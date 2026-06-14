@@ -56,6 +56,93 @@ func TestPlanAuditInputDigestExcludesAssuranceAndIncludesStructuralTasks(t *test
 	assert.Equal(t, realChange.Inputs, changedAssurance.Inputs, "assurance.md changes must not affect the plan-audit digest")
 }
 
+func TestPlanAuditInputDigestIgnoresScaffoldOnlyProseEdits(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		artifact string
+		content  string
+	}{
+		{
+			name:     "intent scaffold-only section",
+			artifact: "intent.md",
+			content:  "# Intent\nship digest freshness\n\n## Deferred Ideas\n<!-- Identified but postponed ideas -->\n",
+		},
+		{
+			name:     "requirements scaffold-only section",
+			artifact: "requirements.md",
+			content:  "# Requirements\nREQ-001 digest freshness\n\n## Requirements\n<!-- Author each requirement here. -->\n",
+		},
+		{
+			name:     "research scaffold-only section",
+			artifact: "research.md",
+			content:  "# Research\ncurrent facts\n\n## Assumptions\n<!-- Assumptions with the evidence that supports them. -->\n",
+		},
+		{
+			name:     "decision scaffold-only section",
+			artifact: "decision.md",
+			content:  "# Decision\nuse digest inputs\n\n## Risk\n<!-- Concrete risks found by inspecting the affected code and contracts. -->\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			change := model.NewChange("plan-audit-prose-scaffold-" + strings.ReplaceAll(tt.name, " ", "-"))
+			require.NoError(t, state.SaveChange(root, change))
+			bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+			before, err := certifiedSkillInputDigest(root, change, SkillPlanAudit, nil)
+			require.NoError(t, err)
+
+			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, tt.artifact), []byte(tt.content), 0o644))
+			after, err := certifiedSkillInputDigest(root, change, SkillPlanAudit, nil)
+			require.NoError(t, err)
+
+			assert.Equal(t, before.Inputs[tt.artifact], after.Inputs[tt.artifact],
+				"scaffold-only edits must not stale %s", tt.artifact)
+		})
+	}
+}
+
+func TestProseFileInputHashTreatsKnownDefaultsAsNonMaterial(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	intentPath := filepath.Join(root, "intent.md")
+
+	require.NoError(t, os.WriteFile(intentPath, []byte(`# Intent
+
+## Summary
+Describe the change objective.
+`), 0o644))
+	defaultHash, err := computeProseFileInputHash(intentPath)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(intentPath, []byte(`# Intent
+
+## Summary
+<!-- Summary is still un-authored scaffold. -->
+`), 0o644))
+	commentOnlyHash, err := computeProseFileInputHash(intentPath)
+	require.NoError(t, err)
+	assert.Equal(t, defaultHash, commentOnlyHash,
+		"the engine-owned intent summary default must hash like an empty scaffold section")
+
+	require.NoError(t, os.WriteFile(intentPath, []byte(`# Intent
+
+## Summary
+Ship prose digest materiality.
+`), 0o644))
+	authoredHash, err := computeProseFileInputHash(intentPath)
+	require.NoError(t, err)
+	assert.NotEqual(t, defaultHash, authoredHash,
+		"unknown non-empty authored prose must remain material")
+}
+
 func TestGovernedSkillInputDigestsCoverStageAuthorities(t *testing.T) {
 	t.Parallel()
 
