@@ -86,8 +86,10 @@ func TestRunFromRootReportsBoundElsewhere(t *testing.T) {
 
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
+		normalizedWorktreePath, normalizeErr := state.NormalizePath(worktreePath)
+		require.NoError(t, normalizeErr)
 		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
 		assert.Contains(t, cliErr.Remediation, "--change run-bound-change")
-		assert.Contains(t, cliErr.Remediation, worktreePath)
+		assert.Contains(t, cliErr.Remediation, normalizedWorktreePath)
 	})
 }

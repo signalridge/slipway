@@ -19,6 +19,10 @@ extract_json_string_field() {
   printf '%s' "${input}" | sed -nE 's/.*"'"${field}"'"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1
 }
 
+unescape_json_string() {
+  printf '%s' "$1" | sed -e 's/\\"/"/g' -e 's/\\\\/\\/g'
+}
+
 format_bound_worktree_handoff() {
   local output
   local normalized
@@ -31,6 +35,8 @@ format_bound_worktree_handoff() {
   fi
   slug="$(extract_json_string_field "${normalized}" "slug")"
   worktree_path="$(extract_json_string_field "${normalized}" "worktree_path")"
+  slug="$(unescape_json_string "${slug}")"
+  worktree_path="$(unescape_json_string "${worktree_path}")"
   if [ -z "${slug}" ] || [ -z "${worktree_path}" ]; then
     return 1
   fi
