@@ -48,6 +48,55 @@ func TestProvisionWorktreeHostSurfaces_CopiesThirdPartyAndRegenerates(t *testing
 	assert.NoDirExists(t, filepath.Join(worktreeRoot, ".gemini"))
 }
 
+func TestProvisionWorktreeHostSurfaces_DoesNotMutateCodexHome(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	repoRoot := t.TempDir()
+	worktreeRoot := filepath.Join(t.TempDir(), "wt")
+	require.NoError(t, os.MkdirAll(worktreeRoot, 0o755))
+
+	// A .codex adapter is present, so provisioning generates its worktree-local
+	// skills — but Codex command prompts are host-global, and provisioning one
+	// worktree must never rewrite them.
+	writeUnder(t, repoRoot, ".codex/skills/golang-foo/SKILL.md", "third party codex")
+
+	require.NoError(t, ProvisionWorktreeHostSurfaces(repoRoot, worktreeRoot))
+
+	// Worktree-local Codex skills are generated.
+	assert.DirExists(t, filepath.Join(worktreeRoot, ".codex/skills/slipway-wave-orchestration"))
+	// Host-global Codex prompts under CODEX_HOME must be untouched.
+	promptsDir := filepath.Join(codexHome, "prompts")
+	entries, err := os.ReadDir(promptsDir)
+	if err != nil {
+		require.True(t, os.IsNotExist(err),
+			"CODEX_HOME/prompts must not exist after provisioning, got: %v", err)
+		return
+	}
+	assert.Empty(t, entries,
+		"provisioning a worktree must not write any host-global Codex prompt")
+}
+
+func TestProvisionWorktreeHostSurfaces_DropsStaleManagedSlipwaySkill(t *testing.T) {
+	repoRoot := t.TempDir()
+	worktreeRoot := filepath.Join(t.TempDir(), "wt")
+	require.NoError(t, os.MkdirAll(worktreeRoot, 0o755))
+
+	// A managed-looking slipway-* skill that the current generator does NOT emit
+	// (e.g. a skill removed in a newer Slipway). On a first-time provision the
+	// worktree has no .adapter-generated sentinel, so the gated prune cannot run;
+	// the copy step must therefore never carry it in.
+	writeUnder(t, repoRoot, ".claude/skills/slipway-removed-legacy-skill/SKILL.md", "STALE MANAGED SKILL")
+	writeUnder(t, repoRoot, ".claude/skills/golang-foo/SKILL.md", "third party")
+
+	require.NoError(t, ProvisionWorktreeHostSurfaces(repoRoot, worktreeRoot))
+
+	assert.NoDirExists(t, filepath.Join(worktreeRoot, ".claude/skills/slipway-removed-legacy-skill"),
+		"a stale managed slipway-* skill must not be copied into a freshly provisioned worktree")
+	// The third-party neighbour is still copied, and real generated skills exist.
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/skills/golang-foo/SKILL.md"))
+	assert.DirExists(t, filepath.Join(worktreeRoot, generatedSlipwaySkillDir))
+}
+
 func TestProvisionWorktreeHostSurfaces_ExcludesWorktreesLocksAndSourceSentinel(t *testing.T) {
 	repoRoot := t.TempDir()
 	worktreeRoot := filepath.Join(t.TempDir(), "wt")
