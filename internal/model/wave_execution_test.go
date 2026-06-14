@@ -147,7 +147,7 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 			record: VerificationRecord{
 				References: []string{
 					"dispatch_mode:wave=1:degraded_sequential",
-					"dispatch_mode:wave=1:parallel",
+					"dispatch_mode:wave=1:parallel_subagents",
 				},
 			},
 		},
@@ -156,7 +156,7 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 			record: VerificationRecord{
 				References: []string{
 					"dispatch_mode:wave=1:degraded_sequential",
-					"dispatch_mode:wave=1:parallel",
+					"dispatch_mode:wave=1:parallel_subagents",
 					"dispatch_mode:wave=1:degraded_sequential",
 				},
 			},
@@ -179,6 +179,105 @@ func TestWaveDispatchModesFromVerification(t *testing.T) {
 
 			got, err := WaveDispatchModesFromVerification(tt.record)
 			require.NoError(t, err)
+			if tt.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExecutorAgentHandlesFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		record VerificationRecord
+		want   map[int]map[string]string
+	}{
+		{
+			name: "single handle",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=1:task=t-01:agent-abc"},
+			},
+			want: map[int]map[string]string{1: {"t-01": "agent-abc"}},
+		},
+		{
+			name: "multiple waves and tasks",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:agent-a",
+					"executor_agent:wave=1:task=t-02:agent-b",
+					"executor_agent:wave=2:task=t-03:agent-c",
+				},
+			},
+			want: map[int]map[string]string{
+				1: {"t-01": "agent-a", "t-02": "agent-b"},
+				2: {"t-03": "agent-c"},
+			},
+		},
+		{
+			name: "colon inside handle is preserved",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=1:task=t-01:agent:nested:id"},
+			},
+			want: map[int]map[string]string{1: {"t-01": "agent:nested:id"}},
+		},
+		{
+			name: "conflicting handles for the same wave and task collapse to empty",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:agent-old",
+					"executor_agent:wave=1:task=t-01:agent-new",
+				},
+			},
+			// REQ-005 requires exactly one handle per planned task; two different
+			// handles are ambiguous, so the parser fails closed to an empty handle
+			// that ExecutorAgentBlockers treats as missing.
+			want: map[int]map[string]string{1: {"t-01": ""}},
+		},
+		{
+			name: "a repeated identical handle is idempotent",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:agent-a",
+					"executor_agent:wave=1:task=t-01:agent-a",
+				},
+			},
+			want: map[int]map[string]string{1: {"t-01": "agent-a"}},
+		},
+		{
+			name: "unrelated reference is ignored",
+			record: VerificationRecord{
+				References: []string{"dispatch_mode:wave=1:parallel_subagents", "tool:go-test"},
+			},
+		},
+		{
+			name: "missing handle is ignored",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=1:task=t-01:"},
+			},
+		},
+		{
+			name: "missing task segment is ignored",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=1:t-01:agent-a"},
+			},
+		},
+		{
+			name: "invalid wave index is ignored",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=0:task=t-01:agent-a"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ExecutorAgentHandlesFromVerification(tt.record)
 			if tt.want == nil {
 				assert.Nil(t, got)
 				return

@@ -48,6 +48,32 @@ map content out of the coordinator context.
 - A target-overlap preflight failure records `dispatch_blocker:wave=<wave_index>:target_overlap`.
 - Notes explain the decision, but structured references are the reviewable dispatch evidence.
 
+## Target/Changed-File Safety Model And Engine Blockers
+- A wave fans out into a single shared worktree; there is no per-executor git
+  worktree isolation. Each task's declared `target_files` plus each executor's
+  exhaustive `changed_files` are the safety model — that is the only boundary
+  preventing same-wave executors from clobbering each other's writes.
+- The engine signals, records, and gates on this evidence; it does not spawn or
+  execute agents (this host owns the dispatch). When recorded evidence is
+  missing or violates the model, the engine records an open blocker and the
+  change fails closed to rerun, review, and corrected evidence.
+- `task_changed_file_scope_escape:<task_id>:<file>` — a task's `changed_files`
+  escaped its declared `target_files`. The engine audits this after results, so
+  the target-overlap preflight and the post-result changed-file conflict check
+  keep you clear of it; recover by fixing `target_files` or the change and
+  re-recording evidence.
+- `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
+  in the same `parallel: true` wave wrote the same file. Sequential waves
+  sharing a file are allowed; a parallel overlap must be rescoped or replanned.
+- `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
+  parallel wave recorded no dispatch-mode evidence. Silent parallel inference is
+  gone: record `dispatch_mode:wave=<wave_index>:parallel_subagents` or
+  `dispatch_mode:wave=<wave_index>:degraded_sequential` for the wave.
+- `executor_agent_missing:<wave_index>:<task_id>` — a `parallel_subagents` wave
+  is missing a per-task executor handle. Record exactly one
+  `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` per planned task;
+  `degraded_sequential` and non-parallel waves require no handles.
+
 ## Wait And Recovery
 - Wait for every spawned executor handle before accepting the wave.
 - If an executor handle is lost, record `executor_handle_lost` with the known handles and last observed state, then ask for operator direction.
