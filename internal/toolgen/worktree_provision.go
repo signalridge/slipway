@@ -187,5 +187,5 @@ func copyHostAdapterFileNoClobber(srcPath, dstPath string, d fs.DirEntry) error 
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 -- preserves the source mode so adapter hooks remain executable.
+	return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 G703 -- preserves the source mode so adapter hooks remain executable; dstPath is filepath.Join(worktreeRoot, toolRel, rel) where rel comes from filepath.Rel against the walked source tree, so the write stays within the worktree's host-adapter surface.
 }
