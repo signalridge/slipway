@@ -7,9 +7,10 @@ import (
 )
 
 type governanceSummaryView struct {
-	BlockedBy       []string `json:"blocked_by,omitempty"`
-	RequiredActions []string `json:"required_actions,omitempty"`
-	AuthorityRefs   []string `json:"authority_refs,omitempty"`
+	BlockedBy        []string               `json:"blocked_by,omitempty"`
+	RequiredActions  []string               `json:"required_actions,omitempty"`
+	SatisfiedActions []governanceActionView `json:"satisfied_actions,omitempty"`
+	AuthorityRefs    []string               `json:"authority_refs,omitempty"`
 }
 
 type statusJSONView struct {
@@ -45,6 +46,7 @@ func (view statusJSONView) MarshalJSON() ([]byte, error) {
 func buildGovernanceSummaryView(view statusView) *governanceSummaryView {
 	var blockedBy []string
 	var requiredActions []string
+	var satisfiedActions []governanceActionView
 	seenControls := map[string]struct{}{}
 	seenActions := map[string]struct{}{}
 
@@ -81,6 +83,9 @@ func buildGovernanceSummaryView(view statusView) *governanceSummaryView {
 	// independent-review at S2) as blockers, contradicting the real gate.
 	for _, action := range view.RequiredActions {
 		if action.Satisfied {
+			if len(action.SatisfiedBy) > 0 {
+				satisfiedActions = append(satisfiedActions, action)
+			}
 			continue
 		}
 		addAction(action.Description)
@@ -94,14 +99,15 @@ func buildGovernanceSummaryView(view statusView) *governanceSummaryView {
 		addAction(description)
 	}
 
-	if len(blockedBy) == 0 && len(requiredActions) == 0 {
+	if len(blockedBy) == 0 && len(requiredActions) == 0 && len(satisfiedActions) == 0 {
 		return nil
 	}
 
 	summary := &governanceSummaryView{
-		BlockedBy:       blockedBy,
-		RequiredActions: requiredActions,
-		AuthorityRefs:   governanceSummaryAuthorityRefs(view),
+		BlockedBy:        blockedBy,
+		RequiredActions:  requiredActions,
+		SatisfiedActions: satisfiedActions,
+		AuthorityRefs:    governanceSummaryAuthorityRefs(view),
 	}
 	return summary
 }

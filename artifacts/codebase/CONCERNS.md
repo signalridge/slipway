@@ -1,22 +1,9 @@
 # Concerns
 
-Re-authored for change
-`resolve-github-issue-155-knuth-invariant-overwrite-only-own`
-(GitHub issue #155).
+Re-authored for change `explain-domain-review-mapping` (GitHub issue #203).
 
-- False-negative freshness risk: if the classifier treats human prose as
-  scaffold/default, stale plan or research evidence may be accepted. The
-  implementation must include unknown non-empty prose in the digest.
-- False-positive reopen risk: if authoring comments or empty scaffold-only
-  sections stay in the digest, engine-owned scaffold refreshes can reopen
-  downstream stages without a material change.
-- Contract drift risk: template-derived defaults and hand-maintained phrase
-  lists can diverge. Prefer deriving scaffold defaults from embedded templates
-  where possible, and keep any literal known defaults narrow and tested.
-- Artifact-stage risk: `intent.md` is engine-scaffolded at creation, while
-  `requirements.md`, `research.md`, `decision.md`, `tasks.md`, and
-  `assurance.md` are skill-authored/deferred. A one-size-fits-all overwrite
-  rule would be too broad.
-- Recovery risk: stale recovery removes verification records from the target
-  stage onward. Digest materiality changes must be covered before relying on
-  `stale_evidence_recovery.go` to reopen correctly.
+- Traceability risk: preserving only `Satisfied bool` makes a control appear to satisfy itself when another review skill is the actual evidence source.
+- Compatibility risk: changing existing JSON fields would break consumers; prefer additive fields such as `satisfied_by`.
+- False-positive explanation risk: an explanation must only appear when the action is actually satisfied by current passing evidence. Stale or missing run-summary cases must remain unsatisfied and continue to show diagnostics.
+- Scope risk: requiring a new `domain-review.yaml` would change policy semantics and expand the issue beyond user-facing traceability unless code proves the current mapping is wrong.
+- Surface consistency risk: status, validate, and next share `cmd/governance_surface.go`; fixing only one command would leave the black-box behavior inconsistent.

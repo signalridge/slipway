@@ -1,54 +1,27 @@
 # Architecture
 
-Re-authored for change
-`resolve-github-issue-155-knuth-invariant-overwrite-only-own`
-(GitHub issue #155).
+Re-authored for change `explain-domain-review-mapping` (GitHub issue #203).
 
-Question: which Slipway freshness/digest seams should classify prose artifact
-edits as engine-default/scaffold versus human material while preserving
-fail-closed reopen behavior?
+Question: where should Slipway preserve and expose the evidence source that satisfies a governance control?
 
 ## Affected Seams
 
-- `internal/engine/progression/evidence_digests.go:36` through
-  `internal/engine/progression/evidence_digests.go:79` is the skill input
-  digest switch. `intake-clarification` consumes `intent.md`,
-  `research-orchestration` consumes `intent.md` plus `research.md`, and
-  `plan-audit` consumes the planning artifacts.
-- `internal/engine/progression/evidence_digests.go:388` through
-  `internal/engine/progression/evidence_digests.go:423` is the plan-audit
-  artifact input collector. It hashes `intent.md`, `requirements.md`,
-  `research.md`, and `decision.md`, while `tasks.md` already uses
-  `wave.TaskPlanStructuralHash`.
-- `internal/engine/progression/evidence_digests.go:426` through
-  `internal/engine/progression/evidence_digests.go:448` is the prose file
-  digest seam. `computeProseFileInputHash` currently hashes raw content, so
-  authoring comments and scaffold-only sections can churn evidence digests.
-- `internal/engine/progression/stale_evidence_recovery.go:59` through
-  `internal/engine/progression/stale_evidence_recovery.go:93` turns digest
-  drift into the earliest stale evidence recovery target. A digest false
-  positive here reopens earlier lifecycle stages.
-- `internal/engine/artifact/manager.go:152` through
-  `internal/engine/artifact/manager.go:167` exposes artifact templates, and
-  `internal/engine/artifact/manager.go:329` through
-  `internal/engine/artifact/manager.go:349` documents which artifacts are
-  skill-authored rather than always engine-scaffolded.
+- `internal/engine/governance/actions.go:7-14` defines `RequiredAction`. It currently stores `control_id`, `mode`, `scope`, `description`, and `satisfied`, but no reason or evidence source for a satisfied action.
+- `internal/engine/governance/actions.go:45-48` maps `domain-review` to `DomainReviewDone`. The policy decision is already abstracted as input to this layer.
+- `internal/engine/governance/actions.go:73-85` defines `RequiredActionsInput`. It currently accepts boolean satisfaction inputs, not the source evidence that produced them.
+- `internal/engine/governance/runtime_actions.go:15-20` defines runtime skill constants. `skillSpecComplianceReview` is the evidence skill used for domain review satisfaction.
+- `internal/engine/governance/runtime_actions.go:39-44` computes review-side satisfaction. `domainReviewDone` comes from `skillSatisfied(skillSpecComplianceReview, ...)`, while independent review comes from `skillCodeQualityReview`.
+- `internal/engine/governance/runtime_actions.go:64-75` passes only booleans into `ResolveRequiredActions`, losing the evidence-source mapping before CLI views are built.
+- `cmd/governance_surface.go:42-56` converts `governance.RequiredAction` into CLI `governanceActionView`; it cannot expose information not present on the engine action.
+- `cmd/status.go:94-99` defines the JSON shape used by status, validate, and next governance surfaces for each required action.
 
 ## Dependency Flow
 
-Governed artifacts live in `artifacts/changes/<slug>/`. Skill verification is
-accepted through `slipway evidence skill`, which stamps current input digests.
-Later readiness checks recompute those digests and compare named inputs; changed
-inputs become `required_skill_stale:<skill>:<artifact>` blockers that can reopen
-the change to the earliest affected stage.
+`EvaluateGovernanceReadiness` computes runtime required actions, command builders map those actions through `cmd/governance_surface.go`, and `status`, `validate`, and `next --json --diagnostics` emit the resulting `required_actions` array. The issue #203 gap is not in control derivation; it is in runtime evidence attribution being reduced to a boolean before the JSON surface is rendered.
 
 ## Constraints And Invariants
 
-- Evidence freshness remains fail-closed. Unknown or material content must keep
-  changing the digest and reopening stale evidence.
-- `tasks.md` structural hashing is intentionally separate and already excludes
-  checkbox-only and `target_files`-only churn for plan-audit.
-- Prose artifact materiality should be derived from repo-owned scaffold/template
-  knowledge, not from mutable file timestamps.
-- GSD is a behavioral reference only. Slipway must not gain a runtime dependency
-  on the local GSD checkout.
+- Preserve current policy semantics: `spec-compliance-review` is allowed to satisfy `domain-review` when the verification is passing and current for the latest execution summary.
+- Keep stale or missing execution-summary behavior fail-closed; stale `spec-compliance-review` must not satisfy `domain-review`.
+- Add JSON fields in an additive way so existing consumers of `control_id`, `mode`, `description`, and `satisfied` keep working.
+- Keep action blockers based on unsatisfied blocking actions only; satisfied action explanations should not create new blockers.
