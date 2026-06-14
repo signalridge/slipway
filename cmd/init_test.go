@@ -383,6 +383,24 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 	})
 }
 
+// TestInitCommandCodexPrintsInvocationSurface asserts the init success path
+// surfaces the actual Codex invocation surface (issue #210), so a user does not
+// have to inspect source or docs to discover how to invoke the generated skills.
+func TestInitCommandCodexPrintsInvocationSurface(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	withWorkspace(t, root, func() {
+		stdout, stderr, err := runRootCommand([]string{"init", "--tools", "codex"})
+		require.NoError(t, err, "stderr: %s", stderr)
+
+		cfg, ok := toolgen.LookupTool("codex")
+		require.True(t, ok)
+		assert.Contains(t, stdout, "codex: "+cfg.InvocationSummary())
+		assert.Contains(t, stdout, "$slipway-<command>")
+		assert.Contains(t, stdout, "/skills")
+	})
+}
+
 func writeGeneratedAdapterMarkerForTest(t *testing.T, root, toolID string) {
 	t.Helper()
 

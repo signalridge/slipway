@@ -2643,3 +2643,31 @@ func runCommandInDir(dir, name string, args ...string) (string, error) {
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
+
+// TestToolConfigInvocationSummary locks the per-adapter invocation surface string
+// that `slipway init` prints at setup time (issue #210), so the discoverable
+// surface can never silently regress to the retired prompt-based description.
+func TestToolConfigInvocationSummary(t *testing.T) {
+	t.Run("command skill surface", func(t *testing.T) {
+		cfg := ToolConfig{CommandSkillSurface: true}
+		assert.Equal(t,
+			"invoke skills: $slipway (entry), $slipway-<command> per command, or /skills",
+			cfg.InvocationSummary())
+	})
+	t.Run("slash-colon commands", func(t *testing.T) {
+		cfg := ToolConfig{TriggerPrefix: "/slipway", TriggerStyle: "slash-colon"}
+		assert.Equal(t, "invoke commands as /slipway:<command>", cfg.InvocationSummary())
+	})
+	t.Run("mention commands", func(t *testing.T) {
+		cfg := ToolConfig{TriggerPrefix: "/slipway-", TriggerStyle: "slash-hyphen"}
+		assert.Equal(t, "invoke commands as /slipway-<command>", cfg.InvocationSummary())
+	})
+	t.Run("codex adapter routes to skills", func(t *testing.T) {
+		cfg, ok := LookupTool("codex")
+		require.True(t, ok)
+		summary := cfg.InvocationSummary()
+		assert.Contains(t, summary, "invoke skills:")
+		assert.Contains(t, summary, "$slipway-<command>")
+		assert.NotContains(t, summary, "prompts")
+	})
+}
