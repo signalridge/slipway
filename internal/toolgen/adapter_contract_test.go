@@ -161,7 +161,8 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 	// Codex exposes commands as per-command skills, not a flat command-surface
 	// directory. The skills dir also holds host/governance skills, so assert each
 	// frozen command id has its skill file rather than a strict directory match,
-	// and assert no retired global prompt files remain under $CODEX_HOME/prompts.
+	// and assert no retired generated command prompts remain under
+	// $CODEX_HOME/prompts.
 	if contract.CommandStyle == "skill" {
 		for _, id := range frozenAdapterCommandIDs {
 			relPath := contract.commandPath(id)
@@ -170,7 +171,7 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 			require.NoError(t, err, "missing generated command skill for %s/%s", toolID, id)
 			assert.Contains(t, string(content), contract.commandContentMarker(id), "%s/%s contract marker drifted", toolID, id)
 		}
-		assertNoFrozenCodexPrompts(t, codexHome)
+		assertNoFrozenCodexCommandPrompts(t, codexHome)
 		return
 	}
 
@@ -191,20 +192,16 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 	}
 }
 
-// assertNoFrozenCodexPrompts asserts the retired global Codex prompt surface is
-// absent: $CODEX_HOME/prompts holds no slipway-* entries (directory absent or
-// empty of them).
-func assertNoFrozenCodexPrompts(t *testing.T, codexHome string) {
+// assertNoFrozenCodexCommandPrompts asserts the retired generated Codex command
+// prompt files are absent. It deliberately checks the command registry filenames
+// rather than the whole slipway-* namespace because $CODEX_HOME/prompts is user
+// state and may contain unrelated prompts with the same prefix.
+func assertNoFrozenCodexCommandPrompts(t *testing.T, codexHome string) {
 	t.Helper()
 	promptsDir := filepath.Join(codexHome, "prompts")
-	entries, err := os.ReadDir(promptsDir)
-	if err != nil {
-		assert.True(t, os.IsNotExist(err), "unexpected error reading codex prompts dir: %v", err)
-		return
-	}
-	for _, entry := range entries {
-		assert.False(t, strings.HasPrefix(entry.Name(), "slipway-"),
-			"codex must not write retired global prompt file %q", entry.Name())
+	for _, id := range frozenAdapterCommandIDs {
+		_, err := os.Stat(filepath.Join(promptsDir, "slipway-"+id+".md"))
+		assert.True(t, os.IsNotExist(err), "codex must not write retired generated command prompt for %s", id)
 	}
 }
 

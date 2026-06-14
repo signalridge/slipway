@@ -1204,6 +1204,23 @@ func TestCodexCommandSkillsUseCommandSpecificPrerequisites(t *testing.T) {
 	assert.NotContains(t, string(initSkill), ".slipway.yaml` must exist")
 }
 
+func TestCodexCommandSkillsUseCommandRegistryArguments(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	for _, id := range commandIDs() {
+		body, err := os.ReadFile(codexCommandSkillPath(root, id))
+		require.NoError(t, err, "missing codex command skill for %s", id)
+
+		args := CommandArguments(id)
+		require.NotEmpty(t, args, "registry Arguments missing for command %s", id)
+		assert.Contains(t, string(body), args,
+			"codex command skill %s must render registry Arguments", id)
+	}
+}
+
 func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -1375,9 +1392,9 @@ func TestCodexCommandSkills(t *testing.T) {
 		assert.Contains(t, string(body), "description:", "codex command skill %s missing description frontmatter", id)
 	}
 
-	// No global prompt files must be written under $CODEX_HOME/prompts: the
-	// directory is either absent or carries no slipway- entries.
-	assertNoCodexSlipwayPrompts(t, codexHome)
+	// No generated legacy command prompt files must be written under
+	// $CODEX_HOME/prompts.
+	assertNoCodexLegacyCommandPrompts(t, codexHome)
 
 	// Verify refresh protection.
 	require.NoError(t, os.WriteFile(skillPath, []byte("custom"), 0o644))
@@ -1391,20 +1408,40 @@ func TestCodexCommandSkills(t *testing.T) {
 	assert.NotEqual(t, "custom", string(refreshedContent), "command skill should be overwritten with refresh")
 }
 
-// assertNoCodexSlipwayPrompts asserts that no slipway-* global prompt files
-// exist under $CODEX_HOME/prompts: either the directory is absent or it
-// contains no slipway- entries.
-func assertNoCodexSlipwayPrompts(t *testing.T, codexHome string) {
+func TestCodexRefreshPrunesOnlyLegacyGeneratedCommandPrompts(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	promptsDir := filepath.Join(codexHome, "prompts")
+	require.NoError(t, os.MkdirAll(promptsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-new.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-run.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-personal.md"), []byte("user prompt"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "not-slipway.md"), []byte("user prompt"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	assertNoCodexLegacyCommandPrompts(t, codexHome)
+
+	personal, err := os.ReadFile(filepath.Join(promptsDir, "slipway-personal.md"))
+	require.NoError(t, err, "refresh must not delete user-owned slipway-* prompts outside the command registry")
+	assert.Equal(t, "user prompt", string(personal))
+	other, err := os.ReadFile(filepath.Join(promptsDir, "not-slipway.md"))
+	require.NoError(t, err, "refresh must not delete unrelated prompts")
+	assert.Equal(t, "user prompt", string(other))
+}
+
+// assertNoCodexLegacyCommandPrompts asserts that no retired generated Codex
+// command prompt files exist under $CODEX_HOME/prompts. It checks the command
+// registry filenames exactly instead of the whole slipway-* namespace because
+// that directory is user-owned host state.
+func assertNoCodexLegacyCommandPrompts(t *testing.T, codexHome string) {
 	t.Helper()
 	promptsDir := filepath.Join(codexHome, "prompts")
-	entries, err := os.ReadDir(promptsDir)
-	if err != nil {
-		assert.True(t, os.IsNotExist(err), "unexpected error reading codex prompts dir: %v", err)
-		return
-	}
-	for _, entry := range entries {
-		assert.False(t, strings.HasPrefix(entry.Name(), "slipway-"),
-			"codex must not write global prompt file %q under $CODEX_HOME/prompts", entry.Name())
+	for _, id := range commandIDs() {
+		_, err := os.Stat(filepath.Join(promptsDir, "slipway-"+id+".md"))
+		assert.True(t, os.IsNotExist(err), "codex must not write retired generated command prompt for %s", id)
 	}
 }
 

@@ -6,6 +6,13 @@ tier: "{{.Tier}}"
 surface: "skill"
 ---
 {{ include .BodyTemplate . }}
+{{- if .Arguments }}
+
+## Arguments
+```text
+{{ .Arguments }}
+```
+{{- end }}
 {{- if .Prerequisites }}
 
 ## Prerequisites

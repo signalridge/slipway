@@ -7,17 +7,16 @@ import (
 )
 
 // TestMain hardens the whole package against the class of bug where a test
-// silently rewrites the developer's real Codex prompt store. Codex prompts are
-// host-global (resolved from $CODEX_HOME/prompts, else ~/.codex/prompts), so any
-// test that generates Codex surfaces without an explicit sandbox would mutate
-// the host. Defaulting CODEX_HOME to a throwaway directory makes that
-// impossible; individual tests still override it with t.Setenv when they need to
-// assert on the generated prompts.
+// silently mutates the developer's real legacy Codex prompt store. Codex command
+// surfaces are project skills now, but refresh still prunes retired host-global
+// slipway-* prompts from $CODEX_HOME/prompts (else ~/.codex/prompts). Defaulting
+// CODEX_HOME to a throwaway directory makes that cleanup safe; individual tests
+// still override it with t.Setenv when they need to assert on legacy cleanup.
 //
 // If the sandbox cannot be established the package aborts rather than running
 // with an unset CODEX_HOME — running on would leave the very escape hatch this
-// guard exists to close, letting a Codex-generating test write to the real
-// ~/.codex store.
+// guard exists to close, letting a Codex-generating test prune the real ~/.codex
+// prompt store.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "slipway-toolgen-codex-home")
 	if err != nil {

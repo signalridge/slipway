@@ -1244,6 +1244,8 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "# Create Governed Change")
 		assert.Contains(t, content, "slipway new")
 		assert.Contains(t, content, `surface: "skill"`)
+		assert.Contains(t, content, "## Arguments")
+		assert.Contains(t, content, "```text\n--json\n```")
 		assert.NotContains(t, content, "argument-hint:")
 		assert.NotContains(t, content, "$ARGUMENTS")
 	})

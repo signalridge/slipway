@@ -53,6 +53,8 @@ func BuildSurfaceManifest() SurfaceManifest {
 		})
 	}
 
+	rows = append(rows, commandSkillRows()...)
+
 	seenSkills := map[string]struct{}{}
 	for _, desc := range governanceSurfaceDescriptors {
 		name := adapterSkillName(desc.ID)
@@ -178,8 +180,32 @@ func jsonContractRows() []SurfaceManifestRow {
 	return rows
 }
 
+func commandSkillRows() []SurfaceManifestRow {
+	rows := []SurfaceManifestRow{}
+	for _, cfg := range Registry() {
+		if !cfg.CommandSkillSurface {
+			continue
+		}
+		for _, id := range commandIDs() {
+			name := adapterSkillName(id)
+			rows = append(rows, SurfaceManifestRow{
+				Kind:   "skill",
+				Name:   name,
+				Source: "internal/toolgen/toolgen.go:commandRegistry",
+				Docs:   "docs/ai-tools.md",
+				Token:  commandSkillDocsToken(id),
+			})
+		}
+	}
+	return rows
+}
+
 func commandSourcePath(commandID string) string {
 	return "cmd/" + strings.ReplaceAll(commandID, "-", "_") + ".go"
+}
+
+func commandSkillDocsToken(commandID string) string {
+	return "$" + adapterSkillName(commandID)
 }
 
 func jsonContractDocsToken(commandID string) string {

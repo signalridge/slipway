@@ -299,16 +299,18 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		})
 	})
 
-	t.Run("codex stale prompt files prune only after successful rewrite", func(t *testing.T) {
+	t.Run("codex legacy command prompts prune only after successful rewrite", func(t *testing.T) {
 		root := t.TempDir()
 		codexHome := t.TempDir()
 		t.Setenv("CODEX_HOME", codexHome)
 
 		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
 
-		stalePrompt := filepath.Join(codexHome, "prompts", "slipway-stale.md")
-		require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
-		require.NoError(t, os.WriteFile(stalePrompt, []byte("stale prompt"), 0o644))
+		legacyPrompt := filepath.Join(codexHome, "prompts", "slipway-new.md")
+		userPrompt := filepath.Join(codexHome, "prompts", "slipway-stale.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPrompt), 0o755))
+		require.NoError(t, os.WriteFile(legacyPrompt, []byte("legacy generated command prompt"), 0o644))
+		require.NoError(t, os.WriteFile(userPrompt, []byte("user prompt"), 0o644))
 
 		blockedSkillDir := filepath.Join(root, ".codex", "skills", "slipway-intake-clarification")
 		require.NoError(t, os.RemoveAll(blockedSkillDir))
@@ -317,14 +319,18 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		err := toolgen.Generate(root, []string{"codex"}, true)
 		require.Error(t, err)
 
-		_, statErr := os.Stat(stalePrompt)
-		require.NoError(t, statErr, "failed codex refresh must not prune stale prompts before rewrite succeeds")
+		_, statErr := os.Stat(legacyPrompt)
+		require.NoError(t, statErr, "failed codex refresh must not prune legacy command prompts before rewrite succeeds")
+		_, statErr = os.Stat(userPrompt)
+		require.NoError(t, statErr, "failed codex refresh must not prune user prompts before rewrite succeeds")
 
 		require.NoError(t, os.Remove(blockedSkillDir))
 		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
 
-		_, statErr = os.Stat(stalePrompt)
-		assert.True(t, os.IsNotExist(statErr), "successful codex refresh must prune stale prompts")
+		_, statErr = os.Stat(legacyPrompt)
+		assert.True(t, os.IsNotExist(statErr), "successful codex refresh must prune legacy generated command prompts")
+		_, statErr = os.Stat(userPrompt)
+		assert.NoError(t, statErr, "successful codex refresh must preserve user-owned slipway-* prompts")
 	})
 
 	t.Run("typed cli error for fail-closed init", func(t *testing.T) {

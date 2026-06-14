@@ -352,4 +352,8 @@ In a repository initialized with adapters, inspect generated files:
 find .claude .codex .cursor .gemini .opencode -maxdepth 3 -type f 2>/dev/null
 ```
 
-Codex prompts are generated in `$CODEX_HOME/prompts/` if `CODEX_HOME` is set, otherwise under `~/.codex/prompts/`.
+Codex command surfaces are generated as skills under
+`.codex/skills/slipway-<command>/SKILL.md`. `slipway init --tools codex
+--refresh` also removes legacy generated command prompt files from
+`$CODEX_HOME/prompts/` (or `~/.codex/prompts/` when `CODEX_HOME` is unset) so
+the retired command surface does not linger.

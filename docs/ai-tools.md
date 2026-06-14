@@ -18,7 +18,7 @@
 | `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `.gemini/commands/slipway/*.toml` | `/slipway-<command>` |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `.opencode/commands/slipway-*.md` | `/slipway-<command>` |
 
-Codex commands are generated as discoverable per-command skills under `.codex/skills/slipway-<command>/SKILL.md` (invoked `$slipway-<command>` or via `/skills`). Slipway no longer writes global prompt files, and `--refresh` removes any left by older versions.
+Codex commands are generated as discoverable per-command skills under `.codex/skills/slipway-<command>/SKILL.md` (invoked `$slipway-<command>` or via `/skills`). Slipway no longer writes global prompt files, and `--refresh` removes the legacy generated command prompts left by older versions.
 
 ## Generate Adapters
 
@@ -51,33 +51,33 @@ on Claude, Cursor, Gemini, and OpenCode, and a per-command skill
 
 Core commands:
 
-- `new`
-- `next`
-- `run`
-- `status`
-- `done`
+- `new` (`$slipway-new`)
+- `next` (`$slipway-next`)
+- `run` (`$slipway-run`)
+- `status` (`$slipway-status`)
+- `done` (`$slipway-done`)
 
 Situational commands:
 
-- `init`
-- `cancel`
-- `delete`
-- `review`
-- `validate`
-- `checkpoint`
-- `preset`
-- `pivot`
-- `abort`
-- `repair`
-- `evidence` (the wave-orchestration host records task evidence via `slipway evidence task ...`)
+- `init` (`$slipway-init`)
+- `cancel` (`$slipway-cancel`)
+- `delete` (`$slipway-delete`)
+- `review` (`$slipway-review`)
+- `validate` (`$slipway-validate`)
+- `checkpoint` (`$slipway-checkpoint`)
+- `preset` (`$slipway-preset`)
+- `pivot` (`$slipway-pivot`)
+- `abort` (`$slipway-abort`)
+- `repair` (`$slipway-repair`)
+- `evidence` (`$slipway-evidence`; the wave-orchestration host records task evidence via `slipway evidence task ...`)
 
 Diagnostics commands:
 
-- `learn`
-- `stats`
-- `health`
-- `codebase-map`
-- `instructions`
+- `learn` (`$slipway-learn`)
+- `stats` (`$slipway-stats`)
+- `health` (`$slipway-health`)
+- `codebase-map` (`$slipway-codebase-map`)
+- `instructions` (`$slipway-instructions`)
 
 Every CLI command ships a command surface, so an agent never has to fall
 back to guessing one; the workflow skill's command reference indexes them all.
