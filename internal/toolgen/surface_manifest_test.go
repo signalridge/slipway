@@ -35,7 +35,9 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		require.NotEmpty(t, row.Source)
 		require.NotEmpty(t, row.Docs)
 		require.NotEmpty(t, row.Token)
-		rowsByKey[row.Kind+"/"+row.Name] = row
+		key := row.Kind + "/" + row.Name
+		require.NotContains(t, rowsByKey, key, "duplicate manifest row %s", key)
+		rowsByKey[key] = row
 	}
 
 	for _, id := range commandIDs() {
@@ -52,6 +54,20 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		assert.Equal(t, "internal/toolgen/toolgen.go:toolRegistry", row.Source)
 		assert.Equal(t, "docs/ai-tools.md", row.Docs)
 		assert.Equal(t, "`"+cfg.ID+"`", row.Token)
+	}
+
+	for _, cfg := range Registry() {
+		if !cfg.CommandSkillSurface {
+			continue
+		}
+		for _, id := range commandIDs() {
+			name := adapterSkillName(id)
+			row, ok := rowsByKey["skill/"+name]
+			require.Truef(t, ok, "missing %s command skill row for %s", cfg.ID, id)
+			assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", row.Source)
+			assert.Equal(t, "docs/ai-tools.md", row.Docs)
+			assert.Equal(t, commandSkillDocsToken(id), row.Token)
+		}
 	}
 
 	for _, id := range governanceSurfaceIDs(func(governanceSurfaceDescriptor) bool { return true }) {

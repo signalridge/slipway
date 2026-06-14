@@ -182,7 +182,7 @@ Generate host-tool surfaces with `slipway init --tools <id>` (`claude`, `codex`,
 | Tool | Generated surfaces |
 | --- | --- |
 | Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/hooks/slipway-session-start.sh`, `.claude/settings.json` |
-| Codex | `.codex/skills/slipway-*/SKILL.md`, `$CODEX_HOME/prompts/slipway-*.md` |
+| Codex | `.codex/skills/slipway-*/SKILL.md` (entry, per-command, and governance skills) |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start.sh` |
 | Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start.sh`, `.gemini/settings.json` |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start.sh` |
@@ -202,7 +202,7 @@ Exported generated skill rows are pinned by public skill directory:
 `slipway-wave-orchestration/SKILL.md`, and
 `slipway-worktree-preflight/SKILL.md`.
 
-Every tool gets the entry skill. Codex enters the lifecycle through its skill and prompt surfaces; the other four also get an auto-injecting session-start hook (Codex has no session-hook surface to attach to, so its agent pulls governed state via `slipway status --json` instead).
+Every tool gets the entry skill. Codex enters the lifecycle through its skills (the entry skill, one skill per command, and governance host skills); the other four also get an auto-injecting session-start hook (Codex has no session-hook surface to attach to, so its agent pulls governed state via `slipway status --json` instead).
 
 </details>
 

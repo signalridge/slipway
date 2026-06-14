@@ -13,12 +13,12 @@
 | Tool ID | Skills path | Command path | Invocation style |
 | --- | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | `.claude/commands/slipway/*.md` | `/slipway:<command>` |
-| `codex` | `.codex/skills/slipway-*/SKILL.md` | `$CODEX_HOME/prompts/slipway-*.md` | `$slipway-<command>` |
+| `codex` | `.codex/skills/slipway-*/SKILL.md` | `.codex/skills/slipway-*/SKILL.md` | `$slipway-<command>` (or `/skills`) |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `.cursor/commands/*.md` | `/slipway-<command>` |
 | `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `.gemini/commands/slipway/*.toml` | `/slipway-<command>` |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `.opencode/commands/slipway-*.md` | `/slipway-<command>` |
 
-Codex command prompts are global because Codex consumes prompt files from its home directory. If `CODEX_HOME` is unset, Slipway uses `~/.codex`.
+Codex commands are generated as discoverable per-command skills under `.codex/skills/slipway-<command>/SKILL.md` (invoked `$slipway-<command>` or via `/skills`). Slipway no longer writes global prompt files, and `--refresh` removes the legacy generated command prompts left by older versions.
 
 ## Generate Adapters
 
@@ -45,37 +45,41 @@ Slipway detects adapters by its generated markers, not by a bare `.claude`, `.co
 
 ## Generated Command Surface
 
-Core prompt-backed commands:
+Every CLI command ships a command surface on every tool: a command prompt file
+on Claude, Cursor, Gemini, and OpenCode, and a per-command skill
+(`.codex/skills/slipway-<command>/SKILL.md`) on Codex.
 
-- `new`
-- `next`
-- `run`
-- `status`
-- `done`
+Core commands:
 
-Situational prompt-backed commands:
+- `new` (`$slipway-new`)
+- `next` (`$slipway-next`)
+- `run` (`$slipway-run`)
+- `status` (`$slipway-status`)
+- `done` (`$slipway-done`)
 
-- `init`
-- `cancel`
-- `delete`
-- `review`
-- `validate`
-- `checkpoint`
-- `preset`
-- `pivot`
-- `abort`
-- `repair`
-- `evidence` (the wave-orchestration host records task evidence via `slipway evidence task ...`)
+Situational commands:
 
-Diagnostics prompt-backed commands:
+- `init` (`$slipway-init`)
+- `cancel` (`$slipway-cancel`)
+- `delete` (`$slipway-delete`)
+- `review` (`$slipway-review`)
+- `validate` (`$slipway-validate`)
+- `checkpoint` (`$slipway-checkpoint`)
+- `preset` (`$slipway-preset`)
+- `pivot` (`$slipway-pivot`)
+- `abort` (`$slipway-abort`)
+- `repair` (`$slipway-repair`)
+- `evidence` (`$slipway-evidence`; the wave-orchestration host records task evidence via `slipway evidence task ...`)
 
-- `learn`
-- `stats`
-- `health`
-- `codebase-map`
-- `instructions`
+Diagnostics commands:
 
-Every CLI command ships a prompt-backed surface, so an agent never has to fall
+- `learn` (`$slipway-learn`)
+- `stats` (`$slipway-stats`)
+- `health` (`$slipway-health`)
+- `codebase-map` (`$slipway-codebase-map`)
+- `instructions` (`$slipway-instructions`)
+
+Every CLI command ships a command surface, so an agent never has to fall
 back to guessing one; the workflow skill's command reference indexes them all.
 
 ## Surface Manifest

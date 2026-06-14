@@ -56,14 +56,17 @@ func TestProvisionWorktreeHostSurfaces_DoesNotMutateCodexHome(t *testing.T) {
 	require.NoError(t, os.MkdirAll(worktreeRoot, 0o755))
 
 	// A .codex adapter is present, so provisioning generates its worktree-local
-	// skills — but Codex command prompts are host-global, and provisioning one
-	// worktree must never rewrite them.
+	// skills (including the per-command skills under .codex/skills) — but the
+	// retired host-global Codex prompt surface lives outside the worktree, and
+	// provisioning one worktree must never write or purge it.
 	writeUnder(t, repoRoot, ".codex/skills/golang-foo/SKILL.md", "third party codex")
 
 	require.NoError(t, ProvisionWorktreeHostSurfaces(repoRoot, worktreeRoot))
 
 	// Worktree-local Codex skills are generated.
 	assert.DirExists(t, filepath.Join(worktreeRoot, ".codex/skills/slipway-wave-orchestration"))
+	// Worktree-local Codex per-command skills are generated under the worktree root.
+	assert.DirExists(t, filepath.Join(worktreeRoot, ".codex/skills/slipway-new"))
 	// Host-global Codex prompts under CODEX_HOME must be untouched.
 	promptsDir := filepath.Join(codexHome, "prompts")
 	entries, err := os.ReadDir(promptsDir)

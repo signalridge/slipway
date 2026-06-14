@@ -184,14 +184,28 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 	entries, err := os.ReadDir(skillsRoot)
 	require.NoError(t, err)
 
+	// Codex also renders one command skill per Slipway command under the same
+	// SkillsDir. Separate those from the host-skill allowlist so the slim
+	// exported-surface contract still measures only host skills.
+	commandSkillSet := map[string]struct{}{}
+	for _, name := range commandSkillDirNames() {
+		commandSkillSet[name] = struct{}{}
+	}
+
 	var got []string
+	var gotCommandSkills []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(skillsRoot, entry.Name(), "SKILL.md")); err == nil {
-			got = append(got, entry.Name())
+		if _, err := os.Stat(filepath.Join(skillsRoot, entry.Name(), "SKILL.md")); err != nil {
+			continue
 		}
+		if _, ok := commandSkillSet[entry.Name()]; ok {
+			gotCommandSkills = append(gotCommandSkills, entry.Name())
+			continue
+		}
+		got = append(got, entry.Name())
 	}
 
 	expectedSet := map[string]struct{}{}
@@ -215,6 +229,10 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 	}
 	assert.ElementsMatch(t, expected, got)
 	assert.Len(t, got, 23, "host skill count should stay within the slim exported surface target")
+
+	// Every Slipway command must have its own discoverable Codex command skill.
+	assert.ElementsMatch(t, commandSkillDirNames(), gotCommandSkills,
+		"codex command skill dirs must cover exactly the command set")
 }
 
 func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testing.T) {
@@ -546,8 +564,15 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md.tmpl"))
 		assert.True(t, os.IsNotExist(err), "%s: raw workflow template leaked into generated tree", cfg.ID)
 
+		// Adapters that expose commands as project-local prompts must not also
+		// emit a per-command standalone skill. Codex (CommandSkillSurface) is the
+		// exception: it deliberately renders one command skill per command.
 		_, err = os.Stat(filepath.Join(root, cfg.SkillsDir, "slipway-new", "SKILL.md"))
-		assert.True(t, os.IsNotExist(err), "%s: unexpected per-command standalone skill generated", cfg.ID)
+		if cfg.CommandSkillSurface {
+			assert.NoError(t, err, "%s: missing expected per-command skill", cfg.ID)
+		} else {
+			assert.True(t, os.IsNotExist(err), "%s: unexpected per-command standalone skill generated", cfg.ID)
+		}
 	}
 
 	_, err := os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
@@ -563,7 +588,7 @@ func TestGeneratedNewCommandSurfacesDocumentJSONStdinClassification(t *testing.T
 
 	surfaces := map[string]string{
 		"claude": filepath.Join(root, ".claude", "commands", "slipway", "new.md"),
-		"codex":  filepath.Join(codexHome, "prompts", "slipway-new.md"),
+		"codex":  filepath.Join(root, ".codex", "skills", "slipway-new", "SKILL.md"),
 	}
 	for id, path := range surfaces {
 		content, err := os.ReadFile(path)
@@ -758,8 +783,9 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 
 			s := string(content)
 			assert.Contains(t, s, commandDescriptions[id], "%s/%s missing registry description", cfg.ID, id)
-			if cfg.PromptsStyle == "global" {
-				assert.Contains(t, s, "slipway "+id, "%s/%s missing prompt command reference", cfg.ID, id)
+			if cfg.CommandSkillSurface {
+				assert.Contains(t, s, "name: "+adapterSkillName(id), "%s/%s missing command skill name frontmatter", cfg.ID, id)
+				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
 			} else {
 				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
 			}
@@ -1151,56 +1177,74 @@ func TestGeneratedWaveOrchestrationCodexDispatchUsesSpawnAgent(t *testing.T) {
 		"generated dispatch reference must preserve nested-spawner guidance")
 }
 
-func TestCodexPromptsUseCommandSpecificPrerequisites(t *testing.T) {
+func codexCommandSkillPath(root, id string) string {
+	return filepath.Join(root, ".codex", "skills", "slipway-"+id, "SKILL.md")
+}
+
+func TestCodexCommandSkillsUseCommandSpecificPrerequisites(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
-	newPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-new.md"))
+	newSkill, err := os.ReadFile(codexCommandSkillPath(root, "new"))
 	require.NoError(t, err)
-	assert.NotContains(t, string(newPrompt), "an active change must exist")
+	assert.NotContains(t, string(newSkill), "an active change must exist")
 
-	statusPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-status.md"))
+	statusSkill, err := os.ReadFile(codexCommandSkillPath(root, "status"))
 	require.NoError(t, err)
-	assert.NotContains(t, string(statusPrompt), "an active change must exist")
+	assert.NotContains(t, string(statusSkill), "an active change must exist")
 
-	nextPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-next.md"))
+	nextSkill, err := os.ReadFile(codexCommandSkillPath(root, "next"))
 	require.NoError(t, err)
-	assert.Contains(t, string(nextPrompt), "an active change must exist")
+	assert.Contains(t, string(nextSkill), "an active change must exist")
 
-	initPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-init.md"))
+	initSkill, err := os.ReadFile(codexCommandSkillPath(root, "init"))
 	require.NoError(t, err)
-	assert.NotContains(t, string(initPrompt), ".slipway.yaml` must exist")
+	assert.NotContains(t, string(initSkill), ".slipway.yaml` must exist")
 }
 
-func TestCodexPromptsIncludeTierAndSurface(t *testing.T) {
+func TestCodexCommandSkillsUseCommandRegistryArguments(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	for _, id := range commandIDs() {
+		body, err := os.ReadFile(codexCommandSkillPath(root, id))
+		require.NoError(t, err, "missing codex command skill for %s", id)
+
+		args := CommandArguments(id)
+		require.NotEmpty(t, args, "registry Arguments missing for command %s", id)
+		assert.Contains(t, string(body), args,
+			"codex command skill %s must render registry Arguments", id)
+	}
+}
+
+func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	// Core command should have tier: "core".
-	newPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-new.md"))
+	newSkill, err := os.ReadFile(codexCommandSkillPath(root, "new"))
 	require.NoError(t, err)
-	assert.Contains(t, string(newPrompt), `class: "mutation"`, "core command prompt missing class metadata")
-	assert.Contains(t, string(newPrompt), `tier: "core"`, "core command prompt missing tier metadata")
-	assert.Contains(t, string(newPrompt), `surface: "adapter"`, "command prompt missing surface metadata")
+	assert.Contains(t, string(newSkill), `class: "mutation"`, "core command skill missing class metadata")
+	assert.Contains(t, string(newSkill), `tier: "core"`, "core command skill missing tier metadata")
+	assert.Contains(t, string(newSkill), `surface: "skill"`, "command skill missing surface metadata")
 
 	// Query command should preserve class alongside tier and surface metadata.
-	statusPrompt, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-status.md"))
+	statusSkill, err := os.ReadFile(codexCommandSkillPath(root, "status"))
 	require.NoError(t, err)
-	assert.Contains(t, string(statusPrompt), `class: "query"`, "query command prompt missing class metadata")
-	assert.Contains(t, string(statusPrompt), `tier: "core"`, "query command prompt missing tier metadata")
-	assert.Contains(t, string(statusPrompt), `surface: "adapter"`, "query command prompt missing surface metadata")
+	assert.Contains(t, string(statusSkill), `class: "query"`, "query command skill missing class metadata")
+	assert.Contains(t, string(statusSkill), `tier: "core"`, "query command skill missing tier metadata")
+	assert.Contains(t, string(statusSkill), `surface: "skill"`, "query command skill missing surface metadata")
 }
 
 func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"claude", "gemini", "codex"}, true))
 
@@ -1212,7 +1256,7 @@ func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiRun), `class = "mutation"`)
 
-	codexAbort, err := os.ReadFile(filepath.Join(codexHome, "prompts", "slipway-abort.md"))
+	codexAbort, err := os.ReadFile(codexCommandSkillPath(root, "abort"))
 	require.NoError(t, err)
 	assert.Contains(t, string(codexAbort), `class: "mutation"`)
 }
@@ -1315,46 +1359,90 @@ func TestOpenCodeRefreshWithoutGeneratedMarkerDoesNotPruneNestedCommands(t *test
 	assert.NoError(t, err, "refresh without a generated adapter marker must not prune nested user commands")
 }
 
-func TestCodexGlobalPrompts(t *testing.T) {
+func TestCodexCommandSkills(t *testing.T) {
 	root := t.TempDir()
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
-	// Prompt files should be generated at $CODEX_HOME/prompts/.
-	promptPath := filepath.Join(codexHome, "prompts", "slipway-new.md")
-	content, err := os.ReadFile(promptPath)
+	// Command surfaces should be generated as discoverable per-command skills
+	// under .codex/skills/slipway-<command>/SKILL.md.
+	skillPath := codexCommandSkillPath(root, "new")
+	content, err := os.ReadFile(skillPath)
 	require.NoError(t, err)
 
 	s := string(content)
-	// Check frontmatter.
+	// Check injected frontmatter.
+	assert.Contains(t, s, "name: slipway-new")
 	assert.Contains(t, s, "description:")
-	assert.Contains(t, s, "argument-hint:")
-	// Check $ARGUMENTS usage.
-	assert.Contains(t, s, "$ARGUMENTS")
+	assert.Contains(t, s, `surface: "skill"`)
+	// The skill surface must not carry the retired prompt frontmatter.
+	assert.NotContains(t, s, "argument-hint:")
+	assert.NotContains(t, s, "$ARGUMENTS")
 	// Check it contains the body partial content.
 	assert.Contains(t, s, "slipway new")
 
-	// Verify all command IDs have prompt files.
+	// Verify all command IDs have command skills, each carrying its name and
+	// description frontmatter.
 	for _, id := range commandIDs() {
-		path := filepath.Join(codexHome, "prompts", "slipway-"+id+".md")
-		_, err := os.Stat(path)
-		assert.NoError(t, err, "missing codex prompt for %s", id)
+		body, err := os.ReadFile(codexCommandSkillPath(root, id))
+		require.NoError(t, err, "missing codex command skill for %s", id)
+		assert.Contains(t, string(body), "name: slipway-"+id, "codex command skill %s missing name frontmatter", id)
+		assert.Contains(t, string(body), "description:", "codex command skill %s missing description frontmatter", id)
 	}
-	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
-	assert.True(t, os.IsNotExist(err), "workflow entry skill must not be emitted as a codex global prompt")
+
+	// No generated legacy command prompt files must be written under
+	// $CODEX_HOME/prompts.
+	assertNoCodexLegacyCommandPrompts(t, codexHome)
 
 	// Verify refresh protection.
-	require.NoError(t, os.WriteFile(promptPath, []byte("custom"), 0o644))
+	require.NoError(t, os.WriteFile(skillPath, []byte("custom"), 0o644))
 	require.NoError(t, Generate(root, []string{"codex"}, false))
-	customContent, _ := os.ReadFile(promptPath)
-	assert.Equal(t, "custom", string(customContent), "prompt should not be overwritten without refresh")
+	customContent, _ := os.ReadFile(skillPath)
+	assert.Equal(t, "custom", string(customContent), "command skill should not be overwritten without refresh")
 
 	// Verify refresh overwrites.
 	require.NoError(t, Generate(root, []string{"codex"}, true))
-	refreshedContent, _ := os.ReadFile(promptPath)
-	assert.NotEqual(t, "custom", string(refreshedContent), "prompt should be overwritten with refresh")
+	refreshedContent, _ := os.ReadFile(skillPath)
+	assert.NotEqual(t, "custom", string(refreshedContent), "command skill should be overwritten with refresh")
+}
+
+func TestCodexRefreshPrunesOnlyLegacyGeneratedCommandPrompts(t *testing.T) {
+	root := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	promptsDir := filepath.Join(codexHome, "prompts")
+	require.NoError(t, os.MkdirAll(promptsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-new.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-run.md"), []byte("legacy generated command"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-personal.md"), []byte("user prompt"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "not-slipway.md"), []byte("user prompt"), 0o644))
+
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	assertNoCodexLegacyCommandPrompts(t, codexHome)
+
+	personal, err := os.ReadFile(filepath.Join(promptsDir, "slipway-personal.md"))
+	require.NoError(t, err, "refresh must not delete user-owned slipway-* prompts outside the command registry")
+	assert.Equal(t, "user prompt", string(personal))
+	other, err := os.ReadFile(filepath.Join(promptsDir, "not-slipway.md"))
+	require.NoError(t, err, "refresh must not delete unrelated prompts")
+	assert.Equal(t, "user prompt", string(other))
+}
+
+// assertNoCodexLegacyCommandPrompts asserts that no retired generated Codex
+// command prompt files exist under $CODEX_HOME/prompts. It checks the command
+// registry filenames exactly instead of the whole slipway-* namespace because
+// that directory is user-owned host state.
+func assertNoCodexLegacyCommandPrompts(t *testing.T, codexHome string) {
+	t.Helper()
+	promptsDir := filepath.Join(codexHome, "prompts")
+	for _, id := range commandIDs() {
+		_, err := os.Stat(filepath.Join(promptsDir, "slipway-"+id+".md"))
+		assert.True(t, os.IsNotExist(err), "codex must not write retired generated command prompt for %s", id)
+	}
 }
 
 func TestByteStabilityAllTools(t *testing.T) {
@@ -1518,9 +1606,10 @@ func splitFrontmatter(content string) []string {
 }
 
 func commandSurfacePath(root, codexHome string, cfg ToolConfig, id string) (string, string) {
-	if cfg.PromptsStyle == "global" {
-		rel := filepath.ToSlash(filepath.Join("prompts", "slipway-"+id+".md"))
-		return rel, filepath.Join(codexHome, filepath.FromSlash(rel))
+	_ = codexHome
+	if cfg.CommandSkillSurface {
+		rel := filepath.ToSlash(SkillPath(cfg, id))
+		return rel, filepath.Join(root, filepath.FromSlash(rel))
 	}
 
 	ext := ".md"
@@ -2553,4 +2642,32 @@ func runCommandInDir(dir, name string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// TestToolConfigInvocationSummary locks the per-adapter invocation surface string
+// that `slipway init` prints at setup time (issue #210), so the discoverable
+// surface can never silently regress to the retired prompt-based description.
+func TestToolConfigInvocationSummary(t *testing.T) {
+	t.Run("command skill surface", func(t *testing.T) {
+		cfg := ToolConfig{CommandSkillSurface: true}
+		assert.Equal(t,
+			"invoke skills: $slipway (entry), $slipway-<command> per command, or /skills",
+			cfg.InvocationSummary())
+	})
+	t.Run("slash-colon commands", func(t *testing.T) {
+		cfg := ToolConfig{TriggerPrefix: "/slipway", TriggerStyle: "slash-colon"}
+		assert.Equal(t, "invoke commands as /slipway:<command>", cfg.InvocationSummary())
+	})
+	t.Run("mention commands", func(t *testing.T) {
+		cfg := ToolConfig{TriggerPrefix: "/slipway-", TriggerStyle: "slash-hyphen"}
+		assert.Equal(t, "invoke commands as /slipway-<command>", cfg.InvocationSummary())
+	})
+	t.Run("codex adapter routes to skills", func(t *testing.T) {
+		cfg, ok := LookupTool("codex")
+		require.True(t, ok)
+		summary := cfg.InvocationSummary()
+		assert.Contains(t, summary, "invoke skills:")
+		assert.Contains(t, summary, "$slipway-<command>")
+		assert.NotContains(t, summary, "prompts")
+	})
 }

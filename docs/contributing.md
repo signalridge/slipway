@@ -50,7 +50,7 @@ When command metadata, generated paths, hooks, or prompt surfaces change, update
 go test ./internal/toolgen -count=1
 ```
 
-Generated surfaces are contract-tested, including supported tool IDs, command paths, Codex global prompts, OpenCode flat commands, and byte stability.
+Generated surfaces are contract-tested, including supported tool IDs, command paths, Codex command skills and legacy prompt cleanup, OpenCode flat commands, and byte stability.
 
 ## Governance Contracts
 
