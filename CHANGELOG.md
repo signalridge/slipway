@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0](https://github.com/signalridge/slipway/compare/v0.22.2...v0.23.0) (2026-06-14)
+
+
+### Features
+
+* **worktree:** provision host-adapter surfaces into git worktrees ([#208](https://github.com/signalridge/slipway/issues/208)) ([82e49dc](https://github.com/signalridge/slipway/commit/82e49dca2288bd79c16333000f11f01de5ab8721))
+
+
+### Bug Fixes
+
+* **codex:** replace deprecated prompt command surfaces with discoverable skills ([#213](https://github.com/signalridge/slipway/issues/213)) ([9407056](https://github.com/signalridge/slipway/commit/94070569f8d40eb7585d154781f9039774c8ec45))
+
 ## [0.22.2](https://github.com/signalridge/slipway/compare/v0.22.1...v0.22.2) (2026-06-14)
 
 
