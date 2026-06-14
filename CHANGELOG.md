@@ -5,6 +5,25 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0](https://github.com/signalridge/slipway/compare/v0.22.2...v0.23.0) (2026-06-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **wave:** the WaveRun.dispatch_mode public JSON value changes from "parallel" to "parallel_subagents", and the validate/next/status --json blocker-code set gains four fail-closed wave blockers. A started parallel wave without an explicit dispatch_mode token is now blocked instead of silently inferred parallel; record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) plus per-task executor_agent handles, then re-run.
+
+### Features
+
+* **wave:** engine-enforced fail-closed safety nets for shared-worktree parallelism ([#214](https://github.com/signalridge/slipway/issues/214)) ([ee86d70](https://github.com/signalridge/slipway/commit/ee86d70261a0aa455bedea44a5de135243026144))
+* **worktree:** provision host-adapter surfaces into git worktrees ([#208](https://github.com/signalridge/slipway/issues/208)) ([82e49dc](https://github.com/signalridge/slipway/commit/82e49dca2288bd79c16333000f11f01de5ab8721))
+
+
+### Bug Fixes
+
+* **codex:** replace deprecated prompt command surfaces with discoverable skills ([#213](https://github.com/signalridge/slipway/issues/213)) ([9407056](https://github.com/signalridge/slipway/commit/94070569f8d40eb7585d154781f9039774c8ec45))
+* **governance:** surface scope-contract codebase-map exemption + drop rejected run_summary_version=0 ([#207](https://github.com/signalridge/slipway/issues/207), [#211](https://github.com/signalridge/slipway/issues/211)) ([#216](https://github.com/signalridge/slipway/issues/216)) ([c558c17](https://github.com/signalridge/slipway/commit/c558c1785a7e586975b73dad0bcbcab0a81586bc))
+* **hook:** make cross-worktree session handoff informational ([#215](https://github.com/signalridge/slipway/issues/215)) ([62119f2](https://github.com/signalridge/slipway/commit/62119f247423005ee96fe7f60e5aed2580b07f2c))
+
 ## [0.22.2](https://github.com/signalridge/slipway/compare/v0.22.1...v0.22.2) (2026-06-14)
 
 
