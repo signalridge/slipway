@@ -1,6 +1,7 @@
 package tmpl
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -218,6 +219,21 @@ func TestSessionStartHookTreatsBoundWorktreeChangeAsInformational(t *testing.T) 
 	writeHookProjectConfig(t, root)
 	writeHookSharedScopeMarker(t, root, "")
 	boundWorktree := filepath.Join(root, ".worktrees", "bound-change")
+	nextPayload := map[string]any{
+		"error_code":  "change_bound_to_other_worktree",
+		"category":    "precondition_blocked",
+		"message":     "active change is bound to another worktree: bound-change at " + boundWorktree,
+		"remediation": "Use --change bound-change, or cd into " + boundWorktree + ".",
+		"exit_code":   3,
+		"details": map[string]any{
+			"bound_changes": []map[string]string{{
+				"slug":          "bound-change",
+				"worktree_path": boundWorktree,
+			}},
+		},
+	}
+	nextJSON, err := json.Marshal(nextPayload)
+	require.NoError(t, err)
 
 	logPath, binDir := installHookTestSlipwayScript(t, root, fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
@@ -227,11 +243,13 @@ case "$*" in
     printf '%%s\n' %q
     ;;
   "next --json")
-    printf '{"error_code":"change_bound_to_other_worktree","category":"precondition_blocked","message":"active change is bound to another worktree: bound-change at %s","remediation":"Use --change bound-change, or cd into %s.","exit_code":3,"details":{"bound_changes":[{"slug":"bound-change","worktree_path":"%s"}]}}'
+    cat <<'SLIPWAY_NEXT_JSON'
+%s
+SLIPWAY_NEXT_JSON
     exit 3
     ;;
 esac
-`, root, boundWorktree, boundWorktree, boundWorktree))
+`, root, string(nextJSON)))
 	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
 		"ToolID": "claude",
 	})
