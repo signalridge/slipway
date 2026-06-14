@@ -90,10 +90,12 @@ var frozenToolContracts = map[string]frozenToolContract{
 		},
 	},
 	"codex": {
-		CommandBase:  frozenSurfaceCodexHome,
-		CommandRoot:  "prompts",
-		CommandStyle: "global",
-		CommandExt:   ".md",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".codex/skills",
+		CommandStyle:  "skill",
+		CommandExt:    ".md",
+		TriggerPrefix: "$slipway-",
+		TriggerStyle:  "dollar-mention",
 	},
 	"cursor": {
 		CommandBase:   frozenSurfaceRoot,
@@ -156,6 +158,22 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contract frozenToolContract) {
 	t.Helper()
 
+	// Codex exposes commands as per-command skills, not a flat command-surface
+	// directory. The skills dir also holds host/governance skills, so assert each
+	// frozen command id has its skill file rather than a strict directory match,
+	// and assert no retired global prompt files remain under $CODEX_HOME/prompts.
+	if contract.CommandStyle == "skill" {
+		for _, id := range frozenAdapterCommandIDs {
+			relPath := contract.commandPath(id)
+			absPath := contract.resolvePath(root, codexHome, relPath)
+			content, err := os.ReadFile(absPath)
+			require.NoError(t, err, "missing generated command skill for %s/%s", toolID, id)
+			assert.Contains(t, string(content), contract.commandContentMarker(id), "%s/%s contract marker drifted", toolID, id)
+		}
+		assertNoFrozenCodexPrompts(t, codexHome)
+		return
+	}
+
 	expectedPaths := make([]string, 0, len(frozenAdapterCommandIDs))
 	for _, id := range frozenAdapterCommandIDs {
 		expectedPaths = append(expectedPaths, contract.commandPath(id))
@@ -173,9 +191,28 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 	}
 }
 
+// assertNoFrozenCodexPrompts asserts the retired global Codex prompt surface is
+// absent: $CODEX_HOME/prompts holds no slipway-* entries (directory absent or
+// empty of them).
+func assertNoFrozenCodexPrompts(t *testing.T, codexHome string) {
+	t.Helper()
+	promptsDir := filepath.Join(codexHome, "prompts")
+	entries, err := os.ReadDir(promptsDir)
+	if err != nil {
+		assert.True(t, os.IsNotExist(err), "unexpected error reading codex prompts dir: %v", err)
+		return
+	}
+	for _, entry := range entries {
+		assert.False(t, strings.HasPrefix(entry.Name(), "slipway-"),
+			"codex must not write retired global prompt file %q", entry.Name())
+	}
+}
+
 func (c frozenToolContract) commandPath(id string) string {
 	filename := id + c.CommandExt
 	switch c.CommandStyle {
+	case "skill":
+		return filepath.ToSlash(filepath.Join(c.CommandRoot, "slipway-"+id, "SKILL.md"))
 	case "flat", "global":
 		return filepath.ToSlash(filepath.Join(c.CommandRoot, "slipway-"+filename))
 	default:
@@ -200,10 +237,15 @@ func (c frozenToolContract) resolvePath(root, codexHome, relPath string) string 
 }
 
 func (c frozenToolContract) commandContentMarker(id string) string {
-	if c.CommandStyle == "global" {
+	switch c.CommandStyle {
+	case "skill":
+		// Codex command skills carry the injected adapter name frontmatter.
+		return "name: slipway-" + id
+	case "global":
 		return "surface: \"adapter\""
+	default:
+		return c.commandTrigger(id)
 	}
-	return c.commandTrigger(id)
 }
 
 func (c frozenToolContract) commandTrigger(id string) string {

@@ -22,20 +22,24 @@ const skillIndexFileName = "skill-index.md"
 
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
 type ToolConfig struct {
-	ID             string
-	SkillsDir      string
-	CommandsDir    string // "" = no project-local commands (Codex)
-	CommandStyle   string // "nested", "flat", "" = no project-local commands
-	CommandFormat  string // "md" (default), "toml" (Gemini)
-	PromptsStyle   string // "global" (Codex), "" = no global prompts
-	SettingsPath   string
-	SessionEvent   string
-	SessionHook    string
-	PostToolEvent  string
-	PostToolHook   string
-	TriggerPrefix  string
-	TriggerStyle   string
-	AutoDetectPath []string
+	ID            string
+	SkillsDir     string
+	CommandsDir   string // "" = no project-local commands (Codex)
+	CommandStyle  string // "nested", "flat", "" = no project-local commands
+	CommandFormat string // "md" (default), "toml" (Gemini)
+	// CommandSkillSurface, when true, generates one host skill per Slipway command
+	// under SkillsDir (slipway-<command>/SKILL.md) instead of project-local command
+	// prompt files. Codex uses this: its current CLI discovers skills, not the
+	// deprecated custom-prompt surface.
+	CommandSkillSurface bool
+	SettingsPath        string
+	SessionEvent        string
+	SessionHook         string
+	PostToolEvent       string
+	PostToolHook        string
+	TriggerPrefix       string
+	TriggerStyle        string
+	AutoDetectPath      []string
 }
 
 var toolRegistry = map[string]ToolConfig{
@@ -45,7 +49,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".claude/commands",
 		CommandStyle:  "nested",
 		CommandFormat: "md",
-		PromptsStyle:  "",
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".claude/hooks/slipway-session-start.sh",
@@ -63,7 +66,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".cursor/commands",
 		CommandStyle:  "flat",
 		CommandFormat: "md",
-		PromptsStyle:  "",
 		SettingsPath:  "",
 		SessionEvent:  "",
 		SessionHook:   ".cursor/hooks/slipway-session-start.sh",
@@ -74,17 +76,17 @@ var toolRegistry = map[string]ToolConfig{
 		},
 	},
 	"codex": {
-		ID:            "codex",
-		SkillsDir:     ".codex/skills",
-		CommandsDir:   "",
-		CommandStyle:  "",
-		CommandFormat: "",
-		PromptsStyle:  "global",
-		SettingsPath:  "",
-		SessionEvent:  "",
-		SessionHook:   "",
-		TriggerPrefix: "$slipway-",
-		TriggerStyle:  "dollar-mention",
+		ID:                  "codex",
+		SkillsDir:           ".codex/skills",
+		CommandsDir:         "",
+		CommandStyle:        "",
+		CommandFormat:       "",
+		CommandSkillSurface: true,
+		SettingsPath:        "",
+		SessionEvent:        "",
+		SessionHook:         "",
+		TriggerPrefix:       "$slipway-",
+		TriggerStyle:        "dollar-mention",
 		AutoDetectPath: []string{
 			".codex",
 		},
@@ -95,7 +97,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".opencode/commands",
 		CommandStyle:  "flat",
 		CommandFormat: "md",
-		PromptsStyle:  "",
 		SettingsPath:  "",
 		SessionEvent:  "",
 		SessionHook:   ".opencode/hooks/slipway-session-start.sh",
@@ -111,7 +112,6 @@ var toolRegistry = map[string]ToolConfig{
 		CommandsDir:   ".gemini/commands",
 		CommandStyle:  "nested",
 		CommandFormat: "toml",
-		PromptsStyle:  "",
 		SettingsPath:  ".gemini/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".gemini/hooks/slipway-session-start.sh",
@@ -932,18 +932,24 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 		}
 	}
 
-	// Global prompts (Codex: ~/.codex/prompts/) — writes outside project root.
-	// Skipped for worktree-local passes: these prompts are host-global and shared
-	// across every checkout, so provisioning one worktree must not rewrite them.
-	if cfg.PromptsStyle == "global" && !opts.worktreeLocalOnly {
-		if err := generateCodexPrompts(cfg, refresh); err != nil {
-			return err
+	// Command skill surfaces (Codex): one discoverable skill per command under
+	// SkillsDir. Generated for both full and worktree-local passes since they
+	// live under root.
+	if cfg.CommandSkillSurface {
+		for _, id := range commandIDs() {
+			content, err := renderCommandSkill(cfg, id)
+			if err != nil {
+				return fmt.Errorf("render command skill %q for %s: %w", id, cfg.ID, err)
+			}
+			if err := writeDeterministic(filepath.Join(root, SkillPath(cfg, id)), content, refresh); err != nil {
+				return err
+			}
 		}
-		if refresh {
-			// Codex prompts are host-global, so stale slipway-* entries are pruned
-			// only after the current expected prompt set has been written
-			// successfully.
-			if err := cleanupStaleGlobalPrompts(cfg); err != nil {
+		// Legacy migration: prior versions wrote host-global Codex prompt files.
+		// Remove them on refresh so the retired surface does not linger. Skipped
+		// for worktree-local passes (must not mutate shared host state).
+		if refresh && !opts.worktreeLocalOnly {
+			if err := cleanupLegacyCodexPrompts(cfg); err != nil {
 				return err
 			}
 		}
@@ -1063,7 +1069,12 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 			expected[adapterSkillName(name)] = struct{}{}
 		}
 	}
-	managed := generatedSkillDirNameSet()
+	if cfg.CommandSkillSurface {
+		for _, name := range commandSkillDirNames() {
+			expected[name] = struct{}{}
+		}
+	}
+	managed := generatedSkillDirNameSet(cfg)
 
 	entries, err := os.ReadDir(skillsRoot)
 	if err != nil {
@@ -1086,7 +1097,7 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 	return nil
 }
 
-func generatedSkillDirNameSet() map[string]struct{} {
+func generatedSkillDirNameSet(cfg ToolConfig) map[string]struct{} {
 	managed := map[string]struct{}{}
 	for _, names := range [][]string{
 		GovernanceSkillNames,
@@ -1098,6 +1109,11 @@ func generatedSkillDirNameSet() map[string]struct{} {
 	} {
 		for _, name := range names {
 			managed[adapterSkillName(name)] = struct{}{}
+		}
+	}
+	if cfg.CommandSkillSurface {
+		for _, name := range commandSkillDirNames() {
+			managed[name] = struct{}{}
 		}
 	}
 	return managed
@@ -1155,20 +1171,17 @@ func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string) 
 	return os.Remove(dir)
 }
 
-func cleanupStaleGlobalPrompts(cfg ToolConfig) error {
-	if cfg.PromptsStyle != "global" {
+// cleanupLegacyCodexPrompts removes ALL slipway-* global Codex prompt files,
+// the retired pre-skill command surface. expected is nil so every match is purged.
+func cleanupLegacyCodexPrompts(cfg ToolConfig) error {
+	if !cfg.CommandSkillSurface {
 		return nil
 	}
-
 	promptsDir, err := codexPromptsDir()
 	if err != nil {
 		return err
 	}
-	expected := map[string]struct{}{}
-	for _, id := range commandIDs() {
-		expected["slipway-"+id+".md"] = struct{}{}
-	}
-	return cleanupPrefixedEntries(promptsDir, "slipway-", expected)
+	return cleanupPrefixedEntries(promptsDir, "slipway-", nil)
 }
 
 func cleanupUnexpectedEntries(dir string, expected map[string]struct{}) error {
@@ -1671,6 +1684,44 @@ func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 	return tmpl.Render(path.Join("commands", tmplName), data)
 }
 
+// renderCommandSkill renders one discoverable host skill per Slipway command for
+// adapters that expose commands as skills (Codex). The injected frontmatter
+// `name`/`description` use the same YAML-safe escaping as every other generated
+// skill so adapter skill loaders accept the output.
+func renderCommandSkill(cfg ToolConfig, id string) (string, error) {
+	meta, err := buildCommandRenderData(id)
+	if err != nil {
+		return "", err
+	}
+	data := map[string]any{
+		"CommandID":     meta.ID,
+		"ToolID":        cfg.ID,
+		"Trigger":       commandTrigger(cfg, meta.ID),
+		"Class":         meta.Class,
+		"Description":   meta.Description,
+		"BodyTemplate":  "command-" + id + "-body",
+		"Arguments":     meta.Arguments,
+		"Prerequisites": meta.Prerequisites,
+		"Tier":          meta.Tier,
+		"Surface":       "skill",
+	}
+	raw, err := tmpl.Render(path.Join("commands", "command-skill.md.tmpl"), data)
+	if err != nil {
+		return "", err
+	}
+	return injectAdapterFrontmatter(raw, adapterSkillName(id), meta.Description)
+}
+
+// commandSkillDirNames returns the generated skill directory names for each
+// adapter command (slipway-<command>).
+func commandSkillDirNames() []string {
+	out := make([]string, 0, len(commandIDs()))
+	for _, id := range commandIDs() {
+		out = append(out, adapterSkillName(id))
+	}
+	return out
+}
+
 func renderSessionHook(cfg ToolConfig) (string, error) {
 	data := map[string]string{
 		"ToolID":     cfg.ID,
@@ -1848,40 +1899,15 @@ func codexPromptsDir() (string, error) {
 	return filepath.Join(userHome, ".codex", "prompts"), nil
 }
 
-// generateCodexPrompts renders and writes global prompt files to ~/.codex/prompts/
-// (or $CODEX_HOME/prompts/ when set). Note: this writes outside the project root
-// to the user's home directory.
-func generateCodexPrompts(cfg ToolConfig, refresh bool) error {
-	promptsDir, err := codexPromptsDir()
-	if err != nil {
-		return err
+// InvocationSummary describes, for humans, how generated command surfaces are
+// invoked for this tool. `slipway init` prints it per selected tool so the
+// invocation surface is explicit at setup time.
+func (c ToolConfig) InvocationSummary() string {
+	if c.CommandSkillSurface {
+		return "invoke skills: $slipway (entry), $slipway-<command> per command, or /skills"
 	}
-
-	for _, id := range commandIDs() {
-		meta, err := buildCommandRenderData(id)
-		if err != nil {
-			return err
-		}
-		data := map[string]any{
-			"CommandID":     meta.ID,
-			"ToolID":        cfg.ID,
-			"Trigger":       commandTrigger(cfg, meta.ID),
-			"Class":         meta.Class,
-			"Description":   meta.Description,
-			"BodyTemplate":  "command-" + id + "-body",
-			"Arguments":     meta.Arguments,
-			"Prerequisites": meta.Prerequisites,
-			"Tier":          meta.Tier,
-			"Surface":       "adapter",
-		}
-		content, err := tmpl.Render(path.Join("commands", "command-entry.codex-prompt.md.tmpl"), data)
-		if err != nil {
-			return fmt.Errorf("render codex prompt %q: %w", id, err)
-		}
-		path := filepath.Join(promptsDir, "slipway-"+id+".md")
-		if err := writeDeterministic(path, content, refresh); err != nil {
-			return err
-		}
+	if c.TriggerStyle == "slash-colon" {
+		return fmt.Sprintf("invoke commands as %s:<command>", c.TriggerPrefix)
 	}
-	return nil
+	return fmt.Sprintf("invoke commands as %s<command>", c.TriggerPrefix)
 }

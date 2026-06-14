@@ -13,12 +13,12 @@
 | Tool ID | Skills path | Command path | Invocation style |
 | --- | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | `.claude/commands/slipway/*.md` | `/slipway:<command>` |
-| `codex` | `.codex/skills/slipway-*/SKILL.md` | `$CODEX_HOME/prompts/slipway-*.md` | `$slipway-<command>` |
+| `codex` | `.codex/skills/slipway-*/SKILL.md` | `.codex/skills/slipway-*/SKILL.md` | `$slipway-<command>` (or `/skills`) |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `.cursor/commands/*.md` | `/slipway-<command>` |
 | `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `.gemini/commands/slipway/*.toml` | `/slipway-<command>` |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `.opencode/commands/slipway-*.md` | `/slipway-<command>` |
 
-Codex command prompts are global because Codex consumes prompt files from its home directory. If `CODEX_HOME` is unset, Slipway uses `~/.codex`.
+Codex commands are generated as discoverable per-command skills under `.codex/skills/slipway-<command>/SKILL.md` (invoked `$slipway-<command>` or via `/skills`). Slipway no longer writes global prompt files, and `--refresh` removes any left by older versions.
 
 ## Generate Adapters
 
@@ -45,7 +45,11 @@ Slipway detects adapters by its generated markers, not by a bare `.claude`, `.co
 
 ## Generated Command Surface
 
-Core prompt-backed commands:
+Every CLI command ships a command surface on every tool: a command prompt file
+on Claude, Cursor, Gemini, and OpenCode, and a per-command skill
+(`.codex/skills/slipway-<command>/SKILL.md`) on Codex.
+
+Core commands:
 
 - `new`
 - `next`
@@ -53,7 +57,7 @@ Core prompt-backed commands:
 - `status`
 - `done`
 
-Situational prompt-backed commands:
+Situational commands:
 
 - `init`
 - `cancel`
@@ -67,7 +71,7 @@ Situational prompt-backed commands:
 - `repair`
 - `evidence` (the wave-orchestration host records task evidence via `slipway evidence task ...`)
 
-Diagnostics prompt-backed commands:
+Diagnostics commands:
 
 - `learn`
 - `stats`
@@ -75,7 +79,7 @@ Diagnostics prompt-backed commands:
 - `codebase-map`
 - `instructions`
 
-Every CLI command ships a prompt-backed surface, so an agent never has to fall
+Every CLI command ships a command surface, so an agent never has to fall
 back to guessing one; the workflow skill's command reference indexes them all.
 
 ## Surface Manifest

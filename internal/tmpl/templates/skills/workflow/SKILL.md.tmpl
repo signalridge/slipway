@@ -78,8 +78,8 @@ Detailed command contracts live in `references/command-reference.md`. For
 commands that ship generated command surfaces, prefer those surfaces over
 re-explaining the command inline here.
 
-{{if eq .ToolID "codex"}}For Codex, command surfaces remain global prompt files under
-`~/.codex/prompts/slipway-<command>.md`.{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
+{{if eq .ToolID "codex"}}For Codex, command surfaces are generated skills under
+`.codex/skills/slipway-<command>/SKILL.md`, invoked as `$slipway-<command>` (or via `/skills`).{{else}}For `{{.ToolID}}`, command surfaces live under the generated workspace command
 directory `{{.CommandsDir}}`.{{end}}
 
 Every CLI command ships a command surface, so you never need to fall back to
