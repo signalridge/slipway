@@ -443,8 +443,99 @@ func computeProseFileInputHash(path string) (string, error) {
 		return "", err
 	}
 	return model.ComputeInputHash(map[string]any{
-		"content": string(raw),
+		"artifact":          filepath.Base(path),
+		"material_sections": proseArtifactMaterialSections(filepath.Base(path), string(raw)),
 	})
+}
+
+func proseArtifactMaterialSections(name, content string) []map[string]string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = stringutil.StripHTMLComments(content)
+
+	type proseSection struct {
+		heading string
+		lines   []string
+	}
+
+	sections := []proseSection{{}}
+	for _, line := range strings.Split(content, "\n") {
+		if heading, ok := proseArtifactSectionHeading(line); ok {
+			sections = append(sections, proseSection{heading: heading})
+			continue
+		}
+		last := len(sections) - 1
+		sections[last].lines = append(sections[last].lines, line)
+	}
+
+	material := make([]map[string]string, 0, len(sections))
+	for _, section := range sections {
+		body := normalizeProseArtifactSectionBody(section.lines)
+		if body == "" || proseArtifactKnownDefault(name, section.heading, body) {
+			continue
+		}
+		entry := map[string]string{"body": body}
+		if section.heading != "" {
+			entry["heading"] = section.heading
+		}
+		material = append(material, entry)
+	}
+	return material
+}
+
+func proseArtifactSectionHeading(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "## ") {
+		return "", false
+	}
+	heading := strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))
+	return heading, heading != ""
+}
+
+func normalizeProseArtifactSectionBody(lines []string) string {
+	normalized := make([]string, 0, len(lines))
+	for _, line := range lines {
+		normalized = append(normalized, strings.TrimRight(line, " \t"))
+	}
+	for len(normalized) > 0 && strings.TrimSpace(normalized[0]) == "" {
+		normalized = normalized[1:]
+	}
+	for len(normalized) > 0 && strings.TrimSpace(normalized[len(normalized)-1]) == "" {
+		normalized = normalized[:len(normalized)-1]
+	}
+	if len(normalized) == 1 && strings.HasPrefix(strings.TrimSpace(normalized[0]), "# ") {
+		return ""
+	}
+	return strings.Join(normalized, "\n")
+}
+
+func proseArtifactKnownDefault(name, heading, body string) bool {
+	defaultsByHeading := proseArtifactKnownDefaults[strings.TrimSpace(name)]
+	if len(defaultsByHeading) == 0 {
+		return false
+	}
+	defaults := defaultsByHeading[strings.ToLower(strings.TrimSpace(heading))]
+	if len(defaults) == 0 {
+		return false
+	}
+	normalizedBody := normalizeKnownProseDefault(body)
+	for _, known := range defaults {
+		if normalizedBody == normalizeKnownProseDefault(known) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeKnownProseDefault(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
+}
+
+var proseArtifactKnownDefaults = map[string]map[string][]string{
+	"intent.md": {
+		"summary": {
+			"Describe the change objective.",
+		},
+	},
 }
 
 func addExecutionAndContentInputs(
