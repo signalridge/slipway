@@ -275,17 +275,22 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 	}
 	if state.ExecutionSummaryReady(execCtx.Summary) {
-		workspaceChangedFiles := scopeContractWorkspaceChangedFiles(paths)
+		// workspaceChangedFiles yields both the scope-contract changed set and the
+		// codebase-map context files it exempts from that set, from a single git
+		// scan, so the disclosed exemption can never drift from the set actually
+		// filtered out.
+		changedFiles, exemptContextFiles := workspaceChangedFiles(paths, workspaceChangedFilesOptions{})
 		scopeReport, err := scopecontract.EvaluateBundleWithChangedFiles(
 			paths.GovernedBundleDir,
 			execCtx.Summary,
-			workspaceChangedFiles,
+			changedFiles,
 		)
 		if err != nil {
 			readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(scopecontract.ReasonScopeContractEvaluationFailed, err.Error()))
 			readiness.Diagnostics = append(readiness.Diagnostics, "scope_contract_evaluation_failed: "+err.Error())
 		} else {
 			cloned := scopeReport.Clone()
+			cloned.ExemptContextFiles = exemptContextFiles
 			readiness.ScopeContract = &cloned
 			readiness.Blockers = append(readiness.Blockers, scopeReport.Blockers...)
 			readiness.Diagnostics = append(readiness.Diagnostics, scopeReport.Diagnostics...)
@@ -294,7 +299,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 			}
 		}
 
-		sensitiveReport := sensitiveevidence.Evaluate(execCtx.Summary, workspaceChangedFiles)
+		sensitiveReport := sensitiveevidence.Evaluate(execCtx.Summary, changedFiles)
 		if sensitiveReport.Status != sensitiveevidence.StatusNotApplicable {
 			cloned := sensitiveReport
 			readiness.SensitiveEvidence = &cloned
@@ -762,7 +767,8 @@ func resolveArtifactEvaluationContext(change model.Change, requiredPreset model.
 }
 
 func scopeContractWorkspaceChangedFiles(paths state.ResolvedChangePaths) []string {
-	return workspaceChangedFiles(paths, workspaceChangedFilesOptions{})
+	changed, _ := workspaceChangedFiles(paths, workspaceChangedFilesOptions{})
+	return changed
 }
 
 type workspaceChangedFilesOptions struct {
@@ -783,17 +789,26 @@ type workspaceChangedFilesOptions struct {
 // rewrites it into the archived bundle. Any other dirty governance artifact is
 // surfaced so the operator can commit it alongside the archived record.
 func WorkspaceChangedFilesForDoneArchive(paths state.ResolvedChangePaths) []string {
-	return workspaceChangedFiles(paths, workspaceChangedFilesOptions{
+	changed, _ := workspaceChangedFiles(paths, workspaceChangedFilesOptions{
 		includeGovernedBundle:  false,
 		includeLocalState:      true,
 		exemptActiveBundleOnly: true,
 	})
+	return changed
 }
 
-func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChangedFilesOptions) []string {
+// workspaceChangedFiles returns the Git-visible changed files for scope-contract
+// and dirty-advisory accounting. The second result, exemptContext, is the set of
+// dirty codebase-map context artifacts (artifacts/codebase/**) that the
+// scope-contract filter intentionally drops from the changed set. It is collected
+// in the same pass that drops them — and only on the scope-contract path
+// (opts.includeLocalState == false) — so the disclosed exemption is exactly the
+// set filtered out, never a separately re-derived (and potentially divergent) one.
+// Both results are unique-sorted; either may be nil.
+func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChangedFilesOptions) (changed, exemptContext []string) {
 	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
 	if workspaceRoot == "" {
-		return nil
+		return nil, nil
 	}
 	files := gitNameOnly(workspaceRoot, "diff", "--name-only", "HEAD", "--")
 	for _, file := range gitNameOnly(workspaceRoot, "ls-files", "--others", "--exclude-standard") {
@@ -802,7 +817,7 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 		}
 	}
 	if len(files) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	bundleRel := ""
@@ -810,6 +825,7 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 		bundleRel = filepath.ToSlash(rel)
 	}
 	filtered := make([]string, 0, len(files))
+	var exempt []string
 	for _, file := range files {
 		file = filepath.ToSlash(strings.TrimSpace(file))
 		file = strings.TrimPrefix(file, "./")
@@ -827,15 +843,19 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 				continue
 			}
 			if !opts.includeLocalState && scopeContractContextArtifactChangedFile(file) {
+				exempt = append(exempt, file)
 				continue
 			}
 		}
 		filtered = append(filtered, file)
 	}
-	if len(filtered) == 0 {
-		return nil
+	if len(filtered) > 0 {
+		changed = stringutil.UniqueSorted(filtered)
 	}
-	return stringutil.UniqueSorted(filtered)
+	if len(exempt) > 0 {
+		exemptContext = stringutil.UniqueSorted(exempt)
+	}
+	return changed, exemptContext
 }
 
 func scopeContractContextArtifactChangedFile(file string) bool {

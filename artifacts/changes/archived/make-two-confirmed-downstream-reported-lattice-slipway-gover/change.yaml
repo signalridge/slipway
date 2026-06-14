@@ -1,0 +1,38 @@
+version: 1
+slug: make-two-confirmed-downstream-reported-lattice-slipway-gover
+description: 'Make two confirmed downstream-reported (Lattice) Slipway governance-surface transparency gaps self-explaining, without changing underlying behavior. (1) Issue #207: scope_contract silently filters dirty artifacts/codebase/** files out of changed_files while reporting status=pass, so reviewers must infer the hidden exemption from a git-diff disagreement. Surface the codebase-map exemption explicitly in validate/status JSON output (and align docs/help) so the omission is visible rather than inferred; keep the exemption itself intact. (2) Issue #211: status --json exposes progress.run_summary_version=0 (a ''no execution summary yet'' sentinel) but slipway evidence task rejects 0 and requires >=1, so the visible value misleads task-evidence recording. Stop surfacing a value the evidence surface itself refuses and make the correct task-evidence run version unambiguous; keep the >=1 evidence rule intact. Both fixes are to Slipway''s own CLI/JSON/doc surfaces (external contracts consumed downstream); no change to scope-contract exemption behavior or the run-summary-version validation rule.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-14T13:21:55.839554Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/make-two-confirmed-downstream-reported-lattice-slipway-gover
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 01ebb0bd3a4fa473238e650a74a9dc4817cc9b9a040e61059997a3003a28929a
+        updated_at: 2026-06-14T13:28:55.993993342Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 10f7cb836c291319cd2b1dcc75a8091a741583ec6350fc577100ede4f5e96340
+        updated_at: 2026-06-14T13:32:29.161520219Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 0efc7885d2bc0447ec789c3c1badc712dddf6a70958e2bae5729503dcfb98382
+        updated_at: 2026-06-14T14:39:18.720316398Z
+evidence_refs:
+    code-quality-review: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/code-quality-review.yaml
+    goal-verification: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/goal-verification.yaml
+    intake-clarification: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/intake-clarification.yaml
+    plan-audit: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/make-two-confirmed-downstream-reported-lattice-slipway-gover/artifacts/changes/make-two-confirmed-downstream-reported-lattice-slipway-gover/verification/wave-orchestration.yaml

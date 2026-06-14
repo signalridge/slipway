@@ -1,50 +1,43 @@
 # Testing
 
 Re-authored for change
-`add-engine-enforced-fail-closed-safety-nets-for-shared-workt`.
+`make-two-confirmed-downstream-reported-lattice-slipway-gover`
+(GitHub issues #207 and #211).
 
 ## Existing Coverage
 
-- `internal/engine/wave/wave_test.go` covers wave planning, static target
-  conflict behavior, parsing, and now target coverage plus narrowing advisories.
-- `internal/model/wave_execution_test.go` covers dispatch-mode validation and
-  verification-reference parsing, including conflict handling.
-- `internal/state/wave_execution_test.go` covers wave-run construction and the
-  removal of silent parallel dispatch inference.
-- `internal/engine/progression/wave_sync_test.go` covers task evidence parsing,
-  sync/mutate behavior, execution-summary persistence, read-only readiness, and
-  the new safety-net blockers.
-- `cmd/next_wave_plan_test.go` covers derived and persisted wave-plan views,
-  including view-only `advisories`.
-- `internal/tmpl/wave_isolation_content_test.go` and `internal/toolgen` cover
-  generated host instruction contracts.
+- `internal/engine/progression/readiness_optimization_test.go` covers the
+  readiness changed-file optimization, including the `artifacts/codebase/**`
+  scope-contract exemption path.
+- `internal/engine/progression/scope_contract_gate_test.go` covers scope-contract
+  gate behavior (pass/blocked) at the progression layer.
+- `cmd/validate_test.go` covers the validate JSON view, including the
+  `scope_contract` sub-view assembled by `buildScopeContractView`.
+- `cmd/status_test.go` covers the status JSON/human view, including `progress`.
+- `cmd/evidence_task_test.go` / `cmd/evidence_test.go` cover `evidence task`
+  validation, including the `run_summary_version >= 1` rejection.
 
 ## Gaps Closed By This Change
 
-- `parallel_subagents` is parsed and emitted as the public parallel dispatch
-  token; the retired `parallel` dispatch token is not accepted through the new
-  contract.
-- A started parallel wave without explicit valid dispatch evidence records no
-  inferred dispatch mode and surfaces
-  `dispatch_mode_absent_on_started_parallel_wave`.
-- A `parallel_subagents` wave missing a per-task executor handle surfaces
-  `executor_agent_missing`; `degraded_sequential` requires no handles.
-- A task whose recorded `changed_files` escapes planned `target_files` surfaces
-  `task_changed_file_scope_escape`, including the fail-closed empty
-  `target_files` case.
-- Two tasks in the same parallel wave recording the same canonical changed file
-  surface `parallel_wave_changed_file_overlap`; sequential sharing remains
-  allowed.
-- `broad_target_files` and `fully_serial_plan` advisories are exposed only in
-  the view layer and are excluded from persisted wave plans and freshness hashes.
+- #207: a dirty, tracked `artifacts/codebase/*.md` not in any task's
+  `target_files` is surfaced in `scope_contract.exempt_context_files` (unit test
+  at the readiness layer; cmd test at the view layer) while it stays out of
+  `changed_files` and `scope_contract.status` stays `pass`.
+- #211: `status --json` (and `next --json`) omit `progress.run_summary_version`
+  when no execution summary exists (value `0`), and report the real value once a
+  run exists (cmd test asserts both states).
+- #211: the `evidence task` help/guidance surface states the correct first run
+  version (`1`), and `evidence task --run-summary-version 0` still fails with
+  `evidence_task_run_summary_version_invalid` (cmd test pins both).
 
 ## Verification Plan
 
-- Run the focused progression scope-escape blocker tests after repair.
-- Run affected packages:
-  `go test ./internal/model ./internal/state ./internal/engine/wave ./internal/engine/progression ./cmd ./internal/tmpl ./internal/toolgen`.
-- Run full repository verification:
-  `gofmt -l`, `go test ./...`, and `git diff --check`.
-- Use current-worktree Slipway outputs (`status --json`, `validate --json`,
-  `next --json --diagnostics`) as lifecycle authority after each evidence
-  refresh.
+- Run affected packages after each task:
+  `go test ./internal/engine/scopecontract ./internal/engine/progression ./internal/engine/status ./cmd`.
+- Run full repository verification: `go build ./...`, `go vet ./...`,
+  `go test ./...`, and `gofmt -s -l` (the lint gate is golangci-lint gofmt
+  **simplify**, not plain `gofmt -l`).
+- Manually confirm with current-worktree Slipway: with a dirty
+  `artifacts/codebase/*.md`, `validate --json` / `status --json` show
+  `scope_contract.exempt_context_files` listing it while `changed_files` omits it
+  and status is `pass`; early-S2 `status --json` omits `run_summary_version`.
