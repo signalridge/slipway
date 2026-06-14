@@ -28,6 +28,14 @@ go run . status --json
 ```
 
 Avoid deciding readiness from `main...HEAD` alone. Pair branch comparisons with direct worktree status and diff checks.
+The durable codebase map under `artifacts/codebase/**` is exempt from
+scope-contract changed-file accounting: when only those context files are dirty,
+they stay out of `scope_contract.changed_files` and
+`scope_contract.out_of_scope_files`, and `scope_contract.status` stays `pass`.
+To keep that filtering visible rather than inferred from a `git diff`
+disagreement, the exempted files are disclosed in the
+`scope_contract.exempt_context_files` field surfaced by `slipway validate --json`,
+`slipway status --json`, and `slipway review --json`.
 After `slipway done`, Git-safe archived records remain in the owning worktree; commit or merge them before removing that worktree.
 When a worktree-bound change still has uncommitted source or non-active
 governance changes, `done --json` archives anyway and returns a non-blocking

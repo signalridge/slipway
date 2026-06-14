@@ -69,6 +69,7 @@ type scopeContractView struct {
 	Status                  string             `json:"status"`
 	PlannedTargets          []string           `json:"planned_targets,omitempty"`
 	ChangedFiles            []string           `json:"changed_files,omitempty"`
+	ExemptContextFiles      []string           `json:"exempt_context_files,omitempty"`
 	OutOfScopeFiles         []string           `json:"out_of_scope_files,omitempty"`
 	MissingContractTasks    []string           `json:"missing_contract_tasks,omitempty"`
 	MissingChangedFileTasks []string           `json:"missing_changed_file_tasks,omitempty"`
@@ -338,6 +339,7 @@ func buildScopeContractView(report *scopecontract.Report) *scopeContractView {
 		Status:                  string(report.Status),
 		PlannedTargets:          append([]string(nil), report.PlannedTargets...),
 		ChangedFiles:            append([]string(nil), report.ChangedFiles...),
+		ExemptContextFiles:      append([]string(nil), report.ExemptContextFiles...),
 		OutOfScopeFiles:         append([]string(nil), report.OutOfScopeFiles...),
 		MissingContractTasks:    append([]string(nil), report.MissingContractTasks...),
 		MissingChangedFileTasks: append([]string(nil), report.MissingChangedFileTasks...),
