@@ -178,11 +178,17 @@ func TestRepairExecutionStateUsesEffectiveParallelWhenRecoveringWaveRuns(t *test
 			plan.Waves[0].Parallel = tt.persistedParallel
 			require.NoError(t, SaveWavePlan(root, change.Slug, plan))
 
+			// A valid parallel dispatch token lets the recovered run record a
+			// parallel mode when the wave is effectively parallel; the engine no
+			// longer infers one from the Parallel flag alone (REQ-004). When
+			// parallelization is off the wave is non-parallel, so the same token is
+			// ignored and the recovered run records no dispatch mode.
 			writeVerificationForTest(t, root, change.Slug, "wave-orchestration", model.VerificationRecord{
 				Verdict:    model.VerificationVerdictPass,
 				Blockers:   []model.ReasonCode{},
 				Timestamp:  waveMaterializeTime,
 				RunVersion: 1,
+				References: []string{"dispatch_mode:wave=1:parallel_subagents"},
 			})
 			require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
 				RunSummaryVersion: 1,

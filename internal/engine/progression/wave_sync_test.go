@@ -538,10 +538,17 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 		want              model.WaveDispatchMode
 	}{
 		{
-			name:              "default forced parallel overrides stale persisted false",
+			name:              "default forced parallel records the declared parallel token",
 			slug:              "wave-effective-parallel-default",
 			persistedParallel: false,
-			want:              model.WaveDispatchParallel,
+			// A parallel_subagents wave requires an executor handle per planned task,
+			// so both are recorded; otherwise the executor-handle gate would fire.
+			references: []string{
+				"dispatch_mode:wave=1:parallel_subagents",
+				"executor_agent:wave=1:task=task-a:agent-a",
+				"executor_agent:wave=1:task=task-b:agent-b",
+			},
+			want: model.WaveDispatchParallel,
 		},
 		{
 			name:              "parallelization off suppresses stale persisted true",
@@ -549,13 +556,6 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 			config:            "execution:\n  parallelization: off\n",
 			persistedParallel: true,
 			want:              "",
-		},
-		{
-			name:              "invalid dispatch reference does not block sync",
-			slug:              "wave-effective-parallel-invalid-dispatch",
-			persistedParallel: true,
-			references:        []string{"dispatch_mode:wave=1:sequential"},
-			want:              model.WaveDispatchParallel,
 		},
 		{
 			name:              "stale degraded dispatch is ignored when parallelization is off",
@@ -623,10 +623,14 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 					"task_kind":           "code",
 					"verdict":             "pass",
 					"changed_files":       []string{changedFile},
-					"blockers":            []string{},
-					"evidence_ref":        "test:" + taskID,
-					"captured_at":         recordedAt.Add(-time.Minute).Format(time.RFC3339Nano),
-					"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
+					// target_files mirror each task's planned scope so the changed file
+					// stays within scope and the disjoint files never overlap — this
+					// test asserts dispatch-mode resolution, not the safety-net gates.
+					"target_files":     []string{changedFile},
+					"blockers":         []string{},
+					"evidence_ref":     "test:" + taskID,
+					"captured_at":      recordedAt.Add(-time.Minute).Format(time.RFC3339Nano),
+					"freshness_inputs": state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
 				}
 				raw, err := json.Marshal(taskEvidence)
 				require.NoError(t, err)
@@ -886,6 +890,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 		"task_kind":           "code",
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
+		"target_files":        []string{"cmd/next.go"},
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
@@ -948,6 +953,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 		"task_kind":           "code",
 		"verdict":             "pass",
 		"changed_files":       []string{"cmd/next.go"},
+		"target_files":        []string{"cmd/next.go"},
 		"blockers":            []string{},
 		"evidence_ref":        "test:task-a",
 		"captured_at":         capturedAt.Format(time.RFC3339Nano),
@@ -1123,6 +1129,10 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
 		RunVersion: 1,
+		// A degraded_sequential token keeps the started parallel wave from tripping
+		// the dispatch-evidence gate and requires no executor handles, so the only
+		// blocker here is the session-isolation warning this test exercises.
+		References: []string{"dispatch_mode:wave=1:degraded_sequential"},
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
@@ -1329,10 +1339,14 @@ func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *test
 	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
 	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 
+	// Scope-only change: a different (directory) target that still covers the
+	// recorded changed file cmd/next.go, so this stays a pure rematerialization
+	// test and the planned-scope escape audit (which now uses plan target_files)
+	// does not legitimately fire on stranded evidence.
 	scopeOnlyTasks := `# Tasks
 
 - [ ] ` + "`task-a`" + ` Implement task A
-  - target_files: ["cmd/status.go"]
+  - target_files: ["cmd"]
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(tasksPath, []byte(scopeOnlyTasks), 0o644))
@@ -1356,7 +1370,7 @@ func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *test
 	assert.Equal(t, updatedScopeHash, wavePlan.TasksPlanScopeHash)
 	require.Len(t, wavePlan.Waves, 1)
 	require.Len(t, wavePlan.Waves[0].Tasks, 1)
-	assert.Equal(t, []string{"cmd/status.go"}, wavePlan.Waves[0].Tasks[0].TargetFiles)
+	assert.Equal(t, []string{"cmd"}, wavePlan.Waves[0].Tasks[0].TargetFiles)
 
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
@@ -1366,7 +1380,7 @@ func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *test
 	currentTasksRaw, err := os.ReadFile(tasksPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(currentTasksRaw), "- [x] `task-a` Implement task A")
-	assert.Contains(t, string(currentTasksRaw), `target_files: ["cmd/status.go"]`)
+	assert.Contains(t, string(currentTasksRaw), `target_files: ["cmd"]`)
 }
 
 func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T) {
@@ -1565,6 +1579,668 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 	currentHash, err := wave.TaskPlanStructuralHash(updatedTasks)
 	require.NoError(t, err)
 	assert.NotEqual(t, currentHash, summary.TasksPlanHash, "first sync must not bind stale evidence to the current tasks hash")
+}
+
+func scopeEscapePlan(taskID string, targets ...string) model.WavePlan {
+	return model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Tasks:     []model.WavePlanTask{{TaskID: taskID, TargetFiles: targets}},
+		}},
+	}
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_OutOfScopeBlocks(t *testing.T) {
+	t.Parallel()
+	// Coverage is judged against the PLAN's target_files. The evidence widens its
+	// own target_files to cover internal/b.go, but the plan only grants
+	// internal/a.go, so the audit must still fire (REQ-002 anti-bypass).
+	plan := scopeEscapePlan("t-01", "internal/a.go")
+	tasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			TargetFiles:  []string{"internal/a.go", "internal/b.go"},
+			ChangedFiles: []string{"internal/a.go", "internal/b.go"},
+		},
+	}
+	blockers := TaskChangedFileScopeEscapeBlockers(plan, tasks)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "task_changed_file_scope_escape", blockers[0].Code)
+	assert.Equal(t, "t-01:internal/b.go", blockers[0].Detail)
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_DirectoryTargetCovers(t *testing.T) {
+	t.Parallel()
+	// A directory target covers a changed file nested beneath it (REQ-002 glob/dir
+	// coverage), so no scope-escape blocker is produced.
+	plan := scopeEscapePlan("t-01", "internal/engine/")
+	tasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			ChangedFiles: []string{"internal/engine/wave/wave.go"},
+		},
+	}
+	assert.Empty(t, TaskChangedFileScopeEscapeBlockers(plan, tasks))
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_MalformedGlobTargetFailsClosed(t *testing.T) {
+	t.Parallel()
+	// Invalid glob syntax is broad for planner conflict detection, but it must not
+	// grant coverage authority in the post-run scope audit. Treating it as a
+	// match-all here would let malformed target_files suppress scope escapes.
+	plan := scopeEscapePlan("t-01", "internal/[")
+	tasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			ChangedFiles: []string{"cmd/run.go"},
+		},
+	}
+	blockers := TaskChangedFileScopeEscapeBlockers(plan, tasks)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "task_changed_file_scope_escape", blockers[0].Code)
+	assert.Equal(t, "t-01:cmd/run.go", blockers[0].Detail)
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_EmptyPlanTargetsFailClosed(t *testing.T) {
+	t.Parallel()
+	// The shared-worktree safety model is declared target_files plus exhaustive
+	// changed_files. A planned task with no target_files has no declared write
+	// scope, so any recorded changed_file must fail closed as a scope escape.
+	plan := scopeEscapePlan("t-01")
+	tasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			ChangedFiles: []string{"internal/a.go"},
+		},
+	}
+	blockers := TaskChangedFileScopeEscapeBlockers(plan, tasks)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "task_changed_file_scope_escape", blockers[0].Code)
+	assert.Equal(t, "t-01:internal/a.go", blockers[0].Detail)
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_AllWithinTargetNoBlock(t *testing.T) {
+	t.Parallel()
+	plan := scopeEscapePlan("t-01", "internal/a.go", "internal/b.go")
+	tasks := []model.ExecutionTaskSummary{
+		{
+			TaskID:       "t-01",
+			ChangedFiles: []string{"internal/a.go", "internal/b.go"},
+		},
+	}
+	assert.Empty(t, TaskChangedFileScopeEscapeBlockers(plan, tasks))
+}
+
+func TestTaskChangedFileScopeEscapeBlockers_OrphanEvidenceSkipped(t *testing.T) {
+	t.Parallel()
+	// Evidence for a task absent from the plan is an orphan owned by a dedicated
+	// gate; the scope-escape audit only adjudicates planned tasks.
+	plan := scopeEscapePlan("t-01", "internal/a.go")
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "t-99", ChangedFiles: []string{"internal/z.go"}},
+	}
+	assert.Empty(t, TaskChangedFileScopeEscapeBlockers(plan, tasks))
+}
+
+func TestParallelWaveChangedFileOverlapBlockers_ParallelOverlapBlocks(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a", ChangedFiles: []string{"internal/x.go"}},
+		{TaskID: "task-b", ChangedFiles: []string{"internal/x.go"}},
+	}
+	blockers := ParallelWaveChangedFileOverlapBlockers(plan, tasks)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "parallel_wave_changed_file_overlap", blockers[0].Code)
+	assert.Equal(t, "1:internal/x.go:task-a,task-b", blockers[0].Detail)
+}
+
+func TestParallelWaveChangedFileOverlapBlockers_SequentialOverlapAllowed(t *testing.T) {
+	t.Parallel()
+	// Two non-parallel (sequential) waves sharing a changed file must not block:
+	// they cannot run concurrently, so they cannot clobber each other.
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+			{WaveIndex: 2, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "task-b"}}},
+		},
+	}
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a", ChangedFiles: []string{"internal/x.go"}},
+		{TaskID: "task-b", ChangedFiles: []string{"internal/x.go"}},
+	}
+	assert.Empty(t, ParallelWaveChangedFileOverlapBlockers(plan, tasks))
+}
+
+func TestParallelWaveChangedFileOverlapBlockers_SameWaveDistinctFilesNoBlock(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a", ChangedFiles: []string{"internal/a.go"}},
+		{TaskID: "task-b", ChangedFiles: []string{"internal/b.go"}},
+	}
+	assert.Empty(t, ParallelWaveChangedFileOverlapBlockers(plan, tasks))
+}
+
+func TestDispatchEvidenceBlockers_StartedParallelWaveMissingTokenBlocks(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	// Both planned tasks have recorded evidence, so the wave is started; with no
+	// dispatch token the engine fails closed instead of inferring parallel (REQ-004).
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a"},
+		{TaskID: "task-b"},
+	}
+	blockers := DispatchEvidenceBlockers(plan, tasks, nil)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "dispatch_mode_absent_on_started_parallel_wave", blockers[0].Code)
+	assert.Equal(t, "1", blockers[0].Detail)
+}
+
+func TestDispatchEvidenceBlockers_ValidTokensDoNotBlock(t *testing.T) {
+	t.Parallel()
+	// A parallel_subagents token and a degraded_sequential token are both explicit
+	// dispatch evidence, so neither started parallel wave is blocked.
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+			{WaveIndex: 2, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-b"}}},
+		},
+	}
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a"},
+		{TaskID: "task-b"},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{
+		1: model.WaveDispatchParallel,
+		2: model.WaveDispatchDegradedSequential,
+	}
+	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, dispatchModes))
+}
+
+func TestDispatchEvidenceBlockers_NonParallelAndPendingWavesDoNotBlock(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			// Non-parallel waves never require dispatch evidence.
+			{WaveIndex: 1, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+			// Parallel but not started (no recorded task evidence), so no blocker yet.
+			{WaveIndex: 2, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-b"}}},
+		},
+	}
+	tasks := []model.ExecutionTaskSummary{
+		{TaskID: "task-a"},
+	}
+	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, nil))
+}
+
+func TestExecutorAgentBlockers_ParallelSubagentsMissingHandleBlocks(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchParallel}
+	// Only task-a has a recorded handle, so task-b is blocked (REQ-005).
+	handles := map[int]map[string]string{1: {"task-a": "agent-a"}}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}, {TaskID: "task-b"}}
+	blockers := ExecutorAgentBlockers(plan, tasks, dispatchModes, handles)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "executor_agent_missing", blockers[0].Code)
+	assert.Equal(t, "1:task-b", blockers[0].Detail)
+}
+
+func TestExecutorAgentBlockers_AllHandlesPresentNoBlock(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchParallel}
+	handles := map[int]map[string]string{1: {"task-a": "agent-a", "task-b": "agent-b"}}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}, {TaskID: "task-b"}}
+	assert.Empty(t, ExecutorAgentBlockers(plan, tasks, dispatchModes, handles))
+}
+
+func TestExecutorAgentBlockers_DegradedAndNonParallelWavesRequireNoHandles(t *testing.T) {
+	t.Parallel()
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			// Degraded-sequential dispatch requires no executor handles.
+			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+			// A non-parallel wave never requires handles regardless of dispatch map.
+			{WaveIndex: 2, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "task-b"}}},
+		},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}, {TaskID: "task-b"}}
+	assert.Empty(t, ExecutorAgentBlockers(plan, tasks, dispatchModes, nil))
+}
+
+func TestExecutorAgentBlockers_NonParallelWaveWithStaleParallelTokenRequiresNoHandles(t *testing.T) {
+	t.Parallel()
+	// A non-parallel wave can still carry a stale parallel_subagents dispatch
+	// token (recorded while parallel, then parallelization turned off so
+	// ApplyEffectiveParallel cleared the flag). REQ-005 says non-parallel waves
+	// MUST NOT require handles, so no executor_agent_missing blocker is emitted
+	// even though the dispatch map still names parallel_subagents for the wave.
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  false,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchParallel}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}, {TaskID: "task-b"}}
+	assert.Empty(t, ExecutorAgentBlockers(plan, tasks, dispatchModes, nil))
+}
+
+func TestExecutorAgentBlockers_PendingParallelSubagentsWaveRequiresNoHandles(t *testing.T) {
+	t.Parallel()
+	// A pending wave may already have a future dispatch token in the verification
+	// references, but no planned task has recorded execution evidence yet. Match
+	// BuildWaveRuns/DispatchEvidenceBlockers: handle completeness is evaluated
+	// only after the wave has started.
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{{
+			WaveIndex: 1,
+			Parallel:  true,
+			Tasks:     []model.WavePlanTask{{TaskID: "task-a"}, {TaskID: "task-b"}},
+		}},
+	}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchParallel}
+	assert.Empty(t, ExecutorAgentBlockers(plan, nil, dispatchModes, nil))
+}
+
+// TestSyncGovernedWaveExecutionSurfacesScopeEscapeBlocker proves the new
+// scope-escape gate folds into the single wave-execution assembly point: the
+// blocker is both returned from the sync and made durable in the saved
+// summary's OpenBlockers (issue #95 durability), so read-only readiness reports
+// it too.
+func TestSyncGovernedWaveExecutionSurfacesScopeEscapeBlocker(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "wave-sync-scope-escape"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	})
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)
+
+	// changed_files escapes the planned target_files (cmd/run.go is not covered).
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/next.go", "cmd/run.go"},
+		"target_files":        []string{"cmd/next.go"},
+		"blockers":            []string{},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         recordedAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "task_changed_file_scope_escape", "task-a:cmd/run.go"),
+		"sync must return task_changed_file_scope_escape:task-a:cmd/run.go, got %+v", result.Blockers)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "task_changed_file_scope_escape", "task-a:cmd/run.go"),
+		"scope-escape blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
+
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(readiness.Blockers, "task_changed_file_scope_escape", "task-a:cmd/run.go"),
+		"read-only readiness must surface the scope-escape blocker, got %+v", readiness.Blockers)
+}
+
+// TestSyncGovernedWaveExecutionSurfacesParallelOverlapBlocker proves the
+// parallel-overlap gate folds into the same assembly point. Two file-disjoint,
+// dependency-free tasks land in one wave that the default forced-parallel mode
+// marks Parallel; both record the same changed file, which is the clobber risk
+// REQ-003 blocks.
+func TestSyncGovernedWaveExecutionSurfacesParallelOverlapBlocker(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "wave-sync-parallel-overlap"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+		References: []string{"dispatch_mode:wave=1:parallel_subagents"},
+	})
+	// Disjoint target_files keep both tasks in the same (parallel) wave.
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+
+- [x] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)
+
+	writeTaskEvidence := func(taskID, targetFile string) {
+		t.Helper()
+		taskEvidence := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			// Both tasks record the SAME changed file (cmd/shared.go), which is the
+			// same-wave overlap REQ-003 blocks. Because the plan target_files do not
+			// grant cmd/shared.go to either task, scope-escape may also fire; this test
+			// asserts the overlap blocker is still returned and persisted.
+			"changed_files":    []string{targetFile, "cmd/shared.go"},
+			"target_files":     []string{targetFile, "cmd/shared.go"},
+			"blockers":         []string{},
+			"evidence_ref":     "test:" + taskID,
+			"captured_at":      recordedAt.Format(time.RFC3339Nano),
+			"freshness_inputs": expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(taskEvidence)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	}
+	writeTaskEvidence("task-a", "cmd/next.go")
+	writeTaskEvidence("task-b", "cmd/run.go")
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
+		"sync must return parallel_wave_changed_file_overlap:1:cmd/shared.go:task-a,task-b, got %+v", result.Blockers)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
+		"overlap blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
+}
+
+// TestSyncGovernedWaveExecutionBlocksStartedParallelWaveMissingDispatchEvidence
+// proves the dispatch-evidence gate folds into the same assembly point. Two
+// file-disjoint, dependency-free tasks land in one wave that default forced
+// parallel marks Parallel; with no dispatch_mode reference recorded, the engine
+// must not infer parallel dispatch and instead fails closed with a blocker that
+// is durable in the saved summary's OpenBlockers (REQ-004). The blocked wave also
+// records no dispatch mode.
+func TestSyncGovernedWaveExecutionBlocksStartedParallelWaveMissingDispatchEvidence(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "wave-sync-missing-dispatch"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	// No dispatch_mode reference: the started parallel wave has no dispatch evidence.
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+	})
+	// Disjoint target_files keep both tasks in the same (parallel) wave.
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+
+- [x] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)
+
+	writeTaskEvidence := func(taskID, targetFile string) {
+		t.Helper()
+		taskEvidence := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			// changed_files stay within each task's own target so only the
+			// dispatch-evidence gate fires here, not scope-escape or overlap.
+			"changed_files":    []string{targetFile},
+			"target_files":     []string{targetFile},
+			"blockers":         []string{},
+			"evidence_ref":     "test:" + taskID,
+			"captured_at":      recordedAt.Format(time.RFC3339Nano),
+			"freshness_inputs": expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(taskEvidence)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	}
+	writeTaskEvidence("task-a", "cmd/next.go")
+	writeTaskEvidence("task-b", "cmd/run.go")
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "dispatch_mode_absent_on_started_parallel_wave", "1"),
+		"sync must return dispatch_mode_absent_on_started_parallel_wave:1, got %+v", result.Blockers)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "dispatch_mode_absent_on_started_parallel_wave", "1"),
+		"dispatch-evidence blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
+
+	runs, err := state.LoadWaveRuns(root, slug, 1)
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Empty(t, runs[0].DispatchMode, "a wave blocked for missing dispatch evidence must not record an inferred mode")
+}
+
+// TestSyncGovernedWaveExecutionBlocksParallelSubagentsWaveMissingExecutorHandle
+// proves the executor-handle gate folds into the same assembly point. The wave is
+// dispatched parallel_subagents with a handle for task-a but none for task-b, so
+// the engine fails closed with a per-task blocker that is durable in the saved
+// summary's OpenBlockers (REQ-005).
+func TestSyncGovernedWaveExecutionBlocksParallelSubagentsWaveMissingExecutorHandle(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "wave-sync-missing-executor-handle"
+	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	// parallel_subagents dispatch with a handle for task-a only; task-b is missing.
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  recordedAt,
+		RunVersion: 1,
+		References: []string{
+			"dispatch_mode:wave=1:parallel_subagents",
+			"executor_agent:wave=1:task=task-a:agent-a",
+		},
+	})
+	// Disjoint target_files keep both tasks in the same (parallel) wave.
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`task-a`"+` Implement task A
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+
+- [x] `+"`task-b`"+` Implement task B
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)
+
+	writeTaskEvidence := func(taskID, targetFile string) {
+		t.Helper()
+		taskEvidence := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"changed_files":       []string{targetFile},
+			"target_files":        []string{targetFile},
+			"blockers":            []string{},
+			"evidence_ref":        "test:" + taskID,
+			"captured_at":         recordedAt.Format(time.RFC3339Nano),
+			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(taskEvidence)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	}
+	writeTaskEvidence("task-a", "cmd/next.go")
+	writeTaskEvidence("task-b", "cmd/run.go")
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "1:task-b"),
+		"sync must return executor_agent_missing:1:task-b, got %+v", result.Blockers)
+	assert.False(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "1:task-a"),
+		"task-a has a recorded handle and must not be blocked, got %+v", result.Blockers)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "executor_agent_missing", "1:task-b"),
+		"executor-handle blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
+}
+
+// TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift proves the
+// safety-net gate honors the same len(planDriftBlockers)==0 suppression guard
+// that incomplete-execution blockers use: when plan drift is present (which owns
+// its own remediation), the scope-escape blocker is not surfaced.
+func TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "wave-sync-safetynet-suppressed"
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS2Execute
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+
+	initialTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Initial objective
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
+
+	evidenceAt := record.Timestamp
+	// changed_files escapes target_files (would normally fire scope-escape)...
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/run.go"},
+		"target_files":        []string{"cmd/next.go"},
+		"evidence_ref":        "test:task-a",
+		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	// ...but the tasks plan changed after evidence capture, raising plan drift,
+	// which must suppress the safety-net blockers.
+	updatedTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Updated objective
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+`
+	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))
+	planChangedAt := evidenceAt.Add(2 * time.Minute)
+	require.NoError(t, os.Chtimes(tasksPath, planChangedAt, planChangedAt))
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "tasks_plan_changed_since_task_evidence", "task-a"),
+		"plan-drift blocker must be present, got %+v", result.Blockers)
+	assert.False(t, hasReasonCodeWithCode(result.Blockers, "task_changed_file_scope_escape"),
+		"safety-net blockers must be suppressed under plan drift, got %+v", result.Blockers)
 }
 
 func hasWaveReasonCode(reasons []model.ReasonCode, code, detail string) bool {

@@ -502,16 +502,11 @@ func waveRunDispatchMode(
 		return ""
 	}
 	dispatchMode, hasDispatchMode := dispatchByWave[plannedWave.WaveIndex]
-	if !hasDispatchMode || dispatchMode == "" {
-		if plannedWave.Parallel {
-			return model.WaveDispatchParallel
-		}
-		return ""
-	}
-	if !dispatchMode.IsValid() {
-		if plannedWave.Parallel {
-			return model.WaveDispatchParallel
-		}
+	if !hasDispatchMode || !dispatchMode.IsValid() {
+		// Fail closed: a started wave without explicit, valid dispatch evidence
+		// records no dispatch mode. The engine no longer infers parallel dispatch
+		// for a parallel wave that lacks a token (REQ-004); the missing evidence
+		// is surfaced as a hard blocker by DispatchEvidenceBlockers instead.
 		return ""
 	}
 	if !plannedWave.Parallel {
