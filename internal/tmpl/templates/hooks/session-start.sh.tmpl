@@ -13,6 +13,36 @@ normalize_hook_message() {
   printf '%s' "$1" | tr '\r\n' ' ' | sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//'
 }
 
+extract_json_string_field() {
+  local input="$1"
+  local field="$2"
+  printf '%s' "${input}" | sed -nE 's/.*"'"${field}"'"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1
+}
+
+unescape_json_string() {
+  printf '%s' "$1" | sed -e 's/\\"/"/g' -e 's/\\\\/\\/g'
+}
+
+format_bound_worktree_handoff() {
+  local output
+  local normalized
+  local slug
+  local worktree_path
+  output="$1"
+  normalized="$(normalize_hook_message "${output}")"
+  if ! printf '%s' "${normalized}" | grep -q '"error_code"[[:space:]]*:[[:space:]]*"change_bound_to_other_worktree"'; then
+    return 1
+  fi
+  slug="$(extract_json_string_field "${normalized}" "slug")"
+  worktree_path="$(extract_json_string_field "${normalized}" "worktree_path")"
+  slug="$(unescape_json_string "${slug}")"
+  worktree_path="$(unescape_json_string "${worktree_path}")"
+  if [ -z "${slug}" ] || [ -z "${worktree_path}" ]; then
+    return 1
+  fi
+  printf 'session_handoff_info: no active change in this worktree; active change %s is bound to %s; cd there or use --change %s to act' "${slug}" "${worktree_path}" "${slug}"
+}
+
 diagnostics=()
 hook_cwd="$(pwd -P 2>/dev/null || pwd)"
 project_root=""
@@ -46,8 +76,11 @@ run_slipway_readonly() {
 }
 
 next_json=""
+handoff_info=""
 if next_output="$(run_slipway_readonly next --json)"; then
   next_json="${next_output}"
+elif handoff_info="$(format_bound_worktree_handoff "${next_output}")"; then
+  :
 else
   diagnostics+=("hook_diagnostic: slipway next --json failed: $(normalize_hook_message "${next_output}")")
 fi
@@ -93,7 +126,7 @@ if [ -n "${handoff_path}" ]; then
   handoff_summary="$(printf 'session_handoff_present: %s\nsession_handoff_path: %s' "${handoff_present}" "${handoff_path}")"
 fi
 
-if [ -z "${next_json}" ] && [ -z "${handoff_summary}" ] && [ -z "${diagnostics_text}" ]; then
+if [ -z "${next_json}" ] && [ -z "${handoff_info}" ] && [ -z "${handoff_summary}" ] && [ -z "${diagnostics_text}" ]; then
   exit 0
 fi
 
@@ -101,6 +134,7 @@ cat <<EOF
 <slipway-session-start tool="{{.ToolID}}">
 slipway_entry_skill: This repository is governed by Slipway. To drive any non-trivial change through the governed lifecycle, load the "{{.EntrySkill}}" skill — the entry point that routes new/next/run/done.
 ${next_json}
+${handoff_info}
 ${diagnostics_text}
 ${handoff_summary}
 </slipway-session-start>
