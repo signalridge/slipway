@@ -152,7 +152,7 @@ func DefaultWorktreeBranch(slug string) string {
 	return "feat/" + slug
 }
 
-func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultWorktreeBinding, error) {
+func EnsureDefaultWorktreeForChange(root string, change *model.Change, provision WorktreeProvisioner) (DefaultWorktreeBinding, error) {
 	if change == nil {
 		return DefaultWorktreeBinding{}, fmt.Errorf("change is required")
 	}
@@ -211,6 +211,9 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 		if len(validation.Blockers) > 0 {
 			return DefaultWorktreeBinding{}, fmt.Errorf("default worktree validation failed: %s", strings.Join(model.ReasonSpecs(validation.Blockers), ", "))
 		}
+		if err := provision.provision(repoRoot, normalizedPath); err != nil {
+			return DefaultWorktreeBinding{}, fmt.Errorf("provision host-adapter surfaces into reused worktree %s: %w", normalizedPath, err)
+		}
 		return DefaultWorktreeBinding{Path: normalizedPath, Branch: branch}, nil
 	}
 
@@ -242,6 +245,9 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 
 	if err := PersistScopeWorktreeMetadata(change, normalizedPath, branch); err != nil {
 		return DefaultWorktreeBinding{}, err
+	}
+	if err := provision.provision(repoRoot, normalizedPath); err != nil {
+		return DefaultWorktreeBinding{}, fmt.Errorf("provision host-adapter surfaces into new worktree %s: %w", normalizedPath, err)
 	}
 	return DefaultWorktreeBinding{
 		Path:    normalizedPath,
