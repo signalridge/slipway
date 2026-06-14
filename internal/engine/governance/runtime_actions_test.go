@@ -132,10 +132,66 @@ Pending.
 	}
 
 	assert.False(t, byID[model.ControlDomainReview].Satisfied, "review evidence with stale run summary should not satisfy domain-review")
+	assert.Empty(t, byID[model.ControlDomainReview].SatisfiedBy, "stale review evidence must not be reported as satisfying domain-review")
 	assert.Contains(t, byID[model.ControlDomainReview].Description, "run_version_mismatch")
 	assert.True(t, byID[model.ControlIndependentReview].Satisfied, "independent reviewer evidence with current run summary should satisfy independent-review")
 	assert.True(t, byID[model.ControlWorktreeIsolation].Satisfied, "worktree-isolation is always satisfied after worktree-preflight removal")
 	assert.False(t, byID[model.ControlRollbackRequired].Satisfied, "rollback-required must require explicit rollback documentation in assurance.md, not just requirement coverage")
+}
+
+func TestResolveRuntimeRequiredActionsExplainsDomainReviewSatisfiedBySpecCompliance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitRepoForRuntimeActionsTests(t, root)
+	change := model.NewChange("runtime-actions-domain-review")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 3,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "task-a",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"internal/engine/governance/runtime_actions.go"},
+				CapturedAt:   time.Now().UTC(),
+			},
+		},
+	}))
+	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 3,
+		References: []string{"layer:R0=pass"},
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlDomainReview, model.ControlModeBlocking, model.ControlScopeReview),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	require.Len(t, actions, 1)
+	action := actions[0]
+	require.True(t, action.Satisfied)
+	require.Len(t, action.SatisfiedBy, 1)
+	assert.Equal(t, "skill_evidence", action.SatisfiedBy[0].Kind)
+	assert.Equal(t, skillSpecComplianceReview, action.SatisfiedBy[0].Name)
+	assert.Equal(t, "artifacts/changes/"+change.Slug+"/verification/spec-compliance-review.yaml", action.SatisfiedBy[0].EvidenceRef)
+	assert.Equal(t, "spec-compliance-review provides the domain-aware review evidence for domain-review", action.SatisfiedBy[0].Reason)
 }
 
 func TestResolveRuntimeRequiredActionsRejectsTemplateOnlyRollbackSections(t *testing.T) {

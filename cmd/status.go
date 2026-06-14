@@ -92,10 +92,18 @@ type governanceControlView struct {
 }
 
 type governanceActionView struct {
-	ControlID   string `json:"control_id"`
-	Mode        string `json:"mode"`
-	Description string `json:"description"`
-	Satisfied   bool   `json:"satisfied"`
+	ControlID   string                             `json:"control_id"`
+	Mode        string                             `json:"mode"`
+	Description string                             `json:"description"`
+	Satisfied   bool                               `json:"satisfied"`
+	SatisfiedBy []governanceActionSatisfactionView `json:"satisfied_by,omitempty"`
+}
+
+type governanceActionSatisfactionView struct {
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	EvidenceRef string `json:"evidence_ref,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 type artifactDAGNode struct {

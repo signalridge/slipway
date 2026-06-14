@@ -11,6 +11,15 @@ type RequiredAction struct {
 	Scope       model.ControlScope `json:"scope"`
 	Description string             `json:"description"`
 	Satisfied   bool               `json:"satisfied"`
+	SatisfiedBy []SatisfiedBy      `json:"satisfied_by,omitempty"`
+}
+
+// SatisfiedBy names the evidence source that satisfied a governance action.
+type SatisfiedBy struct {
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	EvidenceRef string `json:"evidence_ref,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 // ResolveRequiredActions derives the queue of required governance actions
@@ -45,6 +54,9 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 		case model.ControlDomainReview:
 			action.Description = "run domain-aware compliance review and attach review evidence"
 			action.Satisfied = input.DomainReviewDone
+			if action.Satisfied {
+				action.SatisfiedBy = append(action.SatisfiedBy, input.DomainReviewSatisfiedBy...)
+			}
 
 		case model.ControlIndependentReview:
 			// Independent review is a review-scope gate (S3/S4), so it runs on
@@ -54,6 +66,9 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 			// at the S2 handoff (issue #36, comment 1).
 			action.Description = "run independent review after wave execution produces execution evidence"
 			action.Satisfied = input.IndependentReviewDone
+			if action.Satisfied {
+				action.SatisfiedBy = append(action.SatisfiedBy, input.IndependentReviewSatisfiedBy...)
+			}
 
 		case model.ControlWorktreeIsolation:
 			action.Description = "ensure worktree preflight before code execution continues"
@@ -72,16 +87,18 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 
 // RequiredActionsInput captures the runtime evidence needed to resolve action satisfaction.
 type RequiredActionsInput struct {
-	ActiveControls           []model.ControlActivation
-	CurrentState             model.WorkflowState
-	HasBlockingOpenQuestions bool
-	IntentExists             bool
-	ScopeConfirmed           bool
-	ResearchStructureOK      bool // research.md has all required sections (always true for non-discovery)
-	DomainReviewDone         bool
-	IndependentReviewDone    bool
-	WorktreePreflightDone    bool
-	RollbackSectionExists    bool
+	ActiveControls               []model.ControlActivation
+	CurrentState                 model.WorkflowState
+	HasBlockingOpenQuestions     bool
+	IntentExists                 bool
+	ScopeConfirmed               bool
+	ResearchStructureOK          bool // research.md has all required sections (always true for non-discovery)
+	DomainReviewDone             bool
+	DomainReviewSatisfiedBy      []SatisfiedBy
+	IndependentReviewDone        bool
+	IndependentReviewSatisfiedBy []SatisfiedBy
+	WorktreePreflightDone        bool
+	RollbackSectionExists        bool
 }
 
 func researchActionDescription(state model.WorkflowState) string {

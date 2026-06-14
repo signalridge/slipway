@@ -99,6 +99,58 @@ func TestStatusJSONResponseOmitsGovernanceSummaryWhenNoGovernanceActions(t *test
 	assert.NotContains(t, payload, "required_actions")
 }
 
+func TestStatusJSONResponseIncludesAttributedSatisfiedActions(t *testing.T) {
+	t.Parallel()
+
+	view := statusView{
+		ExecutionMode:     governedExecutionMode,
+		Slug:              "domain-review-mapping",
+		Phase:             model.PhaseReviewing,
+		LifecycleStatus:   string(model.ChangeStatusActive),
+		CurrentState:      model.StateS3Review,
+		EvidenceFreshness: "fresh",
+		RequiredActions: []governanceActionView{
+			{
+				ControlID:   "domain-review",
+				Mode:        "blocking",
+				Description: "run domain-aware compliance review and attach review evidence",
+				Satisfied:   true,
+				SatisfiedBy: []governanceActionSatisfactionView{
+					{
+						Kind:        "skill_evidence",
+						Name:        "spec-compliance-review",
+						EvidenceRef: "artifacts/changes/domain-review-mapping/verification/spec-compliance-review.yaml",
+						Reason:      "spec-compliance-review provides the domain-aware review evidence for domain-review",
+					},
+				},
+			},
+		},
+	}
+
+	raw, err := json.Marshal(buildStatusJSONResponse(view))
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	assert.NotContains(t, payload, "required_actions")
+	summary, ok := payload["governance_summary"].(map[string]any)
+	require.True(t, ok)
+	actions, ok := summary["satisfied_actions"].([]any)
+	require.True(t, ok)
+	require.Len(t, actions, 1)
+	action, ok := actions[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "domain-review", action["control_id"])
+	satisfiedBy, ok := action["satisfied_by"].([]any)
+	require.True(t, ok)
+	require.Len(t, satisfiedBy, 1)
+	source, ok := satisfiedBy[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "skill_evidence", source["kind"])
+	assert.Equal(t, "spec-compliance-review", source["name"])
+	assert.Equal(t, "artifacts/changes/domain-review-mapping/verification/spec-compliance-review.yaml", source["evidence_ref"])
+	assert.Equal(t, "spec-compliance-review provides the domain-aware review evidence for domain-review", source["reason"])
+}
+
 func TestStatusJSONResponseDoesNotTreatNonGovernanceBlockersAsGovernanceSummary(t *testing.T) {
 	t.Parallel()
 
