@@ -122,6 +122,60 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceToleratesMalformedFile(t *testin
 	assert.Equal(t, 0, index)
 }
 
+// Task-evidence files spanning more than one run version are ambiguous: the
+// resolver cannot pick a single authoritative run, so it reports no usable
+// evidence (derived=false) and the caller keeps the safe wave-1 default rather
+// than guessing (issue #227a).
+func TestIssue227ResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.T) {
+	t.Parallel()
+	root, change := issue227TwoWavePlan(t)
+	// task-a at run version 1, task-b at run version 2 — two distinct versions.
+	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	dir := state.EvidenceTasksDir(root, change.Slug)
+	v2 := map[string]any{
+		"task_id":             "task-b",
+		"run_summary_version": 2,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"changed_files":       []string{"cmd/evidence.go"},
+		"target_files":        []string{"cmd/evidence.go"},
+		"evidence_ref":        "test:task-b",
+		"captured_at":         time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 2, "task-b"),
+	}
+	raw, err := json.Marshal(v2)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "task-b.json"), raw, 0o644))
+
+	plan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+
+	index, derived, err := ResumeWaveIndexFromTaskEvidence(root, change, plan)
+	require.NoError(t, err, "mixed run versions must not hard-fail")
+	assert.False(t, derived, "ambiguous run versions yield the safe wave-1 default, not a guess")
+	assert.Equal(t, 0, index)
+}
+
+// Non-JSON siblings (and subdirectories) in the task-evidence directory are
+// skipped during run-version detection; a valid wave-1 record alongside them
+// still drives the resume index to wave 2 (issue #227a).
+func TestIssue227ResumeWaveIndexFromTaskEvidenceSkipsNonJSONEntries(t *testing.T) {
+	t.Parallel()
+	root, change := issue227TwoWavePlan(t)
+	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	dir := state.EvidenceTasksDir(root, change.Slug)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not evidence\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0o755))
+
+	plan, err := state.LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+
+	index, derived, err := ResumeWaveIndexFromTaskEvidence(root, change, plan)
+	require.NoError(t, err)
+	assert.True(t, derived, "a valid record drives derivation even beside non-JSON entries")
+	assert.Equal(t, 2, index, "the .txt file and subdirectory are ignored for version detection")
+}
+
 // issue227ScopeContractMissingChange seeds an S2_EXECUTE change whose single code
 // task passed but recorded NO changed files, and materializes the matching
 // execution-summary.yaml + passing wave-orchestration evidence. This is the
