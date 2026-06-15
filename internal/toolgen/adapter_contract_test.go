@@ -22,6 +22,7 @@ const (
 type frozenHookContract struct {
 	Event      string
 	Path       string
+	Command    string // portable settings.json command (empty when not registered)
 	Registered bool
 }
 
@@ -81,11 +82,13 @@ var frozenToolContracts = map[string]frozenToolContract{
 		SessionHook: frozenHookContract{
 			Event:      "SessionStart",
 			Path:       ".claude/hooks/slipway-session-start",
+			Command:    `slipway hook session-start --tool "claude"`,
 			Registered: true,
 		},
 		PostToolHook: frozenHookContract{
 			Event:      "PostToolUse",
 			Path:       ".claude/hooks/slipway-context-pressure-post-tool-use",
+			Command:    "slipway hook context-pressure",
 			Registered: true,
 		},
 	},
@@ -120,6 +123,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		SessionHook: frozenHookContract{
 			Event:      "SessionStart",
 			Path:       ".gemini/hooks/slipway-session-start",
+			Command:    `slipway hook session-start --tool "gemini"`,
 			Registered: true,
 		},
 	},
@@ -307,13 +311,23 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 	_, err = os.Stat(settingsAbsPath)
 	require.NoError(t, err, "missing settings file %s", settingsPath)
 
-	registered, err := hookCommandRegistered(settingsAbsPath, hook.Event, hookInvocationCommand(hook.Path))
+	registered, err := hookCommandRegistered(settingsAbsPath, hook.Event, hook.Command)
 	require.NoError(t, err)
 	assert.Equal(t, hook.Registered, registered, "hook registration drifted for %s", hook.Path)
+	if hook.Registered {
+		assertShellNeutralHookCommand(t, hook.Command)
+	}
 }
 
-func hookInvocationCommand(hookPath string) string {
-	return hookLauncherCommand(nativeHookPath(hookPath))
+func assertShellNeutralHookCommand(t *testing.T, command string) {
+	t.Helper()
+
+	assert.NotContains(t, command, "||")
+	assert.NotContains(t, command, "&&")
+	assert.NotContains(t, command, ";")
+	assert.NotContains(t, command, "|")
+	assert.NotContains(t, command, "&")
+	assert.NotContains(t, command, " exit ")
 }
 
 func hookCommandRegistered(settingsPath, eventName, command string) (bool, error) {

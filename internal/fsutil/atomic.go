@@ -8,7 +8,24 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
+)
+
+const (
+	// renameRetryAttempts bounds how many times the final rename is retried on
+	// Windows when a concurrent reader holds the destination file open.
+	renameRetryAttempts = 10
+	// renameRetryBaseDelay is the per-attempt backoff; the total budget across
+	// all attempts stays well under one second.
+	renameRetryBaseDelay = 5 * time.Millisecond
+
+	// errWindowsSharingViolation is ERROR_SHARING_VIOLATION (32): the file is in
+	// use by another process and cannot be replaced.
+	errWindowsSharingViolation = 32
+	// errWindowsAccessDenied is ERROR_ACCESS_DENIED (5): access to the file is
+	// denied, which Windows also reports for a held destination during rename.
+	errWindowsAccessDenied = 5
 )
 
 // WriteFileAtomic writes the file using temp-in-dir, fsync, rename, fsync-parent.
@@ -52,7 +69,7 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 	}
 	closed = true
 
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := renameWithRetry(tmpName, path); err != nil {
 		return err
 	}
 
@@ -71,6 +88,46 @@ func writeFileAtomicImpl(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return nil
+}
+
+// renameWithRetry renames oldPath to newPath. On Windows, a concurrent reader
+// holding the destination open can make the rename fail transiently with a
+// sharing violation; in that case the rename is retried with a bounded backoff.
+// On other platforms it behaves exactly like os.Rename.
+func renameWithRetry(oldPath, newPath string) error {
+	return renameWithRetryFunc(oldPath, newPath, runtime.GOOS, os.Rename, time.Sleep)
+}
+
+func renameWithRetryFunc(
+	oldPath, newPath, goos string,
+	rename func(string, string) error,
+	sleep func(time.Duration),
+) error {
+	err := rename(oldPath, newPath)
+	if err == nil || goos != "windows" {
+		return err
+	}
+
+	for attempt := 0; attempt < renameRetryAttempts && isWindowsSharingViolation(err); attempt++ {
+		sleep(renameRetryBaseDelay)
+		err = rename(oldPath, newPath)
+		if err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+// isWindowsSharingViolation reports whether err is a Windows error indicating
+// the destination file is held open by another reader during a rename. The
+// numeric errno comparison compiles on every platform, so no build tags are
+// needed; on non-Windows platforms these codes simply never occur.
+func isWindowsSharingViolation(err error) bool {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == errWindowsSharingViolation || errno == errWindowsAccessDenied
+	}
+	return false
 }
 
 // CleanupAtomicTempArtifactsOlderThan removes temp files created by
