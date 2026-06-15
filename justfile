@@ -20,7 +20,7 @@ build-release version="dev" commit="unknown":
 [group('build')]
 clean:
     rm -f slipway
-    rm -rf dist/ coverage.txt coverage.html site/
+    rm -rf dist/ coverage.txt coverage.html site/ tmp/
 
 [group('test')]
 test:
@@ -34,6 +34,24 @@ test-race:
 coverage:
     go test -timeout=20m ./... -coverprofile=coverage.txt -count=1
     go tool cover -func=coverage.txt
+
+# Run the governance-kernel coverage gate locally (fails closed on regression).
+[group('test')]
+coverage-gate:
+    mkdir -p tmp
+    go test -timeout=20m ./... -count=1 \
+        -coverpkg="$(go list ./internal/engine/gate ./internal/engine/governance ./internal/engine/progression | paste -sd, -)" \
+        -coverprofile=tmp/coverage-kernel.out
+    go run ./internal/coverage/cmd/covergate -check -profile tmp/coverage-kernel.out
+
+# Ratchet the committed kernel coverage baseline up to current (review the diff).
+[group('test')]
+coverage-baseline:
+    mkdir -p tmp
+    go test -timeout=20m ./... -count=1 \
+        -coverpkg="$(go list ./internal/engine/gate ./internal/engine/governance ./internal/engine/progression | paste -sd, -)" \
+        -coverprofile=tmp/coverage-kernel.out
+    go run ./internal/coverage/cmd/covergate -write -profile tmp/coverage-kernel.out
 
 [group('lint')]
 lint:

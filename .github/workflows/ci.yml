@@ -89,6 +89,28 @@ jobs:
           cache: true
       - name: Run race tests
         run: go test -timeout=20m ./... -race -count=1
+  coverage:
+    name: Kernel Coverage Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Measure governance-kernel coverage
+        run: |
+          mkdir -p tmp
+          kernel_pkgs="$(go list \
+            ./internal/engine/gate \
+            ./internal/engine/governance \
+            ./internal/engine/progression | paste -sd, -)"
+          go test -timeout=20m ./... -count=1 \
+            -coverpkg="${kernel_pkgs}" \
+            -coverprofile=tmp/coverage-kernel.out
+      - name: Enforce kernel coverage baseline (fails closed on regression)
+        run: go run ./internal/coverage/cmd/covergate -check -profile tmp/coverage-kernel.out
   build:
     name: Build
     runs-on: ubuntu-latest
