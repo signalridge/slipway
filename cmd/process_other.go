@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package cmd
 
@@ -14,7 +14,7 @@ func isPIDAlive(_ int) bool {
 
 // preemptInFlightTasks is not supported on non-Unix platforms once there are
 // active task PIDs to signal. With no recorded task PIDs, it is a no-op so
-// ordinary cancel/abort flows still work on Windows.
+// ordinary cancel/abort flows still work on unsupported platforms.
 func preemptInFlightTasks(root, slug string, _ time.Duration) ([]int, []int, error) {
 	pids, err := loadActiveTaskPIDs(root, slug)
 	if err != nil || len(pids) == 0 {

@@ -531,6 +531,105 @@ func TestCopyDirRecursivePreservesSymlinks(t *testing.T) {
 	assert.Equal(t, "# Tasks\n", string(content))
 }
 
+func TestCopyDirRecursiveDereferencesSymlinkWhenCreateSymlinkFails(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "source")
+	dst := filepath.Join(root, "target")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "tasks.md"), []byte("# Tasks\n"), 0o644))
+	if err := os.Symlink("tasks.md", filepath.Join(src, "tasks.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	require.NoError(t, copyDirRecursive(src, dst))
+
+	got, err := os.ReadFile(filepath.Join(dst, "tasks.link"))
+	require.NoError(t, err)
+	assert.Equal(t, "# Tasks\n", string(got))
+}
+
+func TestCopyDirRecursiveRejectsOutsideRootSymlinkFallback(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "source")
+	dst := filepath.Join(root, "target")
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(outside, []byte("outside"), 0o644))
+	if err := os.Symlink(outside, filepath.Join(src, "outside.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	err := copyDirRecursive(src, dst)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "outside allowed root")
+}
+
+func TestCopyDirRecursiveRejectsAncestorDirectorySymlinkFallback(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "source")
+	dst := filepath.Join(root, "target")
+	nested := filepath.Join(src, "nested")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	if err := os.Symlink("..", filepath.Join(nested, "root.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	err := copyDirRecursive(src, dst)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "contains the link")
+}
+
+func TestCopyDirRecursiveRejectsMutualDirectorySymlinkFallback(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "source")
+	dst := filepath.Join(root, "target")
+	dirA := filepath.Join(src, "a")
+	dirB := filepath.Join(src, "b")
+	require.NoError(t, os.MkdirAll(dirA, 0o755))
+	require.NoError(t, os.MkdirAll(dirB, 0o755))
+	if err := os.Symlink("../b", filepath.Join(dirA, "to-b")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink("../a", filepath.Join(dirB, "to-a")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	err := copyDirRecursive(src, dst)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "symlink cycle")
+}
+
 func TestScrubArchivedExecutionSummaryRuntimeEvidenceRefsDirect(t *testing.T) {
 	t.Parallel()
 

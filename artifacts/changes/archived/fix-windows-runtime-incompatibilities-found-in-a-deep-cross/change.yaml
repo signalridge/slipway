@@ -1,0 +1,37 @@
+version: 1
+slug: fix-windows-runtime-incompatibilities-found-in-a-deep-cross
+description: 'Fix Windows runtime incompatibilities found in a deep cross-platform audit. (1) HIGH: internal/model/evidence.go ComputeFileContentHash hashes raw file bytes with no CRLF normalization, while its sibling normalizeCanonical normalizes \r\n->\n; on Windows (git autocrlf, editors) this makes artifact-freshness reconciliation (internal/engine/artifact/manager.go) and goal-verification evidence digests (internal/engine/progression/evidence_digests.go) report false staleness / failed fresh-evidence for semantically-unchanged files. Normalize CRLF before sha256, and add a repo .gitattributes enforcing eol=lf on hashed artifacts/templates. (2) MEDIUM: cmd/process_other.go isPIDAlive hardcoded false on Windows degrades stale-lock cleanup in internal/fsutil/lock.go; add a real Windows liveness check. (3) MEDIUM: internal/fsutil/atomic.go WriteFileAtomic os.Rename has no Windows sharing-violation retry. (4) MEDIUM: internal/toolgen/worktree_provision.go os.Symlink creation fails on Windows without privilege; add dereference fallback. (5) MEDIUM: internal/toolgen/toolgen.go nativeHookPath pins the committed settings.json hook command to the init-host OS. (6) MEDIUM: internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl prescribes Unix-only grep/perl stub scan.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-15T07:41:57.362105Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-windows-runtime-incompatibilities-found-in-a-deep-cross
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 565db04e01881015e9de2efef05f6b5bc03817cf78b17b82d2f4cabc451cf7de
+        updated_at: 2026-06-15T07:50:22.265928805Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ff10c09ee08689061e47d5e4817b0b6617ba1573f402a1f62403fac2b1a5a539
+        updated_at: 2026-06-15T10:52:28.3656639Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 5f4a76c5426c72761385792ac4e3bcd9decdaa1a227d442f5735078bc92e6aae
+        updated_at: 2026-06-15T11:10:51.956219505Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/artifacts/changes/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/verification/code-quality-review.yaml
+    goal-verification: .worktrees/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/artifacts/changes/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/verification/goal-verification.yaml
+    plan-audit: .worktrees/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/artifacts/changes/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/artifacts/changes/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/artifacts/changes/fix-windows-runtime-incompatibilities-found-in-a-deep-cross/verification/wave-orchestration.yaml

@@ -632,9 +632,21 @@ func TestGoalVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
 	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
+	// The prescribed scan must run on stock Windows: no perl, no BSD/macOS-incompatible
+	// `grep -P`, and no hardcoded GNU `grep ... \|` alternation as the mandated path.
+	assert.NotContains(t, content, "perl -0ne")
 	assert.NotContains(t, content, "grep -P")
-	assert.Contains(t, content, "perl -0ne")
-	assert.Contains(t, content, `\{\s*\n\s*\}`)
+	assert.NotContains(t, content, `grep -E 'TODO`)
+	assert.NotContains(t, content, `\{\s*\n\s*\}`)
+
+	// Portable, tool-agnostic guidance: name the markers and the empty-body check,
+	// and express the HOW via whatever code search is available (editor/agent search or rg).
+	assert.Contains(t, content, "PLACEHOLDER")
+	assert.Contains(t, content, "TODO")
+	assert.Contains(t, content, "code-search capability is available")
+	assert.Contains(t, content, "editor/agent search")
+	assert.Contains(t, content, "ripgrep")
+	assert.Contains(t, content, "rg")
 }
 
 func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {

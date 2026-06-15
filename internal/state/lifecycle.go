@@ -19,6 +19,7 @@ import (
 var renameDir = os.Rename
 var promoteDir = os.Rename
 var removeDirAll = os.RemoveAll
+var createSymlink = os.Symlink
 
 // LoadArchivedChange loads an archived change by slug.
 //
@@ -238,6 +239,20 @@ func stageAndMoveDirAcrossFilesystems(src, dst string) error {
 }
 
 func copyDirRecursive(src, dst string) error {
+	return copyDirRecursiveWithin(src, dst, src, make(map[string]struct{}))
+}
+
+func copyDirRecursiveWithin(src, dst, allowedRoot string, active map[string]struct{}) error {
+	realRoot, err := fsutil.RealExistingPath(src)
+	if err != nil {
+		return err
+	}
+	if _, ok := active[realRoot]; ok {
+		return fmt.Errorf("refuse dereference directory %q into %q: symlink cycle through %q", src, dst, realRoot)
+	}
+	active[realRoot] = struct{}{}
+	defer delete(active, realRoot)
+
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -263,7 +278,37 @@ func copyDirRecursive(src, dst string) error {
 			if err != nil {
 				return err
 			}
-			return os.Symlink(linkTarget, target) // #nosec G122 -- source and target are bounded to the staged archive copy; preserving symlinks is intentional.
+			symErr := createSymlink(linkTarget, target) // #nosec G122 -- source and target are bounded to the staged archive copy; preserving symlinks is intentional.
+			if symErr == nil {
+				return nil
+			}
+			// On Windows, os.Symlink fails without SeCreateSymbolicLinkPrivilege
+			// (Developer Mode). Rather than abort the whole copy, dereference the
+			// link and materialize the target's content at the destination.
+			resolved, info, statErr := fsutil.ResolveSymlinkTargetWithin(allowedRoot, path, linkTarget)
+			if statErr != nil {
+				if errors.Is(statErr, fsutil.ErrSymlinkTargetOutsideRoot) {
+					return fmt.Errorf("refuse dereference symlink %q into %q: %w", path, target, statErr)
+				}
+				// Dangling/broken link or unreadable: preserve the original failure.
+				return symErr
+			}
+			if info.IsDir() {
+				if fsutil.SymlinkTargetContainsLink(resolved, path) {
+					return fmt.Errorf("refuse dereference symlink %q into %q: target directory %q contains the link", path, target, resolved)
+				}
+				if err := copyDirRecursiveWithin(resolved, target, allowedRoot, active); err != nil {
+					return fmt.Errorf("dereference symlink %q into %q: %w", path, target, err)
+				}
+				return nil
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
+				return err
+			}
+			if err := copyFile(resolved, target, info.Mode().Perm()); err != nil {
+				return fmt.Errorf("dereference symlink %q into %q: %w", path, target, err)
+			}
+			return nil
 		default:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 				return err

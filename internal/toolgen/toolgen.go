@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -972,7 +971,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 		}
 	}
 
-	// Session-start hook launchers (hook-capable runtimes).
+	// Session-start hook launchers (hook-capable runtimes). Settings-capable
+	// adapters register the shell-neutral `slipway hook ...` command below, but
+	// launcher files remain the native host/manual dispatch surface.
 	if strings.TrimSpace(cfg.SessionHook) != "" {
 		for _, launcher := range hookLauncherOutputs(cfg.SessionHook, "session-start") {
 			content, err := renderHookLauncher(cfg, launcher.template)
@@ -1722,19 +1723,23 @@ func hookLauncherOutputs(basePath, hookTemplateBase string) []hookLauncherOutput
 	}
 }
 
-func nativeHookPath(basePath string) string {
-	basePath = strings.TrimSpace(basePath)
-	if basePath == "" {
-		return ""
-	}
-	if runtime.GOOS == "windows" {
-		return basePath + ".cmd"
-	}
-	return basePath
+// postToolHookSubcommand is the `slipway hook` subcommand the PostToolUse
+// launcher ultimately runs (see hooks/context-pressure-post-tool-use templates).
+const postToolHookSubcommand = "context-pressure"
+
+// sessionHookSubcommand is the `slipway hook` subcommand+args the SessionStart
+// launcher ultimately runs (see hooks/session-start templates).
+func sessionHookSubcommand(toolID string) string {
+	return fmt.Sprintf(`session-start --tool "%s"`, toolID)
 }
 
-func hookLauncherCommand(path string) string {
-	return fmt.Sprintf(`"%s"`, filepath.ToSlash(path))
+// portableHookCommand builds the OS-independent command string registered in a
+// tool's settings.json. It resolves `slipway` from PATH and deliberately avoids
+// shell control operators so the same command parses under sh, cmd.exe,
+// Windows PowerShell 5.1, and PowerShell 7+ instead of pinning an OS-specific
+// launcher file path that breaks for teammates on another OS.
+func portableHookCommand(subcommandArgs string) string {
+	return fmt.Sprintf("slipway hook %s", subcommandArgs)
 }
 
 func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
@@ -1797,12 +1802,14 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
-		pruneLegacySlipwayHookCommands(hooks, cfg.SessionEvent, legacyShellHookPath(cfg.SessionHook))
-		mergeHookEventCommand(hooks, cfg.SessionEvent, hookLauncherCommand(nativeHookPath(cfg.SessionHook)))
+		command := portableHookCommand(sessionHookSubcommand(cfg.ID))
+		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, command)
+		mergeHookEventCommand(hooks, cfg.SessionEvent, command)
 	}
 	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		pruneLegacySlipwayHookCommands(hooks, cfg.PostToolEvent, legacyShellHookPath(cfg.PostToolHook))
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, hookLauncherCommand(nativeHookPath(cfg.PostToolHook)))
+		command := portableHookCommand(postToolHookSubcommand)
+		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, command)
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, command)
 	}
 	settings["hooks"] = hooks
 
@@ -1828,7 +1835,20 @@ func cleanupLegacyHookLauncher(root, basePath string) error {
 	return removePathIfExists(filepath.Join(root, filepath.FromSlash(legacyShellHookPath(basePath))))
 }
 
-func pruneLegacySlipwayHookCommands(hooks map[string]any, eventName, legacyPath string) {
+// pruneStaleSlipwayHookCommands removes every previously generated Slipway hook
+// command for an event so refresh can re-register the current portable form.
+// It prunes BOTH retired shapes:
+//   - the legacy `bash "...slipway-<hook>.sh"` interpreter form, and
+//   - the OS-pinned launcher-path form (the bare launcher, ".sh", ".cmd", or
+//     ".ps1") that earlier versions wrote into the committed settings.json.
+//   - the shell-chained direct form (`slipway hook ... || exit 0`) from the
+//     short-lived portable command shape that PowerShell 5.1 cannot parse.
+//
+// hookBasePath is the launcher base path (e.g. ".claude/hooks/slipway-session-start").
+// The current portable command (`slipway hook <subcommand> ...`) does not contain
+// that path, so it is never pruned by this matcher and mergeHookEventCommand stays
+// idempotent across refreshes.
+func pruneStaleSlipwayHookCommands(hooks map[string]any, eventName, hookBasePath, currentCommand string) {
 	rawEntries, ok := hooks[eventName].([]any)
 	if !ok {
 		return
@@ -1847,7 +1867,7 @@ func pruneLegacySlipwayHookCommands(hooks map[string]any, eventName, legacyPath 
 		}
 		var keptHooks []any
 		for _, hook := range hookList {
-			if isLegacySlipwayHookCommand(hook, legacyPath) {
+			if isStaleSlipwayHookCommand(hook, hookBasePath, currentCommand) {
 				continue
 			}
 			keptHooks = append(keptHooks, hook)
@@ -1865,27 +1885,27 @@ func pruneLegacySlipwayHookCommands(hooks map[string]any, eventName, legacyPath 
 	hooks[eventName] = keptEntries
 }
 
-func isLegacySlipwayHookCommand(hook any, legacyPath string) bool {
+func isStaleSlipwayHookCommand(hook any, hookBasePath, currentCommand string) bool {
 	hookMap, ok := hook.(map[string]any)
 	if !ok {
 		return false
 	}
 	command, _ := hookMap["command"].(string)
 	command = filepath.ToSlash(strings.TrimSpace(command))
-	if !strings.Contains(command, legacyPath) {
+	basePath := filepath.ToSlash(strings.TrimSpace(hookBasePath))
+	// A command that references the Slipway-owned launcher base path is a
+	// previously generated form: the bare launcher path, any ".sh"/".cmd"/".ps1"
+	// variant, and the legacy `bash "...sh"` interpreter form all embed it.
+	if basePath != "" && strings.Contains(command, basePath) {
+		return true
+	}
+
+	currentCommand = strings.TrimSpace(currentCommand)
+	if currentCommand == "" || command == currentCommand {
 		return false
 	}
-	fields := strings.Fields(command)
-	if len(fields) == 0 {
-		return false
-	}
-	first := strings.Trim(fields[0], `"'`)
-	// Match the interpreter by basename so an absolute path (e.g. /bin/bash) is
-	// pruned too, not just the bare "bash"/"sh" Slipway historically generated.
-	// A direct exec of the legacy script (first token ends with the
-	// Slipway-owned .sh path) also qualifies.
-	firstBase := path.Base(first)
-	return firstBase == "bash" || firstBase == "sh" || strings.HasSuffix(first, legacyPath)
+	suffix := strings.TrimSpace(strings.TrimPrefix(command, currentCommand))
+	return suffix == "|| exit 0"
 }
 
 func mergeHookEventCommand(hooks map[string]any, eventName, command string) {

@@ -1030,3 +1030,66 @@ func TestStalePropagationOrderUnknownArtifactError(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrUnknownArtifact))
 }
+
+// TestReconcileFromFilesystemCRLFRematerializationIsNotStale is a Windows
+// regression guard (REQ-002 scenario A / REQ-009). A governed text artifact is
+// frozen with its content hash recorded while stored as LF, then re-read from
+// disk with CRLF line endings (the Windows `git core.autocrlf=true` checkout
+// case). Reconciliation runs in an amendment-eligible state (S2_EXECUTE), where
+// a real content change would unfreeze the artifact to approved and record an
+// AmendmentEvent. Because ComputeFileContentHash CRLF-normalizes text, the
+// CRLF re-materialization must hash identically to the LF original, so
+// reconciliation reports the artifact as UNCHANGED: it stays frozen, keeps its
+// recorded hash, and produces no amendment. If CRLF normalization were removed,
+// the LF-recorded hash would differ from the CRLF disk hash and this test would
+// go RED (an amendment would fire and the state would flip to approved).
+func TestReconcileFromFilesystemCRLFRematerializationIsNotStale(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "test-change"
+	base := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	artifactPath := filepath.Join(base, "intent.md")
+	// Record the artifact while stored as LF (the original committed form).
+	require.NoError(t, os.WriteFile(artifactPath, []byte("# Intent\nship the change\nverify it\n"), 0o644))
+	lfHash, err := model.ComputeFileContentHash(artifactPath)
+	require.NoError(t, err)
+
+	// Re-materialize the SAME logical content on disk with CRLF line endings, as
+	// a Windows autocrlf checkout would. The raw bytes differ from the LF form.
+	require.NoError(t, os.WriteFile(artifactPath, []byte("# Intent\r\nship the change\r\nverify it\r\n"), 0o644))
+	crlfBytes, err := os.ReadFile(artifactPath)
+	require.NoError(t, err)
+	require.Contains(t, string(crlfBytes), "\r\n", "test must drive the real CRLF on-disk case")
+
+	// The normalized content hash is line-ending invariant: the regression guard.
+	crlfHash, err := model.ComputeFileContentHash(artifactPath)
+	require.NoError(t, err)
+	require.Equal(t, lfHash, crlfHash,
+		"CRLF re-materialization of identical text must hash equal to its LF form")
+
+	change := &model.Change{
+		Slug:         slug,
+		CurrentState: model.StateS2Execute, // amendment-eligible: a real change would unfreeze.
+		Artifacts: map[string]model.ArtifactState{
+			"intent": {
+				ID:          "intent",
+				State:       model.ArtifactLifecycleFrozen,
+				ContentHash: lfHash,
+				Path:        artifactPath,
+			},
+		},
+	}
+
+	result, reconcileErr := ReconcileFromFilesystem(root, change)
+	require.NoError(t, reconcileErr)
+
+	// UNCHANGED: no auto-amendment for a line-ending-only re-materialization.
+	assert.Empty(t, result.Amendments,
+		"a CRLF-only re-materialization must not auto-amend a frozen artifact")
+	assert.Equal(t, model.ArtifactLifecycleFrozen, change.Artifacts["intent"].State,
+		"frozen artifact must remain frozen across a CRLF checkout")
+	assert.Equal(t, lfHash, change.Artifacts["intent"].ContentHash,
+		"recorded content hash must survive a CRLF round-trip unchanged")
+}
