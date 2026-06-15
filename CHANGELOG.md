@@ -5,6 +5,19 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0](https://github.com/signalridge/slipway/compare/v0.24.1...v0.25.0) (2026-06-15)
+
+
+### Features
+
+* **ci:** add governance kernel coverage gate ([#226](https://github.com/signalridge/slipway/issues/226)) ([a1cd8d9](https://github.com/signalridge/slipway/commit/a1cd8d92d6cfe85020ca4bd1d3e97bffe13d8077))
+
+
+### Dependencies
+
+* **docker:** bump golang from `f23e8b2` to `7a3e500` ([#223](https://github.com/signalridge/slipway/issues/223)) ([aa04960](https://github.com/signalridge/slipway/commit/aa0496097202f0c4811ad0be8a0453b796c6af6d))
+* **go:** bump golang.org/x/term from 0.43.0 to 0.44.0 in the go-minor group ([#224](https://github.com/signalridge/slipway/issues/224)) ([11f657a](https://github.com/signalridge/slipway/commit/11f657afb2f7e43f139e161ec413de5348d20984))
+
 ## [0.24.1](https://github.com/signalridge/slipway/compare/v0.24.0...v0.24.1) (2026-06-15)
 
 
