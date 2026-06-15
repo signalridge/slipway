@@ -196,8 +196,14 @@ func TestToolFindPolluterGoRejectsExistingPollutionPath(t *testing.T) {
 
 	_, stderr, err := runRootCommandWithInput([]string{"tool", "find-polluter-go", pollutionPath, "./..."}, "")
 	require.Error(t, err)
-	assert.Contains(t, stderr, "find_polluter_go_pollution_present")
-	assert.Contains(t, stderr, pollutionPath)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
+	assert.Equal(t, "find_polluter_go_pollution_present", payload["error_code"])
+	assert.Contains(t, fmt.Sprint(payload["message"]), pollutionPath)
+	details, ok := payload["details"].(map[string]any)
+	require.True(t, ok, "details must be present")
+	assert.Equal(t, pollutionPath, details["path"])
 }
 
 func TestToolFindPolluterGoFailsWhenGoListFails(t *testing.T) {
