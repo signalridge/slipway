@@ -20,10 +20,19 @@ const (
 )
 
 type frozenHookContract struct {
-	Event      string
-	Path       string
-	Command    string // portable settings.json command (empty when not registered)
+	Event string
+	Path  string
+	// Registered is true when the host registers an inline `slipway hook ...`
+	// command for this event in settings.json. Settings-capable hosts (claude,
+	// gemini) register; file-by-path hosts (cursor, opencode) do not.
 	Registered bool
+	// InlineCommand is the bare inline command expected in settings.json for a
+	// registered hook. Empty for unregistered (file-by-path) hooks.
+	InlineCommand string
+	// EmitsLauncher is true when the host writes the launcher file family
+	// (extensionless + .ps1 + .cmd) for this hook. Settings-capable hosts emit
+	// NO launcher files; only file-by-path hosts do.
+	EmitsLauncher bool
 }
 
 type frozenToolContract struct {
@@ -80,16 +89,18 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerStyle:  "slash-colon",
 		SettingsPath:  ".claude/settings.json",
 		SessionHook: frozenHookContract{
-			Event:      "SessionStart",
-			Path:       ".claude/hooks/slipway-session-start",
-			Command:    `slipway hook session-start --tool "claude"`,
-			Registered: true,
+			Event:         "SessionStart",
+			Path:          ".claude/hooks/slipway-session-start",
+			Registered:    true,
+			InlineCommand: sessionStartHookCommand,
+			EmitsLauncher: false,
 		},
 		PostToolHook: frozenHookContract{
-			Event:      "PostToolUse",
-			Path:       ".claude/hooks/slipway-context-pressure-post-tool-use",
-			Command:    "slipway hook context-pressure",
-			Registered: true,
+			Event:         "PostToolUse",
+			Path:          ".claude/hooks/slipway-context-pressure-post-tool-use",
+			Registered:    true,
+			InlineCommand: contextPressureHookCommand,
+			EmitsLauncher: false,
 		},
 	},
 	"codex": {
@@ -108,8 +119,9 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		SessionHook: frozenHookContract{
-			Path:       ".cursor/hooks/slipway-session-start",
-			Registered: false,
+			Path:          ".cursor/hooks/slipway-session-start",
+			Registered:    false,
+			EmitsLauncher: true,
 		},
 	},
 	"gemini": {
@@ -121,10 +133,11 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerStyle:  "slash-hyphen",
 		SettingsPath:  ".gemini/settings.json",
 		SessionHook: frozenHookContract{
-			Event:      "SessionStart",
-			Path:       ".gemini/hooks/slipway-session-start",
-			Command:    `slipway hook session-start --tool "gemini"`,
-			Registered: true,
+			Event:         "SessionStart",
+			Path:          ".gemini/hooks/slipway-session-start",
+			Registered:    true,
+			InlineCommand: sessionStartHookCommand,
+			EmitsLauncher: false,
 		},
 	},
 	"opencode": {
@@ -135,8 +148,9 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		SessionHook: frozenHookContract{
-			Path:       ".opencode/hooks/slipway-session-start",
-			Registered: false,
+			Path:          ".opencode/hooks/slipway-session-start",
+			Registered:    false,
+			EmitsLauncher: true,
 		},
 	},
 }
@@ -293,30 +307,48 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 	if strings.TrimSpace(hook.Path) == "" {
 		assert.Empty(t, hook.Event)
 		assert.False(t, hook.Registered)
+		assert.False(t, hook.EmitsLauncher)
+		assert.Empty(t, hook.InlineCommand)
 		return
 	}
 
-	absHookPath := filepath.Join(root, filepath.FromSlash(hook.Path))
-	_, err := os.Stat(absHookPath)
-	require.NoError(t, err, "missing generated hook %s", hook.Path)
-	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(hook.Path+".ps1")))
-	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(hook.Path+".cmd")))
+	// Launcher emission is keyed on whether the host owns a settings.json.
+	// Settings-capable hosts (claude, gemini) emit NO launcher files; file-by-path
+	// hosts (cursor, opencode) still emit the extensionless + .ps1 + .cmd family.
+	for _, suffix := range []string{"", ".ps1", ".cmd", ".sh"} {
+		p := filepath.Join(root, filepath.FromSlash(hook.Path+suffix))
+		_, err := os.Stat(p)
+		if hook.EmitsLauncher && suffix != ".sh" {
+			require.NoErrorf(t, err, "missing generated launcher %s", hook.Path+suffix)
+		} else {
+			assert.Truef(t, os.IsNotExist(err),
+				"unexpected launcher file %s (settings-capable hosts emit none; .sh is always retired)", hook.Path+suffix)
+		}
+	}
 
 	if strings.TrimSpace(settingsPath) == "" {
 		assert.False(t, hook.Registered, "hook without settings must not be marked registered")
+		assert.Empty(t, hook.InlineCommand, "hook without settings must not declare an inline command")
 		return
 	}
 
 	settingsAbsPath := filepath.Join(root, filepath.FromSlash(settingsPath))
-	_, err = os.Stat(settingsAbsPath)
+	content, err := os.ReadFile(settingsAbsPath)
 	require.NoError(t, err, "missing settings file %s", settingsPath)
+	settings := string(content)
 
-	registered, err := hookCommandRegistered(settingsAbsPath, hook.Event, hook.Command)
+	// Settings-capable hosts register the bare inline command and never reference
+	// a launcher path.
+	if hook.Registered {
+		require.NotEmpty(t, hook.InlineCommand, "registered hook must declare its inline command")
+		assert.NotContains(t, settings, hook.Path,
+			"settings must not reference launcher path for %s", hook.Path)
+		assertShellNeutralHookCommand(t, hook.InlineCommand)
+	}
+
+	registered, err := hookCommandRegistered(settingsAbsPath, hook.Event, hook.InlineCommand)
 	require.NoError(t, err)
 	assert.Equal(t, hook.Registered, registered, "hook registration drifted for %s", hook.Path)
-	if hook.Registered {
-		assertShellNeutralHookCommand(t, hook.Command)
-	}
 }
 
 func assertShellNeutralHookCommand(t *testing.T, command string) {

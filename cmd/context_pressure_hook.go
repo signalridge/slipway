@@ -57,8 +57,11 @@ func makeContextPressureHookCmd() *cobra.Command {
 		Short:  "Evaluate PostToolUse context pressure",
 		Hidden: true,
 		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runContextPressureHook(cmd.InOrStdin(), cmd.OutOrStdout(), time.Now())
+		Run: func(cmd *cobra.Command, _ []string) {
+			// Fail silent: this hook is inlined into automatic host hooks and must
+			// never surface a blocking or non-zero failure. Any internal error
+			// (read, JSON, path, classify, write) is swallowed to a clean exit 0.
+			_ = runContextPressureHook(cmd.InOrStdin(), cmd.OutOrStdout(), time.Now())
 		},
 	}
 }

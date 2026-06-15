@@ -181,11 +181,11 @@ Generate host-tool surfaces with `slipway init --tools <id>` (`claude`, `codex`,
 
 | Tool | Generated surfaces |
 | --- | --- |
-| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/hooks/slipway-*` native launchers, `.claude/settings.json` |
+| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/settings.json` (inline `slipway hook ...` entries, no launcher file) |
 | Codex | `.codex/skills/slipway-*/SKILL.md` (entry, per-command, and governance skills) |
-| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start` native launchers |
-| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start` native launchers, `.gemini/settings.json` |
-| OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start` native launchers |
+| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start` (plus `.ps1` / `.cmd`) |
+| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/settings.json` (inline `slipway hook ...` entries, no launcher file) |
+| OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start` (plus `.ps1` / `.cmd`) |
 
 Exported generated skill rows are pinned by public skill directory:
 `slipway/SKILL.md`, `slipway-ci-triage/SKILL.md`,
@@ -214,6 +214,12 @@ Want an agent to install and initialize Slipway for you? Paste the [AI Tool Inst
 - `artifacts/changes/**/evidence/`, `events/`, `verification/`: raw local proof directories, ignored by Slipway-managed `.gitignore` rules. Keep them for local audit and validation.
 - `artifacts/codebase/`: advisory repo-scoped codebase maps from `slipway codebase-map`, git-tracked by default so brownfield context is shared rather than hidden.
 - `.worktrees/`: dedicated governed worktrees, local-only by default.
+
+The governed AI-tool session runs from the **project root** and reads skills and
+hooks from the root host surfaces (`.claude`, `.gemini`, etc.). The per-change
+git worktree under `.worktrees/<branch>` holds that change's edited files, but
+the session's working directory stays at the root — it does not run with its cwd
+inside the worktree, so host-adapter surfaces are not provisioned into worktrees.
 
 See the [Operator Guide](docs/operator-guide.md) for state authority, freshness state, and recovery details.
 
