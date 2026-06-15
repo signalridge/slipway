@@ -5,6 +5,17 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0](https://github.com/signalridge/slipway/compare/v0.23.0...v0.24.0) (2026-06-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tool:** generated settings register native launchers and slipway tool/slipway hook commands instead of bash "<hook>.sh" and skills/*/scripts/* payloads. Run slipway init --refresh to migrate existing installs; legacy Slipway-owned bash "<hook>.sh" hook entries are pruned while user hooks are preserved.
+
+### Features
+
+* **tool:** replace shell/python hooks & skill scripts with native slipway hook/tool commands ([#218](https://github.com/signalridge/slipway/issues/218)) ([e225088](https://github.com/signalridge/slipway/commit/e2250886331432af423a55e5748f529948fed08b))
+
 ## [0.23.0](https://github.com/signalridge/slipway/compare/v0.22.2...v0.23.0) (2026-06-14)
 
 
