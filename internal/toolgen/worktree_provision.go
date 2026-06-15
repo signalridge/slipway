@@ -228,7 +228,7 @@ func dereferenceSymlinkCopy(srcPath, dstPath, linkTarget string, symErr error) e
 	if err != nil {
 		return fmt.Errorf("dereference symlink %q into %q: %w", srcPath, dstPath, err)
 	}
-	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 -- preserves the dereferenced target's mode; dstPath stays within the worktree's host-adapter surface.
+	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 G703 -- preserves the dereferenced target's mode; dstPath is produced by the caller-owned host-adapter copy target.
 		return fmt.Errorf("dereference symlink %q into %q: %w", srcPath, dstPath, err)
 	}
 	return nil
@@ -280,11 +280,11 @@ func copyDereferencedDirWithin(srcRoot, dstRoot, allowedRoot string, active map[
 		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil { // #nosec G301 -- host-adapter surfaces are user-facing skill/command trees where searchable mode is intentional.
 			return err
 		}
-		data, err := os.ReadFile(srcPath) // #nosec G304 -- srcPath is under the accepted dereferenced host-adapter symlink target.
+		data, err := os.ReadFile(srcPath) // #nosec G304 G122 -- srcPath is supplied by WalkDir under the accepted dereferenced host-adapter symlink target.
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 -- preserves the source mode; dstPath stays within the worktree's host-adapter surface.
+		return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 G703 -- preserves the source mode; dstPath is derived from filepath.Rel(srcRoot, srcPath) under the caller-owned host-adapter copy target.
 	})
 }
 
@@ -313,7 +313,7 @@ func dereferenceNestedSymlinkCopy(allowedRoot, srcPath, dstPath string, active m
 	if err != nil {
 		return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
 	}
-	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 -- preserves the dereferenced target's mode; dstPath stays within the worktree's host-adapter surface.
+	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 G703 -- preserves the dereferenced target's mode; resolved source is bounded to allowedRoot and dstPath is the caller-owned host-adapter copy target.
 		return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
 	}
 	return nil
