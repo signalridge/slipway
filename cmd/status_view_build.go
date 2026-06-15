@@ -291,6 +291,7 @@ func buildStatusTimeline(root string, change model.Change, limit int) ([]statusT
 	if len(events) == 0 {
 		return nil, nil
 	}
+	events = markDuplicateTransitionReplays(events)
 	if limit > 0 && len(events) > limit {
 		events = events[len(events)-limit:]
 	}
@@ -314,6 +315,77 @@ func buildStatusTimeline(root string, change model.Change, limit int) ([]statusT
 		timeline = append(timeline, entry)
 	}
 	return timeline, nil
+}
+
+func markDuplicateTransitionReplays(events []state.LifecycleEvent) []state.LifecycleEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	presented := make([]state.LifecycleEvent, 0, len(events))
+	var lastTransition state.LifecycleEvent
+	hasLastTransition := false
+	for _, event := range events {
+		next := event
+		if hasLastTransition && duplicateLifecycleTransition(lastTransition, event) {
+			next.EventType = "state.transition.replayed"
+			next.Result = "replayed"
+			presented = append(presented, next)
+			continue
+		}
+		presented = append(presented, next)
+		if event.EventType == "state.transitioned" {
+			lastTransition = event
+			hasLastTransition = true
+		}
+	}
+	return presented
+}
+
+func duplicateLifecycleTransition(previous, current state.LifecycleEvent) bool {
+	if previous.EventType != "state.transitioned" || current.EventType != "state.transitioned" {
+		return false
+	}
+	if previous.Command != current.Command ||
+		previous.Action != current.Action ||
+		previous.Reason != current.Reason ||
+		previous.Result != current.Result ||
+		previous.BeforeState != current.BeforeState ||
+		previous.AfterState != current.AfterState ||
+		previous.BeforeSubStep != current.BeforeSubStep ||
+		previous.AfterSubStep != current.AfterSubStep ||
+		previous.GateID != current.GateID ||
+		previous.ControlID != current.ControlID ||
+		previous.SkillID != current.SkillID {
+		return false
+	}
+	if !lifecycleEvidenceRefsEqual(previous.EvidenceRefs, current.EvidenceRefs) {
+		return false
+	}
+	return lifecycleSideEffectsEqual(previous.SideEffects, current.SideEffects)
+}
+
+func lifecycleEvidenceRefsEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		if right[key] != leftValue {
+			return false
+		}
+	}
+	return true
+}
+
+func lifecycleSideEffectsEqual(left, right []state.LifecycleSideEffect) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i].Kind != right[i].Kind || left[i].Detail != right[i].Detail {
+			return false
+		}
+	}
+	return true
 }
 
 func buildStatusNarrative(view statusView) string {
