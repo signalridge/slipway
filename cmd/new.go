@@ -16,7 +16,6 @@ import (
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -473,7 +472,7 @@ func createDirectGovernedChange(
 			return err
 		}
 
-		worktreeBinding, err := state.EnsureDefaultWorktreeForChange(root, &change, toolgen.ProvisionWorktreeHostSurfaces)
+		worktreeBinding, err := state.EnsureDefaultWorktreeForChange(root, &change)
 		if err != nil {
 			return err
 		}

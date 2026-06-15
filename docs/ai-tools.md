@@ -137,7 +137,8 @@ Generated OpenCode skills live under:
 .opencode/skills/
 ```
 
-and the advisory session hook is generated as platform-native launchers:
+and, because OpenCode has no `settings.json`, the advisory session hook is
+generated as platform-native launcher files:
 
 ```text
 .opencode/hooks/slipway-session-start
@@ -145,13 +146,23 @@ and the advisory session hook is generated as platform-native launchers:
 .opencode/hooks/slipway-session-start.cmd
 ```
 
-Settings-capable adapters register a direct, shell-neutral `slipway hook ...`
-command in `settings.json` instead of a platform-specific launcher path. The
-registered command intentionally contains no shell chaining operators, so the
-same settings file parses under POSIX `sh`, `cmd.exe`, Windows PowerShell 5.1,
-and PowerShell 7+. The generated launcher files remain available for
-host-native dispatch paths and manual inspection; each launcher only delegates
-to `slipway hook ...`, and hook behavior lives in the Slipway binary.
+Cursor follows the same pattern, shipping
+`.cursor/hooks/slipway-session-start` plus the `.ps1` and `.cmd` companions.
+These launchers only delegate to `slipway hook ...`; hook behavior lives in the
+Slipway binary.
+
+## Settings-Capable Hosts
+
+Claude (`.claude/settings.json`) and Gemini (`.gemini/settings.json`) register
+hooks inline in their own settings file rather than through a launcher script.
+Slipway writes bare `slipway hook ...` commands directly into `settings.json`:
+
+- `slipway hook context-pressure` on `PostToolUse`
+- `slipway hook session-start` on `SessionStart`
+
+No launcher file is generated under `.claude/hooks/` or `.gemini/hooks/`; the
+command resolves the `slipway` binary on `PATH` and the hook behavior lives in
+that binary.
 
 ## Safety Rules
 

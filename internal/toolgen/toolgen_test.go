@@ -427,13 +427,34 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			}
 		}
 
-		if cfg.SessionHook != "" {
+		// Hook emission is keyed on whether the host owns a settings.json.
+		// Settings-capable hosts (claude, gemini) register a bare inline command
+		// and emit NO launcher files. File-by-path hosts (cursor, opencode) still
+		// emit the session-start launcher family. Codex has no session hook.
+		switch {
+		case cfg.SettingsPath != "":
+			// Settings-capable hosts must not write any launcher file for either
+			// hook (the extensionless POSIX entry or its .ps1/.cmd/.sh variants).
+			for _, base := range []string{cfg.SessionHook, cfg.PostToolHook} {
+				if base == "" {
+					continue
+				}
+				for _, suffix := range []string{"", ".ps1", ".cmd", ".sh"} {
+					p := filepath.Join(root, filepath.FromSlash(base+suffix))
+					_, err := os.Stat(p)
+					assert.True(t, os.IsNotExist(err),
+						"%s: settings-capable host must not emit launcher file %s", toolID, base+suffix)
+				}
+			}
+		case cfg.SessionHook != "":
+			// File-by-path hosts keep emitting the session-start launcher family.
 			hookPath := filepath.Join(root, cfg.SessionHook)
 			_, err := os.Stat(hookPath)
-			assert.NoError(t, err, "%s: missing session-start hook", toolID)
-			assert.FileExists(t, hookPath+".ps1", "%s: missing PowerShell session-start hook", toolID)
-			assert.FileExists(t, hookPath+".cmd", "%s: missing cmd session-start hook", toolID)
-		} else {
+			assert.NoError(t, err, "%s: missing session-start launcher", toolID)
+			assert.FileExists(t, hookPath+".ps1", "%s: missing PowerShell session-start launcher", toolID)
+			assert.FileExists(t, hookPath+".cmd", "%s: missing cmd session-start launcher", toolID)
+		default:
+			// Codex: no session hook at all.
 			hookPath := filepath.Join(root, "."+toolID, "hooks", "slipway-session-start")
 			_, err := os.Stat(hookPath)
 			assert.True(t, os.IsNotExist(err), "%s: unexpected session hook generated", toolID)
@@ -446,16 +467,25 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NoError(t, err, "%s: missing settings file", toolID)
 			settings := string(content)
 			assert.Contains(t, settings, "SessionStart", "%s: missing session-start registration", toolID)
-			assert.Contains(t, settings, "slipway hook session-start", "%s: missing portable session-start command", toolID)
+			// Both settings-capable hosts register the bare inline session-start
+			// command with no launcher path or shell operator.
+			assert.Contains(t, settings, sessionStartHookCommand,
+				"%s: missing inline session-start command", toolID)
+			assert.NotContains(t, settings, ".claude/hooks/",
+				"%s: settings must not reference a launcher path", toolID)
+			assert.NotContains(t, settings, "."+toolID+"/hooks/",
+				"%s: settings must not reference a launcher path", toolID)
+			assert.NotContains(t, settings, "--tool", "%s: settings must use the bare inline command", toolID)
 			assert.NotContains(t, settings, "||", "%s: settings command must parse in Windows PowerShell 5.1", toolID)
-			if toolID == "claude" {
+			assert.NotContains(t, settings, "bash", "%s: settings must not require bash", toolID)
+			if cfg.PostToolEvent != "" && cfg.PostToolHook != "" {
 				assert.Contains(t, settings, "PostToolUse", "%s: missing post-tool registration", toolID)
-				assert.Contains(t, settings, "slipway hook context-pressure", "%s: missing portable context-pressure command", toolID)
-				assert.NotContains(t, settings, "bash", "%s: settings must not require bash", toolID)
-				// The portable command is OS-independent: no pinned launcher path.
-				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use", "%s: settings must not pin launcher path", toolID)
+				assert.Contains(t, settings, contextPressureHookCommand,
+					"%s: missing inline context-pressure command", toolID)
 			} else {
-				assert.NotContains(t, settings, "context-pressure", "%s: unexpected post-tool registration", toolID)
+				assert.NotContains(t, settings, "PostToolUse", "%s: unexpected post-tool registration", toolID)
+				assert.NotContains(t, settings, contextPressureHookCommand,
+					"%s: unexpected context-pressure registration", toolID)
 			}
 		default:
 			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
@@ -799,7 +829,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 				t,
 				filepath.Join(root, cfg.SettingsPath),
 				cfg.SessionEvent,
-				portableHookCommand(sessionHookSubcommand(cfg.ID)),
+				sessionStartHookCommand,
 			)
 		}
 	}
@@ -1012,85 +1042,102 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"claude", "gemini"}, true))
 
-	// Assert the registered command via the parsed JSON value so the embedded
-	// quotes in `--tool "<id>"` are compared decoded, not against the
-	// backslash-escaped raw bytes JSON marshaling produces.
-	assertHookCommandRegistered(
-		t,
-		filepath.Join(root, ".claude", "settings.json"),
-		"SessionStart",
-		portableHookCommand(sessionHookSubcommand("claude")),
-	)
-	assertHookCommandRegistered(
-		t,
-		filepath.Join(root, ".claude", "settings.json"),
-		"PostToolUse",
-		portableHookCommand(postToolHookSubcommand),
-	)
-
+	// Claude registers BOTH the inline session-start and context-pressure
+	// commands directly in settings.json, with no launcher path, no
+	// `.claude/hooks/` reference, no `--tool` flag, and no shell operator.
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.Contains(t, string(claudeSettings), "slipway hook session-start --tool")
-	assert.Contains(t, string(claudeSettings), "PostToolUse")
-	assert.Contains(t, string(claudeSettings), "slipway hook context-pressure")
-	// Portable command is OS-independent: no pinned launcher file path or bash.
-	assert.NotContains(t, string(claudeSettings), "slipway-session-start.sh")
-	assert.NotContains(t, string(claudeSettings), ".claude/hooks/slipway-session-start")
-	assert.NotContains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use")
-	assert.NotContains(t, string(claudeSettings), "bash")
-	assert.NotContains(t, string(claudeSettings), "||")
-	assert.NotContains(t, string(claudeSettings), "&&")
+	claude := string(claudeSettings)
+	assert.Contains(t, claude, "SessionStart")
+	assert.Contains(t, claude, sessionStartHookCommand)
+	assert.Contains(t, claude, "PostToolUse")
+	assert.Contains(t, claude, contextPressureHookCommand)
+	assert.NotContains(t, claude, ".claude/hooks/", "claude settings must not reference a launcher path")
+	assert.NotContains(t, claude, "slipway-session-start", "claude settings must not name a launcher file")
+	assert.NotContains(t, claude, "slipway-context-pressure-post-tool-use", "claude settings must not name a launcher file")
+	assert.NotContains(t, claude, "--tool", "claude settings must use the bare inline command")
+	assert.NotContains(t, claude, "bash", "claude settings must not require bash")
+	assert.NotContains(t, claude, "||", "claude settings must not require shell fallback operators")
+	assert.NotContains(t, claude, "&&", "claude settings must not require shell fallback operators")
 
-	assertHookCommandRegistered(
-		t,
-		filepath.Join(root, ".gemini", "settings.json"),
-		"SessionStart",
-		portableHookCommand(sessionHookSubcommand("gemini")),
-	)
-
+	// Gemini registers ONLY the inline session-start command (no PostToolUse).
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(geminiSettings), "SessionStart")
-	assert.Contains(t, string(geminiSettings), "slipway hook session-start --tool")
-	assert.NotContains(t, string(geminiSettings), "slipway-session-start.sh")
-	assert.NotContains(t, string(geminiSettings), ".gemini/hooks/slipway-session-start")
-	assert.NotContains(t, string(geminiSettings), "PostToolUse")
-	assert.NotContains(t, string(geminiSettings), "context-pressure")
-	assert.NotContains(t, string(geminiSettings), "||")
+	gemini := string(geminiSettings)
+	assert.Contains(t, gemini, "SessionStart")
+	assert.Contains(t, gemini, sessionStartHookCommand)
+	assert.NotContains(t, gemini, "PostToolUse")
+	assert.NotContains(t, gemini, contextPressureHookCommand)
+	assert.NotContains(t, gemini, ".gemini/hooks/", "gemini settings must not reference a launcher path")
+	assert.NotContains(t, gemini, "slipway-session-start", "gemini settings must not name a launcher file")
+	assert.NotContains(t, gemini, "--tool", "gemini settings must use the bare inline command")
+	assert.NotContains(t, gemini, "bash", "gemini settings must not require bash")
+	assert.NotContains(t, gemini, "||", "gemini settings must not require shell fallback operators")
+
+	// Neither settings-capable host emits any launcher file (extensionless +
+	// .ps1/.cmd/.sh) for either hook event.
+	for _, base := range []string{
+		filepath.Join(".claude", "hooks", "slipway-session-start"),
+		filepath.Join(".claude", "hooks", "slipway-context-pressure-post-tool-use"),
+		filepath.Join(".gemini", "hooks", "slipway-session-start"),
+	} {
+		for _, suffix := range []string{"", ".ps1", ".cmd", ".sh"} {
+			p := filepath.Join(root, base+suffix)
+			_, err := os.Stat(p)
+			assert.True(t, os.IsNotExist(err),
+				"settings-capable host must not emit launcher file %s", base+suffix)
+		}
+	}
 }
 
-func TestGenerateRefreshRemovesLegacyShellHookLaunchers(t *testing.T) {
+func TestGenerateRefreshPrunesOrphanedHookLaunchersForSettingsCapableHosts(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
-	stalePaths := []string{
+	// Seed the full orphaned launcher family (extensionless + .ps1 + .cmd + .sh)
+	// for both settings-capable hosts (claude, gemini), plus the same for the
+	// file-by-path hosts (cursor, opencode) which legitimately re-emit launchers.
+	settingsCapableOrphans := []string{
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start"),
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start.ps1"),
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start.cmd"),
 		filepath.Join(root, ".claude", "hooks", "slipway-session-start.sh"),
+		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use"),
+		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.ps1"),
+		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.cmd"),
 		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.sh"),
+		filepath.Join(root, ".gemini", "hooks", "slipway-session-start"),
+		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.ps1"),
+		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.cmd"),
+		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.sh"),
+	}
+	fileByPathSeeds := []string{
 		filepath.Join(root, ".cursor", "hooks", "slipway-session-start.sh"),
 		filepath.Join(root, ".opencode", "hooks", "slipway-session-start.sh"),
 	}
-	for _, p := range stalePaths {
+	for _, p := range append(append([]string{}, settingsCapableOrphans...), fileByPathSeeds...) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
 		require.NoError(t, os.WriteFile(p, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
 	}
 
-	require.NoError(t, Generate(root, []string{"claude", "cursor", "opencode"}, true))
+	require.NoError(t, Generate(root, []string{"claude", "gemini", "cursor", "opencode"}, true))
 
-	for _, p := range stalePaths {
+	// Settings-capable hosts no longer emit launchers; every orphaned launcher
+	// file is pruned on refresh.
+	for _, p := range settingsCapableOrphans {
 		_, err := os.Stat(p)
-		assert.True(t, os.IsNotExist(err), "refresh should remove stale legacy shell hook launcher %s", p)
+		assert.True(t, os.IsNotExist(err),
+			"refresh must prune orphaned launcher %s for settings-capable host", p)
 	}
+
+	// File-by-path hosts (cursor, opencode) still emit their session-start
+	// launcher family, so the extensionless entry remains present.
 	for _, p := range []string{
-		filepath.Join(root, ".claude", "hooks", "slipway-session-start"),
-		filepath.Join(root, ".claude", "hooks", "slipway-session-start.ps1"),
-		filepath.Join(root, ".claude", "hooks", "slipway-session-start.cmd"),
-		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use"),
 		filepath.Join(root, ".cursor", "hooks", "slipway-session-start"),
 		filepath.Join(root, ".opencode", "hooks", "slipway-session-start"),
 	} {
 		_, err := os.Stat(p)
-		assert.NoError(t, err, "refresh should keep native hook launcher %s", p)
+		assert.NoError(t, err, "file-by-path host must retain its session-start launcher %s", p)
 	}
 }
 
@@ -1699,6 +1746,13 @@ func commandSurfacePath(root, codexHome string, cfg ToolConfig, id string) (stri
 func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command string) {
 	t.Helper()
 
+	commands := hookCommandsForEvent(t, settingsPath, eventName)
+	assert.Contains(t, commands, command, "expected %s to register hook command %q", settingsPath, command)
+}
+
+func hookCommandsForEvent(t *testing.T, settingsPath, eventName string) []string {
+	t.Helper()
+
 	content, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
 
@@ -1711,7 +1765,7 @@ func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command 
 	entries, ok := hooks[eventName].([]any)
 	require.True(t, ok, "settings missing hook event %s", eventName)
 
-	found := false
+	commands := []string{}
 	for _, entry := range entries {
 		entryMap, ok := entry.(map[string]any)
 		if !ok {
@@ -1723,16 +1777,16 @@ func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command 
 		}
 		for _, hook := range rawHooks {
 			hookMap, ok := hook.(map[string]any)
-			if ok && hookMap["command"] == command {
-				found = true
-				break
+			if !ok {
+				continue
+			}
+			command, ok := hookMap["command"].(string)
+			if ok {
+				commands = append(commands, command)
 			}
 		}
-		if found {
-			break
-		}
 	}
-	assert.True(t, found, "expected %s to register hook command %q", settingsPath, command)
+	return commands
 }
 
 // hydratedSkillIDs lists the PR-1 slice of skills required to ship a
@@ -2192,6 +2246,12 @@ func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T
 	      {"hooks":[{"type":"command","command":"\".claude/hooks/slipway-session-start\""}]},
 	      {"hooks":[{"type":"command","command":"\".claude/hooks/slipway-session-start.cmd\""}]},
 	      {"hooks":[{"type":"command","command":"slipway hook session-start --tool \"claude\" || exit 0"}]},
+	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start\""}]},
+	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.ps1\""}]},
+	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.cmd\""}]},
+	      {"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-startup.sh\""}]},
+	      {"hooks":[{"type":"command","command":"bash -lc \"echo .claude/hooks/slipway-session-start\""}]},
+	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-startup\""}]},
 	      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
 	    ]
 	  }
@@ -2205,22 +2265,39 @@ func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T
 	first, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
 	got := string(first)
+	commands := hookCommandsForEvent(t, settingsPath, cfg.SessionEvent)
 
-	// Both retired shapes are pruned: no bash interpreter and no pinned launcher path.
-	assert.NotContains(t, got, "slipway-session-start.sh")
-	assert.NotContains(t, got, "slipway-session-start.cmd")
-	assert.NotContains(t, got, ".claude/hooks/slipway-session-start")
-	assert.NotContains(t, got, "bash ")
-	// The unrelated user hook (and its matcher) is preserved verbatim.
+	// Every retired launcher-path command (extensionless, .ps1, .cmd, .sh;
+	// direct exec or via bash/sh), plus the short-lived `--tool ... || exit 0`
+	// direct command, is migrated away.
+	assert.NotContains(t, commands, `bash "$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh"`)
+	assert.NotContains(t, commands, `sh "$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh"`)
+	assert.NotContains(t, commands, `"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh"`)
+	assert.NotContains(t, commands, `/bin/bash "$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh"`)
+	assert.NotContains(t, commands, `".claude/hooks/slipway-session-start"`)
+	assert.NotContains(t, commands, `".claude/hooks/slipway-session-start.cmd"`)
+	assert.NotContains(t, commands, `"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start"`)
+	assert.NotContains(t, commands, `"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.ps1"`)
+	assert.NotContains(t, commands, `"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.cmd"`)
+	assert.NotContains(t, commands, `slipway hook session-start --tool "claude" || exit 0`)
+	// Unrelated user hooks, including similarly prefixed paths and `bash -lc`
+	// command strings, are preserved verbatim.
 	assert.Contains(t, got, "echo user-owned-hook")
 	assert.Contains(t, got, `"matcher": "*"`)
-	// The portable, PATH-resolved command is registered in its place. Assert the
-	// decoded command value (the raw bytes carry backslash-escaped quotes).
-	assertHookCommandRegistered(t, settingsPath, cfg.SessionEvent, portableHookCommand(sessionHookSubcommand(cfg.ID)))
-	assert.Contains(t, got, "slipway hook session-start --tool")
+	assert.Contains(t, commands, `bash "$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-startup.sh"`)
+	assert.Contains(t, commands, `bash -lc "echo .claude/hooks/slipway-session-start"`)
+	assert.Contains(t, commands, `"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-startup"`)
+	// The bare inline session-start command is registered in its place.
+	assert.Contains(t, got, sessionStartHookCommand)
 	assert.NotContains(t, got, "||")
 	assert.NotContains(t, got, "&&")
 	assert.NotContains(t, got, " exit ")
+	assertHookCommandRegistered(
+		t,
+		settingsPath,
+		cfg.SessionEvent,
+		sessionStartHookCommand,
+	)
 
 	// Refresh is idempotent: a second merge does not duplicate or mutate.
 	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
