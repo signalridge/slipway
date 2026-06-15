@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.1](https://github.com/signalridge/slipway/compare/v0.24.0...v0.24.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **ci:** stabilize hook path assertion on Windows ([31ce168](https://github.com/signalridge/slipway/commit/31ce168597c28f93d98183e203936862cc943f86))
+
 ## [0.24.0](https://github.com/signalridge/slipway/compare/v0.23.0...v0.24.0) (2026-06-15)
 
 
