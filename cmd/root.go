@@ -61,6 +61,13 @@ var helpGroups = []commandGroup{
 		},
 	},
 	{
+		Title:       "Helpers",
+		Description: "Helper tools used by generated skills; explicit backends and domain tools fail closed when unavailable.",
+		Commands: []groupedCommand{
+			{Name: "tool", Description: desc("tool")},
+		},
+	},
+	{
 		Title:       "Diagnostics",
 		Description: "Repo-local observability and integrity checks.",
 		Commands: []groupedCommand{
@@ -173,6 +180,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeCheckpointCmd())
 	cmd.AddCommand(makeEvidenceCmd())
 	cmd.AddCommand(makeHookCmd())
+	cmd.AddCommand(makeToolCmd())
 	cmd.SetHelpCommand(&cobra.Command{
 		Use:   "help [command]",
 		Short: "Show help for a command",

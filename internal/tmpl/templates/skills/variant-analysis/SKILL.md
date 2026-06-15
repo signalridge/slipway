@@ -55,7 +55,7 @@ labelled `affected`, `safe-with-reason`, or `needs-followup`.
 - Classifying callsites as `safe` without citing the guard.
 
 ## Helpers
-- `scripts/find-variant.sh --engine=<codeql|semgrep> --language=<lang>`
+- `slipway tool find-variant --engine=<codeql|semgrep> --language=<lang>`
   — emits a starter query / rule scaffold for CodeQL and Semgrep, with
   TODO placeholders for seed
   location, sources, sinks, and sanitizers. This is **not** a finished

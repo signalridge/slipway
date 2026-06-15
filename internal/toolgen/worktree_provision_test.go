@@ -40,7 +40,9 @@ func TestProvisionWorktreeHostSurfaces_CopiesThirdPartyAndRegenerates(t *testing
 	// slipway-owned surfaces regenerated for each present adapter.
 	assert.DirExists(t, filepath.Join(worktreeRoot, generatedSlipwaySkillDir))
 	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/settings.json"))
-	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/hooks/slipway-session-start.sh"))
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/hooks/slipway-session-start"))
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/hooks/slipway-session-start.ps1"))
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".claude/hooks/slipway-session-start.cmd"))
 	assert.DirExists(t, filepath.Join(worktreeRoot, ".codex/skills/slipway-wave-orchestration"))
 	// .serena is not a toolgen adapter — it must not be provisioned.
 	assert.NoDirExists(t, filepath.Join(worktreeRoot, ".serena"))

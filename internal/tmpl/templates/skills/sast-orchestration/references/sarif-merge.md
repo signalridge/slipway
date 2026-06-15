@@ -1,9 +1,8 @@
 # SARIF Merge Operator Guide
 
 This guide defines Slipway's SARIF merge expectations for SAST orchestration.
-The companion script ships as `scripts/merge-sarif.sh` under this skill. The
-merge step keeps SARIF audit trails intact before downstream reporting or
-code-scanning upload.
+The companion helper is `slipway tool merge-sarif`. The merge step keeps SARIF
+audit trails intact before downstream reporting or code-scanning upload.
 
 ## When to merge
 
@@ -40,13 +39,13 @@ codeql database analyze db/ --format=sarif-latest --output raw-sarif/codeql.sari
 semgrep --config auto --sarif --output raw-sarif/semgrep.sarif
 
 # Merge into one file before handoff
-scripts/merge-sarif.sh raw-sarif merged.sarif
+slipway tool merge-sarif raw-sarif merged.sarif
 ```
 
-The authoritative merge path is the shipped shell + jq helper. It stays
-offline and deterministic: sorted input filenames, first-seen tool metadata,
-first-seen rule ordering, dedup by `(ruleId, uri, startLine)`, and a
-sort-keys JSON output that stays byte-stable across reruns.
+The authoritative merge path is the compiled Slipway helper. It stays offline
+and deterministic: sorted input filenames, first-seen tool metadata,
+first-seen rule ordering, dedup by `(ruleId, uri, startLine)`, and stable JSON
+output across reruns. It does not require shell, Python, or `jq`.
 
 ## When to collapse vs. keep separate
 
@@ -91,6 +90,6 @@ step should leave the SARIF shape intact so audit trails survive.
   Loses driver metadata and causes silent rule-id collisions.
 - Rewriting `ruleIndex` without re-sorting `rules[]`. Off-by-one breaks
   triage tooling silently.
-- Replacing the shipped merge helper with an ad-hoc jq one-liner in CI.
-  Keep the deterministic merge contract in the checked-in script so fixture
+- Replacing the shipped merge helper with an ad-hoc JSON one-liner in CI.
+  Keep the deterministic merge contract in the compiled Slipway helper so fixture
   tests can pin byte-for-byte output.

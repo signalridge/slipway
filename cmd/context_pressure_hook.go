@@ -46,6 +46,7 @@ func makeHookCmd() *cobra.Command {
 		Short:  "Run internal Slipway hook helpers",
 		Hidden: true,
 	}
+	cmd.AddCommand(makeSessionStartHookCmd())
 	cmd.AddCommand(makeContextPressureHookCmd())
 	return cmd
 }

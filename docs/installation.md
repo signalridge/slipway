@@ -270,7 +270,10 @@ Use `--refresh` to regenerate Slipway-managed adapter files:
 slipway init --tools opencode --refresh
 ```
 
-If `--tools` is omitted during refresh, Slipway detects previously generated adapters and refreshes those managed surfaces.
+If `--tools` is omitted during refresh, Slipway detects previously generated
+adapters and refreshes those managed surfaces. Refresh also prunes
+Slipway-owned legacy shell hook launchers and settings entries while preserving
+user-owned hooks.
 
 ## AI Tool Installation Prompt
 
@@ -334,9 +337,20 @@ For OpenCode specifically, the expected generated project surfaces are:
 
 - `.opencode/skills/slipway-*/SKILL.md`
 - `.opencode/commands/slipway-*.md`
-- `.opencode/hooks/slipway-session-start.sh`
+- `.opencode/hooks/slipway-session-start`
+- `.opencode/hooks/slipway-session-start.ps1`
+- `.opencode/hooks/slipway-session-start.cmd`
 
 OpenCode commands use slash-hyphen spelling such as `/slipway-new`, `/slipway-next`, and `/slipway-run`. Some OpenCode builds display project commands with a project prefix in the command picker; the generated file path is the stable contract.
+
+Hook-capable adapters receive native launchers for POSIX, PowerShell, and
+`cmd.exe`. The launchers only delegate to `slipway hook ...`; no generated hook
+requires bash, Python, `jq`, `gh`, or a Go runtime.
+
+Generated skill helpers run through `slipway tool ...` rather than generated
+script payloads. Manual helpers may still require explicit authenticated
+backends or domain tools, such as `gh` for GitHub helpers or `go` for Go test
+pollution tracing, and fail closed with remediation when those are unavailable.
 
 ## Verify Installation
 
@@ -356,4 +370,6 @@ Codex command surfaces are generated as skills under
 `.codex/skills/slipway-<command>/SKILL.md`. `slipway init --tools codex
 --refresh` also removes legacy generated command prompt files from
 `$CODEX_HOME/prompts/` (or `~/.codex/prompts/` when `CODEX_HOME` is unset) so
-the retired command surface does not linger.
+the retired command surface does not linger. For hook-capable adapters,
+`--refresh` also removes Slipway-owned legacy shell hook launchers and replaces
+retired `bash "<hook>.sh"` settings entries with native launcher entries.

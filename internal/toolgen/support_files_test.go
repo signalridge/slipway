@@ -84,13 +84,12 @@ func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dst, "references", "current.md"))
 	assert.NoError(t, err)
 	_, err = os.Stat(filepath.Join(dst, "scripts", "current.sh"))
-	assert.NoError(t, err)
+	assert.True(t, os.IsNotExist(err), "script templates must not be copied into generated skill trees")
 }
 
-// TestEmitSupportFilesSkipsPythonCacheArtifacts verifies that copied support
-// trees ignore transient Python cache directories/files instead of exporting
-// them into generated skill trees.
-func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
+// TestEmitSupportFilesOmitsScriptArtifacts verifies generated skills do not
+// export helper scripts or transient script cache artifacts.
+func TestEmitSupportFilesOmitsScriptArtifacts(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
@@ -103,15 +102,12 @@ func TestEmitSupportFilesSkipsPythonCacheArtifacts(t *testing.T) {
 	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "python-helper", dst, true))
 
 	_, err := os.Stat(filepath.Join(dst, "scripts", "merge-sarif.py"))
-	assert.NoError(t, err)
+	assert.True(t, os.IsNotExist(err), "script helpers must not be copied into generated skill trees")
 	_, err = os.Stat(filepath.Join(dst, "scripts", "__pycache__", "merge-sarif.cpython.pyc"))
 	assert.True(t, os.IsNotExist(err), "python cache artifacts must not be copied into generated trees")
 }
 
-func TestEmitSupportFilesCopiesSharedGitHubHelpers(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable-bit semantics are POSIX-only")
-	}
+func TestEmitSupportFilesOmitsSharedGitHubHelpers(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
@@ -123,31 +119,15 @@ func TestEmitSupportFilesCopiesSharedGitHubHelpers(t *testing.T) {
 	dst := t.TempDir()
 	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "review-comment-triage", dst, true))
 
-	info, err := os.Stat(filepath.Join(dst, "scripts", "gh-common.sh"))
-	require.NoError(t, err)
-	assert.NotZerof(t, info.Mode().Perm()&0o111, "shared helper must stay executable after emission")
+	_, err := os.Stat(filepath.Join(dst, "scripts", "gh-common.sh"))
+	assert.True(t, os.IsNotExist(err), "shared script helpers must not be copied into generated skill trees")
 }
 
-// TestTemplateShellScriptsAreExecutable guards the checked-in template source
-// tree itself. Generated trees already normalize `*.sh` to 0755, but operators
-// and local tests may invoke template-side helpers directly during development.
-func TestTemplateShellScriptsAreExecutable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable-bit semantics are POSIX-only")
-	}
-
-	pattern := filepath.Join(checkedInSkillTemplatesRoot(t), "*", "scripts", "*.sh")
+func TestCheckedInSkillTemplatesDoNotShipScriptHelpers(t *testing.T) {
+	pattern := filepath.Join(checkedInSkillTemplatesRoot(t), "*", "scripts", "*")
 	matches, err := filepath.Glob(pattern)
 	require.NoError(t, err)
-	require.NotEmpty(t, matches, "expected at least one template-side shell helper")
-
-	for _, path := range matches {
-		info, err := os.Stat(path)
-		require.NoError(t, err)
-		assert.NotZerof(t, info.Mode().Perm()&0o111,
-			"%s: expected executable bit on checked-in template shell script, got %v",
-			path, info.Mode().Perm())
-	}
+	assert.Empty(t, matches, "skill templates must route helper behavior through slipway tool, not scripts/")
 }
 
 // TestGeneratedSkillTreeInventoryManifest catches accidental structural drift

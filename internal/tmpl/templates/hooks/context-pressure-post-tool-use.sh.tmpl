@@ -1,15 +1,8 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
 
-# Slipway PostToolUse context-pressure hook helper for {{.ToolID}}.
-# This hook is advisory and fail-silent: the Go helper emits optional
-# hookSpecificOutput.additionalContext and never blocks the completed tool call.
+# Slipway PostToolUse launcher for {{.ToolID}}.
+# Behavior lives in `slipway hook context-pressure`; this file only dispatches.
 
-if ! command -v slipway >/dev/null 2>&1; then
-  exit 0
-fi
-
-set +e
-slipway hook context-pressure 2>/dev/null
-set -e
+command -v slipway >/dev/null 2>&1 || exit 0
+slipway hook context-pressure 2>/dev/null || true
 exit 0

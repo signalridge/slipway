@@ -369,14 +369,12 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	}
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")
-	assert.LessOrEqual(t, len([]byte(content)), 5600, "session-start hook template must stay compact")
+	assert.LessOrEqual(t, len([]byte(content)), 700, "session-start hook template must stay compact")
 	assert.NotContains(t, content, "{{.", "session-start hook has unrendered template vars")
-	assert.Contains(t, content, "slipway next --json")
-	assert.Contains(t, content, "change_bound_to_other_worktree")
-	assert.Contains(t, content, "session_handoff_info")
-	assert.NotContains(t, content, "--hook-lite")
+	assert.Contains(t, content, `slipway hook session-start --tool "claude"`)
+	assert.NotContains(t, content, "slipway next --json")
+	assert.NotContains(t, content, "slipway root")
 	assert.NotContains(t, content, "slipway status --json")
-	assert.Contains(t, content, `cd "${hook_cwd}" && slipway "$@"`)
 	assert.NotContains(t, content, "--preview")
 }
 
@@ -387,10 +385,10 @@ func TestRenderContextPressurePostToolUseHookTemplate(t *testing.T) {
 	}
 	content, err := Render("hooks/context-pressure-post-tool-use.sh.tmpl", data)
 	require.NoError(t, err, "failed to render context-pressure post-tool hook")
-	assert.LessOrEqual(t, len([]byte(content)), 1200, "context-pressure hook template must stay compact")
+	assert.LessOrEqual(t, len([]byte(content)), 700, "context-pressure hook template must stay compact")
 	assert.NotContains(t, content, "{{.", "context-pressure hook has unrendered template vars")
 	assert.Contains(t, content, "slipway hook context-pressure")
-	assert.Contains(t, content, "PostToolUse")
+	assert.NotContains(t, content, "next --json")
 }
 
 func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {

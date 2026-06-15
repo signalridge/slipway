@@ -1,72 +1,63 @@
 # Architecture
 
 Re-authored for change
-`make-two-confirmed-downstream-reported-lattice-slipway-gover`
-(GitHub issues #207 and #211).
+`eliminate-non-native-hook-and-skill-script-runtime-dependenc`.
 
-Question: which Slipway reporting seams turn two silent governance-surface
-behaviors (a hidden scope-contract exemption; a run version the evidence surface
-refuses) into self-explaining JSON, without changing the underlying behavior?
+Question: which Slipway adapter and helper seams must move from generated
+shell/Python payloads into compiled Slipway commands while preserving
+cross-platform host integration?
 
 ## Affected Seams
 
-- `internal/engine/scopecontract/evaluate.go` owns the `Report` data contract
-  for the scope-contract audit (`changed_files`, `out_of_scope_files`,
-  `planned_targets`, blockers) and its `Clone`. It gains a new additive
-  `ExemptContextFiles []string` (`json:"exempt_context_files,omitempty"`) field;
-  no existing field changes.
-- `internal/engine/progression/readiness.go` owns workspace changed-file
-  collection and the `artifacts/codebase/**` exemption
-  (`scopeContractContextArtifactChangedFile`, ~L841/L844) that drops dirty
-  codebase-map files from `changed_files` while keeping `scope_contract.status`
-  `pass`. It is the seam (~L829) where the dropped files must be captured and
-  threaded into the cloned `Report.ExemptContextFiles` before the report is
-  assigned to `readiness.ScopeContract` (~L289).
-- `internal/engine/status/view.go` owns the engine Progress model. Its
-  `RunSummaryVersion` is `0` until an execution summary exists (set to the real
-  version only when `summary.RunSummaryVersion >= 1`). `0` is the "no summary
-  yet" sentinel that `evidence task` rejects.
-- `cmd/validate.go` owns the shared `scopeContractView` struct and its single
-  builder `buildScopeContractView`. That one builder backs all three report
-  consumers — `validate` (`cmd/validate.go`), `status`
-  (`cmd/status_view_build.go`), and `review` (`cmd/review.go`) — so the new
-  `exempt_context_files` field reaches every surface from one edit.
-- `cmd/status.go` / `cmd/status_view_build.go` and `cmd/next.go` /
-  `cmd/next_context_build.go` own the user-facing `progress.run_summary_version`
-  JSON. They are the only two surfaces that emit it; the field becomes
-  omit-on-zero and the human-readable line must not print a `0`.
-- `cmd/evidence.go` owns `evidence task --run-summary-version` validation
-  (`runSummary < 1` → `evidence_task_run_summary_version_invalid`, ~L342) and its
-  help. The rejection stays; the help gains discoverability of the correct first
-  run version (`1`).
+- `cmd/root.go` registers the public and hidden command tree. It currently
+  includes `makeHookCmd`; this change adds compiled helper entrypoints under
+  the Slipway binary instead of asking generated adapters to execute script
+  payloads directly.
+- `cmd/context_pressure_hook.go` already owns the compiled
+  `slipway hook context-pressure` behavior. It is the precedent for hook
+  behavior living in Go while generated files remain launch adapters only.
+- A new hook command owns `slipway hook session-start --tool <tool>`. It must
+  replace the lifecycle/path/JSON logic currently embedded in
+  `internal/tmpl/templates/hooks/session-start.sh.tmpl`.
+- A new tool command family owns supported skill helpers such as SARIF merge,
+  action pinning, variant query scaffolding, Go polluter tracing, and GitHub PR
+  review/check helpers.
+- `internal/toolgen/toolgen.go` owns adapter registry data, hook file emission,
+  support-file copying, and hook settings merge. Its current registry stores
+  `.sh` paths and its settings merge registers `bash "<hook>.sh"` commands.
+- `internal/tmpl/templates/hooks/` owns rendered hook launcher templates. After
+  this change these templates should contain only platform-native binary
+  dispatch logic, not lifecycle behavior.
+- `internal/tmpl/templates/skills/` owns generated skill instructions and
+  optional support payloads. Executable `scripts/` payloads are no longer a
+  valid generated runtime surface for supported Slipway helpers.
 
 ## Dependency Flow
 
-For #207: readiness gathers dirty workspace files, evaluates the scope contract,
-then filters `artifacts/codebase/**` out of `changed_files`. Today the filtered
-files are discarded silently. The change captures that same dropped set and
-records it on the cloned `Report.ExemptContextFiles`; `buildScopeContractView`
-then maps it onto the shared view, so `validate`/`status`/`review --json` all
-disclose what was exempted while `changed_files` still omits it and the status
-stays `pass`.
+Generated host adapters are produced by `toolgen` from embedded templates. Tool
+settings invoke hook commands, which should now dispatch to the compiled
+Slipway binary. Hook commands can query current worktree lifecycle state through
+existing command/progression helpers and emit host-specific hook output.
 
-For #211: the engine Progress carries `RunSummaryVersion` (0 when no summary).
-The cmd JSON structs in `status` and `next` serialize it as
-`progress.run_summary_version`. Making those fields omit-on-zero stops surfacing
-a value `evidence task` refuses; the correct first version (`1`) is instead made
-discoverable on the `evidence task` help surface, with the `>= 1` rejection
-unchanged.
+Skill instructions are also produced by `toolgen`. Where a skill needs a
+supported helper, the instruction points to `slipway tool <helper>`; the helper
+logic runs inside the binary and uses the standard library plus explicit domain
+tools only when the task inherently requires them, for example `go test` inside
+the Go polluter helper.
 
 ## Constraints And Invariants
 
-- The exemption behavior is preserved: `artifacts/codebase/**` stays out of
-  `changed_files`/`out_of_scope_files`, and `scope_contract.status` stays `pass`
-  when only context files are dirty. The change only discloses the exemption.
-- The `evidence task` `>= 1` rule and the `run_summary_version` counter semantics
-  are preserved; only the *surfacing* of the rejected `0` changes.
-- JSON output is an external contract consumed downstream (Lattice): changes are
-  additive/back-compatible only — no rename or removal of existing fields, and
-  no gate pass/fail outcome change. `omitempty` on the int run-version drops only
-  the never-valid `0`.
-- One shared `buildScopeContractView` keeps validate/status/review aligned; the
-  field is read-only display on all three.
+- Generated settings must not canonically invoke `bash`, `.sh`, Python, jq, or
+  `gh` for Slipway-owned hooks.
+- Platform-specific launchers are allowed when generated for the host platform
+  and kept thin: locate/execute `slipway`, pass stdin/stdout through, and
+  fail-silent for automatic hooks.
+- Hook launchers must not duplicate lifecycle, path, JSON parsing, handoff, or
+  context-pressure business logic.
+- Manual `slipway tool` helpers must fail explicitly; only automatic hooks are
+  allowed to no-op when the binary is unavailable.
+- No backward-compatibility path is required for legacy generated
+  `bash ".*/hooks/*.sh"` settings.
+- Existing generated skill references and support files must be refreshed from
+  `internal/tmpl/templates`; checked-in generated `.claude` or `.codex` output
+  is not the source of truth.
