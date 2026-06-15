@@ -54,7 +54,6 @@ func TestClassifyContextUtilization(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -164,7 +163,6 @@ func TestContextPressureHookCommandIgnoresMissingAndStaleMetrics(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -172,6 +170,49 @@ func TestContextPressureHookCommandIgnoresMissingAndStaleMetrics(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, stdout)
 			assert.Empty(t, stderr)
+		})
+	}
+}
+
+// TestContextPressureHookCommandFailsSilentOnUnusableInput pins REQ-003: the
+// PostToolUse hook is inlined into automatic host hooks, so it must always exit
+// 0 (return nil, write nothing, never panic) on empty or malformed stdin rather
+// than surfacing a blocking or non-zero failure.
+func TestContextPressureHookCommandFailsSilentOnUnusableInput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{
+			name:    "empty stdin",
+			payload: "",
+		},
+		{
+			name:    "whitespace only stdin",
+			payload: "   \n\t  \n",
+		},
+		{
+			name:    "garbage non-json stdin",
+			payload: "this is not json at all <<>>",
+		},
+		{
+			name:    "truncated json",
+			payload: `{"hook_event_name":"PostToolUse","context_utilization":{`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.NotPanics(t, func() {
+				stdout, stderr, err := runRootCommandWithInput([]string{"hook", "context-pressure"}, tt.payload)
+				require.NoError(t, err)
+				assert.Empty(t, stdout)
+				assert.Empty(t, stderr)
+			})
 		})
 	}
 }

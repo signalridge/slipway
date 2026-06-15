@@ -343,12 +343,12 @@ For OpenCode specifically, the expected generated project surfaces are:
 
 OpenCode commands use slash-hyphen spelling such as `/slipway-new`, `/slipway-next`, and `/slipway-run`. Some OpenCode builds display project commands with a project prefix in the command picker; the generated file path is the stable contract.
 
-Hook-capable adapters receive native launchers for POSIX, PowerShell, and
-`cmd.exe`. The launchers only delegate to `slipway hook ...`; no generated hook
-requires bash, Python, `jq`, `gh`, or a Go runtime. Settings-capable adapters
-register a direct, shell-neutral `slipway hook ...` command in `settings.json`
-instead of a platform-specific launcher path, so one generated settings file
-parses under POSIX `sh`, `cmd.exe`, Windows PowerShell 5.1, and PowerShell 7+.
+Hosts without a `settings.json` (Cursor, OpenCode) receive native launcher
+files for POSIX, PowerShell, and `cmd.exe` under their `hooks/` directory.
+Settings-capable hosts (Claude, Gemini) instead register bare inline
+`slipway hook ...` commands directly in `settings.json` and get no launcher
+file. Either way, no generated hook requires bash, Python, `jq`, `gh`, or a Go
+runtime.
 
 Generated skill helpers run through `slipway tool ...` rather than generated
 script payloads. Manual helpers may still require explicit authenticated
@@ -374,6 +374,7 @@ Codex command surfaces are generated as skills under
 --refresh` also removes legacy generated command prompt files from
 `$CODEX_HOME/prompts/` (or `~/.codex/prompts/` when `CODEX_HOME` is unset) so
 the retired command surface does not linger. For hook-capable adapters,
-`--refresh` also removes Slipway-owned legacy shell hook launchers and replaces
-retired `bash "<hook>.sh"` settings entries with shell-neutral
-`slipway hook ...` settings entries.
+`--refresh` also removes Slipway-owned retired hook launchers. Settings-capable
+hosts migrate retired launcher-path settings entries to bare inline
+`slipway hook ...` commands; Cursor and OpenCode keep their file-by-path
+session-start launchers.

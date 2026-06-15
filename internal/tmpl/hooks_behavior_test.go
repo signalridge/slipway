@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,41 +66,6 @@ func TestSessionStartLauncherNoopsWhenSlipwayMissing(t *testing.T) {
 	assert.Empty(t, out)
 }
 
-func TestContextPressureLauncherDelegatesToCompiledHookCommand(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX launcher execution is not portable on Windows")
-	}
-
-	root := t.TempDir()
-	logPath, binDir := installLauncherTestSlipway(t, root, `#!/bin/sh
-printf '%s|%s\n' "$PWD" "$*" >> "$SLIPWAY_HOOK_LOG"
-if [ "$*" = "hook context-pressure" ]; then
-  cat >/dev/null
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"CONTEXT CRITICAL"}}'
-fi
-`)
-	scriptPath := writeRenderedHook(t, root, "hooks/context-pressure-post-tool-use.sh.tmpl", map[string]string{
-		"ToolID": "claude",
-	})
-
-	shPath, err := exec.LookPath("sh")
-	require.NoError(t, err)
-	cmd := exec.Command(shPath, scriptPath)
-	cmd.Dir = root
-	cmd.Stdin = strings.NewReader(`{"hook_event_name":"PostToolUse"}`)
-	cmd.Env = append(os.Environ(),
-		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"SLIPWAY_HOOK_LOG="+logPath,
-	)
-	out, err := cmd.Output()
-	require.NoError(t, err)
-
-	assert.Contains(t, string(out), "hookSpecificOutput")
-	assert.Contains(t, string(out), "CONTEXT CRITICAL")
-	logContent := readHookLog(t, logPath)
-	assert.Contains(t, logContent, "|hook context-pressure")
-}
-
 func installLauncherTestSlipway(t *testing.T, root string, script string) (string, string) {
 	t.Helper()
 
@@ -139,9 +103,7 @@ func TestHookLauncherTemplatesRenderForNativePlatforms(t *testing.T) {
 		want     string
 	}{
 		{name: "session powershell", template: "hooks/session-start.ps1.tmpl", want: `hook session-start --tool "claude"`},
-		{name: "context powershell", template: "hooks/context-pressure-post-tool-use.ps1.tmpl", want: "hook context-pressure"},
 		{name: "session cmd", template: "hooks/session-start.cmd.tmpl", want: `hook session-start --tool "claude"`},
-		{name: "context cmd", template: "hooks/context-pressure-post-tool-use.cmd.tmpl", want: "hook context-pressure"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			content, err := Render(tc.template, map[string]string{"ToolID": "claude"})
@@ -157,11 +119,8 @@ func TestHookLauncherTemplatesRenderForNativePlatforms(t *testing.T) {
 func TestHookLauncherTemplateNamesStaySmall(t *testing.T) {
 	for _, name := range []string{
 		"hooks/session-start.sh.tmpl",
-		"hooks/context-pressure-post-tool-use.sh.tmpl",
 		"hooks/session-start.ps1.tmpl",
-		"hooks/context-pressure-post-tool-use.ps1.tmpl",
 		"hooks/session-start.cmd.tmpl",
-		"hooks/context-pressure-post-tool-use.cmd.tmpl",
 	} {
 		content, err := Render(name, map[string]string{"ToolID": "claude"})
 		require.NoError(t, err, fmt.Sprintf("render %s", name))

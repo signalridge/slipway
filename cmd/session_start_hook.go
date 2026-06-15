@@ -21,8 +21,11 @@ func makeSessionStartHookCmd() *cobra.Command {
 		Short:  "Emit SessionStart Slipway handoff context",
 		Hidden: true,
 		Args:   cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSessionStartHook(cmd, toolID)
+		Run: func(cmd *cobra.Command, _ []string) {
+			// Fail silent: this hook is inlined into automatic host hooks and must
+			// never surface a blocking or non-zero failure. Any internal error
+			// (root lookup, state lock, JSON, write) is swallowed to a clean exit 0.
+			_ = runSessionStartHook(cmd, toolID)
 		},
 	}
 	cmd.Flags().StringVar(&toolID, "tool", "", "Host tool ID")
@@ -31,9 +34,6 @@ func makeSessionStartHookCmd() *cobra.Command {
 
 func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		toolID = "unknown"
-	}
 
 	root, err := projectRootFromCommand(cmd)
 	if err != nil {
@@ -137,9 +137,13 @@ func sessionStartHandoffSummary(root string) string {
 
 func writeSessionStartHookOutput(w io.Writer, toolID, nextJSON, handoffInfo string, diagnostics []string, handoffSummary string) error {
 	var b strings.Builder
-	b.WriteString(`<slipway-session-start tool="`)
-	b.WriteString(escapeSessionStartAttr(toolID))
-	b.WriteString("\">\n")
+	b.WriteString(`<slipway-session-start`)
+	if strings.TrimSpace(toolID) != "" {
+		b.WriteString(` tool="`)
+		b.WriteString(escapeSessionStartAttr(toolID))
+		b.WriteString(`"`)
+	}
+	b.WriteString(">\n")
 	b.WriteString("slipway_entry_skill: This repository is governed by Slipway. To drive any non-trivial change through the governed lifecycle, load the \"")
 	b.WriteString(sessionStartEntrySkill)
 	b.WriteString("\" skill - the entry point that routes new/next/run/done.\n")

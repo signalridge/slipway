@@ -700,31 +700,12 @@ func DetectExistingTools(root string) []string {
 
 // Generate creates tool skills and command surfaces for the given tools.
 func Generate(root string, tools []string, refresh bool) error {
-	return generateWithOptions(root, tools, refresh, generateOptions{})
-}
-
-// GenerateWorktreeLocal generates only the worktree-local slipway-owned surfaces
-// for the given tools, skipping every host-global mutation such as legacy Codex
-// prompt cleanup under $CODEX_HOME / ~/.codex. Provisioning a git worktree must
-// never mutate shared host-level state owned by another checkout.
-func GenerateWorktreeLocal(root string, tools []string, refresh bool) error {
-	return generateWithOptions(root, tools, refresh, generateOptions{worktreeLocalOnly: true})
-}
-
-// generateOptions tunes a single generation pass.
-type generateOptions struct {
-	// worktreeLocalOnly suppresses host-global outputs so the pass writes only
-	// surfaces under root. Set when provisioning a worktree.
-	worktreeLocalOnly bool
-}
-
-func generateWithOptions(root string, tools []string, refresh bool, opts generateOptions) error {
 	for _, tool := range tools {
 		cfg, ok := toolRegistry[tool]
 		if !ok {
 			return fmt.Errorf("unsupported tool %q", tool)
 		}
-		if err := generateForTool(root, cfg, refresh, opts); err != nil {
+		if err := generateForTool(root, cfg, refresh); err != nil {
 			return err
 		}
 	}
@@ -776,7 +757,7 @@ func SkillIndexPath(cfg ToolConfig) string {
 	)
 }
 
-func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOptions) error {
+func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	_, sentinelErr := os.Stat(sentinelPath)
 	hadGeneratedAdapter := sentinelErr == nil
@@ -949,8 +930,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 	}
 
 	// Command skill surfaces (Codex): one discoverable skill per command under
-	// SkillsDir. Generated for both full and worktree-local passes since they
-	// live under root.
+	// SkillsDir.
 	if cfg.CommandSkillSurface {
 		for _, id := range commandIDs() {
 			content, err := renderCommandSkill(cfg, id)
@@ -962,19 +942,36 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 			}
 		}
 		// Legacy migration: prior versions wrote host-global Codex prompt files.
-		// Remove them on refresh so the retired surface does not linger. Skipped
-		// for worktree-local passes (must not mutate shared host state).
-		if refresh && !opts.worktreeLocalOnly {
+		// Remove them on refresh so the retired surface does not linger.
+		if refresh {
 			if err := cleanupLegacyCodexPrompts(cfg); err != nil {
 				return err
 			}
 		}
 	}
 
-	// Session-start hook launchers (hook-capable runtimes). Settings-capable
-	// adapters register the shell-neutral `slipway hook ...` command below, but
-	// launcher files remain the native host/manual dispatch surface.
-	if strings.TrimSpace(cfg.SessionHook) != "" {
+	// Hook registration is keyed on whether the host owns a settings.json.
+	//
+	//   - Settings-capable hosts (claude, gemini): register each hook event as a
+	//     bare inline `slipway hook <subcommand>` command directly in
+	//     settings.json. No launcher script files are written, and on refresh any
+	//     previously generated launcher files are pruned.
+	//   - Settings-less hosts (cursor, opencode): keep emitting the advisory
+	//     session-start launcher files (extensionless + .ps1 + .cmd), since they
+	//     have no settings.json to register an inline command in.
+	if strings.TrimSpace(cfg.SettingsPath) != "" {
+		if refresh {
+			if err := pruneHookLauncherFiles(root, cfg.SessionHook); err != nil {
+				return err
+			}
+			if err := pruneHookLauncherFiles(root, cfg.PostToolHook); err != nil {
+				return err
+			}
+		}
+		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
+			return err
+		}
+	} else if strings.TrimSpace(cfg.SessionHook) != "" {
 		for _, launcher := range hookLauncherOutputs(cfg.SessionHook, "session-start") {
 			content, err := renderHookLauncher(cfg, launcher.template)
 			if err != nil {
@@ -989,28 +986,6 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 			if err := cleanupLegacyHookLauncher(root, cfg.SessionHook); err != nil {
 				return err
 			}
-		}
-	}
-	if strings.TrimSpace(cfg.PostToolHook) != "" {
-		for _, launcher := range hookLauncherOutputs(cfg.PostToolHook, "context-pressure-post-tool-use") {
-			content, err := renderHookLauncher(cfg, launcher.template)
-			if err != nil {
-				return fmt.Errorf("render post-tool hook launcher for %s: %w", cfg.ID, err)
-			}
-			p := filepath.Join(root, launcher.path)
-			if err := writeDeterministicMode(p, content, refresh, launcher.mode); err != nil {
-				return err
-			}
-		}
-		if refresh {
-			if err := cleanupLegacyHookLauncher(root, cfg.PostToolHook); err != nil {
-				return err
-			}
-		}
-	}
-	if strings.TrimSpace(cfg.SettingsPath) != "" {
-		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
-			return err
 		}
 	}
 
@@ -1723,24 +1698,13 @@ func hookLauncherOutputs(basePath, hookTemplateBase string) []hookLauncherOutput
 	}
 }
 
-// postToolHookSubcommand is the `slipway hook` subcommand the PostToolUse
-// launcher ultimately runs (see hooks/context-pressure-post-tool-use templates).
-const postToolHookSubcommand = "context-pressure"
-
-// sessionHookSubcommand is the `slipway hook` subcommand+args the SessionStart
-// launcher ultimately runs (see hooks/session-start templates).
-func sessionHookSubcommand(toolID string) string {
-	return fmt.Sprintf(`session-start --tool "%s"`, toolID)
-}
-
-// portableHookCommand builds the OS-independent command string registered in a
-// tool's settings.json. It resolves `slipway` from PATH and deliberately avoids
-// shell control operators so the same command parses under sh, cmd.exe,
-// Windows PowerShell 5.1, and PowerShell 7+ instead of pinning an OS-specific
-// launcher file path that breaks for teammates on another OS.
-func portableHookCommand(subcommandArgs string) string {
-	return fmt.Sprintf("slipway hook %s", subcommandArgs)
-}
+// Bare inline hook commands registered in a settings-capable host's
+// settings.json. They are intentionally launcher-free and shell-operator-free so
+// the same string is portable across `/bin/sh -c`, `cmd /c`, and PowerShell.
+const (
+	sessionStartHookCommand    = "slipway hook session-start"
+	contextPressureHookCommand = "slipway hook context-pressure"
+)
 
 func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
 	data := map[string]string{
@@ -1802,14 +1766,12 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
-		command := portableHookCommand(sessionHookSubcommand(cfg.ID))
-		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, command)
-		mergeHookEventCommand(hooks, cfg.SessionEvent, command)
+		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionStartHookCommand)
+		mergeHookEventCommand(hooks, cfg.SessionEvent, sessionStartHookCommand)
 	}
 	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		command := portableHookCommand(postToolHookSubcommand)
-		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, command)
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, command)
+		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, contextPressureHookCommand)
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, contextPressureHookCommand)
 	}
 	settings["hooks"] = hooks
 
@@ -1835,20 +1797,35 @@ func cleanupLegacyHookLauncher(root, basePath string) error {
 	return removePathIfExists(filepath.Join(root, filepath.FromSlash(legacyShellHookPath(basePath))))
 }
 
+// hookLauncherFileSuffixes lists the extensions Slipway has ever emitted for a
+// hook launcher beside the extensionless POSIX entry. Used to prune the
+// now-retired launcher family for settings-capable hosts.
+var hookLauncherFileSuffixes = []string{"", ".ps1", ".cmd", ".sh"}
+
+// pruneHookLauncherFiles removes every Slipway-generated launcher file derived
+// from basePath (the extensionless POSIX entry plus its .ps1/.cmd/.sh variants).
+// It is the refresh-time orphan cleanup for settings-capable hosts that no
+// longer emit launcher scripts.
+func pruneHookLauncherFiles(root, basePath string) error {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return nil
+	}
+	for _, suffix := range hookLauncherFileSuffixes {
+		p := filepath.Join(root, filepath.FromSlash(basePath+suffix))
+		if err := removePathIfExists(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // pruneStaleSlipwayHookCommands removes every previously generated Slipway hook
-// command for an event so refresh can re-register the current portable form.
-// It prunes BOTH retired shapes:
-//   - the legacy `bash "...slipway-<hook>.sh"` interpreter form, and
-//   - the OS-pinned launcher-path form (the bare launcher, ".sh", ".cmd", or
-//     ".ps1") that earlier versions wrote into the committed settings.json.
-//   - the shell-chained direct form (`slipway hook ... || exit 0`) from the
-//     short-lived portable command shape that PowerShell 5.1 cannot parse.
-//
-// hookBasePath is the launcher base path (e.g. ".claude/hooks/slipway-session-start").
-// The current portable command (`slipway hook <subcommand> ...`) does not contain
-// that path, so it is never pruned by this matcher and mergeHookEventCommand stays
-// idempotent across refreshes.
-func pruneStaleSlipwayHookCommands(hooks map[string]any, eventName, hookBasePath, currentCommand string) {
+// command for an event so refresh can re-register the current bare inline form.
+// It prunes retired launcher-path commands and the short-lived direct forms
+// (`slipway hook ... --tool <id>` / `slipway hook ... || exit 0`) while
+// preserving unrelated user-authored hook entries.
+func pruneStaleSlipwayHookCommands(hooks map[string]any, eventName, basePath, currentCommand string) {
 	rawEntries, ok := hooks[eventName].([]any)
 	if !ok {
 		return
@@ -1867,7 +1844,7 @@ func pruneStaleSlipwayHookCommands(hooks map[string]any, eventName, hookBasePath
 		}
 		var keptHooks []any
 		for _, hook := range hookList {
-			if isStaleSlipwayHookCommand(hook, hookBasePath, currentCommand) {
+			if isStaleSlipwayHookCommand(hook, basePath, currentCommand) {
 				continue
 			}
 			keptHooks = append(keptHooks, hook)
@@ -1885,27 +1862,100 @@ func pruneStaleSlipwayHookCommands(hooks map[string]any, eventName, hookBasePath
 	hooks[eventName] = keptEntries
 }
 
-func isStaleSlipwayHookCommand(hook any, hookBasePath, currentCommand string) bool {
+// isLegacySlipwayHookCommand reports whether a settings.json hook command points
+// at a retired Slipway launcher derived from basePath (the extensionless POSIX
+// entry or its .sh/.ps1/.cmd variants), either executed directly or as the script
+// file passed to a bash/sh interpreter. User-authored commands that merely
+// mention an unrelated or similarly prefixed path are left untouched.
+func isStaleSlipwayHookCommand(hook any, basePath, currentCommand string) bool {
 	hookMap, ok := hook.(map[string]any)
 	if !ok {
 		return false
 	}
 	command, _ := hookMap["command"].(string)
 	command = filepath.ToSlash(strings.TrimSpace(command))
-	basePath := filepath.ToSlash(strings.TrimSpace(hookBasePath))
-	// A command that references the Slipway-owned launcher base path is a
-	// previously generated form: the bare launcher path, any ".sh"/".cmd"/".ps1"
-	// variant, and the legacy `bash "...sh"` interpreter form all embed it.
-	if basePath != "" && strings.Contains(command, basePath) {
-		return true
+	basePath = filepath.ToSlash(strings.TrimSpace(basePath))
+	if basePath != "" {
+		variants := legacyHookLauncherVariants(basePath)
+		fields := strings.Fields(command)
+		if len(fields) > 0 {
+			first := strings.Trim(fields[0], `"'`)
+			// Match the interpreter by basename so an absolute path (e.g. /bin/bash) is
+			// pruned too, not just the bare "bash"/"sh" Slipway historically generated.
+			// A direct exec of any launcher variant (first token is the launcher base
+			// path or one of its .sh/.ps1/.cmd siblings) also qualifies.
+			firstBase := path.Base(first)
+			if firstBase == "bash" || firstBase == "sh" {
+				if scriptArg, ok := firstShellScriptArg(fields[1:]); ok && matchesLegacyHookLauncher(scriptArg, variants) {
+					return true
+				}
+			} else if matchesLegacyHookLauncher(first, variants) {
+				return true
+			}
+		}
 	}
+	return isStaleDirectHookCommand(command, currentCommand)
+}
 
+func isStaleDirectHookCommand(command, currentCommand string) bool {
 	currentCommand = strings.TrimSpace(currentCommand)
 	if currentCommand == "" || command == currentCommand {
 		return false
 	}
+	if !strings.HasPrefix(command, currentCommand) {
+		return false
+	}
 	suffix := strings.TrimSpace(strings.TrimPrefix(command, currentCommand))
-	return suffix == "|| exit 0"
+	return suffix == "|| exit 0" ||
+		strings.HasPrefix(suffix, "--tool ") ||
+		strings.HasPrefix(suffix, "--tool=")
+}
+
+func legacyHookLauncherVariants(basePath string) []string {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return nil
+	}
+	variants := make([]string, 0, len(hookLauncherFileSuffixes))
+	for _, suffix := range hookLauncherFileSuffixes {
+		variants = append(variants, filepath.ToSlash(basePath+suffix))
+	}
+	return variants
+}
+
+func matchesLegacyHookLauncher(token string, variants []string) bool {
+	token = filepath.ToSlash(strings.Trim(strings.TrimSpace(token), `"'`))
+	if token == "" {
+		return false
+	}
+	for _, variant := range variants {
+		if token == variant || strings.HasSuffix(token, "/"+variant) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstShellScriptArg(fields []string) (string, bool) {
+	for _, field := range fields {
+		arg := strings.Trim(strings.TrimSpace(field), `"'`)
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			// `bash -c` / `bash -lc` receives a command string, not a script
+			// filename. Leave such user-authored hooks untouched.
+			if strings.Contains(arg, "c") {
+				return "", false
+			}
+			continue
+		}
+		return arg, true
+	}
+	return "", false
 }
 
 func mergeHookEventCommand(hooks map[string]any, eventName, command string) {

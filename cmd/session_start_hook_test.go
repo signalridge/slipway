@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -35,6 +36,26 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		assert.Contains(t, body, "session_handoff_present: true")
 		assert.Contains(t, body, "session_handoff_path: "+handoffPath)
 		assert.NotContains(t, body, "handoff body must not be embedded")
+	})
+}
+
+func TestSessionStartHookBareCommandOmitsUnknownToolAttribute(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "session-start bare command")
+
+		cmd := makeHookCmd()
+		cmd.SetArgs([]string{"session-start"})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		body := out.String()
+		assert.Contains(t, body, `<slipway-session-start>`)
+		assert.NotContains(t, body, `tool="unknown"`)
+		assert.NotContains(t, body, `tool=""`)
+		assert.Contains(t, body, `"slug": "`+slug+`"`)
 	})
 }
 
@@ -84,4 +105,53 @@ func TestSessionStartHookSurfacesRootFailureDiagnostic(t *testing.T) {
 	body := out.String()
 	assert.Contains(t, body, `<slipway-session-start tool="bad&quot;tool">`)
 	assert.Contains(t, body, "hook_diagnostic: slipway root failed:")
+}
+
+// TestSessionStartHookFailsSilentOnUnusableInput pins REQ-003: the SessionStart
+// hook is inlined into automatic host hooks, so it must always exit 0 (Execute
+// returns nil, never panics) even when stdin is empty or malformed garbage. The
+// subcommand does not consume stdin, but the fail-silent contract must hold for
+// any host-supplied input.
+func TestSessionStartHookFailsSilentOnUnusableInput(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, "L2", "session-start fail-silent input")
+
+		tests := []struct {
+			name  string
+			stdin string
+		}{
+			{
+				name:  "empty stdin",
+				stdin: "",
+			},
+			{
+				name:  "whitespace only stdin",
+				stdin: "   \n\t  \n",
+			},
+			{
+				name:  "garbage non-json stdin",
+				stdin: "this is not json at all <<>>",
+			},
+			{
+				name:  "truncated json",
+				stdin: `{"hook_event_name":"SessionStart",`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cmd := makeHookCmd()
+				cmd.SetArgs([]string{"session-start", "--tool", "claude"})
+				cmd.SetIn(strings.NewReader(tt.stdin))
+				var out bytes.Buffer
+				cmd.SetOut(&out)
+
+				require.NotPanics(t, func() {
+					require.NoError(t, cmd.Execute())
+				})
+			})
+		}
+	})
 }

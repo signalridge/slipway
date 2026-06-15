@@ -1,0 +1,38 @@
+version: 1
+slug: eliminate-generated-claude-gemini-hook-launcher-scripts-by-i
+description: Eliminate generated Claude/Gemini hook launcher scripts by inlining the `slipway hook` command directly into host settings.json, and make the `slipway hook` subcommands fail-silent (always exit 0). This removes the missing-file, relative-path/CWD, and cross-platform-launcher failure modes that caused PostToolUse hooks to fail with "No such file or directory".
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-15T09:03:19.46313Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 277cf162912f6b86a59e2c7492debed24c50687d03561d7fcf7f6140f2902e69
+        updated_at: 2026-06-15T14:54:44.53147039Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 70fd035c4a833cb3145fbc0eb30535acaca613503e13f38b85c347c8d1b3544b
+        updated_at: 2026-06-15T14:54:44.532673543Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 2eca8e397b33649494e9429e5be3a0d2ef9d05e85bb14cae3b464a6df6f57420
+        updated_at: 2026-06-15T14:54:44.534131901Z
+evidence_refs:
+    code-quality-review: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/code-quality-review.yaml
+    goal-verification: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/goal-verification.yaml
+    intake-clarification: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/intake-clarification.yaml
+    plan-audit: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/artifacts/changes/eliminate-generated-claude-gemini-hook-launcher-scripts-by-i/verification/wave-orchestration.yaml

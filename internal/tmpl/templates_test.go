@@ -378,19 +378,6 @@ func TestRenderSessionStartHookTemplate(t *testing.T) {
 	assert.NotContains(t, content, "--preview")
 }
 
-func TestRenderContextPressurePostToolUseHookTemplate(t *testing.T) {
-	t.Parallel()
-	data := map[string]string{
-		"ToolID": "claude",
-	}
-	content, err := Render("hooks/context-pressure-post-tool-use.sh.tmpl", data)
-	require.NoError(t, err, "failed to render context-pressure post-tool hook")
-	assert.LessOrEqual(t, len([]byte(content)), 700, "context-pressure hook template must stay compact")
-	assert.NotContains(t, content, "{{.", "context-pressure hook has unrendered template vars")
-	assert.Contains(t, content, "slipway hook context-pressure")
-	assert.NotContains(t, content, "next --json")
-}
-
 func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
