@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.2](https://github.com/signalridge/slipway/compare/v0.25.1...v0.25.2) (2026-06-15)
+
+
+### Bug Fixes
+
+* **governance:** clarify lifecycle timeline transitions ([#236](https://github.com/signalridge/slipway/issues/236)) ([f741779](https://github.com/signalridge/slipway/commit/f7417799dae4f67278e20b4f6b512b3dc5bdbef8))
+
 ## [0.25.1](https://github.com/signalridge/slipway/compare/v0.25.0...v0.25.1) (2026-06-15)
 
 
