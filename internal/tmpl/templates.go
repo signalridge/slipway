@@ -17,7 +17,6 @@ import (
 //go:embed templates/hooks/*.tmpl
 //go:embed templates/skills/*/*.md templates/skills/*/*.tmpl
 //go:embed templates/skills/*/references/*.md
-//go:embed templates/skills/*/scripts/*.py templates/skills/*/scripts/*.sh
 var embeddedTemplates embed.FS
 
 // TemplateFS returns a read-only view of the embedded templates rooted at

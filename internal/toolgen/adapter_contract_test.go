@@ -80,12 +80,12 @@ var frozenToolContracts = map[string]frozenToolContract{
 		SettingsPath:  ".claude/settings.json",
 		SessionHook: frozenHookContract{
 			Event:      "SessionStart",
-			Path:       ".claude/hooks/slipway-session-start.sh",
+			Path:       ".claude/hooks/slipway-session-start",
 			Registered: true,
 		},
 		PostToolHook: frozenHookContract{
 			Event:      "PostToolUse",
-			Path:       ".claude/hooks/slipway-context-pressure-post-tool-use.sh",
+			Path:       ".claude/hooks/slipway-context-pressure-post-tool-use",
 			Registered: true,
 		},
 	},
@@ -105,7 +105,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		SessionHook: frozenHookContract{
-			Path:       ".cursor/hooks/slipway-session-start.sh",
+			Path:       ".cursor/hooks/slipway-session-start",
 			Registered: false,
 		},
 	},
@@ -119,7 +119,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		SettingsPath:  ".gemini/settings.json",
 		SessionHook: frozenHookContract{
 			Event:      "SessionStart",
-			Path:       ".gemini/hooks/slipway-session-start.sh",
+			Path:       ".gemini/hooks/slipway-session-start",
 			Registered: true,
 		},
 	},
@@ -131,7 +131,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		SessionHook: frozenHookContract{
-			Path:       ".opencode/hooks/slipway-session-start.sh",
+			Path:       ".opencode/hooks/slipway-session-start",
 			Registered: false,
 		},
 	},
@@ -295,6 +295,8 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 	absHookPath := filepath.Join(root, filepath.FromSlash(hook.Path))
 	_, err := os.Stat(absHookPath)
 	require.NoError(t, err, "missing generated hook %s", hook.Path)
+	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(hook.Path+".ps1")))
+	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(hook.Path+".cmd")))
 
 	if strings.TrimSpace(settingsPath) == "" {
 		assert.False(t, hook.Registered, "hook without settings must not be marked registered")
@@ -311,10 +313,7 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 }
 
 func hookInvocationCommand(hookPath string) string {
-	if strings.HasSuffix(hookPath, ".js") {
-		return `node "` + filepath.ToSlash(hookPath) + `"`
-	}
-	return `bash "` + filepath.ToSlash(hookPath) + `"`
+	return hookLauncherCommand(nativeHookPath(hookPath))
 }
 
 func hookCommandRegistered(settingsPath, eventName, command string) (bool, error) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -51,9 +52,9 @@ var toolRegistry = map[string]ToolConfig{
 		CommandFormat: "md",
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
-		SessionHook:   ".claude/hooks/slipway-session-start.sh",
+		SessionHook:   ".claude/hooks/slipway-session-start",
 		PostToolEvent: "PostToolUse",
-		PostToolHook:  ".claude/hooks/slipway-context-pressure-post-tool-use.sh",
+		PostToolHook:  ".claude/hooks/slipway-context-pressure-post-tool-use",
 		TriggerPrefix: "/slipway",
 		TriggerStyle:  "slash-colon",
 		AutoDetectPath: []string{
@@ -68,7 +69,7 @@ var toolRegistry = map[string]ToolConfig{
 		CommandFormat: "md",
 		SettingsPath:  "",
 		SessionEvent:  "",
-		SessionHook:   ".cursor/hooks/slipway-session-start.sh",
+		SessionHook:   ".cursor/hooks/slipway-session-start",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -99,7 +100,7 @@ var toolRegistry = map[string]ToolConfig{
 		CommandFormat: "md",
 		SettingsPath:  "",
 		SessionEvent:  "",
-		SessionHook:   ".opencode/hooks/slipway-session-start.sh",
+		SessionHook:   ".opencode/hooks/slipway-session-start",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -114,7 +115,7 @@ var toolRegistry = map[string]ToolConfig{
 		CommandFormat: "toml",
 		SettingsPath:  ".gemini/settings.json",
 		SessionEvent:  "SessionStart",
-		SessionHook:   ".gemini/hooks/slipway-session-start.sh",
+		SessionHook:   ".gemini/hooks/slipway-session-start",
 		TriggerPrefix: "/slipway-",
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
@@ -162,7 +163,7 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Situational (10)
+	// Situational (12)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
@@ -199,6 +200,12 @@ var commandRegistry = []CommandDef{
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_EXECUTE with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
+	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "situational", HasPromptSurface: false,
+		Arguments:     "<helper> [helper flags]",
+		Prerequisites: []string{"None — public CLI-only helper namespace used by generated skills. Individual helpers may require GitHub tokens, local files, or explicit confirmation."},
+		Notes: []string{
+			"`tool` is intentionally CLI-only: generated skills call `slipway tool ...` directly, but Slipway does not export `$slipway-tool` or host command prompt wrappers.",
+		}},
 	// Diagnostics (5)
 	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--preview] [--json]",
@@ -521,17 +528,29 @@ func validateWorkflowCommandCoverage(groups ...[]string) error {
 			if _, exists := grouped[id]; exists {
 				return fmt.Errorf("workflow command %q declared more than once", id)
 			}
+			def, ok := commandRegistryMap[id]
+			if !ok {
+				return fmt.Errorf("workflow command group references unknown registry command %q", id)
+			}
+			if !def.HasPromptSurface {
+				return fmt.Errorf("workflow command group includes CLI-only command %q", id)
+			}
 			grouped[id] = struct{}{}
 		}
 	}
 
+	expected := 0
 	for _, def := range commandRegistry {
+		if !def.HasPromptSurface {
+			continue
+		}
+		expected++
 		if _, ok := grouped[def.ID]; !ok {
 			return fmt.Errorf("workflow command groups missing registry command %q", def.ID)
 		}
 	}
-	if len(grouped) != len(commandRegistry) {
-		return fmt.Errorf("workflow command groups cover %d commands, want %d", len(grouped), len(commandRegistry))
+	if len(grouped) != expected {
+		return fmt.Errorf("workflow command groups cover %d commands, want %d", len(grouped), expected)
 	}
 	return nil
 }
@@ -953,25 +972,39 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, opts generateOpt
 		}
 	}
 
-	// Session-start hook helper (hook-capable runtimes).
+	// Session-start hook launchers (hook-capable runtimes).
 	if strings.TrimSpace(cfg.SessionHook) != "" {
-		content, err := renderSessionHook(cfg)
-		if err != nil {
-			return fmt.Errorf("render session hook for %s: %w", cfg.ID, err)
+		for _, launcher := range hookLauncherOutputs(cfg.SessionHook, "session-start") {
+			content, err := renderHookLauncher(cfg, launcher.template)
+			if err != nil {
+				return fmt.Errorf("render session hook launcher for %s: %w", cfg.ID, err)
+			}
+			p := filepath.Join(root, launcher.path)
+			if err := writeDeterministicMode(p, content, refresh, launcher.mode); err != nil {
+				return err
+			}
 		}
-		p := filepath.Join(root, cfg.SessionHook)
-		if err := writeDeterministic(p, content, refresh); err != nil {
-			return err
+		if refresh {
+			if err := cleanupLegacyHookLauncher(root, cfg.SessionHook); err != nil {
+				return err
+			}
 		}
 	}
 	if strings.TrimSpace(cfg.PostToolHook) != "" {
-		content, err := renderPostToolHook(cfg)
-		if err != nil {
-			return fmt.Errorf("render post-tool hook for %s: %w", cfg.ID, err)
+		for _, launcher := range hookLauncherOutputs(cfg.PostToolHook, "context-pressure-post-tool-use") {
+			content, err := renderHookLauncher(cfg, launcher.template)
+			if err != nil {
+				return fmt.Errorf("render post-tool hook launcher for %s: %w", cfg.ID, err)
+			}
+			p := filepath.Join(root, launcher.path)
+			if err := writeDeterministicMode(p, content, refresh, launcher.mode); err != nil {
+				return err
+			}
 		}
-		p := filepath.Join(root, cfg.PostToolHook)
-		if err := writeDeterministic(p, content, refresh); err != nil {
-			return err
+		if refresh {
+			if err := cleanupLegacyHookLauncher(root, cfg.PostToolHook); err != nil {
+				return err
+			}
 		}
 	}
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
@@ -1421,10 +1454,9 @@ func yamlDoubleQuoted(s string) string {
 
 var optionalSkillSupportDirs = []string{"references", "scripts"}
 
-// emitSkillSupportFiles copies optional support artifacts (`references/`,
-// `scripts/`) next to a generated skill. Skills with no support payload are a
-// silent no-op. Refresh mode also sweeps stale copies so catalog drops clean
-// up their previous output.
+// emitSkillSupportFiles copies optional support artifacts next to a generated
+// skill. Skill scripts are intentionally not exported anymore; the `scripts`
+// entry remains only as a refresh-time stale cleanup target.
 func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
 	skillDirRel := filepath.Dir(SkillPath(cfg, skillID))
 	dstBase := filepath.Join(root, skillDirRel)
@@ -1442,8 +1474,13 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 				return err
 			}
 		}
-		if err := emitSharedSkillSupportFromFS(srcFS, skillID, sub, dstDir, refresh); err != nil {
-			return fmt.Errorf("copy shared %s for %q: %w", sub, skillID, err)
+		if sub == "scripts" {
+			continue
+		}
+		if sub == "references" {
+			if err := emitSharedReferenceSupportFromFS(srcFS, skillID, dstDir, refresh); err != nil {
+				return fmt.Errorf("copy shared references for %q: %w", skillID, err)
+			}
 		}
 		if err := copyTemplateSubtreeFromFS(srcFS, sourceSkillTemplatePath(skillID, sub), dstDir, refresh); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
@@ -1460,38 +1497,24 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 // path emitted).
 var sharedReferenceDocs = []string{"checklist-quality.md"}
 
-func emitSharedSkillSupportFromFS(srcFS fs.FS, skillID, sub, dstDir string, refresh bool) error {
-	switch sub {
-	case "scripts":
-		usesSharedHelper, err := skillUsesSharedScriptHelper(srcFS, skillID)
+func emitSharedReferenceSupportFromFS(srcFS fs.FS, skillID, dstDir string, refresh bool) error {
+	for _, doc := range sharedReferenceDocs {
+		referenced, err := skillReferencesSharedDoc(srcFS, skillID, doc)
 		if err != nil {
 			return err
 		}
-		if !usesSharedHelper {
-			return nil
+		if !referenced {
+			continue
 		}
-		return copyTemplateSubtreeFromFS(srcFS, path.Join("skills", "_shared", "scripts"), dstDir, refresh)
-	case "references":
-		for _, doc := range sharedReferenceDocs {
-			referenced, err := skillReferencesSharedDoc(srcFS, skillID, doc)
-			if err != nil {
-				return err
-			}
-			if !referenced {
-				continue
-			}
-			content, err := fs.ReadFile(srcFS, path.Join("skills", "_shared", "references", doc))
-			if err != nil {
-				return err
-			}
-			if err := writeDeterministic(filepath.Join(dstDir, doc), string(content), refresh); err != nil {
-				return err
-			}
+		content, err := fs.ReadFile(srcFS, path.Join("skills", "_shared", "references", doc))
+		if err != nil {
+			return err
 		}
-		return nil
-	default:
-		return nil
+		if err := writeDeterministic(filepath.Join(dstDir, doc), string(content), refresh); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // skillReferencesSharedDoc reports whether a skill's authored SKILL.md (or
@@ -1509,51 +1532,6 @@ func skillReferencesSharedDoc(srcFS fs.FS, skillID, doc string) (bool, error) {
 		if strings.Contains(string(content), doc) {
 			return true, nil
 		}
-	}
-	return false, nil
-}
-
-func skillUsesSharedScriptHelper(srcFS fs.FS, skillID string) (bool, error) {
-	scriptsDir := sourceSkillTemplatePath(skillID, "scripts")
-	info, err := fs.Stat(srcFS, scriptsDir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	if !info.IsDir() {
-		return false, fmt.Errorf("expected directory at %q", scriptsDir)
-	}
-
-	sharedHelperReferenced := errors.New("shared helper referenced")
-	err = fs.WalkDir(srcFS, scriptsDir, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			if shouldSkipSupportArtifact(path.Base(p), true) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if shouldSkipSupportArtifact(path.Base(p), false) || path.Ext(p) != ".sh" {
-			return nil
-		}
-		content, err := fs.ReadFile(srcFS, p)
-		if err != nil {
-			return err
-		}
-		if strings.Contains(string(content), "gh-common.sh") {
-			return sharedHelperReferenced
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, sharedHelperReferenced) {
-			return true, nil
-		}
-		return false, err
 	}
 	return false, nil
 }
@@ -1726,22 +1704,52 @@ func commandSkillDirNames() []string {
 	return out
 }
 
-func renderSessionHook(cfg ToolConfig) (string, error) {
+type hookLauncherOutput struct {
+	path     string
+	template string
+	mode     os.FileMode
+}
+
+func hookLauncherOutputs(basePath, hookTemplateBase string) []hookLauncherOutput {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return nil
+	}
+	return []hookLauncherOutput{
+		{path: basePath, template: path.Join("hooks", hookTemplateBase+".sh.tmpl"), mode: 0o755},
+		{path: basePath + ".ps1", template: path.Join("hooks", hookTemplateBase+".ps1.tmpl"), mode: 0o644},
+		{path: basePath + ".cmd", template: path.Join("hooks", hookTemplateBase+".cmd.tmpl"), mode: 0o644},
+	}
+}
+
+func nativeHookPath(basePath string) string {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return ""
+	}
+	if runtime.GOOS == "windows" {
+		return basePath + ".cmd"
+	}
+	return basePath
+}
+
+func hookLauncherCommand(path string) string {
+	return fmt.Sprintf(`"%s"`, filepath.ToSlash(path))
+}
+
+func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
 	data := map[string]string{
 		"ToolID":     cfg.ID,
 		"EntrySkill": workflowEntryPublicName,
 	}
-	return tmpl.Render(path.Join("hooks", "session-start.sh.tmpl"), data)
-}
-
-func renderPostToolHook(cfg ToolConfig) (string, error) {
-	data := map[string]string{
-		"ToolID": cfg.ID,
-	}
-	return tmpl.Render(path.Join("hooks", "context-pressure-post-tool-use.sh.tmpl"), data)
+	return tmpl.Render(templatePath, data)
 }
 
 func writeDeterministic(path, content string, refresh bool) error {
+	return writeDeterministicMode(path, content, refresh, defaultFileModeForPath(path))
+}
+
+func writeDeterministicMode(path, content string, refresh bool, mode os.FileMode) error {
 	if !refresh {
 		if _, err := os.Stat(path); err == nil {
 			return nil
@@ -1750,11 +1758,14 @@ func writeDeterministic(path, content string, refresh bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
-	mode := os.FileMode(0o644)
-	if strings.HasSuffix(path, ".sh") {
-		mode = 0o755
-	}
 	return os.WriteFile(path, []byte(content), mode)
+}
+
+func defaultFileModeForPath(path string) os.FileMode {
+	if strings.HasSuffix(path, ".sh") {
+		return 0o755
+	}
+	return 0o644
 }
 
 func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
@@ -1786,10 +1797,12 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
-		mergeHookEventCommand(hooks, cfg.SessionEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.SessionHook)))
+		pruneLegacySlipwayHookCommands(hooks, cfg.SessionEvent, legacyShellHookPath(cfg.SessionHook))
+		mergeHookEventCommand(hooks, cfg.SessionEvent, hookLauncherCommand(nativeHookPath(cfg.SessionHook)))
 	}
 	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, fmt.Sprintf(`bash "%s"`, filepath.ToSlash(cfg.PostToolHook)))
+		pruneLegacySlipwayHookCommands(hooks, cfg.PostToolEvent, legacyShellHookPath(cfg.PostToolHook))
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, hookLauncherCommand(nativeHookPath(cfg.PostToolHook)))
 	}
 	settings["hooks"] = hooks
 
@@ -1802,6 +1815,77 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	}
 	content = append(content, '\n')
 	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
+}
+
+func legacyShellHookPath(basePath string) string {
+	return filepath.ToSlash(strings.TrimSpace(basePath) + ".sh")
+}
+
+func cleanupLegacyHookLauncher(root, basePath string) error {
+	if strings.TrimSpace(basePath) == "" {
+		return nil
+	}
+	return removePathIfExists(filepath.Join(root, filepath.FromSlash(legacyShellHookPath(basePath))))
+}
+
+func pruneLegacySlipwayHookCommands(hooks map[string]any, eventName, legacyPath string) {
+	rawEntries, ok := hooks[eventName].([]any)
+	if !ok {
+		return
+	}
+	var keptEntries []any
+	for _, entry := range rawEntries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			keptEntries = append(keptEntries, entry)
+			continue
+		}
+		hookList, ok := entryMap["hooks"].([]any)
+		if !ok {
+			keptEntries = append(keptEntries, entry)
+			continue
+		}
+		var keptHooks []any
+		for _, hook := range hookList {
+			if isLegacySlipwayHookCommand(hook, legacyPath) {
+				continue
+			}
+			keptHooks = append(keptHooks, hook)
+		}
+		if len(keptHooks) == 0 {
+			continue
+		}
+		entryCopy := map[string]any{}
+		for key, value := range entryMap {
+			entryCopy[key] = value
+		}
+		entryCopy["hooks"] = keptHooks
+		keptEntries = append(keptEntries, entryCopy)
+	}
+	hooks[eventName] = keptEntries
+}
+
+func isLegacySlipwayHookCommand(hook any, legacyPath string) bool {
+	hookMap, ok := hook.(map[string]any)
+	if !ok {
+		return false
+	}
+	command, _ := hookMap["command"].(string)
+	command = filepath.ToSlash(strings.TrimSpace(command))
+	if !strings.Contains(command, legacyPath) {
+		return false
+	}
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return false
+	}
+	first := strings.Trim(fields[0], `"'`)
+	// Match the interpreter by basename so an absolute path (e.g. /bin/bash) is
+	// pruned too, not just the bare "bash"/"sh" Slipway historically generated.
+	// A direct exec of the legacy script (first token ends with the
+	// Slipway-owned .sh path) also qualifies.
+	firstBase := path.Base(first)
+	return firstBase == "bash" || firstBase == "sh" || strings.HasSuffix(first, legacyPath)
 }
 
 func mergeHookEventCommand(hooks map[string]any, eventName, command string) {

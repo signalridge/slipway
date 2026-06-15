@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -17,11 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-)
-
-var (
-	execLookPath  = exec.LookPath
-	osExecCommand = exec.Command
 )
 
 type hydrateReferenceEntry struct {
@@ -94,8 +88,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 21 commands (5 core + 11 situational + 5 diagnostics).
-	assert.Len(t, commandRegistry, 21)
+	// Verify registry has 22 commands (5 core + 12 situational + 5 diagnostics).
+	assert.Len(t, commandRegistry, 22)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -128,18 +122,20 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 5, core, "expected 5 core commands")
-	assert.Equal(t, 11, sit, "expected 11 situational commands")
+	assert.Equal(t, 12, sit, "expected 12 situational commands")
 	assert.Equal(t, 5, diag, "expected 5 diagnostics commands")
 	assert.Equal(t, 7, query, "expected 7 query commands")
-	assert.Equal(t, 14, mutation, "expected 14 mutation commands")
+	assert.Equal(t, 15, mutation, "expected 15 mutation commands")
 
-	// Verify commandIDs() returns a sorted list covering every command (all
-	// commands ship a prompt surface).
+	// Verify commandIDs() returns a sorted list covering every command that
+	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
+	// but intentionally do not generate host prompt wrappers.
 	ids := commandIDs()
 	assert.Len(t, ids, 21)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
+	assert.NotContains(t, ids, "tool")
 }
 
 func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
@@ -435,8 +431,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			hookPath := filepath.Join(root, cfg.SessionHook)
 			_, err := os.Stat(hookPath)
 			assert.NoError(t, err, "%s: missing session-start hook", toolID)
+			assert.FileExists(t, hookPath+".ps1", "%s: missing PowerShell session-start hook", toolID)
+			assert.FileExists(t, hookPath+".cmd", "%s: missing cmd session-start hook", toolID)
 		} else {
-			hookPath := filepath.Join(root, "."+toolID, "hooks", "slipway-session-start.sh")
+			hookPath := filepath.Join(root, "."+toolID, "hooks", "slipway-session-start")
 			_, err := os.Stat(hookPath)
 			assert.True(t, os.IsNotExist(err), "%s: unexpected session hook generated", toolID)
 		}
@@ -450,9 +448,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.Contains(t, settings, "SessionStart", "%s: missing session-start registration", toolID)
 			if toolID == "claude" {
 				assert.Contains(t, settings, "PostToolUse", "%s: missing post-tool registration", toolID)
-				assert.Contains(t, settings, "slipway-context-pressure-post-tool-use.sh", "%s: missing context-pressure hook", toolID)
+				assert.Contains(t, settings, "slipway-context-pressure-post-tool-use", "%s: missing context-pressure hook", toolID)
+				assert.NotContains(t, settings, "bash", "%s: settings must not require bash", toolID)
 			} else {
-				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use.sh", "%s: unexpected post-tool registration", toolID)
+				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use", "%s: unexpected post-tool registration", toolID)
 			}
 		default:
 			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
@@ -796,7 +795,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 				t,
 				filepath.Join(root, cfg.SettingsPath),
 				cfg.SessionEvent,
-				`bash "`+filepath.ToSlash(cfg.SessionHook)+`"`,
+				hookLauncherCommand(nativeHookPath(cfg.SessionHook)),
 			)
 		}
 	}
@@ -1012,16 +1011,53 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.Contains(t, string(claudeSettings), "slipway-session-start.sh")
+	assert.Contains(t, string(claudeSettings), "slipway-session-start")
+	assert.NotContains(t, string(claudeSettings), "slipway-session-start.sh")
 	assert.Contains(t, string(claudeSettings), "PostToolUse")
-	assert.Contains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use.sh")
+	assert.Contains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use")
+	assert.NotContains(t, string(claudeSettings), "bash")
 
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiSettings), "SessionStart")
-	assert.Contains(t, string(geminiSettings), "slipway-session-start.sh")
+	assert.Contains(t, string(geminiSettings), "slipway-session-start")
+	assert.NotContains(t, string(geminiSettings), "slipway-session-start.sh")
 	assert.NotContains(t, string(geminiSettings), "PostToolUse")
-	assert.NotContains(t, string(geminiSettings), "slipway-context-pressure-post-tool-use.sh")
+	assert.NotContains(t, string(geminiSettings), "slipway-context-pressure-post-tool-use")
+}
+
+func TestGenerateRefreshRemovesLegacyShellHookLaunchers(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	stalePaths := []string{
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start.sh"),
+		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.sh"),
+		filepath.Join(root, ".cursor", "hooks", "slipway-session-start.sh"),
+		filepath.Join(root, ".opencode", "hooks", "slipway-session-start.sh"),
+	}
+	for _, p := range stalePaths {
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
+	}
+
+	require.NoError(t, Generate(root, []string{"claude", "cursor", "opencode"}, true))
+
+	for _, p := range stalePaths {
+		_, err := os.Stat(p)
+		assert.True(t, os.IsNotExist(err), "refresh should remove stale legacy shell hook launcher %s", p)
+	}
+	for _, p := range []string{
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start"),
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start.ps1"),
+		filepath.Join(root, ".claude", "hooks", "slipway-session-start.cmd"),
+		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use"),
+		filepath.Join(root, ".cursor", "hooks", "slipway-session-start"),
+		filepath.Join(root, ".opencode", "hooks", "slipway-session-start"),
+	} {
+		_, err := os.Stat(p)
+		assert.NoError(t, err, "refresh should keep native hook launcher %s", p)
+	}
 }
 
 func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
@@ -2026,622 +2062,46 @@ func generatedSkillsRoot(t *testing.T) string {
 	return filepath.Join(root, cfg.SkillsDir)
 }
 
-func scriptPathForTest(t *testing.T, skillsRoot, skillID, name string) string {
-	t.Helper()
-	if shouldExportAsHostSkill(skillID) {
-		return filepath.Join(skillsRoot, "slipway-"+skillID, "scripts", name)
-	}
-	dstDir := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstDir, true),
-		"materialize source support files for non-exported skill %s", skillID)
-	return filepath.Join(dstDir, "scripts", name)
-}
-
-// TestScriptExecutableBit asserts every rendered scripts/*.sh file has an
-// executable bit set. Skipped on Windows where POSIX perm bits are not
-// meaningful.
-func TestScriptExecutableBit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable-bit semantics are POSIX-only")
-	}
+func TestGeneratedSkillsDoNotShipScriptDirectories(t *testing.T) {
 	root := generatedSkillsRoot(t)
-	shellCount := 0
-	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+
+	var scriptPaths []string
+	require.NoError(t, filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
 			return err
 		}
-		if !strings.Contains(filepath.ToSlash(p), "/scripts/") || !strings.HasSuffix(p, ".sh") {
-			return nil
-		}
-		info, err := os.Stat(p)
-		require.NoError(t, err)
-		assert.NotZerof(t, info.Mode().Perm()&0o111,
-			"%s: expected executable bit on .sh script, got %v", p, info.Mode().Perm())
-		shellCount++
-		return nil
-	})
-	require.NoError(t, err)
-	assert.NotZero(t, shellCount, "expected at least one .sh script in the generated tree")
-}
-
-// TestScriptStaticChecks validates each rendered script parses.
-//   - *.sh  -> `bash -n`
-//   - *.py  -> `python3 -m py_compile`
-//
-// If a required interpreter is missing locally, the corresponding check
-// is skipped with an explicit message; CI must provide bash and python3.
-func TestScriptStaticChecks(t *testing.T) {
-	root := generatedSkillsRoot(t)
-
-	bashPath, bashErr := execLookPath("bash")
-	pyPath, pyErr := execLookPath("python3")
-
-	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		slash := filepath.ToSlash(p)
-		if !strings.Contains(slash, "/scripts/") {
-			return nil
-		}
-		switch {
-		case strings.HasSuffix(p, ".sh"):
-			if bashErr != nil {
-				t.Logf("skipping bash -n for %s: %v", p, bashErr)
-				return nil
+		if d.IsDir() && filepath.Base(p) == "scripts" {
+			rel, relErr := filepath.Rel(root, p)
+			if relErr != nil {
+				return relErr
 			}
-			out, cerr := runCommand(bashPath, "-n", p)
-			assert.NoErrorf(t, cerr, "bash -n %s failed: %s", p, out)
-		case strings.HasSuffix(p, ".py"):
-			if pyErr != nil {
-				t.Logf("skipping py_compile for %s: %v", p, pyErr)
-				return nil
-			}
-			out, cerr := runCommand(pyPath, "-m", "py_compile", p)
-			assert.NoErrorf(t, cerr, "py_compile %s failed: %s", p, out)
+			scriptPaths = append(scriptPaths, filepath.ToSlash(rel))
 		}
 		return nil
-	})
-	require.NoError(t, err)
+	}))
+	assert.Empty(t, scriptPaths, "generated skills must route helper behavior through slipway tool, not scripts/")
 }
 
-// TestScriptFixtureContracts exercises each Wave-1 script against a
-// fixture scenario:
-//   - merge-sarif.sh merges two SARIF files and produces a deterministic
-//     result set (deduped, sorted).
-//   - pin-actions.sh rewrites a workflow using a checked-in mapping,
-//     fails on unresolved refs, and rejects missing --mapping with
-//     usage text.
-//   - find-polluter-go.sh surfaces a stable usage error when argv is
-//     insufficient, independent of a Go toolchain being available.
-func TestScriptFixtureContracts(t *testing.T) {
-	root := generatedSkillsRoot(t)
-
-	t.Run("merge-sarif", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		if _, err := execLookPath("jq"); err != nil {
-			t.Skipf("jq unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "sast-orchestration", "merge-sarif.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		raw := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
-          "version":"2.1.0",
-          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"}]}},
-            "results":[{"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]}]}]}`), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
-          "version":"2.1.0",
-          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"},{"id":"R2"}]}},
-            "results":[
-              {"ruleId":"R1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"x.go"},"region":{"startLine":1}}}]},
-              {"ruleId":"R2","locations":[{"physicalLocation":{"artifactLocation":{"uri":"y.go"},"region":{"startLine":7}}}]}]}]}`), 0o644))
-
-		outPath := filepath.Join(t.TempDir(), "merged.sarif")
-		out, cerr := runCommand(bashPath, script, raw, outPath)
-		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
-
-		data, err := os.ReadFile(outPath)
-		require.NoError(t, err)
-		var merged map[string]any
-		require.NoError(t, json.Unmarshal(data, &merged))
-		runs, _ := merged["runs"].([]any)
-		require.Len(t, runs, 1, "expected exactly one merged run")
-		run0 := runs[0].(map[string]any)
-		results, _ := run0["results"].([]any)
-		assert.Len(t, results, 2, "expected 2 deduped results (R1@x.go:1 + R2@y.go:7)")
-
-		out2, cerr2 := runCommand(bashPath, script, raw, outPath)
-		require.NoErrorf(t, cerr2, "merge-sarif.sh second run failed: %s", out2)
-		data2, err := os.ReadFile(outPath)
-		require.NoError(t, err)
-		assert.Equal(t, string(data), string(data2), "merge output must be deterministic across runs")
-	})
-
-	t.Run("merge-sarif keeps tool runs separate", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		if _, err := execLookPath("jq"); err != nil {
-			t.Skipf("jq unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "sast-orchestration", "merge-sarif.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		raw := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
-          "version":"2.1.0",
-          "runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"DUP"}]}},
-            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
-          "version":"2.1.0",
-          "runs":[{"tool":{"driver":{"name":"CodeQL","rules":[{"id":"DUP"}]}},
-            "results":[{"ruleId":"DUP","locations":[{"physicalLocation":{"artifactLocation":{"uri":"shared.go"},"region":{"startLine":9}}}]}]}]}`), 0o644))
-
-		outPath := filepath.Join(t.TempDir(), "merged.sarif")
-		out, cerr := runCommand(bashPath, script, raw, outPath)
-		require.NoErrorf(t, cerr, "merge-sarif.sh failed: %s", out)
-
-		data, err := os.ReadFile(outPath)
-		require.NoError(t, err)
-		var merged struct {
-			Runs []struct {
-				Tool struct {
-					Driver struct {
-						Name  string `json:"name"`
-						Rules []struct {
-							ID string `json:"id"`
-						} `json:"rules"`
-					} `json:"driver"`
-				} `json:"tool"`
-				Results []struct {
-					RuleID string `json:"ruleId"`
-				} `json:"results"`
-			} `json:"runs"`
-		}
-		require.NoError(t, json.Unmarshal(data, &merged))
-		require.Len(t, merged.Runs, 2, "different tools must remain in separate SARIF runs")
-		assert.Equal(t, "CodeQL", merged.Runs[0].Tool.Driver.Name)
-		assert.Equal(t, "semgrep", merged.Runs[1].Tool.Driver.Name)
-		assert.Len(t, merged.Runs[0].Results, 1, "CodeQL result must not be deduped away by semgrep")
-		assert.Len(t, merged.Runs[1].Results, 1, "semgrep result must stay in its own run")
-		assert.Equal(t, "DUP", merged.Runs[0].Tool.Driver.Rules[0].ID)
-		assert.Equal(t, "DUP", merged.Runs[1].Tool.Driver.Rules[0].ID)
-	})
-
-	t.Run("pin-actions", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "gha-security-review", "pin-actions.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		// Missing --mapping fails with usage text.
-		dir := t.TempDir()
-		wf := filepath.Join(dir, "ci.yml")
-		require.NoError(t, os.WriteFile(wf, []byte("jobs:\n  x:\n    steps:\n      - uses: actions/checkout@v4\n"), 0o644))
-		out, cerr := runCommand(bashPath, script, wf)
-		assert.Errorf(t, cerr, "expected failure when --mapping is missing")
-		assert.Contains(t, out, "Usage:", "expected usage text on missing --mapping")
-
-		// Successful rewrite with mapping.
-		mapping := filepath.Join(dir, "pins.tsv")
-		require.NoError(t, os.WriteFile(mapping,
-			[]byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
-		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf)
-		require.NoErrorf(t, cerr, "pin-actions.sh unexpected failure: %s", out)
-		rewritten, err := os.ReadFile(wf)
-		require.NoError(t, err)
-		assert.Contains(t, string(rewritten), "@b4ffde65f46336ab88eb53be808477a3936bae11")
-		assert.Contains(t, string(rewritten), "# v4")
-
-		// Unresolved reference: non-zero exit, no rewrite.
-		wf2 := filepath.Join(dir, "ci2.yml")
-		body := "jobs:\n  x:\n    steps:\n      - uses: custom/act@v9\n"
-		require.NoError(t, os.WriteFile(wf2, []byte(body), 0o644))
-		out, cerr = runCommand(bashPath, script, "--mapping", mapping, wf2)
-		assert.Errorf(t, cerr, "expected failure on unresolved ref")
-		assert.Contains(t, out, "unresolved")
-		after, err := os.ReadFile(wf2)
-		require.NoError(t, err)
-		assert.Equal(t, body, string(after), "file must be untouched when unresolved refs remain")
-
-		// Unreadable workflow preserves the documented exit code 3 instead of
-		// collapsing it into the generic unresolved-ref exit path.
-		out, cerr = runCommand(bashPath, script, "--mapping", mapping, filepath.Join(dir, "missing.yml"))
-		require.Error(t, cerr, "expected unreadable workflow to fail")
-		var exitErr *exec.ExitError
-		require.ErrorAs(t, cerr, &exitErr)
-		assert.Equal(t, 3, exitErr.ExitCode())
-		assert.Contains(t, out, "cannot read")
-	})
-
-	t.Run("find-polluter-go", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		// No argv -> stable usage.
-		out, cerr := runCommand(bashPath, script)
-		assert.Errorf(t, cerr, "expected usage exit")
-		assert.Contains(t, out, "Usage:")
-
-		// Nonexistent pollution path with empty package set should exit
-		// cleanly or produce the "no test packages" diagnostic when a
-		// Go toolchain is present.
-	})
-
-	t.Run("find-polluter-go reports go list failures", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		if _, err := execLookPath("go"); err != nil {
-			t.Skipf("go unavailable: %v", err)
-		}
-
-		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		modRoot := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/listfail\n\ngo 1.22\n"), 0o644))
-		out, cerr := runCommandInDir(modRoot, bashPath, script, filepath.Join(modRoot, ".pollution"), "./does-not-exist/...")
-		assert.Errorf(t, cerr, "expected go list failure for missing package tree")
-		assert.Contains(t, out, "go list failed for ./does-not-exist/...")
-		assert.NotContains(t, out, "no test packages found", "go list failures must not collapse into an empty-package diagnostic")
-	})
-
-	t.Run("find-polluter-go ignores go list warnings when no packages match", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		if _, err := execLookPath("go"); err != nil {
-			t.Skipf("go unavailable: %v", err)
-		}
-
-		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		modRoot := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/emptyparent\n\ngo 1.22\n"), 0o644))
-		emptyDir := filepath.Join(modRoot, "empty")
-		require.NoError(t, os.MkdirAll(emptyDir, 0o755))
-
-		out, cerr := runCommandInDir(emptyDir, bashPath, script, filepath.Join(emptyDir, ".pollution"), "./...")
-		assert.Errorf(t, cerr, "expected no matching test packages to exit non-zero")
-		assert.Contains(t, out, "no test packages found under ./...")
-		assert.NotContains(t, out, "-- go test go: warning", "go list stderr must not be parsed as a package")
-		assert.NotContains(t, out, "checking 1 package(s)", "go list warning must not become a package entry")
-	})
-
-	t.Run("find-polluter-go external tests", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		if _, err := execLookPath("go"); err != nil {
-			t.Skipf("go unavailable: %v", err)
-		}
-
-		script := scriptPathForTest(t, root, "root-cause-tracing", "find-polluter-go.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		modRoot := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "go.mod"), []byte("module example.com/polluter\n\ngo 1.22\n"), 0o644))
-		require.NoError(t, os.MkdirAll(filepath.Join(modRoot, "polluter"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "impl.go"), []byte("package polluter\n"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(modRoot, "polluter", "polluter_test.go"), []byte(`package polluter_test
-
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
-
-func TestOnlyExternalPolluter(t *testing.T) {
-	target := filepath.Join("..", ".pollution")
-	if err := os.WriteFile(target, []byte("polluted"), 0o644); err != nil {
-		t.Fatalf("write pollution marker: %v", err)
+func TestSkillHelperDocsUseSlipwayTool(t *testing.T) {
+	cases := []struct {
+		path     string
+		contains string
+	}{
+		{path: "skills/ci-triage/SKILL.md", contains: "slipway tool fetch-pr-checks"},
+		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-pr-feedback"},
+		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-review-requests"},
+		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool reply-to-thread"},
+		{path: "skills/root-cause-tracing/references/root-cause-tracing.md", contains: "slipway tool find-polluter-go"},
+		{path: "skills/sast-orchestration/references/sarif-merge.md", contains: "slipway tool merge-sarif"},
+		{path: "skills/variant-analysis/SKILL.md", contains: "slipway tool find-variant"},
 	}
-}
-`), 0o644))
 
-		pollutionPath := filepath.Join(modRoot, ".pollution")
-		out, cerr := runCommandInDir(modRoot, bashPath, script, pollutionPath, "./...")
-		assert.Errorf(t, cerr, "expected polluter detection to exit non-zero")
-		assert.Contains(t, out, "POLLUTER:", "external-test-only package should still be enumerated")
-		assert.Contains(t, out, "example.com/polluter/polluter")
-	})
-
-	t.Run("find-variant codeql python", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommand(bashPath, script,
-			"--engine=codeql", "--language=python",
-			"--seed-file=app/views.py", "--seed-line=42",
-			"--variant-name=SQLi-audit", "--original-bug=CVE-2025-0001")
-		require.NoErrorf(t, cerr, "find-variant codeql python failed: %s", out)
-		assert.Contains(t, out, "import python",
-			"Python CodeQL scaffold must import the Python library")
-		assert.Contains(t, out, "TaintTracking",
-			"Python CodeQL scaffold must use taint tracking")
-		assert.Contains(t, out, "Seed: app/views.py:42",
-			"scaffold must embed the seed location verbatim")
-		assert.Contains(t, out, "TODO(source)",
-			"scaffold must carry a source-shape TODO")
-		assert.Contains(t, out, "TODO(sink)",
-			"scaffold must carry a sink-shape TODO")
-		assert.Contains(t, out, "TODO(sanitizer)",
-			"scaffold must carry a sanitizer-shape TODO")
-		assert.Contains(t, out, "CVE-2025-0001",
-			"scaffold must echo the original bug id")
-	})
-
-	t.Run("find-variant semgrep go", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommand(bashPath, script,
-			"--engine=semgrep", "--language=go")
-		require.NoErrorf(t, cerr, "find-variant semgrep go failed: %s", out)
-		assert.Contains(t, out, "id: variant-taint-go",
-			"Go Semgrep scaffold must carry the namespaced rule id")
-		assert.Contains(t, out, "mode: taint",
-			"Go Semgrep scaffold must use taint mode")
-		assert.Contains(t, out, "languages: [go]",
-			"Go Semgrep scaffold must declare language")
-		assert.Contains(t, out, "TODO(source)")
-		assert.Contains(t, out, "TODO(sink)")
-		assert.Contains(t, out, "TODO(sanitizer)")
-	})
-
-	t.Run("find-variant invalid engine", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommand(bashPath, script,
-			"--engine=unknown", "--language=python")
-		require.Error(t, cerr, "unsupported engine must exit non-zero")
-		assert.Contains(t, out, "unsupported engine/language pair",
-			"error must cite the engine/language contract")
-		assert.Contains(t, out, "Usage:",
-			"error output must include the usage block")
-	})
-
-	t.Run("find-variant missing args", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "variant-analysis", "find-variant.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommand(bashPath, script)
-		require.Error(t, cerr, "missing required flags must fail")
-		assert.Contains(t, out, "--engine and --language are required",
-			"error must explain which flags are mandatory")
-	})
-
-	// Wave-3 PR-2: ci-triage + review-comment-triage Python helpers. All
-	// four must fail fast with a credential-signal when GH_TOKEN is invalid
-	// (no live network calls are made by the tests themselves — the
-	// upstream gh CLI surfaces the 401 / auth-missing condition inside
-	// this test harness). reply-to-thread additionally must respect the
-	// dry-run safety default.
-
-	t.Run("fetch-pr-checks rejects invalid credentials", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "ci-triage", "fetch-pr-checks.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommandEnv(
-			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			pythonPath, script, "--pr", "999999999",
-		)
-		require.Error(t, cerr, "invalid credentials must exit non-zero")
-		assert.True(t,
-			strings.Contains(out, "Bad credentials") ||
-				strings.Contains(out, "not authenticated") ||
-				strings.Contains(out, "gh auth") ||
-				strings.Contains(out, "No PR found"),
-			"fetch-pr-checks must surface a stable credential-error signal, got:\n%s", out)
-	})
-
-	t.Run("fetch-pr-feedback rejects invalid credentials", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-pr-feedback.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommandEnv(
-			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			pythonPath, script, "--pr", "999999999",
-		)
-		require.Error(t, cerr, "invalid credentials must exit non-zero")
-		assert.True(t,
-			strings.Contains(out, "Bad credentials") ||
-				strings.Contains(out, "not authenticated") ||
-				strings.Contains(out, "gh auth") ||
-				strings.Contains(out, "Could not determine repository"),
-			"fetch-pr-feedback must surface a stable credential-error signal, got:\n%s", out)
-	})
-
-	t.Run("fetch-review-requests rejects invalid credentials", func(t *testing.T) {
-		t.Parallel()
-		bashPath, err := execLookPath("bash")
-		if err != nil {
-			t.Skipf("bash unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-review-requests.sh")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommandEnv(
-			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			bashPath, script, "--teams", "none-such-slipway-test",
-		)
-		require.Error(t, cerr, "invalid credentials must exit non-zero")
-		assert.True(t,
-			strings.Contains(out, "invalid or unauthorized") ||
-				strings.Contains(out, "Bad credentials") ||
-				strings.Contains(out, "not authenticated") ||
-				strings.Contains(out, "gh auth"),
-			"fetch-review-requests must surface a stable credential-error signal, got:\n%s", out)
-	})
-
-	t.Run("fetch-review-requests avoids bash4-only syntax", func(t *testing.T) {
-		t.Parallel()
-		script := scriptPathForTest(t, root, "review-comment-triage", "fetch-review-requests.sh")
-		raw, err := os.ReadFile(script)
-		require.NoError(t, err)
-
-		content := string(raw)
-		assert.NotContains(t, content, "mapfile ",
-			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
-		assert.NotContains(t, content, "readarray ",
-			"fetch-review-requests must stay compatible with Bash 3.2 on macOS")
-		assert.NotContains(t, content, ",,}",
-			"fetch-review-requests must avoid Bash 4 lowercase expansion")
-	})
-
-	t.Run("reply-to-thread defaults to dry-run", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "review-comment-triage", "reply-to-thread.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		// No --confirm: preflight must NOT be triggered (dry-run works
-		// offline) and exit must be non-zero.
-		out, cerr := runCommandEnv(
-			// Intentionally neuter PATH so a late preflight would also
-			// refuse, but dry-run is supposed to bypass the gh probe.
-			[]string{"GH_TOKEN=", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			pythonPath, script, "PRRT_abc", "dry-run body",
-		)
-		require.Error(t, cerr, "dry-run must exit non-zero to prevent silent success")
-		assert.Contains(t, out, "DRY-RUN",
-			"dry-run must announce itself explicitly")
-		assert.Contains(t, out, "addPullRequestReviewThreadReply",
-			"dry-run must print the intended GraphQL mutation")
-		assert.Contains(t, out, "PRRT_abc",
-			"dry-run must echo the thread id in the mutation body")
-	})
-
-	t.Run("reply-to-thread confirm rejects invalid credentials", func(t *testing.T) {
-		t.Parallel()
-		pythonPath, err := execLookPath("python3")
-		if err != nil {
-			t.Skipf("python3 unavailable: %v", err)
-		}
-		script := scriptPathForTest(t, root, "review-comment-triage", "reply-to-thread.py")
-		_, err = os.Stat(script)
-		require.NoError(t, err)
-
-		out, cerr := runCommandEnv(
-			[]string{"GH_TOKEN=invalid", "GITHUB_TOKEN=", "HOME=" + t.TempDir()},
-			pythonPath, script, "--confirm", "PRRT_abc", "real body",
-		)
-		var exitErr *exec.ExitError
-		require.ErrorAs(t, cerr, &exitErr, "--confirm with invalid credentials must exit non-zero")
-		assert.Equal(t, 2, exitErr.ExitCode(), "invalid credentials should fail during preflight")
-		assert.Contains(t, out, "BEGIN REQUEST",
-			"reply-to-thread --confirm must print the pending request before posting")
-		assert.Contains(t, out, "addPullRequestReviewThreadReply",
-			"reply-to-thread --confirm must show the GraphQL mutation body")
-		assert.Contains(t, out, "PRRT_abc",
-			"reply-to-thread --confirm must echo the thread id in the request body")
-		assert.NotContains(t, out, "GraphQL error",
-			"invalid credentials should be rejected before attempting the GraphQL write")
-		assert.True(t,
-			strings.Contains(out, "invalid or unauthorized") ||
-				strings.Contains(out, "Bad credentials") ||
-				strings.Contains(out, "not authenticated") ||
-				strings.Contains(out, "gh auth"),
-			"reply-to-thread --confirm must surface the credential path, got:\n%s", out)
-	})
-}
-
-// runCommand runs an external command capturing combined output. Returns
-// stdout+stderr and the exit error (if any).
-func runCommand(name string, args ...string) (string, error) {
-	cmd := osExecCommand(name, args...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
-// runCommandEnv runs a command with a supplemental environment appended to
-// the inherited environment. Later entries win for duplicate keys, matching
-// exec.Cmd.Env semantics. PATH is inherited from the test process so tools
-// like `gh` and `python3` remain locatable.
-func runCommandEnv(extraEnv []string, name string, args ...string) (string, error) {
-	cmd := osExecCommand(name, args...)
-	cmd.Env = append(os.Environ(), extraEnv...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
-func runCommandInDir(dir, name string, args ...string) (string, error) {
-	cmd := osExecCommand(name, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	for _, tc := range cases {
+		content, err := fs.ReadFile(tmpl.TemplateFS(), tc.path)
+		require.NoError(t, err, "missing generated helper doc %s", tc.path)
+		assert.Contains(t, string(content), tc.contains, "%s must point at compiled helper command", tc.path)
+		assert.NotContains(t, string(content), "scripts/", "%s must not point at generated scripts", tc.path)
+	}
 }
 
 // TestToolConfigInvocationSummary locks the per-adapter invocation surface string
@@ -2670,4 +2130,51 @@ func TestToolConfigInvocationSummary(t *testing.T) {
 		assert.Contains(t, summary, "$slipway-<command>")
 		assert.NotContains(t, summary, "prompts")
 	})
+}
+
+func TestMergeHookSettingsPrunesLegacyShellHookAndPreservesUserHooks(t *testing.T) {
+	root := t.TempDir()
+	cfg := ToolConfig{
+		SettingsPath: filepath.Join(".claude", "settings.json"),
+		SessionEvent: "SessionStart",
+		SessionHook:  filepath.Join(".claude", "hooks", "slipway-session-start"),
+	}
+
+	// Seed settings with the retired bash launcher for the slipway hook plus an
+	// unrelated user-authored hook (with a matcher) that must survive the refresh.
+	seed := `{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
+	      {"hooks":[{"type":"command","command":"sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
+	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
+	      {"hooks":[{"type":"command","command":"/bin/bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
+	      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
+	    ]
+	  }
+	}`
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
+	require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
+
+	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
+
+	first, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	got := string(first)
+
+	// The legacy bash/.sh launcher is pruned.
+	assert.NotContains(t, got, "slipway-session-start.sh")
+	assert.NotContains(t, got, "bash ")
+	// The unrelated user hook (and its matcher) is preserved verbatim.
+	assert.Contains(t, got, "echo user-owned-hook")
+	assert.Contains(t, got, `"matcher": "*"`)
+	// The native binary-backed launcher is registered in its place.
+	assert.Contains(t, got, nativeHookPath(cfg.SessionHook))
+
+	// Refresh is idempotent: a second merge does not duplicate or mutate.
+	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
+	second, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(first), string(second))
 }

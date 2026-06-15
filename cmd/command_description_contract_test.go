@@ -31,6 +31,7 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 		"run":          makeRunCmd,
 		"stats":        makeStatsCmd,
 		"status":       makeStatusCmd,
+		"tool":         makeToolCmd,
 		"validate":     makeValidateCmd,
 	}
 

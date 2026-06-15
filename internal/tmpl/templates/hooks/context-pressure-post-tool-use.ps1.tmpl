@@ -1,0 +1,9 @@
+$ErrorActionPreference = "SilentlyContinue"
+
+# Slipway PostToolUse launcher for {{.ToolID}}.
+# Behavior lives in `slipway hook context-pressure`; this file only dispatches.
+
+$slipway = Get-Command slipway -ErrorAction SilentlyContinue
+if ($null -eq $slipway) { exit 0 }
+& $slipway.Source hook context-pressure 2>$null
+exit 0

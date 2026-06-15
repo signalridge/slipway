@@ -3,7 +3,6 @@ slipway-cancel/SKILL.md	skill_md	non-exec
 slipway-checkpoint/SKILL.md	skill_md	non-exec
 slipway-ci-triage/SKILL.md	skill_md	non-exec
 slipway-ci-triage/references/fetch-pr-checks-shell-evaluation.md	reference	non-exec
-slipway-ci-triage/scripts/fetch-pr-checks.py	script_py	non-exec
 slipway-code-quality-review/SKILL.md	skill_md	non-exec
 slipway-codebase-map/SKILL.md	skill_md	non-exec
 slipway-codebase-mapping/SKILL.md	skill_md	non-exec
@@ -40,7 +39,6 @@ slipway-root-cause-tracing/SKILL.md	skill_md	non-exec
 slipway-root-cause-tracing/references/condition-based-waiting.md	reference	non-exec
 slipway-root-cause-tracing/references/hypothesis-testing.md	reference	non-exec
 slipway-root-cause-tracing/references/root-cause-tracing.md	reference	non-exec
-slipway-root-cause-tracing/scripts/find-polluter-go.sh	script_sh	exec
 slipway-run/SKILL.md	skill_md	non-exec
 slipway-security-review/SKILL.md	skill_md	non-exec
 slipway-security-review/references/authentication.md	reference	non-exec
@@ -69,4 +67,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:c95374ceea2a26aaf54851385bdf07f4139899d9a6cc6cfc26ef593cd8cfeeb8
+# inventory_sha256:a448f02fb3ba75ef74c5861b32aa6eb9620f96daa5f53201431f99e53f5f677c

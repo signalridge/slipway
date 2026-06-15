@@ -5,6 +5,11 @@ exceptions: `slipway init` is setup-only (`--tools`/`--refresh`, no `--json`), a
 `slipway validate` emits JSON only (its `--format` flag shapes `--list-focuses`
 output, not the main report).
 
+Generated host command surfaces cover the governed workflow commands. Public
+CLI-only helper namespaces, such as `slipway tool`, are registered here and in
+the surface manifest, but they do not generate `$slipway-tool` or host prompt
+wrappers; generated skills invoke their helper subcommands directly.
+
 ## Core Lifecycle
 
 | Command | Class | Purpose |
@@ -56,6 +61,7 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
+| `slipway tool <helper>` | mutation | Run helper tools used by generated skills; helpers fail closed on missing explicit backends or domain tools. |
 
 `slipway cancel` and `slipway delete` are not the same operation. `cancel`
 takes an **active** change to a terminal `cancelled` status and **archives** it

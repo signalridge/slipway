@@ -55,20 +55,22 @@ cosmetic-only fixes produce surprise blockers on the next round.
 - Closing threads without a reply.
 - Replying "done" without a commit/hunk link.
 
-## Scripts
-All helpers require the `gh` CLI on `PATH` plus `GH_TOKEN` (or
-`GITHUB_TOKEN`, or a prior `gh auth login`); shell helpers also require `jq`.
-Each fails fast with a credential-error message when credentials are missing or
-rejected.
+## Helpers
+GitHub helpers default to `--backend auto`: use authenticated `gh` when
+available, and use the token-backed API when `gh` is unavailable or reports an
+auth-required error while `GH_TOKEN` or `GITHUB_TOKEN` is set. Use `--backend gh`
+to require GitHub CLI, or `--backend api` to require token API. Each helper
+fails closed when no authenticated backend is available. No generated Python,
+shell, or `jq` helper script is required.
 
-- `scripts/fetch-pr-feedback.py` — fetch and LOGAF-categorize review
-  comments / threads for a PR. Read-only.
-- `scripts/fetch-review-requests.sh` — list open review requests for a
-  user across team memberships. Read-only. Migrated to shell in this wave and
-  sources the shared `scripts/gh-common.sh` preflight.
-- `scripts/reply-to-thread.py` — reply to a PR review thread. **Write
-  side effect.** Defaults to dry-run: without `--confirm` it prints the
-  intended GraphQL mutation to stderr and exits non-zero. Only supply
-  `--confirm` once the reply body and thread id have been reviewed. It
-  intentionally stays Python because the GraphQL body construction and confirm
-  safety contract are easier to audit there.
+- `slipway tool fetch-pr-feedback --repo owner/repo --pr N` — fetch and
+  LOGAF-categorize review comments / threads for a PR. Read-only.
+- `slipway tool fetch-review-requests --org ORG --teams team-a,team-b` —
+  list open review requests for a user across team memberships. Read-only.
+- `slipway tool reply-to-thread THREAD_ID BODY` — reply to a PR review
+  thread. **Write side effect when confirmed.** Defaults to dry-run: without
+  `--confirm` it prints the intended GraphQL mutation and intentionally exits
+  non-zero with `reply_to_thread_dry_run`, so automation cannot mistake a preview
+  for a posted reply. Only supply `--confirm` once the reply body and thread id
+  have been reviewed. Reply bodies get a `Slipway` attribution by default; pass
+  `--signature <label>` to customize it or `--signature ""` to disable it.

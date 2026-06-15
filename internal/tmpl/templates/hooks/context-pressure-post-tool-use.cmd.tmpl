@@ -1,0 +1,8 @@
+@echo off
+rem Slipway PostToolUse launcher for {{.ToolID}}.
+rem Behavior lives in `slipway hook context-pressure`; this file only dispatches.
+
+where slipway >nul 2>nul
+if errorlevel 1 exit /b 0
+slipway hook context-pressure 2>nul
+exit /b 0
