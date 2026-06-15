@@ -135,13 +135,26 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// remediation while leaving wave-orchestration/execution-summary intact;
 	// re-running after the file is removed or the plan is rescoped advances
 	// normally (issue #136). Missing task changed-file evidence, by contrast, can
-	// only be repaired by re-recording in the owning stage, so it reopens to
-	// S2_EXECUTE instead of stranding the failure in S3_REVIEW where task evidence
-	// is no longer recordable.
+	// only be repaired by re-recording in the owning stage, so when the failure
+	// surfaces downstream (S3_REVIEW/S4_VERIFY) it reopens to S2_EXECUTE instead
+	// of stranding the failure where task evidence is no longer recordable.
+	//
+	// When the change is still IN S2_EXECUTE, every scope-contract blocker — drift
+	// and missing-changed-file alike — blocks visibly without clearing
+	// execution-summary.yaml / wave-orchestration.yaml. Reopening S2 from S2 is a
+	// no-op transition whose only effect is wiping the summary; once the summary is
+	// gone the scope contract evaluates NotApplicable, so the real
+	// scope_contract_changed_files_missing is masked behind run_summary_missing and
+	// every `slipway run` re-wipes it — an infinite loop only `slipway repair`
+	// escaped (issue #227b). Preserving the summary keeps the real blocker visible
+	// to validate/status/next with actionable remediation (record the task's
+	// --changed-file, or record it as a verification/investigation kind, which is
+	// exempt). This fails closed — the block is kept, only the masking wipe is
+	// removed.
 	if target, err := scopeContractReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
-		if scopeContractDriftOnly(target.Blockers) {
+		if fromState == model.StateS2Execute || scopeContractDriftOnly(target.Blockers) {
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
 		}
 		return reopenToStaleStage(root, &change, target, fromState)

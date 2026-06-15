@@ -216,6 +216,14 @@ func assembleSkillViewWithOptions(
 		resolutionReason = fmt.Sprintf("blocking skill evidence supersedes already-passing display skill: %s", nextSkillName)
 	}
 
+	// atBundlePlanAuditHandoff records that plan-audit is being surfaced from the
+	// S1_PLAN/bundle authoring step rather than S1_PLAN/audit. plan-audit evidence
+	// is rejected by `slipway evidence skill` until the substep advances to audit
+	// (evidence_skill_wrong_plan_substep), so the bundle handoff must NOT advertise
+	// write_evidence / evidence_record as the immediate action — doing so produces a
+	// dead-end handoff (issue #229). The authoritative next action at bundle is to
+	// run the lifecycle into S1_PLAN/audit first.
+	atBundlePlanAuditHandoff := false
 	if nextSkillName == "" && governedChange != nil &&
 		governedChange.CurrentState == model.StateS1Plan &&
 		governedChange.PlanSubStep == model.PlanSubStepBundle &&
@@ -223,7 +231,8 @@ func assembleSkillViewWithOptions(
 		len(view.Blockers) == 0 {
 		nextSkillName = progression.SkillPlanAudit
 		nextState = string(model.StateS1Plan)
-		view.Warnings = append(view.Warnings, "S1_PLAN/bundle is a machine authoring step; ensure bundle artifacts are complete, then write plan-audit evidence or run `slipway run --json` to enter S1_PLAN/audit.")
+		atBundlePlanAuditHandoff = true
+		view.Warnings = append(view.Warnings, "S1_PLAN/bundle is a machine authoring step; ensure bundle artifacts are complete, then run `slipway run --json` to enter S1_PLAN/audit. plan-audit evidence cannot be recorded until the substep advances to audit.")
 	}
 
 	if nextSkillName == "" {
@@ -338,6 +347,16 @@ func assembleSkillViewWithOptions(
 	}
 	if options.IncludeAgentContext {
 		view.Constraints = deriveAgentConstraints(registry, nextSkillName)
+		if atBundlePlanAuditHandoff {
+			// At S1_PLAN/bundle the authoritative next action is `slipway run` into
+			// S1_PLAN/audit, not recording evidence: `slipway evidence skill --skill
+			// plan-audit` fails closed with evidence_skill_wrong_plan_substep until the
+			// substep advances. Drop write_evidence / evidence_record so the handoff
+			// does not advertise an action the evidence command rejects (issue #229).
+			// The audit-substep handoff keeps the registry constraints unchanged.
+			view.Constraints.AllowedOperations = withoutOperation(view.Constraints.AllowedOperations, "write_evidence")
+			view.Constraints.RequiredOutputs = withoutOperation(view.Constraints.RequiredOutputs, "evidence_record")
+		}
 	}
 
 	if advanced.Action == "blocked" {
@@ -346,6 +365,23 @@ func assembleSkillViewWithOptions(
 	applyContextBudgetGuard(view)
 
 	return nil
+}
+
+// withoutOperation returns values with every occurrence of op removed, preserving
+// order. An emptied list collapses to nil so it serializes as a JSON null rather
+// than carrying a stale entry.
+func withoutOperation(values []string, op string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == op {
+			continue
+		}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // codebaseMapStatusHasNoDurableDocs reports whether a whole-map status means no

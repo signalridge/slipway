@@ -225,6 +225,31 @@ func makeEvidenceSkillCmd() *cobra.Command {
 					)
 				}
 
+				// Materialize execution-summary.yaml from the same public command that
+				// owns wave execution evidence (issue #228). The summary was previously
+				// only written by advance/next or `slipway repair`, so the public
+				// per-task-evidence + wave-orchestration flow left validate blocking on
+				// run_summary_missing until an undocumented repair. The owning stage now
+				// produces the evidence: once the passing wave-orchestration record and
+				// its task evidence are durable at S2_EXECUTE, sync writes the summary.
+				// This is idempotent (sync only rewrites a changed summary) and any
+				// error it returns is surfaced, never swallowed, so a partial or
+				// scope-failing run still fails closed instead of recording a clean
+				// summary.
+				if record.IsPassing() &&
+					skillName == progression.SkillWaveOrchestration &&
+					change.CurrentState == model.StateS2Execute {
+					if _, err := progression.SyncGovernedWaveExecution(root, change); err != nil {
+						return newStateIntegrityError(
+							"evidence_skill_execution_summary_sync_failed",
+							fmt.Sprintf("failed to materialize execution summary after recording %s evidence: %v", skillName, err),
+							"Repair the runtime wave execution evidence and retry the evidence command.",
+							change.Slug,
+							map[string]any{"skill": skillName},
+						)
+					}
+				}
+
 				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
 					Command:     "evidence skill",
 					EventType:   "skill.evidence_recorded",
