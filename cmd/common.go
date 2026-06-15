@@ -348,7 +348,12 @@ func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
 func resolveExplicitChange(root string, slug string) (changeRef, error) {
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		// An archived DONE change can leave its active bundle directory behind
+		// after its change.yaml is moved to the archive. LoadChange then reports a
+		// missing-authority error rather than os.ErrNotExist, so attempt the
+		// archived fallback for both. This mirrors status's
+		// shouldFallbackToArchivedStatus predicate (issue #196).
+		if errors.Is(err, os.ErrNotExist) || state.IsMissingBundleAuthority(err) {
 			if archived, archiveErr := state.LoadArchivedChange(root, slug); archiveErr == nil {
 				archivePath := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml"))
 				if path, pathErr := state.ArchivedChangeFilePathForRead(root, slug); pathErr == nil {
@@ -366,16 +371,22 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 					},
 				)
 			}
-			if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
-				return changeRef{}, recoveryErr
+			// No archived record was found. Only os.ErrNotExist (no bundle at all)
+			// softens to no_active_change. A missing-authority error without an
+			// archive is genuine active-bundle corruption and must fall through to
+			// fail closed on change_state_load_failed.
+			if errors.Is(err, os.ErrNotExist) {
+				if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
+					return changeRef{}, recoveryErr
+				}
+				return changeRef{}, newPreconditionError(
+					"no_active_change",
+					fmt.Sprintf("no change found for slug %q", slug),
+					"Check the slug with `slipway status`.",
+					slug,
+					nil,
+				)
 			}
-			return changeRef{}, newPreconditionError(
-				"no_active_change",
-				fmt.Sprintf("no change found for slug %q", slug),
-				"Check the slug with `slipway status`.",
-				slug,
-				nil,
-			)
 		}
 		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
 			return changeRef{}, recoveryErr
