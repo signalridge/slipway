@@ -5,6 +5,15 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.1](https://github.com/signalridge/slipway/compare/v0.25.0...v0.25.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **governance:** self-sufficient per-task wave-evidence flow + non-corrupting archived reads ([#227](https://github.com/signalridge/slipway/issues/227) [#228](https://github.com/signalridge/slipway/issues/228) [#229](https://github.com/signalridge/slipway/issues/229) [#232](https://github.com/signalridge/slipway/issues/232)) ([#235](https://github.com/signalridge/slipway/issues/235)) ([0e76c83](https://github.com/signalridge/slipway/commit/0e76c833926866cdfe80ade051ddb480581ffb41))
+* **hooks:** eliminate Claude and Gemini launcher scripts ([#233](https://github.com/signalridge/slipway/issues/233)) ([fa5e6f0](https://github.com/signalridge/slipway/commit/fa5e6f01f3e63ee3a0362e9c571ee78e9a59463d))
+* support Windows runtime portability ([#230](https://github.com/signalridge/slipway/issues/230)) ([603e693](https://github.com/signalridge/slipway/commit/603e6934db184367a012abf0f61d695613c37a10))
+
 ## [0.25.0](https://github.com/signalridge/slipway/compare/v0.24.1...v0.25.0) (2026-06-15)
 
 
