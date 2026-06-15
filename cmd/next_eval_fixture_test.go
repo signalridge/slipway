@@ -82,7 +82,7 @@ Docs render.
 				return view
 			},
 			wantBlockers: []string{"no_skill_required:S0_INTAKE"},
-			wantEvents:   []string{"state.transitioned", "skill.evidence_recorded"},
+			wantEvents:   []string{"state.substep_transitioned", "skill.evidence_recorded"},
 		},
 	}
 

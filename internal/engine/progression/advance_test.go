@@ -275,8 +275,8 @@ func TestAdvanceGovernedWritesLifecycleEvent(t *testing.T) {
 		t.Fatalf("expected transition and skill evidence lifecycle events, got %d: %+v", len(events), events)
 	}
 	event := events[0]
-	if event.EventType != "state.transitioned" {
-		t.Fatalf("expected state.transitioned event, got %q", event.EventType)
+	if event.EventType != "state.substep_transitioned" {
+		t.Fatalf("expected state.substep_transitioned event, got %q", event.EventType)
 	}
 	if event.Command != "run" {
 		t.Fatalf("expected run command, got %q", event.Command)

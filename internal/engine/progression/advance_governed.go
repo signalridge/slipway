@@ -656,6 +656,9 @@ func recordAdvanceLifecycleEvent(root string, before, after model.Change, summar
 func advanceLifecycleEventType(summary AdvanceSummary) string {
 	switch summary.Action {
 	case "advanced":
+		if isSubstepAdvance(summary) {
+			return "state.substep_transitioned"
+		}
 		if len(summary.AutoPassedStates) > 0 {
 			return "auto_pass.applied"
 		}
@@ -670,6 +673,14 @@ func advanceLifecycleEventType(summary AdvanceSummary) string {
 	default:
 		return "advance." + summary.Action
 	}
+}
+
+func isSubstepAdvance(summary AdvanceSummary) bool {
+	return summary.FromState != "" &&
+		summary.FromState == summary.ToState &&
+		summary.FromSubStep != "" &&
+		summary.ToSubStep != "" &&
+		summary.FromSubStep != summary.ToSubStep
 }
 
 func advanceGateID(before model.Change, summary AdvanceSummary) string {
