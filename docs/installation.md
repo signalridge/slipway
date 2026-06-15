@@ -345,7 +345,10 @@ OpenCode commands use slash-hyphen spelling such as `/slipway-new`, `/slipway-ne
 
 Hook-capable adapters receive native launchers for POSIX, PowerShell, and
 `cmd.exe`. The launchers only delegate to `slipway hook ...`; no generated hook
-requires bash, Python, `jq`, `gh`, or a Go runtime.
+requires bash, Python, `jq`, `gh`, or a Go runtime. Settings-capable adapters
+register a direct, shell-neutral `slipway hook ...` command in `settings.json`
+instead of a platform-specific launcher path, so one generated settings file
+parses under POSIX `sh`, `cmd.exe`, Windows PowerShell 5.1, and PowerShell 7+.
 
 Generated skill helpers run through `slipway tool ...` rather than generated
 script payloads. Manual helpers may still require explicit authenticated
@@ -372,4 +375,5 @@ Codex command surfaces are generated as skills under
 `$CODEX_HOME/prompts/` (or `~/.codex/prompts/` when `CODEX_HOME` is unset) so
 the retired command surface does not linger. For hook-capable adapters,
 `--refresh` also removes Slipway-owned legacy shell hook launchers and replaces
-retired `bash "<hook>.sh"` settings entries with native launcher entries.
+retired `bash "<hook>.sh"` settings entries with shell-neutral
+`slipway hook ...` settings entries.

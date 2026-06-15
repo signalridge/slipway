@@ -1,0 +1,37 @@
+# Normalize all text files to LF in the repository and on checkout.
+# The governance kernel computes content hashes over these files; CRLF drift
+# (e.g. Windows core.autocrlf=true) must never change a hashed artifact.
+* text=auto eol=lf
+
+*.go    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.tmpl  text eol=lf
+*.sh    text eol=lf
+*.svg   text eol=lf
+artifacts/** text=auto eol=lf
+
+# Binary assets — never normalize.
+*.bin   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.mp4   binary
+*.mov   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.zip   binary
+*.gz    binary
+*.tgz   binary
+*.xz    binary
+*.zst   binary
+*.tar   binary
+*.db    binary
+*.sqlite binary
+*.wasm  binary

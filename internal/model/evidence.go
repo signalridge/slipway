@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,12 @@ func ComputeFileContentHash(path string) (string, error) {
 	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return "", err
+	}
+	// Treat content with a NUL byte as binary and hash the raw bytes byte-exact.
+	// Otherwise normalize CRLF to LF before hashing so text digests are
+	// line-ending invariant, matching normalizeCanonical's string contract.
+	if !bytes.Contains(data, []byte{0x00}) {
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil

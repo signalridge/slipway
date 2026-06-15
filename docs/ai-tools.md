@@ -145,10 +145,13 @@ and the advisory session hook is generated as platform-native launchers:
 .opencode/hooks/slipway-session-start.cmd
 ```
 
-Settings-capable adapters register the native launcher for the current
-platform. On Unix-like hosts that is the extensionless POSIX entry; on Windows
-it is the `.cmd` entry. The launcher only delegates to `slipway hook ...`; hook
-behavior lives in the Slipway binary.
+Settings-capable adapters register a direct, shell-neutral `slipway hook ...`
+command in `settings.json` instead of a platform-specific launcher path. The
+registered command intentionally contains no shell chaining operators, so the
+same settings file parses under POSIX `sh`, `cmd.exe`, Windows PowerShell 5.1,
+and PowerShell 7+. The generated launcher files remain available for
+host-native dispatch paths and manual inspection; each launcher only delegates
+to `slipway hook ...`, and hook behavior lives in the Slipway binary.
 
 ## Safety Rules
 

@@ -181,11 +181,11 @@ Generate host-tool surfaces with `slipway init --tools <id>` (`claude`, `codex`,
 
 | Tool | Generated surfaces |
 | --- | --- |
-| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/hooks/slipway-session-start.sh`, `.claude/settings.json` |
+| Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/hooks/slipway-*` native launchers, `.claude/settings.json` |
 | Codex | `.codex/skills/slipway-*/SKILL.md` (entry, per-command, and governance skills) |
-| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start.sh` |
-| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start.sh`, `.gemini/settings.json` |
-| OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start.sh` |
+| Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, `.cursor/hooks/slipway-session-start` native launchers |
+| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/hooks/slipway-session-start` native launchers, `.gemini/settings.json` |
+| OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, `.opencode/hooks/slipway-session-start` native launchers |
 
 Exported generated skill rows are pinned by public skill directory:
 `slipway/SKILL.md`, `slipway-ci-triage/SKILL.md`,

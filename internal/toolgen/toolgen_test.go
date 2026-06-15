@@ -446,12 +446,16 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NoError(t, err, "%s: missing settings file", toolID)
 			settings := string(content)
 			assert.Contains(t, settings, "SessionStart", "%s: missing session-start registration", toolID)
+			assert.Contains(t, settings, "slipway hook session-start", "%s: missing portable session-start command", toolID)
+			assert.NotContains(t, settings, "||", "%s: settings command must parse in Windows PowerShell 5.1", toolID)
 			if toolID == "claude" {
 				assert.Contains(t, settings, "PostToolUse", "%s: missing post-tool registration", toolID)
-				assert.Contains(t, settings, "slipway-context-pressure-post-tool-use", "%s: missing context-pressure hook", toolID)
+				assert.Contains(t, settings, "slipway hook context-pressure", "%s: missing portable context-pressure command", toolID)
 				assert.NotContains(t, settings, "bash", "%s: settings must not require bash", toolID)
+				// The portable command is OS-independent: no pinned launcher path.
+				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use", "%s: settings must not pin launcher path", toolID)
 			} else {
-				assert.NotContains(t, settings, "slipway-context-pressure-post-tool-use", "%s: unexpected post-tool registration", toolID)
+				assert.NotContains(t, settings, "context-pressure", "%s: unexpected post-tool registration", toolID)
 			}
 		default:
 			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
@@ -795,7 +799,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 				t,
 				filepath.Join(root, cfg.SettingsPath),
 				cfg.SessionEvent,
-				hookLauncherCommand(nativeHookPath(cfg.SessionHook)),
+				portableHookCommand(sessionHookSubcommand(cfg.ID)),
 			)
 		}
 	}
@@ -1008,22 +1012,52 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"claude", "gemini"}, true))
 
+	// Assert the registered command via the parsed JSON value so the embedded
+	// quotes in `--tool "<id>"` are compared decoded, not against the
+	// backslash-escaped raw bytes JSON marshaling produces.
+	assertHookCommandRegistered(
+		t,
+		filepath.Join(root, ".claude", "settings.json"),
+		"SessionStart",
+		portableHookCommand(sessionHookSubcommand("claude")),
+	)
+	assertHookCommandRegistered(
+		t,
+		filepath.Join(root, ".claude", "settings.json"),
+		"PostToolUse",
+		portableHookCommand(postToolHookSubcommand),
+	)
+
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeSettings), "SessionStart")
-	assert.Contains(t, string(claudeSettings), "slipway-session-start")
-	assert.NotContains(t, string(claudeSettings), "slipway-session-start.sh")
+	assert.Contains(t, string(claudeSettings), "slipway hook session-start --tool")
 	assert.Contains(t, string(claudeSettings), "PostToolUse")
-	assert.Contains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use")
+	assert.Contains(t, string(claudeSettings), "slipway hook context-pressure")
+	// Portable command is OS-independent: no pinned launcher file path or bash.
+	assert.NotContains(t, string(claudeSettings), "slipway-session-start.sh")
+	assert.NotContains(t, string(claudeSettings), ".claude/hooks/slipway-session-start")
+	assert.NotContains(t, string(claudeSettings), "slipway-context-pressure-post-tool-use")
 	assert.NotContains(t, string(claudeSettings), "bash")
+	assert.NotContains(t, string(claudeSettings), "||")
+	assert.NotContains(t, string(claudeSettings), "&&")
+
+	assertHookCommandRegistered(
+		t,
+		filepath.Join(root, ".gemini", "settings.json"),
+		"SessionStart",
+		portableHookCommand(sessionHookSubcommand("gemini")),
+	)
 
 	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(geminiSettings), "SessionStart")
-	assert.Contains(t, string(geminiSettings), "slipway-session-start")
+	assert.Contains(t, string(geminiSettings), "slipway hook session-start --tool")
 	assert.NotContains(t, string(geminiSettings), "slipway-session-start.sh")
+	assert.NotContains(t, string(geminiSettings), ".gemini/hooks/slipway-session-start")
 	assert.NotContains(t, string(geminiSettings), "PostToolUse")
-	assert.NotContains(t, string(geminiSettings), "slipway-context-pressure-post-tool-use")
+	assert.NotContains(t, string(geminiSettings), "context-pressure")
+	assert.NotContains(t, string(geminiSettings), "||")
 }
 
 func TestGenerateRefreshRemovesLegacyShellHookLaunchers(t *testing.T) {
@@ -2132,16 +2166,22 @@ func TestToolConfigInvocationSummary(t *testing.T) {
 	})
 }
 
-func TestMergeHookSettingsPrunesLegacyShellHookAndPreservesUserHooks(t *testing.T) {
+func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T) {
 	root := t.TempDir()
 	cfg := ToolConfig{
+		ID:           "claude",
 		SettingsPath: filepath.Join(".claude", "settings.json"),
 		SessionEvent: "SessionStart",
 		SessionHook:  filepath.Join(".claude", "hooks", "slipway-session-start"),
 	}
 
-	// Seed settings with the retired bash launcher for the slipway hook plus an
-	// unrelated user-authored hook (with a matcher) that must survive the refresh.
+	// Seed settings with every retired hook shape that must be replaced on refresh:
+	//   - the legacy `bash "...sh"` (and sh / direct exec / abs-path) launcher forms,
+	//   - the OS-pinned launcher-path forms (bare POSIX launcher and Windows ".cmd")
+	//     that earlier versions wrote and that break for teammates on another OS,
+	//   - the shell-chained direct `slipway hook ... || exit 0` form, which is
+	//     not parseable by Windows PowerShell 5.1,
+	// plus an unrelated user-authored hook (with a matcher) that must survive.
 	seed := `{
 	  "hooks": {
 	    "SessionStart": [
@@ -2149,6 +2189,9 @@ func TestMergeHookSettingsPrunesLegacyShellHookAndPreservesUserHooks(t *testing.
 	      {"hooks":[{"type":"command","command":"sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
 	      {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
 	      {"hooks":[{"type":"command","command":"/bin/bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/slipway-session-start.sh\""}]},
+	      {"hooks":[{"type":"command","command":"\".claude/hooks/slipway-session-start\""}]},
+	      {"hooks":[{"type":"command","command":"\".claude/hooks/slipway-session-start.cmd\""}]},
+	      {"hooks":[{"type":"command","command":"slipway hook session-start --tool \"claude\" || exit 0"}]},
 	      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
 	    ]
 	  }
@@ -2163,19 +2206,21 @@ func TestMergeHookSettingsPrunesLegacyShellHookAndPreservesUserHooks(t *testing.
 	require.NoError(t, err)
 	got := string(first)
 
-	// The legacy bash/.sh launcher is pruned.
+	// Both retired shapes are pruned: no bash interpreter and no pinned launcher path.
 	assert.NotContains(t, got, "slipway-session-start.sh")
+	assert.NotContains(t, got, "slipway-session-start.cmd")
+	assert.NotContains(t, got, ".claude/hooks/slipway-session-start")
 	assert.NotContains(t, got, "bash ")
 	// The unrelated user hook (and its matcher) is preserved verbatim.
 	assert.Contains(t, got, "echo user-owned-hook")
 	assert.Contains(t, got, `"matcher": "*"`)
-	// The native binary-backed launcher is registered in its place.
-	assertHookCommandRegistered(
-		t,
-		settingsPath,
-		cfg.SessionEvent,
-		hookLauncherCommand(nativeHookPath(cfg.SessionHook)),
-	)
+	// The portable, PATH-resolved command is registered in its place. Assert the
+	// decoded command value (the raw bytes carry backslash-escaped quotes).
+	assertHookCommandRegistered(t, settingsPath, cfg.SessionEvent, portableHookCommand(sessionHookSubcommand(cfg.ID)))
+	assert.Contains(t, got, "slipway hook session-start --tool")
+	assert.NotContains(t, got, "||")
+	assert.NotContains(t, got, "&&")
+	assert.NotContains(t, got, " exit ")
 
 	// Refresh is idempotent: a second merge does not duplicate or mutate.
 	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))

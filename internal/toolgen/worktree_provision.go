@@ -1,12 +1,17 @@
 package toolgen
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
+
+var createSymlink = os.Symlink
 
 // ProvisionWorktreeHostSurfaces materializes every host-adapter surface that
 // exists in the repository root into a freshly created (or reused) worktree.
@@ -179,7 +184,13 @@ func copyHostAdapterFileNoClobber(srcPath, dstPath string, d fs.DirEntry) error 
 		if err != nil {
 			return err
 		}
-		return os.Symlink(target, dstPath)
+		if symErr := createSymlink(target, dstPath); symErr != nil {
+			// On Windows, os.Symlink fails without SeCreateSymbolicLinkPrivilege
+			// (Developer Mode). Rather than abort the whole copy, dereference the
+			// link and materialize the target's content at the destination.
+			return dereferenceSymlinkCopy(srcPath, dstPath, target, symErr)
+		}
+		return nil
 	}
 	if !info.Mode().IsRegular() {
 		return nil // skip sockets, devices, and other irregular files
@@ -189,4 +200,121 @@ func copyHostAdapterFileNoClobber(srcPath, dstPath string, d fs.DirEntry) error 
 		return err
 	}
 	return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 G703 -- preserves the source mode so adapter hooks remain executable; dstPath is filepath.Join(worktreeRoot, toolRel, rel) where rel comes from filepath.Rel against the walked source tree, so the write stays within the worktree's host-adapter surface.
+}
+
+// dereferenceSymlinkCopy materializes a symlink target's content at dstPath when
+// os.Symlink fails (e.g. Windows without SeCreateSymbolicLinkPrivilege). Host
+// adapter trees commonly contain third-party skill symlinks that point outside
+// the repository, so the top-level target is allowed to resolve outside srcRoot.
+// Nested symlinks inside a dereferenced directory are constrained to that
+// directory's real root so one accepted skill link cannot pull in arbitrary
+// additional filesystem content.
+func dereferenceSymlinkCopy(srcPath, dstPath, linkTarget string, symErr error) error {
+	resolved, info, statErr := fsutil.ResolveSymlinkTarget(srcPath, linkTarget)
+	if statErr != nil {
+		// Dangling/broken link or unreadable: preserve the original failure.
+		return symErr
+	}
+	if info.IsDir() {
+		if fsutil.SymlinkTargetContainsLink(resolved, srcPath) {
+			return fmt.Errorf("refuse dereference symlink %q into %q: target directory %q contains the link", srcPath, dstPath, resolved)
+		}
+		if err := copyDereferencedDir(resolved, dstPath, resolved); err != nil {
+			return fmt.Errorf("dereference symlink %q into %q: %w", srcPath, dstPath, err)
+		}
+		return nil
+	}
+	data, err := os.ReadFile(resolved) // #nosec G304 -- resolved is the explicit target of a host-adapter symlink being materialized.
+	if err != nil {
+		return fmt.Errorf("dereference symlink %q into %q: %w", srcPath, dstPath, err)
+	}
+	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 G703 -- preserves the dereferenced target's mode; dstPath is produced by the caller-owned host-adapter copy target.
+		return fmt.Errorf("dereference symlink %q into %q: %w", srcPath, dstPath, err)
+	}
+	return nil
+}
+
+// copyDereferencedDir recursively copies the real contents of a directory that a
+// symlink pointed at into dstRoot, preserving file modes. Nested symlinks are
+// materialized only when their targets resolve within allowedRoot.
+func copyDereferencedDir(srcRoot, dstRoot, allowedRoot string) error {
+	return copyDereferencedDirWithin(srcRoot, dstRoot, allowedRoot, make(map[string]struct{}))
+}
+
+func copyDereferencedDirWithin(srcRoot, dstRoot, allowedRoot string, active map[string]struct{}) error {
+	realRoot, err := fsutil.RealExistingPath(srcRoot)
+	if err != nil {
+		return err
+	}
+	if _, ok := active[realRoot]; ok {
+		return fmt.Errorf("refuse dereference directory %q into %q: symlink cycle through %q", srcRoot, dstRoot, realRoot)
+	}
+	active[realRoot] = struct{}{}
+	defer delete(active, realRoot)
+
+	return filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(srcRoot, srcPath)
+		if err != nil {
+			return err
+		}
+		dstPath := dstRoot
+		if rel != "." {
+			dstPath = filepath.Join(dstRoot, rel)
+		}
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, 0o755) // #nosec G301 -- host-adapter surfaces are user-facing skill/command trees where searchable mode is intentional.
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return dereferenceNestedSymlinkCopy(allowedRoot, srcPath, dstPath, active)
+		}
+		if !info.Mode().IsRegular() {
+			return nil // skip sockets, devices, and other irregular files
+		}
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil { // #nosec G301 -- host-adapter surfaces are user-facing skill/command trees where searchable mode is intentional.
+			return err
+		}
+		data, err := os.ReadFile(srcPath) // #nosec G304 G122 -- srcPath is supplied by WalkDir under the accepted dereferenced host-adapter symlink target.
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dstPath, data, info.Mode().Perm()) // #nosec G306 G703 -- preserves the source mode; dstPath is derived from filepath.Rel(srcRoot, srcPath) under the caller-owned host-adapter copy target.
+	})
+}
+
+func dereferenceNestedSymlinkCopy(allowedRoot, srcPath, dstPath string, active map[string]struct{}) error {
+	linkTarget, err := os.Readlink(srcPath)
+	if err != nil {
+		return err
+	}
+	resolved, info, err := fsutil.ResolveSymlinkTargetWithin(allowedRoot, srcPath, linkTarget)
+	if err != nil {
+		if errors.Is(err, fsutil.ErrSymlinkTargetOutsideRoot) {
+			return fmt.Errorf("refuse dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
+		}
+		return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
+	}
+	if info.IsDir() {
+		if fsutil.SymlinkTargetContainsLink(resolved, srcPath) {
+			return fmt.Errorf("refuse dereference nested symlink %q into %q: target directory %q contains the link", srcPath, dstPath, resolved)
+		}
+		if err := copyDereferencedDirWithin(resolved, dstPath, allowedRoot, active); err != nil {
+			return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
+		}
+		return nil
+	}
+	data, err := os.ReadFile(resolved) // #nosec G304 -- resolved is bounded to the accepted dereferenced directory root.
+	if err != nil {
+		return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
+	}
+	if err := os.WriteFile(dstPath, data, info.Mode().Perm()); err != nil { // #nosec G306 G703 -- preserves the dereferenced target's mode; resolved source is bounded to allowedRoot and dstPath is the caller-owned host-adapter copy target.
+		return fmt.Errorf("dereference nested symlink %q into %q: %w", srcPath, dstPath, err)
+	}
+	return nil
 }

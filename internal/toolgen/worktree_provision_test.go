@@ -1,6 +1,7 @@
 package toolgen
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,6 +49,122 @@ func TestProvisionWorktreeHostSurfaces_CopiesThirdPartyAndRegenerates(t *testing
 	assert.NoDirExists(t, filepath.Join(worktreeRoot, ".serena"))
 	// An adapter absent from the repo root must not be created in the worktree.
 	assert.NoDirExists(t, filepath.Join(worktreeRoot, ".gemini"))
+}
+
+func TestCopyHostAdapterTreeDereferencesSymlinkWhenCreateSymlinkFails(t *testing.T) {
+	repoRoot := t.TempDir()
+	srcRoot := filepath.Join(repoRoot, ".claude")
+	dstRoot := filepath.Join(t.TempDir(), ".claude")
+	require.NoError(t, os.MkdirAll(srcRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "target.txt"), []byte("target content"), 0o644))
+	if err := os.Symlink("target.txt", filepath.Join(srcRoot, "target.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	require.NoError(t, copyHostAdapterTree(ToolConfig{}, srcRoot, dstRoot))
+
+	got, err := os.ReadFile(filepath.Join(dstRoot, "target.link"))
+	require.NoError(t, err)
+	assert.Equal(t, "target content", string(got))
+}
+
+func TestCopyHostAdapterTreeDereferencesExternalSkillSymlinkWhenCreateSymlinkFails(t *testing.T) {
+	repoRoot := t.TempDir()
+	srcRoot := filepath.Join(repoRoot, ".claude")
+	dstRoot := filepath.Join(t.TempDir(), ".claude")
+	externalSkill := filepath.Join(t.TempDir(), "golang-security")
+	writeUnder(t, externalSkill, "SKILL.md", "# external skill\n")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, "skills"), 0o755))
+	if err := os.Symlink(externalSkill, filepath.Join(srcRoot, "skills", "golang-security")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	oldCreateSymlink := createSymlink
+	createSymlink = func(_, _ string) error {
+		return errors.New("symlink privilege missing")
+	}
+	t.Cleanup(func() {
+		createSymlink = oldCreateSymlink
+	})
+
+	require.NoError(t, copyHostAdapterTree(ToolConfig{}, srcRoot, dstRoot))
+
+	got, err := os.ReadFile(filepath.Join(dstRoot, "skills", "golang-security", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# external skill\n", string(got))
+}
+
+func TestDereferenceSymlinkCopyMaterializesNestedSymlinkInsideTargetDir(t *testing.T) {
+	srcRoot := t.TempDir()
+	targetDir := filepath.Join(t.TempDir(), "skill")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "target.md"), []byte("nested target"), 0o644))
+	if err := os.Symlink("target.md", filepath.Join(targetDir, "nested.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	dstPath := filepath.Join(t.TempDir(), "skill")
+
+	err := dereferenceSymlinkCopy(filepath.Join(srcRoot, "skill.link"), dstPath, targetDir, errors.New("symlink privilege missing"))
+
+	require.NoError(t, err)
+	got, err := os.ReadFile(filepath.Join(dstPath, "nested.link"))
+	require.NoError(t, err)
+	assert.Equal(t, "nested target", string(got))
+}
+
+func TestDereferenceSymlinkCopyRejectsNestedSymlinkOutsideTargetDir(t *testing.T) {
+	srcRoot := t.TempDir()
+	targetDir := filepath.Join(t.TempDir(), "skill")
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	require.NoError(t, os.WriteFile(outside, []byte("outside"), 0o644))
+	if err := os.Symlink(outside, filepath.Join(targetDir, "outside.link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	dstPath := filepath.Join(t.TempDir(), "skill")
+
+	err := dereferenceSymlinkCopy(filepath.Join(srcRoot, "skill.link"), dstPath, targetDir, errors.New("symlink privilege missing"))
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "outside allowed root")
+}
+
+func TestDereferenceSymlinkCopyRejectsAncestorDirectoryTarget(t *testing.T) {
+	srcRoot := t.TempDir()
+	nested := filepath.Join(srcRoot, "nested")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	symErr := errors.New("symlink privilege missing")
+
+	err := dereferenceSymlinkCopy(filepath.Join(nested, "root.link"), filepath.Join(t.TempDir(), "root.link"), "..", symErr)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "contains the link")
+}
+
+func TestDereferenceSymlinkCopyRejectsMutualDirectorySymlinkCycle(t *testing.T) {
+	srcRoot := t.TempDir()
+	targetDir := filepath.Join(t.TempDir(), "skill")
+	dirA := filepath.Join(targetDir, "a")
+	dirB := filepath.Join(targetDir, "b")
+	require.NoError(t, os.MkdirAll(dirA, 0o755))
+	require.NoError(t, os.MkdirAll(dirB, 0o755))
+	if err := os.Symlink("../b", filepath.Join(dirA, "to-b")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink("../a", filepath.Join(dirB, "to-a")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	err := dereferenceSymlinkCopy(filepath.Join(srcRoot, "skill.link"), filepath.Join(t.TempDir(), "skill"), targetDir, errors.New("symlink privilege missing"))
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "symlink cycle")
 }
 
 func TestProvisionWorktreeHostSurfaces_DoesNotMutateCodexHome(t *testing.T) {

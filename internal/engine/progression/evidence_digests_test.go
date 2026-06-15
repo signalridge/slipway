@@ -1652,3 +1652,39 @@ func deletedInputDigest(digest, rel string) bool {
 	expected, err := deletedFileInputHash(rel)
 	return err == nil && digest == expected
 }
+
+// TestWorkspacePathInputHashStableAcrossLineEndingRoundTrip is a Windows
+// regression guard (REQ-002 scenario B / REQ-009). A workspace file is digested
+// for goal-verification / review evidence via workspacePathInputHash (which
+// hashes file content through model.ComputeFileContentHash). When the SAME
+// logical content is digested again after conversion from LF to CRLF — the
+// Windows `git core.autocrlf=true` checkout case — the recomputed evidence
+// digest must EQUAL the recorded digest. CRLF is simulated OS-independently by
+// writing bytes containing \r\n directly. If CRLF normalization were removed,
+// the LF and CRLF digests would differ and this test would go RED.
+func TestWorkspacePathInputHashStableAcrossLineEndingRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "tracked.go")
+	const rel = "tracked.go"
+
+	// Digest the file while stored as LF (the committed form).
+	require.NoError(t, os.WriteFile(path, []byte("package main\n\nfunc main() {}\n"), 0o644))
+	lfDigest, err := workspacePathInputHash(path, rel)
+	require.NoError(t, err)
+	require.NotEmpty(t, lfDigest)
+
+	// Re-materialize the SAME logical content with CRLF line endings (Windows
+	// autocrlf checkout) and digest again. The raw bytes differ from the LF form.
+	require.NoError(t, os.WriteFile(path, []byte("package main\r\n\r\nfunc main() {}\r\n"), 0o644))
+	crlfBytes, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(crlfBytes), "\r\n", "test must drive the real CRLF on-disk case")
+
+	crlfDigest, err := workspacePathInputHash(path, rel)
+	require.NoError(t, err)
+
+	assert.Equal(t, lfDigest, crlfDigest,
+		"evidence digest must be stable across an LF<->CRLF line-ending round-trip")
+}

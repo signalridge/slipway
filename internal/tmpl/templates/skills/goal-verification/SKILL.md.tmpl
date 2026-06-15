@@ -80,14 +80,25 @@ Delegate these bulky reads when possible:
 - SAST output and finding triage for guardrail safety baseline checks
 
 ## Stub And Placeholder Scan
-Run the following scans against all claimed target files. Any real hit is a blocker.
+Scan every claimed target file for leftover stubs and placeholders. Any real hit
+is a blocker. Use whatever code-search capability is available on this host — the
+editor/agent search, ripgrep (`rg`), or an equivalent — not a hardcoded
+`grep`/`perl` invocation. Search the target files for:
 
+- Stub/placeholder markers: `TODO`, `FIXME`, `HACK`, `XXX`, `PLACEHOLDER`,
+  `NotImplemented`, `not implemented`
+- Unimplemented panics or no-op returns: `panic("... implement")`,
+  `panic("... todo")`, `return nil, nil`
+- Zero-value-only returns: `return ""`, `return 0`, `return false`
+- Empty or no-op bodies: `{ }` with nothing between the braces
+
+For example, ripgrep can cover the marker scan in one pass:
 ```bash
-grep -rn 'TODO\|FIXME\|HACK\|XXX\|PLACEHOLDER\|NotImplemented\|not implemented' <target_files>
-grep -rn 'panic(".*implement\|panic(".*todo\|return nil, nil' <target_files>
-grep -rn 'return ""$\|return 0$\|return false$' <target_files>
-perl -0ne 'print "$ARGV\n" if /\{\s*\n\s*\}/' <target_files>
+rg -n 'TODO|FIXME|HACK|XXX|PLACEHOLDER|NotImplemented|not implemented' <target_files>
 ```
+This is one option only — any portable equivalent (the editor/agent search or
+another tool) is acceptable, and the empty-body check may need a multiline-aware
+search or manual inspection.
 
 Also block:
 - zero-value or hardcoded production responses
