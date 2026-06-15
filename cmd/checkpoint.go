@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
@@ -129,7 +130,28 @@ func makeCheckpointCmd() *cobra.Command {
 						}
 						return err
 					}
-					currentWaveIndex = state.ResumeWaveIndex(wavePlan, nil)
+					// No materialized run summary yet — the normal case BETWEEN waves,
+					// before wave-orchestration skill evidence is recorded. Derive the
+					// current incomplete wave from the recorded per-task evidence so a
+					// completed early wave lets its successor become checkpointable; a
+					// bare ResumeWaveIndex(plan, nil) would always pin wave 1 and reject
+					// every next-wave task (issue #227a). With no task evidence yet, the
+					// wave-1 default is correct.
+					evidenceWaveIndex, derived, err := progression.ResumeWaveIndexFromTaskEvidence(root, change, wavePlan)
+					if err != nil {
+						return newStateIntegrityError(
+							"checkpoint_wave_derivation_failed",
+							fmt.Sprintf("failed to derive the current wave from task evidence: %v", err),
+							"Run `slipway repair` to inspect or repair runtime task evidence before setting a checkpoint.",
+							change.Slug,
+							nil,
+						)
+					}
+					if derived {
+						currentWaveIndex = evidenceWaveIndex
+					} else {
+						currentWaveIndex = state.ResumeWaveIndex(wavePlan, nil)
+					}
 				}
 				if currentWaveIndex == 0 {
 					return newInvalidUsageError(

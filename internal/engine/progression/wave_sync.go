@@ -314,6 +314,88 @@ func LatestPassingWaveEvidence(root, slug string) (model.VerificationRecord, boo
 	return rec, true, nil
 }
 
+// ResumeWaveIndexFromTaskEvidence derives the current incomplete wave index from
+// the per-task evidence on disk, without requiring a materialized
+// execution-summary.yaml. It is the resume-index authority for the documented
+// per-task-evidence flow BETWEEN waves, before wave-orchestration skill evidence
+// has been recorded (issue #227a): in that window no run summary exists yet, so
+// callers that fall back to state.ResumeWaveIndex(plan, nil) always see wave 1
+// and a next-wave task is wrongly rejected as not-in-current-wave. Reconstructing
+// the runs from recorded task evidence lets a fully-passed early wave count as
+// complete so its successor becomes the current incomplete wave.
+//
+// The boolean result reports whether usable task evidence was found and applied.
+// When false, the caller must keep its own default (wave 1) — there is no
+// evidence yet to derive from, the recorded files do not resolve to a single run
+// version, or none of them loaded cleanly; the returned index is 0 and carries no
+// meaning. When true, the index is the authoritative current incomplete wave (0
+// means every planned wave has passed, exactly like state.ResumeWaveIndex). A
+// non-nil error is only returned for a genuine filesystem/parse failure that must
+// fail closed.
+func ResumeWaveIndexFromTaskEvidence(root string, change model.Change, plan model.WavePlan) (int, bool, error) {
+	runVersion, err := singleTaskEvidenceRunVersion(root, change.Slug)
+	if err != nil {
+		return 0, false, err
+	}
+	if runVersion < 1 {
+		return 0, false, nil
+	}
+	tasks, issues, err := LoadExecutionTasksFromEvidence(root, change.Slug, runVersion)
+	if err != nil {
+		return 0, false, err
+	}
+	if len(issues) > 0 || len(tasks) == 0 {
+		return 0, false, nil
+	}
+	plan = state.ApplyEffectiveParallel(plan, state.EffectiveForcedParallel(root))
+	runs, err := state.BuildWaveRuns(plan, runVersion, tasks, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	return state.ResumeWaveIndex(plan, runs), true, nil
+}
+
+// singleTaskEvidenceRunVersion returns the run version shared by every recorded
+// task evidence file, or 0 when none are recorded, an unreadable/malformed file is
+// present, or the recorded files span more than one run version (all ambiguous —
+// caller keeps the wave-1 default rather than guessing). Only a directory-level
+// read failure fails closed via an error.
+func singleTaskEvidenceRunVersion(root, slug string) (int, error) {
+	dir := state.EvidenceTasksDir(root, slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	versions := map[int]struct{}{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		version, err := taskEvidenceRunVersion(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			// A single unreadable/malformed task-evidence file must not make
+			// checkpoint harder-failing than the read-only sibling surfaces, which
+			// soft-tolerate the same file: LoadExecutionTasksFromEvidence records it
+			// as an issue and continues. Skip it for version detection; the
+			// len(issues) > 0 check in ResumeWaveIndexFromTaskEvidence still forces
+			// derived=false, so the caller keeps the safe, more-restrictive wave-1
+			// default rather than aborting (issue #227a review).
+			continue
+		}
+		versions[version] = struct{}{}
+	}
+	if len(versions) != 1 {
+		return 0, nil
+	}
+	for version := range versions {
+		return version, nil
+	}
+	return 0, nil
+}
+
 func waveRecordStaleTaskEvidenceBlockers(
 	record model.VerificationRecord,
 	tasks []model.ExecutionTaskSummary,
