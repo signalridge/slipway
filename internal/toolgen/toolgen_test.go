@@ -2170,7 +2170,12 @@ func TestMergeHookSettingsPrunesLegacyShellHookAndPreservesUserHooks(t *testing.
 	assert.Contains(t, got, "echo user-owned-hook")
 	assert.Contains(t, got, `"matcher": "*"`)
 	// The native binary-backed launcher is registered in its place.
-	assert.Contains(t, got, nativeHookPath(cfg.SessionHook))
+	assertHookCommandRegistered(
+		t,
+		settingsPath,
+		cfg.SessionEvent,
+		hookLauncherCommand(nativeHookPath(cfg.SessionHook)),
+	)
 
 	// Refresh is idempotent: a second merge does not duplicate or mutate.
 	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
