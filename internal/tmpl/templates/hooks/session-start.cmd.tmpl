@@ -1,0 +1,8 @@
+@echo off
+rem Slipway SessionStart launcher for {{.ToolID}}.
+rem Behavior lives in `slipway hook session-start`; this file only dispatches.
+
+where slipway >nul 2>nul
+if errorlevel 1 exit /b 0
+slipway hook session-start --tool "{{.ToolID}}" 2>nul
+exit /b 0

@@ -42,7 +42,9 @@ func TestEnsureDefaultWorktreeForChange_ProvisionsHostSurfacesOnCreate(t *testin
 	assert.FileExists(t, filepath.Join(binding.Path, ".claude/skills/golang-foo/SKILL.md"))
 	assert.DirExists(t, filepath.Join(binding.Path, generatedSlipwaySkillDir))
 	assert.FileExists(t, filepath.Join(binding.Path, ".claude/settings.json"))
-	assert.FileExists(t, filepath.Join(binding.Path, ".claude/hooks/slipway-session-start.sh"))
+	assert.FileExists(t, filepath.Join(binding.Path, ".claude/hooks/slipway-session-start"))
+	assert.FileExists(t, filepath.Join(binding.Path, ".claude/hooks/slipway-session-start.ps1"))
+	assert.FileExists(t, filepath.Join(binding.Path, ".claude/hooks/slipway-session-start.cmd"))
 	assert.FileExists(t, filepath.Join(binding.Path, ".codex/skills/golang-foo/SKILL.md"))
 }
 

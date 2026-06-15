@@ -40,12 +40,12 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		rowsByKey[key] = row
 	}
 
-	for _, id := range commandIDs() {
-		row, ok := rowsByKey["command/"+id]
-		require.Truef(t, ok, "missing command row for %s", id)
+	for _, def := range commandRegistry {
+		row, ok := rowsByKey["command/"+def.ID]
+		require.Truef(t, ok, "missing command row for %s", def.ID)
 		assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", row.Source)
 		assert.Equal(t, "docs/commands.md", row.Docs)
-		assert.Equal(t, "slipway "+id, row.Token)
+		assert.Equal(t, "slipway "+def.ID, row.Token)
 	}
 
 	for _, cfg := range Registry() {

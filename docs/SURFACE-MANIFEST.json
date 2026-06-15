@@ -178,6 +178,13 @@
     },
     {
       "kind": "command",
+      "name": "tool",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/commands.md",
+      "token": "slipway tool"
+    },
+    {
+      "kind": "command",
       "name": "validate",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/commands.md",

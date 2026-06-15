@@ -53,12 +53,14 @@ failure wastes time and normalizes flakes. Classify every red run, then act.
 - "Flaky test; skip it" without a ticket and a budget.
 - Masking env drift by pinning the broken test.
 
-## Scripts
-- `scripts/fetch-pr-checks.py` — fetch CI check-run status for a PR and
-  extract failure log snippets. Read-only. Requires the `gh` CLI on
-  `PATH` plus `GH_TOKEN` (or `GITHUB_TOKEN`, or a prior `gh auth
-  login`); the helper fails fast with a credential-error message when
-  credentials are missing or rejected. It intentionally stays Python in this
-  wave because failure-snippet extraction is still shorter and safer there
-  than in shell. See `references/fetch-pr-checks-shell-evaluation.md` for the
-  keep-Python decision record and revisit criteria.
+## Helpers
+- `slipway tool fetch-pr-checks --repo owner/repo --pr N` — fetch CI
+  check-run status, failed check annotations, and check-run output summaries
+  for a PR. Read-only.
+  Defaults to `--backend auto`: use authenticated `gh` when available, and use
+  the token-backed API when `gh` is unavailable or reports an auth-required
+  error while `GH_TOKEN` or `GITHUB_TOKEN` is set. Use `--backend gh` to require
+  GitHub CLI, or `--backend api` to require token API.
+  The helper fails closed when no authenticated backend is available. No
+  generated Python, shell, or `jq` helper script is required. See
+  `references/fetch-pr-checks-shell-evaluation.md` for the retirement note.

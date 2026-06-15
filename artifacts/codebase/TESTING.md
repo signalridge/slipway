@@ -1,43 +1,51 @@
 # Testing
 
 Re-authored for change
-`make-two-confirmed-downstream-reported-lattice-slipway-gover`
-(GitHub issues #207 and #211).
+`eliminate-non-native-hook-and-skill-script-runtime-dependenc`.
 
 ## Existing Coverage
 
-- `internal/engine/progression/readiness_optimization_test.go` covers the
-  readiness changed-file optimization, including the `artifacts/codebase/**`
-  scope-contract exemption path.
-- `internal/engine/progression/scope_contract_gate_test.go` covers scope-contract
-  gate behavior (pass/blocked) at the progression layer.
-- `cmd/validate_test.go` covers the validate JSON view, including the
-  `scope_contract` sub-view assembled by `buildScopeContractView`.
-- `cmd/status_test.go` covers the status JSON/human view, including `progress`.
-- `cmd/evidence_task_test.go` / `cmd/evidence_test.go` cover `evidence task`
-  validation, including the `run_summary_version >= 1` rejection.
+- `cmd/context_pressure_hook_test.go` covers the compiled
+  `slipway hook context-pressure` behavior and should remain the model for
+  testing hook behavior without executing generated shell scripts.
+- `internal/tmpl/hooks_behavior_test.go` currently executes rendered bash hook
+  templates. This is the coverage to retire or narrow to launcher-only contract
+  tests.
+- `internal/toolgen/adapter_contract_test.go` and
+  `internal/toolgen/toolgen_test.go` freeze hook paths and settings commands;
+  today they assert `bash "<path>.sh"` and must be updated to reject that
+  contract.
+- `internal/toolgen/toolgen_test.go` also runs template-side skill scripts via
+  bash and Python for SARIF merge, action pinning, Go polluter tracing, variant
+  scaffolding, and GitHub helpers. These tests must move to compiled
+  `slipway tool` command behavior.
+- `internal/toolgen/support_files_test.go` verifies support file copying,
+  including `scripts/` payloads and shared `gh-common.sh`; it should instead
+  assert generated skills no longer ship executable helper scripts.
+- `internal/tmpl/templates_test.go` verifies rendered templates have no
+  unexpanded variables and keeps hook templates compact.
 
 ## Gaps Closed By This Change
 
-- #207: a dirty, tracked `artifacts/codebase/*.md` not in any task's
-  `target_files` is surfaced in `scope_contract.exempt_context_files` (unit test
-  at the readiness layer; cmd test at the view layer) while it stays out of
-  `changed_files` and `scope_contract.status` stays `pass`.
-- #211: `status --json` (and `next --json`) omit `progress.run_summary_version`
-  when no execution summary exists (value `0`), and report the real value once a
-  run exists (cmd test asserts both states).
-- #211: the `evidence task` help/guidance surface states the correct first run
-  version (`1`), and `evidence task --run-summary-version 0` still fails with
-  `evidence_task_run_summary_version_invalid` (cmd test pins both).
+- Session-start hook behavior receives Go command tests for success, scoped
+  worktree handoff paths, missing Slipway state, and fail-silent diagnostics.
+- Hook settings tests reject legacy `bash`, `.sh` canonical commands, and
+  script-specific settings.
+- Launcher template tests cover only native binary dispatch and fail-silent
+  behavior; lifecycle output is tested in `cmd`.
+- Skill helper tests run compiled `slipway tool` commands without bash, Python,
+  jq, or `gh` on PATH.
+- GitHub helper tests use local HTTP test servers and token environment
+  variables instead of the GitHub CLI.
+- Template inventory tests assert no generated `skills/*/scripts/*` support
+  payload remains for Slipway-owned helpers.
 
 ## Verification Plan
 
-- Run affected packages after each task:
-  `go test ./internal/engine/scopecontract ./internal/engine/progression ./internal/engine/status ./cmd`.
-- Run full repository verification: `go build ./...`, `go vet ./...`,
-  `go test ./...`, and `gofmt -s -l` (the lint gate is golangci-lint gofmt
-  **simplify**, not plain `gofmt -l`).
-- Manually confirm with current-worktree Slipway: with a dirty
-  `artifacts/codebase/*.md`, `validate --json` / `status --json` show
-  `scope_contract.exempt_context_files` listing it while `changed_files` omits it
-  and status is `pass`; early-S2 `status --json` omits `run_summary_version`.
+- Run focused command tests for new hook and tool subcommands.
+- Run affected packages:
+  `go test ./cmd ./internal/tmpl ./internal/toolgen`.
+- Run repository verification:
+  `gofmt -l`, `go test -count=1 ./...`, and `git diff --check`.
+- Use current-worktree Slipway outputs (`status --json`, `validate --json`,
+  `next --json --diagnostics`) after evidence refreshes.
