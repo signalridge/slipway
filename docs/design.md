@@ -36,6 +36,34 @@ Slipway's durable design is expressed through its own authority boundaries, not 
 | Execution evidence | Treat task evidence, review evidence, and final verification as first-class Slipway artifacts bound to the current run. |
 | Scope discipline | Reuse small primitives when they fit, but avoid importing lane schedulers, dashboards, or project-management runtimes into the governance kernel. |
 
+## Independence Attestation Tier
+
+Slipway consumes a small set of independence attestations recorded on verification
+references. They sit on a deliberate tier boundary, and the design states the
+boundary honestly rather than overselling it.
+
+| Attestation | What the engine enforces | Tier |
+| --- | --- | --- |
+| `review_origin:skill=<skill>=<handle>` on the spec-compliance-review / code-quality-review pair | both handles present and distinct | Audit/structural — raises forging cost and auditability, not cryptographic proof |
+| `closeout:reviewer_independence=pass` on final-closeout | Pattern-A presence, now engine-consumed | Structural presence |
+| Chain ordering `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)` | the four verdict timestamps are ordered, always on | Genuinely enforced ordering |
+| `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` | a `degraded_sequential` dispatch is paired with a tool-unavailable justification | Structural pairing |
+
+Each gate fails closed at error severity on `standard`/`strict` and is advisory on
+`light` — advisory is realized as Pattern-A omission (the gate returns no blocker
+on `light`), not a separate advisory channel. No gate adds a bypass, force-close,
+or self-stamp path; the engine stays the sole verdict stamper.
+
+**Honest residual.** The `review_origin` handle gate cannot prove that two reviews
+ran in genuinely independent contexts, because the handles are host-emitted
+strings. True non-forgeable distinct-context discrimination would require an
+engine-issued per-stage nonce or a lifecycle-event boundary ("Option B"), which is
+infeasible within this change's constraints: the independence skills share a
+run-version, timestamp monotonicity only catches wrong-order, and the only
+zero-schema nonce is host-readable plaintext. So the handle gate is presented as
+audit/structural tier — it makes the cheapest authoring-context collapse visible
+and costly — and never as cryptographic distinct-context proof.
+
 ## Non-Goals
 
 - Slipway does not infer a full project plan without governed artifacts.

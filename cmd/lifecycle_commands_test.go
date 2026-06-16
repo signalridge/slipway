@@ -2118,7 +2118,12 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 	// fixtures and, unlike parallel_subagents, requires no per-task executor handles.
 	if plan, planErr := state.LoadWavePlanForChange(root, change); planErr == nil {
 		for _, planWave := range plan.Waves {
-			references = append(references, fmt.Sprintf("dispatch_mode:wave=%d:degraded_sequential", planWave.WaveIndex))
+			references = append(references,
+				fmt.Sprintf("dispatch_mode:wave=%d:degraded_sequential", planWave.WaveIndex),
+				// A bare degraded_sequential claim is no longer self-sufficient; it must
+				// be paired with a tool-unavailable justification for the same wave.
+				fmt.Sprintf("degraded_dispatch_justification:wave=%d:tool_unavailable=synthetic test fixture cannot dispatch subagents", planWave.WaveIndex),
+			)
 		}
 	}
 
@@ -2134,19 +2139,25 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 
 func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryVersion int) {
 	t.Helper()
+	// Stamp both reviews at one instant so the always-on chain-order invariant
+	// (closeout >= goal >= max(spec, code)) holds: the later goal/closeout helper
+	// calls observe a non-earlier time.Now(). The two reviews are unordered peers,
+	// each carrying a DISTINCT review_origin handle so the distinct-context gate is
+	// satisfied (the handle pair must differ, not the timestamps).
+	reviewStampedAt := time.Now().UTC()
 	writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
+		Timestamp:  reviewStampedAt,
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:R0=pass", "layer:R3=pass"},
+		References: []string{"layer:R0=pass", "layer:R3=pass", "review_origin:skill=spec-compliance-review=spec-compliance-context"},
 	})
 	writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC().Add(time.Second),
+		Timestamp:  reviewStampedAt,
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:IR1=pass", "layer:IR3=pass", "layer:QUALITY=pass"},
+		References: []string{"layer:IR1=pass", "layer:IR3=pass", "layer:QUALITY=pass", "review_origin:skill=code-quality-review=code-quality-context"},
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillSpecComplianceReview, progression.SkillCodeQualityReview)
 }
@@ -2170,7 +2181,7 @@ func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSumma
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{"closeout:assurance_complete=pass"},
+		References: []string{"closeout:assurance_complete=pass", "closeout:reviewer_independence=pass"},
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillFinalCloseout)
 }

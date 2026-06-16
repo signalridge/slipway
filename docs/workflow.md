@@ -53,6 +53,34 @@ slipway run --json --diagnostics
 
 `run` stops on a surfaced skill, blocker, checkpoint, or done-ready outcome.
 
+## Independence Attestation Tokens
+
+The review, verification, closeout, and wave-orchestration stages record a few
+engine-consumed tokens on the verification record's `references` (via
+`slipway evidence skill --reference ...`). Each is an error-severity blocker on
+`standard`/`strict` and advisory-only on `light` (realized as Pattern-A omission —
+the gate simply returns no blocker on `light`, there is no separate advisory
+channel in this seam). None of them is a self-stamp of a freshness or final
+verdict; the engine remains the sole timestamp and run-version stamper.
+
+| Token | Attests | Enforced | Recovery when the gate fails closed |
+| --- | --- | --- | --- |
+| `review_origin:skill=<skill>=<handle>` on spec-compliance-review and code-quality-review | each review ran under a distinct per-review context; the two handles must be present and distinct | standard/strict error, light advisory | re-run both reviews under fresh, separately-labelled contexts and re-record via the spec-compliance-review and code-quality-review skills |
+| `closeout:reviewer_independence=pass` on final-closeout | the closeout independence attestation the engine previously ignored is now present (Pattern-A) | standard/strict error, light advisory | re-run **final-closeout** and record the token |
+| chain ordering `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)` (always-on, no token) | the four independence-critical verdicts were stamped in order, independent of the opt-in reuse token | standard/strict error, light advisory | re-stamp in order via the reviews, then **goal-verification**, then **final-closeout** (distinct `closeout_chain_order_invalid` code, not the reuse code) |
+| `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` on wave-orchestration | a `degraded_sequential` dispatch was paired with a genuine tool-unavailable justification | standard/strict error, light advisory | re-record wave-orchestration evidence with the justification reference, or re-run the wave with real concurrent dispatch |
+
+A bare `degraded_sequential` with no paired justification is rejected on every
+path that synchronizes governed wave execution, including the
+`slipway evidence skill` path — not only advance/next.
+
+The `review_origin` handle gate is **audit/structural tier**: the handles are
+host-emitted strings, so it raises the cost and auditability of collapsing four
+verdicts into one authoring context but is not cryptographic proof. Genuine
+non-forgeable distinct-context discrimination (an engine-issued per-stage nonce or
+lifecycle-event boundary, "Option B") is infeasible within this change's
+constraints, so no gate here is oversold as cryptographic distinct-context proof.
+
 ## Read-Only Surfaces
 
 These commands inspect state without mutating lifecycle authority:

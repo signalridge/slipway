@@ -95,7 +95,7 @@ func TestAuthorityTimestampOrderingIsLimitedToCloseoutProofOrdering(t *testing.T
 	if !sourceTokensLimitedToFunctions(string(raw),
 		[]string{".Before(", ".After("},
 		"func closeoutGoalVerificationReuseBlockers(",
-		"func closeoutGoalVerificationReuseReviewBlocker(",
+		"func closeoutChainOrderBlockers(",
 	) {
 		t.Fatalf("authority timestamp ordering must stay limited to closeout proof-ordering gates")
 	}
