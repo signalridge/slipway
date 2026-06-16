@@ -229,12 +229,27 @@ references:
 ```
 
 If any `parallel: true` wave degraded to sequential because the host lacked
-concurrent executors, include one structured reference per affected wave:
+concurrent executors, include one structured reference per affected wave. A bare
+`degraded_sequential` is no longer self-sufficient: the dispatch gate REQUIRES it
+to be PAIRED with a genuine tool-unavailable justification for the same wave,
+recorded as
+`degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>`,
+where `<detail>` names why concurrent executor dispatch was unavailable on this
+host:
 
 ```yaml
 references:
   - dispatch_mode:wave=<wave_index>:degraded_sequential
+  - degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>
 ```
+
+An unpaired `degraded_sequential` is rejected with
+`degraded_dispatch_justification_missing` on standard/strict (advisory on light),
+and the gate fires on every path that synchronizes governed wave execution,
+including the `slipway evidence skill` path — not only advance/next. Recovery:
+re-record the wave-orchestration evidence with the justification reference (or
+re-run the wave with real concurrent dispatch). Do not fabricate the justification
+when concurrent executors were actually available.
 
 ## Present and Advance
 Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>

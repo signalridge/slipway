@@ -268,54 +268,10 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, "latest execution evidence")
 
-	reviewAfterGoal := passingCloseoutReuseRecords(1)
-	goalAt = time.Now().UTC()
-	reviewAfterGoal[SkillGoalVerification] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt,
-		RunVersion: 1,
-	}
-	reviewAfterGoal[SkillFinalCloseout] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt.Add(3 * time.Second),
-		RunVersion: 1,
-		References: []string{
-			closeoutGoalVerificationReuseReference,
-			closeoutGoalVerificationReuseRunVersionPrefix + "1",
-			assuranceCompleteReference,
-		},
-	}
-	reviewRecords := closeoutReuseReviewRecords(1, goalAt.Add(time.Second), goalAt.Add(2*time.Second))
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, reviewAfterGoal, reviewRecords, summary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "latest review evidence")
-
-	closeoutBeforeGoal := passingCloseoutReuseRecords(1)
-	goalAt = time.Now().UTC()
-	closeoutBeforeGoal[SkillGoalVerification] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt,
-		RunVersion: 1,
-	}
-	closeoutBeforeGoal[SkillFinalCloseout] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt.Add(-time.Second),
-		RunVersion: 1,
-		References: []string{
-			closeoutGoalVerificationReuseReference,
-			closeoutGoalVerificationReuseRunVersionPrefix + "1",
-			assuranceCompleteReference,
-		},
-	}
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, closeoutBeforeGoal, nil, summary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "final-closeout timestamp")
+	// The review<=goal and closeout>=goal ordering halves have moved out of this
+	// opt-in reuse gate into the always-on closeoutChainOrderBlockers invariant;
+	// they are asserted under closeout_chain_order_invalid in
+	// TestCloseoutChainOrderBlockers, not here.
 
 	changedContent := passingCloseoutReuseRecords(1)
 	changedGoalAt := changedContent[SkillGoalVerification].Timestamp.UTC()
@@ -381,6 +337,143 @@ func TestCloseoutGoalVerificationReuseInvalidBlockerRoutesS4Recovery(t *testing.
 	assert.Contains(t, blocker.Detail, "goal-verification")
 	assert.Contains(t, blocker.Detail, "final-closeout")
 	assert.Contains(t, blocker.Detail, "assurance.md")
+}
+
+// TestCloseoutReviewerIndependenceBlockers covers the P1 presence facet
+// (REQ-001): under standard/strict the passing final-closeout record must carry
+// closeout:reviewer_independence=pass; absence fails closed, light is advisory.
+func TestCloseoutReviewerIndependenceBlockers(t *testing.T) {
+	t.Parallel()
+
+	missing := map[string]model.VerificationRecord{
+		SkillFinalCloseout: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"closeout:assurance_complete=pass"},
+		},
+	}
+	blockers := closeoutReviewerIndependenceBlockers(missing, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_reviewer_independence_missing", blockers[0].Code)
+
+	present := map[string]model.VerificationRecord{
+		SkillFinalCloseout: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"  closeout:reviewer_independence=pass  "},
+		},
+	}
+	assert.Empty(t, closeoutReviewerIndependenceBlockers(present, true))
+
+	// No final-closeout record at all -> same fail-closed blocker.
+	blockers = closeoutReviewerIndependenceBlockers(map[string]model.VerificationRecord{}, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_reviewer_independence_missing", blockers[0].Code)
+
+	// Light preset (required=false) is advisory: never blocks.
+	assert.Empty(t, closeoutReviewerIndependenceBlockers(missing, false))
+}
+
+// TestCloseoutChainOrderBlockers covers the always-on P1 ordering invariant
+// (REQ-001): closeout >= goal >= max(spec,code) under its own distinct
+// closeout_chain_order_invalid code, advisory on light.
+func TestCloseoutChainOrderBlockers(t *testing.T) {
+	t.Parallel()
+
+	goalAt := time.Now().UTC()
+	inOrder := map[string]model.VerificationRecord{
+		SkillGoalVerification: {
+			Verdict:   model.VerificationVerdictPass,
+			Timestamp: goalAt,
+		},
+		SkillFinalCloseout: {
+			Verdict:   model.VerificationVerdictPass,
+			Timestamp: goalAt.Add(time.Second),
+		},
+	}
+	reviewsBeforeGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
+	assert.Empty(t, closeoutChainOrderBlockers(inOrder, reviewsBeforeGoal, true),
+		"in-order chain with reviews before goal and goal before closeout must pass")
+
+	// review after goal -> blocker.
+	reviewsAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(time.Second), goalAt.Add(2*time.Second))
+	blockers := closeoutChainOrderBlockers(inOrder, reviewsAfterGoal, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "review evidence")
+
+	// closeout before goal -> blocker.
+	closeoutBeforeGoal := map[string]model.VerificationRecord{
+		SkillGoalVerification: {
+			Verdict:   model.VerificationVerdictPass,
+			Timestamp: goalAt,
+		},
+		SkillFinalCloseout: {
+			Verdict:   model.VerificationVerdictPass,
+			Timestamp: goalAt.Add(-time.Second),
+		},
+	}
+	blockers = closeoutChainOrderBlockers(closeoutBeforeGoal, nil, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "final-closeout must not predate")
+
+	// Genuinely-absent goal: nothing to compare, no blocker (owned elsewhere).
+	assert.Empty(t, closeoutChainOrderBlockers(map[string]model.VerificationRecord{}, reviewsAfterGoal, true))
+
+	// Light preset (required=false) is advisory even on an out-of-order chain.
+	assert.Empty(t, closeoutChainOrderBlockers(closeoutBeforeGoal, reviewsAfterGoal, false))
+}
+
+// TestReviewOriginHandleBlockers covers the P2 distinct-context handle gate
+// (REQ-002): two distinct handles pass; identical or missing handles fail closed
+// on standard/strict; advisory on light. No ordering is imposed.
+func TestReviewOriginHandleBlockers(t *testing.T) {
+	t.Parallel()
+
+	distinct := map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=spec-compliance-review=handle-spec"},
+		},
+		SkillCodeQualityReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=code-quality-review=handle-code"},
+		},
+	}
+	assert.Empty(t, reviewOriginHandleBlockers(distinct, true), "two distinct handles pass")
+
+	identical := map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=spec-compliance-review=shared"},
+		},
+		SkillCodeQualityReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=code-quality-review=shared"},
+		},
+	}
+	blockers := reviewOriginHandleBlockers(identical, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "review_origin_handle_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "identical")
+
+	// One review missing its handle -> fail closed naming that review.
+	oneMissing := map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=spec-compliance-review=handle-spec"},
+		},
+		SkillCodeQualityReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"layer:IR1=pass"},
+		},
+	}
+	blockers = reviewOriginHandleBlockers(oneMissing, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "review_origin_handle_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, SkillCodeQualityReview)
+
+	// Light preset (required=false) is advisory.
+	assert.Empty(t, reviewOriginHandleBlockers(identical, false))
 }
 
 func closeoutReuseExecutionSummary(change model.Change, runVersion int, capturedAt time.Time) *model.ExecutionSummary {

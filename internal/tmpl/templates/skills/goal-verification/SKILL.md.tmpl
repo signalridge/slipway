@@ -22,6 +22,16 @@ fresh, concrete proof from the current run.
 ## When This Runs
 After review passes. `slipway next` returns `next_skill: goal-verification`.
 
+## Chain-Ordering Invariant
+Goal-verification MUST be stamped AFTER both reviews and BEFORE final-closeout.
+The ship gate enforces an always-on invariant
+`closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)`
+across the four independence-critical verdict timestamps. If you stamp
+goal-verification at or before the latest review verdict, the closeout chain-order
+gate fails closed with `closeout_chain_order_invalid` on standard/strict (advisory
+on light). Run this skill only once both reviews have passing verification, so the
+closeout chain-order gate passes.
+
 ## Read Context
 Run `slipway next --json` for the handoff, `slipway status --json` for the
 current `run_summary_version` (`progress.run_summary_version`), and

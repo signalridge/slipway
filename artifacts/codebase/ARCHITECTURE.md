@@ -1,63 +1,96 @@
 # Architecture
 
 Re-authored for change
-`eliminate-non-native-hook-and-skill-script-runtime-dependenc`.
-
-Question: which Slipway adapter and helper seams must move from generated
-shell/Python payloads into compiled Slipway commands while preserving
-cross-platform host integration?
+`add-an-engine-consumed-context-origin-fresh-context-attestat`.
 
 ## Affected Seams
 
-- `cmd/root.go` registers the public and hidden command tree. It currently
-  includes `makeHookCmd`; this change adds compiled helper entrypoints under
-  the Slipway binary instead of asking generated adapters to execute script
-  payloads directly.
-- `cmd/context_pressure_hook.go` already owns the compiled
-  `slipway hook context-pressure` behavior. It is the precedent for hook
-  behavior living in Go while generated files remain launch adapters only.
-- A new hook command owns `slipway hook session-start --tool <tool>`. It must
-  replace the lifecycle/path/JSON logic currently embedded in
-  `internal/tmpl/templates/hooks/session-start.sh.tmpl`.
-- A new tool command family owns supported skill helpers such as SARIF merge,
-  action pinning, variant query scaffolding, Go polluter tracing, and GitHub PR
-  review/check helpers.
-- `internal/toolgen/toolgen.go` owns adapter registry data, hook file emission,
-  support-file copying, and hook settings merge. Its current registry stores
-  `.sh` paths and its settings merge registers `bash "<hook>.sh"` commands.
-- `internal/tmpl/templates/hooks/` owns rendered hook launcher templates. After
-  this change these templates should contain only platform-native binary
-  dispatch logic, not lifecycle behavior.
-- `internal/tmpl/templates/skills/` owns generated skill instructions and
-  optional support payloads. Executable `scripts/` payloads are no longer a
-  valid generated runtime surface for supported Slipway helpers.
+- `internal/engine/progression/authority.go` — the verdict-gate seam.
+  - `evaluateReviewAuthorityWithPolicy` builds `ReviewAuthority`
+    (`PassingSkills` keyed by skill name, including `SkillSpecComplianceReview`
+    and `SkillCodeQualityReview`); this is where review-pair handle/dispatch
+    tokens would be consumed (P2's read side).
+  - `buildShipAuthorityFromReadiness` is the ship-stage gate. It already holds
+    `reviewAuthority.PassingSkills` AND `verifyPassingSkills` (goal +
+    final-closeout) in one scope, and computes the standard/strict predicate
+    `assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight`.
+    This is the natural home for P1's always-on chain-ordering gate and its
+    preset-keyed error/advisory split.
+  - Pattern A: `closeoutAssuranceAttestationBlockers` (presence attestation —
+    `assuranceCompleteReference = "closeout:assurance_complete=pass"` must be
+    in the final-closeout `References`).
+  - Pattern B: `closeoutGoalVerificationReuseBlockers`, whose
+    `closeoutGoalVerificationReuseReviewBlocker` already enforces
+    `goal.Timestamp >= max(spec-compliance-review, code-quality-review)` BUT
+    only inside the opt-in `closeout:goal_verification_reuse=pass` branch. P1
+    promotes that ordering to always-on (closeout >= goal >= max(reviews)) with
+    a distinct reason code, giving the dead
+    `closeout:reviewer_independence=pass` token a consumer.
+- `internal/engine/progression/wave_sync.go` — the dispatch-machinery seam P2
+  reuses for the review pair. `DispatchEvidenceBlockers` (parallel wave missing a
+  valid `dispatch_mode`) and `ExecutorAgentBlockers` (parallel_subagents wave
+  missing per-task `executor_agent` handle) are the analogues to clone for the
+  review pair. `SyncGovernedWaveExecution` / `evaluateGovernedWaveExecution`
+  aggregate these as `safetyNetBlockers` and are currently **preset-agnostic** —
+  P4's #5/#6 must thread `EffectivePreset` through here. `session_isolation_warning`
+  is emitted in `LoadExecutionTasksFromEvidence` (advisory, task-only, empty
+  `session_id` excluded) — the token P4 demotes.
+- `internal/model/verification.go` — `VerificationRecord`. `References []string`
+  is the sole host-controlled inbound channel; `Verdict`/`Timestamp`/`RunVersion`
+  are engine-owned. New attestation tokens ride `References`, not a new field.
+- `internal/model/wave_execution.go` — `WaveDispatchModesFromVerification`,
+  `ExecutorAgentHandlesFromVerification`, `WaveDispatchParallel`, and the token
+  prefixes (`dispatch_mode:wave=`, `executor_agent:wave=...:task=...`). P2's
+  per-review context-id handles mirror this token grammar.
+- `internal/model/reason_code.go` (`canonicalReasonDefinitions`, `NewReasonCode`,
+  severity map) + `internal/model/reason_code_contract_test.go`
+  (`TestCanonicalReasonCodeTaxonomySnapshot`) + `internal/model/recovery.go`
+  (remediation vocab) — the three-file reason-code contract any new gate code
+  must register in. `NewReasonCode` silently downgrades unregistered codes to
+  `unknown_reason_code`.
+- `internal/engine/skill/skill.go` — the four independence skills
+  (`spec-compliance-review`, `code-quality-review`, `goal-verification`,
+  `final-closeout`) are `RunSummaryBound: true`, so they share one `RunVersion`;
+  this is *why* RunVersion cannot discriminate context origin (P3 residual).
+- `cmd/evidence.go` — the producer. `makeEvidenceSkillCmd` stamps engine-owned
+  `Timestamp`/`RunVersion` (`evidenceSkillRunContext`) and passes through host
+  `--reference` values verbatim into the saved record.
+- `internal/tmpl/templates/skills/{spec-compliance-review,code-quality-review,
+  goal-verification,final-closeout,wave-orchestration}/SKILL.md.tmpl` +
+  `internal/toolgen` (`Arguments` contract in `surface_manifest.go`/`toolgen.go`)
+  document/emit the tokens the gates consume.
 
 ## Dependency Flow
 
-Generated host adapters are produced by `toolgen` from embedded templates. Tool
-settings invoke hook commands, which should now dispatch to the compiled
-Slipway binary. Hook commands can query current worktree lifecycle state through
-existing command/progression helpers and emit host-specific hook output.
-
-Skill instructions are also produced by `toolgen`. Where a skill needs a
-supported helper, the instruction points to `slipway tool <helper>`; the helper
-logic runs inside the binary and uses the standard library plus explicit domain
-tools only when the task inherently requires them, for example `go test` inside
-the Go polluter helper.
+Host emits `--reference` tokens via `slipway evidence skill` ->
+`cmd/evidence.go` stamps engine-owned `Timestamp`/`RunVersion` and writes
+`verification/<skill>.yaml` -> `authority.go` consumes them at the ship/review
+gate (`buildShipAuthorityFromReadiness`, `closeoutGoalVerificationReuse*`).
+For waves: `slipway evidence task` -> per-task JSON ->
+`SyncGovernedWaveExecution` -> `dispatch_mode`/`executor_agent` tokens parsed by
+`wave_execution.go` -> `DispatchEvidenceBlockers`/`ExecutorAgentBlockers`. New
+chain-ordering and review-pair gates go in `internal/engine/progression`; new
+reason-code vocabulary stays pure in `internal/model`.
 
 ## Constraints And Invariants
 
-- Generated settings must not canonically invoke `bash`, `.sh`, Python, jq, or
-  `gh` for Slipway-owned hooks.
-- Platform-specific launchers are allowed when generated for the host platform
-  and kept thin: locate/execute `slipway`, pass stdin/stdout through, and
-  fail-silent for automatic hooks.
-- Hook launchers must not duplicate lifecycle, path, JSON parsing, handoff, or
-  context-pressure business logic.
-- Manual `slipway tool` helpers must fail explicitly; only automatic hooks are
-  allowed to no-op when the binary is unavailable.
-- No backward-compatibility path is required for legacy generated
-  `bash ".*/hooks/*.sh"` settings.
-- Existing generated skill references and support files must be refreshed from
-  `internal/tmpl/templates`; checked-in generated `.claude` or `.codex` output
-  is not the source of truth.
+- Engine is the sole verdict/freshness stamper; the host may add `References`
+  but cannot stamp `Timestamp`/`RunVersion`. Honest hybrid: host-emitted handles
+  are audit/structural-tier evidence, not crypto proof.
+- References-only, additive: no new `VerificationRecord` struct field, avoiding
+  Lattice/JSON-schema and toolgen `Arguments` contract churn.
+- Fail-closed on standard/strict (`EffectivePreset != WorkflowPresetLight`),
+  advisory on light — the same predicate `closeoutAssuranceAttestationBlockers`
+  uses. `SyncGovernedWaveExecution` must learn this preset (today it is
+  preset-blind).
+- Three-file reason-code contract: every new code must land in
+  `canonicalReasonDefinitions` + the snapshot/severity test + `recovery.go`
+  remediations, or `NewReasonCode` silently downgrades it.
+- Layering ban: `internal/architecture/dependency_direction_test.go`
+  (`TestAuthorityPackagesDoNotImportSurfaceRenderers`) forbids `internal/model`
+  and `internal/state` from importing `cmd`, `internal/tmpl`, or
+  `internal/toolgen`. New gates go in `internal/engine/progression`; new vocab
+  stays in `internal/model`.
+- RunSummaryBound parity gives all four independence skills the same RunVersion,
+  so RunVersion cannot prove fresh-context origin — P3's documented residual;
+  cross-stage timestamp ordering (Pattern B) is the strongest honest discriminator.

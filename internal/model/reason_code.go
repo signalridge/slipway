@@ -86,6 +86,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The final-closeout assurance attestation is missing",
 	},
+	"closeout_chain_order_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The independence-critical verdict chain (review -> goal-verification -> final-closeout) is out of order",
+	},
+	"closeout_reviewer_independence_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The final-closeout reviewer-independence attestation is missing",
+	},
 	"closeout_goal_verification_reuse_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Final-closeout cannot reuse the recorded goal-verification evidence",
@@ -177,6 +185,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"decision_structure_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "The decision artifact structure is invalid",
+	},
+	"degraded_dispatch_justification_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "A degraded_sequential dispatch is missing its tool-unavailable justification",
 	},
 	"dispatch_mode_absent_on_started_parallel_wave": {
 		Severity: ReasonSeverityError,
@@ -486,6 +498,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required review layer evidence is missing",
 	},
+	"review_origin_handle_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "The review-context handles for the spec-compliance-review / code-quality-review pair are missing or not distinct",
+	},
 	"review_layer_failed": {
 		Severity: ReasonSeverityError,
 		Message:  "Required review layer evidence did not pass",
@@ -681,6 +697,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"wave_task_linkage_mismatch": {
 		Severity: ReasonSeverityError,
 		Message:  "Wave run task linkage does not match wave-plan.yaml",
+	},
+	"wave_test_impl_not_distinct": {
+		Severity: ReasonSeverityError,
+		Message:  "A task_kind=code task shares target files with no distinct preceding task_kind=test task",
 	},
 	"workspace_scope_config_missing": {
 		Severity: ReasonSeverityError,

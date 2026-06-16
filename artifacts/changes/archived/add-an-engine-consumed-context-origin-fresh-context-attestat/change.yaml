@@ -1,0 +1,59 @@
+version: 1
+slug: add-an-engine-consumed-context-origin-fresh-context-attestat
+description: 'Add an engine-consumed context-origin / fresh-context attestation contract so independence-critical lifecycle steps cannot be satisfied from the authoring context. Today the engine only truly enforces fresh context at S2 wave dispatch (DispatchEvidenceBlockers, defeatable via self-asserted degraded_sequential) and the goal-verification SAST safety_baseline; review/verify/closeout rely on host-honored markdown and self-asserted tokens the engine ignores. Concretely: final-closeout writes closeout:reviewer_independence=pass (SKILL.md L160) but NO engine code consumes it (authority.go parses only closeout:assurance_complete=pass at :210/:238), so the same context that authored, reviewed, and verified can also perform closeout and stamp independence=pass. The objective is a tamper-evident, engine-consumed attestation binding a verdict''s context-origin (distinct-from-authoring), starting with making final-closeout''s reviewer_independence actually gated, then extending to chain-binding across spec-compliance-review, code-quality-review, and goal-verification to close the serial author->review->verify->close collapse. The engine stays the sole inline verdict-stamping authority; the fix is an attestation the gate consumes, NOT spawning review/verify hosts as leaf subagents.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-15T19:26:05.30738Z
+quality_mode: standard
+workflow_preset: strict
+worktree_branch: feat/add-an-engine-consumed-context-origin-fresh-context-attestat
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 3105c5ca1d63c466b11b9726e02e0d733e039365f4cab296ee79c2c90861d766
+        updated_at: 2026-06-16T05:41:18.567441747Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 24d20db0b8023fcd5c51a3d077872e98e294765efa9d9cb8ef2196cf0305578f
+        updated_at: 2026-06-16T03:47:20.952696828Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 939ecf58d74d63009e15ec332a5eec00d59128c1ecf067f4c5d4ca47bf8fc3fe
+        updated_at: 2026-06-16T01:13:49.541612872Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 6139cb77455d195f02d715c6fe0288eab924e8f025305654070f7b339faafd32
+        updated_at: 2026-06-16T03:34:32.173594416Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 97ffc57deb74e8db2e4f41ecf39ffda4d57e8d0914f92a0f4f113b07fb5073ba
+        updated_at: 2026-06-16T04:05:23.913406675Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: ed05fb51ddf160da2a2a55f63ae93a262ac167941f45a3bb5163f1c903344439
+        updated_at: 2026-06-16T05:37:29.213884337Z
+evidence_refs:
+    code-quality-review: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/code-quality-review.yaml
+    final-closeout: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/final-closeout.yaml
+    goal-verification: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/goal-verification.yaml
+    intake-clarification: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/intake-clarification.yaml
+    plan-audit: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/plan-audit.yaml
+    research-orchestration: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/add-an-engine-consumed-context-origin-fresh-context-attestat/artifacts/changes/add-an-engine-consumed-context-origin-fresh-context-attestat/verification/wave-orchestration.yaml
