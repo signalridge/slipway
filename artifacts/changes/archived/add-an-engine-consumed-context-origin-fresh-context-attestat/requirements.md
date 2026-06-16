@@ -36,8 +36,8 @@ severity with a remediation that names re-running final-closeout.
 
 #### Scenario: Out-of-order chain fails closed on standard
 
-GIVEN a standard change where final-closeout (or goal-verification) was stamped
-at or before the latest review verdict
+GIVEN a standard change where goal-verification predates the latest review
+verdict, or final-closeout predates goal-verification
 WHEN the engine evaluates ship authority
 THEN a blocker carrying the new distinct chain-ordering reason code is surfaced
 at error severity in the ship gate, and it is NOT the

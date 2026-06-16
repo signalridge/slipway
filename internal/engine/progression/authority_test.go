@@ -472,6 +472,23 @@ func TestReviewOriginHandleBlockers(t *testing.T) {
 	assert.Equal(t, "review_origin_handle_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillCodeQualityReview)
 
+	// A handle token must self-describe the same skill as the record it lives on.
+	// Swapped skill names used to pass as long as the handle values differed.
+	swappedSkillTokens := map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=code-quality-review=handle-spec"},
+		},
+		SkillCodeQualityReview: {
+			Verdict:    model.VerificationVerdictPass,
+			References: []string{"review_origin:skill=spec-compliance-review=handle-code"},
+		},
+	}
+	blockers = reviewOriginHandleBlockers(swappedSkillTokens, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "review_origin_handle_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "review_origin:skill=spec-compliance-review=<handle>")
+
 	// Light preset (required=false) is advisory.
 	assert.Empty(t, reviewOriginHandleBlockers(identical, false))
 }

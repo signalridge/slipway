@@ -435,9 +435,10 @@ func closeoutChainOrderInvalidBlocker(detail string) model.ReasonCode {
 // reviewOriginHandleBlockers enforces the P2 distinct-context handle contract
 // (REQ-002). On standard/strict each of spec-compliance-review and
 // code-quality-review that is present and passing must record a well-formed
-// review_origin handle, and the two handles must differ. A missing/ambiguous
-// handle on a present-passing review, or two identical handles across the pair,
-// fails closed. Absent or non-passing review records are owned by the
+// review_origin handle for that same skill, and the two handles must differ. A
+// missing/ambiguous/mis-scoped handle on a present-passing review, or two
+// identical handles across the pair, fails closed. Absent or non-passing review
+// records are owned by the
 // required-skill-missing blocker and are skipped here. The two reviews are
 // unordered peers; this gate imposes no ordering. Advisory (returns nil) on light.
 func reviewOriginHandleBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
@@ -454,6 +455,13 @@ func reviewOriginHandleBlockers(passingSkills map[string]model.VerificationRecor
 		if !ok {
 			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
 				skillName + " must record a distinct review_origin handle",
+			)}
+		}
+		if handle.Skill != skillName {
+			detail := skillName + " must record review_origin:skill=" + skillName +
+				"=<handle>, got review_origin:skill=" + handle.Skill
+			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
+				detail,
 			)}
 		}
 		handles[skillName] = handle

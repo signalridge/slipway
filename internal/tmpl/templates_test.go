@@ -227,7 +227,7 @@ func TestGoalVerificationTemplateDocumentsChainOrderingInvariant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "stamped AFTER both reviews and BEFORE final-closeout")
+	assert.Contains(t, content, "MUST NOT predate either review")
 	assert.Contains(t, content, "closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)")
 	assert.Contains(t, content, "closeout_chain_order_invalid")
 }

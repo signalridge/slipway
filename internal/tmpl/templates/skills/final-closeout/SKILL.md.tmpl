@@ -157,8 +157,8 @@ The ship gate now consumes the independence attestation it previously ignored.
   `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)`
   across the four independence-critical verdict timestamps. This invariant is
   always on — it does NOT depend on the opt-in `closeout:goal_verification_reuse=pass`
-  token. If final-closeout (or goal-verification) was stamped at or before the
-  latest review verdict, the ship gate fails closed with
+  token. If goal-verification predates the latest review verdict, or
+  final-closeout predates goal-verification, the ship gate fails closed with
   `closeout_chain_order_invalid` (a distinct code, not
   `closeout_goal_verification_reuse_invalid`). Recovery: re-stamp the affected
   stage in order — both reviews first, then goal-verification, then final-closeout.
