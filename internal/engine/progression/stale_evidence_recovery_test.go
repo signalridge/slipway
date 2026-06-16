@@ -3,6 +3,7 @@ package progression
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,4 +127,86 @@ func TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps(t *testing.T
 				"stale intake-clarification verification should be cleared, stat err=%v", statErr)
 		})
 	}
+}
+
+func TestStaleEvidenceRecoveryIgnoresIntakeOpenQuestionResolution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+	change := model.NewChange("issue-238-open-question-resolution")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	change.NeedsDiscovery = true
+	change.ComplexityLevel = "complex"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	intentPath := filepath.Join(bundleDir, "intent.md")
+	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  time.Date(2026, 6, 16, 1, 0, 0, 0, time.UTC),
+		RunVersion: 0,
+		References: []string{"intake:pass"},
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, record)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, record, nil))
+
+	resolvedOpenQuestions := "- [x] Which digest boundary owns research resolution?\n" +
+		"  Resolved: intake digest owns substantive scope; research owns this checklist state.\n"
+	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent(resolvedOpenQuestions)), 0o644))
+
+	target, ok, err := StaleEvidenceRecoveryAvailable(root, change, nil)
+	require.NoError(t, err)
+	assert.Falsef(t, ok, "Open Questions resolution must not reopen stale intake evidence, got target=%+v", target)
+
+	require.NoError(t, os.WriteFile(intentPath, []byte(strings.Replace(
+		issue238Intent(resolvedOpenQuestions),
+		"Fix issue #238.",
+		"Fix issue #238 with revised substantive scope.",
+		1,
+	)), 0o644))
+
+	target, ok, err = StaleEvidenceRecoveryAvailable(root, change, nil)
+	require.NoError(t, err)
+	require.True(t, ok, "substantive intent changes must still reopen stale intake evidence")
+	assert.Equal(t, SkillIntakeClarification, target.SkillName)
+	assert.Equal(t, model.StateS0Intake, target.State)
+	assert.Contains(t, model.ReasonSpecs(target.Blockers), "required_skill_stale:intake-clarification:intent.md")
+}
+
+func issue238Intent(openQuestions string) string {
+	return `# Intent
+
+## Summary
+Fix issue #238.
+
+## Complexity Assessment
+complex
+
+## Guardrail Domains
+Governance lifecycle correctness
+
+## In Scope
+- Update intake digest behavior.
+
+## Out of Scope
+- Redesign all freshness recovery.
+
+## Constraints
+- Preserve fail-closed behavior for substantive scope changes.
+
+## Acceptance Signals
+- Regression tests cover Open Questions resolution and substantive changes.
+
+## Open Questions
+` + openQuestions + `
+## Approved Summary
+User confirmed the issue #238 scope.
+`
 }
