@@ -5,6 +5,17 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0](https://github.com/signalridge/slipway/compare/v0.25.2...v0.26.0) (2026-06-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **governance:** engine-consumed reviewer-independence + context-origin attestation ([#239](https://github.com/signalridge/slipway/issues/239))
+
+### Features
+
+* **governance:** engine-consumed reviewer-independence + context-origin attestation ([#239](https://github.com/signalridge/slipway/issues/239)) ([2d2adac](https://github.com/signalridge/slipway/commit/2d2adacd6d85bd10a2317652238f6333912308f4))
+
 ## [0.25.2](https://github.com/signalridge/slipway/compare/v0.25.1...v0.25.2) (2026-06-15)
 
 
