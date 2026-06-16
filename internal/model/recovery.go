@@ -502,6 +502,33 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 		Priority:        20,
 	},
+	"closeout_reviewer_independence_missing": {
+		Remediation:     "Final-closeout did not record the reviewer-independence attestation (closeout:reviewer_independence=pass) required on standard/strict workflows; re-run final-closeout and record it.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+		Priority:        20,
+	},
+	"closeout_chain_order_invalid": {
+		Remediation:     "The independence-critical verdicts are out of order; re-run the stages so spec-compliance-review and code-quality-review precede goal-verification, which precedes final-closeout, then re-run final-closeout.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+		Priority:        15,
+	},
+	"review_origin_handle_invalid": {
+		Remediation:     "Spec-compliance-review and code-quality-review must each record a distinct review_origin context handle; re-run review and record distinct review-context evidence for each.",
+		CommandTemplate: "slipway review",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"wave_test_impl_not_distinct": {
+		Remediation:     "A code task shares target files with no distinct preceding test task; split the work so a task_kind=test task is dispatched before its dependent task_kind=code task, then re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"degraded_dispatch_justification_missing": {
+		Remediation:     "A degraded_sequential dispatch needs a genuine tool-unavailable justification; record degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail> and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
 	"review_layer_missing": {
 		Remediation:     "Re-run review and record passing evidence for review layer {subject}.",
 		CommandTemplate: "slipway review",

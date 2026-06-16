@@ -466,24 +466,56 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	slug := "wave-sync-degraded-dispatch"
-	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
-	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, state.SaveChange(root, change))
-
-	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  recordedAt,
-		RunVersion: 1,
-		References: []string{
-			"dispatch_mode:wave=1:degraded_sequential",
+	// The single parallel wave records degraded_sequential. Under the tightened
+	// gate (REQ-004) a bare degraded token now fails closed on standard, while a
+	// degraded token paired with a tool-unavailable justification reference is
+	// accepted — this exercises both the rejected and the justified path through
+	// SyncGovernedWaveExecution. (Intended update: the prior version asserted the
+	// bare-degraded wave passed; the bare path is now a blocker.)
+	tests := []struct {
+		name           string
+		slug           string
+		extraRefs      []string
+		wantBlockerFor bool
+	}{
+		{
+			name:           "bare degraded is rejected on standard",
+			slug:           "wave-sync-degraded-dispatch-bare",
+			extraRefs:      nil,
+			wantBlockerFor: true,
 		},
-	})
-	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+		{
+			name: "justified degraded is accepted on standard",
+			slug: "wave-sync-degraded-dispatch-justified",
+			extraRefs: []string{
+				"degraded_dispatch_justification:wave=1:tool_unavailable=Task tool unavailable in sandbox",
+			},
+			wantBlockerFor: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			slug := tt.slug
+			recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+			change := model.NewChange(slug)
+			change.CurrentState = model.StateS2Execute
+			change.PlanSubStep = model.PlanSubStepNone
+			require.NoError(t, state.SaveChange(root, change))
+
+			references := append([]string{"dispatch_mode:wave=1:degraded_sequential"}, tt.extraRefs...)
+			writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  recordedAt,
+				RunVersion: 1,
+				References: references,
+			})
+			writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
 
 - [x] `+"`task-a`"+` Implement task A
   - target_files: ["cmd/next.go"]
@@ -494,36 +526,42 @@ func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
   - task_kind: code
 `)
 
-	writeTaskEvidence := func(taskID string, changedFile string) {
-		t.Helper()
-		taskEvidence := map[string]any{
-			"task_id":             taskID,
-			"run_summary_version": 1,
-			"task_kind":           "code",
-			"verdict":             "pass",
-			"changed_files":       []string{changedFile},
-			"blockers":            []string{},
-			"evidence_ref":        "test:" + taskID,
-			"captured_at":         recordedAt.Format(time.RFC3339Nano),
-			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
-		}
-		raw, err := json.Marshal(taskEvidence)
-		require.NoError(t, err)
-		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
-		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
-		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+			writeTaskEvidence := func(taskID string, changedFile string) {
+				t.Helper()
+				taskEvidence := map[string]any{
+					"task_id":             taskID,
+					"run_summary_version": 1,
+					"task_kind":           "code",
+					"verdict":             "pass",
+					"changed_files":       []string{changedFile},
+					"blockers":            []string{},
+					"evidence_ref":        "test:" + taskID,
+					"captured_at":         recordedAt.Format(time.RFC3339Nano),
+					"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+				}
+				raw, err := json.Marshal(taskEvidence)
+				require.NoError(t, err)
+				taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+				require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+				require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+			}
+			writeTaskEvidence("task-a", "cmd/next.go")
+			writeTaskEvidence("task-b", "cmd/run.go")
+
+			result, err := SyncGovernedWaveExecution(root, change)
+			require.NoError(t, err)
+
+			// The recorded dispatch mode is the same in both cases; the gate decides
+			// acceptance, not the persisted mode.
+			runs, err := state.LoadWaveRuns(root, slug, 1)
+			require.NoError(t, err)
+			require.Len(t, runs, 1)
+			assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
+
+			has := hasWaveReasonCode(result.Blockers, "degraded_dispatch_justification_missing", "1")
+			assert.Equal(t, tt.wantBlockerFor, has)
+		})
 	}
-	writeTaskEvidence("task-a", "cmd/next.go")
-	writeTaskEvidence("task-b", "cmd/run.go")
-
-	result, err := SyncGovernedWaveExecution(root, change)
-	require.NoError(t, err)
-	assert.True(t, result.Updated)
-
-	runs, err := state.LoadWaveRuns(root, slug, 1)
-	require.NoError(t, err)
-	require.Len(t, runs, 1)
-	assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
 }
 
 func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testing.T) {
@@ -1129,10 +1167,16 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
 		RunVersion: 1,
-		// A degraded_sequential token keeps the started parallel wave from tripping
-		// the dispatch-evidence gate and requires no executor handles, so the only
-		// blocker here is the session-isolation warning this test exercises.
-		References: []string{"dispatch_mode:wave=1:degraded_sequential"},
+		// A degraded_sequential token paired with its tool-unavailable
+		// justification keeps the started parallel wave from tripping the
+		// dispatch-evidence gate and requires no executor handles, so the only
+		// blocker here is the session-isolation warning this test exercises. The
+		// justification is required on standard so the bare-degraded gate (REQ-004)
+		// does not add a second blocker.
+		References: []string{
+			"dispatch_mode:wave=1:degraded_sequential",
+			"degraded_dispatch_justification:wave=1:tool_unavailable=Task tool unavailable in sandbox",
+		},
 	}
 	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
@@ -1754,7 +1798,7 @@ func TestDispatchEvidenceBlockers_StartedParallelWaveMissingTokenBlocks(t *testi
 		{TaskID: "task-a"},
 		{TaskID: "task-b"},
 	}
-	blockers := DispatchEvidenceBlockers(plan, tasks, nil)
+	blockers := DispatchEvidenceBlockers(plan, tasks, nil, nil, true)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "dispatch_mode_absent_on_started_parallel_wave", blockers[0].Code)
 	assert.Equal(t, "1", blockers[0].Detail)
@@ -1762,8 +1806,9 @@ func TestDispatchEvidenceBlockers_StartedParallelWaveMissingTokenBlocks(t *testi
 
 func TestDispatchEvidenceBlockers_ValidTokensDoNotBlock(t *testing.T) {
 	t.Parallel()
-	// A parallel_subagents token and a degraded_sequential token are both explicit
-	// dispatch evidence, so neither started parallel wave is blocked.
+	// A parallel_subagents token passes outright; a degraded_sequential token now
+	// passes only when paired with a tool-unavailable justification for its wave
+	// (REQ-004). Both started parallel waves are then unblocked.
 	plan := model.WavePlan{
 		Version: model.WavePlanVersion,
 		Waves: []model.WavePlanWave{
@@ -1779,7 +1824,44 @@ func TestDispatchEvidenceBlockers_ValidTokensDoNotBlock(t *testing.T) {
 		1: model.WaveDispatchParallel,
 		2: model.WaveDispatchDegradedSequential,
 	}
-	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, dispatchModes))
+	justifications := map[int]struct{}{2: {}}
+	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, dispatchModes, justifications, true))
+}
+
+func TestDispatchEvidenceBlockers_BareDegradedFailsClosedWhenEnforced(t *testing.T) {
+	t.Parallel()
+	// A bare degraded_sequential token with no tool-unavailable justification is
+	// rejected on standard/strict (enforced) — the engine no longer accepts a
+	// self-asserted degrade (REQ-004).
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+		},
+	}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential}
+
+	blockers := DispatchEvidenceBlockers(plan, tasks, dispatchModes, nil, true)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "degraded_dispatch_justification_missing", blockers[0].Code)
+	assert.Equal(t, "1", blockers[0].Detail)
+}
+
+func TestDispatchEvidenceBlockers_BareDegradedAdvisoryOnLight(t *testing.T) {
+	t.Parallel()
+	// On light (enforced=false) a bare degraded_sequential is advisory: the
+	// justification requirement does not fire, so no blocker is raised.
+	plan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "task-a"}}},
+		},
+	}
+	tasks := []model.ExecutionTaskSummary{{TaskID: "task-a"}}
+	dispatchModes := map[int]model.WaveDispatchMode{1: model.WaveDispatchDegradedSequential}
+
+	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, dispatchModes, nil, false))
 }
 
 func TestDispatchEvidenceBlockers_NonParallelAndPendingWavesDoNotBlock(t *testing.T) {
@@ -1796,7 +1878,7 @@ func TestDispatchEvidenceBlockers_NonParallelAndPendingWavesDoNotBlock(t *testin
 	tasks := []model.ExecutionTaskSummary{
 		{TaskID: "task-a"},
 	}
-	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, nil))
+	assert.Empty(t, DispatchEvidenceBlockers(plan, tasks, nil, nil, true))
 }
 
 func TestExecutorAgentBlockers_ParallelSubagentsMissingHandleBlocks(t *testing.T) {
@@ -2282,4 +2364,220 @@ func TestWaveRunsEqualDetectsDispatchModeChange(t *testing.T) {
 
 	assert.True(t, waveRunsEqual(base, base), "identical runs are equal")
 	assert.False(t, waveRunsEqual(base, flipped), "a dispatch_mode change must not be treated as equal")
+}
+
+func TestImplDistinctnessBlockersGate(t *testing.T) {
+	t.Parallel()
+
+	sharedTargets := []string{"internal/x.go"}
+
+	tests := []struct {
+		name     string
+		plan     model.WavePlan
+		enforced bool
+		want     bool // whether a wave_test_impl_not_distinct blocker for t-code is expected
+	}{
+		{
+			name: "shared-targets code without a preceding distinct test blocks",
+			plan: model.WavePlan{
+				Version: model.WavePlanVersion,
+				Waves: []model.WavePlanWave{
+					{WaveIndex: 1, Tasks: []model.WavePlanTask{
+						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+						{TaskID: "t-peer", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+					}},
+				},
+			},
+			enforced: true,
+			want:     true,
+		},
+		{
+			name: "preceding test wave overlapping targets passes",
+			plan: model.WavePlan{
+				Version: model.WavePlanVersion,
+				Waves: []model.WavePlanWave{
+					{WaveIndex: 1, Tasks: []model.WavePlanTask{
+						{TaskID: "t-test", TargetFiles: sharedTargets, TaskKind: model.TaskKindTest},
+					}},
+					{WaveIndex: 2, Tasks: []model.WavePlanTask{
+						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+					}},
+				},
+			},
+			enforced: true,
+			want:     false,
+		},
+		{
+			name: "disjoint targets carry no requirement",
+			plan: model.WavePlan{
+				Version: model.WavePlanVersion,
+				Waves: []model.WavePlanWave{
+					{WaveIndex: 1, Tasks: []model.WavePlanTask{
+						{TaskID: "t-code", TargetFiles: []string{"internal/a.go"}, TaskKind: model.TaskKindCode},
+						{TaskID: "t-peer", TargetFiles: []string{"internal/b.go"}, TaskKind: model.TaskKindCode},
+					}},
+				},
+			},
+			enforced: true,
+			want:     false,
+		},
+		{
+			name: "same-wave test does not satisfy (must precede)",
+			plan: model.WavePlan{
+				Version: model.WavePlanVersion,
+				Waves: []model.WavePlanWave{
+					{WaveIndex: 1, Tasks: []model.WavePlanTask{
+						{TaskID: "t-test", TargetFiles: sharedTargets, TaskKind: model.TaskKindTest},
+						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+					}},
+				},
+			},
+			enforced: true,
+			want:     true,
+		},
+		{
+			name: "advisory on light (enforced=false) raises nothing",
+			plan: model.WavePlan{
+				Version: model.WavePlanVersion,
+				Waves: []model.WavePlanWave{
+					{WaveIndex: 1, Tasks: []model.WavePlanTask{
+						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+						{TaskID: "t-peer", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
+					}},
+				},
+			},
+			enforced: false,
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			blockers := TestImplDistinctnessBlockers(tt.plan, tt.enforced)
+			assert.Equal(t, tt.want, hasWaveReasonCode(blockers, "wave_test_impl_not_distinct", "t-code"))
+		})
+	}
+}
+
+// TestImplDistinctnessBlockers_SessionIDIrrelevant proves the gate takes no
+// session_id and is decided only by task_kind + target_files + wave order
+// (REQ-003): the WavePlanTask struct carries no session_id field, so the same plan
+// yields the same verdict regardless of any host-chosen session value. The two
+// shared-target code tasks with no preceding test always block; flipping a
+// preceding distinct test always clears it — neither depends on a session id that
+// the structure cannot even express.
+func TestImplDistinctnessBlockers_SessionIDIrrelevant(t *testing.T) {
+	t.Parallel()
+
+	shared := []string{"internal/x.go"}
+	blockedPlan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Tasks: []model.WavePlanTask{
+				{TaskID: "t-code", TargetFiles: shared, TaskKind: model.TaskKindCode},
+				{TaskID: "t-peer", TargetFiles: shared, TaskKind: model.TaskKindCode},
+			}},
+		},
+	}
+	clearedPlan := model.WavePlan{
+		Version: model.WavePlanVersion,
+		Waves: []model.WavePlanWave{
+			{WaveIndex: 1, Tasks: []model.WavePlanTask{
+				{TaskID: "t-test", TargetFiles: shared, TaskKind: model.TaskKindTest},
+			}},
+			{WaveIndex: 2, Tasks: []model.WavePlanTask{
+				{TaskID: "t-code", TargetFiles: shared, TaskKind: model.TaskKindCode},
+			}},
+		},
+	}
+
+	// Verdict is fully determined by plan structure; no session id participates.
+	assert.True(t, hasWaveReasonCode(TestImplDistinctnessBlockers(blockedPlan, true), "wave_test_impl_not_distinct", "t-code"))
+	assert.Empty(t, TestImplDistinctnessBlockers(clearedPlan, true))
+}
+
+// TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating proves the #5/#6
+// gates are preset-sensitive end-to-end through SyncGovernedWaveExecution: the
+// same shared-target-files wave plan with no preceding distinct test fails closed
+// on strict and is omitted on light (advisory). The preset is resolved internally
+// from the change, so no signature change is needed.
+func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		preset  model.WorkflowPreset
+		slug    string
+		wantHit bool
+	}{
+		{name: "strict fails closed", preset: model.WorkflowPresetStrict, slug: "wave-sync-distinct-strict", wantHit: true},
+		{name: "light is advisory", preset: model.WorkflowPresetLight, slug: "wave-sync-distinct-light", wantHit: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			slug := tt.slug
+			recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+			change := model.NewChange(slug)
+			change.CurrentState = model.StateS2Execute
+			change.PlanSubStep = model.PlanSubStepNone
+			change.WorkflowPreset = tt.preset
+			require.NoError(t, state.SaveChange(root, change))
+
+			writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Blockers:   []model.ReasonCode{},
+				Timestamp:  recordedAt,
+				RunVersion: 1,
+			})
+			// Two code tasks share internal/x.go with no preceding test task, so the
+			// shared-targets code task t-code has no distinct preceding test. The
+			// shared file forces them into one sequential wave (no parallel dispatch
+			// evidence needed), isolating the #5 distinctness gate.
+			writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+- [x] `+"`t-code`"+` Implement the feature
+  - target_files: ["internal/x.go"]
+  - task_kind: code
+
+- [x] `+"`t-peer`"+` Extend the same file
+  - target_files: ["internal/x.go"]
+  - task_kind: code
+`)
+
+			writeTaskEvidence := func(taskID string) {
+				t.Helper()
+				taskEvidence := map[string]any{
+					"task_id":             taskID,
+					"run_summary_version": 1,
+					"task_kind":           "code",
+					"verdict":             "pass",
+					"changed_files":       []string{"internal/x.go"},
+					"target_files":        []string{"internal/x.go"},
+					"blockers":            []string{},
+					"evidence_ref":        "test:" + taskID,
+					"captured_at":         recordedAt.Format(time.RFC3339Nano),
+					"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+				}
+				raw, err := json.Marshal(taskEvidence)
+				require.NoError(t, err)
+				taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+				require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+				require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+			}
+			writeTaskEvidence("t-code")
+			writeTaskEvidence("t-peer")
+
+			result, err := SyncGovernedWaveExecution(root, change)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantHit, hasWaveReasonCode(result.Blockers, "wave_test_impl_not_distinct", "t-code"),
+				"distinctness blocker presence must follow the preset, got %+v", result.Blockers)
+		})
+	}
 }

@@ -133,7 +133,7 @@ references:
   - "closeout:test_suite=pass:N/N"
   - "closeout:goal_verification_reuse=pass"                         # only when using the reuse branch
   - "closeout:goal_verification_reuse_run_version=<current run_version>"  # only when using the reuse branch; must match goal-verification, final-closeout, and execution-summary
-  - "closeout:reviewer_independence=pass"
+  - "closeout:reviewer_independence=pass"   # REQUIRED on standard/strict (engine-consumed presence); omit on light
   - "closeout:guardrail_baseline=pass"   # closeout's recheck; the ship-gate check itself is goal-verification's high_risk_check:<domain>.safety_baseline
   - "closeout:assurance_complete=pass"   # REQUIRED on standard/strict; omit on light
 notes: |
@@ -145,6 +145,28 @@ ship gate blocks with `closeout_assurance_attestation_missing` if the passing
 final-closeout record omits it. Add it only after you have judged every required
 assurance section as genuinely authored (see Assurance Artifact Verification).
 On light preset, omit it — assurance is optional there.
+
+## Reviewer Independence And Chain Ordering
+The ship gate now consumes the independence attestation it previously ignored.
+
+- **Presence (Pattern-A):** on standard/strict, `closeout:reviewer_independence=pass`
+  is REQUIRED on the passing final-closeout record. If a passing record omits it,
+  the ship gate fails closed with `closeout_reviewer_independence_missing`.
+  Recovery: re-run final-closeout and record the token. Advisory on light.
+- **Chain ordering (always-on invariant):** the engine enforces
+  `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)`
+  across the four independence-critical verdict timestamps. This invariant is
+  always on — it does NOT depend on the opt-in `closeout:goal_verification_reuse=pass`
+  token. If goal-verification predates the latest review verdict, or
+  final-closeout predates goal-verification, the ship gate fails closed with
+  `closeout_chain_order_invalid` (a distinct code, not
+  `closeout_goal_verification_reuse_invalid`). Recovery: re-stamp the affected
+  stage in order — both reviews first, then goal-verification, then final-closeout.
+  Advisory on light.
+
+Both facets fail closed at error severity on standard/strict and are advisory on
+light. There is no bypass, force-close, or self-stamp path; the engine remains the
+sole verdict stamper.
 
 ## Present and Advance
 Show closeout summary with verification index. {{template "hard-gate"}}

@@ -164,6 +164,91 @@ func TestFinalCloseoutTemplateRequiresAssuranceAttestationOnStandardStrict(t *te
 	assert.Contains(t, content, "On light preset, omit it")
 }
 
+func TestSpecComplianceReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:spec-compliance-review",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	// The review records a per-review context handle via the review_origin:
+	// grammar; the engine consumes the pair and requires the two handles to be
+	// distinct on standard/strict, advisory on light.
+	assert.Contains(t, content, "review_origin:skill=spec-compliance-review=<handle>")
+	assert.Contains(t, content, "MUST be DISTINCT")
+	// The colliding next/handoff JSON name must never be emitted as the token.
+	assert.NotContains(t, content, "review_context:skill=")
+}
+
+func TestCodeQualityReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/code-quality-review/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:code-quality-review",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "review_origin:skill=code-quality-review=<handle>")
+	assert.Contains(t, content, "MUST be DISTINCT")
+	assert.NotContains(t, content, "review_context:skill=")
+}
+
+func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:final-closeout",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	// Pattern-A presence attestation, now engine-consumed.
+	assert.Contains(t, content, `- "closeout:reviewer_independence=pass"`)
+	assert.Contains(t, content, "closeout_reviewer_independence_missing")
+	// Always-on chain-ordering invariant with its own distinct reason code.
+	assert.Contains(t, content, "closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)")
+	assert.Contains(t, content, "closeout_chain_order_invalid")
+	assert.Contains(t, content, "Advisory on light")
+}
+
+func TestGoalVerificationTemplateDocumentsChainOrderingInvariant(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:goal-verification",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "MUST NOT predate either review")
+	assert.Contains(t, content, "closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)")
+	assert.Contains(t, content, "closeout_chain_order_invalid")
+}
+
+func TestWaveOrchestrationTemplateRequiresDegradedJustification(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:wave-orchestration",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	// A bare degraded_sequential must be paired with the tool-unavailable
+	// justification token; unpaired is rejected on standard/strict, advisory on light.
+	assert.Contains(t, content, "degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>")
+	assert.Contains(t, content, "degraded_dispatch_justification_missing")
+	assert.Contains(t, content, "advisory on light")
+}
+
 func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}

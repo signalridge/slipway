@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/gate"
@@ -102,6 +101,7 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		blockers = append(blockers, layerBlockers...)
 	}
 	blockers = append(blockers, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)...)
+	blockers = append(blockers, reviewOriginHandleBlockers(passingSkills, policy.EffectivePreset != model.WorkflowPresetLight)...)
 	blockers = model.NormalizeReasonCodes(blockers)
 
 	return ReviewAuthority{
@@ -154,9 +154,17 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
 	attestationBlockers := closeoutAssuranceAttestationBlockers(verifyPassingSkills, assuranceRequired)
 	reuseBlockers := closeoutGoalVerificationReuseBlockers(root, change, verifyPassingSkills, reviewAuthority.PassingSkills, readiness.ExecutionSummary)
+	// P1 (issue #47 follow-on): independence facets gated on the effective preset,
+	// matching the assurance attestation floor — required on standard/strict,
+	// advisory (omitted) on light.
+	independenceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
+	independencePresenceBlockers := closeoutReviewerIndependenceBlockers(verifyPassingSkills, independenceRequired)
+	chainOrderBlockers := closeoutChainOrderBlockers(verifyPassingSkills, reviewAuthority.PassingSkills, independenceRequired)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, attestationBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, reuseBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, independencePresenceBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, chainOrderBlockers...)
 
 	manifestOK, manifestBlockers := ValidateChangeYamlR0(
 		filepath.Join(inputs.Paths.GovernedBundleDir, "change.yaml"),
@@ -179,6 +187,8 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	// specific, actionable closeout_assurance_attestation_missing code.
 	unresolved = append(unresolved, attestationBlockers...)
 	unresolved = append(unresolved, reuseBlockers...)
+	unresolved = append(unresolved, independencePresenceBlockers...)
+	unresolved = append(unresolved, chainOrderBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
@@ -308,14 +318,9 @@ func closeoutGoalVerificationReuseBlockers(
 			"goal-verification timestamp must be at or after latest execution evidence",
 		)}
 	}
-	if blocker := closeoutGoalVerificationReuseReviewBlocker(reviewPassingSkills, goalRecord.Timestamp.UTC()); blocker != nil {
-		return []model.ReasonCode{*blocker}
-	}
-	if !goalRecord.Timestamp.IsZero() && closeoutRecord.Timestamp.UTC().Before(goalRecord.Timestamp.UTC()) {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"final-closeout timestamp must not predate reused goal-verification",
-		)}
-	}
+	// The cross-stage ordering halves (review <= goal, closeout >= goal) have moved
+	// out of this opt-in reuse gate into the always-on closeoutChainOrderBlockers
+	// invariant, which carries its own distinct reason code.
 	freshness := state.ExecutionSummaryFreshness(root, change, summary)
 	if freshness != ctxpack.EvidenceFreshnessFresh {
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
@@ -335,27 +340,147 @@ func closeoutGoalVerificationReuseBlockers(
 	return nil
 }
 
-func closeoutGoalVerificationReuseReviewBlocker(
-	reviewPassingSkills map[string]model.VerificationRecord,
-	goalTimestamp time.Time,
-) *model.ReasonCode {
-	if goalTimestamp.IsZero() {
-		blocker := closeoutGoalVerificationReuseInvalidBlocker("goal-verification timestamp is required for final-closeout reuse")
-		return &blocker
+// closeoutReviewerIndependenceReference is the engine-consumed presence facet of
+// the P1 independence contract: the final-closeout record's structured
+// attestation that the closeout judgment was produced by an independent reviewer
+// context. Pattern-A presence (analogue of assuranceCompleteReference): the
+// kernel only requires the token to be present, it does not re-derive
+// independence here.
+const closeoutReviewerIndependenceReference = "closeout:reviewer_independence=pass"
+
+// closeoutReviewerIndependenceBlockers enforces the P1 presence facet (REQ-001).
+// When required (standard/strict effective preset), the passing final-closeout
+// record must carry the reviewer-independence attestation; a missing record or a
+// record lacking the token is a fail-closed blocker. Advisory (returns nil) on
+// light.
+func closeoutReviewerIndependenceBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
+	if !required {
+		return nil
 	}
+	record, ok := passingSkills[SkillFinalCloseout]
+	if !ok {
+		return []model.ReasonCode{closeoutReviewerIndependenceMissingBlocker()}
+	}
+	for _, ref := range record.References {
+		if strings.TrimSpace(ref) == closeoutReviewerIndependenceReference {
+			return nil
+		}
+	}
+	return []model.ReasonCode{closeoutReviewerIndependenceMissingBlocker()}
+}
+
+func closeoutReviewerIndependenceMissingBlocker() model.ReasonCode {
+	return model.NewReasonCode(
+		"closeout_reviewer_independence_missing",
+		"final-closeout must record "+closeoutReviewerIndependenceReference+" on standard/strict; rerun final-closeout",
+	)
+}
+
+// closeoutChainOrderBlockers enforces the always-on P1 cross-stage ordering
+// invariant closeout >= goal-verification >= max(spec-compliance-review,
+// code-quality-review) across the independence-critical verdicts (REQ-001). It is
+// independent of the opt-in closeout:goal_verification_reuse=pass token and
+// carries its own distinct reason code closeout_chain_order_invalid (never folded
+// into closeout_goal_verification_reuse_invalid). Each pair is compared only when
+// BOTH records are present, passing, and carry a non-zero timestamp; a genuinely
+// absent record is owned by the required-skill-missing blocker, so this gate does
+// not double-fire on absence. Advisory (returns nil) on light.
+func closeoutChainOrderBlockers(
+	passingSkills map[string]model.VerificationRecord,
+	reviewPassingSkills map[string]model.VerificationRecord,
+	required bool,
+) []model.ReasonCode {
+	if !required {
+		return nil
+	}
+	goalRecord, ok := passingSkills[SkillGoalVerification]
+	if !ok || !goalRecord.IsPassing() || goalRecord.Timestamp.IsZero() {
+		// Goal absence/staleness is owned by the required-skill-missing and reuse
+		// gates; ordering has nothing to compare against.
+		return nil
+	}
+	goalAt := goalRecord.Timestamp.UTC()
+
+	// review <= goal: each present, passing, non-zero review verdict must not be
+	// stamped after goal-verification.
 	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
-		record, ok := reviewPassingSkills[skillName]
-		if !ok || !record.IsPassing() || record.Timestamp.IsZero() {
+		reviewRecord, ok := reviewPassingSkills[skillName]
+		if !ok || !reviewRecord.IsPassing() || reviewRecord.Timestamp.IsZero() {
 			continue
 		}
-		if record.Timestamp.UTC().After(goalTimestamp) {
-			blocker := closeoutGoalVerificationReuseInvalidBlocker(
-				"goal-verification timestamp must be at or after latest review evidence: " + skillName,
-			)
-			return &blocker
+		if reviewRecord.Timestamp.UTC().After(goalAt) {
+			return []model.ReasonCode{closeoutChainOrderInvalidBlocker(
+				"goal-verification must be at or after review evidence: " + skillName,
+			)}
+		}
+	}
+
+	// closeout >= goal: when final-closeout is present, passing, and timestamped it
+	// must not predate goal-verification.
+	closeoutRecord, ok := passingSkills[SkillFinalCloseout]
+	if ok && closeoutRecord.IsPassing() && !closeoutRecord.Timestamp.IsZero() {
+		if closeoutRecord.Timestamp.UTC().Before(goalAt) {
+			return []model.ReasonCode{closeoutChainOrderInvalidBlocker(
+				"final-closeout must not predate goal-verification",
+			)}
 		}
 	}
 	return nil
+}
+
+func closeoutChainOrderInvalidBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode("closeout_chain_order_invalid", appendS4VerificationRecovery(detail))
+}
+
+// reviewOriginHandleBlockers enforces the P2 distinct-context handle contract
+// (REQ-002). On standard/strict each of spec-compliance-review and
+// code-quality-review that is present and passing must record a well-formed
+// review_origin handle for that same skill, and the two handles must differ. A
+// missing/ambiguous/mis-scoped handle on a present-passing review, or two
+// identical handles across the pair, fails closed. Absent or non-passing review
+// records are owned by the
+// required-skill-missing blocker and are skipped here. The two reviews are
+// unordered peers; this gate imposes no ordering. Advisory (returns nil) on light.
+func reviewOriginHandleBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
+	if !required {
+		return nil
+	}
+	handles := make(map[string]model.ReviewOriginHandle, 2)
+	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
+		record, ok := passingSkills[skillName]
+		if !ok || !record.IsPassing() {
+			continue
+		}
+		handle, ok := model.ReviewOriginHandleFromVerification(record)
+		if !ok {
+			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
+				skillName + " must record a distinct review_origin handle",
+			)}
+		}
+		if handle.Skill != skillName {
+			detail := skillName + " must record review_origin:skill=" + skillName +
+				"=<handle>, got review_origin:skill=" + handle.Skill
+			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
+				detail,
+			)}
+		}
+		handles[skillName] = handle
+	}
+	specHandle, hasSpec := handles[SkillSpecComplianceReview]
+	codeHandle, hasCode := handles[SkillCodeQualityReview]
+	if hasSpec && hasCode && specHandle.Handle == codeHandle.Handle {
+		return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
+			"spec-compliance-review and code-quality-review recorded identical review_origin handles",
+		)}
+	}
+	return nil
+}
+
+func reviewOriginHandleInvalidBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode(
+		"review_origin_handle_invalid",
+		strings.TrimSpace(detail)+"; re-record distinct review-context evidence per review",
+	)
 }
 
 func closeoutGoalVerificationReuseContentPaths(change model.Change, summary *model.ExecutionSummary) []string {

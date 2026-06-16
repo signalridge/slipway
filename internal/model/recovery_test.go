@@ -153,6 +153,11 @@ func inScopeProducedRecoverySpecs() []string {
 		"manifest_r0_invalid:manifest_base_ref_missing",
 		"sensitive_evidence_missing:schema_migration:db/migrations/001_create_users.sql",
 		"worktree_metadata_persist_failed:permission denied",
+		"closeout_reviewer_independence_missing",
+		"closeout_chain_order_invalid",
+		"review_origin_handle_invalid",
+		"wave_test_impl_not_distinct",
+		"degraded_dispatch_justification_missing",
 	}
 }
 
