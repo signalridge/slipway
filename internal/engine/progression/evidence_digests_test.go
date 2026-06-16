@@ -180,6 +180,53 @@ func TestGovernedSkillInputDigestsCoverStageAuthorities(t *testing.T) {
 	assert.Contains(t, finalCloseout.Inputs, "tracked.go")
 }
 
+func TestIntakeClarificationInputDigestExcludesOnlyOpenQuestions(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("intake-open-question-digest")
+	require.NoError(t, state.SaveChange(root, change))
+	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	intentPath := filepath.Join(bundleDir, "intent.md")
+	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
+
+	baseIntake, err := certifiedSkillInputDigest(root, change, SkillIntakeClarification, nil)
+	require.NoError(t, err)
+	baseResearch, err := certifiedSkillInputDigest(root, change, SkillResearchOrchestration, nil)
+	require.NoError(t, err)
+	basePlanAudit, err := certifiedSkillInputDigest(root, change, SkillPlanAudit, nil)
+	require.NoError(t, err)
+
+	resolvedOpenQuestions := "- [x] Which digest boundary owns research resolution?\n" +
+		"  Resolved: intake owns substantive scope; research owns this checklist state.\n"
+	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent(resolvedOpenQuestions)), 0o644))
+
+	currentIntake, err := certifiedSkillInputDigest(root, change, SkillIntakeClarification, nil)
+	require.NoError(t, err)
+	currentResearch, err := certifiedSkillInputDigest(root, change, SkillResearchOrchestration, nil)
+	require.NoError(t, err)
+	currentPlanAudit, err := certifiedSkillInputDigest(root, change, SkillPlanAudit, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, baseIntake.Inputs["intent.md"], currentIntake.Inputs["intent.md"],
+		"intake-clarification must not stale on research-owned Open Questions resolution")
+	assert.NotEqual(t, baseResearch.Inputs["intent.md"], currentResearch.Inputs["intent.md"],
+		"research-orchestration must keep consuming full intent.md")
+	assert.NotEqual(t, basePlanAudit.Inputs["intent.md"], currentPlanAudit.Inputs["intent.md"],
+		"plan-audit must keep consuming full intent.md")
+
+	require.NoError(t, os.WriteFile(intentPath, []byte(strings.Replace(
+		issue238Intent(resolvedOpenQuestions),
+		"Fix issue #238.",
+		"Fix issue #238 with revised substantive scope.",
+		1,
+	)), 0o644))
+	substantiveIntake, err := certifiedSkillInputDigest(root, change, SkillIntakeClarification, nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, baseIntake.Inputs["intent.md"], substantiveIntake.Inputs["intent.md"],
+		"substantive intake text must still stale intake-clarification")
+}
+
 func TestLateAssuranceEditDoesNotStalePlanAuditAtS1(t *testing.T) {
 	t.Parallel()
 

@@ -46,7 +46,7 @@ func certifiedSkillInputDigest(
 			return model.SkillDigest{}, err
 		}
 	case strings.TrimSpace(skillName) == SkillIntakeClarification:
-		if err := addGovernedFileInput(root, change, "intent.md", inputs); err != nil {
+		if err := addIntakeClarificationIntentInput(root, change, inputs); err != nil {
 			return model.SkillDigest{}, err
 		}
 	case strings.TrimSpace(skillName) == SkillResearchOrchestration:
@@ -437,14 +437,46 @@ func addGovernedFileInput(root string, change model.Change, rel string, inputs m
 	return nil
 }
 
+func addIntakeClarificationIntentInput(root string, change model.Change, inputs map[string]string) error {
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(bundleDir, "intent.md")
+	hash, err := computeFilteredProseFileInputHash(path, func(heading string) bool {
+		// Open Questions are research-routing state. Intake evidence owns the
+		// clarified scope text, so resolving research questions must not reopen S0.
+		return !strings.EqualFold(strings.TrimSpace(heading), "Open Questions")
+	})
+	if err != nil {
+		return err
+	}
+	inputs["intent.md"] = hash
+	return nil
+}
+
 func computeProseFileInputHash(path string) (string, error) {
+	return computeFilteredProseFileInputHash(path, nil)
+}
+
+func computeFilteredProseFileInputHash(path string, includeSection func(heading string) bool) (string, error) {
 	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
 	if err != nil {
 		return "", err
 	}
+	sections := proseArtifactMaterialSections(filepath.Base(path), string(raw))
+	if includeSection != nil {
+		filtered := make([]map[string]string, 0, len(sections))
+		for _, section := range sections {
+			if includeSection(section["heading"]) {
+				filtered = append(filtered, section)
+			}
+		}
+		sections = filtered
+	}
 	return model.ComputeInputHash(map[string]any{
 		"artifact":          filepath.Base(path),
-		"material_sections": proseArtifactMaterialSections(filepath.Base(path), string(raw)),
+		"material_sections": sections,
 	})
 }
 
