@@ -117,8 +117,6 @@ func issue227SeedTwoWaveExecution(t *testing.T, root, slug string) {
 // on a wave-2 task must be settable: the documented per-task-evidence flow has
 // completed wave 1, so wave 2 is the current incomplete wave (issue #227a).
 func TestIssue227CheckpointSettableAtWaveBoundaryBeforeSkillEvidence(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -175,8 +173,6 @@ func TestIssue227CheckpointSettableAtWaveBoundaryBeforeSkillEvidence(t *testing.
 // as not in the current wave. This guards that issue #227a's evidence-derived
 // path does not regress the no-evidence baseline.
 func TestIssue227CheckpointWaveOneDefaultWithoutTaskEvidence(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)

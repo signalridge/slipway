@@ -84,8 +84,6 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 }
 
 func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
