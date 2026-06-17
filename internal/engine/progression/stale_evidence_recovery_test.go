@@ -49,6 +49,59 @@ func TestStalePlanSubStepRankDerivesFromPlanSubStepOrder(t *testing.T) {
 	assert.Equal(t, 0, stalePlanSubStepRank(model.PlanSubStepNone))
 }
 
+func TestStaleEvidenceAuthoritiesUseSelectedReviewSet(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+	change := model.NewChange("stale-review-default-selection")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	require.NoError(t, state.SaveChange(root, change))
+	writeStaleRecoverySelectionBundle(t, root, change, []string{"cmd/review.go"})
+
+	authorities, err := staleEvidenceAuthorities(root, change, true)
+	require.NoError(t, err)
+	names := staleEvidenceAuthorityNames(authorities)
+
+	assert.Contains(t, names, SkillSpecComplianceReview)
+	assert.Contains(t, names, SkillCodeQualityReview)
+	assert.Contains(t, names, SkillIndependentReview)
+	assert.NotContains(t, names, SkillSecurityReview)
+}
+
+func TestStaleEvidenceAuthoritiesIncludeSelectedSecurityReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+	change := model.NewChange("stale-review-security-selection")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetStrict
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	require.NoError(t, state.SaveChange(root, change))
+	writeStaleRecoverySelectionBundle(t, root, change, []string{
+		"cmd/a.go",
+		"cmd/b.go",
+		"cmd/c.go",
+		"cmd/d.go",
+		"cmd/e.go",
+	})
+
+	authorities, err := staleEvidenceAuthorities(root, change, true)
+	require.NoError(t, err)
+	names := staleEvidenceAuthorityNames(authorities)
+
+	assert.Contains(t, names, SkillSpecComplianceReview)
+	assert.Contains(t, names, SkillCodeQualityReview)
+	assert.Contains(t, names, SkillIndependentReview)
+	assert.Contains(t, names, SkillSecurityReview)
+}
+
 // TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps reproduces #90:
 // when intent.md changes after intake-clarification passed and the change has
 // already moved onto a machine-only S0 substep (research/confirm), mutating
@@ -117,8 +170,8 @@ func TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps(t *testing.T
 				"#90: reopen from %s must reset the intake substep to clarify", tc.intakeSubStep)
 
 			// Read-only resolution after recovery routes back to intake-clarification.
-			nextSkill, _ := ResolveNextSkill(reloaded)
-			assert.Equal(t, SkillIntakeClarification, nextSkill,
+			nextSkills, _ := ResolveNextSkill(reloaded)
+			assert.Equal(t, []string{SkillIntakeClarification}, nextSkills,
 				"post-recovery next skill must be intake-clarification")
 
 			// The stale verification record is cleared so the rerun re-stamps fresh.
@@ -209,4 +262,33 @@ Governance lifecycle correctness
 ## Approved Summary
 User confirmed the issue #238 scope.
 `
+}
+
+func staleEvidenceAuthorityNames(authorities []staleEvidenceAuthority) []string {
+	names := make([]string, 0, len(authorities))
+	for _, authority := range authorities {
+		names = append(names, authority.SkillName)
+	}
+	return names
+}
+
+func writeStaleRecoverySelectionBundle(t *testing.T, root string, change model.Change, targetFiles []string) {
+	t.Helper()
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\n\nReview selection.\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`## Requirements
+
+### Requirement: ReviewSelection
+REQ-001: Review selection must be explicit.
+`), 0o644))
+	tasks := "# Tasks\n\n- [ ] `t-01` selected review proof\n  - target_files: ["
+	for i, target := range targetFiles {
+		if i > 0 {
+			tasks += ", "
+		}
+		tasks += `"` + target + `"`
+	}
+	tasks += "]\n  - task_kind: code\n  - covers: [REQ-001]\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasks), 0o644))
 }

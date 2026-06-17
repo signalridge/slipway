@@ -12,7 +12,8 @@ IRON LAW: NO SHIP WITHOUT INDEPENDENT REVIEW
 
 ## Purpose
 Verify bidirectional alignment between specification artifacts and
-implementation. This is Stage 1 of the governed review sequence. The attached
+implementation. This is one of the selected concurrent S3 reviews; selected
+reviewers are unordered peers, neither gating the other. The attached
 `slipway-spec-trace` checklist defines the trace matrix you must produce.
 
 ## Workflow Outline
@@ -21,8 +22,13 @@ implementation. This is Stage 1 of the governed review sequence. The attached
 3. Write verification, surface blockers, and wait for approval.
 
 ## When This Runs
-After wave execution. `slipway next` returns `next_skill: spec-compliance-review`.
-This is Stage 1 of the two-stage review protocol. Must pass before code-quality-review runs.
+After wave execution, at `S3_REVIEW` the workflow dispatches the selected review
+set as concurrent native subagents from one dispatch point. The selected set
+always includes spec-compliance-review, code-quality-review, and
+independent-review; it also includes security-review when the security control is
+selected. This review does not gate or wait for any peer reviewer. `slipway next`
+returns the selected review set at `S3_REVIEW` independent of which review
+evidence is recorded first.
 
 ## Review Contract
 Do not trust prior summaries. Read artifacts, code, and tests yourself before
@@ -128,22 +134,36 @@ Do not use `layer:CORRECTNESS=pass` or `layer:SAFETY=pass` as gate-satisfying
 substitutes. They may be prose categories in notes, but governance gates consume
 the exact `R*` layer tokens.
 
-## Review-Context Handle
-Record this review's per-review context identifier as
-`review_origin:skill=spec-compliance-review=<handle>`, where `<handle>` is a
-short label for the fresh context this review ran under. The engine consumes the
-two review handles as a pair: spec-compliance-review and code-quality-review MUST
-each record a handle, and the two handles MUST be DISTINCT from each other (one
-uniform handle stamped on both reviews, or a missing handle, is the degenerate
-single-context signature the gate rejects). This handle is the per-review context
-id; do not add a separate `context_origin` token, and do NOT use the literal
-`review_context` (that name is the unrelated next/handoff JSON object). The two
-reviews are unordered peers — the handle carries no ordering between them.
+## Independent Review Dispatch And Context-Origin Handle
+At `S3_REVIEW` the workflow dispatches the selected review set as CONCURRENT
+native subagents from one dispatch point on the SHARED change worktree (the same
+worktree the implementation edited; there is no per-review git worktree
+isolation). The selected reviews run in parallel as unordered peers: no reviewer
+waits for another reviewer's verdict. Model the dispatch on how
+`slipway-wave-orchestration` fans out executor subagents: spawn each review as a
+fresh-context subagent with a bounded review brief, pass it required-reading paths
+rather than artifact bodies, wait for the results, and record each handle. If a
+capable runtime cannot spawn, wait for, and close a subagent, stop and ask for
+operator direction rather than reviewing inline in the host context.
+
+Record this review's per-stage context identifier as
+`context_origin:stage=review=<handle>`, where `<handle>` is the dispatched
+subagent's handle/identity — the fresh context this review ran under. The engine
+consumes the review-stage context handles as a cross-stage lattice: every S3
+reviewer MUST record a handle with stage `review`, and the handles MUST be DISTINCT
+across the review-stage subagents (one uniform handle stamped on multiple
+reviews, or a missing handle, is the degenerate single-context signature the
+gate rejects). Do NOT build the token out of the literal
+`review_context` name (that name is the unrelated next/handoff JSON object); the
+only handle token this review emits is the `context_origin:stage=review=`
+reference above. The selected reviews are unordered peers, so the handle carries
+no ordering between them.
 
 The distinct-handle gate fails closed at error severity on standard/strict and is
-advisory on light. When it fails closed, re-record distinct review-context
-evidence by re-running this review (and code-quality-review) under fresh,
-separately-labelled contexts via `slipway evidence skill`.
+advisory on light. When it fails closed, re-record distinct context-origin
+evidence by re-running this review and any selected peer reviewers with invalid
+or colliding handles under fresh, separately-labelled subagent contexts via
+`slipway evidence skill`.
 
 ## Record Verification
 Write bulky review notes to disk, then record the verdict through the CLI so
@@ -157,7 +177,7 @@ slipway evidence skill \
   --reference "layer:R0=pass" \
   --reference "scope_contract:pass" \
   --reference "negative_path:pass" \
-  --reference "review_origin:skill=spec-compliance-review=<handle>" \
+  --reference "context_origin:stage=review=<handle>" \
   --notes-file artifacts/changes/{slug}/verification/spec-compliance-review-notes.md
 ```
 
@@ -167,7 +187,7 @@ bidirectional alignment.
 ## Present and Advance
 Show review findings. {{template "hard-gate"}}
 
-After confirmation, advance with `slipway run`; the engine re-resolves S3_REVIEW to code-quality-review as Stage 2 (`slipway next` only previews it, it does not advance).
+After confirmation, advance with `slipway run`; the engine rechecks the S3_REVIEW evidence and advances once every selected S3 review has passing verification (`slipway next` only previews it, it does not advance).
 
 ## DO NOT SKIP
 1. Independent review for governed levels.

@@ -381,6 +381,7 @@ governance:
   min_preset: standard
   controls:
     independent-review: advisory
+    security-review: blocking
     rollback-required: blocking
   disabled_controls:
     - research
@@ -391,6 +392,7 @@ governance:
 	assert.Equal(t, WorkflowPresetLight, cfg.Governance.DefaultPreset)
 	assert.Equal(t, WorkflowPresetStandard, cfg.Governance.MinPreset)
 	assert.Equal(t, ControlModeAdvisory, cfg.Governance.Controls[ControlIndependentReview])
+	assert.Equal(t, ControlModeBlocking, cfg.Governance.Controls[ControlSecurityReview])
 	assert.Equal(t, ControlModeBlocking, cfg.Governance.Controls[ControlRollbackRequired])
 	assert.Contains(t, cfg.Governance.DisabledControls, ControlResearch)
 }
@@ -403,6 +405,7 @@ func TestConfigGovernanceRoundTrip(t *testing.T) {
 		MinPreset:     WorkflowPresetStandard,
 		Controls: map[ControlID]ControlMode{
 			ControlIndependentReview: ControlModeAdvisory,
+			ControlSecurityReview:    ControlModeBlocking,
 		},
 	}
 
@@ -412,6 +415,7 @@ func TestConfigGovernanceRoundTrip(t *testing.T) {
 	assert.Contains(t, string(out), "default_preset: light")
 	assert.Contains(t, string(out), "min_preset: standard")
 	assert.Contains(t, string(out), "independent-review: advisory")
+	assert.Contains(t, string(out), "security-review: blocking")
 
 	// Re-parse and verify.
 	cfg2, err := ParseConfigYAML(out)
@@ -419,6 +423,7 @@ func TestConfigGovernanceRoundTrip(t *testing.T) {
 	assert.Equal(t, WorkflowPresetLight, cfg2.Governance.DefaultPreset)
 	assert.Equal(t, WorkflowPresetStandard, cfg2.Governance.MinPreset)
 	assert.Equal(t, ControlModeAdvisory, cfg2.Governance.Controls[ControlIndependentReview])
+	assert.Equal(t, ControlModeBlocking, cfg2.Governance.Controls[ControlSecurityReview])
 }
 
 func TestConfigGovernancePolicyPacksAreAdvisoryOnly(t *testing.T) {
@@ -553,18 +558,21 @@ func TestConfigGovernanceThresholdsRoundTrip(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Governance = ConfigGovernance{
 		Thresholds: ConfigGovernanceThresholds{
-			WorktreeBlastRadius: SignalLevelMedium,
+			SecurityReviewBlastRadius: SignalLevelMedium,
+			WorktreeBlastRadius:       SignalLevelMedium,
 		},
 	}
 
 	out, err := cfg.ToYAML()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "governance:")
+	assert.Contains(t, string(out), "security_review_blast_radius: medium")
 	assert.Contains(t, string(out), "worktree_blast_radius: medium")
 
 	// Re-parse and verify thresholds survive.
 	cfg2, err := ParseConfigYAML(out)
 	require.NoError(t, err)
+	assert.Equal(t, SignalLevelMedium, cfg2.Governance.Thresholds.SecurityReviewBlastRadius)
 	assert.Equal(t, SignalLevelMedium, cfg2.Governance.Thresholds.WorktreeBlastRadius)
 }
 
@@ -575,6 +583,7 @@ func TestConfigGovernanceThresholdsOnlyRoundTrip(t *testing.T) {
 	cfg.Governance = ConfigGovernance{
 		Thresholds: ConfigGovernanceThresholds{
 			IndependentReviewBlastRadius: SignalLevelMedium,
+			SecurityReviewBlastRadius:    SignalLevelHigh,
 			WorktreeBlastRadius:          SignalLevelLow,
 		},
 	}
@@ -586,6 +595,7 @@ func TestConfigGovernanceThresholdsOnlyRoundTrip(t *testing.T) {
 	cfg2, err := ParseConfigYAML(out)
 	require.NoError(t, err)
 	assert.Equal(t, SignalLevelMedium, cfg2.Governance.Thresholds.IndependentReviewBlastRadius)
+	assert.Equal(t, SignalLevelHigh, cfg2.Governance.Thresholds.SecurityReviewBlastRadius)
 	assert.Equal(t, SignalLevelLow, cfg2.Governance.Thresholds.WorktreeBlastRadius)
 }
 
@@ -611,11 +621,13 @@ defaults:
 governance:
   thresholds:
     worktree_blast_radius: medium
+    security_review_blast_radius: high
     independent_review_blast_radius: low
 `)
 	cfg, err := ParseConfigYAML(raw)
 	require.NoError(t, err)
 	assert.Equal(t, SignalLevelMedium, cfg.Governance.Thresholds.WorktreeBlastRadius)
+	assert.Equal(t, SignalLevelHigh, cfg.Governance.Thresholds.SecurityReviewBlastRadius)
 	assert.Equal(t, SignalLevelLow, cfg.Governance.Thresholds.IndependentReviewBlastRadius)
 }
 

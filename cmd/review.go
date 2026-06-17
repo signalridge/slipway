@@ -20,19 +20,20 @@ type reviewOptions struct {
 }
 
 type reviewView struct {
-	Slug               string                    `json:"slug"`
-	ExecutionMode      string                    `json:"execution_mode"`
-	QualityMode        string                    `json:"quality_mode,omitempty"`
-	NeedsDiscovery     bool                      `json:"needs_discovery,omitempty"`
-	CurrentState       string                    `json:"current_state"`
-	Verdict            string                    `json:"verdict"`
-	Mode               string                    `json:"mode,omitempty"`
-	HydrateReferences  []string                  `json:"hydrate_references,omitempty"`
-	ArtifactAmendments []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
-	ScopeContract      *scopeContractView        `json:"scope_contract,omitempty"`
-	Blockers           []model.ReasonCode        `json:"blockers,omitempty"`
-	Waves              []reviewWaveView          `json:"waves,omitempty"`
-	Gaps               *reviewGaps               `json:"gaps,omitempty"`
+	Slug                 string                    `json:"slug"`
+	ExecutionMode        string                    `json:"execution_mode"`
+	QualityMode          string                    `json:"quality_mode,omitempty"`
+	NeedsDiscovery       bool                      `json:"needs_discovery,omitempty"`
+	CurrentState         string                    `json:"current_state"`
+	Verdict              string                    `json:"verdict"`
+	Mode                 string                    `json:"mode,omitempty"`
+	HydrateReferences    []string                  `json:"hydrate_references,omitempty"`
+	ArtifactAmendments   []artifact.AmendmentEvent `json:"artifact_amendments,omitempty"`
+	ScopeContract        *scopeContractView        `json:"scope_contract,omitempty"`
+	SelectedReviewSkills []string                  `json:"selected_review_skills,omitempty"`
+	Blockers             []model.ReasonCode        `json:"blockers,omitempty"`
+	Waves                []reviewWaveView          `json:"waves,omitempty"`
+	Gaps                 *reviewGaps               `json:"gaps,omitempty"`
 }
 
 type reviewGaps struct {
@@ -234,18 +235,19 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 
 	profile := buildChangeProfileView(change)
 	view := reviewView{
-		Slug:              slug,
-		ExecutionMode:     governedExecutionMode,
-		QualityMode:       profile.QualityMode,
-		NeedsDiscovery:    profile.NeedsDiscovery,
-		CurrentState:      string(change.CurrentState),
-		Verdict:           verdict,
-		Mode:              effectiveMode,
-		HydrateReferences: hydrateKeys,
-		ScopeContract:     buildScopeContractView(readiness.ScopeContract),
-		Blockers:          blockers,
-		Waves:             waveViews,
-		Gaps:              classifyReviewGaps(blockers),
+		Slug:                 slug,
+		ExecutionMode:        governedExecutionMode,
+		QualityMode:          profile.QualityMode,
+		NeedsDiscovery:       profile.NeedsDiscovery,
+		CurrentState:         string(change.CurrentState),
+		Verdict:              verdict,
+		Mode:                 effectiveMode,
+		HydrateReferences:    hydrateKeys,
+		ScopeContract:        buildScopeContractView(readiness.ScopeContract),
+		SelectedReviewSkills: selectedReviewSkillsFromReadiness(readiness),
+		Blockers:             blockers,
+		Waves:                waveViews,
+		Gaps:                 classifyReviewGaps(blockers),
 	}
 	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)

@@ -65,21 +65,64 @@ verdict; the engine remains the sole timestamp and run-version stamper.
 
 | Token | Attests | Enforced | Recovery when the gate fails closed |
 | --- | --- | --- | --- |
-| `review_origin:skill=<skill>=<handle>` on spec-compliance-review and code-quality-review | each review ran under a distinct per-review context; the two handles must be present and distinct | standard/strict error, light advisory | re-run both reviews under fresh, separately-labelled contexts and re-record via the spec-compliance-review and code-quality-review skills |
+| `context_origin:stage=<stage>=<handle>` across the chain participants, with selected S3 reviewers all using `stage=review` | each owned seam's participants ran under distinct contexts on the shared worktree; selected reviewers are keyed by skill name and must be pairwise distinct | standard/strict error, light advisory | re-run the owning stage or selected reviewer in a fresh native subagent so it re-emits a distinct `context_origin` handle |
 | `closeout:reviewer_independence=pass` on final-closeout | the closeout independence attestation the engine previously ignored is now present (Pattern-A) | standard/strict error, light advisory | re-run **final-closeout** and record the token |
-| chain ordering `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)` (always-on, no token) | the four independence-critical verdicts were stamped in order, independent of the opt-in reuse token | standard/strict error, light advisory | re-stamp in order via the reviews, then **goal-verification**, then **final-closeout** (distinct `closeout_chain_order_invalid` code, not the reuse code) |
+| chain ordering `closeout >= goal-verification >= every selected review verdict` (always-on, no token) | all selected review verdicts, goal verification, and final closeout were stamped in order, independent of the opt-in reuse token | standard/strict error, light advisory | re-stamp the stale selected reviewer, then **goal-verification**, then **final-closeout** (distinct `closeout_chain_order_invalid` code, not the reuse code) |
 | `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` on wave-orchestration | a `degraded_sequential` dispatch was paired with a genuine tool-unavailable justification | standard/strict error, light advisory | re-record wave-orchestration evidence with the justification reference, or re-run the wave with real concurrent dispatch |
 
 A bare `degraded_sequential` with no paired justification is rejected on every
 path that synchronizes governed wave execution, including the
 `slipway evidence skill` path — not only advance/next.
 
-The `review_origin` handle gate is **audit/structural tier**: the handles are
-host-emitted strings, so it raises the cost and auditability of collapsing four
-verdicts into one authoring context but is not cryptographic proof. Genuine
+`context_origin:stage=<stage>=<handle>` is one chain-wide grammar that spans the
+whole governed chain. The S3 selected review set is the mandatory spec, code, and
+independent reviewers, plus the security reviewer when the engine-derived
+security control selects it. All selected review hosts emit
+`context_origin:stage=review=<handle>`; the R2 lattice keys each review
+participant by skill name, not by the shared `review` stage. The other
+participants are the S2 wave `executor`, the S1 plan-audit `audit_origin` (paired
+against the plan's `plan_origin` author), `goal`, and `closeout`. The collision
+lattice is owned per seam, so each edge is checked exactly once:
+
+| Seam | Owns | Edges |
+| --- | --- | --- |
+| Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
+| Review authority | every edge among `{executor, audit_origin}` plus the selected review-skill keys | variable: mandatory set has 10, selected security expands it to 15 |
+| Ship authority | every edge introducing `{goal, closeout}` to that selected review base | variable: mandatory set adds 11, selected security expands it to 13 |
+
+When a seam fails closed, re-run its owning stage or selected reviewer in a fresh
+native subagent so the stage re-emits a distinct `context_origin` handle; the
+engine remains the sole verdict stamper and never restamps the collapsed handle.
+
+The `context_origin` lattice is **audit/structural tier**: the handles are
+host-emitted strings — the same structural tier as the executor-dispatch
+handles — so it raises the cost and auditability of collapsing chain stages into
+one authoring context but is never cryptographic proof of independence. Genuine
 non-forgeable distinct-context discrimination (an engine-issued per-stage nonce or
 lifecycle-event boundary, "Option B") is infeasible within this change's
 constraints, so no gate here is oversold as cryptographic distinct-context proof.
+
+## S3 Review Dispatch
+
+At `S3_REVIEW` the engine dispatches one selected review set from a single fan-out
+point. The mandatory reviewers are spec, code, and independent review; the
+security reviewer joins the set only when the engine-derived security control is
+selected. `slipway next` exposes the selected set, and the host fans those
+reviewers out as concurrent native subagents. Any conventional single primary
+skill is only a compatibility projection for surfaces that truly need one; it
+does not imply review ordering.
+
+Selected reviewers are **unordered peers**: none blocks another, and requiredness,
+review authority, ship authority, and stale-evidence recovery all consume the
+same selected set. Every selected reviewer records
+`context_origin:stage=review=<handle>` with its own distinct handle. The R2
+lattice compares those handles under skill-name participant keys, so duplicate
+reviewer handles fail closed even though the wire token's stage label is shared.
+Missing selected reviewer evidence is owned by required-skill blockers; a passing
+selected review record with no well-formed `stage=review` handle fails closed
+with `context_origin_handle_invalid`; collisions fail with
+`cross_stage_context_not_distinct`. Unselected security evidence on disk is
+silent and never becomes a hidden participant.
 
 ## Read-Only Surfaces
 

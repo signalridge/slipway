@@ -92,7 +92,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if err := validateEvidenceSkillStage(change, def); err != nil {
+				if err := validateEvidenceSkillStage(root, change, def); err != nil {
 					return err
 				}
 
@@ -346,7 +346,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return err
 				}
 				if change.CurrentState != model.StateS2Execute {
-					remediation := evidenceTaskWrongStateRemediation(change.CurrentState)
+					remediation := evidenceTaskWrongStateRemediation(root, change)
 					return newInvalidUsageError(
 						"evidence_task_wrong_state",
 						fmt.Sprintf("task evidence requires S2_EXECUTE state, current: %s", change.CurrentState),
@@ -762,7 +762,7 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 	return runVersion, nil
 }
 
-func validateEvidenceSkillStage(change model.Change, def skill.Definition) error {
+func validateEvidenceSkillStage(root string, change model.Change, def skill.Definition) error {
 	if def.DiscoveryOnly && !change.NeedsDiscovery {
 		return newInvalidUsageError(
 			"evidence_skill_not_applicable",
@@ -775,7 +775,7 @@ func validateEvidenceSkillStage(change model.Change, def skill.Definition) error
 		return newInvalidUsageError(
 			"evidence_skill_wrong_state",
 			fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
-			evidenceSkillWrongStateRemediation(change.CurrentState, def),
+			evidenceSkillWrongStateRemediation(root, change, def),
 			map[string]any{
 				"skill":          def.Name,
 				"expected":       def.State,
@@ -804,10 +804,10 @@ func validateEvidenceSkillStage(change model.Change, def skill.Definition) error
 	return nil
 }
 
-func evidenceTaskWrongStateRemediation(current model.WorkflowState) string {
-	switch current {
+func evidenceTaskWrongStateRemediation(root string, change model.Change) string {
+	switch change.CurrentState {
 	case model.StateS3Review:
-		return postReviewReplacementEvidenceRemediation("task evidence")
+		return postReviewReplacementEvidenceRemediation(root, change, "task evidence")
 	case model.StateS4Verify:
 		return s4ReplacementEvidenceRemediation("task evidence")
 	default:
@@ -815,11 +815,11 @@ func evidenceTaskWrongStateRemediation(current model.WorkflowState) string {
 	}
 }
 
-func evidenceSkillWrongStateRemediation(current model.WorkflowState, def skill.Definition) string {
-	switch current {
+func evidenceSkillWrongStateRemediation(root string, change model.Change, def skill.Definition) string {
+	switch change.CurrentState {
 	case model.StateS3Review:
 		if def.State == model.StateS2Execute {
-			return postReviewReplacementEvidenceRemediation(def.Name + " evidence")
+			return postReviewReplacementEvidenceRemediation(root, change, def.Name+" evidence")
 		}
 	case model.StateS4Verify:
 		if def.State == model.StateS2Execute || def.State == model.StateS3Review {
@@ -829,15 +829,25 @@ func evidenceSkillWrongStateRemediation(current model.WorkflowState, def skill.D
 	return fmt.Sprintf("Run the lifecycle to %s before recording %s evidence.", def.State, def.Name)
 }
 
-func postReviewReplacementEvidenceRemediation(surface string) string {
+func postReviewReplacementEvidenceRemediation(root string, change model.Change, surface string) string {
+	reviewSkills := selectedReviewSkillsForRemediation(root, change)
 	return fmt.Sprintf(
-		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof in %s and %s evidence, then rerun %s and %s.",
+		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof for %s evidence, then rerun %s and %s.",
 		surface,
-		progression.SkillSpecComplianceReview,
-		progression.SkillCodeQualityReview,
+		strings.Join(reviewSkills, ", "),
 		progression.SkillGoalVerification,
 		progression.SkillFinalCloseout,
 	)
+}
+
+func selectedReviewSkillsForRemediation(root string, change model.Change) []string {
+	if strings.TrimSpace(root) != "" {
+		_, selected, err := selectedReviewSkillsForChange(root, change)
+		if err == nil && len(selected) > 0 {
+			return selected
+		}
+	}
+	return skill.SelectedReviewSkills(skill.ReviewSkillSelection{})
 }
 
 func s4ReplacementEvidenceRemediation(surface string) string {
@@ -1056,6 +1066,34 @@ func restoreVerificationSuffix(err error) string {
 }
 
 func validateEvidenceSkillActionable(root string, change model.Change, def skill.Definition, runVersion int) error {
+	if change.CurrentState == model.StateS3Review {
+		reviewSelection, selectedReviewSkills, err := selectedReviewSkillsForChange(root, change)
+		if err != nil {
+			return err
+		}
+		if !stringInSlice(selectedReviewSkills, def.Name) {
+			return newInvalidUsageError(
+				"evidence_skill_not_current",
+				fmt.Sprintf("skill %s is not currently recordable", def.Name),
+				"Run `slipway next --json` and record evidence only for a selected review skill.",
+				map[string]any{"skill": def.Name},
+			)
+		}
+		passing, err := currentPassingEvidenceSkillsWithReviewSelection(root, change, model.StateS3Review, runVersion, reviewSelection)
+		if err != nil {
+			return err
+		}
+		if _, ok := passing[def.Name]; ok {
+			return newInvalidUsageError(
+				"evidence_skill_not_current",
+				fmt.Sprintf("skill %s already has passing evidence for the current review set", def.Name),
+				"Run `slipway next --json` and record evidence only for a selected review skill that is still missing or stale.",
+				map[string]any{"skill": def.Name},
+			)
+		}
+		return nil
+	}
+
 	actionable, err := currentActionableEvidenceSkill(root, change, runVersion)
 	if err != nil {
 		return err
@@ -1085,16 +1123,17 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 func currentActionableEvidenceSkill(root string, change model.Change, runVersion int) (string, error) {
 	switch change.CurrentState {
 	case model.StateS3Review:
-		passing, err := currentPassingEvidenceSkills(root, change, model.StateS3Review, runVersion)
+		reviewSelection, selectedReviewSkills, err := selectedReviewSkillsForChange(root, change)
 		if err != nil {
 			return "", err
 		}
-		if _, ok := passing[progression.SkillSpecComplianceReview]; !ok {
-			return progression.SkillSpecComplianceReview, nil
+		passing, err := currentPassingEvidenceSkillsWithReviewSelection(root, change, model.StateS3Review, runVersion, reviewSelection)
+		if err != nil {
+			return "", err
 		}
-		if change.EffectiveWorkflowProfile().RequiresCodeQualityReview() {
-			if _, ok := passing[progression.SkillCodeQualityReview]; !ok {
-				return progression.SkillCodeQualityReview, nil
+		for _, skillName := range selectedReviewSkills {
+			if _, ok := passing[skillName]; !ok {
+				return skillName, nil
 			}
 		}
 		return "", nil
@@ -1117,7 +1156,10 @@ func currentActionableEvidenceSkill(root string, change model.Change, runVersion
 		}
 		return "", nil
 	default:
-		nextSkill, _ := progression.ResolveNextSkill(change)
+		// S3_REVIEW and S4_VERIFY are handled by explicit cases above; the
+		// remaining states resolve a single skill, so the conventional primary
+		// is the full skill set here.
+		nextSkill, _ := progression.PrimaryNextSkill(change)
 		if nextSkill == progression.SkillWorktreePreflight {
 			return "", nil
 		}
@@ -1131,16 +1173,46 @@ func currentPassingEvidenceSkills(
 	workflowState model.WorkflowState,
 	runVersion int,
 ) (map[string]model.VerificationRecord, error) {
+	return currentPassingEvidenceSkillsWithReviewSelection(
+		root,
+		change,
+		workflowState,
+		runVersion,
+		skill.ReviewSkillSelection{},
+	)
+}
+
+func currentPassingEvidenceSkillsWithReviewSelection(
+	root string,
+	change model.Change,
+	workflowState model.WorkflowState,
+	runVersion int,
+	reviewSelection skill.ReviewSkillSelection,
+) (map[string]model.VerificationRecord, error) {
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
 		return nil, err
 	}
-	passing, _, err := progression.EvaluateRequiredSkillsForChange(
+	passing, _, err := progression.EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		change,
 		workflowState,
 		runVersion,
 		progression.FinalCloseoutEvidenceRequired(policy),
+		reviewSelection,
 	)
 	return passing, err
+}
+
+func stringInSlice(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
 }

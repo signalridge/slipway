@@ -3,6 +3,7 @@ package progression
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	reviewengine "github.com/signalridge/slipway/internal/engine/review"
+	engineskill "github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -21,12 +23,13 @@ type runtimeGovernanceInputs struct {
 }
 
 type ReviewAuthority struct {
-	Policy              governance.PresetPolicy
-	ExecutionSummaryCtx state.RelevantExecutionSummaryContext
-	PassingSkills       map[string]model.VerificationRecord
-	SkillBlockers       []model.ReasonCode
-	LayerBlockers       []model.ReasonCode
-	Blockers            []model.ReasonCode
+	Policy               governance.PresetPolicy
+	ExecutionSummaryCtx  state.RelevantExecutionSummaryContext
+	PassingSkills        map[string]model.VerificationRecord
+	SelectedReviewSkills []string
+	SkillBlockers        []model.ReasonCode
+	LayerBlockers        []model.ReasonCode
+	Blockers             []model.ReasonCode
 }
 
 type ShipAuthority struct {
@@ -78,12 +81,18 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 	if err != nil {
 		return ReviewAuthority{}, err
 	}
-	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChange(
+	reviewSelection, err := reviewSkillSelectionForAuthority(root, change)
+	if err != nil {
+		return ReviewAuthority{}, err
+	}
+	selectedReviewSkills := engineskill.SelectedReviewSkills(reviewSelection)
+	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		change,
 		model.StateS3Review,
 		executionSummaryCtx.LatestRunVersion,
 		policy.CloseoutRefreshRequired,
+		reviewSelection,
 	)
 	if err != nil {
 		return ReviewAuthority{}, err
@@ -101,17 +110,37 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		blockers = append(blockers, layerBlockers...)
 	}
 	blockers = append(blockers, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)...)
-	blockers = append(blockers, reviewOriginHandleBlockers(passingSkills, policy.EffectivePreset != model.WorkflowPresetLight)...)
+	blockers = append(blockers, crossStageContextDistinctBlockers(
+		root,
+		change,
+		passingSkills,
+		crossStageContextReviewStagesForSelectedSkills(selectedReviewSkills),
+		crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills),
+		policy.EffectivePreset != model.WorkflowPresetLight,
+	)...)
 	blockers = model.NormalizeReasonCodes(blockers)
 
 	return ReviewAuthority{
-		Policy:              policy,
-		ExecutionSummaryCtx: executionSummaryCtx,
-		PassingSkills:       passingSkills,
-		SkillBlockers:       model.ReasonCodesFromSpecs(skillBlockers),
-		LayerBlockers:       model.NormalizeReasonCodes(layerBlockers),
-		Blockers:            blockers,
+		Policy:               policy,
+		ExecutionSummaryCtx:  executionSummaryCtx,
+		PassingSkills:        passingSkills,
+		SelectedReviewSkills: selectedReviewSkills,
+		SkillBlockers:        model.ReasonCodesFromSpecs(skillBlockers),
+		LayerBlockers:        model.NormalizeReasonCodes(layerBlockers),
+		Blockers:             blockers,
 	}, nil
+}
+
+func reviewSkillSelectionForAuthority(root string, change model.Change) (engineskill.ReviewSkillSelection, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return engineskill.ReviewSkillSelection{}, err
+	}
+	snap, err := previewGovernanceSnapshotForReadiness(root, change, paths.GovernedBundleDir)
+	if err != nil {
+		return engineskill.ReviewSkillSelection{}, err
+	}
+	return ReviewSkillSelectionFromControls(snap.ActiveControls), nil
 }
 
 func EvaluateShipAuthority(root string, change model.Change) (ShipAuthority, error) {
@@ -159,12 +188,33 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	// advisory (omitted) on light.
 	independenceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
 	independencePresenceBlockers := closeoutReviewerIndependenceBlockers(verifyPassingSkills, independenceRequired)
-	chainOrderBlockers := closeoutChainOrderBlockers(verifyPassingSkills, reviewAuthority.PassingSkills, independenceRequired)
+	selectedReviewSkills := selectedReviewSkillsForAuthority(reviewAuthority)
+	chainOrderBlockers := closeoutChainOrderBlockers(
+		verifyPassingSkills,
+		reviewAuthority.PassingSkills,
+		selectedReviewSkills,
+		independenceRequired,
+	)
+	// Ship owns the goal/closeout edges of the cross-stage distinct-context
+	// lattice. It re-loads the base review participants (executor, audit_origin,
+	// and selected reviewer skill names) and adds goal + closeout, but owns only
+	// the goal/closeout stages, so review-owned edges do not re-fire here. Review
+	// handles are read from the review authority's passing records, the same
+	// surface the review gate used.
+	shipContextBlockers := crossStageContextDistinctBlockers(
+		root,
+		change,
+		mergeContextHandleRecords(reviewAuthority.PassingSkills, verifyPassingSkills),
+		crossStageContextShipStagesForSelectedSkills(selectedReviewSkills),
+		crossStageContextOwnedShipStages,
+		independenceRequired,
+	)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, attestationBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, reuseBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, independencePresenceBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, chainOrderBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, shipContextBlockers...)
 
 	manifestOK, manifestBlockers := ValidateChangeYamlR0(
 		filepath.Join(inputs.Paths.GovernedBundleDir, "change.yaml"),
@@ -189,6 +239,7 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	unresolved = append(unresolved, reuseBlockers...)
 	unresolved = append(unresolved, independencePresenceBlockers...)
 	unresolved = append(unresolved, chainOrderBlockers...)
+	unresolved = append(unresolved, shipContextBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
@@ -377,17 +428,18 @@ func closeoutReviewerIndependenceMissingBlocker() model.ReasonCode {
 }
 
 // closeoutChainOrderBlockers enforces the always-on P1 cross-stage ordering
-// invariant closeout >= goal-verification >= max(spec-compliance-review,
-// code-quality-review) across the independence-critical verdicts (REQ-001). It is
-// independent of the opt-in closeout:goal_verification_reuse=pass token and
-// carries its own distinct reason code closeout_chain_order_invalid (never folded
-// into closeout_goal_verification_reuse_invalid). Each pair is compared only when
-// BOTH records are present, passing, and carry a non-zero timestamp; a genuinely
+// invariant closeout >= goal-verification >= max(selected review evidence)
+// across the independence-critical verdicts (REQ-001). It is independent of the
+// opt-in closeout:goal_verification_reuse=pass token and carries its own distinct
+// reason code closeout_chain_order_invalid (never folded into
+// closeout_goal_verification_reuse_invalid). Each pair is compared only when BOTH
+// records are present, passing, and carry a non-zero timestamp; a genuinely
 // absent record is owned by the required-skill-missing blocker, so this gate does
 // not double-fire on absence. Advisory (returns nil) on light.
 func closeoutChainOrderBlockers(
 	passingSkills map[string]model.VerificationRecord,
 	reviewPassingSkills map[string]model.VerificationRecord,
+	selectedReviewSkills []string,
 	required bool,
 ) []model.ReasonCode {
 	if !required {
@@ -403,7 +455,7 @@ func closeoutChainOrderBlockers(
 
 	// review <= goal: each present, passing, non-zero review verdict must not be
 	// stamped after goal-verification.
-	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
+	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
 		reviewRecord, ok := reviewPassingSkills[skillName]
 		if !ok || !reviewRecord.IsPassing() || reviewRecord.Timestamp.IsZero() {
 			continue
@@ -432,54 +484,278 @@ func closeoutChainOrderInvalidBlocker(detail string) model.ReasonCode {
 	return model.NewReasonCode("closeout_chain_order_invalid", appendS4VerificationRecovery(detail))
 }
 
-// reviewOriginHandleBlockers enforces the P2 distinct-context handle contract
-// (REQ-002). On standard/strict each of spec-compliance-review and
-// code-quality-review that is present and passing must record a well-formed
-// review_origin handle for that same skill, and the two handles must differ. A
-// missing/ambiguous/mis-scoped handle on a present-passing review, or two
-// identical handles across the pair, fails closed. Absent or non-passing review
-// records are owned by the
-// required-skill-missing blocker and are skipped here. The two reviews are
-// unordered peers; this gate imposes no ordering. Advisory (returns nil) on light.
-func reviewOriginHandleBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
-	if !required {
-		return nil
+// crossStageContextOwnedReviewStagesForSelectedSkills is the set of lattice
+// stages the review authority owns: the executor handle set, the plan auditor,
+// and each selected review skill by skill name. CrossStageContextCollisions
+// keeps an edge only when at least one endpoint is owned, so the review gate
+// fires the selected reviewer/executor/audit-origin edges without re-owning the
+// plan author/auditor self-audit edge (owned by the plan gate) or the
+// goal/closeout edges (owned by the ship gate).
+func crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills []string) map[string]struct{} {
+	stages := map[string]struct{}{
+		model.StageContextExecutor:    {},
+		model.StageContextAuditOrigin: {},
 	}
-	handles := make(map[string]model.ReviewOriginHandle, 2)
-	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
+	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
+		stages[skillName] = struct{}{}
+	}
+	return stages
+}
+
+// crossStageContextOwnedShipStages is the set of lattice stages the ship
+// authority newly owns: goal-verification and final-closeout. The same base
+// participant set is re-loaded plus these two stages; owning exactly goal +
+// closeout adds only the edges those two stages introduce without double-firing
+// review-owned edges, which carry no owned endpoint here.
+var crossStageContextOwnedShipStages = map[string]struct{}{
+	model.StageContextGoal:     {},
+	model.StageContextCloseout: {},
+}
+
+// crossStageContextStageHandleSkill maps a single-handle lattice stage to the
+// skill whose passing verification record carries its context-origin handle.
+// executor is excluded (it is a handle set sourced from the wave record);
+// audit_origin is excluded (it rides the plan-audit record's audit_origin token,
+// not a context_origin:stage= token).
+var crossStageContextStageHandleSkill = map[string]string{
+	model.StageContextGoal:     SkillGoalVerification,
+	model.StageContextCloseout: SkillFinalCloseout,
+}
+
+// crossStageContextParticipants builds the lattice participants for the requested
+// single-handle stages plus the executor handle set and the plan auditor handle.
+// Only present-and-passing records contribute a participant; an absent or
+// non-passing record contributes nothing and is silent (its absence is owned by
+// the required-skill-missing blocker, not this gate). A present-passing record
+// that yields no well-formed context-origin handle fails closed with
+// context_origin_handle_invalid. The returned invalid blockers, when non-empty,
+// short-circuit collision evaluation in the caller.
+func crossStageContextParticipants(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	stages map[string]struct{},
+) (map[string]model.ContextParticipant, []model.ReasonCode) {
+	participants := map[string]model.ContextParticipant{}
+	var invalid []model.ReasonCode
+
+	// executor <- S2 wave-orchestration record, flattened to a handle set. The
+	// wave record is the executor stage's evidence; a present-passing wave record
+	// with no executor handles yields an empty set, which collides with nothing
+	// and is treated as silent rather than invalid (per-task executor handles are
+	// owned by the executor_agent_missing gate, not this lattice).
+	if _, want := stages[model.StageContextExecutor]; want {
+		if waveRecord, ok, err := LatestPassingWaveEvidence(root, change.Slug); err == nil && ok {
+			set := model.ExecutorParticipantHandleSetFromVerification(waveRecord)
+			if len(set) > 0 {
+				participants[model.StageContextExecutor] = model.ContextParticipant{HandleSet: set}
+			}
+		}
+	}
+
+	// audit_origin <- S1 plan-audit record's audit_origin handle. A present
+	// plan-audit record with no well-formed audit_origin handle fails closed.
+	if _, want := stages[model.StageContextAuditOrigin]; want {
+		if record, ok := loadPresentPassingVerification(root, change.Slug, SkillPlanAudit); ok {
+			handle, ok := model.AuditOriginHandleFromVerification(record)
+			if !ok {
+				invalid = append(invalid, contextOriginHandleInvalidBlocker(
+					SkillPlanAudit+" ("+model.StageContextAuditOrigin+") recorded no well-formed context-origin handle",
+				))
+			} else {
+				participants[model.StageContextAuditOrigin] = model.ContextParticipant{Handle: handle.Handle}
+			}
+		}
+	}
+
+	// Selected review skills <- each selected reviewer's passing record, parsed
+	// for context_origin:stage=review=<handle>. The participant key is the skill
+	// name, not the shared "review" stage label, so peer reviewers can collide
+	// with each other deterministically.
+	for _, skillName := range reviewParticipantSkillNames(stages) {
 		record, ok := passingSkills[skillName]
 		if !ok || !record.IsPassing() {
 			continue
 		}
-		handle, ok := model.ReviewOriginHandleFromVerification(record)
+		handle, ok := model.ReviewContextOriginHandleFromVerification(record)
 		if !ok {
-			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
-				skillName + " must record a distinct review_origin handle",
-			)}
+			invalid = append(invalid, contextOriginHandleInvalidBlocker(
+				skillName+" ("+model.StageContextReview+") recorded no context-origin handle for selected reviewer",
+			))
+			continue
 		}
-		if handle.Skill != skillName {
-			detail := skillName + " must record review_origin:skill=" + skillName +
-				"=<handle>, got review_origin:skill=" + handle.Skill
-			return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
-				detail,
-			)}
+		participants[skillName] = model.ContextParticipant{Handle: handle.Handle}
+	}
+
+	// Single-handle verification/closeout stages <- each owning skill's passing
+	// record, parsed for its self-describing context_origin:stage= handle.
+	for _, stage := range []string{
+		model.StageContextGoal,
+		model.StageContextCloseout,
+	} {
+		if _, want := stages[stage]; !want {
+			continue
 		}
-		handles[skillName] = handle
+		skillName := crossStageContextStageHandleSkill[stage]
+		record, ok := passingSkills[skillName]
+		if !ok || !record.IsPassing() {
+			continue
+		}
+		handles, ok := model.ContextOriginHandlesFromVerification(record)
+		if !ok {
+			invalid = append(invalid, contextOriginHandleInvalidBlocker(
+				skillName+" ("+stage+") recorded no well-formed context-origin handle",
+			))
+			continue
+		}
+		handle, ok := handles[stage]
+		if !ok || strings.TrimSpace(handle.Handle) == "" {
+			invalid = append(invalid, contextOriginHandleInvalidBlocker(
+				skillName+" ("+stage+") recorded no context-origin handle for stage "+stage,
+			))
+			continue
+		}
+		participants[stage] = model.ContextParticipant{Handle: handle.Handle}
 	}
-	specHandle, hasSpec := handles[SkillSpecComplianceReview]
-	codeHandle, hasCode := handles[SkillCodeQualityReview]
-	if hasSpec && hasCode && specHandle.Handle == codeHandle.Handle {
-		return []model.ReasonCode{reviewOriginHandleInvalidBlocker(
-			"spec-compliance-review and code-quality-review recorded identical review_origin handles",
-		)}
-	}
-	return nil
+
+	return participants, model.NormalizeReasonCodes(invalid)
 }
 
-func reviewOriginHandleInvalidBlocker(detail string) model.ReasonCode {
+// mergeContextHandleRecords overlays the verify-stage passing records (goal,
+// closeout) onto the review-stage passing records so the ship lattice can
+// resolve every single-handle stage from one map. The review records are the
+// selected-reviewer source the review gate already used; the verify records win
+// on key collision since they are the ship gate's own surface.
+func mergeContextHandleRecords(
+	reviewPassingSkills map[string]model.VerificationRecord,
+	verifyPassingSkills map[string]model.VerificationRecord,
+) map[string]model.VerificationRecord {
+	merged := make(map[string]model.VerificationRecord, len(reviewPassingSkills)+len(verifyPassingSkills))
+	for skillName, record := range reviewPassingSkills {
+		merged[skillName] = record
+	}
+	for skillName, record := range verifyPassingSkills {
+		merged[skillName] = record
+	}
+	return merged
+}
+
+func loadPresentPassingVerification(root, slug, skillName string) (model.VerificationRecord, bool) {
+	record, err := state.LoadVerification(root, slug, skillName)
+	if err != nil {
+		// An absent record (or any load failure) contributes no participant and is
+		// silent here; record presence/freshness is owned by the
+		// required-skill-missing and digest gates, not the distinct-context lattice.
+		return model.VerificationRecord{}, false
+	}
+	if !record.IsPassing() {
+		return model.VerificationRecord{}, false
+	}
+	return record, true
+}
+
+// crossStageContextDistinctBlockers enforces the generalized P2 distinct-context
+// lattice (REQ-002). It builds the lattice participants for the requested stages,
+// fails closed with context_origin_handle_invalid for any present-passing record
+// that lacks a well-formed handle, and otherwise emits one
+// cross_stage_context_not_distinct blocker per colliding stage pair that has an
+// owned endpoint. Advisory (returns nil) on light.
+func crossStageContextDistinctBlockers(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	stages map[string]struct{},
+	ownedStages map[string]struct{},
+	required bool,
+) []model.ReasonCode {
+	if !required {
+		return nil
+	}
+	participants, invalid := crossStageContextParticipants(root, change, passingSkills, stages)
+	if len(invalid) > 0 {
+		// A malformed handle makes the distinctness comparison meaningless; fail
+		// closed on the invalid-handle code rather than emit a misleading collision.
+		return invalid
+	}
+	collisions := model.CrossStageContextCollisions(participants, ownedStages)
+	if len(collisions) == 0 {
+		return nil
+	}
+	blockers := make([]model.ReasonCode, 0, len(collisions))
+	for _, pair := range collisions {
+		blockers = append(blockers, crossStageContextNotDistinctBlocker(pair[0]+"|"+pair[1]))
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// crossStageContextReviewStagesForSelectedSkills is the participant set both
+// review and ship load: executor, audit_origin, and the selected reviewer skill
+// names. It mirrors the review-owned stage set exactly; the ship gate adds goal
+// + closeout to this base before evaluating its own edges.
+func crossStageContextReviewStagesForSelectedSkills(selectedReviewSkills []string) map[string]struct{} {
+	return crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills)
+}
+
+func crossStageContextShipStagesForSelectedSkills(selectedReviewSkills []string) map[string]struct{} {
+	stages := crossStageContextReviewStagesForSelectedSkills(selectedReviewSkills)
+	stages[model.StageContextGoal] = struct{}{}
+	stages[model.StageContextCloseout] = struct{}{}
+	return stages
+}
+
+func selectedReviewSkillsForAuthority(authority ReviewAuthority) []string {
+	if len(authority.SelectedReviewSkills) > 0 {
+		return normalizeReviewSkillNames(authority.SelectedReviewSkills)
+	}
+	return engineskill.SelectedReviewSkills(engineskill.ReviewSkillSelection{})
+}
+
+func normalizeReviewSkillNames(skillNames []string) []string {
+	if len(skillNames) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(skillNames))
+	for _, skillName := range skillNames {
+		trimmed := strings.TrimSpace(skillName)
+		if trimmed == "" || !engineskill.IsReviewSkill(trimmed) {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	slices.Sort(normalized)
+	return normalized
+}
+
+func reviewParticipantSkillNames(stages map[string]struct{}) []string {
+	if len(stages) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(stages))
+	for stage := range stages {
+		if engineskill.IsReviewSkill(stage) {
+			names = append(names, stage)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func contextOriginHandleInvalidBlocker(detail string) model.ReasonCode {
 	return model.NewReasonCode(
-		"review_origin_handle_invalid",
-		strings.TrimSpace(detail)+"; re-record distinct review-context evidence per review",
+		"context_origin_handle_invalid",
+		strings.TrimSpace(detail)+"; re-run the owning stage in a fresh native subagent so it records a valid context-origin handle",
+	)
+}
+
+func crossStageContextNotDistinctBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode(
+		"cross_stage_context_not_distinct",
+		strings.TrimSpace(detail),
 	)
 }
 

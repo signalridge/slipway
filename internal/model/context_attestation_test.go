@@ -7,42 +7,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReviewOriginHandleFromVerification(t *testing.T) {
+func TestContextOriginHandlesFromVerification(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		record     VerificationRecord
-		wantOK     bool
-		wantSkill  string
-		wantHandle string
+		name   string
+		record VerificationRecord
+		wantOK bool
+		want   map[string]string
 	}{
 		{
 			name: "valid single token",
 			record: VerificationRecord{
-				References: []string{"review_origin:skill=spec-compliance-review=ctx-abc"},
+				References: []string{"context_origin:stage=review=ctx-abc"},
 			},
-			wantOK:     true,
-			wantSkill:  "spec-compliance-review",
-			wantHandle: "ctx-abc",
+			wantOK: true,
+			want:   map[string]string{"review": "ctx-abc"},
+		},
+		{
+			name: "multiple distinct stages",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-abc",
+					"context_origin:stage=goal=ctx-def",
+				},
+			},
+			wantOK: true,
+			want:   map[string]string{"review": "ctx-abc", "goal": "ctx-def"},
 		},
 		{
 			name: "handle containing equals splits on first only",
 			record: VerificationRecord{
-				References: []string{"review_origin:skill=code-quality-review=ctx=99"},
+				References: []string{"context_origin:stage=goal=ctx=99"},
 			},
-			wantOK:     true,
-			wantSkill:  "code-quality-review",
-			wantHandle: "ctx=99",
+			wantOK: true,
+			want:   map[string]string{"goal": "ctx=99"},
 		},
 		{
 			name: "surrounding punctuation and quotes trimmed",
 			record: VerificationRecord{
-				References: []string{"`review_origin:skill=spec-compliance-review=ctx-abc`."},
+				References: []string{"`context_origin:stage=review=ctx-abc`."},
 			},
-			wantOK:     true,
-			wantSkill:  "spec-compliance-review",
-			wantHandle: "ctx-abc",
+			wantOK: true,
+			want:   map[string]string{"review": "ctx-abc"},
 		},
 		{
 			name: "no token present",
@@ -54,21 +61,21 @@ func TestReviewOriginHandleFromVerification(t *testing.T) {
 		{
 			name: "wrong prefix",
 			record: VerificationRecord{
-				References: []string{"review_context:skill=x=y"},
+				References: []string{"review_origin:skill=x=y"},
 			},
 			wantOK: false,
 		},
 		{
 			name: "missing handle",
 			record: VerificationRecord{
-				References: []string{"review_origin:skill=spec-compliance-review="},
+				References: []string{"context_origin:stage=review="},
 			},
 			wantOK: false,
 		},
 		{
-			name: "missing skill",
+			name: "missing stage",
 			record: VerificationRecord{
-				References: []string{"review_origin:skill==ctx"},
+				References: []string{"context_origin:stage==ctx"},
 			},
 			wantOK: false,
 		},
@@ -76,20 +83,19 @@ func TestReviewOriginHandleFromVerification(t *testing.T) {
 			name: "repeated identical token is idempotent",
 			record: VerificationRecord{
 				References: []string{
-					"review_origin:skill=spec-compliance-review=ctx-abc",
-					"review_origin:skill=spec-compliance-review=ctx-abc",
+					"context_origin:stage=review=ctx-abc",
+					"context_origin:stage=review=ctx-abc",
 				},
 			},
-			wantOK:     true,
-			wantSkill:  "spec-compliance-review",
-			wantHandle: "ctx-abc",
+			wantOK: true,
+			want:   map[string]string{"review": "ctx-abc"},
 		},
 		{
-			name: "two different handles fail closed",
+			name: "two different handles for same stage fail closed",
 			record: VerificationRecord{
 				References: []string{
-					"review_origin:skill=spec-compliance-review=ctx-abc",
-					"review_origin:skill=spec-compliance-review=ctx-def",
+					"context_origin:stage=review=ctx-abc",
+					"context_origin:stage=review=ctx-def",
 				},
 			},
 			wantOK: false,
@@ -101,14 +107,378 @@ func TestReviewOriginHandleFromVerification(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := ReviewOriginHandleFromVerification(tt.record)
+			got, ok := ContextOriginHandlesFromVerification(tt.record)
 			require.Equal(t, tt.wantOK, ok)
 			if !tt.wantOK {
-				assert.Equal(t, ReviewOriginHandle{}, got)
+				assert.Nil(t, got)
 				return
 			}
-			assert.Equal(t, tt.wantSkill, got.Skill)
+			want := make(map[string]string, len(tt.want))
+			for stage, handle := range tt.want {
+				want[stage] = handle
+			}
+			gotMap := make(map[string]string, len(got))
+			for stage, h := range got {
+				assert.Equal(t, stage, h.Stage)
+				gotMap[stage] = h.Handle
+			}
+			assert.Equal(t, want, gotMap)
+		})
+	}
+}
+
+func TestPlanOriginHandleFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		record     VerificationRecord
+		wantOK     bool
+		wantHandle string
+	}{
+		{
+			name: "valid plan origin token",
+			record: VerificationRecord{
+				References: []string{"plan_origin:ctx-author"},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-author",
+		},
+		{
+			name: "surrounding punctuation trimmed",
+			record: VerificationRecord{
+				References: []string{"`plan_origin:ctx-author`."},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-author",
+		},
+		{
+			name: "handle with embedded colon preserved",
+			record: VerificationRecord{
+				References: []string{"plan_origin:ctx:author:1"},
+			},
+			wantOK:     true,
+			wantHandle: "ctx:author:1",
+		},
+		{
+			name: "no token present",
+			record: VerificationRecord{
+				References: []string{"tool:go-test"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "empty handle fails",
+			record: VerificationRecord{
+				References: []string{"plan_origin:"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "repeated identical token is idempotent",
+			record: VerificationRecord{
+				References: []string{
+					"plan_origin:ctx-author",
+					"plan_origin:ctx-author",
+				},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-author",
+		},
+		{
+			name: "two different handles fail closed",
+			record: VerificationRecord{
+				References: []string{
+					"plan_origin:ctx-author",
+					"plan_origin:ctx-other",
+				},
+			},
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := PlanOriginHandleFromVerification(tt.record)
+			require.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				assert.Equal(t, ContextOriginHandle{}, got)
+				return
+			}
+			assert.Equal(t, StageContextPlanOrigin, got.Stage)
 			assert.Equal(t, tt.wantHandle, got.Handle)
+		})
+	}
+}
+
+func TestAuditOriginHandleFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		record     VerificationRecord
+		wantOK     bool
+		wantHandle string
+	}{
+		{
+			name: "valid audit origin token",
+			record: VerificationRecord{
+				References: []string{"audit_origin:ctx-auditor"},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-auditor",
+		},
+		{
+			name: "no token present",
+			record: VerificationRecord{
+				References: []string{"plan_origin:ctx-author"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "empty handle fails",
+			record: VerificationRecord{
+				References: []string{"audit_origin:"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "two different handles fail closed",
+			record: VerificationRecord{
+				References: []string{
+					"audit_origin:ctx-auditor",
+					"audit_origin:ctx-other",
+				},
+			},
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := AuditOriginHandleFromVerification(tt.record)
+			require.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				assert.Equal(t, ContextOriginHandle{}, got)
+				return
+			}
+			assert.Equal(t, StageContextAuditOrigin, got.Stage)
+			assert.Equal(t, tt.wantHandle, got.Handle)
+		})
+	}
+}
+
+func TestReviewContextOriginHandleFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		record     VerificationRecord
+		wantOK     bool
+		wantHandle string
+	}{
+		{
+			name: "valid review origin token",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=review=ctx-reviewer"},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-reviewer",
+		},
+		{
+			name: "other context origin stages do not satisfy review origin",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=goal=ctx-goal"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "conflicting review handles fail closed",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-reviewer-a",
+					"context_origin:stage=review=ctx-reviewer-b",
+				},
+			},
+			wantOK: false,
+		},
+		{
+			name: "review handle may coexist with non-review stages",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-reviewer",
+					"context_origin:stage=goal=ctx-goal",
+				},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-reviewer",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := ReviewContextOriginHandleFromVerification(tt.record)
+			require.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				assert.Equal(t, ContextOriginHandle{}, got)
+				return
+			}
+			assert.Equal(t, StageContextReview, got.Stage)
+			assert.Equal(t, tt.wantHandle, got.Handle)
+		})
+	}
+}
+
+func TestExecutorParticipantHandleSetFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		record VerificationRecord
+		want   map[string]struct{}
+	}{
+		{
+			name: "single executor handle flattened to a set",
+			record: VerificationRecord{
+				References: []string{"executor_agent:wave=1:task=t-01:ctx-exec-a"},
+			},
+			want: map[string]struct{}{"ctx-exec-a": {}},
+		},
+		{
+			name: "distinct handles across waves and tasks deduped",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:ctx-exec-a",
+					"executor_agent:wave=1:task=t-02:ctx-exec-b",
+					"executor_agent:wave=2:task=t-03:ctx-exec-a",
+				},
+			},
+			want: map[string]struct{}{"ctx-exec-a": {}, "ctx-exec-b": {}},
+		},
+		{
+			name: "blank collapse value from conflicting handles is dropped",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:ctx-exec-a",
+					"executor_agent:wave=1:task=t-01:ctx-exec-b",
+				},
+			},
+			want: map[string]struct{}{},
+		},
+		{
+			name: "conflict drop leaves a valid sibling handle",
+			record: VerificationRecord{
+				References: []string{
+					"executor_agent:wave=1:task=t-01:ctx-exec-a",
+					"executor_agent:wave=1:task=t-01:ctx-exec-b",
+					"executor_agent:wave=1:task=t-02:ctx-exec-c",
+				},
+			},
+			want: map[string]struct{}{"ctx-exec-c": {}},
+		},
+		{
+			name: "no executor tokens yields empty set",
+			record: VerificationRecord{
+				References: []string{"tool:go-test"},
+			},
+			want: map[string]struct{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ExecutorParticipantHandleSetFromVerification(tt.record)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestCrossStageContextCollisions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		participants map[string]ContextParticipant
+		ownedStages  map[string]struct{}
+		want         [][2]string
+	}{
+		{
+			name: "two single-handle participants sharing a handle collide",
+			participants: map[string]ContextParticipant{
+				StageContextGoal:   {Handle: "ctx-shared"},
+				StageContextReview: {Handle: "ctx-shared"},
+			},
+			ownedStages: map[string]struct{}{StageContextGoal: {}, StageContextReview: {}},
+			want:        [][2]string{{StageContextGoal, StageContextReview}},
+		},
+		{
+			name: "distinct single handles do not collide",
+			participants: map[string]ContextParticipant{
+				StageContextGoal:   {Handle: "ctx-a"},
+				StageContextReview: {Handle: "ctx-b"},
+			},
+			ownedStages: map[string]struct{}{StageContextGoal: {}, StageContextReview: {}},
+			want:        nil,
+		},
+		{
+			name: "single handle inside executor set collides",
+			participants: map[string]ContextParticipant{
+				StageContextReview:   {Handle: "ctx-exec-a"},
+				StageContextExecutor: {HandleSet: map[string]struct{}{"ctx-exec-a": {}, "ctx-exec-b": {}}},
+			},
+			ownedStages: map[string]struct{}{StageContextReview: {}},
+			want:        [][2]string{{StageContextExecutor, StageContextReview}},
+		},
+		{
+			name: "single handle outside executor set does not collide",
+			participants: map[string]ContextParticipant{
+				StageContextReview:   {Handle: "ctx-fresh"},
+				StageContextExecutor: {HandleSet: map[string]struct{}{"ctx-exec-a": {}}},
+			},
+			ownedStages: map[string]struct{}{StageContextReview: {}},
+			want:        nil,
+		},
+		{
+			name: "collision on an edge with no owned endpoint is filtered out",
+			participants: map[string]ContextParticipant{
+				StageContextGoal:     {Handle: "ctx-shared"},
+				StageContextReview:   {Handle: "ctx-shared"},
+				StageContextCloseout: {Handle: "ctx-closeout"},
+			},
+			ownedStages: map[string]struct{}{StageContextCloseout: {}},
+			want:        nil,
+		},
+		{
+			name: "collision retained when one endpoint is owned",
+			participants: map[string]ContextParticipant{
+				StageContextReview:   {Handle: "ctx-shared"},
+				StageContextGoal:     {Handle: "ctx-shared"},
+				StageContextCloseout: {Handle: "ctx-closeout"},
+			},
+			ownedStages: map[string]struct{}{StageContextGoal: {}},
+			want:        [][2]string{{StageContextGoal, StageContextReview}},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := CrossStageContextCollisions(tt.participants, tt.ownedStages)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -193,6 +563,15 @@ func TestDegradedDispatchJustificationsFromVerification(t *testing.T) {
 func TestContextAttestationPrefixConstsArePinned(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "review_origin:skill=", ReviewOriginReferencePrefix)
+	assert.Equal(t, "context_origin:stage=", ContextOriginReferencePrefix)
+	assert.Equal(t, "plan_origin:", PlanOriginReferencePrefix)
+	assert.Equal(t, "audit_origin:", AuditOriginReferencePrefix)
 	assert.Equal(t, "degraded_dispatch_justification:wave=", WaveDegradedJustificationReferencePrefix)
+
+	assert.Equal(t, "executor", StageContextExecutor)
+	assert.Equal(t, "plan_origin", StageContextPlanOrigin)
+	assert.Equal(t, "audit_origin", StageContextAuditOrigin)
+	assert.Equal(t, "review", StageContextReview)
+	assert.Equal(t, "goal", StageContextGoal)
+	assert.Equal(t, "closeout", StageContextCloseout)
 }

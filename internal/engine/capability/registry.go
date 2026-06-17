@@ -2,8 +2,10 @@
 //
 //  1. The catalog-skill registry (internal identity): bindings for hosts,
 //     command-auto routes, technique hints, and export-only metadata.
-//     Generated SKILL.md frontmatter mirrors this registry and the
-//     binding-compare gate enforces 1:1 equality.
+//     Catalog-rendered SKILL.md frontmatter mirrors this registry and the
+//     binding-compare gate enforces 1:1 equality. Workflow-owned hosts may
+//     share a catalog ID for command-auto metadata while toolgen owns their
+//     exported host template.
 //  2. The surface policy registry (public exposure), owned by surfaces.go.
 //     It classifies each user-facing selector as primary / explicit focus
 //     and resolves public aliases to their backing skill id. --focus

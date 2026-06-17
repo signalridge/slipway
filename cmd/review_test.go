@@ -295,7 +295,7 @@ THEN the governed verify-state is preserved.
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingSelectedReviewEvidencePack(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
@@ -307,11 +307,62 @@ THEN the governed verify-state is preserved.
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "pass", view.Verdict)
 		assert.Equal(t, string(model.StateS4Verify), view.CurrentState)
+		assert.ElementsMatch(t, []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+		}, view.SelectedReviewSkills)
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.StateS4Verify, change.CurrentState)
 	})
+}
+
+func writePassingSelectedReviewEvidencePack(t *testing.T, root, slug string, runSummaryVersion int) {
+	t.Helper()
+	reviewStampedAt := time.Now().UTC()
+	writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  reviewStampedAt,
+		RunVersion: runSummaryVersion,
+		References: []string{
+			"layer:R0=pass",
+			"layer:R3=pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=review-spec",
+		},
+	})
+	writeSkillVerification(t, root, slug, progression.SkillCodeQualityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  reviewStampedAt,
+		RunVersion: runSummaryVersion,
+		References: []string{
+			"layer:IR1=pass",
+			"layer:IR3=pass",
+			"layer:QUALITY=pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=review-code",
+		},
+	})
+	writeSkillVerification(t, root, slug, progression.SkillIndependentReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  reviewStampedAt,
+		RunVersion: runSummaryVersion,
+		References: []string{
+			"independent-review:pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=review-independent",
+		},
+	})
+	refreshPassingSkillDigestsForTest(
+		t,
+		root,
+		slug,
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+	)
 }
 
 func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {

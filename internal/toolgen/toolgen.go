@@ -266,6 +266,8 @@ var governanceSurfaceDescriptors = []governanceSurfaceDescriptor{
 	{ID: "wave-orchestration", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "spec-compliance-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "code-quality-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "independent-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "security-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "goal-verification", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "final-closeout", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 }
@@ -284,6 +286,19 @@ func governanceSurfaceIDsByRenderMode(mode governanceRenderMode) []string {
 	return governanceSurfaceIDs(func(desc governanceSurfaceDescriptor) bool {
 		return desc.RenderMode == mode
 	})
+}
+
+var governanceSurfaceIDSet = func() map[string]struct{} {
+	out := make(map[string]struct{}, len(governanceSurfaceDescriptors))
+	for _, desc := range governanceSurfaceDescriptors {
+		out[desc.ID] = struct{}{}
+	}
+	return out
+}()
+
+func isGovernanceSurfaceID(id string) bool {
+	_, ok := governanceSurfaceIDSet[strings.TrimSpace(id)]
+	return ok
 }
 
 // CommandDescription returns the registry description for a command ID.
@@ -819,6 +834,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	// typed templates in fixed order).
 	reg := capability.DefaultRegistry()
 	for _, id := range catalogSkillIDs {
+		if isGovernanceSurfaceID(id) {
+			continue
+		}
 		sk, ok := reg.Lookup(id)
 		if !ok {
 			return fmt.Errorf("catalog skill %q missing from registry lookup", id)

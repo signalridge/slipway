@@ -44,6 +44,14 @@ func newTestSnapshot() model.GovernanceSnapshot {
 				PolicySource: model.BuiltinPolicySource,
 			},
 			{
+				ControlID:    model.ControlSecurityReview,
+				Mode:         model.ControlModeBlocking,
+				Scope:        model.ControlScopeReview,
+				Active:       true,
+				TriggeredBy:  []string{"domain=auth_authz"},
+				PolicySource: model.BuiltinPolicySource,
+			},
+			{
 				ControlID:    model.ControlIndependentReview,
 				Mode:         model.ControlModeAdvisory,
 				Scope:        model.ControlScopeReview,
@@ -87,10 +95,11 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	assert.Len(t, loaded.Observations, 1)
 	assert.Equal(t, "obs-1", loaded.Observations[0].ID)
 	assert.Equal(t, snap.Traceability.Status, loaded.Traceability.Status)
-	assert.Len(t, loaded.ActiveControls, 3)
+	assert.Len(t, loaded.ActiveControls, 4)
 	assert.Equal(t, model.ControlDomainReview, loaded.ActiveControls[0].ControlID)
-	assert.Equal(t, model.ControlIndependentReview, loaded.ActiveControls[1].ControlID)
-	assert.Equal(t, model.ControlWorktreeIsolation, loaded.ActiveControls[2].ControlID)
+	assert.Equal(t, model.ControlSecurityReview, loaded.ActiveControls[1].ControlID)
+	assert.Equal(t, model.ControlIndependentReview, loaded.ActiveControls[2].ControlID)
+	assert.Equal(t, model.ControlWorktreeIsolation, loaded.ActiveControls[3].ControlID)
 	assert.True(t, loaded.ActiveControls[0].Active)
 }
 

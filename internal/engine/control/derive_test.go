@@ -89,6 +89,93 @@ func TestDeriveControls_GuardrailDomainSmallBlastRadius(t *testing.T) {
 	}
 }
 
+func TestDeriveControls_SecurityReviewFromSASTGuardrailDomains(t *testing.T) {
+	t.Parallel()
+
+	domains := []model.GuardrailDomain{
+		model.GuardrailDomainAuthAuthZ,
+		model.GuardrailDomainSecurityCredentials,
+		model.GuardrailDomainPrivacyPII,
+		model.GuardrailDomainExternalAPIContracts,
+	}
+
+	for _, domain := range domains {
+		domain := domain
+		t.Run(string(domain), func(t *testing.T) {
+			t.Parallel()
+
+			result := DeriveControls(DeriveControlsInput{
+				GuardrailDomain: string(domain),
+				NeedsDiscovery:  false,
+				PlannedTargetFiles: []string{
+					"small.go",
+				},
+				Traceability: model.TraceabilitySummary{Status: model.TraceabilityStatusOK},
+			})
+
+			var securityReview *model.ControlActivation
+			for _, control := range result.ActiveControls {
+				if control.ControlID == model.ControlSecurityReview {
+					control := control
+					securityReview = &control
+					break
+				}
+			}
+			require.NotNil(t, securityReview, "security-relevant domain should select security-review")
+			assert.Equal(t, model.ControlModeBlocking, securityReview.Mode)
+			assert.Contains(t, securityReview.TriggeredBy, "domain="+string(domain))
+		})
+	}
+}
+
+func TestDeriveControls_SecurityReviewFromHighBlastRadiusWithoutDomain(t *testing.T) {
+	t.Parallel()
+
+	files := make([]string, 11)
+	for i := range files {
+		files[i] = filepath.Join("pkg", "security-selector-"+string(rune('a'+i))+".go")
+	}
+
+	result := DeriveControls(DeriveControlsInput{
+		GuardrailDomain:    "",
+		NeedsDiscovery:     false,
+		PlannedTargetFiles: files,
+		Traceability:       model.TraceabilitySummary{Status: model.TraceabilityStatusOK},
+	})
+
+	var securityReview *model.ControlActivation
+	for _, control := range result.ActiveControls {
+		if control.ControlID == model.ControlSecurityReview {
+			control := control
+			securityReview = &control
+			break
+		}
+	}
+	require.NotNil(t, securityReview, "high blast radius should select security-review")
+	assert.Equal(t, model.ControlModeBlocking, securityReview.Mode)
+	assert.Contains(t, securityReview.TriggeredBy, "blast_radius=high")
+}
+
+func TestDeriveControls_StandardMediumBlastRadiusWithoutDomainDoesNotSelectSecurityReview(t *testing.T) {
+	t.Parallel()
+
+	result := DeriveControls(DeriveControlsInput{
+		GuardrailDomain: "",
+		NeedsDiscovery:  false,
+		PlannedTargetFiles: []string{
+			"a.go", "b.go", "c.go", "d.go", "e.go",
+		},
+		Traceability: model.TraceabilitySummary{Status: model.TraceabilityStatusOK},
+	})
+
+	var controlIDs []model.ControlID
+	for _, control := range result.ActiveControls {
+		controlIDs = append(controlIDs, control.ControlID)
+	}
+	assert.NotContains(t, controlIDs, model.ControlSecurityReview,
+		"standard medium blast radius without a SAST domain must not select security-review")
+}
+
 func TestDeriveControls_PreExecutionBlastRadiusFromPlannedTargetFiles(t *testing.T) {
 	t.Parallel()
 	// ExecutionRunVersion=0 means pre-execution: blast radius from

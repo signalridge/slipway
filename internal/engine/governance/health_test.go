@@ -364,6 +364,86 @@ func TestRecomputeGovernanceSnapshotUsesTasksChecklistTargetFilesPreExecution(t 
 	assert.Contains(t, controlIDs, model.ControlWorktreeIsolation)
 }
 
+func TestRecomputeGovernanceSnapshotStrictMediumBlastRadiusSelectsSecurityReview(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "strict-medium-security-review"
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", slug), 0o755))
+
+	change := model.Change{
+		Slug:           slug,
+		CurrentState:   model.StateS1Plan,
+		PlanSubStep:    model.PlanSubStepBundle,
+		ArtifactSchema: model.ArtifactSchemaExpanded,
+		WorkflowPreset: model.WorkflowPresetStrict,
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
+	writePlanningTasksChecklist(t, bundleDir, `# Tasks
+
+## Task List
+
+- [ ] `+"`t-1`"+` planned blast radius
+  - target_files: ["cmd/a.go", "cmd/b.go", "cmd/c.go", "cmd/d.go", "cmd/e.go"]
+  - task_kind: code
+  - covers: ["REQ-001"]
+`)
+
+	snap, err := RecomputeGovernanceSnapshot(root, change, bundleDir)
+	require.NoError(t, err)
+	assert.Equal(t, model.SignalLevelMedium, snap.Summary.BlastRadius)
+
+	var securityReview *model.ControlActivation
+	for _, control := range snap.ActiveControls {
+		if control.ControlID == model.ControlSecurityReview {
+			control := control
+			securityReview = &control
+			break
+		}
+	}
+	require.NotNil(t, securityReview, "strict medium blast radius should select security-review")
+	assert.Equal(t, model.ControlModeBlocking, securityReview.Mode)
+	assert.Contains(t, securityReview.TriggeredBy, "blast_radius=medium")
+}
+
+func TestRecomputeGovernanceSnapshotStrictPostExecNoDataDegradesMediumSelectsSecurityReview(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	slug := "strict-postexec-no-data-security-review"
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", slug), 0o755))
+
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	change.WorkflowPreset = model.WorkflowPresetStrict
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+	}))
+
+	snap, err := RecomputeGovernanceSnapshot(root, change, filepath.Join(root, "artifacts", "changes", slug))
+	require.NoError(t, err)
+	assert.Equal(t, model.SignalLevelMedium, snap.Summary.BlastRadius)
+
+	var securityReview *model.ControlActivation
+	for _, control := range snap.ActiveControls {
+		if control.ControlID == model.ControlSecurityReview {
+			control := control
+			securityReview = &control
+			break
+		}
+	}
+	require.NotNil(t, securityReview, "strict fallback-to-medium blast radius should select security-review")
+	assert.Equal(t, model.ControlModeBlocking, securityReview.Mode)
+	assert.Contains(t, securityReview.TriggeredBy, "blast_radius=medium")
+}
+
 func TestRecomputeGovernanceSnapshotPreservesExistingControlsWithoutCurrentCandidate(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

@@ -341,16 +341,21 @@ func staleEvidenceAuthorities(root string, change model.Change, requiredOnly boo
 		return nil, err
 	}
 	closeoutRequired := true
+	reviewSelection := skill.ReviewSkillSelection{}
 	if requiredOnly {
 		policy, err := governance.ResolvePresetPolicy(root, change)
 		if err != nil {
 			return nil, err
 		}
 		closeoutRequired = FinalCloseoutEvidenceRequired(policy)
+		reviewSelection, err = reviewSkillSelectionForRecovery(root, change)
+		if err != nil {
+			return nil, err
+		}
 	}
 	authorities := make([]staleEvidenceAuthority, 0, len(registry))
 	for _, def := range registry {
-		if requiredOnly && !staleEvidenceDefinitionApplies(change, def, closeoutRequired) {
+		if requiredOnly && !staleEvidenceDefinitionApplies(change, def, closeoutRequired, reviewSelection) {
 			continue
 		}
 		position, ok := staleEvidencePositionForDefinition(def)
@@ -368,11 +373,31 @@ func staleEvidenceAuthorities(root string, change model.Change, requiredOnly boo
 	return authorities, nil
 }
 
-func staleEvidenceDefinitionApplies(change model.Change, def skill.Definition, closeoutRequired bool) bool {
+func reviewSkillSelectionForRecovery(root string, change model.Change) (skill.ReviewSkillSelection, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return skill.ReviewSkillSelection{}, err
+	}
+	snap, err := governance.PreviewGovernanceSnapshot(root, change, paths.GovernedBundleDir)
+	if err != nil {
+		return skill.ReviewSkillSelection{}, err
+	}
+	return ReviewSkillSelectionFromControls(snap.ActiveControls), nil
+}
+
+func staleEvidenceDefinitionApplies(
+	change model.Change,
+	def skill.Definition,
+	closeoutRequired bool,
+	reviewSelection skill.ReviewSkillSelection,
+) bool {
 	if def.DiscoveryOnly && !change.NeedsDiscovery {
 		return false
 	}
 	if def.CloseoutConditional && !closeoutRequired {
+		return false
+	}
+	if def.State == model.StateS3Review && skill.IsReviewSkill(def.Name) && !skill.ReviewSkillSelected(def.Name, reviewSelection) {
 		return false
 	}
 	if def.Name == SkillCodeQualityReview && !change.EffectiveWorkflowProfile().RequiresCodeQualityReview() {
@@ -451,7 +476,9 @@ func primaryAuthoritySkill(authority staleEvidenceAuthority) string {
 	change.CurrentState = authority.State
 	change.PlanSubStep = authority.PlanSubStep
 	change.WorktreePath = "."
-	skillName, _ := ResolveNextSkill(change)
+	// Stale-evidence ordering needs a single authority skill per state; select
+	// the conventional primary (spec-compliance-review at S3_REVIEW).
+	skillName, _ := PrimaryNextSkill(change)
 	return skillName
 }
 

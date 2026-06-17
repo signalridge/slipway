@@ -1,16 +1,33 @@
 package progression
 
 import (
+	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 )
 
-// ResolveNextSkill determines what skill should run at the given state.
-// For S0_INTAKE, it dispatches based on the change's IntakeSubStep.
-// For S1_PLAN, it dispatches based on the change's PlanSubStep.
-// For S2_EXECUTE, it returns wave-orchestration.
-// For S3_REVIEW, it returns spec-compliance-review (then code-quality-review via evidence evaluation).
-// For S4_VERIFY, it returns goal-verification (then final-closeout via evidence evaluation).
-func ResolveNextSkill(change model.Change) (skillName string, evidenceState string) {
+// ResolveNextSkill determines what skills should run at the given state.
+//
+// It returns a skill set rather than a single skill: most states route to a
+// single skill, but S3_REVIEW dispatches BOTH spec-compliance-review and
+// code-quality-review as a concurrent peer pair. The returned slice is empty
+// for machine-only steps and unknown states. evidenceState is the workflow
+// state the resulting evidence is recorded against.
+//
+//   - For S0_INTAKE, it dispatches based on the change's IntakeSubStep.
+//   - For S1_PLAN, it dispatches based on the change's PlanSubStep.
+//   - For S2_EXECUTE, it returns wave-orchestration.
+//   - For S3_REVIEW, it returns the selected review peer set (all run
+//     concurrently; none precedes another).
+//   - For S4_VERIFY, it returns goal-verification (then final-closeout via
+//     evidence evaluation).
+func ResolveNextSkill(change model.Change) (skillNames []string, evidenceState string) {
+	return ResolveNextSkillWithReviewSelection(change, skill.ReviewSkillSelection{})
+}
+
+func ResolveNextSkillWithReviewSelection(
+	change model.Change,
+	reviewSelection skill.ReviewSkillSelection,
+) (skillNames []string, evidenceState string) {
 	state := change.CurrentState
 	switch state {
 	case model.StateS0Intake:
@@ -20,54 +37,86 @@ func ResolveNextSkill(change model.Change) (skillName string, evidenceState stri
 	case model.StateS2Execute:
 		return resolveS2Execute(change)
 	case model.StateS3Review:
-		return SkillSpecComplianceReview, string(model.StateS3Review)
+		// Parallel review set: all selected peer reviews dispatch concurrently
+		// and are unordered. Per-skill evidence evaluation gates progression.
+		return skill.SelectedReviewSkills(reviewSelection), string(model.StateS3Review)
 	case model.StateS4Verify:
-		return SkillGoalVerification, string(model.StateS4Verify)
+		return []string{SkillGoalVerification}, string(model.StateS4Verify)
 
 	default:
-		return "", ""
+		return nil, ""
 	}
 }
 
+// PrimaryNextSkill returns the conventional single primary skill for the given
+// state, selecting the first member of the resolved skill set. It exists for
+// callers that genuinely need exactly one authority skill (e.g. stale-evidence
+// ordering); the routing surface itself must use ResolveNextSkill so S3 exposes
+// the selected review set. The primary at S3_REVIEW is spec-compliance-review by
+// convention; selected reviews remain unordered peers for gating.
+func PrimaryNextSkill(change model.Change) (skillName string, evidenceState string) {
+	return PrimaryNextSkillWithReviewSelection(change, skill.ReviewSkillSelection{})
+}
+
+func PrimaryNextSkillWithReviewSelection(
+	change model.Change,
+	reviewSelection skill.ReviewSkillSelection,
+) (skillName string, evidenceState string) {
+	skills, evidenceState := ResolveNextSkillWithReviewSelection(change, reviewSelection)
+	if len(skills) == 0 {
+		return "", evidenceState
+	}
+	return skills[0], evidenceState
+}
+
+func ReviewSkillSelectionFromControls(activeControls []model.ControlActivation) skill.ReviewSkillSelection {
+	for _, ctrl := range activeControls {
+		if ctrl.ControlID == model.ControlSecurityReview && ctrl.Active {
+			return skill.ReviewSkillSelection{SecurityReviewSelected: true}
+		}
+	}
+	return skill.ReviewSkillSelection{}
+}
+
 // resolveS0Intake dispatches within S0_INTAKE based on IntakeSubStep.
-func resolveS0Intake(change model.Change) (string, string) {
+func resolveS0Intake(change model.Change) ([]string, string) {
 	switch change.IntakeSubStep {
 	case model.IntakeSubStepClarify:
-		return SkillIntakeClarification, string(model.StateS0Intake)
+		return []string{SkillIntakeClarification}, string(model.StateS0Intake)
 	case model.IntakeSubStepResearch:
 		// Machine-only step: advances discovery-scoped intake into S1_PLAN/research.
-		return "", ""
+		return nil, ""
 	case model.IntakeSubStepConfirm:
 		// Machine-only step: confirms approved summary presence.
-		return "", ""
+		return nil, ""
 	default:
-		return "", ""
+		return nil, ""
 	}
 }
 
 // resolveS1Plan dispatches within the S1_PLAN state based on PlanSubStep.
-func resolveS1Plan(change model.Change) (string, string) {
+func resolveS1Plan(change model.Change) ([]string, string) {
 	switch change.PlanSubStep {
 	case model.PlanSubStepResearch:
-		return SkillResearchOrchestration, string(model.StateS1Plan)
+		return []string{SkillResearchOrchestration}, string(model.StateS1Plan)
 	case model.PlanSubStepBundle:
 		// Machine-only step: no skill needed.
-		return "", ""
+		return nil, ""
 	case model.PlanSubStepAudit:
-		return SkillPlanAudit, string(model.StateS1Plan)
+		return []string{SkillPlanAudit}, string(model.StateS1Plan)
 	case model.PlanSubStepValidate:
 		// Machine-only step: no skill needed.
-		return "", ""
+		return nil, ""
 	default:
-		return "", ""
+		return nil, ""
 	}
 }
 
 // resolveS2Execute returns the execution skill. Discovery changes without a
 // bound worktree must complete worktree-preflight first.
-func resolveS2Execute(change model.Change) (string, string) {
+func resolveS2Execute(change model.Change) ([]string, string) {
 	if change.NeedsDiscovery && change.WorktreePath == "" {
-		return SkillWorktreePreflight, string(model.StateS2Execute)
+		return []string{SkillWorktreePreflight}, string(model.StateS2Execute)
 	}
-	return SkillWaveOrchestration, string(model.StateS2Execute)
+	return []string{SkillWaveOrchestration}, string(model.StateS2Execute)
 }
