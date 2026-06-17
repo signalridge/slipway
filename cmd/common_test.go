@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var (
+	testProcessCWDMu sync.Mutex
+	stableTestWD     = initialTestWorkingDirectory()
+)
+
+func initialTestWorkingDirectory() string {
+	wd, err := os.Getwd()
+	if err == nil {
+		return wd
+	}
+	return os.TempDir()
+}
+
+func withProcessWorkingDirectory(t *testing.T, dir string, fn func()) {
+	t.Helper()
+
+	testProcessCWDMu.Lock()
+	defer testProcessCWDMu.Unlock()
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		previousWD = stableTestWD
+	}
+	require.NoError(t, os.Chdir(dir))
+	defer restoreProcessWorkingDirectory(t, previousWD)
+
+	fn()
+}
+
+func restoreProcessWorkingDirectory(t *testing.T, preferred string) {
+	t.Helper()
+
+	for _, dir := range []string{preferred, stableTestWD, os.TempDir()} {
+		if dir == "" {
+			continue
+		}
+		if err := os.Chdir(dir); err == nil {
+			return
+		}
+	}
+	t.Fatalf("failed to restore process working directory")
+}
 
 func setCommandProjectRoot(cmd *cobra.Command, root string) {
 	if cmd == nil {

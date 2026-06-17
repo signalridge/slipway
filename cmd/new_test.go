@@ -1779,13 +1779,7 @@ func TestDiscoveryPathStatusBlocksOnPresetConfirmation(t *testing.T) {
 func withWorkspace(t *testing.T, root string, fn func()) {
 	t.Helper()
 	ensureTestGitRepo(t, root)
-	previousWD, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(root))
-	defer func() {
-		_ = os.Chdir(previousWD)
-	}()
-	fn()
+	withProcessWorkingDirectory(t, root, fn)
 }
 
 // initTestWorkspace wraps bootstrap.InitWorkspace with the lightest runtime

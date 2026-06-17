@@ -288,8 +288,6 @@ func TestDoneJSONWarnsDirtyNonActiveChangeArtifact(t *testing.T) {
 }
 
 func TestDoneAllReadyWarnsDirtyBoundWorktree(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	initGitRepoForWorktreeTests(t, root)
 	withWorkspace(t, root, func() {
