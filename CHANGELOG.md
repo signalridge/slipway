@@ -5,6 +5,19 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0](https://github.com/signalridge/slipway/compare/v0.26.0...v0.27.0) (2026-06-17)
+
+
+### Features
+
+* **governance:** enforce native subagent review set ([#257](https://github.com/signalridge/slipway/issues/257)) ([1e9d1e5](https://github.com/signalridge/slipway/commit/1e9d1e5585cb334d40e561dd85201127a275a82d))
+
+
+### Bug Fixes
+
+* **ci:** stabilize cwd-sensitive cmd tests ([30c8834](https://github.com/signalridge/slipway/commit/30c8834e59d46220a6f7b8c743bb899b5433c322))
+* **governance:** ignore intake open question resolution in digest ([#242](https://github.com/signalridge/slipway/issues/242)) ([5256499](https://github.com/signalridge/slipway/commit/525649957f81bc5644b4c49c9e3229445555e5c7))
+
 ## [0.26.0](https://github.com/signalridge/slipway/compare/v0.25.2...v0.26.0) (2026-06-16)
 
 
