@@ -498,9 +498,17 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required review layer evidence is missing",
 	},
-	"review_origin_handle_invalid": {
+	"context_origin_handle_invalid": {
 		Severity: ReasonSeverityError,
-		Message:  "The review-context handles for the spec-compliance-review / code-quality-review pair are missing or not distinct",
+		Message:  "A governed stage recorded a missing or invalid context-origin handle",
+	},
+	"cross_stage_context_not_distinct": {
+		Severity: ReasonSeverityError,
+		Message:  "Two governed stages recorded the same context-origin handle and are not distinct",
+	},
+	"plan_audit_origin_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan audit recorded the same author and auditor context-origin handle (self-audit)",
 	},
 	"review_layer_failed": {
 		Severity: ReasonSeverityError,

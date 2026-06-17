@@ -6,6 +6,7 @@ import "github.com/signalridge/slipway/internal/model"
 type ControlOverrides struct {
 	// Threshold overrides
 	IndependentReviewBlastRadius model.SignalLevel `yaml:"independent_review_blast_radius,omitempty"`
+	SecurityReviewBlastRadius    model.SignalLevel `yaml:"security_review_blast_radius,omitempty"`
 	WorktreeBlastRadius          model.SignalLevel `yaml:"worktree_blast_radius,omitempty"`
 
 	// Enablement overrides: explicitly disable a built-in control.
@@ -24,6 +25,7 @@ var defaultControlModes = map[model.ControlID]model.ControlMode{
 	model.ControlResearch:          model.ControlModeBlocking,
 	model.ControlDomainReview:      model.ControlModeAdvisory,
 	model.ControlIndependentReview: model.ControlModeAdvisory,
+	model.ControlSecurityReview:    model.ControlModeBlocking,
 	model.ControlWorktreeIsolation: model.ControlModeAdvisory,
 	model.ControlRollbackRequired:  model.ControlModeAdvisory,
 }

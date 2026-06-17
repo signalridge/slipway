@@ -1,26 +1,15 @@
 ---
 skill_id: independent-review
 domain: review-quality
-function: fresh-context code review with explicit verdict contract and reviewer-handoff discipline
+function: workflow-owned S3 fresh-context code review with explicit verdict contract and reviewer-handoff discipline
 tier: T1
 primary_attachment: procedure
-summary: "Use when a fresh-context code review with an explicit verdict contract is needed — the base reader that both review hosts (spec-compliance-review, code-quality-review) embed. Triggers on a review host or the `slipway review` command surface."
+summary: "Use when a fresh-context S3 code review with an explicit verdict contract is needed. Triggers on the workflow-owned S3 review host or the `slipway review` command surface."
 trigger_signals:
-  - host: ["spec-compliance-review", "code-quality-review"]
-    reason: "Review host active; anchor fresh-context review discipline"
   - command: review
-    reason: "review command invoked; attach independent-review procedure"
+    reason: "review command invoked; attach independent-review report schema"
 evidence_contract: verdict
 bindings:
-  - type: host-embedded
-    target: spec-compliance-review
-    attachment: procedure
-  - type: host-embedded
-    target: code-quality-review
-    attachment: procedure
-  - type: host-embedded
-    target: code-quality-review
-    attachment: checklist
   - type: command-auto
     target: review
     attachment: report-schema
@@ -33,9 +22,9 @@ IRON LAW: REVIEW WITH FRESH CONTEXT, EXIT WITH A VERDICT
 ```
 
 ## Purpose
-Perform code review as an independent reader. The attached procedure,
-checklist, and verdict schema are the base contract. Do not reuse the author's
-narration as your source of truth.
+Perform code review as an independent reader. In S3 this runs as a
+workflow-owned review host with its own native subagent context. Do not reuse
+the author's narration as your source of truth.
 
 ## Diff-scoped review
 

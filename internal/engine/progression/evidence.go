@@ -21,6 +21,26 @@ func EvaluateRequiredSkillsForChange(
 	closeoutRequired bool,
 	planSubSteps ...model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
+	return EvaluateRequiredSkillsForChangeWithReviewSelection(
+		root,
+		change,
+		workflowState,
+		latestRunSummaryVersion,
+		closeoutRequired,
+		skill.ReviewSkillSelection{},
+		planSubSteps...,
+	)
+}
+
+func EvaluateRequiredSkillsForChangeWithReviewSelection(
+	root string,
+	change model.Change,
+	workflowState model.WorkflowState,
+	latestRunSummaryVersion int,
+	closeoutRequired bool,
+	reviewSelection skill.ReviewSkillSelection,
+	planSubSteps ...model.PlanSubStep,
+) (map[string]model.VerificationRecord, []string, error) {
 	return evaluateRequiredSkills(
 		root,
 		change,
@@ -29,6 +49,7 @@ func EvaluateRequiredSkillsForChange(
 		workflowState,
 		latestRunSummaryVersion,
 		closeoutRequired,
+		reviewSelection,
 		func() (map[string]model.VerificationRecord, error) {
 			return state.ListVerificationsForChange(root, change)
 		},
@@ -51,6 +72,7 @@ func evaluateRequiredSkills(
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
 	closeoutRequired bool,
+	reviewSelection skill.ReviewSkillSelection,
 	loadVerifications func() (map[string]model.VerificationRecord, error),
 	planSubSteps ...model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
@@ -58,14 +80,15 @@ func evaluateRequiredSkills(
 	if err != nil {
 		return nil, nil, err
 	}
-	required := skill.RequiredSkillsForStateWithRegistry(
+	required := skill.RequiredSkillsForStateWithRegistryWithReviewSelection(
 		registry,
 		needsDiscovery,
 		workflowState,
 		closeoutRequired,
+		reviewSelection,
 		planSubSteps...,
 	)
-	required = skill.FilterRequiredSkillsForWorkflowProfile(required, workflowProfile)
+	required = skill.FilterRequiredSkillsForWorkflowProfileWithReviewSelection(required, workflowProfile, reviewSelection)
 	// Read authoritative verification files before the empty-required-skills
 	// early return so malformed evidence still fails closed with explicit
 	// integrity reporting.

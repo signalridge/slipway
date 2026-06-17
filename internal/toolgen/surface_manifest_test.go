@@ -93,6 +93,9 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		if !shouldExportAsHostSkill(id) {
 			continue
 		}
+		if isGovernanceSurfaceID(id) {
+			continue
+		}
 		row, ok := rowsByKey["skill/"+adapterSkillName(id)]
 		require.Truef(t, ok, "missing exported catalog skill row for %s", id)
 		assert.Equal(t, "internal/engine/capability.DefaultRegistry", row.Source)

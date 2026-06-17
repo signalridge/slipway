@@ -183,13 +183,54 @@ func TestEvidenceSkillFailOverwritesPlanAuditAndPrunesDigest(t *testing.T) {
 	})
 }
 
-func TestEvidenceSkillRejectsCodeQualityBeforeSpecCompliance(t *testing.T) {
+func TestEvidenceSkillRecordsSelectedReviewPeerWithoutSpecPredecessor(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects review ordering")
+		slug := createGovernedRequest(t, root, "L2", "evidence skill records unordered review peer")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillCodeQualityReview,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "code-quality:pass",
+			"--notes", "Quality review passed.",
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, progression.SkillCodeQualityReview, view.SkillName)
+		assert.Equal(t, 1, view.RunVersion)
+		assert.True(t, view.Recorded)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillCodeQualityReview)
+		require.NoError(t, err)
+		assert.Equal(t, model.VerificationVerdictPass, rec.Verdict)
+		assert.Equal(t, 1, rec.RunVersion)
+
+		_, err = os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillSpecComplianceReview+".yaml"))
+		require.Error(t, err)
+		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestEvidenceSkillRejectsUnselectedSecurityReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects unselected security")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -197,18 +238,17 @@ func TestEvidenceSkillRejectsCodeQualityBeforeSpecCompliance(t *testing.T) {
 		cmd.SetArgs([]string{
 			"skill",
 			"--change", slug,
-			"--skill", progression.SkillCodeQualityReview,
+			"--skill", progression.SkillSecurityReview,
 			"--verdict", model.VerificationVerdictPass,
-			"--reference", "code-quality:pass",
-			"--notes", "Quality review passed.",
+			"--reference", "security-review:pass",
+			"--notes", "Security review passed.",
 		})
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "evidence_skill_predecessor_required", cliErr.ErrorCode)
-		assert.Equal(t, progression.SkillCodeQualityReview, cliErr.Details["skill"])
-		assert.Equal(t, progression.SkillSpecComplianceReview, cliErr.Details["required_first"])
+		assert.Equal(t, "evidence_skill_not_current", cliErr.ErrorCode)
+		assert.Equal(t, progression.SkillSecurityReview, cliErr.Details["skill"])
 
-		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillCodeQualityReview+".yaml"))
+		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillSecurityReview+".yaml"))
 		require.Error(t, err)
 		assert.True(t, os.IsNotExist(err))
 	})
@@ -389,6 +429,7 @@ func TestEvidenceSkillWrongStateForWaveOrchestrationInS3RoutesToReviewAndVerific
 		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
 		assert.Contains(t, cliErr.Remediation, progression.SkillSpecComplianceReview)
 		assert.Contains(t, cliErr.Remediation, progression.SkillCodeQualityReview)
+		assert.Contains(t, cliErr.Remediation, progression.SkillIndependentReview)
 		assert.Contains(t, cliErr.Remediation, progression.SkillGoalVerification)
 		assert.Contains(t, cliErr.Remediation, progression.SkillFinalCloseout)
 	})

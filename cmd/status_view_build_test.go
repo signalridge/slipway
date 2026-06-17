@@ -142,7 +142,7 @@ func TestBuildGovernedStatusViewExposesDoneReadyReadiness(t *testing.T) {
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 0,
-		References: []string{"plan-audit:pass"},
+		References: append([]string{"plan-audit:pass"}, planAuditOriginReferences()...),
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillPlanAudit)
 
@@ -588,6 +588,28 @@ func TestBuildGovernedStatusViewIncludesAutoPassedStates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, view.AutoPassedStates, 1)
 	assert.Equal(t, model.StateS3Review, view.AutoPassedStates[0].State)
+}
+
+func TestBuildGovernedStatusViewReportsSelectedReviewSkills(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("status-selected-review-skills")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+	}, view.SelectedReviewSkills)
 }
 
 func TestBuildGovernedStatusViewUsesResolvedWorktreeEvidencePaths(t *testing.T) {

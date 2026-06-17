@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -11,68 +12,233 @@ import (
 // the engine consumes — and every parser here stays free of any
 // cmd/tmpl/toolgen import, a sibling of the wave_execution.go token grammar.
 
-// ReviewOriginReferencePrefix is the literal prefix of a review verification
-// reference that records the per-review context handle a review verdict was
-// produced under: review_origin:skill=<skill>=<handle>. The handle is the
-// per-review context identifier the distinct-context gate compares across the
-// spec-compliance-review / code-quality-review pair. It is named review_origin to
-// avoid colliding with the unrelated review_context JSON object on the
-// next/handoff surface.
-const ReviewOriginReferencePrefix = "review_origin:skill="
+// Canonical context-origin stage identifiers. A context handle self-describes
+// the lifecycle stage it was produced under; these are the stage keys the
+// cross-stage independence lattice compares. The review stage is deliberately
+// shared by the selected S3 review set; the authority feeder supplies
+// per-review-skill participant keys outside the model vocabulary.
+const (
+	StageContextExecutor    = "executor"
+	StageContextPlanOrigin  = "plan_origin"
+	StageContextAuditOrigin = "audit_origin"
+	StageContextReview      = "review"
+	StageContextGoal        = "goal"
+	StageContextCloseout    = "closeout"
+)
 
-// ReviewOriginHandle is the parsed decomposition of a review-context handle
-// reference token. Skill is the review skill the handle self-describes; Handle is
-// the per-review context identifier compared for distinctness.
-type ReviewOriginHandle struct {
-	Skill  string
+// ContextOriginReferencePrefix is the literal prefix of a verification reference
+// that records the per-stage context handle a stage verdict was produced under:
+// context_origin:stage=<stage>=<handle>. The handle is the per-stage fresh
+// context identifier the cross-stage independence gate compares across stages.
+// It is named context_origin to avoid colliding with the unrelated
+// review_context JSON object on the next/handoff surface.
+const ContextOriginReferencePrefix = "context_origin:stage="
+
+// PlanOriginReferencePrefix is the literal prefix of a plan-audit verification
+// reference recording the context handle the plan author produced the bundle
+// under: plan_origin:<handle>.
+const PlanOriginReferencePrefix = "plan_origin:"
+
+// AuditOriginReferencePrefix is the literal prefix of a plan-audit verification
+// reference recording the context handle the plan auditor reviewed the bundle
+// under: audit_origin:<handle>.
+const AuditOriginReferencePrefix = "audit_origin:"
+
+// ContextOriginHandle is the parsed decomposition of a context-origin handle
+// reference token. Stage is the lifecycle stage the handle self-describes;
+// Handle is the per-stage fresh-context identifier compared for distinctness.
+type ContextOriginHandle struct {
+	Stage  string
 	Handle string
 }
 
-// ReviewOriginHandleFromVerification extracts the single review-context handle a
-// review record attests via review_origin:skill=<skill>=<handle>. ok is false
-// when no well-formed handle is present, or when the record carries conflicting
-// handles — ambiguous evidence fails closed (mirroring
-// ExecutorAgentHandlesFromVerification) rather than letting the last reference
-// win. A repeated identical handle is idempotent.
-func ReviewOriginHandleFromVerification(record VerificationRecord) (ReviewOriginHandle, bool) {
-	var found ReviewOriginHandle
-	seen := false
+// ContextOriginHandlesFromVerification extracts the per-stage context handles a
+// record attests via context_origin:stage=<stage>=<handle>. The result is keyed
+// by stage. ok is false when no well-formed handle is present, or when the
+// record carries conflicting handles for the same stage — ambiguous evidence
+// fails closed (mirroring ExecutorAgentHandlesFromVerification) rather than
+// letting the last reference win. A repeated identical handle for a stage is
+// idempotent.
+func ContextOriginHandlesFromVerification(record VerificationRecord) (map[string]ContextOriginHandle, bool) {
+	handles := map[string]ContextOriginHandle{}
 	for _, ref := range record.References {
-		skill, handle, ok := parseReviewOriginReference(ref)
+		stage, handle, ok := parseContextOriginReference(ref)
 		if !ok {
 			continue
 		}
-		candidate := ReviewOriginHandle{Skill: skill, Handle: handle}
+		if existing, seen := handles[stage]; seen && existing.Handle != handle {
+			// Two references naming the same stage with different handles are
+			// ambiguous; the gate fails closed rather than letting the last
+			// reference win.
+			return nil, false
+		}
+		handles[stage] = ContextOriginHandle{Stage: stage, Handle: handle}
+	}
+	if len(handles) == 0 {
+		return nil, false
+	}
+	return handles, true
+}
+
+func parseContextOriginReference(raw string) (stage, handle string, ok bool) {
+	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
+	if !strings.HasPrefix(raw, ContextOriginReferencePrefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(raw, ContextOriginReferencePrefix)
+	// stage names carry no '=', so the first '=' separates the stage from the
+	// handle; any '=' inside the handle itself is preserved.
+	stage, handle, found := strings.Cut(rest, "=")
+	if !found {
+		return "", "", false
+	}
+	stage = strings.TrimSpace(stage)
+	handle = strings.TrimSpace(handle)
+	if stage == "" || handle == "" {
+		return "", "", false
+	}
+	return stage, handle, true
+}
+
+// PlanOriginHandleFromVerification extracts the single plan-author context handle
+// a record attests via plan_origin:<handle>, stamped onto the StageContextPlanOrigin
+// stage. ok is false when no well-formed handle is present, or when the record
+// carries conflicting handles — ambiguous evidence fails closed. A repeated
+// identical handle is idempotent.
+func PlanOriginHandleFromVerification(record VerificationRecord) (ContextOriginHandle, bool) {
+	return singleStageHandleFromVerification(record, PlanOriginReferencePrefix, StageContextPlanOrigin)
+}
+
+// AuditOriginHandleFromVerification extracts the single plan-auditor context handle
+// a record attests via audit_origin:<handle>, stamped onto the StageContextAuditOrigin
+// stage. ok is false when no well-formed handle is present, or when the record
+// carries conflicting handles — ambiguous evidence fails closed. A repeated
+// identical handle is idempotent.
+func AuditOriginHandleFromVerification(record VerificationRecord) (ContextOriginHandle, bool) {
+	return singleStageHandleFromVerification(record, AuditOriginReferencePrefix, StageContextAuditOrigin)
+}
+
+// ReviewContextOriginHandleFromVerification extracts the reviewer context handle
+// a review-skill record attests via context_origin:stage=review=<handle>.
+func ReviewContextOriginHandleFromVerification(record VerificationRecord) (ContextOriginHandle, bool) {
+	handles, ok := ContextOriginHandlesFromVerification(record)
+	if !ok {
+		return ContextOriginHandle{}, false
+	}
+	handle, ok := handles[StageContextReview]
+	if !ok || strings.TrimSpace(handle.Handle) == "" {
+		return ContextOriginHandle{}, false
+	}
+	return handle, true
+}
+
+func singleStageHandleFromVerification(record VerificationRecord, prefix, stage string) (ContextOriginHandle, bool) {
+	var found ContextOriginHandle
+	seen := false
+	for _, ref := range record.References {
+		handle, ok := parseStageOriginReference(ref, prefix)
+		if !ok {
+			continue
+		}
+		candidate := ContextOriginHandle{Stage: stage, Handle: handle}
 		if seen && candidate != found {
-			return ReviewOriginHandle{}, false
+			return ContextOriginHandle{}, false
 		}
 		found = candidate
 		seen = true
 	}
 	if !seen {
-		return ReviewOriginHandle{}, false
+		return ContextOriginHandle{}, false
 	}
 	return found, true
 }
 
-func parseReviewOriginReference(raw string) (skill, handle string, ok bool) {
+func parseStageOriginReference(raw, prefix string) (handle string, ok bool) {
 	raw = strings.Trim(strings.TrimSpace(raw), "\"'`.,;()[]{}")
-	if !strings.HasPrefix(raw, ReviewOriginReferencePrefix) {
-		return "", "", false
+	if !strings.HasPrefix(raw, prefix) {
+		return "", false
 	}
-	rest := strings.TrimPrefix(raw, ReviewOriginReferencePrefix)
-	// skill names carry no '=', so the first '=' separates the skill from the
-	// handle; any '=' inside the handle itself is preserved.
-	skill, handle, found := strings.Cut(rest, "=")
-	if !found {
-		return "", "", false
+	handle = strings.TrimSpace(strings.TrimPrefix(raw, prefix))
+	if handle == "" {
+		return "", false
 	}
-	skill = strings.TrimSpace(skill)
-	handle = strings.TrimSpace(handle)
-	if skill == "" || handle == "" {
-		return "", "", false
+	return handle, true
+}
+
+// ExecutorParticipantHandleSetFromVerification flattens the per-wave, per-task
+// executor agent handles (ExecutorAgentHandlesFromVerification) into a deduped
+// set of executor context handles. The blank collapse value that
+// ExecutorAgentHandlesFromVerification emits for conflicting same-wave/task
+// handles is dropped — it is not a real handle. The result is never nil so
+// callers can range over it safely; an absence of executor handles yields an
+// empty set.
+func ExecutorParticipantHandleSetFromVerification(record VerificationRecord) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, byTask := range ExecutorAgentHandlesFromVerification(record) {
+		for _, handle := range byTask {
+			if handle == "" {
+				continue
+			}
+			set[handle] = struct{}{}
+		}
 	}
-	return skill, handle, true
+	return set
+}
+
+// ContextParticipant is a stage's contribution to the cross-stage context
+// independence lattice. A stage contributes either a single handle (most
+// stages) or a set of handles (the executor stage, whose participants are the
+// per-task executor agents). Exactly one of Handle / HandleSet is populated.
+type ContextParticipant struct {
+	Handle    string
+	HandleSet map[string]struct{}
+}
+
+// CrossStageContextCollisions returns the colliding stage pairs in the
+// cross-stage context independence lattice, restricted to edges with at least
+// one endpoint in ownedStages. Two participants collide when either both are
+// single-handle participants sharing the same handle, or one is a single handle
+// that is a member of the other's executor handle set. Each colliding pair is
+// returned exactly once as a lexically ordered [stageA, stageB] tuple, and the
+// returned slice is sorted for deterministic output. nil is returned when there
+// are no collisions on an owned edge.
+func CrossStageContextCollisions(participants map[string]ContextParticipant, ownedStages map[string]struct{}) [][2]string {
+	stages := make([]string, 0, len(participants))
+	for stage := range participants {
+		stages = append(stages, stage)
+	}
+	sort.Strings(stages)
+
+	var collisions [][2]string
+	for i := 0; i < len(stages); i++ {
+		for j := i + 1; j < len(stages); j++ {
+			stageA, stageB := stages[i], stages[j]
+			if _, ownedA := ownedStages[stageA]; !ownedA {
+				if _, ownedB := ownedStages[stageB]; !ownedB {
+					continue
+				}
+			}
+			if participantsCollide(participants[stageA], participants[stageB]) {
+				collisions = append(collisions, [2]string{stageA, stageB})
+			}
+		}
+	}
+	return collisions
+}
+
+func participantsCollide(a, b ContextParticipant) bool {
+	switch {
+	case a.Handle != "" && b.Handle != "":
+		return a.Handle == b.Handle
+	case a.Handle != "" && len(b.HandleSet) > 0:
+		_, in := b.HandleSet[a.Handle]
+		return in
+	case b.Handle != "" && len(a.HandleSet) > 0:
+		_, in := a.HandleSet[b.Handle]
+		return in
+	default:
+		return false
+	}
 }
 
 // WaveDegradedJustificationReferencePrefix is the literal prefix of a

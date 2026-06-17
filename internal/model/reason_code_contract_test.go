@@ -67,6 +67,8 @@ func canonicalReasonCodeSnapshot() []string {
 		"codebase_map_freshness_stale",
 		"codebase_map_freshness_unknown",
 		"config_parse_failure",
+		"context_origin_handle_invalid",
+		"cross_stage_context_not_distinct",
 		"decision_contract_path_invalid",
 		"decision_contract_unreadable",
 		"decision_section_placeholder",
@@ -123,6 +125,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"plan_audit_evidence_missing",
 		"plan_audit_failed",
 		"plan_audit_iteration",
+		"plan_audit_origin_invalid",
 		"plan_audit_stalled",
 		"plan_checker_feedback_required",
 		"plan_checker_loop_terminated",
@@ -153,7 +156,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"research_structure_invalid",
 		"review_layer_failed",
 		"review_layer_missing",
-		"review_origin_handle_invalid",
 		"run_slipway_done_to_finalize",
 		"run_slipway_run_to_advance",
 		"scope_contract_changed_files_missing",
@@ -258,6 +260,29 @@ func TestDeclaredWaveBlockerVocabularyRetired(t *testing.T) {
 	_, inRemediations := blockerRemediations[retired]
 	assert.Falsef(t, inRemediations,
 		"the remediation vocabulary must not define the retired declared-wave blocker %q", retired)
+
+	assert.Falsef(t, IsCanonicalReasonCode(retired),
+		"%q must no longer be recognized as a canonical reason code", retired)
+}
+
+// The single-stage `review_origin_handle_invalid` blocker is retired in favor
+// of the lattice-wide `context_origin_handle_invalid` code (which covers every
+// stage's context-origin attestation, not just the review pair). The old code
+// must be fully removed: no canonical reason definition, no remediation
+// vocabulary entry, and no public recognition as a canonical code, so nothing
+// downgrades it to `unknown_reason_code` by silently treating it as live.
+func TestReviewOriginHandleVocabularyRetired(t *testing.T) {
+	t.Parallel()
+
+	const retired = "review_origin_handle_invalid"
+
+	_, inRegistry := canonicalReasonDefinitions[retired]
+	assert.Falsef(t, inRegistry,
+		"the canonical reason registry must not define the retired review-origin blocker %q", retired)
+
+	_, inRemediations := blockerRemediations[retired]
+	assert.Falsef(t, inRemediations,
+		"the remediation vocabulary must not define the retired review-origin blocker %q", retired)
 
 	assert.Falsef(t, IsCanonicalReasonCode(retired),
 		"%q must no longer be recognized as a canonical reason code", retired)

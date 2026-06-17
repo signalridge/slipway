@@ -10,6 +10,7 @@ const (
 	ControlResearch          ControlID = "research"
 	ControlDomainReview      ControlID = "domain-review"
 	ControlIndependentReview ControlID = "independent-review"
+	ControlSecurityReview    ControlID = "security-review"
 	ControlWorktreeIsolation ControlID = "worktree-isolation"
 	ControlRollbackRequired  ControlID = "rollback-required"
 )
@@ -19,7 +20,7 @@ func (c ControlID) String() string { return string(c) }
 func (c ControlID) IsValid() bool {
 	switch c {
 	case ControlClarification, ControlResearch, ControlDomainReview,
-		ControlIndependentReview, ControlWorktreeIsolation, ControlRollbackRequired:
+		ControlIndependentReview, ControlSecurityReview, ControlWorktreeIsolation, ControlRollbackRequired:
 		return true
 	default:
 		return false

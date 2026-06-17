@@ -1,96 +1,235 @@
 # Architecture
 
 Re-authored for change
-`add-an-engine-consumed-context-origin-fresh-context-attestat`.
+`feat-governance-host-native-subagent-enforced-cross-stage-in` (#240).
+
+Baseline: #239 (engine-consumed reviewer-independence + context-origin/`review_origin`
+attestation, closeout chain-ordering, and the wave dispatch/executor gates) has
+SHIPPED (commit 2d2adac, 0.26.0); this change builds on that baseline and retires
+the per-review-pair `review_origin` grammar in favor of the chain-wide
+`context_origin:stage=` independence lattice. This refresh supersedes the stale
+S3 pair plan: the current worktree routes one selected review set with a
+mandatory spec/code/independent trio and an optional security reviewer selected
+from governance controls.
+
+`review_origin` is RETIRED with no compat shim: no `ReviewOriginReferencePrefix`,
+`ReviewOriginHandle`, `ReviewOriginHandleFromVerification`, or
+`review_origin_handle_invalid` symbol exists in source. Independence is now a
+variable participant lattice over the author -> selected-review -> verify -> close
+chain.
 
 ## Affected Seams
 
-- `internal/engine/progression/authority.go` — the verdict-gate seam.
-  - `evaluateReviewAuthorityWithPolicy` builds `ReviewAuthority`
-    (`PassingSkills` keyed by skill name, including `SkillSpecComplianceReview`
-    and `SkillCodeQualityReview`); this is where review-pair handle/dispatch
-    tokens would be consumed (P2's read side).
-  - `buildShipAuthorityFromReadiness` is the ship-stage gate. It already holds
-    `reviewAuthority.PassingSkills` AND `verifyPassingSkills` (goal +
-    final-closeout) in one scope, and computes the standard/strict predicate
-    `assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight`.
-    This is the natural home for P1's always-on chain-ordering gate and its
-    preset-keyed error/advisory split.
-  - Pattern A: `closeoutAssuranceAttestationBlockers` (presence attestation —
-    `assuranceCompleteReference = "closeout:assurance_complete=pass"` must be
-    in the final-closeout `References`).
-  - Pattern B: `closeoutGoalVerificationReuseBlockers`, whose
-    `closeoutGoalVerificationReuseReviewBlocker` already enforces
-    `goal.Timestamp >= max(spec-compliance-review, code-quality-review)` BUT
-    only inside the opt-in `closeout:goal_verification_reuse=pass` branch. P1
-    promotes that ordering to always-on (closeout >= goal >= max(reviews)) with
-    a distinct reason code, giving the dead
-    `closeout:reviewer_independence=pass` token a consumer.
-- `internal/engine/progression/wave_sync.go` — the dispatch-machinery seam P2
-  reuses for the review pair. `DispatchEvidenceBlockers` (parallel wave missing a
-  valid `dispatch_mode`) and `ExecutorAgentBlockers` (parallel_subagents wave
-  missing per-task `executor_agent` handle) are the analogues to clone for the
-  review pair. `SyncGovernedWaveExecution` / `evaluateGovernedWaveExecution`
-  aggregate these as `safetyNetBlockers` and are currently **preset-agnostic** —
-  P4's #5/#6 must thread `EffectivePreset` through here. `session_isolation_warning`
-  is emitted in `LoadExecutionTasksFromEvidence` (advisory, task-only, empty
-  `session_id` excluded) — the token P4 demotes.
+- `internal/model/context_attestation.go` — the pure attestation grammar and
+  lattice (t-01, DONE). stdlib-only (`sort`/`strconv`/`strings`), no
+  cmd/tmpl/toolgen import.
+  - Token grammar: `ContextOriginReferencePrefix = "context_origin:stage="`
+    (:38), shape `context_origin:stage=<stage>=<handle>`;
+    `parseContextOriginReference` (:86) splits on the FIRST `=` after the prefix,
+    so a `=` inside the handle survives. `PlanOriginReferencePrefix =
+    "plan_origin:"` (:43) and `AuditOriginReferencePrefix = "audit_origin:"`
+    (:48) take the whole remainder as the handle (`parseStageOriginReference`,
+    :145).
+  - Six canonical stage constants (:22-28): `StageContextExecutor` `"executor"`,
+    `StageContextPlanOrigin` `"plan_origin"`, `StageContextAuditOrigin`
+    `"audit_origin"`, `StageContextReview` `"review"`, `StageContextGoal`
+    `"goal"`, and `StageContextCloseout` `"closeout"`. Review records all use
+    the shared `review` wire stage; the authority feeder supplies per-skill
+    participant keys.
+  - `ContextOriginHandle{Stage, Handle}` (:53) is the parsed token;
+    `ContextParticipant{Handle, HandleSet}` (:181) is a stage's lattice
+    contribution — exactly one populated (single-handle stages set `Handle`, the
+    executor stage sets `HandleSet`).
+  - Extractors fail closed on ambiguity, idempotent on repeat:
+    `ContextOriginHandlesFromVerification` (:65) keys per stage and returns
+    `(nil,false)` if two refs name one stage with different handles;
+    `PlanOriginHandleFromVerification` (:111) / `AuditOriginHandleFromVerification`
+    (:120) delegate to `singleStageHandleFromVerification` (:124);
+    `ExecutorParticipantHandleSetFromVerification` (:164) flattens the per-wave
+    per-task map from `ExecutorAgentHandlesFromVerification`
+    (`wave_execution.go:336`) into a deduped set, dropping the blank conflict-collapse
+    value, and is never nil.
+  - `CrossStageContextCollisions(participants, ownedStages)` (:194) is the pure
+    pairwise collision detector: returns each colliding stage pair once as a
+    lexically ordered `[stageA, stageB]` tuple, sorted deterministically, keeping
+    an edge only when at least one endpoint is in `ownedStages`.
+    `participantsCollide` (:218) is the predicate: two single-handle stages
+    collide iff handles are equal; a single-handle stage collides with the
+    executor stage iff its handle is a member of the executor `HandleSet`.
+  - Pre-existing sibling grammar `DegradedDispatchJustificationsFromVerification`
+    (:248) + `WaveDegradedJustificationReferencePrefix` (:240) live in this file
+    but are an unrelated wave-dispatch concern, unaffected by #240.
+- `internal/engine/progression/authority.go` — the review+ship verdict-gate seam
+  that CONSUMES the lattice (t-03, DONE).
+  - `evaluateReviewAuthorityWithPolicy` (:79) is the S3 review gate. It derives
+    the security-review selector, computes the selected review-skill slice, runs
+    `EvaluateRequiredSkillsForChangeWithReviewSelection`, and appends
+    cross-stage blockers over the selected review participants; required-flag is
+    `EffectivePreset != light`.
+  - `buildShipAuthorityFromReadiness` (:140) is the S4 ship gate. It re-loads the
+    review participants via `mergeContextHandleRecords` (:624), adds goal +
+    closeout, and DUAL-SURFACES the lattice/closeout blockers into both
+    `VerifySkillBlockers` and the unresolved set feeding `EvaluateGShip`, so the
+    specific code reaches G_ship reasons rather than collapsing to
+    `verification_evidence_missing`.
+  - `crossStageContextParticipants` (:525) builds participants: executor handle
+    set from `LatestPassingWaveEvidence`, `audit_origin` from the plan-audit
+    record, selected review records from `passingSkills` keyed by skill name and
+    parsed from `context_origin:stage=review=<handle>`, plus goal/closeout from
+    their own stage tokens. Absent/non-passing is silent; present-passing with no
+    well-formed handle fails closed with `context_origin_handle_invalid`.
+  - `crossStageContextDistinctBlockers` (:657) builds participants, short-circuits
+    to `context_origin_handle_invalid` on a malformed handle, else emits one
+    `cross_stage_context_not_distinct` per colliding owned-endpoint pair (detail
+    `earlier|later`, lexical order). Returns nil on light.
+  - Owned-edge partition: review owns `{executor, audit_origin}` plus every
+    selected review skill (`crossStageContextOwnedReviewStagesForSelectedSkills`,
+    :487), while ship owns `{goal, closeout}` (:505) against the same selected
+    review base. Mandatory selection owns 10 review edges and 11 ship edges;
+    selected security expands that to 15 review edges and 13 ship edges. No edge
+    double-fires. Load-sets
+    `crossStageContextReviewStagesForSelectedSkills` (:691) /
+    `crossStageContextShipStagesForSelectedSkills` (:699).
+  - Closeout facets, all preset-gated (`EffectivePreset != light`):
+    `closeoutAssuranceAttestationBlockers` (:262, #47),
+    `closeoutReviewerIndependenceBlockers` (:379, REQ-001 presence facet),
+    `closeoutChainOrderBlockers` (:430, always-on relative to the opt-in
+    `goal_verification_reuse` token but still preset-gated; every selected review
+    verdict must be at or before goal verification, and final closeout must not
+    predate goal; distinct code `closeout_chain_order_invalid`). The
+    review<=goal / closeout>=goal halves moved OUT of the opt-in
+    `closeoutGoalVerificationReuseBlockers` (:285) into the always-on chain-order
+    gate.
+- `internal/engine/progression/advance_governed.go` — the S1 PLAN gate and the
+  local plan-audit self-audit edge (t-04, DONE).
+  - `EvaluatePlanGate` (:958) is preset-aware:
+    `func EvaluatePlanGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord, presetPolicy governance.PresetPolicy) gate.GateEvaluation`.
+    It is called on both the advance path (`CheckGateWithIteration`, :582 ->
+    `EvaluatePlanGate` at :588, preset resolved at :587) and the read/readiness path
+    (`readiness.go` `evaluateGateReadiness` -> :488, preset resolved at :487), so
+    status and readiness cannot diverge.
+  - `planAuditOriginHandleBlockers` (:996) owns ONLY the local edge: on a present,
+    passing plan-audit record it requires a well-formed `plan_origin` AND
+    `audit_origin` with `plan_origin != audit_origin`; missing either or equal
+    -> `plan_audit_origin_invalid` via `planAuditOriginInvalidBlocker` (:1021).
+    `enforced := presetPolicy.EffectivePreset != model.WorkflowPresetLight`
+    (:970); not enforced (light) returns nil (advisory). An ABSENT plan-audit
+    record yields `plan_audit_evidence_missing` instead. The plan gate adds NO
+    cross-stage rung whose other endpoint is absent at S1.
+- `internal/model/reason_code.go` (`canonicalReasonDefinitions`, :40) +
+  `internal/model/reason_code_contract_test.go`
+  (`canonicalReasonCodeSnapshot` :41, `canonicalReasonSeveritySnapshot` :218,
+  `TestCanonicalReasonCodeTaxonomySnapshot`) + `internal/model/recovery.go`
+  (`blockerRemediations`, :103) + `internal/model/recovery_test.go`
+  (`inScopeProducedRecoverySpecs` :131, `TestInScopeProducedBlockersResolveToCanonicalRecovery`)
+  — the reason-code contract (t-02, DONE). It is now effectively a FOUR-file
+  contract: `recovery_test.go` directly enforces the three new codes resolve to a
+  canonical message + non-empty remediation + non-empty command.
+  - NEW codes, all `ReasonSeverityError`: `context_origin_handle_invalid`
+    (`reason_code.go:501`, renamed from the retired `review_origin_handle_invalid`,
+    widened from the old review scope to every stage),
+    `cross_stage_context_not_distinct` (:505), `plan_audit_origin_invalid` (:509).
+    Each has a matching `RecoveryClassRerunSkill` + `slipway run` remediation
+    (`recovery.go:517/522/530`) routing the operator to re-run the owning stage in
+    a fresh native subagent.
+  - `TestReviewOriginHandleVocabularyRetired` (`reason_code_contract_test.go:274`)
+    asserts `review_origin_handle_invalid` is absent from the registry, absent from
+    remediations, and unrecognized by `IsCanonicalReasonCode`.
 - `internal/model/verification.go` — `VerificationRecord`. `References []string`
   is the sole host-controlled inbound channel; `Verdict`/`Timestamp`/`RunVersion`
-  are engine-owned. New attestation tokens ride `References`, not a new field.
-- `internal/model/wave_execution.go` — `WaveDispatchModesFromVerification`,
-  `ExecutorAgentHandlesFromVerification`, `WaveDispatchParallel`, and the token
-  prefixes (`dispatch_mode:wave=`, `executor_agent:wave=...:task=...`). P2's
-  per-review context-id handles mirror this token grammar.
-- `internal/model/reason_code.go` (`canonicalReasonDefinitions`, `NewReasonCode`,
-  severity map) + `internal/model/reason_code_contract_test.go`
-  (`TestCanonicalReasonCodeTaxonomySnapshot`) + `internal/model/recovery.go`
-  (remediation vocab) — the three-file reason-code contract any new gate code
-  must register in. `NewReasonCode` silently downgrades unregistered codes to
-  `unknown_reason_code`.
-- `internal/engine/skill/skill.go` — the four independence skills
-  (`spec-compliance-review`, `code-quality-review`, `goal-verification`,
-  `final-closeout`) are `RunSummaryBound: true`, so they share one `RunVersion`;
-  this is *why* RunVersion cannot discriminate context origin (P3 residual).
-- `cmd/evidence.go` — the producer. `makeEvidenceSkillCmd` stamps engine-owned
-  `Timestamp`/`RunVersion` (`evidenceSkillRunContext`) and passes through host
-  `--reference` values verbatim into the saved record.
-- `internal/tmpl/templates/skills/{spec-compliance-review,code-quality-review,
-  goal-verification,final-closeout,wave-orchestration}/SKILL.md.tmpl` +
-  `internal/toolgen` (`Arguments` contract in `surface_manifest.go`/`toolgen.go`)
-  document/emit the tokens the gates consume.
+  are engine-owned. Every new token rides `References`, not a new field or CLI
+  flag.
+- `internal/model/wave_execution.go` — `ExecutorAgentHandlesFromVerification`
+  (:336) and the `executor_agent:wave=...:task=...` grammar are reused unchanged;
+  the executor stage is the only set-valued lattice participant.
+- `internal/engine/skill/skill.go` — selected review-set definition and required
+  skill filtering. `SelectedReviewSkills` (:34) returns the mandatory trio:
+  - `spec-compliance-review`
+  - `code-quality-review`
+  - `independent-review`
+  and appends `security-review` when `ReviewSkillSelection.SecurityReviewSelected`
+  is true. The default registry now includes all four as `StateS3Review`
+  definitions (:93-124); `RequiredSkillsForStateWithRegistryWithReviewSelection`
+  (:169) filters requiredness from the same selection.
+- `internal/engine/progression/skill_resolution.go` — `ResolveNextSkill` (:23),
+  the next-action dispatcher. It now returns a skill slice; `S3_REVIEW` returns
+  `skill.SelectedReviewSkills(reviewSelection)` (:39-42), so the selected review
+  peers dispatch concurrently and none precedes another. `PrimaryNextSkill` (:51)
+  is only a compatibility projection for callers that truly need one conventional
+  skill and must not be treated as S3 ordering authority.
+- `internal/tmpl/templates/skills/` — the review, goal, closeout, and plan-audit
+  host-facing dispatch surfaces. The selected review hosts instruct native
+  subagent dispatch on the SHARED change worktree and record
+  `context_origin:stage=review=<handle>`; goal/closeout retain their own
+  `stage=goal` / `stage=closeout` tokens, and plan-audit keeps the
+  `plan_origin` + `audit_origin` pair. Token contracts are pinned in
+  `internal/tmpl/templates_test.go`, including NotContains guards on retired
+  review-origin / review-context token forms.
 
 ## Dependency Flow
 
-Host emits `--reference` tokens via `slipway evidence skill` ->
+Each governed stage's host-native subagent runs on the shared worktree and
+returns claims only; the host inspects the written files and records a verdict via
+`slipway evidence skill`, stamping a self-describing handle token onto
+`References`: `context_origin:stage=review=<handle>` for every selected reviewer,
+`context_origin:stage=<stage>=<handle>` for goal/closeout,
+`plan_origin:<handle>` + `audit_origin:<handle>` for the plan-audit author/auditor
+pair, and the reused `executor_agent:` grammar for the S2 wave executor set.
 `cmd/evidence.go` stamps engine-owned `Timestamp`/`RunVersion` and writes
-`verification/<skill>.yaml` -> `authority.go` consumes them at the ship/review
-gate (`buildShipAuthorityFromReadiness`, `closeoutGoalVerificationReuse*`).
-For waves: `slipway evidence task` -> per-task JSON ->
-`SyncGovernedWaveExecution` -> `dispatch_mode`/`executor_agent` tokens parsed by
-`wave_execution.go` -> `DispatchEvidenceBlockers`/`ExecutorAgentBlockers`. New
-chain-ordering and review-pair gates go in `internal/engine/progression`; new
-reason-code vocabulary stays pure in `internal/model`.
+`verification/<skill>.yaml`. `internal/model/context_attestation.go` parses those
+tokens fail-closed and exposes `CrossStageContextCollisions`. The plan gate
+(`advance_governed.go` `EvaluatePlanGate`) consumes the local
+`plan_origin`/`audit_origin` pair; the review and ship gates (`authority.go`
+`evaluateReviewAuthorityWithPolicy` / `buildShipAuthorityFromReadiness`) build the
+selected-set lattice and fail closed on missing or colliding handles. New gate
+wiring stays in `internal/engine/progression`; new vocabulary stays pure in
+`internal/model`.
 
 ## Constraints And Invariants
 
-- Engine is the sole verdict/freshness stamper; the host may add `References`
-  but cannot stamp `Timestamp`/`RunVersion`. Honest hybrid: host-emitted handles
-  are audit/structural-tier evidence, not crypto proof.
-- References-only, additive: no new `VerificationRecord` struct field, avoiding
-  Lattice/JSON-schema and toolgen `Arguments` contract churn.
-- Fail-closed on standard/strict (`EffectivePreset != WorkflowPresetLight`),
-  advisory on light — the same predicate `closeoutAssuranceAttestationBlockers`
-  uses. `SyncGovernedWaveExecution` must learn this preset (today it is
-  preset-blind).
-- Three-file reason-code contract: every new code must land in
-  `canonicalReasonDefinitions` + the snapshot/severity test + `recovery.go`
-  remediations, or `NewReasonCode` silently downgrades it.
-- Layering ban: `internal/architecture/dependency_direction_test.go`
-  (`TestAuthorityPackagesDoNotImportSurfaceRenderers`) forbids `internal/model`
-  and `internal/state` from importing `cmd`, `internal/tmpl`, or
-  `internal/toolgen`. New gates go in `internal/engine/progression`; new vocab
-  stays in `internal/model`.
-- RunSummaryBound parity gives all four independence skills the same RunVersion,
-  so RunVersion cannot prove fresh-context origin — P3's documented residual;
-  cross-stage timestamp ordering (Pattern B) is the strongest honest discriminator.
+- Engine is the sole verdict/freshness stamper; the host may add `References` but
+  cannot stamp `Timestamp`/`RunVersion` and the engine forks no process. Honest
+  hybrid: host-emitted handle strings are structural-tier attestation compared for
+  distinctness (`participantsCollide`), never cryptographic proof.
+- References-only, additive: no new `VerificationRecord` struct field and no new
+  CLI flag — every token rides the existing `--reference`, avoiding Lattice/JSON
+  and toolgen `Arguments` churn.
+- Fail-closed on ambiguity: conflicting handles for the same key return
+  `ok=false` rather than letting the last reference win; idempotent on identical
+  repeats. A present-passing record with no well-formed handle ->
+  `context_origin_handle_invalid` (and short-circuits collision evaluation); an
+  absent or non-passing record contributes nothing (its absence is owned by the
+  required-skill-missing gate).
+- Preset floor: every #240/#47/#239 facet is error on standard/strict
+  (`EffectivePreset != model.WorkflowPresetLight`) and advisory (returns nil) on
+  light. Preset-resolution failure falls back to the zero `PresetPolicy`, whose
+  `EffectivePreset` is `""` (!= light), so the gate ENFORCES rather than relaxing.
+- Exactly-once edge partition keyed on the later-resolving endpoint: Plan gate
+  owns the one local `audit_origin != plan_origin` edge. Review owns every edge
+  among `{executor, audit_origin}` plus the selected review-skill keys. Ship owns
+  only the new edges introduced by `{goal, closeout}` against that same selected
+  review base. Mandatory selection yields 10 review-owned edges and 11 ship-owned
+  edges; selected security yields 15 and 13. `CrossStageContextCollisions` keeps
+  only owned-endpoint edges, so no edge double-fires.
+- Executor joins as set-disjointness: each single-handle stage must be absent from
+  the executor `HandleSet`; an empty set is silent; the blank conflict-collapse
+  handle is dropped so it never spuriously collides. Executor-internal distinctness
+  stays owned by the existing `executor_agent_missing` wave gate.
+- Always-on chain order (`closeout_chain_order_invalid`): closeout >=
+  goal-verification >= every selected review verdict, compared only between
+  present+passing+non-zero-timestamp records and independent of the opt-in
+  `goal_verification_reuse` token. Selected reviewers remain unordered peers; no
+  intra-S3 ordering gate exists.
+- Reason-code contract: every code must land in `canonicalReasonDefinitions` + the
+  snapshot/severity test + `recovery.go` remediations (and, for in-scope producers,
+  resolve via `inScopeProducedRecoverySpecs`), or `NewReasonCode` silently
+  downgrades it to `unknown_reason_code`. Retired codes must be absent from all of
+  the registry, remediations, and `IsCanonicalReasonCode`.
+- Layering ban: `internal/architecture/dependency_direction_test.go` forbids
+  `internal/model` and `internal/state` from importing `cmd`, `internal/tmpl`, or
+  `internal/toolgen`. Lattice stage identifiers are local model constants, never
+  the progression skill-name constants.
+- Sensitive-domain fail-closed: no bypass, force-close, or private/self-stamped
+  attestation path is added. Missing selected review evidence, malformed
+  `stage=review` handles, selected-set collisions, and selected-set chain-order
+  violations route only through public skill re-runs and engine-stamped evidence.

@@ -26,16 +26,17 @@ type nextHandoffView struct {
 }
 
 type nextSkillHandoff struct {
-	Name             string             `json:"name"`
-	DisplayName      string             `json:"display_name,omitempty"`
-	BlockingName     string             `json:"blocking_name,omitempty"`
-	ResolutionReason string             `json:"resolution_reason,omitempty"`
-	RequiredTokens   []string           `json:"required_tokens,omitempty"`
-	VerificationDir  string             `json:"verification_dir"`
-	State            string             `json:"state"`
-	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
-	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
-	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
+	Name                 string             `json:"name"`
+	DisplayName          string             `json:"display_name,omitempty"`
+	BlockingName         string             `json:"blocking_name,omitempty"`
+	ResolutionReason     string             `json:"resolution_reason,omitempty"`
+	SelectedReviewSkills []string           `json:"selected_review_skills,omitempty"`
+	RequiredTokens       []string           `json:"required_tokens,omitempty"`
+	VerificationDir      string             `json:"verification_dir"`
+	State                string             `json:"state"`
+	SkillConstraints     *skillConstraints  `json:"skill_constraints,omitempty"`
+	ReviewContext        *reviewContextView `json:"review_context,omitempty"`
+	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
 }
 
 type contextBudgetHandoff struct {
@@ -200,16 +201,17 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 	var nextSkill *nextSkillHandoff
 	if view.NextSkill != nil {
 		nextSkill = &nextSkillHandoff{
-			Name:             view.NextSkill.Name,
-			DisplayName:      view.NextSkill.DisplayName,
-			BlockingName:     view.NextSkill.BlockingName,
-			ResolutionReason: view.NextSkill.ResolutionReason,
-			RequiredTokens:   append([]string(nil), view.NextSkill.RequiredTokens...),
-			VerificationDir:  view.NextSkill.VerificationDir,
-			State:            view.NextSkill.State,
-			SkillConstraints: cloneSkillConstraints(view.NextSkill.SkillConstraints),
-			ReviewContext:    cloneReviewContext(view.NextSkill.ReviewContext),
-			TechniqueHints:   cloneTechniqueHints(view.NextSkill.TechniqueHints),
+			Name:                 view.NextSkill.Name,
+			DisplayName:          view.NextSkill.DisplayName,
+			BlockingName:         view.NextSkill.BlockingName,
+			ResolutionReason:     view.NextSkill.ResolutionReason,
+			SelectedReviewSkills: append([]string(nil), view.NextSkill.SelectedReviewSkills...),
+			RequiredTokens:       append([]string(nil), view.NextSkill.RequiredTokens...),
+			VerificationDir:      view.NextSkill.VerificationDir,
+			State:                view.NextSkill.State,
+			SkillConstraints:     cloneSkillConstraints(view.NextSkill.SkillConstraints),
+			ReviewContext:        cloneReviewContext(view.NextSkill.ReviewContext),
+			TechniqueHints:       cloneTechniqueHints(view.NextSkill.TechniqueHints),
 		}
 	}
 	budget := buildContextBudgetHandoff(view.ContextBudget)

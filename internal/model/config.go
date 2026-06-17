@@ -63,6 +63,9 @@ type ConfigGovernanceThresholds struct {
 	// IndependentReviewBlastRadius is the minimum blast radius that triggers
 	// the independent-review control. Default: high (10+ files).
 	IndependentReviewBlastRadius SignalLevel `yaml:"independent_review_blast_radius,omitempty" json:"independent_review_blast_radius,omitempty"`
+	// SecurityReviewBlastRadius is the minimum blast radius that triggers
+	// the security-review control. Default: high (10+ files).
+	SecurityReviewBlastRadius SignalLevel `yaml:"security_review_blast_radius,omitempty" json:"security_review_blast_radius,omitempty"`
 	// WorktreeBlastRadius is the minimum blast radius that triggers
 	// the worktree-isolation control. Default: high (10+ files).
 	WorktreeBlastRadius SignalLevel `yaml:"worktree_blast_radius,omitempty" json:"worktree_blast_radius,omitempty"`
@@ -72,6 +75,9 @@ type ConfigGovernanceThresholds struct {
 func (t ConfigGovernanceThresholds) Validate() error {
 	if t.IndependentReviewBlastRadius != "" && !t.IndependentReviewBlastRadius.IsValid() {
 		return fmt.Errorf("governance.thresholds.independent_review_blast_radius: invalid signal level %q", t.IndependentReviewBlastRadius)
+	}
+	if t.SecurityReviewBlastRadius != "" && !t.SecurityReviewBlastRadius.IsValid() {
+		return fmt.Errorf("governance.thresholds.security_review_blast_radius: invalid signal level %q", t.SecurityReviewBlastRadius)
 	}
 	if t.WorktreeBlastRadius != "" && !t.WorktreeBlastRadius.IsValid() {
 		return fmt.Errorf("governance.thresholds.worktree_blast_radius: invalid signal level %q", t.WorktreeBlastRadius)
@@ -320,6 +326,7 @@ func (c Config) ToYAML() ([]byte, error) {
 		len(cfg.Governance.PolicyPacks) > 0 ||
 		len(cfg.Governance.Controls) > 0 || len(cfg.Governance.DisabledControls) > 0 ||
 		cfg.Governance.Thresholds.IndependentReviewBlastRadius != "" ||
+		cfg.Governance.Thresholds.SecurityReviewBlastRadius != "" ||
 		cfg.Governance.Thresholds.WorktreeBlastRadius != ""
 	if hasGovernance {
 		governanceNode, err := encodeYAMLNode(cfg.Governance)

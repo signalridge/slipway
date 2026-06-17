@@ -307,9 +307,10 @@ Roll forward by preserving the recommendation under pending_decisions until G_pl
 Low risk; the public field split is additive and fail-closed before approval.
 `)))
 		writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
-			Verdict:   model.VerificationVerdictPass,
-			Blockers:  []model.ReasonCode{},
-			Timestamp: time.Now().UTC(),
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			References: planAuditOriginReferences(),
 		})
 		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillPlanAudit)
 

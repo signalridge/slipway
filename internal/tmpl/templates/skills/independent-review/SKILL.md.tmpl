@@ -1,0 +1,137 @@
+---
+skill_id: independent-review
+name: slipway-independent-review
+description: "Use when a fresh-context S3 code review with an explicit verdict contract is needed. Triggers on the workflow-owned S3 review host or the `slipway review` command surface."
+---
+
+# Independent Review
+
+```
+IRON LAW: REVIEW WITH FRESH CONTEXT, EXIT WITH A VERDICT
+```
+
+## Purpose
+Perform code review as an independent reader. At `S3_REVIEW` this is a
+workflow-owned host that dispatches its own native subagent on the SHARED change worktree.
+Do not reuse the author's narration as your source of truth.
+
+## Workflow Outline
+1. Read the change diff and the intent/plan bundle before reading author notes.
+2. Re-derive the acceptance signal from the plan and re-check the diff against it.
+3. Review correctness, quality, safety, and tests line-by-line.
+4. Write verification, surface blockers, and wait for approval.
+
+## When This Runs
+At `S3_REVIEW` the workflow dispatches independent-review as one of the
+review-stage native subagents. This review is an unordered peer of the other S3
+reviewers; it does not wait for their verdicts and they do not wait for this
+verdict. `slipway next` previews the review set; it does not advance the state.
+
+## Review Contract
+Use fresh context; do not carry assumptions from the implementer or from peer
+reviews.
+
+- Do NOT rely on implementer or peer-review summaries.
+- Do NOT trust "tests pass" claims without reading or rerunning the tests.
+- Do NOT trust "no duplication" claims without searching for similar patterns.
+- If something "looks fine at a glance", treat that as a signal to inspect it line-by-line.
+
+## Disk-Handoff Contract
+For bulky review artifacts, keep the coordinator thin:
+- Pass required-reading paths from `slipway next --json`; do not paste artifact
+  bodies, diffs, or command output into the host context.
+- An isolated subagent writes bulky artifacts directly to disk under
+  `artifacts/changes/<slug>/` and returns only a short confirmation naming the
+  paths written and any blockers.
+- The confirmation is a claim, not evidence. The review host must inspect the
+  written files and record the verdict through `slipway evidence skill`; do not
+  hand-edit verification YAML into a pass state.
+- Slipway CLI owns `run_version`, timestamps, freshness inputs, and verdict
+  stamping; subagents must not self-stamp freshness or final verdicts.
+
+## Required Checks
+### Diff-Scoped Review
+When a concrete diff target is in scope (pull request, commit range, or
+changed-only selection), classify every finding:
+- **new** — finding is introduced by the diff under review. Blocking by default.
+- **pre-existing** — finding existed before the diff and is unchanged. Report it, but do not block on it.
+- **worsened** — finding existed before the diff, but the diff broadens its blast radius or weakens a mitigation. Treat it as blocking.
+
+Only **new** and **worsened** findings participate in the verdict.
+**pre-existing** findings never flip a verdict from pass to fail.
+
+### Line-Level Review Protocol
+1. Confirm scope first: list changed files and map each one to the requirement or acceptance signal it claims to satisfy.
+2. Review correctness before everything else: logic errors, missing branches, broken contracts, caller fallout.
+3. Review quality second: naming, maintainability, duplication, complexity, and convention drift.
+4. Review safety third even when the author says security is unrelated: auth, data handling, destructive ops, external contracts, secrets, and injection paths.
+5. Review tests explicitly: changed functions need behavior checks, not ceremonial "no error" assertions.
+
+## Checklist
+- [ ] Diff read before author notes.
+- [ ] All changed files mapped to a requirement or acceptance signal.
+- [ ] Each changed file reviewed line-by-line for correctness.
+- [ ] Safety scan completed for changed paths.
+- [ ] Test coverage assessed for each changed function or behavior slice.
+- [ ] Every blocker cites a reproducible observation.
+- [ ] Remediation is actionable, not "please reconsider".
+- [ ] Bottom line is one sentence, aligned with verdict severity.
+
+## Review Dispatch And Context-Origin Handle
+Dispatch this review in a native subagent from the S3 review host on the SHARED change worktree
+(the same worktree the implementation edited; there is no
+per-review git worktree isolation). Spawn a fresh-context subagent with a
+bounded review brief, pass it required-reading paths rather than artifact
+bodies, wait for the result, and record the handle. If a capable runtime cannot
+spawn, wait for, and close a subagent, stop and ask for operator direction
+rather than reviewing inline in the host context.
+
+Record this review's context identifier as
+`context_origin:stage=review=<handle>`, where `<handle>` is the dispatched
+subagent's handle/identity. All S3 reviewers share stage `review`, but each
+reviewer's handle MUST be DISTINCT across the review-stage subagents. A uniform
+handle stamped on multiple reviews, or a missing handle, is the degenerate
+single-context signature the gate rejects. Do NOT build the token out of the
+literal `review_context` handoff JSON name; the only handle token this review
+emits is `context_origin:stage=review=`.
+
+## Record Verification
+Write bulky review notes to disk, then record the verdict through the CLI so
+Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
+Do not hand-edit `verification/independent-review.yaml`.
+
+```bash
+slipway evidence skill \
+  --skill independent-review \
+  --verdict pass \
+  --reference "context_origin:stage=review=<handle>" \
+  --notes-file artifacts/changes/{slug}/verification/independent-review-notes.md
+```
+
+## Report Schema
+```yaml
+verdict: pass | changes-requested | blocked
+bottom_line: "<one-sentence summary>"
+findings:
+  - severity: blocker | major | minor | nit
+    location: "<path:line>"
+    evidence: "<quote or command output>"
+    remediation: "<concrete action>"
+questions: []
+```
+
+## Present and Advance
+Show review findings. {{template "hard-gate"}}
+
+After confirmation, advance with `slipway run`; the engine rechecks S3 review
+evidence and advances when required review evidence is satisfied.
+
+## DO NOT SKIP
+1. Fresh context separate from the implementer and peer reviewers.
+2. Line-level review of changed code.
+3. Verification record written after review.
+
+## Block If
+- New or worsened correctness, safety, or contract findings remain unresolved.
+- Tests are weak, misleading, or missing for important paths.
+- Review notes lack reproducible evidence for blockers.

@@ -49,7 +49,7 @@ Verify ALL of the following before producing closeout verification:
       archived bundles are frozen records, not inputs to this active gate
 - [ ] blocker list is empty
 - [ ] `assurance.md` is complete on standard/strict preset
-- [ ] both review skills have passing verification
+- [ ] every selected S3 review skill has passing verification
 - [ ] artifact staleness propagation is clean
 - [ ] when a guardrail domain is active, goal-verification carries a fresh
       `high_risk_check:<domain>.safety_baseline=pass` (the ship-gate check); the
@@ -122,6 +122,17 @@ required attestation the ship gate enforces on standard/strict.
 ## Write Verification
 Closeout must be performed independently from implementation.
 
+Dispatch this closeout's refresh work in a host-native subagent that runs on the
+SHARED change worktree (the same worktree the implementation edited; there is no
+per-closeout git worktree isolation). Model the dispatch on how
+`slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
+subagent with a bounded closeout brief, pass it required-reading paths rather than
+artifact bodies, wait for its result, and record its handle. If a capable runtime
+cannot spawn, wait for, and close a subagent, stop and ask for operator direction
+rather than refreshing inline in the host context. Record the dispatched
+subagent's handle/identity as `context_origin:stage=closeout=<handle>` in the
+references below.
+
 ```yaml
 # Write to: artifacts/changes/{slug}/verification/final-closeout.yaml
 verdict: pass
@@ -131,6 +142,7 @@ run_version: <current run_summary_version from slipway status --json>  # progres
 references:
   - "closeout:evidence_freshness=pass"
   - "closeout:test_suite=pass:N/N"
+  - "context_origin:stage=closeout=<handle>"   # the dispatched closeout subagent's handle/identity
   - "closeout:goal_verification_reuse=pass"                         # only when using the reuse branch
   - "closeout:goal_verification_reuse_run_version=<current run_version>"  # only when using the reuse branch; must match goal-verification, final-closeout, and execution-summary
   - "closeout:reviewer_independence=pass"   # REQUIRED on standard/strict (engine-consumed presence); omit on light
@@ -154,15 +166,18 @@ The ship gate now consumes the independence attestation it previously ignored.
   the ship gate fails closed with `closeout_reviewer_independence_missing`.
   Recovery: re-run final-closeout and record the token. Advisory on light.
 - **Chain ordering (always-on invariant):** the engine enforces
-  `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)`
-  across the four independence-critical verdict timestamps. This invariant is
-  always on — it does NOT depend on the opt-in `closeout:goal_verification_reuse=pass`
-  token. If goal-verification predates the latest review verdict, or
+  `closeout >= goal-verification >= latest(selected S3 review set)` across the
+  independence-critical verdict timestamps. The selected S3 review set always
+  includes spec-compliance-review, code-quality-review, and independent-review;
+  it also includes security-review when the security control is selected. This
+  invariant is always on — it does NOT depend on the opt-in
+  `closeout:goal_verification_reuse=pass` token. If goal-verification predates
+  the latest selected review verdict, or
   final-closeout predates goal-verification, the ship gate fails closed with
   `closeout_chain_order_invalid` (a distinct code, not
   `closeout_goal_verification_reuse_invalid`). Recovery: re-stamp the affected
-  stage in order — both reviews first, then goal-verification, then final-closeout.
-  Advisory on light.
+  stage in order — every selected S3 review first, then goal-verification, then
+  final-closeout. Advisory on light.
 
 Both facets fail closed at error severity on standard/strict and are advisory on
 light. There is no bypass, force-close, or self-stamp path; the engine remains the

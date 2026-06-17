@@ -76,19 +76,20 @@ func TestResolveNoMatchReturnsEmpty(t *testing.T) {
 	assert.Empty(t, res.Supports)
 }
 
-func TestResolveReviewHostAttachesIndependentReview(t *testing.T) {
+func TestResolveReviewHostDoesNotAttachPromotedReviewHosts(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 	res := Resolve(reg, Signals{Host: "code-quality-review"})
 	require.NotEmpty(t, res.Supports)
-	foundIR := false
+
 	for _, s := range res.Supports {
-		if s.SkillID == "independent-review" {
-			foundIR = true
-			assert.NotEmpty(t, s.Kind)
-		}
+		assert.NotContains(t, []string{"independent-review", "security-review"}, s.SkillID,
+			"promoted S3 review hosts must not be attached as host-embedded supports")
 	}
-	assert.True(t, foundIR, "expected independent-review attached at code-quality-review host")
+	for _, key := range res.HydrateReferences {
+		assert.NotContains(t, key, "security-review/",
+			"promoted security-review host hydrate refs must not leak through code-quality-review support")
+	}
 }
 
 func TestResolveEmitsHydrateForAutoRoute(t *testing.T) {
@@ -184,17 +185,7 @@ func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
 			sig:  Signals{Host: "code-quality-review"},
 			want: resolutionSnapshot{
 				supports: []supportSnapshot{
-					{skillID: "independent-review", kind: AttachmentProcedure},
 					{skillID: "multi-reviewer-calibration", kind: AttachmentProcedure},
-					{skillID: "security-review", kind: AttachmentChecklist},
-				},
-				hydrate: []string{
-					"security-review/authentication.md",
-					"security-review/authorization.md",
-					"security-review/infrastructure-docker.md",
-					"security-review/injection.md",
-					"security-review/ssrf.md",
-					"security-review/xss.md",
 				},
 			},
 		},

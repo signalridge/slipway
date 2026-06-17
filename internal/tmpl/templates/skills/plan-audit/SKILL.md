@@ -166,6 +166,27 @@ Audit tasks as execution units, not prose:
 - for guardrail-domain work, require a RED test plan before execution
 - keep non-goals explicit, including scope and rollout boundaries
 
+## Author/Auditor Dispatch And Context-Origin Handles
+Dispatch the audit work in a host-native subagent that runs on the SHARED change
+worktree (the same worktree that holds the governed bundle; there is no
+per-audit git worktree isolation). Model the dispatch on how
+`slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
+subagent with a bounded audit brief, pass it required-reading paths rather than
+artifact bodies, wait for its result, and record its handle. If a capable runtime
+cannot spawn, wait for, and close a subagent, stop and ask for operator direction
+rather than auditing inline in the host context.
+
+Plan-audit records an author/auditor PAIR of context handles, NOT a
+`context_origin:stage=` token. Record both:
+- `plan_origin:<handle>` — the handle/identity of the context that AUTHORED the
+  plan bundle (`requirements.md`, `decision.md`, `tasks.md`).
+- `audit_origin:<handle>` — the handle/identity of the dispatched subagent that
+  AUDITED the bundle in fresh context.
+
+The engine consumes the two as a pair and compares them for independence; a
+missing handle, or one uniform handle stamped as both author and auditor, is the
+degenerate single-context signature the gate rejects.
+
 ## Record Verification
 Write bulky audit notes to disk, then record the verdict through the CLI so
 Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
@@ -176,6 +197,8 @@ slipway evidence skill \
   --skill plan-audit \
   --verdict pass \
   --reference "plan-audit:pass" \
+  --reference "plan_origin:<handle>" \
+  --reference "audit_origin:<handle>" \
   --notes-file artifacts/changes/{slug}/verification/plan-audit-notes.md
 ```
 

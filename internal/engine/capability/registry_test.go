@@ -100,6 +100,41 @@ func TestStatusSuggestedOnlySkillsStayOffStatusCommand(t *testing.T) {
 	}
 }
 
+func TestPromotedReviewSkillsKeepReviewCommandAutoWithoutHostEmbedding(t *testing.T) {
+	t.Parallel()
+
+	reg := DefaultRegistry()
+	cases := []struct {
+		id         string
+		attachment AttachmentMode
+	}{
+		{id: "independent-review", attachment: AttachmentReportSchema},
+		{id: "security-review", attachment: AttachmentChecklist},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+
+			sk, ok := reg.Lookup(tc.id)
+			require.True(t, ok)
+
+			foundCommandAuto := false
+			for _, binding := range sk.Bindings {
+				assert.NotEqual(t, BindingHostEmbedded, binding.Type,
+					"%s is a workflow-owned S3 host and must not be host-embedded into peer review hosts", tc.id)
+				if binding.Type == BindingCommandAuto &&
+					binding.Target == "review" &&
+					binding.Attachment == tc.attachment {
+					foundCommandAuto = true
+				}
+			}
+			assert.True(t, foundCommandAuto, "%s must preserve review command-auto binding", tc.id)
+		})
+	}
+}
+
 func TestDefaultSkillsDoNotUseRemovedCommandViewBindings(t *testing.T) {
 	t.Parallel()
 

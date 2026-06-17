@@ -70,6 +70,10 @@ func DeriveControls(input DeriveControlsInput) DeriveControlsResult {
 	if input.Overrides != nil {
 		thresholds = applyOverrides(thresholds, *input.Overrides)
 	}
+	securityReviewBlastRadius := model.SignalLevelHigh
+	if input.Overrides != nil && input.Overrides.SecurityReviewBlastRadius.IsValid() {
+		securityReviewBlastRadius = input.Overrides.SecurityReviewBlastRadius
+	}
 
 	var candidates []model.ControlActivation
 
@@ -107,6 +111,17 @@ func DeriveControls(input DeriveControlsInput) DeriveControlsResult {
 			Scope:        model.ControlScopeReview,
 			Active:       true,
 			TriggeredBy:  domains,
+			PolicySource: policySource,
+		})
+	}
+
+	if triggers := securityReviewTriggers(domains, blastRadius, securityReviewBlastRadius); len(triggers) > 0 {
+		candidates = append(candidates, model.ControlActivation{
+			ControlID:    model.ControlSecurityReview,
+			Mode:         ResolveControlMode(model.ControlSecurityReview, input.Overrides),
+			Scope:        model.ControlScopeReview,
+			Active:       true,
+			TriggeredBy:  triggers,
 			PolicySource: policySource,
 		})
 	}
@@ -194,6 +209,31 @@ func deriveDomains(input DeriveControlsInput) []string {
 		return []string{d}
 	}
 	return nil
+}
+
+func securityReviewTriggers(domains []string, blastRadius model.SignalLevel, threshold model.SignalLevel) []string {
+	triggers := []string{}
+	for _, domain := range domains {
+		if securityReviewGuardrailDomain(domain) {
+			triggers = append(triggers, "domain="+strings.TrimSpace(domain))
+		}
+	}
+	if blastRadius.Order() >= threshold.Order() {
+		triggers = append(triggers, "blast_radius="+string(blastRadius))
+	}
+	return triggers
+}
+
+func securityReviewGuardrailDomain(domain string) bool {
+	switch strings.TrimSpace(domain) {
+	case string(model.GuardrailDomainAuthAuthZ),
+		string(model.GuardrailDomainSecurityCredentials),
+		string(model.GuardrailDomainPrivacyPII),
+		string(model.GuardrailDomainExternalAPIContracts):
+		return true
+	default:
+		return false
+	}
 }
 
 // deriveBlastRadius computes blast radius from the contract source for the

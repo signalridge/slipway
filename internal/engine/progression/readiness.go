@@ -195,6 +195,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readiness.ActiveControls = cloneControlActivations(snap.ActiveControls)
 	readiness.RequiredActions = governance.ResolveRuntimeRequiredActions(root, evaluationChange, snap)
 	readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(governance.RequiredActionBlockers(evaluationChange, readiness.RequiredActions))...)
+	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
 
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
@@ -210,12 +211,13 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		artifactProjectionReader = contextualArtifactProjectionReader{ctx: artifactCtx}
 	}
 	planningSubSteps := activePlanningSubStepsForState(evaluationChange, effectiveState)
-	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChange(
+	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		evaluationChange,
 		effectiveState,
 		execCtx.LatestRunVersion,
 		FinalCloseoutEvidenceRequired(policy),
+		reviewSelection,
 		planningSubSteps...,
 	)
 	if err != nil {
@@ -480,7 +482,12 @@ func evaluateGateReadiness(
 		if err != nil {
 			return nil, nil, err
 		}
-		planEval := EvaluatePlanGate(root, change, planSkills)
+		// Resolve the preset policy so the plan gate's plan-audit self-audit edge
+		// enforces on standard/strict and stays advisory on light. A resolution
+		// failure falls back to the zero policy (EffectivePreset != light), which
+		// fails closed rather than silently relaxing the edge.
+		planPresetPolicy, _ := governance.ResolvePresetPolicy(root, change)
+		planEval := EvaluatePlanGate(root, change, planSkills, planPresetPolicy)
 		planEval.ReasonCodes = model.NormalizeReasonCodes(append(planEval.ReasonCodes, model.ReasonCodesFromSpecs(planSkillBlockers)...))
 		if len(planEval.ReasonCodes) > 0 {
 			planEval.Status = model.GateStatusBlocked

@@ -25,6 +25,7 @@ func TestResolvePresetPolicyFromConfig_LightPresetEnablesLowCeremonyPolicy(t *te
 	assert.Equal(t, 2, policy.MaxPlanAuditIterations)
 	require.NotNil(t, policy.Overrides)
 	assert.Equal(t, model.ControlModeAdvisory, policy.Overrides.ModeOverrides[model.ControlIndependentReview])
+	assert.Equal(t, model.ControlModeAdvisory, policy.Overrides.ModeOverrides[model.ControlSecurityReview])
 }
 
 func TestResolvePresetPolicyFromConfig_GuardrailNoLongerFloorsLightToStandard(t *testing.T) {
@@ -135,7 +136,9 @@ func TestResolvePresetPolicyFromConfig_StrictPresetBehavior(t *testing.T) {
 	assert.False(t, policy.VerifyAutoPassEnabled, "strict disables verify auto-pass")
 	require.NotNil(t, policy.Overrides)
 	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlIndependentReview])
+	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlSecurityReview])
 	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlRollbackRequired])
+	assert.Equal(t, model.SignalLevelMedium, policy.Overrides.SecurityReviewBlastRadius)
 }
 
 func TestResolvePresetPolicyFromConfig_LightNeverDemotesClarificationOrExploration(t *testing.T) {
@@ -176,6 +179,7 @@ func TestResolvePresetPolicyFromConfig_ProjectOverrideCanWeakenPresetDefault(t *
 	cfg := model.DefaultConfig()
 	cfg.Governance.Controls = map[model.ControlID]model.ControlMode{
 		model.ControlIndependentReview: model.ControlModeAdvisory,
+		model.ControlSecurityReview:    model.ControlModeAdvisory,
 	}
 	change := model.NewChange("strict-project-override")
 	change.WorkflowPreset = model.WorkflowPresetStrict
@@ -186,6 +190,40 @@ func TestResolvePresetPolicyFromConfig_ProjectOverrideCanWeakenPresetDefault(t *
 	// Project override (applied after preset defaults) takes precedence.
 	assert.Equal(t, model.ControlModeAdvisory, policy.Overrides.ModeOverrides[model.ControlIndependentReview],
 		"project per-control override must take precedence over strict preset default")
+	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlSecurityReview],
+		"security-review must remain blocking under strict even when project config tries to weaken it")
+}
+
+func TestResolvePresetPolicyFromConfig_StandardSecurityReviewOverrideCannotWeakenBlocking(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.DefaultConfig()
+	cfg.Governance.Controls = map[model.ControlID]model.ControlMode{
+		model.ControlSecurityReview: model.ControlModeAdvisory,
+	}
+	change := model.NewChange("standard-security-override")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+
+	policy := resolvePresetPolicyFromConfig(cfg, change)
+	require.NotNil(t, policy.Overrides)
+
+	assert.Equal(t, model.ControlModeBlocking, policy.Overrides.ModeOverrides[model.ControlSecurityReview],
+		"security-review must remain blocking under standard even when project config tries to weaken it")
+}
+
+func TestResolvePresetPolicyFromConfig_StrictSecurityReviewThresholdCannotBeWeakened(t *testing.T) {
+	t.Parallel()
+
+	cfg := model.DefaultConfig()
+	cfg.Governance.Thresholds.SecurityReviewBlastRadius = model.SignalLevelHigh
+	change := model.NewChange("strict-security-threshold")
+	change.WorkflowPreset = model.WorkflowPresetStrict
+
+	policy := resolvePresetPolicyFromConfig(cfg, change)
+	require.NotNil(t, policy.Overrides)
+
+	assert.Equal(t, model.SignalLevelMedium, policy.Overrides.SecurityReviewBlastRadius,
+		"strict preset must select security-review at medium blast radius even when config requests high")
 }
 
 func TestResolvePresetPolicyFromConfig_PendingConfirmationUseSuggested(t *testing.T) {

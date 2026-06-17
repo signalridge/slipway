@@ -44,9 +44,9 @@ boundary honestly rather than overselling it.
 
 | Attestation | What the engine enforces | Tier |
 | --- | --- | --- |
-| `review_origin:skill=<skill>=<handle>` on the spec-compliance-review / code-quality-review pair | both handles present and distinct | Audit/structural — raises forging cost and auditability, not cryptographic proof |
+| `context_origin:stage=<stage>=<handle>` emitted by the chain-wide independence skills on the shared worktree, with all selected S3 reviewers using `stage=review` | the participant handles owned by each seam are present and pairwise distinct; selected reviewers are keyed by skill name even though they share the `review` wire stage | Audit/structural — raises forging cost and auditability, not cryptographic proof |
 | `closeout:reviewer_independence=pass` on final-closeout | Pattern-A presence, now engine-consumed | Structural presence |
-| Chain ordering `closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)` | the four verdict timestamps are ordered, always on | Genuinely enforced ordering |
+| Chain ordering `closeout >= goal-verification >= every selected review verdict` | every selected reviewer is stamped before goal verification, and final closeout is stamped after goal verification | Genuinely enforced ordering |
 | `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` | a `degraded_sequential` dispatch is paired with a tool-unavailable justification | Structural pairing |
 
 Each gate fails closed at error severity on `standard`/`strict` and is advisory on
@@ -54,15 +54,42 @@ Each gate fails closed at error severity on `standard`/`strict` and is advisory 
 on `light`), not a separate advisory channel. No gate adds a bypass, force-close,
 or self-stamp path; the engine stays the sole verdict stamper.
 
-**Honest residual.** The `review_origin` handle gate cannot prove that two reviews
-ran in genuinely independent contexts, because the handles are host-emitted
-strings. True non-forgeable distinct-context discrimination would require an
-engine-issued per-stage nonce or a lifecycle-event boundary ("Option B"), which is
-infeasible within this change's constraints: the independence skills share a
-run-version, timestamp monotonicity only catches wrong-order, and the only
-zero-schema nonce is host-readable plaintext. So the handle gate is presented as
-audit/structural tier — it makes the cheapest authoring-context collapse visible
-and costly — and never as cryptographic distinct-context proof.
+### Cross-stage context-origin lattice
+
+`context_origin:stage=<stage>=<handle>` is one chain-wide grammar — emitted by the
+independence skills on the shared worktree — that spans the whole governed chain.
+S3 uses a selected review set: the mandatory spec, code, and independent
+reviewers, plus the security reviewer when the engine-derived security control is
+selected. Every selected review host records the same
+`context_origin:stage=review=<handle>` wire token, but the R2 lattice keys those
+participants by the recording review skill name rather than by the shared
+`review` stage. The non-review participants are the S2 wave `executor`, the S1
+plan-audit `audit_origin` (paired against the plan's `plan_origin` author),
+`goal`, and `closeout`. The collision lattice is owned per seam so no stage
+re-checks an edge another seam already owns:
+
+| Seam | Owns | Edges |
+| --- | --- | --- |
+| Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
+| Review authority | every edge among `{executor, audit_origin}` plus the selected review-skill keys | variable: mandatory set has 10, selected security expands it to 15 |
+| Ship authority | every edge introducing `{goal, closeout}` to that selected review base | variable: mandatory set adds 11, selected security expands it to 13 |
+
+When a seam fails closed, recovery is to re-run the owning stage or selected
+reviewer in a fresh native subagent so it re-emits a distinct `context_origin`
+handle; the engine never self-stamps, restamps, force-closes, or treats
+unselected security evidence as a hidden lattice participant.
+
+**Honest residual.** The `context_origin` lattice cannot prove that the chain's
+stages ran in genuinely independent contexts, because the handles are
+host-emitted strings — it is the *same structural tier as the executor-dispatch
+handles*, not cryptographic proof of independence. True non-forgeable
+distinct-context discrimination would require an engine-issued per-stage nonce or
+a lifecycle-event boundary ("Option B"), which is infeasible within this change's
+constraints: the independence skills share a run-version, timestamp monotonicity
+only catches wrong-order, and the only zero-schema nonce is host-readable
+plaintext. So the lattice is presented as audit/structural tier — it makes the
+cheapest authoring-context collapse visible and costly across every owned seam —
+and never as cryptographic distinct-context proof.
 
 ## Non-Goals
 
