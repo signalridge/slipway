@@ -521,12 +521,10 @@ func TestAppendCatalogHintsIntakeHostDoesNotLeakRetiredScopeSkill(t *testing.T) 
 	assert.Empty(t, hints)
 }
 
-func TestAppendCatalogHintsAttachesOnReviewHost(t *testing.T) {
+func TestAppendCatalogHintsDoesNotDuplicateSelectedReviewPeers(t *testing.T) {
 	t.Parallel()
 	hints := appendCatalogHints(nil, "code-quality-review", nil, &nextView{})
-	require.NotEmpty(t, hints)
-	assert.Equal(t, "skill:independent-review", hints[0].Name)
-	assert.Contains(t, hints[0].Reason, "procedure")
+	assert.Empty(t, hints)
 }
 
 func TestAppendCatalogHintsGoalVerificationDropsRetiredFreshEvidence(t *testing.T) {

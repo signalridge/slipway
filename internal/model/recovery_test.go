@@ -155,9 +155,55 @@ func inScopeProducedRecoverySpecs() []string {
 		"worktree_metadata_persist_failed:permission denied",
 		"closeout_reviewer_independence_missing",
 		"closeout_chain_order_invalid",
-		"review_origin_handle_invalid",
+		"context_origin_handle_invalid",
+		"cross_stage_context_not_distinct:spec-compliance-review|code-quality-review",
+		"plan_audit_origin_invalid",
 		"wave_test_impl_not_distinct",
 		"degraded_dispatch_justification_missing",
+	}
+}
+
+func TestReviewSetRecoveryTextNamesSelectedSetAndOptionalSecurity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		spec string
+		want []string
+	}{
+		{
+			name: "missing selected security review",
+			spec: "required_skill_missing:security-review",
+			want: []string{
+				"selected review-set",
+				"security-review only when selected",
+			},
+		},
+		{
+			name: "closeout chain order selected review set",
+			spec: "closeout_chain_order_invalid",
+			want: []string{
+				"selected review-set",
+				"independent-review",
+				"security-review when the security control selected it",
+				"precedes goal-verification",
+				"precedes final-closeout",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			step, ok := recoveryStepFor(ReasonCodeFromSpec(tt.spec))
+			require.True(t, ok)
+			for _, want := range tt.want {
+				assert.Contains(t, step.Remediation, want)
+			}
+			assert.NotContains(t, step.Remediation, "{")
+		})
 	}
 }
 

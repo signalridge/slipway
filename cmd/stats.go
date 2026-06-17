@@ -177,8 +177,17 @@ func requiresFrozenRunSummary(currentState model.WorkflowState) bool {
 }
 
 func hasMissingReviewEvidenceBlockers(blockers []model.ReasonCode) bool {
-	return hasReason(blockers, "required_skill_missing", progression.SkillSpecComplianceReview) ||
-		hasReason(blockers, "required_skill_missing", progression.SkillCodeQualityReview)
+	for _, skillName := range []string{
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillSecurityReview,
+	} {
+		if hasReason(blockers, "required_skill_missing", skillName) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasAnyRequiredSkillBlocker(blockers []model.ReasonCode, skillNames ...string) bool {

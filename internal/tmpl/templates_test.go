@@ -34,6 +34,8 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
 		"skills/goal-verification/SKILL.md.tmpl",
 		"skills/final-closeout/SKILL.md.tmpl",
 	}
@@ -164,7 +166,7 @@ func TestFinalCloseoutTemplateRequiresAssuranceAttestationOnStandardStrict(t *te
 	assert.Contains(t, content, "On light preset, omit it")
 }
 
-func TestSpecComplianceReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
+func TestSpecComplianceReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", map[string]string{
@@ -174,16 +176,17 @@ func TestSpecComplianceReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The review records a per-review context handle via the review_origin:
-	// grammar; the engine consumes the pair and requires the two handles to be
-	// distinct on standard/strict, advisory on light.
-	assert.Contains(t, content, "review_origin:skill=spec-compliance-review=<handle>")
+	// All S3 reviewers record the same review-stage origin grammar. The handle
+	// identifies the native subagent that performed this specific review.
+	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
+	// The retired review_origin grammar must be gone from the review template.
+	assert.NotContains(t, content, "review_origin:skill=")
 	// The colliding next/handoff JSON name must never be emitted as the token.
 	assert.NotContains(t, content, "review_context:skill=")
 }
 
-func TestCodeQualityReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
+func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/code-quality-review/SKILL.md.tmpl", map[string]string{
@@ -193,9 +196,84 @@ func TestCodeQualityReviewTemplateEmitsReviewOriginHandle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "review_origin:skill=code-quality-review=<handle>")
+	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
+	assert.NotContains(t, content, "review_origin:skill=")
 	assert.NotContains(t, content, "review_context:skill=")
+}
+
+func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
+	} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			content, err := Render(path, map[string]string{
+				"ToolID":      "claude",
+				"Trigger":     "/slipway:" + strings.TrimSuffix(strings.TrimPrefix(path, "skills/"), "/SKILL.md.tmpl"),
+				"Description": "test",
+			})
+			require.NoError(t, err)
+
+			assert.Contains(t, content, "S3_REVIEW")
+			assert.Contains(t, content, "native subagent")
+			assert.Contains(t, content, "SHARED change worktree")
+			assert.Contains(t, content, "context_origin:stage=review=<handle>")
+			assert.Contains(t, content, "MUST be DISTINCT")
+			assert.NotContains(t, content, "host-embedded")
+			assert.NotContains(t, content, "base reader that both review hosts")
+			assert.NotContains(t, content, "review_origin:skill=")
+			assert.NotContains(t, content, "review_context:skill=")
+		})
+	}
+}
+
+func TestPlanAuditTemplateEmitsPlanAndAuditOriginHandles(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+
+	// plan-audit records the author/auditor pair tokens (NOT a
+	// context_origin:stage= reference). The prose may name the stage grammar to
+	// contrast it, but no emitted reference uses the stage form.
+	assert.Contains(t, content, "plan_origin:<handle>")
+	assert.Contains(t, content, "audit_origin:<handle>")
+	assert.NotContains(t, content, `--reference "context_origin:stage=`)
+	assert.NotContains(t, content, "review_origin:skill=")
+}
+
+func TestGoalVerificationTemplateEmitsContextOriginHandle(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:goal-verification",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "context_origin:stage=goal=<handle>")
+	assert.NotContains(t, content, "review_origin:skill=")
+}
+
+func TestFinalCloseoutTemplateEmitsContextOriginHandle(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:final-closeout",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "context_origin:stage=closeout=<handle>")
+	assert.NotContains(t, content, "review_origin:skill=")
 }
 
 func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testing.T) {
@@ -212,7 +290,11 @@ func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testi
 	assert.Contains(t, content, `- "closeout:reviewer_independence=pass"`)
 	assert.Contains(t, content, "closeout_reviewer_independence_missing")
 	// Always-on chain-ordering invariant with its own distinct reason code.
-	assert.Contains(t, content, "closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)")
+	assert.Contains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
+	assert.Contains(t, content, "spec-compliance-review, code-quality-review, and independent-review")
+	assert.Contains(t, content, "security-review when the security control is selected")
+	assert.Contains(t, content, "every selected S3 review skill has passing verification")
+	assert.NotContains(t, content, "both review skills have passing verification")
 	assert.Contains(t, content, "closeout_chain_order_invalid")
 	assert.Contains(t, content, "Advisory on light")
 }
@@ -227,8 +309,10 @@ func TestGoalVerificationTemplateDocumentsChainOrderingInvariant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "MUST NOT predate either review")
-	assert.Contains(t, content, "closeout >= goal-verification >= max(spec-compliance-review, code-quality-review)")
+	assert.Contains(t, content, "MUST NOT predate any selected S3 review")
+	assert.Contains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
+	assert.Contains(t, content, "spec-compliance-review, code-quality-review, and independent-review")
+	assert.Contains(t, content, "security-review when the security control is selected")
 	assert.Contains(t, content, "closeout_chain_order_invalid")
 }
 
@@ -986,6 +1070,12 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 
 	assert.Contains(t, content, "fresh reviewer agent",
 		"run command missing fresh-reviewer pause mandate")
+	assert.Contains(t, content, "`independent-review`",
+		"run command missing independent-review handoff")
+	assert.Contains(t, content, "selected `security-review`",
+		"run command missing selected security-review handoff")
+	assert.NotContains(t, content, "`spec-compliance-review`, `code-quality-review`, or `final-closeout`",
+		"run command must not preserve the old fixed review handoff list")
 
 	assert.Contains(t, content, "Subagent Continuation Rule (HARD RULE)",
 		"run command missing subagent continuation hard rule")

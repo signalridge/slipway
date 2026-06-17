@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -105,9 +106,10 @@ Planning evidence remains authoritative after S1.
 	require.NoError(t, os.Chtimes(assurancePath, sourceAt, sourceAt))
 
 	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-		Verdict:   model.VerificationVerdictPass,
-		Blockers:  []model.ReasonCode{},
-		Timestamp: planAuditAt,
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  planAuditAt,
+		References: planAuditOriginReferences(),
 	})
 	writeSkillVerification(t, root, slug, "research-orchestration", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
@@ -197,6 +199,42 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 			assert.Equal(t, "query", nextResp.Advanced.Action)
 		}
 	})
+}
+
+func TestMissingReviewEvidenceBlockersIncludeSelectedReviewSetAcrossStatusValidateAndNext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "missing selected review evidence should stay aligned")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+
+	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
+
+	for _, blockers := range [][]model.ReasonCode{
+		statusResp.Blockers,
+		validateResp.Blockers,
+		nextResp.Blockers,
+	} {
+		requireBlockerContains(t, blockers, "required_skill_missing:spec-compliance-review")
+		requireBlockerContains(t, blockers, "required_skill_missing:code-quality-review")
+		requireBlockerContains(t, blockers, "required_skill_missing:independent-review")
+		require.NotContains(t, strings.Join(model.ReasonSpecs(blockers), "\n"), "required_skill_missing:security-review")
+	}
+	require.NotNil(t, nextResp.NextSkill)
+	assert.ElementsMatch(t, []string{
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+	}, nextResp.NextSkill.SelectedReviewSkills)
 }
 
 func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *testing.T) {

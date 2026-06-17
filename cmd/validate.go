@@ -7,6 +7,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
+	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -38,6 +39,7 @@ type validateView struct {
 	EvidenceFreshness         string                               `json:"evidence_freshness"`
 	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
 	ActionableNextSkill       *actionableNextSkillView             `json:"actionable_next_skill,omitempty"`
+	SelectedReviewSkills      []string                             `json:"selected_review_skills,omitempty"`
 	RequirementsContract      *artifactContractView                `json:"requirements_contract,omitempty"`
 	TasksContract             *artifactContractView                `json:"tasks_contract,omitempty"`
 	DecisionContract          *artifactContractView                `json:"decision_contract,omitempty"`
@@ -50,11 +52,12 @@ type validateView struct {
 }
 
 type actionableNextSkillView struct {
-	Name             string   `json:"name"`
-	DisplayName      string   `json:"display_name,omitempty"`
-	BlockingName     string   `json:"blocking_name,omitempty"`
-	ResolutionReason string   `json:"resolution_reason,omitempty"`
-	RequiredTokens   []string `json:"required_tokens,omitempty"`
+	Name                 string   `json:"name"`
+	DisplayName          string   `json:"display_name,omitempty"`
+	BlockingName         string   `json:"blocking_name,omitempty"`
+	ResolutionReason     string   `json:"resolution_reason,omitempty"`
+	SelectedReviewSkills []string `json:"selected_review_skills,omitempty"`
+	RequiredTokens       []string `json:"required_tokens,omitempty"`
 }
 
 // artifactContractView is the read-only projection of an artifact substance
@@ -296,6 +299,9 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.DecisionContract = decisionContract
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+	if change.CurrentState == model.StateS3Review {
+		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+	}
 	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)
 	applyGovernanceSurfaceToValidate(readiness, &view)
 	gateDetails := gateStatusFromEvaluations(readiness.GateEvaluations)
@@ -348,21 +354,35 @@ func buildScopeContractView(report *scopecontract.Report) *scopeContractView {
 }
 
 func buildActionableNextSkillView(change model.Change, readiness progression.GovernanceReadiness) *actionableNextSkillView {
-	displaySkill, _ := progression.ResolveNextSkill(change)
+	reviewSelection := progression.ReviewSkillSelectionFromControls(readiness.ActiveControls)
+	var selectedReviewSkills []string
+	if change.CurrentState == model.StateS3Review {
+		selectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+	} else {
+		reviewSelection = skill.ReviewSkillSelection{}
+	}
+	displaySkill, _ := progression.PrimaryNextSkillWithReviewSelection(change, reviewSelection)
 	if displaySkill == "" {
 		return nil
 	}
 	actionableSkill := displaySkill
 	reason := ""
-	if resolved, resolvedReason := resolveActionableBlockingSkill(displaySkill, readiness.PassingSkills, readiness.Blockers); resolved != "" {
+	if len(selectedReviewSkills) > 0 {
+		actionableSkill = firstPendingSelectedReviewSkill(selectedReviewSkills, readiness.PassingSkills, readiness.Blockers)
+		if actionableSkill == "" {
+			return nil
+		}
+		displaySkill = actionableSkill
+	} else if resolved, resolvedReason := resolveActionableBlockingSkill(displaySkill, readiness.PassingSkills, readiness.Blockers); resolved != "" {
 		actionableSkill = resolved
 		reason = resolvedReason
 	} else if skillHasPassingEvidence(readiness.PassingSkills, displaySkill) {
 		return nil
 	}
 	view := &actionableNextSkillView{
-		Name:           actionableSkill,
-		RequiredTokens: progression.RequiredReviewLayerTokensForSkill(change, readiness.ArtifactProjection, false, actionableSkill),
+		Name:                 actionableSkill,
+		SelectedReviewSkills: append([]string(nil), selectedReviewSkills...),
+		RequiredTokens:       progression.RequiredReviewLayerTokensForSkill(change, readiness.ArtifactProjection, false, actionableSkill),
 	}
 	if displaySkill != actionableSkill {
 		view.DisplayName = displaySkill

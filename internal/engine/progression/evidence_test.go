@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	engineskill "github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -213,7 +214,61 @@ func TestEvaluateRequiredSkillsForChange_DocsProfileSkipsCodeQualityReview(t *te
 	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_missing:spec-compliance-review")
+	assert.Contains(t, blockers, "required_skill_missing:independent-review")
 	assert.NotContains(t, blockers, "required_skill_missing:code-quality-review")
+	assert.NotContains(t, blockers, "required_skill_missing:security-review")
+}
+
+func TestEvaluateRequiredSkillsForChange_ResearchProfileSkipsCodeQualityReviewOnly(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("research-review")
+	change.CurrentState = model.StateS3Review
+	change.WorkflowProfile = model.WorkflowProfileResearch
+
+	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_missing:spec-compliance-review")
+	assert.Contains(t, blockers, "required_skill_missing:independent-review")
+	assert.NotContains(t, blockers, "required_skill_missing:code-quality-review")
+	assert.NotContains(t, blockers, "required_skill_missing:security-review")
+}
+
+func TestEvaluateRequiredSkillsForChange_S3SecurityReviewSelection(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("security-review-selection")
+	change.CurrentState = model.StateS3Review
+
+	_, unselectedBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
+		root,
+		change,
+		model.StateS3Review,
+		1,
+		false,
+		engineskill.ReviewSkillSelection{},
+	)
+	require.NoError(t, err)
+	assert.Contains(t, unselectedBlockers, "required_skill_missing:spec-compliance-review")
+	assert.Contains(t, unselectedBlockers, "required_skill_missing:code-quality-review")
+	assert.Contains(t, unselectedBlockers, "required_skill_missing:independent-review")
+	assert.NotContains(t, unselectedBlockers, "required_skill_missing:security-review")
+
+	_, selectedBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
+		root,
+		change,
+		model.StateS3Review,
+		1,
+		false,
+		engineskill.ReviewSkillSelection{SecurityReviewSelected: true},
+	)
+	require.NoError(t, err)
+	assert.Contains(t, selectedBlockers, "required_skill_missing:spec-compliance-review")
+	assert.Contains(t, selectedBlockers, "required_skill_missing:code-quality-review")
+	assert.Contains(t, selectedBlockers, "required_skill_missing:independent-review")
+	assert.Contains(t, selectedBlockers, "required_skill_missing:security-review")
 }
 
 func TestExtractHighRiskChecks_FromReferences(t *testing.T) {

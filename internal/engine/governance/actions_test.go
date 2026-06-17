@@ -117,6 +117,36 @@ func TestIndependentReviewActionDescribesPostExecutionTiming(t *testing.T) {
 	}
 }
 
+func TestSecurityReviewActionSatisfaction(t *testing.T) {
+	t.Parallel()
+
+	controls := []model.ControlActivation{
+		makeControl(model.ControlSecurityReview, model.ControlModeBlocking, model.ControlScopeReview),
+	}
+
+	actions := ResolveRequiredActions(RequiredActionsInput{
+		ActiveControls: controls,
+	})
+	if assert.Len(t, actions, 1) {
+		assert.False(t, actions[0].Satisfied)
+		assert.Contains(t, actions[0].Description, "security review")
+	}
+	assert.NotEmpty(t, UnsatisfiedBlockingActions(actions))
+
+	actions = ResolveRequiredActions(RequiredActionsInput{
+		ActiveControls:     controls,
+		SecurityReviewDone: true,
+		SecurityReviewSatisfiedBy: []SatisfiedBy{
+			{Kind: "skill_evidence", Name: "security-review"},
+		},
+	})
+	if assert.Len(t, actions, 1) {
+		assert.True(t, actions[0].Satisfied)
+		assert.Equal(t, "security-review", actions[0].SatisfiedBy[0].Name)
+	}
+	assert.Empty(t, UnsatisfiedBlockingActions(actions))
+}
+
 func TestAdvisoryModeOverrideDoesNotBlock(t *testing.T) {
 	t.Parallel()
 	// Simulate independent-review activated as advisory via mode override.

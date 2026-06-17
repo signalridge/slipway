@@ -48,15 +48,13 @@ func securityReview() Skill {
 	return Skill{
 		ID:                "security-review",
 		Domain:            DomainReviewSecurity,
-		Function:          "secure-default, boundary- and framework-aware security review",
+		Function:          "workflow-owned S3 secure-default, boundary- and framework-aware security review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when reviewing security-relevant code for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths.",
+		Summary:           "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths.",
 		Evidence:          EvidenceVerdict,
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
-			{Type: BindingHostEmbedded, Target: "spec-compliance-review", Attachment: AttachmentChecklist},
-			{Type: BindingHostEmbedded, Target: "code-quality-review", Attachment: AttachmentChecklist},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "authentication.md", Reason: "Password storage / session / MFA / recovery secure-default rules"},

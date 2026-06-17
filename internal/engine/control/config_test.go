@@ -14,6 +14,7 @@ func TestResolveControlModeNoOverrides(t *testing.T) {
 	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlResearch, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlDomainReview, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlIndependentReview, nil))
+	assert.Equal(t, model.ControlModeBlocking, ResolveControlMode(model.ControlSecurityReview, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlWorktreeIsolation, nil))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlRollbackRequired, nil))
 }
@@ -23,10 +24,12 @@ func TestResolveControlModeWithOverride(t *testing.T) {
 	overrides := &ControlOverrides{
 		ModeOverrides: map[model.ControlID]model.ControlMode{
 			model.ControlIndependentReview: model.ControlModeAdvisory,
+			model.ControlSecurityReview:    model.ControlModeAdvisory,
 		},
 	}
 	// Overridden control returns advisory.
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlIndependentReview, overrides))
+	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlSecurityReview, overrides))
 	// Non-overridden control returns default.
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlDomainReview, overrides))
 	assert.Equal(t, model.ControlModeAdvisory, ResolveControlMode(model.ControlRollbackRequired, overrides))
@@ -65,6 +68,7 @@ func TestDeriveControlsWithThresholdOverride(t *testing.T) {
 		Traceability:       model.TraceabilitySummary{Status: model.TraceabilityStatusOK},
 		Overrides: &ControlOverrides{
 			IndependentReviewBlastRadius: model.SignalLevelMedium,
+			SecurityReviewBlastRadius:    model.SignalLevelMedium,
 			WorktreeBlastRadius:          model.SignalLevelMedium,
 		},
 		PolicySource: model.OverridePolicySource,
@@ -76,6 +80,8 @@ func TestDeriveControlsWithThresholdOverride(t *testing.T) {
 	}
 	assert.Contains(t, controlIDs, model.ControlIndependentReview,
 		"medium threshold + medium blast radius should trigger independent-review")
+	assert.Contains(t, controlIDs, model.ControlSecurityReview,
+		"medium threshold + medium blast radius should trigger security-review")
 	assert.Contains(t, controlIDs, model.ControlWorktreeIsolation,
 		"medium threshold + medium blast radius should trigger worktree-isolation")
 }

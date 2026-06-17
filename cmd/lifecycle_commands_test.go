@@ -1306,7 +1306,7 @@ func TestRunStalePlanningRecoveryRequiresFreshReviewAfterExecutionRefresh(t *tes
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  staleAt.Add(2 * time.Second),
 		RunVersion: 0,
-		References: []string{"plan-audit:refreshed"},
+		References: append([]string{"plan-audit:refreshed"}, planAuditOriginReferences()...),
 	})
 
 	advanceCmd := commandForRoot(t, root, makeRunCmd())
@@ -1391,7 +1391,7 @@ func TestRunStalePlanningRecoveryRefreshesEvidenceInOrder(t *testing.T) {
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(3 * time.Second),
 		RunVersion: 0,
-		References: []string{"plan-audit:refreshed"},
+		References: append([]string{"plan-audit:refreshed"}, planAuditOriginReferences()...),
 	})
 
 	advanceCmd := commandForRoot(t, root, makeRunCmd())
@@ -1923,6 +1923,33 @@ func gitCommitAll(t *testing.T, dir, message string) {
 	runGit(t, dir, "commit", "-m", message)
 }
 
+// Cross-stage context-origin handles for the governed independence lattice.
+// Every stage that participates in the lattice (plan author, plan auditor, the
+// selected reviews, goal verification, final closeout) carries a DISTINCT handle so
+// the chain-wide independence gates (plan_audit_origin_invalid,
+// context_origin_handle_invalid, cross_stage_context_not_distinct) are
+// satisfied. The synthetic wave evidence declares degraded_sequential dispatch
+// and so contributes NO executor handles; none of these values may collide.
+const (
+	testPlanOriginHandle      = "plan-author-h"
+	testAuditOriginHandle     = "plan-auditor-h"
+	testSpecContextHandle     = "spec-compliance-context"
+	testCodeContextHandle     = "code-quality-context"
+	testGoalContextHandle     = "goal-verification-context"
+	testCloseoutContextHandle = "final-closeout-context"
+)
+
+// planAuditOriginReferences returns the distinct plan_origin/audit_origin token
+// pair the S1 plan gate now requires of any plan-audit record that advances past
+// G_plan. The audit_origin handle is also a downstream review-authority lattice
+// participant, so it stays distinct from every context_origin:stage= handle.
+func planAuditOriginReferences() []string {
+	return []string{
+		model.PlanOriginReferencePrefix + testPlanOriginHandle,
+		model.AuditOriginReferencePrefix + testAuditOriginHandle,
+	}
+}
+
 func writeSkillVerification(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {
 	t.Helper()
 
@@ -2139,27 +2166,53 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 
 func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryVersion int) {
 	t.Helper()
-	// Stamp both reviews at one instant so the always-on chain-order invariant
-	// (closeout >= goal >= max(spec, code)) holds: the later goal/closeout helper
-	// calls observe a non-earlier time.Now(). The two reviews are unordered peers,
-	// each carrying a DISTINCT review_origin handle so the distinct-context gate is
-	// satisfied (the handle pair must differ, not the timestamps).
+	// Stamp the mandatory review trio at one instant so the always-on chain-order
+	// invariant (closeout >= goal >= max(selected reviews)) holds: the later
+	// goal/closeout helpers observe a non-earlier time.Now(). The reviews are
+	// unordered peers, each carrying a distinct selected-review context_origin
+	// handle so the cross-stage independence gate is satisfied.
 	reviewStampedAt := time.Now().UTC()
 	writeSkillVerification(t, root, slug, "spec-compliance-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  reviewStampedAt,
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:R0=pass", "layer:R3=pass", "review_origin:skill=spec-compliance-review=spec-compliance-context"},
+		References: []string{
+			"layer:R0=pass",
+			"layer:R3=pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=" + testSpecContextHandle,
+		},
 	})
 	writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  reviewStampedAt,
 		RunVersion: runSummaryVersion,
-		References: []string{"layer:IR1=pass", "layer:IR3=pass", "layer:QUALITY=pass", "review_origin:skill=code-quality-review=code-quality-context"},
+		References: []string{
+			"layer:IR1=pass",
+			"layer:IR3=pass",
+			"layer:QUALITY=pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=" + testCodeContextHandle,
+		},
 	})
-	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillSpecComplianceReview, progression.SkillCodeQualityReview)
+	writeSkillVerification(t, root, slug, progression.SkillIndependentReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  reviewStampedAt,
+		RunVersion: runSummaryVersion,
+		References: []string{
+			"independent-review:pass",
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=independent-review-context",
+		},
+	})
+	refreshPassingSkillDigestsForTest(
+		t,
+		root,
+		slug,
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+	)
 }
 
 func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -2169,7 +2222,7 @@ func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSu
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{"verification:pass"},
+		References: []string{"verification:pass", model.ContextOriginReferencePrefix + "goal=" + testGoalContextHandle},
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillGoalVerification)
 }
@@ -2181,7 +2234,7 @@ func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSumma
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
-		References: []string{"closeout:assurance_complete=pass", "closeout:reviewer_independence=pass"},
+		References: []string{"closeout:assurance_complete=pass", "closeout:reviewer_independence=pass", model.ContextOriginReferencePrefix + "closeout=" + testCloseoutContextHandle},
 	})
 	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillFinalCloseout)
 }

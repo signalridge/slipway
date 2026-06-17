@@ -15,6 +15,8 @@ import (
 const (
 	skillSpecComplianceReview = "spec-compliance-review"
 	skillCodeQualityReview    = "code-quality-review"
+	skillIndependentReview    = "independent-review"
+	skillSecurityReview       = "security-review"
 	skillIntakeClarification  = "intake-clarification"
 	skillWaveOrchestration    = "wave-orchestration"
 	skillWorktreePreflight    = "worktree-preflight"
@@ -52,10 +54,16 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		"spec-compliance-review provides the domain-aware review evidence for domain-review",
 	)
 	independentReviewDone, independentSatisfiedBy, independentIssues := verifications.skillSatisfied(
-		skillCodeQualityReview,
+		skillIndependentReview,
 		executionSummaryCtx.LatestRunVersion,
 		true,
-		"code-quality-review provides the independent review evidence for independent-review",
+		"independent-review provides the selected independent review evidence for independent-review",
+	)
+	securityReviewDone, securitySatisfiedBy, securityIssues := verifications.skillSatisfied(
+		skillSecurityReview,
+		executionSummaryCtx.LatestRunVersion,
+		true,
+		"security-review provides the selected security review evidence for security-review",
 	)
 	if len(executionSummaryCtx.Issues) > 0 {
 		domainReviewDone = false
@@ -64,6 +72,9 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		independentReviewDone = false
 		independentSatisfiedBy = nil
 		independentIssues = stringutil.UniqueSorted(append(independentIssues, executionSummaryCtx.Issues...))
+		securityReviewDone = false
+		securitySatisfiedBy = nil
+		securityIssues = stringutil.UniqueSorted(append(securityIssues, executionSummaryCtx.Issues...))
 	}
 
 	worktreeValidation, err := state.ValidateChangeWorktree(root, change)
@@ -89,6 +100,8 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		DomainReviewSatisfiedBy:      domainSatisfiedBy,
 		IndependentReviewDone:        independentReviewDone,
 		IndependentReviewSatisfiedBy: independentSatisfiedBy,
+		SecurityReviewDone:           securityReviewDone,
+		SecurityReviewSatisfiedBy:    securitySatisfiedBy,
 		WorktreePreflightDone:        worktreeSatisfied,
 		RollbackSectionExists:        hasRollbackDocumentation(root, change),
 	})
@@ -102,6 +115,7 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 			scopeIssues,
 			domainIssues,
 			independentIssues,
+			securityIssues,
 			worktreeIssues,
 		)
 		if len(issues) == 0 {
@@ -273,6 +287,7 @@ func diagnosticsForUnsatisfiedAction(
 	scopeIssues []string,
 	domainIssues []string,
 	independentIssues []string,
+	securityIssues []string,
 	worktreeIssues []string,
 ) []string {
 	switch controlID {
@@ -282,6 +297,8 @@ func diagnosticsForUnsatisfiedAction(
 		return stringutil.UniqueSorted(append(domainIssues, evidence.diagnostics...))
 	case model.ControlIndependentReview:
 		return stringutil.UniqueSorted(append(independentIssues, evidence.diagnostics...))
+	case model.ControlSecurityReview:
+		return stringutil.UniqueSorted(append(securityIssues, evidence.diagnostics...))
 	case model.ControlWorktreeIsolation:
 		return stringutil.UniqueSorted(worktreeIssues)
 	default:

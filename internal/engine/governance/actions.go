@@ -70,6 +70,13 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 				action.SatisfiedBy = append(action.SatisfiedBy, input.IndependentReviewSatisfiedBy...)
 			}
 
+		case model.ControlSecurityReview:
+			action.Description = "run security review after wave execution produces execution evidence"
+			action.Satisfied = input.SecurityReviewDone
+			if action.Satisfied {
+				action.SatisfiedBy = append(action.SatisfiedBy, input.SecurityReviewSatisfiedBy...)
+			}
+
 		case model.ControlWorktreeIsolation:
 			action.Description = "ensure worktree preflight before code execution continues"
 			action.Satisfied = input.WorktreePreflightDone
@@ -97,6 +104,8 @@ type RequiredActionsInput struct {
 	DomainReviewSatisfiedBy      []SatisfiedBy
 	IndependentReviewDone        bool
 	IndependentReviewSatisfiedBy []SatisfiedBy
+	SecurityReviewDone           bool
+	SecurityReviewSatisfiedBy    []SatisfiedBy
 	WorktreePreflightDone        bool
 	RollbackSectionExists        bool
 }

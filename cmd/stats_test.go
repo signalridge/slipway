@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -268,6 +269,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
+	writePassingIndependentReviewEvidence(t, root, slug, 1)
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
 	writeSkillVerification(t, root, slug, "final-closeout", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
@@ -286,4 +288,99 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	assert.Containsf(t, view.CloseoutFreshness.Fresh, slug, "view=%+v", view)
 	assert.NotContainsf(t, view.CloseoutFreshness.Missing, slug, "view=%+v", view)
 	assert.NotContainsf(t, view.CloseoutFreshness.Stale, slug, "view=%+v", view)
+}
+
+func TestStatsCountsMissingMandatoryIndependentReviewEvidence(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "stats should count missing independent review evidence")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:R0=pass"},
+	})
+	writeSkillVerification(t, root, slug, progression.SkillCodeQualityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:IR1=pass"},
+	})
+
+	view, err := buildStatsView(root, time.Now().UTC())
+	require.NoError(t, err)
+	assert.Containsf(t, view.MissingReviewEvidence, slug, "view=%+v", view)
+}
+
+func TestStatsCountsMissingSelectedSecurityReviewEvidence(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, "L2", "stats should count selected security review evidence")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetStrict
+	change.ArtifactSchema = model.ArtifactSchemaExpanded
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` strict medium review
+  - target_files: ["cmd/a.go", "cmd/b.go", "cmd/c.go", "cmd/d.go", "cmd/e.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:R0=pass"},
+	})
+	writeSkillVerification(t, root, slug, progression.SkillCodeQualityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{"layer:IR1=pass"},
+	})
+	writePassingIndependentReviewEvidence(t, root, slug, 1)
+
+	view, err := buildStatsView(root, time.Now().UTC())
+	require.NoError(t, err)
+	assert.Containsf(t, view.MissingReviewEvidence, slug, "view=%+v", view)
+}
+
+func writePassingIndependentReviewEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
+	t.Helper()
+	writeSkillVerification(t, root, slug, progression.SkillIndependentReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: runSummaryVersion,
+		References: []string{"independent-review:pass", model.ContextOriginReferencePrefix + model.StageContextReview + "=stats-independent-reviewer"},
+	})
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillIndependentReview)
 }

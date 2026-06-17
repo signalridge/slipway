@@ -100,7 +100,7 @@ Pending.
 		RunVersion: 1, // stale
 		References: []string{"layer:R0=pass"},
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(2 * time.Second),
@@ -192,6 +192,110 @@ func TestResolveRuntimeRequiredActionsExplainsDomainReviewSatisfiedBySpecComplia
 	assert.Equal(t, skillSpecComplianceReview, action.SatisfiedBy[0].Name)
 	assert.Equal(t, "artifacts/changes/"+change.Slug+"/verification/spec-compliance-review.yaml", action.SatisfiedBy[0].EvidenceRef)
 	assert.Equal(t, "spec-compliance-review provides the domain-aware review evidence for domain-review", action.SatisfiedBy[0].Reason)
+}
+
+func TestResolveRuntimeRequiredActionsDoesNotUseCodeQualityForIndependentReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("runtime-actions-code-quality-not-independent")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 4,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "task-a",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"internal/engine/governance/runtime_actions.go"},
+				CapturedAt:   time.Now().UTC(),
+			},
+		},
+	}))
+	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 4,
+		References: []string{"layer:IR1=pass"},
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlIndependentReview, model.ControlModeBlocking, model.ControlScopeReview),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	require.Len(t, actions, 1)
+	assert.False(t, actions[0].Satisfied, "code-quality-review evidence must not satisfy independent-review")
+	assert.Empty(t, actions[0].SatisfiedBy)
+}
+
+func TestResolveRuntimeRequiredActionsExplainsSecurityReviewSatisfiedBySecurityReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitRepoForRuntimeActionsTests(t, root)
+	change := model.NewChange("runtime-actions-security-review")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 4,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{
+			{
+				TaskID:       "task-a",
+				Verdict:      model.TaskVerdictPass,
+				TaskKind:     model.TaskKindCode,
+				ChangedFiles: []string{"internal/engine/governance/runtime_actions.go"},
+				CapturedAt:   time.Now().UTC(),
+			},
+		},
+	}))
+	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 4,
+		References: []string{"security-review:pass"},
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlSecurityReview, model.ControlModeBlocking, model.ControlScopeReview),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	require.Len(t, actions, 1)
+	action := actions[0]
+	require.True(t, action.Satisfied)
+	require.Len(t, action.SatisfiedBy, 1)
+	assert.Equal(t, "skill_evidence", action.SatisfiedBy[0].Kind)
+	assert.Equal(t, skillSecurityReview, action.SatisfiedBy[0].Name)
+	assert.Equal(t, "artifacts/changes/"+change.Slug+"/verification/security-review.yaml", action.SatisfiedBy[0].EvidenceRef)
+	assert.Equal(t, "security-review provides the selected security review evidence for security-review", action.SatisfiedBy[0].Reason)
 }
 
 func TestResolveRuntimeRequiredActionsRejectsTemplateOnlyRollbackSections(t *testing.T) {
@@ -413,7 +517,7 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenRunSummaryIsMissing(t *test
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 5,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -471,7 +575,7 @@ func TestResolveRuntimeRequiredActionsRejectsExecutionSummaryLevelBlockers(t *te
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 3,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -550,7 +654,7 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 		RunVersion: 2,
 		References: []string{"layer:R0=pass"},
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(time.Second),
@@ -610,7 +714,7 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenExecutionSummaryIsInvalid(t
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 4,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 4,

@@ -170,6 +170,59 @@ func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
 	assert.Len(t, exported, len(governanceSurfaceDescriptors), "governance export union drifted from descriptor table")
 }
 
+func TestPromotedReviewHostsAreWorkflowOwnedTemplatedSurfaces(t *testing.T) {
+	t.Parallel()
+
+	descriptors := map[string]governanceSurfaceDescriptor{}
+	for _, desc := range governanceSurfaceDescriptors {
+		descriptors[desc.ID] = desc
+	}
+
+	for _, id := range []string{"independent-review", "security-review"} {
+		desc, ok := descriptors[id]
+		require.Truef(t, ok, "%s must be promoted into the workflow-owned governance descriptor table", id)
+		assert.Equal(t, governanceRenderTemplated, desc.RenderMode, "%s must render from SKILL.md.tmpl", id)
+		assert.Truef(t, desc.WorkflowOwned, "%s must be owned by workflow governance", id)
+		assert.Falsef(t, desc.ExportOnlyExtra, "%s must not be an export-only catalog helper", id)
+		assert.Truef(t, shouldExportAsHostSkill(id), "%s must export as a host skill", id)
+		assert.Contains(t, TemplatedGovernanceSkillNames, id)
+	}
+}
+
+func TestPromotedReviewCatalogBindingsPreserveCommandAutoOnly(t *testing.T) {
+	t.Parallel()
+
+	reg := capability.DefaultRegistry()
+	cases := []struct {
+		id         string
+		attachment capability.AttachmentMode
+	}{
+		{id: "independent-review", attachment: capability.AttachmentReportSchema},
+		{id: "security-review", attachment: capability.AttachmentChecklist},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+
+			skill, ok := reg.Lookup(tc.id)
+			require.True(t, ok)
+
+			foundCommandAuto := false
+			for _, binding := range skill.Bindings {
+				assert.NotEqual(t, capability.BindingHostEmbedded, binding.Type, "%s must not be embedded into review hosts", tc.id)
+				if binding.Type == capability.BindingCommandAuto &&
+					binding.Target == "review" &&
+					binding.Attachment == tc.attachment {
+					foundCommandAuto = true
+				}
+			}
+			assert.Truef(t, foundCommandAuto, "%s must preserve its review command-auto binding", tc.id)
+		})
+	}
+}
+
 func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -231,6 +284,32 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 		"codex command skill dirs must cover exactly the command set")
 }
 
+func TestGeneratedPromotedReviewHostsUseWorkflowTemplates(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	cfg := toolRegistry["codex"]
+	for _, id := range []string{"independent-review", "security-review"} {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join(root, SkillPath(cfg, id)))
+			require.NoError(t, err)
+			body := string(raw)
+
+			assert.Contains(t, body, "S3_REVIEW")
+			assert.Contains(t, body, "native subagent")
+			assert.Contains(t, body, "SHARED change worktree")
+			assert.Contains(t, body, "context_origin:stage=review=<handle>")
+			assert.Contains(t, body, "MUST be DISTINCT")
+			assert.NotContains(t, body, "host-embedded")
+			assert.NotContains(t, body, "base reader that both review hosts")
+			assert.NotContains(t, body, "review_origin:skill=")
+			assert.NotContains(t, body, "review_context:skill=")
+		})
+	}
+}
+
 func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
@@ -254,6 +333,9 @@ func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testin
 func TestResolveNextSkillOutputsMapToExportedHostSkills(t *testing.T) {
 	t.Parallel()
 
+	// ResolveNextSkill returns a skill set per state. S3_REVIEW emits the
+	// selected review set as concurrent peers, so every member of every state's
+	// output set must map to an exported host skill.
 	for _, id := range []string{
 		"intake-clarification",
 		"research-orchestration",
@@ -262,6 +344,8 @@ func TestResolveNextSkillOutputsMapToExportedHostSkills(t *testing.T) {
 		"wave-orchestration",
 		"spec-compliance-review",
 		"code-quality-review",
+		"independent-review",
+		"security-review",
 		"goal-verification",
 		"final-closeout",
 		"tdd-governance",

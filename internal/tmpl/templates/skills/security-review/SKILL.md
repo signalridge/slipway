@@ -1,15 +1,13 @@
 ---
 skill_id: security-review
 domain: review-security
-function: secure-default, boundary- and framework-aware security review
+function: workflow-owned S3 secure-default, boundary- and framework-aware security review
 tier: T1
 primary_attachment: checklist
-summary: "Use when reviewing security-relevant code for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths."
+summary: "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths."
 trigger_signals:
   - command: review
     reason: "review command invoked; attach security checklist"
-  - host: ["spec-compliance-review", "code-quality-review"]
-    reason: "Review host active; include security checklist"
   - changed_files_include: ["**/auth/*", "**/crypto/*", "**/session*"]
     reason: "Security-sensitive paths changed"
 evidence_contract: verdict
@@ -30,12 +28,6 @@ bindings:
   - type: command-auto
     target: review
     attachment: checklist
-  - type: host-embedded
-    target: spec-compliance-review
-    attachment: checklist
-  - type: host-embedded
-    target: code-quality-review
-    attachment: checklist
 ---
 
 # Security Review
@@ -46,8 +38,9 @@ IRON LAW: SECURE DEFAULT, EXPLICIT DEVIATION
 
 ## Purpose
 Review security-relevant code against secure-default expectations and known
-risky escape hatches. Every deviation from a secure default
-must be called out with a reproducible observation, not a taste argument.
+risky escape hatches. In S3 this runs as a workflow-owned review host with its
+own native subagent context. Every deviation from a secure default must be
+called out with a reproducible observation, not a taste argument.
 
 ## Report schema
 ```yaml

@@ -108,14 +108,17 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 	switch effective {
 	case model.WorkflowPresetLight:
 		overrides.ModeOverrides[model.ControlIndependentReview] = model.ControlModeAdvisory
+		overrides.ModeOverrides[model.ControlSecurityReview] = model.ControlModeAdvisory
 		overrides.ModeOverrides[model.ControlWorktreeIsolation] = model.ControlModeAdvisory
 		overrides.ModeOverrides[model.ControlRollbackRequired] = model.ControlModeAdvisory
 	case model.WorkflowPresetStrict:
 		overrides.ModeOverrides[model.ControlIndependentReview] = model.ControlModeBlocking
+		overrides.ModeOverrides[model.ControlSecurityReview] = model.ControlModeBlocking
 		overrides.ModeOverrides[model.ControlWorktreeIsolation] = model.ControlModeBlocking
 		overrides.ModeOverrides[model.ControlRollbackRequired] = model.ControlModeBlocking
 		overrides.ModeOverrides[model.ControlDomainReview] = model.ControlModeBlocking
 		overrides.IndependentReviewBlastRadius = model.SignalLevelMedium
+		overrides.SecurityReviewBlastRadius = model.SignalLevelMedium
 		overrides.WorktreeBlastRadius = model.SignalLevelMedium
 	}
 
@@ -130,6 +133,9 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 	if cfg.Governance.Thresholds.IndependentReviewBlastRadius.IsValid() {
 		overrides.IndependentReviewBlastRadius = cfg.Governance.Thresholds.IndependentReviewBlastRadius
 	}
+	if cfg.Governance.Thresholds.SecurityReviewBlastRadius.IsValid() {
+		overrides.SecurityReviewBlastRadius = cfg.Governance.Thresholds.SecurityReviewBlastRadius
+	}
 	if cfg.Governance.Thresholds.WorktreeBlastRadius.IsValid() {
 		overrides.WorktreeBlastRadius = cfg.Governance.Thresholds.WorktreeBlastRadius
 	}
@@ -139,11 +145,20 @@ func buildPresetOverrides(change model.Change, cfg model.Config, effective model
 	if change.CallerWorktreeBlastRadius.IsValid() {
 		overrides.WorktreeBlastRadius = change.CallerWorktreeBlastRadius
 	}
+	if effective != model.WorkflowPresetLight {
+		if mode, ok := overrides.ModeOverrides[model.ControlSecurityReview]; ok && mode != model.ControlModeBlocking {
+			overrides.ModeOverrides[model.ControlSecurityReview] = model.ControlModeBlocking
+		}
+	}
+	if effective == model.WorkflowPresetStrict {
+		overrides.SecurityReviewBlastRadius = model.SignalLevelMedium
+	}
 	applyFailClosedGuardrailOverrides(change, overrides)
 
 	if len(overrides.ModeOverrides) == 0 &&
 		len(overrides.DisabledControls) == 0 &&
 		overrides.IndependentReviewBlastRadius == "" &&
+		overrides.SecurityReviewBlastRadius == "" &&
 		overrides.WorktreeBlastRadius == "" {
 		return nil
 	}

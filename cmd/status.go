@@ -54,6 +54,7 @@ type statusView struct {
 	EvidencePointers          statusEvidencePointers               `json:"evidence_pointers,omitempty"`
 	EvidenceFreshness         string                               `json:"evidence_freshness"`
 	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	SelectedReviewSkills      []string                             `json:"selected_review_skills,omitempty"`
 	ScopeContract             *scopeContractView                   `json:"scope_contract,omitempty"`
 	SourceStateFile           string                               `json:"source_state_file,omitempty"`
 	Timeline                  []statusTimelineEvent                `json:"timeline,omitempty"`

@@ -36,8 +36,9 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 		return AdvanceSummary{}, err
 	}
 
-	// Check skill evidence for intake-clarification
-	nextSkillName, evidenceState := ResolveNextSkill(*change)
+	// Check skill evidence for intake-clarification. Intake resolves a single
+	// skill, so the conventional primary is the full skill set here.
+	nextSkillName, evidenceState := PrimaryNextSkill(*change)
 	var passingSkills map[string]model.VerificationRecord
 	var evidenceSideEffects []SideEffect
 	if nextSkillName != "" {

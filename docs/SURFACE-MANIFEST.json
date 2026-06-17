@@ -501,7 +501,7 @@
     {
       "kind": "skill",
       "name": "slipway-independent-review",
-      "source": "internal/engine/capability.DefaultRegistry",
+      "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-independent-review/SKILL.md`"
     },
@@ -606,7 +606,7 @@
     {
       "kind": "skill",
       "name": "slipway-security-review",
-      "source": "internal/engine/capability.DefaultRegistry",
+      "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-security-review/SKILL.md`"
     },

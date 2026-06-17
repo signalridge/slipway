@@ -20,6 +20,42 @@ type Definition struct {
 	HardGate            string              `json:"hard_gate,omitempty"`
 }
 
+const (
+	reviewSkillSpecCompliance = "spec-compliance-review"
+	reviewSkillCodeQuality    = "code-quality-review"
+	reviewSkillIndependent    = "independent-review"
+	reviewSkillSecurity       = "security-review"
+)
+
+type ReviewSkillSelection struct {
+	SecurityReviewSelected bool
+}
+
+func SelectedReviewSkills(selection ReviewSkillSelection) []string {
+	selected := []string{
+		reviewSkillSpecCompliance,
+		reviewSkillCodeQuality,
+		reviewSkillIndependent,
+	}
+	if selection.SecurityReviewSelected {
+		selected = append(selected, reviewSkillSecurity)
+	}
+	return selected
+}
+
+func ReviewSkillSelected(skillName string, selection ReviewSkillSelection) bool {
+	return slices.Contains(SelectedReviewSkills(selection), strings.TrimSpace(skillName))
+}
+
+func IsReviewSkill(skillName string) bool {
+	switch strings.TrimSpace(skillName) {
+	case reviewSkillSpecCompliance, reviewSkillCodeQuality, reviewSkillIndependent, reviewSkillSecurity:
+		return true
+	default:
+		return false
+	}
+}
+
 var defaultGovernanceRegistry = map[string]Definition{
 	"intake-clarification": {
 		Name:              "intake-clarification",
@@ -70,6 +106,22 @@ var defaultGovernanceRegistry = map[string]Definition{
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record", "review_findings"},
 	},
+	"independent-review": {
+		Name:              "independent-review",
+		State:             model.StateS3Review,
+		Mitigation:        "same-context review bias before ship verification",
+		RunSummaryBound:   true,
+		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
+		RequiredOutputs:   []string{"evidence_record", "review_findings"},
+	},
+	"security-review": {
+		Name:              "security-review",
+		State:             model.StateS3Review,
+		Mitigation:        "security-sensitive implementation gaps",
+		RunSummaryBound:   true,
+		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
+		RequiredOutputs:   []string{"evidence_record", "review_findings"},
+	},
 	"goal-verification": {
 		Name:              "goal-verification",
 		State:             model.StateS4Verify,
@@ -104,6 +156,24 @@ func RequiredSkillsForStateWithRegistry(
 	closeoutRequired bool,
 	planSubSteps ...model.PlanSubStep,
 ) []string {
+	return RequiredSkillsForStateWithRegistryWithReviewSelection(
+		registry,
+		needsDiscovery,
+		state,
+		closeoutRequired,
+		ReviewSkillSelection{},
+		planSubSteps...,
+	)
+}
+
+func RequiredSkillsForStateWithRegistryWithReviewSelection(
+	registry []Definition,
+	needsDiscovery bool,
+	state model.WorkflowState,
+	closeoutRequired bool,
+	reviewSelection ReviewSkillSelection,
+	planSubSteps ...model.PlanSubStep,
+) []string {
 	required := []string{}
 
 	// Build set of active plan sub-steps for S1_PLAN matching.
@@ -128,6 +198,9 @@ func RequiredSkillsForStateWithRegistry(
 		if def.DiscoveryOnly && !needsDiscovery {
 			continue
 		}
+		if def.State == model.StateS3Review && IsReviewSkill(def.Name) && !ReviewSkillSelected(def.Name, reviewSelection) {
+			continue
+		}
 		required = append(required, def.Name)
 	}
 	if len(required) == 0 {
@@ -138,12 +211,37 @@ func RequiredSkillsForStateWithRegistry(
 }
 
 func FilterRequiredSkillsForWorkflowProfile(required []string, profile model.WorkflowProfile) []string {
+	return FilterRequiredSkillsForWorkflowProfileWithReviewSelection(required, profile, ReviewSkillSelection{})
+}
+
+func FilterRequiredSkillsForWorkflowProfileWithReviewSelection(
+	required []string,
+	profile model.WorkflowProfile,
+	reviewSelection ReviewSkillSelection,
+) []string {
 	if profile.RequiresCodeQualityReview() {
-		return required
+		return filterRequiredSkillsForReviewSelection(required, reviewSelection)
 	}
 	filtered := make([]string, 0, len(required))
 	for _, skillName := range required {
 		if skillName == "code-quality-review" {
+			continue
+		}
+		if IsReviewSkill(skillName) && !ReviewSkillSelected(skillName, reviewSelection) {
+			continue
+		}
+		filtered = append(filtered, skillName)
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
+func filterRequiredSkillsForReviewSelection(required []string, reviewSelection ReviewSkillSelection) []string {
+	filtered := make([]string, 0, len(required))
+	for _, skillName := range required {
+		if IsReviewSkill(skillName) && !ReviewSkillSelected(skillName, reviewSelection) {
 			continue
 		}
 		filtered = append(filtered, skillName)

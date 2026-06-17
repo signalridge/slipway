@@ -120,6 +120,9 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.AutoPassedStates = append([]model.AutoPassedState(nil), change.LastAutoPassedStates...)
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
+	if change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify {
+		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+	}
 	if !change.ContextDependencies.IsEmpty() {
 		deps := change.ContextDependencies
 		view.ContextDependencies = &deps

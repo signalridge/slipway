@@ -395,7 +395,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"required_skill_missing": {
-		Remediation:     "Run the {subject} governance skill and record its verification evidence, then advance.",
+		Remediation:     "Run the {subject} governance skill and record its verification evidence, then advance. In S3 review this means the selected review-set skills: spec-compliance-review, code-quality-review, independent-review, and security-review only when selected by the security control.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
@@ -509,14 +509,27 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        20,
 	},
 	"closeout_chain_order_invalid": {
-		Remediation:     "The independence-critical verdicts are out of order; re-run the stages so spec-compliance-review and code-quality-review precede goal-verification, which precedes final-closeout, then re-run final-closeout.",
+		Remediation:     "The independence-critical verdicts are out of order; re-run the selected review-set skills (spec-compliance-review, code-quality-review, independent-review, and security-review when the security control selected it) so every selected review precedes goal-verification, which precedes final-closeout, then re-run final-closeout.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        15,
 	},
-	"review_origin_handle_invalid": {
-		Remediation:     "Spec-compliance-review and code-quality-review must each record a distinct review_origin context handle; re-run review and record distinct review-context evidence for each.",
-		CommandTemplate: "slipway review",
+	"context_origin_handle_invalid": {
+		Remediation:     "A governed stage recorded a missing or invalid context-origin handle; re-run the owning stage in a fresh native subagent so it records a valid context-origin handle.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"cross_stage_context_not_distinct": {
+		// Detail names the colliding stage pair (earlier|later); recovery routes to
+		// the later/owning stage, which must re-run in a fresh native subagent so it
+		// records a context-origin handle distinct from the earlier stage.
+		Remediation:     "Two governed stages share a context-origin handle; re-run the later (owning) stage of the colliding pair in a fresh native subagent so it records a distinct context-origin handle.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_audit_origin_invalid": {
+		Remediation:     "Plan audit recorded the same author and auditor context-origin handle (self-audit); re-run plan-audit in a fresh native subagent so its auditor handle is distinct from the plan author.",
+		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
 	"wave_test_impl_not_distinct": {

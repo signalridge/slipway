@@ -196,9 +196,16 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap)); len(blockers) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
+	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
 
 	// 4. Skill evidence evaluation
-	nextSkillName, evidenceState := ResolveNextSkill(change)
+	//
+	// This gate only needs to know whether a skill is required at the current
+	// state and whether it is worktree-preflight; the required evidence set is
+	// derived from the state and selected review inputs. S3_REVIEW's parallel
+	// review set is evaluated there, so the conventional primary skill is
+	// sufficient as the non-empty/worktree-preflight gate signal here.
+	nextSkillName, evidenceState := PrimaryNextSkillWithReviewSelection(change, reviewSelection)
 	closeoutRequired := FinalCloseoutEvidenceRequired(presetPolicy)
 
 	var passingSkills map[string]model.VerificationRecord
@@ -208,12 +215,13 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// can surface the correct blocker.
 	if nextSkillName != "" && nextSkillName != SkillWorktreePreflight {
 		var skillBlockers []string
-		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChange(
+		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChangeWithReviewSelection(
 			root,
 			change,
 			model.WorkflowState(evidenceState),
 			executionSummaryCtx.LatestRunVersion,
 			closeoutRequired,
+			reviewSelection,
 			change.PlanSubStep,
 		)
 		if err != nil {
@@ -580,7 +588,12 @@ func ComputeNextGovernedState(change model.Change) (model.WorkflowState, error) 
 // without mutating the input change. Callers must explicitly apply the returned
 // mutation contract if they want to persist it.
 func CheckGateWithIteration(root string, change model.Change, passingSkills map[string]model.VerificationRecord, maxIterations int) PlanGateResult {
-	result := EvaluatePlanGate(root, change, passingSkills)
+	// Resolve the preset policy so the plan gate's plan-audit self-audit edge
+	// enforces on standard/strict and stays advisory on light. A resolution
+	// failure falls back to the zero policy (EffectivePreset != light), which
+	// fails closed rather than silently relaxing the edge.
+	presetPolicy, _ := governance.ResolvePresetPolicy(root, change)
+	result := EvaluatePlanGate(root, change, passingSkills, presetPolicy)
 	if result.Status != model.GateStatusBlocked {
 		return PlanGateResult{
 			NextPlanAuditIterations:  0,
@@ -950,11 +963,20 @@ func ApplyPlanGateResult(change *model.Change, result PlanGateResult) ([]SideEff
 	return sideEffects, nil
 }
 
-func EvaluatePlanGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord) gate.GateEvaluation {
+func EvaluatePlanGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord, presetPolicy governance.PresetPolicy) gate.GateEvaluation {
 	planAuditPass := false
 	var planBlockers []model.ReasonCode
 	if record, ok := passingSkills[SkillPlanAudit]; ok {
 		planAuditPass = record.IsPassing()
+		// Local plan-audit self-audit edge: the plan-audit record must attest a
+		// well-formed plan_origin and a well-formed audit_origin produced under
+		// distinct fresh contexts. A missing handle, or an author context that
+		// also audited its own bundle (plan_origin == audit_origin), fails closed
+		// at error severity on standard/strict and is advisory on light. This is a
+		// single local edge over one record's two handles; it adds no cross-stage
+		// rung whose other endpoint is absent at S1.
+		enforced := presetPolicy.EffectivePreset != model.WorkflowPresetLight
+		planBlockers = append(planBlockers, planAuditOriginHandleBlockers(record, enforced)...)
 	} else {
 		planBlockers = append(planBlockers, model.NewReasonCode("plan_audit_evidence_missing", ""))
 	}
@@ -970,6 +992,42 @@ func EvaluatePlanGate(root string, change model.Change, passingSkills map[string
 		planBlockers = append(planBlockers, model.ReasonCodesFromSpecs(decisionBlockers)...)
 	}
 	return gate.EvaluateGPlan(bundleReady, planAuditPass, planBlockers)
+}
+
+// planAuditOriginHandleBlockers enforces the local plan-audit self-audit edge on
+// a present plan-audit record: it must carry a well-formed plan_origin and a
+// well-formed audit_origin, and the two handles must differ. A missing handle,
+// or plan_origin == audit_origin, returns a single plan_audit_origin_invalid
+// blocker (error severity per the reason-code registry). When the edge is not
+// enforced (light preset) it is advisory and returns nil. The check is local to
+// one record's two handles and intentionally adds no cross-stage rung.
+func planAuditOriginHandleBlockers(record model.VerificationRecord, enforced bool) []model.ReasonCode {
+	if !enforced {
+		return nil
+	}
+	planOrigin, planOK := model.PlanOriginHandleFromVerification(record)
+	if !planOK {
+		return []model.ReasonCode{planAuditOriginInvalidBlocker(
+			SkillPlanAudit + " recorded no well-formed " + model.StageContextPlanOrigin + " handle",
+		)}
+	}
+	auditOrigin, auditOK := model.AuditOriginHandleFromVerification(record)
+	if !auditOK {
+		return []model.ReasonCode{planAuditOriginInvalidBlocker(
+			SkillPlanAudit + " recorded no well-formed " + model.StageContextAuditOrigin + " handle",
+		)}
+	}
+	if planOrigin.Handle == auditOrigin.Handle {
+		return []model.ReasonCode{planAuditOriginInvalidBlocker(
+			SkillPlanAudit + " recorded the same " + model.StageContextPlanOrigin + " and " +
+				model.StageContextAuditOrigin + " handle; the auditor must review under a distinct fresh context",
+		)}
+	}
+	return nil
+}
+
+func planAuditOriginInvalidBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode("plan_audit_origin_invalid", strings.TrimSpace(detail))
 }
 
 func EvaluateShipGate(root string, change model.Change) (gate.GateEvaluation, error) {

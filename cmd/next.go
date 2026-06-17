@@ -108,16 +108,17 @@ type contextBudgetBreakdown struct {
 }
 
 type nextSkillView struct {
-	Name             string             `json:"name"`
-	DisplayName      string             `json:"display_name,omitempty"`
-	BlockingName     string             `json:"blocking_name,omitempty"`
-	ResolutionReason string             `json:"resolution_reason,omitempty"`
-	RequiredTokens   []string           `json:"required_tokens,omitempty"`
-	VerificationDir  string             `json:"verification_dir"`
-	State            string             `json:"state"`
-	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
-	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
-	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
+	Name                 string             `json:"name"`
+	DisplayName          string             `json:"display_name,omitempty"`
+	BlockingName         string             `json:"blocking_name,omitempty"`
+	ResolutionReason     string             `json:"resolution_reason,omitempty"`
+	SelectedReviewSkills []string           `json:"selected_review_skills,omitempty"`
+	RequiredTokens       []string           `json:"required_tokens,omitempty"`
+	VerificationDir      string             `json:"verification_dir"`
+	State                string             `json:"state"`
+	SkillConstraints     *skillConstraints  `json:"skill_constraints,omitempty"`
+	ReviewContext        *reviewContextView `json:"review_context,omitempty"`
+	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
 }
 
 // skillConstraints carries per-skill metadata from the Go registry
@@ -868,6 +869,9 @@ func writeNextHuman(w io.Writer, view nextView) error {
 		writer.Writef("Next Skill: %s\n", view.NextSkill.Name)
 		writer.Writef("  Verification Dir: %s\n", view.NextSkill.VerificationDir)
 		writer.Writef("  Evidence State: %s\n", view.NextSkill.State)
+		if len(view.NextSkill.SelectedReviewSkills) > 0 {
+			writer.Writef("  Selected Review Skills: %s\n", strings.Join(view.NextSkill.SelectedReviewSkills, ", "))
+		}
 		if len(view.NextSkill.RequiredTokens) > 0 {
 			writer.Writef("  Required Tokens: %s\n", strings.Join(view.NextSkill.RequiredTokens, ", "))
 		}

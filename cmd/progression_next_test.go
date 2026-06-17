@@ -12,6 +12,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -808,14 +809,12 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, "spec-compliance-review", view.NextSkill.Name)
-		foundCatalogHint := false
-		for _, hint := range view.NextSkill.TechniqueHints {
-			if hint.Name == "skill:independent-review" {
-				foundCatalogHint = true
-				break
-			}
-		}
-		assert.True(t, foundCatalogHint, "expected resolver hint without changing governed next host")
+		assert.ElementsMatch(t, []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillSecurityReview,
+		}, view.NextSkill.SelectedReviewSkills)
 		require.NotNil(t, view.NextSkill.ReviewContext)
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
 		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R3")
@@ -909,9 +908,14 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.Name)
-		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.DisplayName)
-		assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.BlockingName)
-		assert.Contains(t, view.NextSkill.ResolutionReason, "blocking skill")
+		assert.Empty(t, view.NextSkill.DisplayName)
+		assert.Empty(t, view.NextSkill.BlockingName)
+		assert.NotContains(t, view.NextSkill.ResolutionReason, "before")
+		assert.ElementsMatch(t, []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+		}, view.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
 
@@ -921,11 +925,14 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 		}
 		require.Contains(t, statusBySkill, progression.SkillSpecComplianceReview)
 		require.Contains(t, statusBySkill, progression.SkillCodeQualityReview)
+		require.Contains(t, statusBySkill, progression.SkillIndependentReview)
 		assert.True(t, statusBySkill[progression.SkillSpecComplianceReview].HasEvidence)
 		assert.Equal(t, "passing", statusBySkill[progression.SkillSpecComplianceReview].Status)
 		assert.Equal(t, model.VerificationVerdictPass, statusBySkill[progression.SkillSpecComplianceReview].Verdict)
 		assert.False(t, statusBySkill[progression.SkillCodeQualityReview].HasEvidence)
 		assert.Equal(t, "missing", statusBySkill[progression.SkillCodeQualityReview].Status)
+		assert.False(t, statusBySkill[progression.SkillIndependentReview].HasEvidence)
+		assert.Equal(t, "missing", statusBySkill[progression.SkillIndependentReview].Status)
 	})
 }
 
@@ -966,7 +973,7 @@ func TestBuildRequiredSkillEvidenceMarksDigestDriftedSkillStale(t *testing.T) {
 			progression.SkillPlanAudit: {Verdict: model.VerificationVerdictPass},
 		}
 		stale := map[string]bool{progression.SkillPlanAudit: true}
-		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, passing, stale)
+		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, passing, stale, skill.ReviewSkillSelection{})
 		require.NoError(t, err)
 
 		byName := map[string]skillEvidenceEntry{}
@@ -1001,7 +1008,7 @@ func TestBuildRequiredSkillEvidenceNonPrecomputedMarksDigestDriftedSkillStale(t 
 
 		// precomputedPassingSkills == nil forces the non-precomputed path.
 		stale := map[string]bool{progression.SkillPlanAudit: true}
-		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, nil, stale)
+		evidence, err := buildRequiredSkillEvidence(root, change, model.StateS1Plan, nil, nil, stale, skill.ReviewSkillSelection{})
 		require.NoError(t, err)
 
 		byName := map[string]skillEvidenceEntry{}
@@ -1041,6 +1048,12 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 				"layer:IR3=pass",
 			},
 		})
+		selectedReviewSkills := []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillSecurityReview,
+		}
 
 		nextCmd := commandForRoot(t, root, makeNextCmd())
 		nextCmd.SetArgs([]string{"--json", "--change", slug})
@@ -1051,6 +1064,9 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
 		require.NotNil(t, handoff.NextSkill)
 		assert.Equal(t, progression.SkillCodeQualityReview, handoff.NextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, handoff.NextSkill.SelectedReviewSkills)
+		assert.Empty(t, handoff.NextSkill.DisplayName)
+		assert.Empty(t, handoff.NextSkill.BlockingName)
 		require.NotNil(t, handoff.NextSkill.ReviewContext)
 		assert.Empty(t, handoff.NextSkill.ReviewContext.RequiredArtifactLayers)
 		assert.Contains(t, handoff.NextSkill.ReviewContext.RequiredImplementationLayers, "IR1")
@@ -1068,6 +1084,7 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		require.NoError(t, json.Unmarshal(nextDiagOut.Bytes(), &nextDiag))
 		require.NotNil(t, nextDiag.NextSkill)
 		assert.Equal(t, progression.SkillCodeQualityReview, nextDiag.NextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, nextDiag.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, nextDiag.NextSkill.RequiredTokens, "layer:IR1=pass")
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
@@ -1079,6 +1096,9 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
 		require.NotNil(t, validate.ActionableNextSkill)
 		assert.Equal(t, progression.SkillCodeQualityReview, validate.ActionableNextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, validate.ActionableNextSkill.SelectedReviewSkills)
+		assert.Empty(t, validate.ActionableNextSkill.DisplayName)
+		assert.Empty(t, validate.ActionableNextSkill.BlockingName)
 		assert.Contains(t, validate.ActionableNextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.Contains(t, validate.ActionableNextSkill.RequiredTokens, "layer:IR3=pass")
 		assert.NotContains(t, validate.ActionableNextSkill.RequiredTokens, "layer:R0=pass")
@@ -1093,9 +1113,9 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
 		require.NotNil(t, runView.NextSkill)
 		assert.Equal(t, progression.SkillCodeQualityReview, runView.NextSkill.Name)
-		assert.Equal(t, progression.SkillSpecComplianceReview, runView.NextSkill.DisplayName)
-		assert.Equal(t, progression.SkillCodeQualityReview, runView.NextSkill.BlockingName)
-		assert.Contains(t, runView.NextSkill.ResolutionReason, "display skill")
+		assert.Empty(t, runView.NextSkill.DisplayName)
+		assert.Empty(t, runView.NextSkill.BlockingName)
+		assert.ElementsMatch(t, selectedReviewSkills, runView.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, runView.NextSkill.RequiredTokens, "layer:IR1=pass")
 	})
 }
@@ -1402,9 +1422,10 @@ THEN the change advances to S2_EXECUTE.
 
 	// Write plan-audit evidence with correct planning input hash.
 	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-		Verdict:   model.VerificationVerdictPass,
-		Blockers:  []model.ReasonCode{},
-		Timestamp: time.Now().UTC(),
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		References: planAuditOriginReferences(),
 	})
 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)

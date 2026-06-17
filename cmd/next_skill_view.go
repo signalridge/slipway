@@ -92,7 +92,24 @@ func assembleSkillViewWithOptions(
 	if governedChange != nil {
 		resolveChange = *governedChange
 	}
-	nextSkillName, nextState := progression.ResolveNextSkill(resolveChange)
+	reviewSelection := skill.ReviewSkillSelection{}
+	var selectedReviewSkills []string
+	if resolveChange.CurrentState == model.StateS3Review {
+		if governedChange != nil {
+			var err error
+			reviewSelection, selectedReviewSkills, err = selectedReviewSkillsForChange(root, *governedChange)
+			if err != nil {
+				return err
+			}
+		} else {
+			selectedReviewSkills = skill.SelectedReviewSkills(reviewSelection)
+		}
+	}
+	// ResolveNextSkill now returns a skill set. This single-skill view uses the
+	// first selected peer as the initial display, then S3_REVIEW resolution below
+	// advances to the first selected peer that still needs evidence without
+	// treating any peer as a predecessor of another.
+	nextSkillName, nextState := progression.PrimaryNextSkillWithReviewSelection(resolveChange, reviewSelection)
 	displaySkillName := nextSkillName
 	resolutionReason := ""
 	blockingResolution := false
@@ -118,12 +135,13 @@ func assembleSkillViewWithOptions(
 				}
 			}
 			planningSubSteps := readOnlyRequiredSkillInputs(*governedChange)
-			evidenceMap, _, evalErr = progression.EvaluateRequiredSkillsForChange(
+			evidenceMap, _, evalErr = progression.EvaluateRequiredSkillsForChangeWithReviewSelection(
 				root,
 				*governedChange,
 				view.CurrentState,
 				latestRunVersion,
 				progression.FinalCloseoutEvidenceRequired(presetPolicy),
+				reviewSelection,
 				planningSubSteps...,
 			)
 			if evalErr != nil {
@@ -139,7 +157,7 @@ func assembleSkillViewWithOptions(
 				staleSkills[skillName] = true
 			}
 		}
-		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills, staleSkills)
+		requiredSkillEvidence, err := buildRequiredSkillEvidence(root, *governedChange, view.CurrentState, execCtx, precomputedPassingSkills, staleSkills, reviewSelection)
 		if err != nil {
 			return wrapRequiredSkillsEvaluationError("evaluate required skill evidence", ref.Slug, err)
 		}
@@ -147,17 +165,6 @@ func assembleSkillViewWithOptions(
 	}
 
 	if autoSkipEvidence {
-		if nextSkillName == progression.SkillSpecComplianceReview && evidenceMap != nil {
-			if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
-				if governedChange != nil && !governedChange.EffectiveWorkflowProfile().RequiresCodeQualityReview() {
-					nextSkillName = ""
-				} else {
-					nextSkillName = progression.SkillCodeQualityReview
-					resolutionReason = "passing spec-compliance-review evidence advances display skill to code-quality-review"
-				}
-			}
-		}
-
 		if nextSkillName == progression.SkillGoalVerification && evidenceMap != nil {
 			if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
 				nextSkillName = progression.SkillFinalCloseout
@@ -166,25 +173,18 @@ func assembleSkillViewWithOptions(
 		}
 	}
 
-	if nextSkillName == progression.SkillSpecComplianceReview &&
-		governedChange != nil &&
-		!governedChange.EffectiveWorkflowProfile().RequiresCodeQualityReview() &&
-		evidenceMap != nil {
-		if _, hasSpecReview := evidenceMap[progression.SkillSpecComplianceReview]; hasSpecReview {
-			nextSkillName = ""
-		}
-	}
-
 	blockersForResolution := append([]model.ReasonCode(nil), view.Blockers...)
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
 	}
+	staleRecoveryAvailable := false
 	if governedChange != nil {
 		staleTarget, staleAvailable, err := progression.StaleEvidenceRecoveryAvailable(root, *governedChange, blockersForResolution)
 		if err != nil {
 			return err
 		}
 		if staleAvailable {
+			staleRecoveryAvailable = true
 			nextSkillName = ""
 			nextState = string(staleTarget.State)
 			view.Blockers = appendReasonCodes(
@@ -201,7 +201,12 @@ func assembleSkillViewWithOptions(
 			}
 		}
 	}
-	if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
+	if !staleRecoveryAvailable && len(selectedReviewSkills) > 0 {
+		nextSkillName = firstPendingSelectedReviewSkill(selectedReviewSkills, evidenceMap, blockersForResolution)
+		displaySkillName = nextSkillName
+		resolutionReason = ""
+		blockingResolution = false
+	} else if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
 		nextSkillName = actionableSkill
 		blockingResolution = true
 		if reason != "" {
@@ -264,9 +269,10 @@ func assembleSkillViewWithOptions(
 	verificationDir := state.DisplayPath(root, filepath.Dir(state.VerificationFilePath(root, ref.Slug, nextSkillName)))
 
 	ns := &nextSkillView{
-		Name:            nextSkillName,
-		VerificationDir: verificationDir,
-		State:           nextState,
+		Name:                 nextSkillName,
+		SelectedReviewSkills: append([]string(nil), selectedReviewSkills...),
+		VerificationDir:      verificationDir,
+		State:                nextState,
 	}
 	if displaySkillName != "" && displaySkillName != nextSkillName {
 		ns.DisplayName = displaySkillName
@@ -517,6 +523,50 @@ func resolveActionableBlockingSkill(
 	return "", ""
 }
 
+func selectedReviewSkillsForChange(root string, change model.Change) (skill.ReviewSkillSelection, []string, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return skill.ReviewSkillSelection{}, nil, err
+	}
+	snap, err := governance.PreviewGovernanceSnapshot(root, change, paths.GovernedBundleDir)
+	if err != nil {
+		return skill.ReviewSkillSelection{}, nil, err
+	}
+	selection, selected := selectedReviewSkillsFromControls(snap.ActiveControls)
+	return selection, selected, nil
+}
+
+func selectedReviewSkillsFromReadiness(readiness progression.GovernanceReadiness) []string {
+	_, selected := selectedReviewSkillsFromControls(readiness.ActiveControls)
+	return selected
+}
+
+func selectedReviewSkillsFromControls(activeControls []model.ControlActivation) (skill.ReviewSkillSelection, []string) {
+	selection := progression.ReviewSkillSelectionFromControls(activeControls)
+	return selection, skill.SelectedReviewSkills(selection)
+}
+
+func firstPendingSelectedReviewSkill(
+	selectedReviewSkills []string,
+	evidenceMap map[string]model.VerificationRecord,
+	blockers []model.ReasonCode,
+) string {
+	if len(selectedReviewSkills) == 0 {
+		return ""
+	}
+	for _, skillName := range selectedReviewSkills {
+		if hasRequiredSkillBlockerFor(blockers, skillName) {
+			return skillName
+		}
+	}
+	for _, skillName := range selectedReviewSkills {
+		if !skillHasPassingEvidence(evidenceMap, skillName) {
+			return skillName
+		}
+	}
+	return ""
+}
+
 func hasRequiredSkillBlockerFor(blockers []model.ReasonCode, skillName string) bool {
 	skillName = strings.TrimSpace(skillName)
 	if skillName == "" {
@@ -581,6 +631,7 @@ func buildRequiredSkillEvidence(
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
 	staleSkills map[string]bool,
+	reviewSelection skill.ReviewSkillSelection,
 ) ([]skillEvidenceEntry, error) {
 	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
@@ -603,14 +654,15 @@ func buildRequiredSkillEvidence(
 	if workflowState == model.StateS1Plan && change.PlanSubStep != model.PlanSubStepNone {
 		planSubSteps = []model.PlanSubStep{change.PlanSubStep}
 	}
-	required := skill.RequiredSkillsForStateWithRegistry(
+	required := skill.RequiredSkillsForStateWithRegistryWithReviewSelection(
 		registry,
 		change.NeedsDiscovery,
 		workflowState,
 		progression.FinalCloseoutEvidenceRequired(presetPolicy),
+		reviewSelection,
 		planSubSteps...,
 	)
-	required = skill.FilterRequiredSkillsForWorkflowProfile(required, change.EffectiveWorkflowProfile())
+	required = skill.FilterRequiredSkillsForWorkflowProfileWithReviewSelection(required, change.EffectiveWorkflowProfile(), reviewSelection)
 	evidence := make([]skillEvidenceEntry, 0, len(required))
 	if precomputedPassingSkills != nil {
 		for _, skillName := range required {
