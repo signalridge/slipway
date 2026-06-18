@@ -340,7 +340,7 @@ func buildResumeCheckpoint(root string, change *model.Change, execCtx executionC
 		)
 	}
 
-	if change.CurrentState == model.StateS2Execute && execCtx.Ready && view.InputContext.ResumeCheckpoint == nil {
+	if change.CurrentState == model.StateS2Implement && execCtx.Ready && view.InputContext.ResumeCheckpoint == nil {
 		if len(completedTaskIDs) > 0 {
 			view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
 				RunSummaryVersion: execCtx.LatestRunVersion,
@@ -392,7 +392,10 @@ func buildResumeCheckpointProgress(
 	if execCtx.LatestRunVersion > 0 {
 		waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, "next")
 		if err != nil {
-			return nil, "", 0, err
+			if !resumableWavePlanHasStructuralDrift(root, change) {
+				return nil, "", 0, err
+			}
+			waveCtx = nil
 		}
 		if waveCtx != nil {
 			resumeWaveIndex = state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs)

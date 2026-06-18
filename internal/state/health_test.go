@@ -119,7 +119,7 @@ func TestCollectHealthReportReportsUnreadableExecutionSummary(t *testing.T) {
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("corrupt-execution-summary")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -142,13 +142,13 @@ func TestCollectHealthReportReportsUnreadableExecutionSummary(t *testing.T) {
 	assert.True(t, found, "expected execution summary integrity finding")
 }
 
-func TestCollectHealthReportReportsMissingWavePlan(t *testing.T) {
+func TestCollectHealthReportDoesNotRequirePersistedWavePlanDuringS2(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("missing-wave-plan")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
@@ -184,11 +184,10 @@ func TestCollectHealthReportReportsMissingWavePlan(t *testing.T) {
 		for _, reason := range finding.Reasons {
 			if reason.Code == "wave_plan_missing" {
 				found = true
-				assert.True(t, finding.Repairable)
 			}
 		}
 	}
-	assert.True(t, found, "expected missing wave-plan health finding")
+	assert.False(t, found, "S2 health must live-derive from tasks.md instead of requiring persisted wave-plan.yaml")
 }
 
 func TestCollectHealthReportReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
@@ -197,7 +196,7 @@ func TestCollectHealthReportReportsMalformedTaskEvidenceWithoutFailing(t *testin
 	root := createRuntimeLayout(t)
 	change := model.NewChange("malformed-task-evidence")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
@@ -244,13 +243,13 @@ func TestCollectHealthReportReportsMalformedTaskEvidenceWithoutFailing(t *testin
 	assert.True(t, found, "expected malformed task evidence finding")
 }
 
-func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+func TestCollectHealthReportIgnoresMissingPersistedWavePlanWhenCurrentTasksDrifted(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("missing-wave-plan-drifted")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -298,23 +297,21 @@ func TestCollectHealthReportBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 			continue
 		}
 		for _, reason := range finding.Reasons {
-			if reason.Code == "wave_plan_repair_blocked" {
+			if reason.Code == "wave_plan_missing" {
 				found = true
-				assert.False(t, finding.Repairable)
-				assert.NotEmpty(t, reason.Detail)
 			}
 		}
 	}
-	assert.True(t, found, "expected wave-plan repair block finding")
+	assert.False(t, found, "missing persisted wave-plan cache is not an S2 health issue")
 }
 
-func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
+func TestCollectHealthReportIgnoresPersistedWavePlanDriftDuringS2(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("wave-plan-drift")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -349,21 +346,19 @@ func TestCollectHealthReportReportsWavePlanDriftWithPivotHint(t *testing.T) {
 		for _, reason := range finding.Reasons {
 			if reason.Code == "wave_plan_drift" {
 				found = true
-				assert.False(t, finding.Repairable)
-				assert.Contains(t, finding.RepairHint, "slipway run")
 			}
 		}
 	}
-	assert.True(t, found, "expected wave plan drift health finding")
+	assert.False(t, found, "S2 health must ignore stale persisted wave-plan cache")
 }
 
-func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+func TestCollectHealthReportIgnoresUnreadablePersistedWavePlanDuringS2(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("unreadable-wave-plan-drifted")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -414,14 +409,12 @@ func TestCollectHealthReportBlocksUnreadableWavePlanRepairWhenCurrentTasksDrifte
 			continue
 		}
 		for _, reason := range finding.Reasons {
-			if reason.Code == "wave_plan_repair_blocked" {
+			if reason.Code == "wave_plan_unreadable" {
 				found = true
-				assert.False(t, finding.Repairable)
-				assert.NotEmpty(t, reason.Detail)
 			}
 		}
 	}
-	assert.True(t, found, "expected unreadable wave-plan repair block finding")
+	assert.False(t, found, "S2 health must ignore unreadable persisted wave-plan cache")
 }
 
 func TestCollectHealthReportReportsMissingWaveRuns(t *testing.T) {
@@ -430,7 +423,7 @@ func TestCollectHealthReportReportsMissingWaveRuns(t *testing.T) {
 	root := createRuntimeLayout(t)
 	change := model.NewChange("missing-wave-runs")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -483,7 +476,7 @@ func TestCollectHealthReportReportsIncompleteWaveRuns(t *testing.T) {
 	root := createRuntimeLayout(t)
 	change := model.NewChange("incomplete-wave-runs")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -554,7 +547,7 @@ func TestCollectHealthReportReportsWaveTaskLinkageMismatch(t *testing.T) {
 	root := createRuntimeLayout(t)
 	change := model.NewChange("wave-task-linkage-mismatch")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -650,7 +643,7 @@ func TestCollectHealthReportReportsStaleCheckpoint(t *testing.T) {
 
 	change := model.NewChange("stale-checkpoint")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.ActiveCheckpoint = &model.ActiveCheckpoint{
 		PausedTaskID:    "t-01",
@@ -780,7 +773,7 @@ func TestCollectHealthReportMarksInvalidWorktreeBindingNonRepairable(t *testing.
 	root := createRuntimeRepoLayout(t)
 	change := model.NewChange("invalid-worktree-binding")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.NeedsDiscovery = true
 	change.WorktreePath = root
@@ -808,7 +801,7 @@ func TestCollectHealthReportReportsMissingBoundWorktreeScopeConfig(t *testing.T)
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	change := model.NewChange("missing-bound-worktree-config")
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.NeedsDiscovery = true
 	change.WorktreePath = worktreeRoot

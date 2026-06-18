@@ -163,7 +163,7 @@ func inScopeProducedRecoverySpecs() []string {
 	}
 }
 
-func TestReviewSetRecoveryTextNamesSelectedSetAndOptionalSecurity(t *testing.T) {
+func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -175,19 +175,21 @@ func TestReviewSetRecoveryTextNamesSelectedSetAndOptionalSecurity(t *testing.T) 
 			name: "missing selected security review",
 			spec: "required_skill_missing:security-review",
 			want: []string{
-				"selected review-set",
-				"security-review only when selected",
+				"selected peer skills",
+				"goal-verification",
+				"security-review when selected",
 			},
 		},
 		{
-			name: "closeout chain order selected review set",
+			name: "closeout chain order selected peer set",
 			spec: "closeout_chain_order_invalid",
 			want: []string{
-				"selected review-set",
+				"selected S3 peer",
 				"independent-review",
-				"security-review when the security control selected it",
-				"precedes goal-verification",
-				"precedes final-closeout",
+				"security-review when selected",
+				"goal-verification",
+				"unordered S3 peer",
+				"re-run final-closeout",
 			},
 		},
 	}
@@ -326,7 +328,7 @@ func sampleRecoveryDetail(code string) string {
 	case "non_pass_task":
 		return "t-01"
 	case "plan_audit_budget_exhausted":
-		return "checker iteration budget exhausted before plan audit passed (rescope is S2_EXECUTE-only)"
+		return "checker iteration budget exhausted before plan audit passed"
 	case "plan_audit_iteration":
 		return "1/2"
 	case "plan_checker_feedback_required":
@@ -382,7 +384,7 @@ func TestSensitiveEvidenceRecoveryPointsToEvidenceTaskWithoutBypass(t *testing.T
 	step, ok := recoveryStepFor(NewReasonCode("sensitive_evidence_missing", "schema_migration:db/migrations/001_create_users.sql"))
 	require.True(t, ok)
 	assert.Equal(t, "slipway run", step.Command)
-	assert.Contains(t, step.Remediation, "S2_EXECUTE")
+	assert.Contains(t, step.Remediation, "S2_IMPLEMENT")
 	assert.Contains(t, step.Remediation, "slipway evidence task")
 	assert.Contains(t, step.Remediation, "migration-applied")
 	assert.Contains(t, step.Remediation, "db/migrations/001_create_users.sql")
@@ -468,41 +470,21 @@ func TestBuildRecoveryStaleRuntimeBindingRoutesToDelete(t *testing.T) {
 	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
 }
 
-func TestBuildRecoverySelectsPrimaryByStagePriority(t *testing.T) {
+func TestBuildRecoverySelectsPrimaryByForwardOnlyRefreshPriority(t *testing.T) {
 	t.Parallel()
 
-	// reopen_evidence (root-most) must win over refresh_execution (later stage),
-	// regardless of blocker order.
 	blockers := []ReasonCode{
 		NewReasonCode("stale_execution_evidence", ""),
 		NewReasonCode("stale_planning_evidence", ""),
-		NewReasonCode("no_skill_required", "S2_EXECUTE"),
+		NewReasonCode("no_skill_required", "S2_IMPLEMENT"),
 	}
 	got := BuildRecovery(blockers)
 	require.NotNil(t, got)
-	assert.Equal(t, RecoveryClassReopenEvidence, got.RecoveryClass)
+	assert.Equal(t, RecoveryClassRefreshWave, got.RecoveryClass)
 	assert.NotEmpty(t, got.PrimaryCommand)
 	for _, step := range got.Steps {
 		assert.NotEqual(t, "no_skill_required", step.Code, "informational blocker must not appear as a step")
 	}
-}
-
-func TestBuildRecoveryPrioritizesStaleEvidenceRecoveryOverDerivedShipBlockers(t *testing.T) {
-	t.Parallel()
-
-	got := BuildRecovery([]ReasonCode{
-		NewReasonCode("high_risk_check_missing", "external_api_contracts.safety_baseline"),
-		NewReasonCode("closeout_assurance_attestation_missing",
-			"final-closeout must record closeout:assurance_complete=pass on standard/strict"),
-		NewReasonCode("required_skill_stale", "code-quality-review:CLAUDE.md"),
-		NewReasonCode("stale_evidence_recovery_available", "S3_REVIEW"),
-		NewReasonCode("run_slipway_run_to_advance", "S4_VERIFY"),
-		NewReasonCode("verification_evidence_missing", ""),
-	})
-	require.NotNil(t, got)
-	assert.Equal(t, "slipway run", got.PrimaryCommand)
-	assert.Equal(t, RecoveryClassReopenEvidence, got.RecoveryClass)
-	assert.Contains(t, got.PrimaryAction, "earliest affected authority")
 }
 
 func TestRecoveryTokensUseCanonicalMessages(t *testing.T) {
@@ -593,20 +575,18 @@ func TestReasonCodeJSONShapeHasNoPresentationFields(t *testing.T) {
 		"ReasonCode JSON must carry no presentation fields")
 }
 
-func TestPlanAuditRecoveryDoesNotRecommendRescopeInS1(t *testing.T) {
+func TestPlanAuditRecoveryUsesRunWithoutRemovedCommands(t *testing.T) {
 	t.Parallel()
 
-	// rescope is S2_EXECUTE-only (gate.EvaluateGPivot), but these blockers are
-	// produced on the S1 plan-audit path. The recovery command must therefore not
-	// hand the operator a `pivot --rescope` the gate will reject; reroute is valid
-	// from S1 through S4.
+	// Plan-audit recovery stays in the run loop. It must not hand the operator
+	// a separate retired recovery surface.
 	for _, code := range []string{"plan_audit_budget_exhausted", "plan_checker_loop_terminated"} {
 		rc := NewReasonCode(code, "")
 		step, ok := recoveryStepFor(rc)
 		require.Truef(t, ok, "%s must produce a recovery step", code)
-		assert.Equalf(t, "slipway pivot --reroute", step.Command, "%s must recommend reroute, not rescope", code)
-		assert.NotContainsf(t, step.Command, "rescope", "%s command must not point at S1-invalid rescope", code)
-		assert.NotContainsf(t, step.Remediation, "--rescope", "%s remediation must not point at S1-invalid rescope", code)
+		assert.Equalf(t, "slipway run", step.Command, "%s must remain in the run loop", code)
+		assert.NotContainsf(t, step.Command, "--", "%s command must not point at a recovery submode", code)
+		assert.NotContainsf(t, step.Remediation, "--", "%s remediation must not point at a recovery submode", code)
 	}
 }
 
@@ -615,7 +595,7 @@ func TestCloseoutAttestationMissingResolvesToRecovery(t *testing.T) {
 
 	// closeout_assurance_attestation_missing is a real G_ship blocker but was not
 	// canonicalized or in the remediation table, so BuildRecovery silently skipped
-	// it on real S4 output. It must now render a step with a remediation/command.
+	// it on real closeout output. It must now render a step with a remediation/command.
 	rc := NewReasonCode("closeout_assurance_attestation_missing",
 		"final-closeout must record closeout:assurance_complete=pass on standard/strict")
 	step, ok := recoveryStepFor(rc)
@@ -658,7 +638,7 @@ func TestBuildRecoveryCoversRealValidationAndShipBlockers(t *testing.T) {
 		"real validate/done blockers must not be silently skipped")
 }
 
-func TestBuildRecoveryPrioritizesVerificationBeforeCloseout(t *testing.T) {
+func TestBuildRecoveryPrioritizesSelectedPeerBeforeFinalCloseout(t *testing.T) {
 	t.Parallel()
 
 	got := BuildRecovery([]ReasonCode{
@@ -671,7 +651,7 @@ func TestBuildRecoveryPrioritizesVerificationBeforeCloseout(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, RecoveryClassRerunSkill, got.RecoveryClass)
 	assert.Contains(t, got.PrimaryAction, "goal-verification",
-		"goal-verification recovery must precede final-closeout when both S4 blockers are present")
+		"selected S3 peer recovery must precede final-closeout when both closeout blockers are present")
 }
 
 func TestBuildRecoveryPrioritizesMissingArtifactsByAuthoringOrder(t *testing.T) {
@@ -696,8 +676,8 @@ func TestReadyStatesSurfaceAdvanceRecovery(t *testing.T) {
 	// trustworthy next action is still surfaced as the primary command, and the two
 	// ready advisories are handled symmetrically.
 	advance := BuildRecovery([]ReasonCode{
-		NewReasonCode("run_slipway_run_to_advance", "S2_EXECUTE"),
-		NewReasonCode("no_skill_required", "S2_EXECUTE"),
+		NewReasonCode("run_slipway_run_to_advance", "S2_IMPLEMENT"),
+		NewReasonCode("no_skill_required", "S2_IMPLEMENT"),
 	})
 	require.NotNil(t, advance)
 	assert.Equal(t, "slipway run", advance.PrimaryCommand)

@@ -383,7 +383,7 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap(t *testing.T) {
 }
 
 // TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration is the exact
-// issue #80 live reproduction: at S2_EXECUTE the next skill is wave-orchestration
+// issue #80 live reproduction: at S2_IMPLEMENT the next skill is wave-orchestration
 // and a populated (stale prior-change) map must still surface the non-blocking
 // relevance advisory — the advisory is not gated to S1 planning skills.
 func TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration(t *testing.T) {
@@ -395,7 +395,7 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration(t *testing
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.NeedsDiscovery = false
 		require.NoError(t, state.SaveChange(root, change))

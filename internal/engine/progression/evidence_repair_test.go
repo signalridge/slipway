@@ -20,7 +20,7 @@ func TestStaleEvidencePlanSubstepOrderingIncludesValidate(t *testing.T) {
 	bundle := staleEvidencePositionFor(model.StateS1Plan, model.PlanSubStepBundle)
 	audit := staleEvidencePositionFor(model.StateS1Plan, model.PlanSubStepAudit)
 	validate := staleEvidencePositionFor(model.StateS1Plan, model.PlanSubStepValidate)
-	execute := staleEvidencePositionFor(model.StateS2Execute, model.PlanSubStepNone)
+	execute := staleEvidencePositionFor(model.StateS2Implement, model.PlanSubStepNone)
 
 	assert.Negative(t, compareStaleEvidencePosition(research, bundle))
 	assert.Negative(t, compareStaleEvidencePosition(bundle, audit))
@@ -28,7 +28,7 @@ func TestStaleEvidencePlanSubstepOrderingIncludesValidate(t *testing.T) {
 	assert.Negative(t, compareStaleEvidencePosition(validate, execute))
 }
 
-// TestStalePlanSubStepRankDerivesFromPlanSubStepOrder pins the stale-recovery
+// TestStalePlanSubStepRankDerivesFromPlanSubStepOrder pins the stale-repair
 // ordering to the canonical planSubStepOrder (REQ-003): the forward substeps
 // must rank by their planSubStepOrder index, and `validate` must rank strictly
 // after the last forward substep. If planSubStepOrder is ever reordered without
@@ -102,14 +102,14 @@ func TestStaleEvidenceAuthoritiesIncludeSelectedSecurityReview(t *testing.T) {
 	assert.Contains(t, names, SkillSecurityReview)
 }
 
-// TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps reproduces #90:
+// TestStaleIntakeRepairBlocksWithoutRewritingMachineOnlySubsteps proves stale
+// intake evidence now blocks as review alignment guidance instead of mutating the
+// lifecycle:
 // when intent.md changes after intake-clarification passed and the change has
-// already moved onto a machine-only S0 substep (research/confirm), mutating
-// `AdvanceGoverned` must reopen S0_INTAKE back to the entry substep (clarify) so
-// the host is routed to intake-clarification — never stranded on a substep with
-// no routable skill, and never requiring a manual digest edit or a second
-// recovery command.
-func TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps(t *testing.T) {
+// already moved onto a machine-only S0 substep (research/confirm),
+// `AdvanceGoverned` must leave state/substep untouched and report a repair
+// blocker rather than deleting evidence or manufacturing a lifecycle mutation.
+func TestStaleIntakeRepairBlocksWithoutRewritingMachineOnlySubsteps(t *testing.T) {
 	cases := []struct {
 		name          string
 		intakeSubStep model.IntakeSubStep
@@ -156,33 +156,27 @@ func TestStaleIntakeRecoveryReopensToClarifyFromMachineOnlySubsteps(t *testing.T
 
 			summary, err := AdvanceGoverned(root, change.Slug)
 			require.NoError(t, err)
-			assert.Equal(t, "advanced", summary.Action)
-			assert.Equal(t, "stale_evidence_recovery_started", summary.Reason)
-			assert.Equal(t, model.StateS0Intake, summary.ToState)
-			assert.Equal(t, string(model.IntakeSubStepClarify), summary.ToSubStep,
-				"reopen must land on the clarify substep, not the machine-only substep")
-			assert.True(t, summary.RecoveryOnly)
+			assert.Equal(t, "blocked", summary.Action)
+			assert.Equal(t, "stale_evidence_requires_review_alignment", summary.Reason)
+			assert.Empty(t, summary.ToState)
+			assert.Empty(t, summary.ToSubStep)
+			assert.False(t, summary.RecoveryOnly)
 
 			reloaded, err := state.LoadChange(root, change.Slug)
 			require.NoError(t, err)
 			assert.Equal(t, model.StateS0Intake, reloaded.CurrentState)
-			assert.Equal(t, model.IntakeSubStepClarify, reloaded.IntakeSubStep,
-				"#90: reopen from %s must reset the intake substep to clarify", tc.intakeSubStep)
+			assert.Equal(t, tc.intakeSubStep, reloaded.IntakeSubStep,
+				"forward-only stale evidence handling must not rewrite intake substeps")
 
-			// Read-only resolution after recovery routes back to intake-clarification.
-			nextSkills, _ := ResolveNextSkill(reloaded)
-			assert.Equal(t, []string{SkillIntakeClarification}, nextSkills,
-				"post-recovery next skill must be intake-clarification")
-
-			// The stale verification record is cleared so the rerun re-stamps fresh.
+			// The stale verification record is preserved; repair is explicit and
+			// evidence-owning code decides when to replace it with a fresh verdict.
 			_, statErr := os.Stat(filepath.Join(bundleDir, "verification", SkillIntakeClarification+".yaml"))
-			assert.Truef(t, os.IsNotExist(statErr),
-				"stale intake-clarification verification should be cleared, stat err=%v", statErr)
+			assert.NoError(t, statErr)
 		})
 	}
 }
 
-func TestStaleEvidenceRecoveryIgnoresIntakeOpenQuestionResolution(t *testing.T) {
+func TestStaleEvidenceRepairIgnoresIntakeOpenQuestionResolution(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -214,9 +208,9 @@ func TestStaleEvidenceRecoveryIgnoresIntakeOpenQuestionResolution(t *testing.T) 
 		"  Resolved: intake digest owns substantive scope; research owns this checklist state.\n"
 	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent(resolvedOpenQuestions)), 0o644))
 
-	target, ok, err := StaleEvidenceRecoveryAvailable(root, change, nil)
+	target, ok, err := StaleEvidenceRepairAvailable(root, change, nil)
 	require.NoError(t, err)
-	assert.Falsef(t, ok, "Open Questions resolution must not reopen stale intake evidence, got target=%+v", target)
+	assert.Falsef(t, ok, "Open Questions resolution must not block stale intake evidence, got target=%+v", target)
 
 	require.NoError(t, os.WriteFile(intentPath, []byte(strings.Replace(
 		issue238Intent(resolvedOpenQuestions),
@@ -225,9 +219,9 @@ func TestStaleEvidenceRecoveryIgnoresIntakeOpenQuestionResolution(t *testing.T) 
 		1,
 	)), 0o644))
 
-	target, ok, err = StaleEvidenceRecoveryAvailable(root, change, nil)
+	target, ok, err = StaleEvidenceRepairAvailable(root, change, nil)
 	require.NoError(t, err)
-	require.True(t, ok, "substantive intent changes must still reopen stale intake evidence")
+	require.True(t, ok, "substantive intent changes must still block stale intake evidence")
 	assert.Equal(t, SkillIntakeClarification, target.SkillName)
 	assert.Equal(t, model.StateS0Intake, target.State)
 	assert.Contains(t, model.ReasonSpecs(target.Blockers), "required_skill_stale:intake-clarification:intent.md")

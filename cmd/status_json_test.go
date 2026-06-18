@@ -159,7 +159,7 @@ func TestStatusJSONResponseDoesNotTreatNonGovernanceBlockersAsGovernanceSummary(
 		Slug:              "execution-blocked",
 		Phase:             model.PhaseBuilding,
 		LifecycleStatus:   string(model.ChangeStatusActive),
-		CurrentState:      model.StateS2Execute,
+		CurrentState:      model.StateS2Implement,
 		EvidenceFreshness: "fresh",
 		Blockers: []model.ReasonCode{
 			model.NewReasonCode("wave_execution_blocked", "task-01 failed"),
@@ -200,7 +200,7 @@ func TestStatusJSONResponseExcludesAdvisoryActionFromBlockedBy(t *testing.T) {
 		Slug:              "advisory-pending",
 		Phase:             model.PhaseBuilding,
 		LifecycleStatus:   string(model.ChangeStatusActive),
-		CurrentState:      model.StateS2Execute,
+		CurrentState:      model.StateS2Implement,
 		EvidenceFreshness: "fresh",
 		Blockers: []model.ReasonCode{
 			model.NewReasonCode("required_skill_missing", "wave-orchestration"),
@@ -242,7 +242,7 @@ func TestStatusJSONResponseBuildsGovernanceSummaryFromGovernanceBlocker(t *testi
 		Slug:              "governance-blocked",
 		Phase:             model.PhaseBuilding,
 		LifecycleStatus:   string(model.ChangeStatusActive),
-		CurrentState:      model.StateS2Execute,
+		CurrentState:      model.StateS2Implement,
 		EvidenceFreshness: "fresh",
 		Blockers: []model.ReasonCode{
 			model.NewReasonCode("governance_action_required", "domain-review: run domain-aware compliance review"),

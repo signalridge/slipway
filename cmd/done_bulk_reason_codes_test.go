@@ -19,7 +19,7 @@ func TestDoneAllReadyPreservesShipGateReasonCodes(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	blocked := model.NewChange("bulk-ship-blocked-reasons")
-	blocked.CurrentState = model.StateS4Verify
+	blocked.CurrentState = model.StateS3Review
 	blocked.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, blocked))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, blocked, ""))
@@ -52,7 +52,7 @@ func TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	blocked := model.NewChange("bulk-ship-blocked-artifact-reason")
-	blocked.CurrentState = model.StateS4Verify
+	blocked.CurrentState = model.StateS3Review
 	blocked.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, blocked))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, blocked, ""))

@@ -15,18 +15,38 @@ wrappers; generated skills invoke their helper subcommands directly.
 | Command | Class | Purpose |
 | --- | --- | --- |
 | `slipway new [description]` | mutation | Create a governed change starting at intake. |
-| `slipway next` | query | Inspect the next actionable skill or blocker without advancing state. |
-| `slipway run` | mutation | Advance until a skill, blocker, checkpoint, or done-ready outcome is surfaced. |
-| `slipway status` | query | Show lifecycle state, blockers, progress, and next actions. |
+| `slipway intake` | mutation | Run S0 intake clarification and authorization. |
+| `slipway plan` | mutation | Run S1 plan artifact authoring or same-intent change amendment. |
+| `slipway implement` | mutation | Run S2 implementation wave orchestration. |
+| `slipway review` | mutation | Run S3 review convergence and reviewer feedback repair. |
+| `slipway fix` | mutation | Dispatch fresh-context fixes for S3 review findings. |
 | `slipway done` | mutation | Finalize a done-ready change and archive it. |
+| `slipway next` | query | Inspect the next actionable skill or blocker without advancing state. |
+| `slipway run` | mutation | Shortcut-drive the current lifecycle stage until a skill, blocker, checkpoint, or done-ready outcome is surfaced. |
+| `slipway status` | query | Show lifecycle state, blockers, progress, and next actions. |
 
 When a governed change has stale evidence, `slipway next` remains read-only and
-reports recovery guidance. `slipway run` is the mutating recovery path: it
-reopens the earliest affected authority, clears that authority and downstream
-verification files, preserves compatible runtime task evidence, and returns the
-side effects in JSON and human-readable output. Planning freshness is keyed on
-the structural task-plan hash; `wave-plan.yaml` `generated_at` is materialization
-time for display/audit and is not a freshness authority.
+reports recovery guidance. Prefer the explicit current-stage command when the
+state is known: `intake`, `plan`, `implement`, `review`, or `done`. `run` is an
+auto-driver shortcut that delegates to the current stage and reports
+`delegated_to` in JSON. Same-intent scope changes are change amendments inside
+the current change; intent conflicts open a new governed change. Planning
+freshness is keyed on the structural task-plan hash. Plan-audit reviews the
+plan bundle before S2 may start; it does not certify `wave-plan.yaml` as a
+planning authority. `wave-plan.yaml` is an S2 execution projection/cache
+materialized from the current `tasks.md`, and its `generated_at` is
+materialization time for display/audit rather than freshness authority.
+
+`slipway fix` is the S3 review-finding repair surface. It discovers reviewer
+findings and alignment blockers, then returns a `repair_batch_id` and a contract
+for a fresh-context repair subagent. The host first collects the selected review
+batch findings, consolidates them by root cause into one repair brief, and must
+not repair findings inline or one-by-one while other selected reviewers are still
+reporting. After the subagent changes code, artifacts, tests, or same-intent
+scope evidence, rerun the affected selected reviewers and record both
+`context_origin:stage=review=<handle>` and
+`context_origin:stage=fix=<handle>` before `slipway review` closes the batch.
+`slipway repair` remains local integrity only.
 
 ## Creation Options
 
@@ -53,10 +73,8 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 | `slipway init` | mutation | Initialize `.slipway.yaml` and optional AI-tool adapters. |
 | `slipway preset <level>` | mutation | Confirm or change the active change preset. |
 | `slipway validate` | query | Recompute evidence and gate readiness without advancing. |
-| `slipway review` | mutation | Run explicit artifact-code alignment review (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY, after execution-summary evidence exists). |
-| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_EXECUTE; `--task-id` required, `--allowed-responses` required for `--type decision`). |
+| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_IMPLEMENT; `--task-id` required, `--allowed-responses` required for `--type decision`). |
 | `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
-| `slipway pivot` | mutation | Reroute an active change (S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY) or rescope it (S2_EXECUTE/S3_REVIEW/S4_VERIFY back to S0_INTAKE). |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
@@ -158,19 +176,20 @@ aligned with the CLI by a reverse flag-contract test:
 - `next --no-auto-pass` reports skill eligibility instead of auto-passing;
   `next --context-guard` emits context-budget guard messages in hook format.
 - `done --all-ready` archives every active change that is currently done-ready.
-- `pivot --reroute` re-evaluates the routing/discovery decision and re-enters
-  S1_PLAN (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY); `pivot --rescope`
-  (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY) returns the change to S0_INTAKE to
-  amend scope, clearing the Approved Summary for re-confirmation. Both set
-  `needs_discovery=true`. To simply bring a legitimately-changed out-of-scope
-  file into the plan, amend the owning task's `target_files` in `tasks.md` and
-  re-run — that is non-destructive and preserves wave evidence; reserve
-  `--rescope` for a full re-plan.
+- Same-intent scope changes are handled as change amendments by the current
+  stage command: update the owning artifacts and evidence, then continue
+  forward. Executor agents must not silently write outside declared task scope;
+  they propose the amendment or return a blocker. If the objective changed,
+  start a new governed change.
 
 ## Useful JSON Invocations
 
 ```bash
 slipway new --json "refresh docs"
+slipway intake --json
+slipway plan --json
+slipway implement --json
+slipway fix --json
 slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
@@ -191,12 +210,15 @@ Stable manifest tokens for JSON contract coverage:
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json` |
+| fix JSON | `slipway fix --json` |
 | health JSON | `slipway health --json` |
+| implement JSON | `slipway implement --json` |
 | instructions JSON | `slipway instructions <artifact> --json` |
+| intake JSON | `slipway intake --json` |
 | learn JSON | `slipway learn --json` |
 | new JSON | `slipway new --json` |
 | next JSON | `slipway next --json` |
-| pivot JSON | `slipway pivot --json` |
+| plan JSON | `slipway plan --json` |
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
@@ -251,7 +273,7 @@ supply for non-pass verdicts), `--captured-at <RFC3339Nano>` (defaults to now),
 `--session-id`, and `--change <slug>`. The command computes `freshness_inputs`,
 validates task kind/verdict/blockers, and refuses unknown or path-unsafe task IDs
 instead of relying on hand-written JSON.
-`freshness_inputs` includes the current wave-plan `tasks_plan_hash` so task
+`freshness_inputs` includes the current task-derived `tasks_plan_hash` so task
 evidence cannot be reused after `tasks.md` semantically changes.
 
 `slipway evidence skill --skill wave-orchestration` is the S2 bootstrap for
@@ -277,6 +299,15 @@ the review stale until the owning review stage is run again through
 `slipway run` against the new diff boundary. If required digest evidence is
 missing or stale, the owning governance skill is reported stale and must be
 re-run.
+
+Selected S3 reviewer digests also require
+`verification/suite-result.yaml` for the current execution summary run. That file
+is the shared digest keystone for the full-suite proof and any guardrail SAST
+proof consumed by spec-compliance-review, code-quality-review,
+independent-review, goal-verification, and selected security-review. If the file
+is absent, invalid, or tied to a different `run_summary_version`, selected S3
+review evidence is not fresh. If a suite or SAST digest changes, the selected
+review set is conservatively staled.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
@@ -306,7 +337,7 @@ slipway run --resume --json
 
 Use `health --doctor` before repair or resume when state looks interrupted or inconsistent.
 
-`run --resume` only applies to resumable execution states such as `S2_EXECUTE`.
-If the active change is already in review or verify, JSON errors include
+`run --resume` only applies to resumable execution states such as `S2_IMPLEMENT`.
+If the active change is already in S3 review or done-ready, JSON errors include
 `current_state`, `resumable_states`, and a `next_action` directing the operator
-back to the normal run, validate, or review-evidence flow.
+back to the S3 review/done-ready flow.

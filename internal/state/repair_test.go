@@ -69,7 +69,7 @@ func TestDiagnoseBundleConsistencyAssuranceDeferredPreReviewIsSilent(t *testing.
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	change := model.NewChange("no-assurance-early")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -87,7 +87,7 @@ func seedWavePlanRepairChange(t *testing.T, slug, tasksMD string) (string, model
 	t.Helper()
 	root := createRuntimeLayout(t)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	bundleDir := filepath.Join(root, "artifacts", "changes", slug)
@@ -104,20 +104,30 @@ func TestWavePlanRepairDriftRebuildsOnStructuralDriftWhenSummaryNotReady(t *test
 	root, change, plan := seedWavePlanRepairChange(t, "wave-repair-structural", tasksA)
 
 	// No drift before editing tasks.md.
-	changed, blocked, err := wavePlanRepairDrift(root, change, plan, nil)
+	changed, preserveHistoricalEvidence, err := wavePlanRepairDrift(root, change, plan, nil)
 	require.NoError(t, err)
 	assert.False(t, changed)
-	assert.Empty(t, blocked)
+	assert.False(t, preserveHistoricalEvidence)
 
 	// A structural edit (task_kind) with no ready summary must rebuild, not reuse
 	// the readable-but-stale plan (#97 / REQ-006).
 	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
 		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"a.go\"]\n  - task_kind: test\n"), 0o644))
-	changed, blocked, err = wavePlanRepairDrift(root, change, plan, nil)
+	changed, preserveHistoricalEvidence, err = wavePlanRepairDrift(root, change, plan, nil)
 	require.NoError(t, err)
 	assert.True(t, changed, "structural drift with no ready summary must rebuild the wave-plan")
-	assert.Empty(t, blocked)
+	assert.False(t, preserveHistoricalEvidence)
+	changed, preserveHistoricalEvidence, err = wavePlanRepairDrift(root, change, plan, &model.ExecutionSummary{
+		RunSummaryVersion: 1,
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:  "t-01",
+			Verdict: model.TaskVerdictPass,
+		}},
+	})
+	require.NoError(t, err)
+	assert.True(t, changed, "structural drift must rebuild the wave-plan even when old execution evidence exists")
+	assert.True(t, preserveHistoricalEvidence, "old execution evidence must be preserved when the task boundary drifted")
 }
 
 func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
@@ -134,10 +144,10 @@ func TestWavePlanRepairDriftRebuildsLegacyPlanMissingScopeHash(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"),
 		[]byte("# Tasks\n\n- [ ] `t-01` original\n  - target_files: [\"b.go\"]\n  - task_kind: code\n"), 0o644))
 
-	changed, blocked, err := wavePlanRepairDrift(root, change, plan, nil)
+	changed, preserveHistoricalEvidence, err := wavePlanRepairDrift(root, change, plan, nil)
 	require.NoError(t, err)
 	assert.True(t, changed, "legacy plan with empty scope hash must rebuild on scope drift instead of carrying stale target_files")
-	assert.Empty(t, blocked)
+	assert.False(t, preserveHistoricalEvidence)
 }
 
 func TestRepairExecutionStateUsesEffectiveParallelWhenRecoveringWaveRuns(t *testing.T) {
@@ -329,6 +339,11 @@ func TestRepairArchivedTerminalStatusSanitizesSiblingWorktreeArchiveInPlace(t *t
 	archivedBundleDir := filepath.Join(worktreeRoot, "artifacts", "changes", "archived", slug)
 	require.NoError(t, os.MkdirAll(filepath.Dir(archivedBundleDir), 0o755))
 	require.NoError(t, os.Rename(bundleDir, archivedBundleDir))
+	archivedChangePath := filepath.Join(archivedBundleDir, "change.yaml")
+	raw, err := os.ReadFile(archivedChangePath)
+	require.NoError(t, err)
+	raw = append(raw, []byte("worktree_path: "+worktreeRoot+"\n")...)
+	require.NoError(t, os.WriteFile(archivedChangePath, raw, 0o644))
 	require.NoError(t, os.MkdirAll(ChangeDir(root, slug), 0o755))
 
 	repaired, err := RepairArchivedTerminalStatus(root, slug)
@@ -341,7 +356,7 @@ func TestRepairArchivedTerminalStatusSanitizesSiblingWorktreeArchiveInPlace(t *t
 	_, err = os.Stat(filepath.Join(root, "artifacts", "changes", "archived", slug))
 	assert.True(t, os.IsNotExist(err))
 
-	raw, err := os.ReadFile(filepath.Join(archivedBundleDir, "change.yaml"))
+	raw, err = os.ReadFile(filepath.Join(archivedBundleDir, "change.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "worktree_path:")
 	assert.NotContains(t, string(raw), worktreeRoot)

@@ -30,11 +30,11 @@ func variantAnalysis() Skill {
 		Function:          "hunt additional variants of a known bug across the codebase",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when a bug has been fixed in one place and variants elsewhere are plausible. Triggers on review or repair commands or user text asking for similar-bug hunts.",
-		Evidence:          EvidenceArtifact, // Suggested-only on review / repair (§5.2). No public focus selector.
+		Summary:           "Use when a bug has been fixed in one place and variants elsewhere are plausible. Triggers on review or fix commands or user text asking for similar-bug hunts.",
+		Evidence:          EvidenceArtifact, // Suggested-only on review / fix (§5.2). No public focus selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentProcedure},
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentProcedure},
 		},
 	}
 }

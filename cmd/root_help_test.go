@@ -17,6 +17,11 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	help := buf.String()
 
 	assert.Contains(t, help, "Create a governed change with intake-first workflow")
+	assert.Contains(t, help, "Complete intake clarification and authorization")
+	assert.Contains(t, help, "Author or amend the governed plan artifacts")
+	assert.Contains(t, help, "Execute governed implementation waves")
+	assert.Contains(t, help, "Run review convergence")
+	assert.Contains(t, help, "Dispatch fresh-context fixes for S3 review findings")
 	assert.NotContains(t, help, "quick")
 	assert.NotContains(t, help, "Create a durable exploration bundle without opening governed change state")
 	assert.Contains(t, help, "Create or refresh the durable repo-scoped codebase map")

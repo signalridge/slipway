@@ -82,13 +82,13 @@ func TestIssue228EvidenceSkillWaveOrchestrationMaterializesExecutionSummary(t *t
 	})
 }
 
-// issue227SeedTwoWaveExecution seeds an S2_EXECUTE change with a two-wave plan
+// issue227SeedTwoWaveExecution seeds an S2_IMPLEMENT change with a two-wave plan
 // (task-01 in wave 1, task-02 in wave 2) and no materialized run summary.
 func issue227SeedTwoWaveExecution(t *testing.T, root, slug string) {
 	t.Helper()
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 

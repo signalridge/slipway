@@ -34,7 +34,7 @@ func codeTaskSummary(changedFiles []string) *model.ExecutionSummary {
 func seedScopeContractChange(t *testing.T, state2 model.WorkflowState) (string, model.Change) {
 	t.Helper()
 	root := t.TempDir()
-	slug := "scope-reopen"
+	slug := "scope-repair"
 	change := model.NewChange(slug)
 	change.CurrentState = state2
 	change.PlanSubStep = model.PlanSubStepNone
@@ -46,52 +46,52 @@ func seedScopeContractChange(t *testing.T, state2 model.WorkflowState) (string, 
 	return root, change
 }
 
-// A code task recorded without changed files fails the Scope Contract. Because
-// the failure can only be repaired by re-recording task evidence in S2_EXECUTE,
-// the gate must reopen there instead of leaving the change stranded downstream.
-func TestScopeContractReopenTargetReopensToS2WhenChangedFilesMissing(t *testing.T) {
+// A code task recorded without changed files fails the Scope Contract. The
+// target identifies the owning implementation authority without mutating
+// lifecycle state.
+func TestScopeContractRepairTargetReturnsS2RepairWhenChangedFilesMissing(t *testing.T) {
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractReopenTarget(root, change, codeTaskSummary(nil))
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary(nil))
 	require.NoError(t, err)
 
 	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
-	assert.Equal(t, model.StateS2Execute, target.State)
-	require.NotEmpty(t, target.Blockers, "scope-contract failure must carry blockers into the reopen target")
+	assert.Equal(t, model.StateS2Implement, target.State)
+	require.NotEmpty(t, target.Blockers, "scope-contract failure must carry blockers into the repair target")
 	found := false
 	for _, b := range target.Blockers {
 		if b.Code == scopecontract.ReasonScopeContractChangedFilesMissing {
 			found = true
 		}
 	}
-	assert.True(t, found, "reopen target should surface scope_contract_changed_files_missing")
+	assert.True(t, found, "repair target should surface scope_contract_changed_files_missing")
 }
 
 // When the same task records its changed files, the Scope Contract is satisfied
-// and the gate must not reopen (advance proceeds normally).
-func TestScopeContractReopenTargetEmptyWhenContractSatisfied(t *testing.T) {
+// and the gate must not request repair (advance proceeds normally).
+func TestScopeContractRepairTargetEmptyWhenContractSatisfied(t *testing.T) {
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractReopenTarget(root, change, codeTaskSummary([]string{"cmd/next.go"}))
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"cmd/next.go"}))
 	require.NoError(t, err)
-	assert.Empty(t, target.SkillName, "a satisfied scope contract must not trigger a reopen")
+	assert.Empty(t, target.SkillName, "a satisfied scope contract must not trigger a repair")
 }
 
 // The gate is a no-op before the change has produced a ready execution summary.
-func TestScopeContractReopenTargetEmptyWhenSummaryNotReady(t *testing.T) {
+func TestScopeContractRepairTargetEmptyWhenSummaryNotReady(t *testing.T) {
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractReopenTarget(root, change, nil)
+	target, err := scopeContractRepairTarget(root, change, nil)
 	require.NoError(t, err)
-	assert.Empty(t, target.SkillName, "no reopen without a ready execution summary")
+	assert.Empty(t, target.SkillName, "no repair without a ready execution summary")
 }
 
 // Out-of-scope drift (a changed file outside the plan) is non-destructive and
 // must block visibly instead of clearing wave evidence; missing task
-// changed-file evidence still requires a re-record reopen (issue #136).
+// changed-file evidence routes to explicit repair (issue #136).
 func TestScopeContractDriftOnly(t *testing.T) {
 	t.Parallel()
 
@@ -110,16 +110,16 @@ func TestScopeContractDriftOnly(t *testing.T) {
 		"no blockers is not drift-only")
 }
 
-func TestSensitiveEvidenceReopenTargetReopensToS2WhenMarkerMissing(t *testing.T) {
+func TestSensitiveEvidenceRepairTargetReturnsS2RepairWhenMarkerMissing(t *testing.T) {
 	t.Parallel()
 
 	root, change := seedSensitiveEvidenceExecution(t, model.StateS3Review, "go-test:./...")
 
-	target, err := sensitiveEvidenceReopenTarget(root, change, sensitiveMigrationSummary("go-test:./..."))
+	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("go-test:./..."))
 	require.NoError(t, err)
 
 	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
-	assert.Equal(t, model.StateS2Execute, target.State)
+	assert.Equal(t, model.StateS2Implement, target.State)
 	assert.Contains(
 		t,
 		model.ReasonSpecs(target.Blockers),
@@ -130,13 +130,13 @@ func TestSensitiveEvidenceReopenTargetReopensToS2WhenMarkerMissing(t *testing.T)
 func TestAdvanceGovernedBlocksSensitiveEvidenceAtS2WithoutAdvancing(t *testing.T) {
 	t.Parallel()
 
-	root, change := seedSensitiveEvidenceExecution(t, model.StateS2Execute, "go-test:./...")
+	root, change := seedSensitiveEvidenceExecution(t, model.StateS2Implement, "go-test:./...")
 
 	summary, err := AdvanceGoverned(root, change.Slug)
 	require.NoError(t, err)
 
 	assert.Equal(t, "blocked", summary.Action)
-	assert.Equal(t, model.StateS2Execute, summary.FromState)
+	assert.Equal(t, model.StateS2Implement, summary.FromState)
 	assert.Contains(
 		t,
 		model.ReasonSpecs(summary.Blockers),
@@ -145,10 +145,10 @@ func TestAdvanceGovernedBlocksSensitiveEvidenceAtS2WithoutAdvancing(t *testing.T
 
 	reloaded, err := state.LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS2Execute, reloaded.CurrentState)
+	assert.Equal(t, model.StateS2Implement, reloaded.CurrentState)
 }
 
-func TestAdvanceGovernedReopensSensitiveEvidenceFromS3ToS2(t *testing.T) {
+func TestAdvanceGovernedBlocksSensitiveEvidenceFromS3ForReviewAlignment(t *testing.T) {
 	t.Parallel()
 
 	root, change := seedSensitiveEvidenceExecution(t, model.StateS3Review, "go-test:./...")
@@ -156,10 +156,10 @@ func TestAdvanceGovernedReopensSensitiveEvidenceFromS3ToS2(t *testing.T) {
 	summary, err := AdvanceGoverned(root, change.Slug)
 	require.NoError(t, err)
 
-	assert.Equal(t, "advanced", summary.Action)
-	assert.Equal(t, "stale_evidence_recovery_started", summary.Reason)
+	assert.Equal(t, "blocked", summary.Action)
+	assert.Equal(t, "stale_evidence_requires_review_alignment", summary.Reason)
 	assert.Equal(t, model.StateS3Review, summary.FromState)
-	assert.Equal(t, model.StateS2Execute, summary.ToState)
+	assert.Empty(t, summary.ToState)
 	assert.Contains(
 		t,
 		model.ReasonSpecs(summary.Blockers),
@@ -168,17 +168,17 @@ func TestAdvanceGovernedReopensSensitiveEvidenceFromS3ToS2(t *testing.T) {
 
 	reloaded, err := state.LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS2Execute, reloaded.CurrentState)
+	assert.Equal(t, model.StateS3Review, reloaded.CurrentState)
 }
 
-func TestSensitiveEvidenceReopenTargetEmptyWhenMarkerPresent(t *testing.T) {
+func TestSensitiveEvidenceRepairTargetEmptyWhenMarkerPresent(t *testing.T) {
 	t.Parallel()
 
 	root, change := seedSensitiveEvidenceExecution(t, model.StateS3Review, "migration-applied:goose up")
 
-	target, err := sensitiveEvidenceReopenTarget(root, change, sensitiveMigrationSummary("migration-applied:goose up"))
+	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("migration-applied:goose up"))
 	require.NoError(t, err)
-	assert.Empty(t, target.SkillName, "matching sensitive evidence must not trigger a reopen")
+	assert.Empty(t, target.SkillName, "matching sensitive evidence must not trigger a repair")
 }
 
 func seedSensitiveEvidenceExecution(

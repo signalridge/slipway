@@ -36,9 +36,9 @@ map content out of the coordinator context.
 - A capable runtime must attempt real executor subagent fan-out for `parallel: true`. If spawning, waiting, result collection, parsing, or cleanup fails, the host must not silently execute the wave inline in the coordinator context; stop and ask for operator direction or record a blocking executor-dispatch failure.
 - Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support. In the latter case note the degradation in the wave report and record `dispatch_mode:wave=<wave_index>:degraded_sequential` in the wave-orchestration verification references. Notes/prose alone are human-readable context and are not parsed as dispatch evidence. If inline execution would pollute coordinator context and the user has not authorized it, stop rather than pretending parallel dispatch happened.
 - Executors share a single worktree unless the runtime explicitly provides stronger isolation. Do not run shared-worktree-wide integration commands such as `go build ./...` concurrently inside each task executor; leave merged-state build/test/lint checks to the post-wave integration gate unless a task owns a genuinely isolated command.
-- Before spawning a `parallel: true` wave, run a target-overlap preflight over the current wave's `target_files`. If two tasks overlap by exact path, path alias, parent/child scope, case-insensitive match, or glob scope, record `dispatch_blocker:wave=<wave_index>:target_overlap` and replan or serialize only after explicit operator direction.
+- Before spawning a `parallel: true` wave, run a target-overlap preflight over the current wave's `target_files`. If two tasks overlap by exact path, path alias, parent/child scope, case-insensitive match, or glob scope, record `dispatch_blocker:wave=<wave_index>:target_overlap` and stop for explicit operator direction before continuing.
 - After executor results return, run a post-result changed-file conflict check across returned `changed_files`. If two parallel executors touched the same file scope or changed files outside declared task targets, record a post-result changed-file conflict and stop before the post-wave integration gate.
-- After all executors in a wave finish, run a post-wave integration gate on the merged current worktree before starting the next wave. Use the narrowest meaningful build/test command for code/test waves, the relevant formatter/lint/validation for docs/config/ops-only waves, or record why no executable gate exists.
+- After all executors in a wave finish, run a post-wave integration gate on the merged current worktree before starting the next wave. Use the narrowest meaningful build/test command for code/test waves, the relevant formatter/lint/validation for docs/config/ops-only waves, or record why no executable gate exists. When it passes, continue directly to the next ready wave in the same host run; do not require another `slipway run` just to cross a wave boundary.
 - HARD RULE markers describe high-impact behavioral constraints; the engine does not enforce them automatically.
 
 ## Dispatch Evidence
@@ -64,7 +64,8 @@ map content out of the coordinator context.
   re-recording evidence.
 - `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
   in the same `parallel: true` wave wrote the same file. Sequential waves
-  sharing a file are allowed; a parallel overlap must be rescoped or replanned.
+  sharing a file are allowed; a parallel overlap is an execution-safety stop
+  point requiring operator direction.
 - `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
   parallel wave recorded no dispatch-mode evidence. Silent parallel inference is
   gone: record `dispatch_mode:wave=<wave_index>:parallel_subagents` or

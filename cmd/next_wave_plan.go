@@ -13,12 +13,12 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
-// buildWavePlan returns the authoritative persisted wave plan during governed
-// execution, and falls back to a derived preview from tasks.md before the
-// authoritative plan exists.
+// buildWavePlan returns a live projection from the current tasks.md in S2.
+// The persisted wave-plan.yaml is an execution artifact/cache; it is not the
+// planning authority while implementation tasks are still being amended.
 func buildWavePlan(root string, change *model.Change, artifactBundle string) *wavePlanView {
-	if change != nil && change.CurrentState == model.StateS2Execute {
-		return authoritativeWavePlanView(root, *change)
+	if change != nil && change.CurrentState == model.StateS2Implement {
+		return derivedWavePlanView(root, artifactBundle)
 	}
 	return derivedWavePlanView(root, artifactBundle)
 }
@@ -34,9 +34,9 @@ func authoritativeWavePlanView(root string, change model.Change) *wavePlanView {
 			sourceTargetFilesByTaskForChange(root, change),
 		)
 	case err == nil:
-		return &wavePlanView{ParseError: "authoritative wave-plan.yaml is missing; run `slipway repair`"}
+		return &wavePlanView{ParseError: "persisted wave-plan.yaml is missing; run `slipway repair`"}
 	default:
-		return &wavePlanView{ParseError: fmt.Sprintf("failed to load authoritative wave-plan.yaml: %v", err)}
+		return &wavePlanView{ParseError: fmt.Sprintf("failed to load persisted wave-plan.yaml: %v", err)}
 	}
 }
 

@@ -18,8 +18,8 @@ slipway preset <light|standard|strict> --json
 - Preset confirmation does not change lifecycle state; the change stays in its
   current state (`S0_INTAKE` or `S1_PLAN`). It is not a separate workflow state.
 - After leaving `S1_PLAN`, a lower-rank preset is rejected (error
-  `preset_downgrade_rejected`); to restart with a lighter preset, run
-  `slipway pivot` or `slipway cancel`.
+  `preset_downgrade_rejected`); to restart with a lighter preset, cancel this
+  change and open a new governed change.
 - The effective (floor-applied) preset is reported by `slipway status` /
   `slipway validate` (field `effective_workflow_preset`), not by this command —
   project minimums or guardrail floors may raise it above the confirmed preset.

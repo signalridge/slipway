@@ -9,7 +9,7 @@ slipway abort --json
 ```
 
 ## Contract
-- Only valid for an active change in `S2_EXECUTE`; outside `S2_EXECUTE` it errors
+- Only valid for an active change in `S2_IMPLEMENT`; outside `S2_IMPLEMENT` it errors
   `abort_state_invalid` — use `slipway cancel` (terminate + archive) instead.
 - Interrupts in-flight task processes using the standard preemption helpers.
 - Clears the active checkpoint, if any.

@@ -283,11 +283,10 @@ func progressBar(pct, width int) string {
 }
 
 var actionHints = map[model.WorkflowState]string{
-	model.StateS1Plan:    "slipway next  (planning phase)",
-	model.StateS2Execute: "slipway run  (execute governed loop)",
-	model.StateS3Review:  "slipway review  (bidirectional alignment review)",
-	model.StateS4Verify:  "slipway next  (verify and close out)",
-	model.StateDone:      "(complete)",
+	model.StateS1Plan:      "slipway plan  (planning stage)",
+	model.StateS2Implement: "slipway implement  (implementation stage)",
+	model.StateS3Review:    "slipway review  (bidirectional alignment review)",
+	model.StateDone:        "(complete)",
 }
 
 func primaryActionHint(view statusView) string {

@@ -1,0 +1,62 @@
+version: 1
+slug: forward-only-governance-lifecycle-redesign-demote-plan-audit
+description: 'Forward-only governance lifecycle redesign: expose intake, plan, implement, review, and done as primary lifecycle commands; demote run to an auto-driver shortcut with delegated_to; remove retired repair command surfaces; route same-intent scope changes through current-change amendments; route intent conflicts to new governed changes; keep review as the plan/code/evidence gate with repair subagents; keep hard fail-closed lines at pre-parallel dispatch safety and final ship authorization. Resolves #244 #245 #246 #247 #248 #249 #250 #251 #252 #253 #254 #255 #256 #258.'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-06-17T06:28:44.15171Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_preset: strict
+worktree_branch: feat/forward-only-governance-lifecycle-redesign-demote-plan-audit
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 701d2b6ef33c36062f482d3bdf418d7dd879ba95bd388177038bd8c038dde652
+        updated_at: 2026-06-17T19:26:26.95359715Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 1c2e7a431f3229002c8448cfe7be47c5c7e865065c1d3d7d96415e884b001c9a
+        updated_at: 2026-06-17T18:17:47.012336337Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 770bf9fa710483240a536904eec3fc72a35fb9e425aea48140b8170ab739b18e
+        updated_at: 2026-06-17T17:37:09.347174948Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: a880343032c1d03944e0833631b8c294ab4da22287cc05cd961805b414c2a08b
+        updated_at: 2026-06-17T18:17:47.011762475Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: c1448e4cc236dbcce9e744ddf25f3bb43a406016d2147e705816c918219d0d7a
+        updated_at: 2026-06-17T17:36:52.911343206Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 9d2637b428c2b041c77b587caa3e34cc0e6eb8aeb65bef7026878d82986b244d
+        updated_at: 2026-06-17T17:37:25.809409052Z
+evidence_refs:
+    code-quality-review: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/code-quality-review.yaml
+    final-closeout: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/final-closeout.yaml
+    goal-verification: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/goal-verification.yaml
+    independent-review: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/independent-review.yaml
+    intake-clarification: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/intake-clarification.yaml
+    plan-audit: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/plan-audit.yaml
+    research-orchestration: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/research-orchestration.yaml
+    security-review: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/security-review.yaml
+    spec-compliance-review: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/forward-only-governance-lifecycle-redesign-demote-plan-audit/artifacts/changes/forward-only-governance-lifecycle-redesign-demote-plan-audit/verification/wave-orchestration.yaml

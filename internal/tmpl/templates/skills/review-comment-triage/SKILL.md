@@ -4,16 +4,16 @@ domain: repair-ci
 function: triage reviewer comments into accept, push-back, or defer with a written disposition
 tier: T2
 primary_attachment: procedure
-summary: "Use when addressing reviewer comments on an open PR. Triggers on repair command or user text naming PR review comments."
+summary: "Use when addressing reviewer comments on an open PR. Triggers on fix command or user text naming PR review comments."
 trigger_signals:
-  - command: repair
-    reason: "repair command invoked; reviewer comments may be in scope"
+  - command: fix
+    reason: "fix command invoked; reviewer comments may be in scope"
   - user_text_matches: ["review comment", "pr comment", "address comment"]
     reason: "User text names PR review comments"
 evidence_contract: artifact
 bindings:
   - type: command-auto
-    target: repair
+    target: fix
     attachment: procedure
 ---
 

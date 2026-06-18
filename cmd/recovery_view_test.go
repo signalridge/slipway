@@ -19,7 +19,7 @@ func TestNextHandoffViewCarriesRecovery(t *testing.T) {
 	handoff := buildNextHandoffView(view)
 
 	require.NotNil(t, handoff.Recovery, "compact handoff must preserve the recovery object")
-	assert.NotEmpty(t, handoff.Recovery.PrimaryCommand, "primary recovery command must survive the compact projection")
+	assert.NotEmpty(t, handoff.Recovery.PrimaryCommand, "primary repair command must survive the compact projection")
 	require.NotEmpty(t, handoff.Recovery.Steps)
 	assert.Equal(t, "required_skill_stale", handoff.Recovery.Steps[0].Code)
 	assert.Equal(t, "plan-audit", handoff.Recovery.Steps[0].Subject)
@@ -33,7 +33,7 @@ func TestNextHandoffViewOmitsRecoveryOnCleanState(t *testing.T) {
 	t.Parallel()
 
 	view := nextView{
-		Blockers: model.ReasonCodesFromSpecs([]string{"no_skill_required:S2_EXECUTE"}),
+		Blockers: model.ReasonCodesFromSpecs([]string{"no_skill_required:S2_IMPLEMENT"}),
 	}
 	handoff := buildNextHandoffView(view)
 	assert.Nil(t, handoff.Recovery)
@@ -53,7 +53,7 @@ func TestGovernanceBlockedErrorCarriesRecovery(t *testing.T) {
 		"CLIError recovery must match what the views produce for the same reasons")
 }
 
-// validate --json must carry a primary recovery command for blocked states
+// validate --json must carry a primary repair command for blocked states
 // (REQ-003); buildValidateViewBase is the seam both validate paths share.
 func TestValidateViewBaseCarriesRecovery(t *testing.T) {
 	t.Parallel()

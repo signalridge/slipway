@@ -22,8 +22,14 @@ const (
 	StageContextPlanOrigin  = "plan_origin"
 	StageContextAuditOrigin = "audit_origin"
 	StageContextReview      = "review"
-	StageContextGoal        = "goal"
-	StageContextCloseout    = "closeout"
+	StageContextFix         = "fix"
+
+	// Deprecated: the folded S3 lifecycle no longer records or accepts
+	// goal-stage context-origin evidence.
+	StageContextGoal = "goal"
+	// Deprecated: the folded S3 lifecycle no longer records or accepts
+	// closeout-stage context-origin evidence.
+	StageContextCloseout = "closeout"
 )
 
 // ContextOriginReferencePrefix is the literal prefix of a verification reference
@@ -97,7 +103,19 @@ func parseContextOriginReference(raw string) (stage, handle string, ok bool) {
 	if stage == "" || handle == "" {
 		return "", "", false
 	}
+	if isRetiredContextOriginStage(stage) {
+		return "", "", false
+	}
 	return stage, handle, true
+}
+
+func isRetiredContextOriginStage(stage string) bool {
+	switch stage {
+	case StageContextGoal, StageContextCloseout:
+		return true
+	default:
+		return false
+	}
 }
 
 // PlanOriginHandleFromVerification extracts the single plan-author context handle

@@ -26,7 +26,7 @@ func TestStatusProgressOmitsRunSummaryVersionWhenNoExecutionSummary(t *testing.T
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("no-summary-run-version")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -57,7 +57,7 @@ func TestStatusProgressReportsRunSummaryVersionWhenSummaryRecorded(t *testing.T)
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("recorded-run-version")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{

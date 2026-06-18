@@ -1325,7 +1325,7 @@ func TestNewCommandAllowsBoundSiblingWorktreeActiveChange(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L3", "existing hidden bound worktree change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -1372,7 +1372,7 @@ func TestNewCommandRejectsWhenActiveChangeIsBoundToCurrentWorktree(t *testing.T)
 		slug := createGovernedRequest(t, root, "L3", "existing current bound worktree change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 

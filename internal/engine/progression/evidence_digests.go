@@ -20,6 +20,8 @@ import (
 
 var errDigestInputsUnavailable = errors.New("evidence digest inputs unavailable")
 
+const suiteResultFileName = "suite-result.yaml"
+
 type skillDigestStampResult struct {
 	Blockers []string
 }
@@ -198,6 +200,85 @@ func skillDigestFreshnessBlockersWithSummary(
 	return staleSkillDigestBlockers(skillName, changed), nil
 }
 
+func reviewerDigestFreshAtCycle(
+	root string,
+	change model.Change,
+	skillName string,
+	cycleRunVersion int,
+	summary *model.ExecutionSummary,
+) ([]string, error) {
+	if cycleRunVersion < 1 {
+		return []string{"input_digest_unavailable"}, nil
+	}
+	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
+	if err != nil {
+		if digestStampUnavailable(err) {
+			return []string{"input_digest_unavailable"}, nil
+		}
+		return nil, err
+	}
+	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
+	if err != nil {
+		return nil, err
+	}
+	if digests == nil {
+		return nil, nil
+	}
+	digests.Normalize()
+	stored, ok := digests.Skills[strings.TrimSpace(skillName)]
+	if !ok {
+		return nil, nil
+	}
+	fresh, changed := model.EvidenceFreshness(stored, current.Inputs)
+	if fresh {
+		return nil, nil
+	}
+	return changed, nil
+}
+
+func reviewerDigestCycleRunVersion(root string, change model.Change, summary *model.ExecutionSummary) (int, error) {
+	result, ok, err := loadSuiteResultForChange(root, change)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return result.RunSummaryVersion, nil
+	}
+	if requiresSuiteResultForSharedReviewerInputs(change) {
+		return 0, nil
+	}
+	if state.ExecutionSummaryReady(summary) {
+		return summary.RunSummaryVersion, nil
+	}
+	return 0, nil
+}
+
+func loadSuiteResultForChange(root string, change model.Change) (model.SuiteResult, bool, error) {
+	paths, err := state.ResolveChangePaths(root, change)
+	if err != nil {
+		return model.SuiteResult{}, false, err
+	}
+	path := filepath.Join(paths.GovernedBundleDir, "verification", suiteResultFileName)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from governed bundle authority before this read.
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return model.SuiteResult{}, false, nil
+		}
+		return model.SuiteResult{}, false, err
+	}
+	var result model.SuiteResult
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&result); err != nil {
+		return model.SuiteResult{}, false, fmt.Errorf("parse %s: %w", suiteResultFileName, err)
+	}
+	result.Normalize()
+	if err := result.Validate(); err != nil {
+		return model.SuiteResult{}, false, fmt.Errorf("invalid %s: %w", suiteResultFileName, err)
+	}
+	return result, true, nil
+}
+
 func stampPassingSkillDigests(
 	root string,
 	change model.Change,
@@ -324,6 +405,13 @@ func passingAndPreviouslyAcceptedSkillRecords(
 			continue
 		}
 		position, ok := recordedPositions[skillName]
+		if ok && staleEvidenceRepairDeferredToReview(change, EvidenceRepairTarget{
+			SkillName:   skillName,
+			State:       position.workflowState(),
+			PlanSubStep: position.planSubStep(),
+		}) {
+			continue
+		}
 		if ok && compareStaleEvidencePosition(position, currentPosition) > 0 {
 			continue
 		}
@@ -376,9 +464,17 @@ func staleSkillDigestBlockers(skillName string, changed []string) []string {
 	changed = stringutil.UniqueSorted(changed)
 	blockers := make([]string, 0, len(changed))
 	for _, name := range changed {
-		blockers = append(blockers, "required_skill_stale:"+strings.TrimSpace(skillName)+":"+name)
+		blockers = append(blockers, "required_skill_stale:"+strings.TrimSpace(skillName)+":"+skillDigestBlockerInputName(name))
 	}
-	return blockers
+	return stringutil.UniqueSorted(blockers)
+}
+
+func skillDigestBlockerInputName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "tasks.md:scope" {
+		return "tasks.md"
+	}
+	return name
 }
 
 func skillDigestInputUnavailableBlocker(skillName string) string {
@@ -423,6 +519,23 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 	return nil
 }
 
+func addTaskPlanScopeInput(root string, change model.Change, inputs map[string]string) error {
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	if err != nil {
+		return err
+	}
+	hash, err := wave.TaskPlanScopeHash(string(raw))
+	if err != nil {
+		return fmt.Errorf("hash tasks.md scope: %w", err)
+	}
+	inputs["tasks.md:scope"] = hash
+	return nil
+}
+
 func addGovernedFileInput(root string, change model.Change, rel string, inputs map[string]string) error {
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	if err != nil {
@@ -445,7 +558,8 @@ func addIntakeClarificationIntentInput(root string, change model.Change, inputs 
 	path := filepath.Join(bundleDir, "intent.md")
 	hash, err := computeFilteredProseFileInputHash(path, func(heading string) bool {
 		// Open Questions are research-routing state. Intake evidence owns the
-		// clarified scope text, so resolving research questions must not reopen S0.
+		// clarified scope text, so resolving research questions must not request
+		// an S0 repair.
 		return !strings.EqualFold(strings.TrimSpace(heading), "Open Questions")
 	})
 	if err != nil {
@@ -597,8 +711,13 @@ func addExecutionAndContentInputs(
 
 func addExecutionSummaryInputs(summary *model.ExecutionSummary, inputs map[string]string) error {
 	if state.ExecutionSummaryReady(summary) {
+		semanticSummary := *summary
+		semanticSummary.CapturedAt = time.Time{}
+		for i := range semanticSummary.Tasks {
+			semanticSummary.Tasks[i].CapturedAt = time.Time{}
+		}
 		hash, err := model.ComputeInputHash(map[string]any{
-			"execution_summary": summary,
+			"execution_summary": semanticSummary,
 		})
 		if err != nil {
 			return err
@@ -655,6 +774,9 @@ func addContentPathInputs(
 					key = filepath.ToSlash(display)
 				}
 			}
+			if closeoutGoalVerificationReuseSkipsContentPath(change, key) {
+				continue
+			}
 			var hash string
 			var err error
 			if normalizeCurrentChangeAuthority {
@@ -687,6 +809,21 @@ func addGoalVerificationInputs(
 	if !state.ExecutionSummaryReady(summary) {
 		return errDigestInputsUnavailable
 	}
+	if err := addSharedReviewerInputs(
+		root,
+		change,
+		summary,
+		inputs,
+		requiresSuiteResultForSharedReviewerInputs(change),
+	); err != nil {
+		return err
+	}
+	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
+		return err
+	}
+	if err := addTaskPlanScopeInput(root, change, inputs); err != nil {
+		return err
+	}
 	if err := addChangedTargetFileSetInput(change, summary, inputs); err != nil {
 		return err
 	}
@@ -717,7 +854,23 @@ func addFinalCloseoutInputs(
 	summary *model.ExecutionSummary,
 	inputs map[string]string,
 ) error {
-	if err := addGoalVerificationInputs(root, change, summary, inputs); err != nil {
+	if summary == nil {
+		loaded, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+		if err != nil {
+			return err
+		}
+		summary = loaded
+	}
+	if !state.ExecutionSummaryReady(summary) {
+		return errDigestInputsUnavailable
+	}
+	if err := addSharedReviewerInputs(root, change, summary, inputs, false); err != nil {
+		return err
+	}
+	if err := addChangedTargetFileSetInput(change, summary, inputs); err != nil {
+		return err
+	}
+	if err := addContentPathInputs(root, change, summary, inputs, true); err != nil {
 		return err
 	}
 	bundleDir, err := state.GovernedBundleDir(root, change)
@@ -731,7 +884,13 @@ func addFinalCloseoutInputs(
 		}
 		return err
 	}
-	return addGovernedFileInput(root, change, "assurance.md", inputs)
+	if err := addGovernedFileInput(root, change, "assurance.md", inputs); err != nil {
+		return err
+	}
+	if len(inputs) == 0 {
+		return errDigestInputsUnavailable
+	}
+	return nil
 }
 
 func addReviewSkillInputs(
@@ -747,6 +906,75 @@ func addReviewSkillInputs(
 		}
 		summary = loaded
 	}
+	if err := addSharedReviewerInputs(
+		root,
+		change,
+		summary,
+		inputs,
+		requiresSuiteResultForSharedReviewerInputs(change),
+	); err != nil {
+		return err
+	}
+	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
+		return err
+	}
+	if err := addTaskPlanScopeInput(root, change, inputs); err != nil {
+		return err
+	}
+	if err := addReviewerSpecificInputs(root, change, summary, inputs); err != nil {
+		return err
+	}
+	if len(inputs) == 0 {
+		return errDigestInputsUnavailable
+	}
+	return nil
+}
+
+func addSharedReviewerInputs(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	inputs map[string]string,
+	requireSuiteResult bool,
+) error {
+	result, ok, err := loadSuiteResultForChange(root, change)
+	if err != nil {
+		return err
+	}
+	if ok {
+		if state.ExecutionSummaryReady(summary) && result.RunSummaryVersion != summary.RunSummaryVersion {
+			return fmt.Errorf(
+				"%s run_summary_version mismatch: got=%d want=%d",
+				suiteResultFileName,
+				result.RunSummaryVersion,
+				summary.RunSummaryVersion,
+			)
+		}
+		shared, err := result.SharedReviewerInputDigests()
+		if err != nil {
+			return err
+		}
+		for name, digest := range shared {
+			inputs[name] = digest
+		}
+		return nil
+	}
+	if requireSuiteResult {
+		return errDigestInputsUnavailable
+	}
+	return addExecutionSummaryInputs(summary, inputs)
+}
+
+func requiresSuiteResultForSharedReviewerInputs(change model.Change) bool {
+	return change.CurrentState == model.StateS3Review
+}
+
+func addReviewerSpecificInputs(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	inputs map[string]string,
+) error {
 	if err := addReviewSummaryContentInputs(root, change, summary, inputs); err != nil {
 		return err
 	}
@@ -766,9 +994,6 @@ func addReviewSkillInputs(
 			}
 			return err
 		}
-	}
-	if len(inputs) == 0 {
-		return errDigestInputsUnavailable
 	}
 	return nil
 }
@@ -919,8 +1144,7 @@ func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths) []string {
 	if workspaceRoot == "" {
 		return nil
 	}
-	files := append([]string{}, gitNameOnly(workspaceRoot, "diff", "--name-only", "HEAD", "--")...)
-	files = append(files, gitNameOnly(workspaceRoot, "ls-files", "--others", "--exclude-standard")...)
+	files, gitMarkers := reviewWorkspaceGitNameOnly(workspaceRoot)
 	filtered := make([]string, 0, len(files))
 	for _, file := range files {
 		rel := filepath.ToSlash(strings.TrimSpace(file))
@@ -930,7 +1154,24 @@ func reviewWorkspaceInputPaths(paths state.ResolvedChangePaths) []string {
 		}
 		filtered = append(filtered, rel)
 	}
+	filtered = append(filtered, gitMarkers...)
 	return stringutil.UniqueSorted(filtered)
+}
+
+func reviewWorkspaceGitNameOnly(workspaceRoot string) ([]string, []string) {
+	var files []string
+	var markers []string
+	if diffFiles, err := gitNameOnlyResult(workspaceRoot, "diff", "--name-only", "HEAD", "--"); err == nil {
+		files = append(files, diffFiles...)
+	} else {
+		markers = append(markers, "__git_error__/diff_name_only")
+	}
+	if otherFiles, err := gitNameOnlyResult(workspaceRoot, "ls-files", "--others", "--exclude-standard"); err == nil {
+		files = append(files, otherFiles...)
+	} else {
+		markers = append(markers, "__git_error__/ls_files_others")
+	}
+	return files, markers
 }
 
 func reviewInputPathExcluded(rel string) bool {
@@ -1034,11 +1275,20 @@ func changeAuthorityInputHash(path, rel string) (string, error) {
 	if err := authority.Validate(); err != nil {
 		return "", err
 	}
-	authority.EvidenceRefs = nil
+	authority = normalizeChangeAuthorityDigestInput(authority)
 	return model.ComputeInputHash(map[string]any{
 		"path":             filepath.ToSlash(strings.TrimSpace(rel)),
 		"change_authority": authority,
 	})
+}
+
+func normalizeChangeAuthorityDigestInput(authority model.Change) model.Change {
+	authority.EvidenceRefs = nil
+	authority.Artifacts = nil
+	authority.LastAutoPassedStates = nil
+	authority.ReviewIntentDriftFailures = 0
+	authority.InterruptedExecutionAt = time.Time{}
+	return authority
 }
 
 func deletedFileInputHash(rel string) (string, error) {

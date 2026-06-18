@@ -103,7 +103,7 @@ func TestReviewFocusCalibrationEmitsPublicAliasAndHydrateReferences(t *testing.T
 		var view reviewView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "pass", view.Verdict)
-		assert.Equal(t, string(model.StateS4Verify), view.CurrentState)
+		assert.Equal(t, string(model.StateS3Review), view.CurrentState)
 		assert.Equal(t, "calibration", view.Mode)
 		assert.Contains(t, view.HydrateReferences, "multi-reviewer-calibration/review-dimensions.md")
 		for _, ref := range view.HydrateReferences {

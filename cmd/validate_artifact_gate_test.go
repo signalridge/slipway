@@ -417,9 +417,9 @@ func TestValidateDoesNotLeakBundleBlockersBeforeWorktreeBinding(t *testing.T) {
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
-	// At S2_EXECUTE with NeedsDiscovery=true and no worktree bound,
+	// At S2_IMPLEMENT with NeedsDiscovery=true and no worktree bound,
 	// the worktree gate should be the primary blocker — not missing artifacts.
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.IntakeSubStep = ""
 	change.PlanSubStep = model.PlanSubStepNone
 	change.NeedsDiscovery = true
@@ -535,11 +535,12 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "validate review evidence at ship gate")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
+		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
@@ -578,7 +579,7 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.Artifacts = map[string]model.ArtifactState{}
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
@@ -601,4 +602,28 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 	assert.False(t, view.CanAdvance)
+}
+
+func TestValidateTreatsS3TaskPlanDriftAsReviewInput(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
+
+	view, err := buildValidateViewForSlug(root, slug)
+	require.NoError(t, err)
+
+	reasons := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
+	assert.NotContains(t, reasons, state.StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, reasons, state.StaleExecutionEvidenceBlockerToken)
+	assert.Equal(t, "fresh", view.EvidenceFreshness)
+	require.NotNil(t, view.FreshnessDiagnostics)
+	assert.Equal(t, "fresh", view.FreshnessDiagnostics.Status)
+	assert.Empty(t, view.FreshnessDiagnostics.StalePairs)
+	assert.Contains(t, view.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
+
+	for _, action := range view.RequiredActions {
+		assert.NotContains(t, action.Description, state.StalePlanningEvidenceBlockerToken)
+		assert.NotContains(t, action.Description, state.StaleExecutionEvidenceBlockerToken)
+	}
 }

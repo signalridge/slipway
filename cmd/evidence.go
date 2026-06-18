@@ -231,14 +231,14 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				// per-task-evidence + wave-orchestration flow left validate blocking on
 				// run_summary_missing until an undocumented repair. The owning stage now
 				// produces the evidence: once the passing wave-orchestration record and
-				// its task evidence are durable at S2_EXECUTE, sync writes the summary.
+				// its task evidence are durable at S2_IMPLEMENT, sync writes the summary.
 				// This is idempotent (sync only rewrites a changed summary) and any
 				// error it returns is surfaced, never swallowed, so a partial or
 				// scope-failing run still fails closed instead of recording a clean
 				// summary.
 				if record.IsPassing() &&
 					skillName == progression.SkillWaveOrchestration &&
-					change.CurrentState == model.StateS2Execute {
+					change.CurrentState == model.StateS2Implement {
 					if _, err := progression.SyncGovernedWaveExecution(root, change); err != nil {
 						return newStateIntegrityError(
 							"evidence_skill_execution_summary_sync_failed",
@@ -345,11 +345,11 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if change.CurrentState != model.StateS2Execute {
+				if change.CurrentState != model.StateS2Implement {
 					remediation := evidenceTaskWrongStateRemediation(root, change)
 					return newInvalidUsageError(
 						"evidence_task_wrong_state",
-						fmt.Sprintf("task evidence requires S2_EXECUTE state, current: %s", change.CurrentState),
+						fmt.Sprintf("task evidence requires S2_IMPLEMENT state, current: %s", change.CurrentState),
 						remediation,
 						nil,
 					)
@@ -360,7 +360,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return newInvalidUsageError(
 						"evidence_task_id_invalid",
 						err.Error(),
-						"Use a task ID from the current governed wave plan without path separators.",
+						"Use a task ID from the current tasks.md-derived wave projection without path separators.",
 						map[string]any{"task_id": taskID},
 					)
 				}
@@ -376,12 +376,12 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return err
 				}
 
-				wavePlan, err := state.LoadWavePlanForChange(root, change)
+				wavePlan, err := loadCurrentWavePlanForCommand(root, change)
 				if err != nil {
 					return newStateIntegrityError(
-						"evidence_task_wave_plan_missing",
-						fmt.Sprintf("task evidence requires wave-plan.yaml for %q: %v", change.Slug, err),
-						"Run `slipway run` through plan-audit so Slipway materializes wave-plan.yaml before recording task evidence.",
+						"evidence_task_wave_plan_unavailable",
+						fmt.Sprintf("task evidence requires a current S2 wave projection for %q: %v", change.Slug, err),
+						"Fix tasks.md so Slipway can derive the current S2 wave projection, then rerun `slipway implement` before recording task evidence.",
 						change.Slug,
 						map[string]any{"path": state.WavePlanPathForRead(root, change.Slug)},
 					)
@@ -391,7 +391,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					return newInvalidUsageError(
 						"evidence_task_unknown",
 						fmt.Sprintf("task %q is not present in the current wave plan", taskID),
-						"Use a task ID from tasks.md / wave-plan.yaml and retry.",
+						"Use a task ID from the current tasks.md-derived wave projection and retry.",
 						map[string]any{"task_id": taskID},
 					)
 				}
@@ -416,8 +416,8 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				if planTask.TaskKind != "" && taskKind != planTask.TaskKind {
 					return newInvalidUsageError(
 						"evidence_task_kind_mismatch",
-						fmt.Sprintf("task %q has task_kind=%q in wave-plan.yaml, got %q", taskID, planTask.TaskKind, taskKind),
-						"Use the task_kind recorded in wave-plan.yaml.",
+						fmt.Sprintf("task %q has task_kind=%q in the current wave projection, got %q", taskID, planTask.TaskKind, taskKind),
+						"Use the task_kind recorded in tasks.md for the current task.",
 						map[string]any{"expected": string(planTask.TaskKind), "got": string(taskKind)},
 					)
 				}
@@ -496,8 +496,8 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					if err != nil {
 						return newStateIntegrityError(
 							"evidence_task_wave_plan_target_invalid",
-							fmt.Sprintf("wave-plan.yaml target_files for task %q are invalid: %v", taskID, err),
-							"Regenerate wave-plan.yaml from a valid tasks.md plan before recording task evidence.",
+							fmt.Sprintf("current wave projection target_files for task %q are invalid: %v", taskID, err),
+							"Fix the task target_files in tasks.md before recording task evidence.",
 							change.Slug,
 							map[string]any{"task_id": taskID},
 						)
@@ -570,7 +570,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	cmd.Flags().StringVar(&taskID, "task-id", "", "Task ID from wave-plan.yaml (required)")
+	cmd.Flags().StringVar(&taskID, "task-id", "", "Task ID from the current tasks.md-derived wave projection (required)")
 	cmd.Flags().IntVar(&runSummary, "run-summary-version", 0, "Run summary version to attribute this task evidence to (>= 1; the first task-evidence run version is 1 -- pass the current wave-orchestration run_version) (required)")
 	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Task kind: code, test, doc, ops, verification, investigation, other (required)")
 	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Task verdict: pass, fail, blocked, incomplete, timeout (required)")
@@ -634,7 +634,7 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 	if execCtx.LatestRunVersion >= 1 {
 		return execCtx.LatestRunVersion, execCtx.Summary, nil
 	}
-	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Execute {
+	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Implement {
 		runVersion, err := waveOrchestrationTaskEvidenceRunVersion(root, change)
 		if err != nil {
 			return 0, nil, err
@@ -804,12 +804,21 @@ func validateEvidenceSkillStage(root string, change model.Change, def skill.Defi
 	return nil
 }
 
+func currentS3ReviewAlignmentActive(root string, change model.Change) (bool, error) {
+	if change.CurrentState != model.StateS3Review {
+		return false, nil
+	}
+	_, staleAvailable, err := progression.StaleEvidenceRepairAvailable(root, change, nil)
+	if err != nil || !staleAvailable {
+		return false, err
+	}
+	return true, nil
+}
+
 func evidenceTaskWrongStateRemediation(root string, change model.Change) string {
 	switch change.CurrentState {
 	case model.StateS3Review:
 		return postReviewReplacementEvidenceRemediation(root, change, "task evidence")
-	case model.StateS4Verify:
-		return s4ReplacementEvidenceRemediation("task evidence")
 	default:
 		return "Record task evidence only during wave execution."
 	}
@@ -818,12 +827,8 @@ func evidenceTaskWrongStateRemediation(root string, change model.Change) string 
 func evidenceSkillWrongStateRemediation(root string, change model.Change, def skill.Definition) string {
 	switch change.CurrentState {
 	case model.StateS3Review:
-		if def.State == model.StateS2Execute {
+		if def.State == model.StateS2Implement {
 			return postReviewReplacementEvidenceRemediation(root, change, def.Name+" evidence")
-		}
-	case model.StateS4Verify:
-		if def.State == model.StateS2Execute || def.State == model.StateS3Review {
-			return s4ReplacementEvidenceRemediation(def.Name + " evidence")
 		}
 	}
 	return fmt.Sprintf("Run the lifecycle to %s before recording %s evidence.", def.State, def.Name)
@@ -848,16 +853,6 @@ func selectedReviewSkillsForRemediation(root string, change model.Change) []stri
 		}
 	}
 	return skill.SelectedReviewSkills(skill.ReviewSkillSelection{})
-}
-
-func s4ReplacementEvidenceRemediation(surface string) string {
-	return fmt.Sprintf(
-		"%s cannot be refreshed from S4_VERIFY. Record fresh proof in %s and %s evidence; %s.",
-		surface,
-		progression.SkillGoalVerification,
-		progression.SkillFinalCloseout,
-		progression.S4VerificationRecoveryRemediation(),
-	)
 }
 
 func resolveEvidenceSkillNotes(root string, change model.Change, notes, notesFile string) (string, error) {
@@ -1071,7 +1066,29 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 		if err != nil {
 			return err
 		}
-		if !stringInSlice(selectedReviewSkills, def.Name) {
+		passing, err := currentPassingEvidenceSkillsWithReviewSelection(root, change, model.StateS3Review, runVersion, reviewSelection)
+		if err != nil {
+			return err
+		}
+		if stringInSlice(selectedReviewSkills, def.Name) {
+			if _, ok := passing[def.Name]; ok {
+				repairActive, err := currentS3ReviewAlignmentActive(root, change)
+				if err != nil {
+					return err
+				}
+				if repairActive {
+					return nil
+				}
+				return newInvalidUsageError(
+					"evidence_skill_not_current",
+					fmt.Sprintf("skill %s already has passing evidence for the current review set", def.Name),
+					"Run `slipway next --json` and record evidence only for a selected review skill that is still missing or stale.",
+					map[string]any{"skill": def.Name},
+				)
+			}
+			return nil
+		}
+		if skill.IsReviewSkill(def.Name) {
 			return newInvalidUsageError(
 				"evidence_skill_not_current",
 				fmt.Sprintf("skill %s is not currently recordable", def.Name),
@@ -1079,16 +1096,22 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 				map[string]any{"skill": def.Name},
 			)
 		}
-		passing, err := currentPassingEvidenceSkillsWithReviewSelection(root, change, model.StateS3Review, runVersion, reviewSelection)
+		actionable, err := currentActionableEvidenceSkill(root, change, runVersion)
 		if err != nil {
 			return err
 		}
-		if _, ok := passing[def.Name]; ok {
+		if actionable == def.Name {
+			return nil
+		}
+		if actionable != "" {
 			return newInvalidUsageError(
-				"evidence_skill_not_current",
-				fmt.Sprintf("skill %s already has passing evidence for the current review set", def.Name),
-				"Run `slipway next --json` and record evidence only for a selected review skill that is still missing or stale.",
-				map[string]any{"skill": def.Name},
+				"evidence_skill_predecessor_required",
+				fmt.Sprintf("skill %s cannot be recorded before %s passes", def.Name, actionable),
+				"Record evidence only for the current actionable skill returned by `slipway next --json`.",
+				map[string]any{
+					"skill":          def.Name,
+					"required_first": actionable,
+				},
 			)
 		}
 		return nil
@@ -1136,12 +1159,6 @@ func currentActionableEvidenceSkill(root string, change model.Change, runVersion
 				return skillName, nil
 			}
 		}
-		return "", nil
-	case model.StateS4Verify:
-		passing, err := currentPassingEvidenceSkills(root, change, model.StateS4Verify, runVersion)
-		if err != nil {
-			return "", err
-		}
 		if _, ok := passing[progression.SkillGoalVerification]; !ok {
 			return progression.SkillGoalVerification, nil
 		}
@@ -1156,30 +1173,15 @@ func currentActionableEvidenceSkill(root string, change model.Change, runVersion
 		}
 		return "", nil
 	default:
-		// S3_REVIEW and S4_VERIFY are handled by explicit cases above; the
-		// remaining states resolve a single skill, so the conventional primary
-		// is the full skill set here.
+		// S3_REVIEW is handled by the explicit case above; the remaining states
+		// resolve a single skill, so the conventional primary is the full skill
+		// set here.
 		nextSkill, _ := progression.PrimaryNextSkill(change)
 		if nextSkill == progression.SkillWorktreePreflight {
 			return "", nil
 		}
 		return nextSkill, nil
 	}
-}
-
-func currentPassingEvidenceSkills(
-	root string,
-	change model.Change,
-	workflowState model.WorkflowState,
-	runVersion int,
-) (map[string]model.VerificationRecord, error) {
-	return currentPassingEvidenceSkillsWithReviewSelection(
-		root,
-		change,
-		workflowState,
-		runVersion,
-		skill.ReviewSkillSelection{},
-	)
 }
 
 func currentPassingEvidenceSkillsWithReviewSelection(

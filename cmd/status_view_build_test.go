@@ -30,8 +30,8 @@ func TestBuildGovernedStatusViewUsesDiscoveryWorkflowForProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, view.Progress)
 	assert.Equal(t, 1, view.Progress.StageIndex)
-	assert.Equal(t, 6, view.Progress.StageTotal)
-	assert.Equal(t, 20, view.Progress.Percentage)
+	assert.Equal(t, 5, view.Progress.StageTotal)
+	assert.Equal(t, 25, view.Progress.Percentage)
 }
 
 func TestBuildGovernedStatusViewUsesExecutionSummaryForProgress(t *testing.T) {
@@ -42,7 +42,7 @@ func TestBuildGovernedStatusViewUsesExecutionSummaryForProgress(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("summary-progress")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
@@ -89,7 +89,7 @@ func TestBuildGovernedStatusViewExposesSummaryBlockersSeparately(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("summary-blockers")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
@@ -217,7 +217,7 @@ func TestLoadStatusChangeBySlugDoesNotMaskMalformedActiveAuthorityWithArchive(t 
 	assert.Equal(t, "change_state_load_failed", cliErr.ErrorCode)
 }
 
-func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing.T) {
+func TestBuildGovernedStatusViewReportsStaleExecutionEvidenceAsS3ReviewInput(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -253,8 +253,8 @@ func TestBuildGovernedStatusViewIncludesStaleExecutionEvidenceBlocker(t *testing
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
 	assert.Equal(t, "stale", view.EvidenceFreshness)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), state.StaleExecutionEvidenceBlockerToken)
-	assert.Contains(t, view.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), state.StaleExecutionEvidenceBlockerToken)
+	assert.NotContains(t, view.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 	require.NotNil(t, view.FreshnessDiagnostics)
 	assert.Equal(t, "stale", view.FreshnessDiagnostics.Status)
 	require.NotNil(t, view.FreshnessDiagnostics.FirstStaleCause)
@@ -277,7 +277,7 @@ func TestBuildGovernedStatusViewKeepsExecutionSummaryProgressWhenChecklistExists
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("summary-progress-authority")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
@@ -333,7 +333,7 @@ func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryI
 	initTestWorkspace(t, root)
 
 	change := model.NewChange("summary-progress-not-ready")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
@@ -415,7 +415,7 @@ func TestBuildGovernedStatusViewKeepsPlanAuditInNormalFlow(t *testing.T) {
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
 	require.NotNil(t, view.Progress)
-	assert.Equal(t, 20, view.Progress.Percentage)
+	assert.Equal(t, 25, view.Progress.Percentage)
 	assert.Contains(t, view.NextReadyActions, "next")
 }
 
@@ -457,11 +457,11 @@ func TestBuildGovernedStatusViewDoesNotLeakBundleBlockersBeforeWorktreeBinding(t
 	root := t.TempDir()
 	change := model.NewChange("execute-no-worktree")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
-	// At S2_EXECUTE with NeedsDiscovery=true and no worktree bound,
+	// At S2_IMPLEMENT with NeedsDiscovery=true and no worktree bound,
 	// the worktree gate should be the primary blocker.
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required")
 }
@@ -577,7 +577,7 @@ func TestBuildGovernedStatusViewIncludesAutoPassedStates(t *testing.T) {
 
 	change := model.NewChange("autopass-status")
 	change.WorkflowPreset = model.WorkflowPresetLight
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.LastAutoPassedStates = []model.AutoPassedState{
 		{State: model.StateS3Review, Reason: "no_blocking_review_obligations"},
@@ -609,6 +609,7 @@ func TestBuildGovernedStatusViewReportsSelectedReviewSkills(t *testing.T) {
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
+		progression.SkillGoalVerification,
 	}, view.SelectedReviewSkills)
 }
 
@@ -716,7 +717,7 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
 	slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.ActiveCheckpoint = &model.ActiveCheckpoint{
 		PausedTaskID:    "task-02",
@@ -748,17 +749,17 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
 	assert.Contains(t, renderStatusText(view), `slipway run --resume-response "<response>"`)
 }
 
-func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+func TestBuildGovernedStatusViewUsesCurrentTasksForActiveCheckpointWhenWavePlanIsMissing(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when pre-summary wave plan is missing")
+	slug := createGovernedRequest(t, root, "L2", "status should use current tasks for checkpoint resume")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.ActiveCheckpoint = &model.ActiveCheckpoint{
 		PausedTaskID:    "task-02",
@@ -767,12 +768,24 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsM
 		CheckpointType:  string(model.CheckpointHumanVerify),
 	}
 	require.NoError(t, state.SaveChange(root, change))
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` completed first wave
+  - depends_on: []
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` checkpointed live wave
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/status.go"]
+  - task_kind: code
+`)))
 
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
 	require.NotEmpty(t, view.NextReadyActions)
-	assert.Equal(t, "repair", view.NextReadyActions[0])
-	assert.Contains(t, strings.Join(view.Diagnostics, "\n"), "wave-plan.yaml")
+	assert.Equal(t, `run --resume-response "<response>"`, view.NextReadyActions[0])
+	assert.NotContains(t, strings.Join(view.Diagnostics, "\n"), "wave-plan.yaml")
 
 	found := false
 	for _, blocker := range view.Blockers {
@@ -781,7 +794,7 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWavePlanIsM
 			break
 		}
 	}
-	assert.True(t, found, "expected status blockers to include wave_plan_missing")
+	assert.False(t, found, "S2 checkpoint status must derive from current tasks instead of requiring persisted wave-plan.yaml")
 }
 
 func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAreMissing(t *testing.T) {
@@ -794,7 +807,7 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAre
 	slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.ActiveCheckpoint = &model.ActiveCheckpoint{
 		PausedTaskID:    "task-02",
@@ -846,7 +859,7 @@ func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testi
 	slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -882,7 +895,7 @@ func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T
 	slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
 	require.NoError(t, state.SaveChange(root, change))
@@ -921,7 +934,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
 	slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -964,7 +977,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
 	assert.True(t, found, "expected status blockers to include wave_runs_incomplete")
 }
 
-func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify(t *testing.T) {
+func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringReview(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -974,7 +987,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringVerify
 	slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1009,7 +1022,7 @@ func TestComputeProgressExcludesPassWithBlockersFromCompleted(t *testing.T) {
 	t.Parallel()
 
 	change := model.NewChange("progress")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	summary := &model.ExecutionSummary{
 		RunSummaryVersion: 1,
 		Tasks: []model.ExecutionTaskSummary{
@@ -1031,7 +1044,7 @@ func TestBuildStatusNarrativeMentionsSelectivePriorContext(t *testing.T) {
 	t.Parallel()
 
 	narrative := buildStatusNarrative(statusView{
-		CurrentState: model.StateS2Execute,
+		CurrentState: model.StateS2Implement,
 		SelectedPriorContext: []selectedPriorContextView{{
 			Slug: "baseline-auth",
 		}},

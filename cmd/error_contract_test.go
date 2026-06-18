@@ -42,7 +42,7 @@ func TestExecuteFailureEnvelopeInvalidUsage(t *testing.T) {
 
 		createIntakeChangeFixture(t, root, "fix login timeout")
 
-		_, stderr, err := runRootCommand([]string{"pivot", "--invalid-flag"})
+		_, stderr, err := runRootCommand([]string{"review", "--invalid-flag"})
 		require.Error(t, err)
 		var payload CLIError
 		require.NoError(t, json.Unmarshal([]byte(stderr), &payload))

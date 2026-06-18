@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,6 +72,39 @@ func TestSaveLoadChangeSlugRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, st.Slug, loaded.Slug)
 	assert.NotNil(t, loaded.EvidenceRefs)
+}
+
+func TestLoadChangeNormalizesRetiredWorkflowStates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want model.WorkflowState
+	}{
+		{name: "s2 execute", raw: "S2_EXECUTE", want: model.StateS2Implement},
+		{name: "s4 verify", raw: "S4_VERIFY", want: model.StateS3Review},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := createRuntimeLayout(t)
+			slug := "retired-" + strings.ToLower(strings.ReplaceAll(tc.raw, "_", "-"))
+			path := BundleChangeFilePath(root, slug)
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(`version: 1
+slug: `+slug+`
+status: active
+current_state: `+tc.raw+`
+`), 0o644))
+
+			loaded, err := LoadChange(root, slug)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, loaded.CurrentState)
+		})
+	}
 }
 
 func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {
@@ -407,7 +441,7 @@ func TestSaveChangeWritesToBundlePath(t *testing.T) {
 	root := createRuntimeLayout(t)
 
 	change := model.NewChange("bundle-write")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -418,7 +452,7 @@ func TestSaveChangeWritesToBundlePath(t *testing.T) {
 
 	var loaded model.Change
 	require.NoError(t, yaml.Unmarshal(raw, &loaded))
-	assert.Equal(t, model.StateS2Execute, loaded.CurrentState)
+	assert.Equal(t, model.StateS2Implement, loaded.CurrentState)
 	assert.Equal(t, "bundle-write", loaded.Slug)
 	assert.Equal(t, "HEAD", loaded.BaseRef)
 
@@ -446,7 +480,7 @@ func TestLoadChangeFindsWorktreeBundleWithoutRegistryMirror(t *testing.T) {
 
 	change := model.NewChange("worktree-bundle")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -454,7 +488,7 @@ func TestLoadChangeFindsWorktreeBundleWithoutRegistryMirror(t *testing.T) {
 
 	loaded, err := LoadChange(root, "worktree-bundle")
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS2Execute, loaded.CurrentState)
+	assert.Equal(t, model.StateS2Implement, loaded.CurrentState)
 	// ChangeDir removal also drops the git-local worktree binding, so this
 	// exercises the location-inference fallback, which resolves to the canonical
 	// (symlink-resolved) worktree root.
@@ -472,7 +506,7 @@ func TestLoadChangeSkipsMarkerlessSiblingWorktreeAtRepoRoot(t *testing.T) {
 	require.NoError(t, ensureScopeMarkerFile(WorkspaceScopeMarkerPath(worktreeRoot)))
 
 	staleChange := model.NewChange("ghost-root")
-	staleChange.CurrentState = model.StateS2Execute
+	staleChange.CurrentState = model.StateS2Implement
 	staleChange.PlanSubStep = model.PlanSubStepNone
 	staleBundlePath := BundleChangeFilePath(worktreeRoot, staleChange.Slug)
 	require.NoError(t, os.MkdirAll(filepath.Dir(staleBundlePath), 0o755))
@@ -503,7 +537,7 @@ func TestLoadChangeFindsNestedScopeBundleInsideWorktree(t *testing.T) {
 
 	change := model.NewChange("nested-worktree-bundle")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(scopeRoot, change))
 
@@ -511,7 +545,7 @@ func TestLoadChangeFindsNestedScopeBundleInsideWorktree(t *testing.T) {
 
 	loaded, err := LoadChange(scopeRoot, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS2Execute, loaded.CurrentState)
+	assert.Equal(t, model.StateS2Implement, loaded.CurrentState)
 	// ChangeDir removal also drops the git-local worktree binding, so this
 	// exercises the location-inference fallback, which resolves to the canonical
 	// (symlink-resolved) worktree root.
@@ -547,7 +581,7 @@ func TestLoadChangeSkipsSiblingBundleWhoseAuthorityPointsAtDifferentWorktree(t *
 
 	change := model.NewChange("cross-worktree-authority")
 	change.WorktreePath = owningWorktree
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.Description = "owning bundle"
 	require.NoError(t, SaveChange(scopeRoot, change))
@@ -575,7 +609,7 @@ func TestLoadChangeSkipsLocalStaleBundleWhenAuthorityOwnedBySiblingWorktree(t *t
 
 	change := model.NewChange("local-stale-bundle")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.Description = "owning bundle"
 	require.NoError(t, SaveChange(root, change))
@@ -643,7 +677,7 @@ func TestChangeSlugExistsTreatsHiddenSiblingWorktreeAuthorityAsReserved(t *testi
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	change := model.NewChange("hidden-worktree-reserved")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -683,7 +717,7 @@ func TestListChangesForCreateGuardIncludesHiddenSiblingWorktreeAuthority(t *test
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	change := model.NewChange("hidden-worktree-guard")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -706,7 +740,7 @@ func TestLoadChangeFallsBackToSiblingWorktreeAuthorityWhenLocalBundleDirIsOrphan
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	change := model.NewChange("worktree-authority")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -726,7 +760,7 @@ func TestListChangesSkipsSiblingWorktreeWithoutConfigEvenWhenBoundWorktreeMatche
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	change := model.NewChange("hidden-sibling-config")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -804,7 +838,7 @@ func TestListChangesFindsNestedScopeBundleInsideWorktree(t *testing.T) {
 
 	change := model.NewChange("nested-worktree-list")
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(scopeRoot, change))
 
@@ -833,7 +867,7 @@ func TestListChangesSkipsStaleSiblingWorktreeScopeMarkerWithoutConfig(t *testing
 
 	// Manually place a stale bundle in the markerless worktree scope.
 	staleChange := model.NewChange("ghost")
-	staleChange.CurrentState = model.StateS2Execute
+	staleChange.CurrentState = model.StateS2Implement
 	staleChange.PlanSubStep = model.PlanSubStepNone
 	staleBundlePath := BundleChangeFilePath(worktreeScopeRoot, "ghost")
 	require.NoError(t, os.MkdirAll(filepath.Dir(staleBundlePath), 0o755))

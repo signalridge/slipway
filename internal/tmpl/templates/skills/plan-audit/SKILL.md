@@ -1,7 +1,7 @@
 ---
 skill_id: plan-audit
 name: slipway-plan-audit
-description: "Use when validating that the governed artifact bundle is ready for execution. Triggers on post-authoring audit or whenever plan artifacts change materially."
+description: "Use when reviewing the governed plan bundle before S2 implementation may start. Triggers on post-authoring audit or whenever plan artifacts change materially."
 ---
 
 # Plan Audit
@@ -11,12 +11,20 @@ IRON LAW: NO EXECUTION WITHOUT A VERIFIED, COMPLETE PLAN
 ```
 
 ## Purpose
-Validate that the governed artifact bundle is ready for execution. This host is
-the execution-readiness gate before implementation.
+Review the governed plan bundle before S2 implementation may start. This host is
+the plan-review gate: it validates that the durable planning artifacts are
+complete, coherent, and executable enough to enter S2.
+
+Plan-audit does not approve a frozen execution schedule. It reviews `tasks.md`
+as declarative planning input (`depends_on`, `target_files`, `task_kind`, and
+coverage), but it must not require, inspect, or certify `wave-plan.yaml`.
+`wave-plan.yaml` is an S2 execution cache/projection that Slipway materializes
+from the current `tasks.md`; S2 commands and review gates validate that current
+projection and its evidence.
 
 ## Workflow Outline
 Read the bundle and codebase-map context, audit artifacts/dimensions/task
-shape, then write verification and wait for approval.
+shape, then write verification and wait for approval to enter S2.
 
 ## Read Context
 Run `slipway next --json`, locate the governed change bundle, and read the
@@ -93,13 +101,13 @@ path; honor its `context`/`rules` but never copy them into the file:
   `target_files` that bound the files or evidence targets it changes or
   verifies.
 
-Author task width for the computed schedule. Keep `depends_on` honest: it is a
-scheduling input, not narrative order, and a dependency that is not a real
-execution-order constraint needlessly serializes the waves. Keep `target_files`
-precise: name exact files rather than directories or globs, because overlapping
-or broad targets bump tasks into later waves and flatten the schedule. Absorb
-small same-file steps into one task instead of splitting work that can never
-run concurrently.
+Author task width for the schedule S2 will compute from the current task list.
+Keep `depends_on` honest: it is a scheduling input, not narrative order, and a
+dependency that is not a real execution-order constraint needlessly serializes
+the waves. Keep `target_files` precise: name exact files rather than directories
+or globs, because overlapping or broad targets bump tasks into later waves and
+flatten the schedule. Absorb small same-file steps into one task instead of
+splitting work that can never run concurrently.
 
 A mechanical or vacuous plan artifact cannot reach done. Re-run `slipway validate`
 until the substance gate passes, then audit.
@@ -133,8 +141,11 @@ If `research.md` is present, also verify that:
 - `## Canonical References` points to real docs/specs/code paths where possible
 - `## Unknowns` and `## Assumptions` have been addressed or remain consistent with the plan
 
-Any missing required artifact is a blocker. A single wave SHOULD contain no
-more than 5 tasks; oversized waves are warnings, not blockers.
+Any missing required artifact is a blocker. If the current `tasks.md` cannot be
+converted into a wave projection, block on the task artifact itself. Do not
+block merely because a persisted `wave-plan.yaml` is missing, stale, or absent:
+that file belongs to S2 materialization. A single computed S2 wave SHOULD
+contain no more than 5 tasks; oversized waves are warnings, not blockers.
 
 ## Dimension Checklist (8D)
 Explicitly check all eight dimensions and record blocker/warning IDs by
@@ -159,8 +170,8 @@ failure modes, alternatives, tradeoffs, and concrete risks.
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
 - require each task to name its evidence shape (`verdict` / `artifact` / `checklist`)
-- require task acceptance criteria to be satisfiable during S2 execution; do
-  not accept criteria that require future S3 review or S4 closeout evidence
+- require task acceptance criteria to be satisfiable during S2 implementation; do
+  not accept criteria that require future S3 review or closeout evidence
   before the workflow can legally reach those states
 - keep rollout in reviewable batches; do not admit half-states that break the kernel between batches
 - for guardrail-domain work, require a RED test plan before execution

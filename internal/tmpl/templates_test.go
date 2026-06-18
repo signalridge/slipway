@@ -180,6 +180,8 @@ func TestSpecComplianceReviewTemplateEmitsReviewContextOriginHandle(t *testing.T
 	// identifies the native subagent that performed this specific review.
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
+	assertSelectedS3ReviewPeerSet(t, content)
+	assertSelectedS3SuiteResultKeystone(t, content)
 	// The retired review_origin grammar must be gone from the review template.
 	assert.NotContains(t, content, "review_origin:skill=")
 	// The colliding next/handoff JSON name must never be emitted as the token.
@@ -198,8 +200,30 @@ func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
+	assertSelectedS3ReviewPeerSet(t, content)
+	assertSelectedS3SuiteResultKeystone(t, content)
 	assert.NotContains(t, content, "review_origin:skill=")
 	assert.NotContains(t, content, "review_context:skill=")
+}
+
+func assertSelectedS3ReviewPeerSet(t *testing.T, content string) {
+	t.Helper()
+
+	normalized := strings.Join(strings.Fields(content), " ")
+	assert.Contains(
+		t,
+		normalized,
+		"always includes spec-compliance-review, code-quality-review, independent-review, and goal-verification",
+	)
+	assert.Contains(t, normalized, "includes security-review when the security control is selected")
+}
+
+func assertSelectedS3SuiteResultKeystone(t *testing.T, content string) {
+	t.Helper()
+
+	assert.Contains(t, content, "verification/suite-result.yaml")
+	assert.Contains(t, content, "run_summary_version")
+	assert.Contains(t, content, "Selected S3")
 }
 
 func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
@@ -225,6 +249,7 @@ func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
 			assert.Contains(t, content, "SHARED change worktree")
 			assert.Contains(t, content, "context_origin:stage=review=<handle>")
 			assert.Contains(t, content, "MUST be DISTINCT")
+			assertSelectedS3SuiteResultKeystone(t, content)
 			assert.NotContains(t, content, "host-embedded")
 			assert.NotContains(t, content, "base reader that both review hosts")
 			assert.NotContains(t, content, "review_origin:skill=")
@@ -248,7 +273,7 @@ func TestPlanAuditTemplateEmitsPlanAndAuditOriginHandles(t *testing.T) {
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
-func TestGoalVerificationTemplateEmitsContextOriginHandle(t *testing.T) {
+func TestGoalVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
@@ -258,11 +283,14 @@ func TestGoalVerificationTemplateEmitsContextOriginHandle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "context_origin:stage=goal=<handle>")
+	assert.Contains(t, content, "context_origin:stage=review=<handle>")
+	assertSelectedS3SuiteResultKeystone(t, content)
+	assert.Contains(t, content, "full_suite_digest")
+	assert.NotContains(t, content, "context_origin:stage=goal=<handle>")
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
-func TestFinalCloseoutTemplateEmitsContextOriginHandle(t *testing.T) {
+func TestFinalCloseoutTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
@@ -272,7 +300,8 @@ func TestFinalCloseoutTemplateEmitsContextOriginHandle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "context_origin:stage=closeout=<handle>")
+	assert.Contains(t, content, "closeout:reviewer_independence=pass")
+	assert.NotContains(t, content, "context_origin:stage=closeout=<handle>")
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
@@ -289,17 +318,19 @@ func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testi
 	// Pattern-A presence attestation, now engine-consumed.
 	assert.Contains(t, content, `- "closeout:reviewer_independence=pass"`)
 	assert.Contains(t, content, "closeout_reviewer_independence_missing")
-	// Always-on chain-ordering invariant with its own distinct reason code.
-	assert.Contains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
-	assert.Contains(t, content, "spec-compliance-review, code-quality-review, and independent-review")
-	assert.Contains(t, content, "security-review when the security control is selected")
+	// Always-on final-ordering invariant with its own distinct reason code.
+	assert.Contains(t, content, "final-closeout >= every selected S3 review peer")
+	assert.Contains(t, content, "spec-compliance-review, code-quality-review, independent-review, and")
+	assert.Contains(t, content, "it also includes security-review")
+	assert.Contains(t, content, "goal-verification")
 	assert.Contains(t, content, "every selected S3 review skill has passing verification")
 	assert.NotContains(t, content, "both review skills have passing verification")
+	assert.NotContains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
 	assert.Contains(t, content, "closeout_chain_order_invalid")
 	assert.Contains(t, content, "Advisory on light")
 }
 
-func TestGoalVerificationTemplateDocumentsChainOrderingInvariant(t *testing.T) {
+func TestGoalVerificationTemplateDocumentsPeerReviewInvariant(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
@@ -309,11 +340,12 @@ func TestGoalVerificationTemplateDocumentsChainOrderingInvariant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "MUST NOT predate any selected S3 review")
-	assert.Contains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
-	assert.Contains(t, content, "spec-compliance-review, code-quality-review, and independent-review")
-	assert.Contains(t, content, "security-review when the security control is selected")
-	assert.Contains(t, content, "closeout_chain_order_invalid")
+	assert.Contains(t, content, "At `S3_REVIEW` as one selected review peer")
+	assert.Contains(t, content, "It runs in parallel with the other")
+	assert.Contains(t, content, "Final-closeout")
+	assert.Contains(t, content, "at or after every selected S3 peer")
+	assert.NotContains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
+	assert.NotContains(t, content, "closeout_chain_order_invalid")
 }
 
 func TestWaveOrchestrationTemplateRequiresDegradedJustification(t *testing.T) {
@@ -811,7 +843,9 @@ func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
 	content, err := Content("skills/plan-audit/SKILL.md")
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "future S3 review or S4 closeout evidence")
+	assert.Contains(t, content, "satisfiable during S2 implementation")
+	assert.Contains(t, content, "future S3 review or closeout evidence")
+	assert.NotContains(t, content, "S3 closeout")
 }
 
 func TestNextCommandDocumentsWorktreeSkillCatalogFallback(t *testing.T) {
@@ -856,7 +890,7 @@ func TestPartialsAreAvailableInRender(t *testing.T) {
 	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, content, "<HARD-GATE>", "hard-gate partial should render into governance skill")
-	assert.Contains(t, content, "Do not call `slipway run` (the advancing command) until the user approves", "hard-gate partial content missing")
+	assert.Contains(t, content, "Do not call an advancing command", "hard-gate partial content missing")
 }
 
 func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
@@ -1072,10 +1106,12 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"run command missing fresh-reviewer pause mandate")
 	assert.Contains(t, content, "`independent-review`",
 		"run command missing independent-review handoff")
-	assert.Contains(t, content, "selected `security-review`",
+	assert.Contains(t, content, "`goal-verification`",
+		"run command missing goal-verification selected peer handoff")
+	assert.Contains(t, content, "`security-review` when selected",
 		"run command missing selected security-review handoff")
-	assert.NotContains(t, content, "`spec-compliance-review`, `code-quality-review`, or `final-closeout`",
-		"run command must not preserve the old fixed review handoff list")
+	assert.Contains(t, content, "`final-closeout` is the last closeout step",
+		"run command must classify final-closeout after selected peers")
 
 	assert.Contains(t, content, "Subagent Continuation Rule (HARD RULE)",
 		"run command missing subagent continuation hard rule")
@@ -1323,7 +1359,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
-		require.Len(t, partials, 21)
+		require.Len(t, partials, 24)
 
 		for _, bodyTemplate := range partials {
 			commandID := strings.TrimSuffix(strings.TrimPrefix(bodyTemplate, "command-"), "-body")
@@ -1335,14 +1371,15 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("pivot rescope surface matches S2 through S4 contract", func(t *testing.T) {
-		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "pivot", "command-pivot-body", "claude")
-		assert.Contains(t, content, "`--rescope` is valid in `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`")
-		assert.Contains(t, content, "Before execution")
-		assert.Contains(t, content, "terminal states are blocked")
-		assert.Contains(t, content, "valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY")
-		assert.NotContains(t, content, "valid only in `S2_EXECUTE`")
-		assert.NotContains(t, content, "valid only in S2_EXECUTE")
+	t.Run("wave orchestration continues across wave boundaries", func(t *testing.T) {
+		content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+			"ToolID":  "claude",
+			"Trigger": "/slipway:wave-orchestration",
+		})
+		require.NoError(t, err)
+		assert.Contains(t, content, "Do not ask the operator to run `slipway run` merely to cross a")
+		assert.Contains(t, content, "Do not call an advancing command between\nwave boundaries")
+		assert.Contains(t, content, "Natural execution stop points:")
 	})
 
 	t.Run("include helper renders", func(t *testing.T) {

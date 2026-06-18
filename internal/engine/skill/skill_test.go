@@ -28,11 +28,11 @@ func TestGovernanceRegistryCompleteness(t *testing.T) {
 
 func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
 	t.Parallel()
-	// Non-discovery at S2_EXECUTE returns wave-orchestration
+	// Non-discovery at S2_IMPLEMENT returns wave-orchestration
 	assert.Equal(
 		t,
 		[]string{"wave-orchestration"},
-		requiredSkillsForState(false, model.StateS2Execute, false),
+		requiredSkillsForState(false, model.StateS2Implement, false),
 	)
 	// Non-discovery at S1_PLAN returns plan-audit only (discovery skills are discovery-only)
 	assert.Equal(
@@ -46,17 +46,17 @@ func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
 		[]string{"plan-audit", "research-orchestration"},
 		requiredSkillsForState(true, model.StateS1Plan, false),
 	)
-	// Non-discovery at S3_REVIEW returns review skills
+	// Non-discovery at S3_REVIEW returns the selected review gate skills.
 	assert.Equal(
 		t,
-		[]string{"code-quality-review", "independent-review", "spec-compliance-review"},
+		[]string{"code-quality-review", "goal-verification", "independent-review", "spec-compliance-review"},
 		requiredSkillsForState(false, model.StateS3Review, false),
 	)
-	// Discovery at S4_VERIFY with closeout returns both
+	// Final closeout is folded into S3_REVIEW when closeout evidence is required.
 	assert.Equal(
 		t,
-		[]string{"final-closeout", "goal-verification"},
-		requiredSkillsForState(true, model.StateS4Verify, true),
+		[]string{"code-quality-review", "final-closeout", "goal-verification", "independent-review", "spec-compliance-review"},
+		requiredSkillsForState(true, model.StateS3Review, true),
 	)
 }
 
@@ -74,7 +74,7 @@ func TestRequiredSkillsForStateWithRegistry_S3SecuritySelection(t *testing.T) {
 
 	assert.Equal(
 		t,
-		[]string{"code-quality-review", "independent-review", "security-review", "spec-compliance-review"},
+		[]string{"code-quality-review", "goal-verification", "independent-review", "security-review", "spec-compliance-review"},
 		required,
 	)
 }
@@ -161,7 +161,7 @@ func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) 
 
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
-	assert.Equal(t, model.StateS2Execute, def.State)
+	assert.Equal(t, model.StateS2Implement, def.State)
 }
 
 func TestLoadGovernanceRegistrySkipsUnknownSkillID(t *testing.T) {
@@ -243,7 +243,7 @@ body
 
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
-	assert.Equal(t, model.StateS2Execute, def.State)
+	assert.Equal(t, model.StateS2Implement, def.State)
 	assert.Equal(t, "uncontrolled parallel execution drift", def.Mitigation)
 }
 

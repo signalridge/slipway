@@ -29,9 +29,9 @@ func PhaseFor(s WorkflowState) UserPhase {
 		return PhaseIntake
 	case StateS1Plan:
 		return PhasePlanning
-	case StateS2Execute:
+	case StateS2Implement:
 		return PhaseBuilding
-	case StateS3Review, StateS4Verify:
+	case StateS3Review:
 		return PhaseReviewing
 	case StateDone:
 		return PhaseDone

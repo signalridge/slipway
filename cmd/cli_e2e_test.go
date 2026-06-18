@@ -121,12 +121,6 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		checkpointPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "checkpoint_wrong_state", checkpointPayload["error_code"])
 
-		stdout, stderr, err = runRootCommandIn(root, []string{"pivot", "--json", "--rescope"})
-		require.Error(t, err)
-		assert.Empty(t, stdout)
-		pivotPayload := decodeJSONMap(t, stderr)
-		assert.Equal(t, "rescope_state_invalid", pivotPayload["error_code"])
-
 		stdout, stderr, err = runRootCommandIn(root, []string{"review", "--json"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
@@ -189,7 +183,7 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -242,7 +236,7 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort then resume e2e")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "task-01")
@@ -264,7 +258,7 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		abortPayload := decodeJSONMap(t, stdout)
-		assert.Equal(t, "S2_EXECUTE", abortPayload["current_state"])
+		assert.Equal(t, "S2_IMPLEMENT", abortPayload["current_state"])
 
 		stdout, stderr, err = runRootCommandIn(root, []string{"run", "--json", "--change", slug})
 		require.Error(t, err)
@@ -276,10 +270,10 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		runPayload := decodeJSONMap(t, stdout)
-		assert.Equal(t, "S1_PLAN", runPayload["current_state"])
+		assert.Equal(t, "S2_IMPLEMENT", runPayload["current_state"])
 		nextSkill, ok := runPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in resumed run output")
-		assert.Equal(t, "plan-audit", nextSkill["name"])
+		assert.Equal(t, "wave-orchestration", nextSkill["name"])
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -368,7 +362,7 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 		require.NoError(t, err)
 
 		// Advance to S5_RUN_WAVES.
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		plan, err := state.MaterializeWavePlan(root, change)
@@ -398,7 +392,7 @@ func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
+func TestCLIEndToEndSuccessfulReviewPassAtS3(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -408,8 +402,8 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		// Advance to S7 with persisted execution summary.
-		change.CurrentState = model.StateS4Verify
+		// Advance to S3 with persisted execution summary.
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
@@ -428,6 +422,8 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		// so that evidence timestamps post-date artifact modifications.
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)
 
@@ -441,7 +437,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS7(t *testing.T) {
 		var view reviewView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "pass", view.Verdict)
-		assert.Equal(t, string(model.StateS4Verify), view.CurrentState)
+		assert.Equal(t, string(model.StateS3Review), view.CurrentState)
 	})
 }
 

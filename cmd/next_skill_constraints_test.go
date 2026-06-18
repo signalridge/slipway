@@ -280,7 +280,7 @@ func TestSkillConstraintsLockedDecisionsAfterPlanLock(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -483,7 +483,7 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.GuardrailDomain = "auth_authz"
 		require.NoError(t, state.SaveChange(root, change))

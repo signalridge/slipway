@@ -20,7 +20,7 @@ func TestCheckpointSetsActiveCheckpoint(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		taskID := materializeWavePlanCheckpointTask(t, root, change)
@@ -55,7 +55,7 @@ func TestCheckpointDecisionWithAllowedResponses(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		taskID := materializeWavePlanCheckpointTask(t, root, change)
@@ -90,7 +90,7 @@ func TestCheckpointRejectsWrongState(t *testing.T) {
 		cmd.SetArgs([]string{"--task-id", "task-01"})
 		err := cmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "S2_EXECUTE")
+		assert.Contains(t, err.Error(), "S2_IMPLEMENT")
 	})
 }
 
@@ -102,7 +102,7 @@ func TestCheckpointRejectsDuplicate(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:   "task-existing",
@@ -126,7 +126,7 @@ func TestCheckpointRequiresTaskID(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -151,7 +151,7 @@ func TestCheckpointDecisionRequiresAllowedResponses(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		taskID := materializeWavePlanCheckpointTask(t, root, change)
@@ -172,7 +172,7 @@ func TestCheckpointRejectsTaskOutsideCurrentWave(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -210,7 +210,7 @@ func TestCheckpointRejectsWhenWaveRunsAreMissing(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 

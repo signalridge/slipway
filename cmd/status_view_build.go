@@ -120,7 +120,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.AutoPassedStates = append([]model.AutoPassedState(nil), change.LastAutoPassedStates...)
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
-	if change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify {
+	if change.CurrentState == model.StateS3Review {
 		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
 	}
 	if !change.ContextDependencies.IsEmpty() {
@@ -134,17 +134,6 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	}
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
 	applyDoneReadyProjection(change, readiness.GateEvaluations, &view)
-	if staleTarget, ok, err := progression.StaleEvidenceRecoveryAvailable(root, change, view.Blockers); err != nil {
-		return statusView{}, err
-	} else if ok {
-		view.Blockers = appendReasonCodes(
-			view.Blockers,
-			[]model.ReasonCode{
-				model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
-				model.NewReasonCode("run_slipway_run_to_advance", string(change.CurrentState)),
-			},
-		)
-	}
 	view.Recovery = model.BuildRecovery(view.Blockers)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
@@ -198,9 +187,9 @@ func buildStatusViewBase(
 
 func statusPrimaryAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {
 	switch change.CurrentState {
-	case model.StateS2Execute:
+	case model.StateS2Implement:
 		return projectStatusExecutionAction(root, change, execCtx)
-	case model.StateS3Review, model.StateS4Verify:
+	case model.StateS3Review:
 		return statusWaveExecutionRepairAction(root, change, execCtx)
 	default:
 		return "", nil, nil
@@ -305,8 +294,8 @@ func buildStatusTimeline(root string, change model.Change, limit int) ([]statusT
 			Command:   event.Command,
 			EventType: event.EventType,
 			Result:    event.Result,
-			FromState: event.BeforeState,
-			ToState:   event.AfterState,
+			FromState: event.BeforeState.Canonical(),
+			ToState:   event.AfterState.Canonical(),
 			GateID:    event.GateID,
 			ControlID: event.ControlID,
 			SkillID:   event.SkillID,
@@ -352,8 +341,8 @@ func duplicateLifecycleTransition(previous, current state.LifecycleEvent) bool {
 		previous.Action != current.Action ||
 		previous.Reason != current.Reason ||
 		previous.Result != current.Result ||
-		previous.BeforeState != current.BeforeState ||
-		previous.AfterState != current.AfterState ||
+		previous.BeforeState.Canonical() != current.BeforeState.Canonical() ||
+		previous.AfterState.Canonical() != current.AfterState.Canonical() ||
 		previous.BeforeSubStep != current.BeforeSubStep ||
 		previous.AfterSubStep != current.AfterSubStep ||
 		previous.GateID != current.GateID ||
@@ -419,7 +408,7 @@ func buildStatusNarrative(view statusView) string {
 }
 
 func applyDoneReadyProjection(change model.Change, evaluations map[gate.GateID]gate.GateEvaluation, view *statusView) {
-	if view == nil || change.CurrentState != model.StateS4Verify {
+	if view == nil || change.CurrentState != model.StateS3Review {
 		return
 	}
 	for _, blocker := range view.Blockers {
@@ -514,7 +503,7 @@ func defaultVisibleGateEvaluations(change model.Change, evaluations map[gate.Gat
 
 func defaultSurfaceShowsShipGate(state model.WorkflowState) bool {
 	switch state {
-	case model.StateS4Verify, model.StateDone:
+	case model.StateS3Review, model.StateDone:
 		return true
 	default:
 		return false

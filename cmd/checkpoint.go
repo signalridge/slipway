@@ -82,10 +82,10 @@ func makeCheckpointCmd() *cobra.Command {
 					)
 				}
 
-				if change.CurrentState != model.StateS2Execute {
+				if change.CurrentState != model.StateS2Implement {
 					return newInvalidUsageError(
 						"checkpoint_wrong_state",
-						fmt.Sprintf("checkpoint requires S2_EXECUTE state, current: %s", change.CurrentState),
+						fmt.Sprintf("checkpoint requires S2_IMPLEMENT state, current: %s", change.CurrentState),
 						"Checkpoints can only be set during wave execution.",
 						nil,
 					)

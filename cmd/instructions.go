@@ -346,7 +346,7 @@ func findInstructionsArtifactSpec(schema []artifact.ArtifactSpec, name, artifact
 // fall back but emit a warning so operators do not mistake static output for a
 // resolved authoring payload. But an explicit --change must fail closed:
 // silently downgrading a missing or typo'd slug to static output makes it look
-// successful and defeats the recovery command (issue #119).
+// successful and defeats the repair command (issue #119).
 func enrichInstructionsView(cmd *cobra.Command, view *instructionsView, changeSlug, artifactFile string) error {
 	explicit := strings.TrimSpace(changeSlug) != ""
 	fail := func(err error) error {
