@@ -40,9 +40,9 @@ var surfacePolicy = []SurfaceRecord{
 		Summary: "Stable default review contract with explicit verdict.",
 	},
 	{
-		Command: "repair", Class: SurfacePrimary,
+		Command: "fix", Class: SurfacePrimary,
 		PublicName: "root-cause-tracing", BackingID: "root-cause-tracing",
-		Summary: "Default repair posture: trace the root cause before fixing.",
+		Summary: "Default fix posture: trace the root cause before changing code.",
 	},
 	{
 		Command: "health", Class: SurfacePrimary,

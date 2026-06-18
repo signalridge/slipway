@@ -61,10 +61,16 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 
-	if target, ok, err := staleReopenTarget(root, change); err != nil {
+	if target, ok, err := staleEvidenceRepairTarget(root, change); err != nil {
 		return AdvanceSummary{}, err
 	} else if ok {
-		return reopenToStaleStage(root, &change, target, fromState)
+		if staleEvidenceRepairDeferredToReview(change, target) {
+			// S2 owns implementation evidence. Upstream intake/planning drift is
+			// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
+			// evidence replay here creates an impossible forward-only dead end.
+		} else {
+			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
+		}
 	}
 
 	// 1. S0_INTAKE: lightweight path — no bundle, no worktree, no wave sync.
@@ -77,7 +83,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// instead of a hollow `slipway repair` dead-end. Only a pure branch mismatch on
 	// an otherwise-valid dedicated worktree is reconciled; every other authenticity
 	// failure stays fail-closed in the bundle/worktree gates below.
-	if fromState == model.StateS2Execute && strings.TrimSpace(change.WorktreePath) != "" {
+	if fromState == model.StateS2Implement && strings.TrimSpace(change.WorktreePath) != "" {
 		reconciled, err := state.ReconcileWorktreeBranchBinding(root, &change)
 		if err != nil {
 			return AdvanceSummary{}, err
@@ -106,8 +112,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(assuranceBlockers)), nil
 	}
 
-	// 3. Wave synchronization (only at S2_EXECUTE)
-	if fromState == model.StateS2Execute {
+	// 3. Wave synchronization (only at S2_IMPLEMENT)
+	if fromState == model.StateS2Implement {
 		syncResult, err := SyncGovernedWaveExecution(root, change)
 		if err != nil {
 			return AdvanceSummary{}, err
@@ -121,51 +127,58 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if err != nil {
 		return AdvanceSummary{}, err
 	}
-	if target := staleReopenFromReasonCodes(change, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)); target.SkillName != "" {
-		return reopenToStaleStage(root, &change, target, fromState)
+	if target := staleEvidenceRepairFromReasonCodes(change, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)); target.SkillName != "" {
+		if !staleEvidenceRepairDeferredToReview(change, target) {
+			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
+		}
 	}
-	if len(executionSummaryCtx.Issues) > 0 {
-		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)), nil
+	if issues := blockingExecutionSummaryIssues(change, executionSummaryCtx.Issues); len(issues) > 0 {
+		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(issues)), nil
 	}
 
-	// Scope Contract gate (owned by S2_EXECUTE): a satisfied execution summary
+	// Scope Contract gate (owned by S2_IMPLEMENT): a satisfied execution summary
 	// must also satisfy the Scope Contract. Out-of-scope drift (a changed file
 	// outside the plan — typically an untracked scratch file or build artifact)
 	// does not invalidate the recorded wave evidence, so it blocks visibly with
 	// remediation while leaving wave-orchestration/execution-summary intact;
-	// re-running after the file is removed or the plan is rescoped advances
+	// re-running after the file is removed or the plan is amended advances
 	// normally (issue #136). Missing task changed-file evidence, by contrast, can
 	// only be repaired by re-recording in the owning stage, so when the failure
-	// surfaces downstream (S3_REVIEW/S4_VERIFY) it reopens to S2_EXECUTE instead
-	// of stranding the failure where task evidence is no longer recordable.
+	// surfaces downstream (S3_REVIEW) it is treated as review input instead of
+	// requiring a return to S2.
 	//
-	// When the change is still IN S2_EXECUTE, every scope-contract blocker — drift
-	// and missing-changed-file alike — blocks visibly without clearing
-	// execution-summary.yaml / wave-orchestration.yaml. Reopening S2 from S2 is a
-	// no-op transition whose only effect is wiping the summary; once the summary is
-	// gone the scope contract evaluates NotApplicable, so the real
-	// scope_contract_changed_files_missing is masked behind run_summary_missing and
-	// every `slipway run` re-wipes it — an infinite loop only `slipway repair`
-	// escaped (issue #227b). Preserving the summary keeps the real blocker visible
-	// to validate/status/next with actionable remediation (record the task's
+	// When the change is still IN S2_IMPLEMENT, every scope-contract blocker —
+	// drift and missing-changed-file alike — blocks visibly without clearing
+	// execution-summary.yaml / wave-orchestration.yaml. Clearing those files would
+	// mask scope_contract_changed_files_missing behind run_summary_missing and
+	// create a loop. Preserving the summary keeps the real blocker visible to
+	// validate/status/next with actionable remediation (record the task's
 	// --changed-file, or record it as a verification/investigation kind, which is
-	// exempt). This fails closed — the block is kept, only the masking wipe is
+	// exempt). This fails closed: the block is kept, only the masking wipe is
 	// removed.
-	if target, err := scopeContractReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
+	if target, err := scopeContractRepairTarget(root, change, executionSummaryCtx.Summary); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
-		if fromState == model.StateS2Execute || scopeContractDriftOnly(target.Blockers) {
+		if fromState == model.StateS2Implement {
+			// In S2 the execution evidence is still owned by the implementation
+			// stage. Keep the summary intact and block visibly so the implement
+			// command can record a scope amendment or task evidence repair without
+			// mutating lifecycle state backward.
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
+		} else {
+			// S3 owns plan/code/evidence alignment through the selected review peers.
+			// Do not force implement/wave-orchestration to replay after review has
+			// started.
 		}
-		return reopenToStaleStage(root, &change, target, fromState)
 	}
-	if target, err := sensitiveEvidenceReopenTarget(root, change, executionSummaryCtx.Summary); err != nil {
+	if target, err := sensitiveEvidenceRepairTarget(root, change, executionSummaryCtx.Summary); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
-		if fromState == model.StateS2Execute {
+		if fromState == model.StateS2Implement {
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
+		} else {
+			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
 		}
-		return reopenToStaleStage(root, &change, target, fromState)
 	}
 
 	preTransitionSideEffects := make([]SideEffect, 0, 2)
@@ -241,8 +254,8 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 	preTransitionSkillEvidence := skillEvidenceTraceFromPassing(root, change, passingSkills)
 
-	// 5. Worktree validation (at S2_EXECUTE when NeedsDiscovery and worktree unbound)
-	isWorktreeGateState := fromState == model.StateS2Execute
+	// 5. Worktree validation (at S2_IMPLEMENT when NeedsDiscovery and worktree unbound)
+	isWorktreeGateState := fromState == model.StateS2Implement
 	if isWorktreeGateState && change.NeedsDiscovery && change.WorktreePath == "" {
 		changeBeforeWorktreeBinding := change
 		worktreePathBefore := change.WorktreePath
@@ -333,7 +346,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		preTransitionSideEffects = append(preTransitionSideEffects, sideEffects...)
 	}
 
-	if fromState == model.StateS4Verify {
+	if fromState == model.StateS3Review {
 		shipAuthority, err := EvaluateShipAuthority(root, change)
 		if err != nil {
 			return AdvanceSummary{}, err
@@ -357,7 +370,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 
 	// 7. State transition
-	// S1_PLAN substep progression: advance within planning before leaving to S2_EXECUTE.
+	// S1_PLAN substep progression: advance within planning before leaving to S2_IMPLEMENT.
 	if fromState == model.StateS1Plan {
 		fromSub := string(change.PlanSubStep)
 		nextSub := computeNextPlanSubStep(change.PlanSubStep)
@@ -397,7 +410,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			}, nil
 		}
 		// Exiting S1_PLAN: audit clean path runs post-audit machine validation
-		// inline before entering S2_EXECUTE. If validation fails, the change
+		// inline before entering S2_IMPLEMENT. If validation fails, the change
 		// persists at S1_PLAN/validate as a recovery-only substep.
 		if change.PlanSubStep == model.PlanSubStepAudit {
 			planResult := ValidatePlanningReadiness(root, change)
@@ -416,10 +429,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 				return summary, nil
 			}
 		}
-		// validate substep already checked by the gate above; fall through to S2_EXECUTE.
+		// validate substep already checked by the gate above; fall through to S2_IMPLEMENT.
 	}
 
-	// D1: Block S4_VERIFY→DONE in `next`; only `slipway done` finalizes.
+	// D1: Block S3_REVIEW→DONE in `next`; only `slipway done` finalizes.
 	if toState == model.StateDone {
 		summary := doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize.")
 		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
@@ -429,7 +442,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 
 	sideEffects := append([]SideEffect(nil), preTransitionSideEffects...)
 	transactionOps := make([]fsutil.FileTransactionOp, 0, 2)
-	if toState == model.StateS2Execute {
+	if toState == model.StateS2Implement {
 		generatedAt := change.CreatedAt
 		if planAudit, ok := passingSkills[SkillPlanAudit]; ok && !planAudit.Timestamp.IsZero() {
 			generatedAt = planAudit.Timestamp
@@ -477,6 +490,39 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}, nil
 }
 
+func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target EvidenceRepairTarget) AdvanceSummary {
+	blockers := append([]model.ReasonCode{}, target.Blockers...)
+	if strings.TrimSpace(target.SkillName) != "" {
+		blockers = append(blockers, model.NewReasonCode("review_alignment_required", target.SkillName))
+	}
+	summary := blockedAdvanceSummary(fromState, model.NormalizeReasonCodes(blockers))
+	summary.Reason = "stale_evidence_requires_review_alignment"
+	summary.Message = "Stale evidence must be realigned through review convergence; the lifecycle state was not changed."
+	return summary
+}
+
+func blockingExecutionSummaryIssues(change model.Change, issues []string) []string {
+	if change.CurrentState != model.StateS3Review {
+		return issues
+	}
+	filtered := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		reason := model.ReasonCodesFromSpecs([]string{issue})
+		if len(reason) == 0 {
+			continue
+		}
+		switch strings.TrimSpace(reason[0].Code) {
+		case state.StalePlanningEvidenceBlockerToken,
+			state.StaleExecutionEvidenceBlockerToken,
+			"tasks_plan_changed_since_task_evidence":
+			continue
+		default:
+			filtered = append(filtered, issue)
+		}
+	}
+	return filtered
+}
+
 func shipAuthorityPassingSkills(shipAuthority ShipAuthority) map[string]model.VerificationRecord {
 	passing := map[string]model.VerificationRecord{}
 	for skillName, record := range shipAuthority.ReviewAuthority.PassingSkills {
@@ -492,7 +538,7 @@ func applyPendingWorktreePreflight(root string, change *model.Change, fromState 
 	if change == nil {
 		return nil, nil
 	}
-	if fromState != model.StateS2Execute || !change.NeedsDiscovery || strings.TrimSpace(change.WorktreePath) != "" {
+	if fromState != model.StateS2Implement || !change.NeedsDiscovery || strings.TrimSpace(change.WorktreePath) != "" {
 		return nil, nil
 	}
 
@@ -535,14 +581,6 @@ func computeNextPlanSubStep(current model.PlanSubStep) model.PlanSubStep {
 		return model.PlanSubStepNone
 	}
 	return planSubStepOrder[idx+1]
-}
-
-// recoveryEvidenceFile pairs a verification artifact path with the skill that
-// owns it. The skill is empty for non-skill artifacts (wave-plan.yaml,
-// execution-summary.yaml), which have no evidence-digest entry of their own.
-type recoveryEvidenceFile struct {
-	path  string
-	skill string
 }
 
 func governedBundleScaffoldTransactionOps(root string, change *model.Change) ([]fsutil.FileTransactionOp, error) {
@@ -616,7 +654,7 @@ func CheckGateWithIteration(root string, change model.Change, passingSkills map[
 		blockers = append(blockers, model.NewReasonCode("plan_audit_stalled", "checker feedback did not change from the previous failed audit"))
 	}
 	if stalled || iteration >= maxIterations {
-		blockers = append(blockers, model.NewReasonCode("plan_audit_budget_exhausted", "consider `slipway pivot --reroute` or manual plan revision"))
+		blockers = append(blockers, model.NewReasonCode("plan_audit_budget_exhausted", "manual plan revision required before continuing"))
 		blockers = append(blockers, model.NewReasonCode("plan_checker_loop_terminated", ""))
 	}
 
@@ -714,7 +752,7 @@ func advanceGateID(before model.Change, summary AdvanceSummary) string {
 		default:
 			return string(gate.GatePlan)
 		}
-	case model.StateS4Verify:
+	case model.StateS3Review:
 		return string(gate.GateShip)
 	default:
 		return ""
@@ -964,10 +1002,8 @@ func ApplyPlanGateResult(change *model.Change, result PlanGateResult) ([]SideEff
 }
 
 func EvaluatePlanGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord, presetPolicy governance.PresetPolicy) gate.GateEvaluation {
-	planAuditPass := false
 	var planBlockers []model.ReasonCode
 	if record, ok := passingSkills[SkillPlanAudit]; ok {
-		planAuditPass = record.IsPassing()
 		// Local plan-audit self-audit edge: the plan-audit record must attest a
 		// well-formed plan_origin and a well-formed audit_origin produced under
 		// distinct fresh contexts. A missing handle, or an author context that
@@ -977,8 +1013,6 @@ func EvaluatePlanGate(root string, change model.Change, passingSkills map[string
 		// rung whose other endpoint is absent at S1.
 		enforced := presetPolicy.EffectivePreset != model.WorkflowPresetLight
 		planBlockers = append(planBlockers, planAuditOriginHandleBlockers(record, enforced)...)
-	} else {
-		planBlockers = append(planBlockers, model.NewReasonCode("plan_audit_evidence_missing", ""))
 	}
 	bundleReady := CheckGovernedBundleReady(root, change)
 	checklistBlockers := ValidateTasksChecklistDetailed(root, change).Blockers
@@ -991,7 +1025,7 @@ func EvaluatePlanGate(root string, change model.Change, passingSkills map[string
 		bundleReady = false
 		planBlockers = append(planBlockers, model.ReasonCodesFromSpecs(decisionBlockers)...)
 	}
-	return gate.EvaluateGPlan(bundleReady, planAuditPass, planBlockers)
+	return gate.EvaluateGPlan(bundleReady, planBlockers)
 }
 
 // planAuditOriginHandleBlockers enforces the local plan-audit self-audit edge on
@@ -1059,7 +1093,7 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 	_, discoveryOK := passingSkills[SkillResearchOrchestration]
 
 	// Worktree validation is only meaningful when a worktree is already bound.
-	// G_scope runs at S1_PLAN/research (before worktree creation at S2_EXECUTE),
+	// G_scope runs at S1_PLAN/research (before worktree creation at S2_IMPLEMENT),
 	// so skip worktree validation when WorktreePath is empty.
 	var worktreeReasons []model.ReasonCode
 	if strings.TrimSpace(change.WorktreePath) != "" {

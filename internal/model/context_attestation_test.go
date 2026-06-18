@@ -29,19 +29,19 @@ func TestContextOriginHandlesFromVerification(t *testing.T) {
 			record: VerificationRecord{
 				References: []string{
 					"context_origin:stage=review=ctx-abc",
-					"context_origin:stage=goal=ctx-def",
+					"context_origin:stage=executor=ctx-def",
 				},
 			},
 			wantOK: true,
-			want:   map[string]string{"review": "ctx-abc", "goal": "ctx-def"},
+			want:   map[string]string{"review": "ctx-abc", "executor": "ctx-def"},
 		},
 		{
 			name: "handle containing equals splits on first only",
 			record: VerificationRecord{
-				References: []string{"context_origin:stage=goal=ctx=99"},
+				References: []string{"context_origin:stage=review=ctx=99"},
 			},
 			wantOK: true,
-			want:   map[string]string{"goal": "ctx=99"},
+			want:   map[string]string{"review": "ctx=99"},
 		},
 		{
 			name: "surrounding punctuation and quotes trimmed",
@@ -294,7 +294,7 @@ func TestReviewContextOriginHandleFromVerification(t *testing.T) {
 		{
 			name: "other context origin stages do not satisfy review origin",
 			record: VerificationRecord{
-				References: []string{"context_origin:stage=goal=ctx-goal"},
+				References: []string{"context_origin:stage=executor=ctx-executor"},
 			},
 			wantOK: false,
 		},
@@ -313,7 +313,7 @@ func TestReviewContextOriginHandleFromVerification(t *testing.T) {
 			record: VerificationRecord{
 				References: []string{
 					"context_origin:stage=review=ctx-reviewer",
-					"context_origin:stage=goal=ctx-goal",
+					"context_origin:stage=executor=ctx-executor",
 				},
 			},
 			wantOK:     true,
@@ -572,6 +572,7 @@ func TestContextAttestationPrefixConstsArePinned(t *testing.T) {
 	assert.Equal(t, "plan_origin", StageContextPlanOrigin)
 	assert.Equal(t, "audit_origin", StageContextAuditOrigin)
 	assert.Equal(t, "review", StageContextReview)
+	assert.Equal(t, "fix", StageContextFix)
 	assert.Equal(t, "goal", StageContextGoal)
 	assert.Equal(t, "closeout", StageContextCloseout)
 }

@@ -311,17 +311,6 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	}
 	view.GateStatus = gateStatus
 	view.GateDetails = gateDetails
-	if staleTarget, ok, err := progression.StaleEvidenceRecoveryAvailable(root, change, appendValidateRecoveryInputs(view.Blockers, gateDetails)); err != nil {
-		return validateView{}, err
-	} else if ok {
-		view.Blockers = appendReasonCodes(
-			view.Blockers,
-			[]model.ReasonCode{
-				model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
-				model.NewReasonCode("run_slipway_run_to_advance", string(change.CurrentState)),
-			},
-		)
-	}
 	view.Recovery = buildValidateRecovery(view.Blockers, gateDetails)
 	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)

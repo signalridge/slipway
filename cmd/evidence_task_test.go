@@ -35,7 +35,8 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 			"--evidence-ref", "test:evidence-task",
 			// Must stay within the fixture wave-plan's target_files
 			// (cmd/lifecycle_commands_test.go) so the Scope Contract passes; an
-			// out-of-scope changed_file now reopens to S2 (scope_contract gate).
+			// out-of-scope changed_file now resolves through the scope-contract
+			// repair gate rather than a backward lifecycle mutation.
 			"--changed-file", "cmd/lifecycle_commands_test.go",
 			"--target-file", "cmd/lifecycle_commands_test.go",
 			"--captured-at", capturedAt.Format(time.RFC3339Nano),
@@ -266,7 +267,7 @@ func TestEvidenceSkillRejectsWrongWorkflowStateWithoutWritingEvidence(t *testing
 		slug, change := createEvidenceTaskFixture(t, root)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -479,7 +480,7 @@ func createEvidenceTaskFixture(t *testing.T, root string) (string, model.Change)
 	slug := createGovernedRequest(t, root, "L2", "evidence task command")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	_, err = state.MaterializeWavePlan(root, change)

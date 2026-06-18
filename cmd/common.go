@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/skill"
@@ -652,19 +653,13 @@ func projectNextReadyActionsWithPrimary(currentState model.WorkflowState, primar
 		actions = append(actions, primary)
 	} else {
 		switch currentState {
-		case model.StateS2Execute:
+		case model.StateS2Implement:
 			actions = append(actions, "run")
 		default:
 			actions = append(actions, "next")
 		}
 	}
-	if currentState == model.StateS4Verify {
-		actions = append(actions, "done")
-	}
-	if currentState == model.StateS2Execute || currentState == model.StateS3Review || currentState == model.StateS4Verify {
-		actions = append(actions, "pivot")
-	}
-	if currentState == model.StateS2Execute {
+	if currentState == model.StateS2Implement {
 		actions = append(actions, "abort")
 	}
 	actions = append(actions, "cancel")
@@ -683,7 +678,8 @@ func projectFreshnessForExecMode(
 	if hasFreshnessBlocker(blockers) {
 		return string(ctxpack.EvidenceFreshnessStale)
 	}
-	return string(state.ExecutionSummaryFreshness(root, change, summary))
+	diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+	return string(state.ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
 }
 
 func hasFreshnessBlocker(blockers []model.ReasonCode) bool {
@@ -718,12 +714,18 @@ func loadResumableWaveExecution(
 	execCtx executionContext,
 	operation string,
 ) (int, error) {
-	if change.CurrentState != model.StateS2Execute || !execCtx.Ready {
+	if change.CurrentState != model.StateS2Implement || !execCtx.Ready {
 		return 0, nil
 	}
 
 	waveCtx, err := loadAuthoritativeWaveExecution(root, change, execCtx.LatestRunVersion, operation)
-	if err != nil || waveCtx == nil {
+	if err != nil {
+		if resumableWavePlanHasStructuralDrift(root, change) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if waveCtx == nil {
 		return 0, err
 	}
 	return state.ResumeWaveIndex(waveCtx.Plan, waveCtx.Runs), nil
@@ -735,7 +737,7 @@ func validateActiveCheckpointAuthority(
 	execCtx executionContext,
 	operation string,
 ) error {
-	if change.ActiveCheckpoint == nil || change.CurrentState != model.StateS2Execute {
+	if change.ActiveCheckpoint == nil || change.CurrentState != model.StateS2Implement {
 		return nil
 	}
 
@@ -750,18 +752,18 @@ func validateActiveCheckpointAuthority(
 		}
 		plan = waveCtx.Plan
 	} else {
-		loadedPlan, err := state.LoadWavePlanForChange(root, change)
+		loadedPlan, err := loadCurrentWavePlanForCommand(root, change)
 		if err != nil {
 			errorCode := "wave_plan_load_failed"
-			message := fmt.Sprintf("%s failed to load wave-plan.yaml for %q: %v", operation, change.Slug, err)
+			message := fmt.Sprintf("%s failed to derive the current wave plan for %q: %v", operation, change.Slug, err)
 			if errors.Is(err, fs.ErrNotExist) {
 				errorCode = "wave_plan_missing"
-				message = fmt.Sprintf("%s requires wave-plan.yaml for active checkpoint %q, but it is missing", operation, change.Slug)
+				message = fmt.Sprintf("%s requires tasks.md for active checkpoint %q, but it is missing", operation, change.Slug)
 			}
 			return newStateIntegrityError(
 				errorCode,
 				message,
-				"Run `slipway repair` to restore wave execution artifacts before continuing.",
+				"Update tasks.md so the active checkpoint belongs to the current wave plan before continuing.",
 				change.Slug,
 				map[string]any{
 					"path": state.WavePlanPathForRead(root, change.Slug),
@@ -846,18 +848,18 @@ func loadAuthoritativeWaveExecution(
 		return nil, nil
 	}
 
-	plan, err := state.LoadWavePlanForChange(root, change)
+	plan, err := loadCurrentWavePlanForCommand(root, change)
 	if err != nil {
 		errorCode := "wave_plan_load_failed"
-		message := fmt.Sprintf("%s failed to load wave-plan.yaml for %q: %v", operation, change.Slug, err)
+		message := fmt.Sprintf("%s failed to derive the current wave plan for %q: %v", operation, change.Slug, err)
 		if errors.Is(err, fs.ErrNotExist) {
 			errorCode = "wave_plan_missing"
-			message = fmt.Sprintf("%s requires wave-plan.yaml for %q, but it is missing", operation, change.Slug)
+			message = fmt.Sprintf("%s requires tasks.md for %q, but it is missing", operation, change.Slug)
 		}
 		return nil, newStateIntegrityError(
 			errorCode,
 			message,
-			"Run `slipway repair` to restore wave execution artifacts before continuing.",
+			"Update tasks.md so it can be converted into the current wave plan before continuing.",
 			change.Slug,
 			map[string]any{
 				"path": state.WavePlanPathForRead(root, change.Slug),
@@ -941,6 +943,14 @@ func loadAuthoritativeWaveExecution(
 		Plan: plan,
 		Runs: runs,
 	}, nil
+}
+
+func loadCurrentWavePlanForCommand(root string, change model.Change) (model.WavePlan, error) {
+	if change.CurrentState == model.StateS2Implement {
+		plan, _, err := state.MaterializeWavePlanTransactionOpAt(root, change, time.Now().UTC())
+		return plan, err
+	}
+	return state.LoadWavePlanForChange(root, change)
 }
 
 // encodeJSONResponse encodes v as indented JSON to the command's stdout.

@@ -46,11 +46,11 @@ func makeAbortCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if change.CurrentState != model.StateS2Execute {
+				if change.CurrentState != model.StateS2Implement {
 					return newInvalidUsageError(
 						"abort_state_invalid",
-						fmt.Sprintf("abort requires S2_EXECUTE state, current: %s", change.CurrentState),
-						"Use `slipway cancel` to terminate and archive the change outside execution, or return to S2_EXECUTE before aborting.",
+						fmt.Sprintf("abort requires S2_IMPLEMENT state, current: %s", change.CurrentState),
+						"Use `slipway cancel` to terminate and archive the change outside execution, or return to S2_IMPLEMENT before aborting.",
 						nil,
 					)
 				}

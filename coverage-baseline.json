@@ -6,8 +6,8 @@
     "github.com/signalridge/slipway/internal/engine/progression"
   ],
   "packages": {
-    "github.com/signalridge/slipway/internal/engine/gate": 96.1,
-    "github.com/signalridge/slipway/internal/engine/governance": 90.1,
-    "github.com/signalridge/slipway/internal/engine/progression": 81.8
+    "github.com/signalridge/slipway/internal/engine/gate": 96.8,
+    "github.com/signalridge/slipway/internal/engine/governance": 90.4,
+    "github.com/signalridge/slipway/internal/engine/progression": 81.2
   }
 }

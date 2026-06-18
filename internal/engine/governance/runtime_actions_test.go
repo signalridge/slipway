@@ -303,7 +303,7 @@ func TestResolveRuntimeRequiredActionsRejectsTemplateOnlyRollbackSections(t *tes
 
 	root := t.TempDir()
 	change := model.NewChange("runtime-actions-template-rollback")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -377,7 +377,7 @@ func TestResolveRuntimeRequiredActionsRejectsSeededDraftRollbackDecision(t *test
 	root := t.TempDir()
 	change := model.NewChange("runtime-actions-seeded-rollback")
 	change.Description = "update auth middleware timeout strategy"
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -451,7 +451,7 @@ func TestResolveRuntimeRequiredActionsRequiresBoundWorktreeMetadata(t *testing.T
 	root := t.TempDir()
 	change := model.NewChange("runtime-actions-worktree-metadata")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -615,7 +615,7 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 	initGitRepoForRuntimeActionsTests(t, root)
 
 	change := model.NewChange("runtime-actions-hidden-worktree")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -631,7 +631,7 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 	require.NoError(t, state.RelocateGovernedBundle(root, beforeWorktree, change))
 	require.NoError(t, state.SaveChange(root, change))
 
-	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+	summary := model.ExecutionSummary{
 		Version:           model.ExecutionSummaryVersion,
 		RunSummaryVersion: 2,
 		CapturedAt:        time.Now().UTC(),
@@ -646,7 +646,10 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 				CapturedAt:   time.Now().UTC(),
 			},
 		},
-	}))
+	}
+	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
+	summary.SyncDerivedFields()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, summary))
 	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
@@ -866,14 +869,14 @@ func TestExecutionScopeDoesNotBlockDiscoveryAtS1(t *testing.T) {
 	}
 
 	blockers := RequiredActionBlockers(change, actions)
-	assert.Empty(t, blockers, "execution-scope control must not block at S1_PLAN; worktree gate is at S2_EXECUTE/preflight")
+	assert.Empty(t, blockers, "execution-scope control must not block at S1_PLAN; worktree gate is at S2_IMPLEMENT/preflight")
 }
 
-func TestExecutionScopeBlocksAtS2Execute(t *testing.T) {
+func TestExecutionScopeBlocksAtS2Implement(t *testing.T) {
 	t.Parallel()
 
 	change := model.Change{
-		CurrentState:   model.StateS2Execute,
+		CurrentState:   model.StateS2Implement,
 		NeedsDiscovery: false,
 	}
 

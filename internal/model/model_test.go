@@ -54,6 +54,45 @@ plan_substep: bundle
 	require.NoError(t, change.Validate())
 }
 
+func TestChangeNormalizeCanonicalizesRetiredWorkflowStates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want WorkflowState
+	}{
+		{
+			name: "s2 execute",
+			raw:  "S2_EXECUTE",
+			want: StateS2Implement,
+		},
+		{
+			name: "s4 verify",
+			raw:  "S4_VERIFY",
+			want: StateS3Review,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var change Change
+			require.NoError(t, yaml.Unmarshal([]byte(`
+version: 1
+slug: retired-state-change
+status: active
+current_state: `+tc.raw+`
+`), &change))
+			change.Normalize()
+
+			assert.Equal(t, tc.want, change.CurrentState)
+			require.NoError(t, change.Validate())
+		})
+	}
+}
+
 func TestChangeValidateRejectsInvalidWorkflowProfile(t *testing.T) {
 	t.Parallel()
 
@@ -222,7 +261,7 @@ func TestChangeUnmarshalYAMLParsesInterruptedExecutionAt(t *testing.T) {
 version: 1
 slug: unified-runtime-field
 status: active
-current_state: S2_EXECUTE
+current_state: S2_IMPLEMENT
 interrupted_execution_at: 2026-04-10T12:00:00Z
 `), &change))
 	change.Normalize()
@@ -307,9 +346,9 @@ func TestPhaseForMapsWorkflowStates(t *testing.T) {
 		// New simplified states
 		{name: "s0_intake", state: StateS0Intake, phase: PhaseIntake},
 		{name: "s1_plan", state: StateS1Plan, phase: PhasePlanning},
-		{name: "s2_execute", state: StateS2Execute, phase: PhaseBuilding},
+		{name: "s2_implement", state: StateS2Implement, phase: PhaseBuilding},
 		{name: "s3_review", state: StateS3Review, phase: PhaseReviewing},
-		{name: "s4_verify", state: StateS4Verify, phase: PhaseReviewing},
+		{name: "s4_verify", state: StateS3Review, phase: PhaseReviewing},
 		{name: "done", state: StateDone, phase: PhaseDone},
 		// Unknown states fall through to PhaseIntake (default)
 		{name: "unknown falls back to intake", state: WorkflowState("UNKNOWN"), phase: PhaseIntake},

@@ -57,7 +57,7 @@ func TestExecutionSummaryPathForReadPrefersHiddenSiblingWorktreeBundle(t *testin
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	slug := "hidden-worktree-summary-path"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, PersistScopeWorktreeMetadata(&change, worktreeRoot, "feature"))
 	require.NoError(t, SaveChange(root, change))
@@ -121,7 +121,7 @@ func TestSaveExecutionSummaryWritesStructuralFreshnessInputs(t *testing.T) {
 
 	root := createRuntimeLayout(t)
 	change := saveActiveChangeForTest(t, root, "structural-freshness")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.GuardrailDomain = "external_api_contracts"
 	require.NoError(t, SaveChange(root, change))
@@ -452,10 +452,89 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	assert.Contains(t, diagnostics.FirstStaleCause.SourceArtifact, "tasks.md")
 	assert.Empty(t, diagnostics.FirstStaleCause.SourceUpdatedAt)
 	assert.Equal(t, capturedAt.Format(time.RFC3339Nano), diagnostics.FirstStaleCause.EvidenceCapturedAt)
+	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
+	projected := ProjectExecutionFreshnessDiagnosticsForState(change.CurrentState, diagnostics)
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), projected.Status)
+	assert.Empty(t, projected.StalePairs)
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
 	require.NoError(t, err)
-	assert.Contains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
+}
+
+func TestExecutionSummaryFreshnessTreatsTasksPlanScopeHashMismatchAsS3TaskPlanDrift(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeRepoLayout(t)
+	change := saveActiveChangeForTest(t, root, "tasks-plan-scope-mismatch")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir, err := GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`
+- [x] `+"`task-a`"+` update scoped files
+  - depends_on: []
+  - target_files: ["cmd/a.go"]
+  - task_kind: code
+`), 0o644))
+
+	planGeneratedAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
+	plan, err := MaterializeWavePlanAt(root, change, planGeneratedAt)
+	require.NoError(t, err)
+	capturedAt := planGeneratedAt.Add(time.Hour)
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		TasksPlanHash:     plan.TasksPlanHash,
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:      "task-a",
+			Verdict:     model.TaskVerdictPass,
+			TaskKind:    model.TaskKindCode,
+			TargetFiles: []string{"cmd/a.go"},
+			CapturedAt:  capturedAt,
+		}},
+	}))
+
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`
+- [x] `+"`task-a`"+` update scoped files
+  - depends_on: []
+  - target_files: ["cmd/b.go"]
+  - task_kind: code
+`), 0o644))
+	currentStructuralHash, err := CurrentTasksPlanStructuralState(root, change)
+	require.NoError(t, err)
+	assert.Equal(t, plan.TasksPlanHash, currentStructuralHash)
+	currentScopeHash, err := CurrentTasksPlanScopeState(root, change)
+	require.NoError(t, err)
+	require.NotEqual(t, plan.TasksPlanScopeHash, currentScopeHash)
+
+	loaded, err := LoadExecutionSummary(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, ctxpack.EvidenceFreshnessStale, ExecutionSummaryFreshness(root, change, &loaded))
+	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
+	assert.Equal(t, "stale", diagnostics.Status)
+	require.NotNil(t, diagnostics.FirstStaleCause)
+	assert.Equal(t, StalePlanningEvidenceBlockerToken, diagnostics.FirstStaleCause.Reason)
+	assert.Contains(t, diagnostics.FirstStaleCause.SourceArtifact, "tasks.md")
+	assert.Contains(t, diagnostics.FirstStaleCause.EvidenceArtifact, WavePlanFileName)
+	assert.Empty(t, diagnostics.FirstStaleCause.SourceUpdatedAt)
+	assert.True(t, ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics))
+	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
+
+	projected := ProjectExecutionFreshnessDiagnosticsForState(change.CurrentState, diagnostics)
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), projected.Status)
+	assert.Empty(t, projected.StalePairs)
+
+	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
+	require.NoError(t, err)
+	assert.NotContains(t, ctx.Issues, StalePlanningEvidenceBlockerToken)
 }
 
 func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *testing.T) {
@@ -512,13 +591,12 @@ func TestExecutionSummaryFreshnessDiagnosticsIncludesPlanningEvidenceChain(t *te
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)
 	assert.Contains(t, diagnostics.FirstStaleCause.SourceArtifact, "tasks.md")
-	assert.Contains(t, diagnostics.FirstStaleCause.EvidenceArtifact, planAuditFileName)
-	assert.Contains(t, diagnostics.FirstStaleCause.NextAction, "plan-audit")
-	assert.True(t, containsFreshnessChainEdge(diagnostics.DownstreamEvidenceChain, planAuditFileName, WavePlanFileName))
+	assert.Contains(t, diagnostics.FirstStaleCause.EvidenceArtifact, WavePlanFileName)
+	assert.Contains(t, diagnostics.FirstStaleCause.NextAction, "wave-orchestration")
 	assert.True(t, containsFreshnessChainEdge(diagnostics.DownstreamEvidenceChain, WavePlanFileName, ExecutionSummaryFileName))
 }
 
-func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampForPlanningStage(t *testing.T) {
+func TestExecutionSummaryFreshnessDiagnosticsDoesNotRouteS2TaskDriftThroughPlanAudit(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeRepoLayout(t)
@@ -543,8 +621,8 @@ func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampForPlanningStage
 	planAuditBody := "verdict: pass\nblockers: []\nrun_version: 1\ntimestamp: " +
 		recordCapturedAt.Format(time.RFC3339) + "\n"
 	require.NoError(t, os.WriteFile(planAuditPath, []byte(planAuditBody), 0o644))
-	// The file is rewritten well after the audit was captured, drifting its
-	// mtime ahead of both the embedded timestamp and the source.
+	// The plan-audit record exists and has a newer mtime, but task-plan drift in
+	// S2 must refresh S2 execution evidence rather than route back through S1.
 	require.NoError(t, os.Chtimes(planAuditPath, fileModifiedAt, fileModifiedAt))
 
 	summary := &model.ExecutionSummary{
@@ -569,11 +647,10 @@ func TestExecutionSummaryFreshnessDiagnosticsUsesRecordTimestampForPlanningStage
 	require.NotNil(t, diagnostics.FirstStaleCause)
 	cause := diagnostics.FirstStaleCause
 	assert.Contains(t, cause.SourceArtifact, "tasks.md")
-	assert.Contains(t, cause.EvidenceArtifact, planAuditFileName)
-
-	// The fix: evidence_captured_at is the embedded record timestamp, and the
-	// (newer) file mtime is never consulted.
-	assert.Equal(t, recordCapturedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
+	assert.Contains(t, cause.EvidenceArtifact, ExecutionSummaryFileName)
+	assert.NotContains(t, cause.EvidenceArtifact, planAuditFileName)
+	assert.Equal(t, summaryCapturedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
+	assert.NotEqual(t, recordCapturedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
 	assert.NotEqual(t, fileModifiedAt.Format(time.RFC3339Nano), cause.EvidenceCapturedAt)
 	assert.Empty(t, cause.SourceUpdatedAt)
 }
@@ -805,7 +882,7 @@ func TestSaveExecutionSummaryRejectsHiddenSiblingWorktreeBundle(t *testing.T) {
 
 	change := model.NewChange(slug)
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -842,7 +919,7 @@ func TestLoadExecutionSummaryRejectsHiddenSiblingWorktreeFallback(t *testing.T) 
 
 	change := model.NewChange(slug)
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
@@ -872,7 +949,7 @@ func TestSaveExecutionSummaryRejectsMissingAuthorityFile(t *testing.T) {
 	root := createRuntimeLayout(t)
 	slug := "missing-authority-summary"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	require.NoError(t, os.Remove(BundleChangeFilePath(root, slug)))
@@ -991,7 +1068,7 @@ func TestExecutionSummaryIssuesFailClosedWhenFreshnessArtifactIsUnreadable(t *te
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("freshness-unreadable")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -1033,7 +1110,7 @@ func TestExecutionSummaryIssuesClassifyPlanningArtifactDrift(t *testing.T) {
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("planning-drift")
-	change.CurrentState = model.StateS3Review
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -1069,7 +1146,7 @@ func TestExecutionSummaryIssuesIgnoreAssuranceOnlyEdits(t *testing.T) {
 
 	root := createRuntimeLayout(t)
 	change := model.NewChange("assurance-only")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 

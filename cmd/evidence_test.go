@@ -57,14 +57,14 @@ func TestEvidenceRestampCommandIsNotRegistered(t *testing.T) {
 	})
 }
 
-func TestEvidenceTaskWrongStateInS4RoutesToGoalVerificationAndFinalCloseout(t *testing.T) {
+func TestEvidenceTaskWrongStateInS3RoutesToGoalVerificationAndFinalCloseout(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		_, change := createEvidenceTaskFixture(t, root)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())

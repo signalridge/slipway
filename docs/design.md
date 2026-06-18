@@ -44,9 +44,9 @@ boundary honestly rather than overselling it.
 
 | Attestation | What the engine enforces | Tier |
 | --- | --- | --- |
-| `context_origin:stage=<stage>=<handle>` emitted by the chain-wide independence skills on the shared worktree, with all selected S3 reviewers using `stage=review` | the participant handles owned by each seam are present and pairwise distinct; selected reviewers are keyed by skill name even though they share the `review` wire stage | Audit/structural — raises forging cost and auditability, not cryptographic proof |
+| `context_origin:stage=<stage>=<handle>` emitted by the chain-wide independence skills on the shared worktree, with all selected S3 reviewers using `stage=review` and S3 review-finding fixes using `stage=fix` when recorded | the participant handles owned by each seam are present and pairwise distinct; selected reviewers are keyed by skill name even though they share the `review` wire stage; recorded fix handles must be distinct from implementation and reviewer handles | Audit/structural — raises forging cost and auditability, not cryptographic proof |
 | `closeout:reviewer_independence=pass` on final-closeout | Pattern-A presence, now engine-consumed | Structural presence |
-| Chain ordering `closeout >= goal-verification >= every selected review verdict` | every selected reviewer is stamped before goal verification, and final closeout is stamped after goal verification | Genuinely enforced ordering |
+| Final ordering `final-closeout >= every selected S3 peer` | final closeout is stamped after the unordered selected review set, including goal-verification | Genuinely enforced ordering |
 | `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` | a `degraded_sequential` dispatch is paired with a tool-unavailable justification | Structural pairing |
 
 Each gate fails closed at error severity on `standard`/`strict` and is advisory on
@@ -58,21 +58,29 @@ or self-stamp path; the engine stays the sole verdict stamper.
 
 `context_origin:stage=<stage>=<handle>` is one chain-wide grammar — emitted by the
 independence skills on the shared worktree — that spans the whole governed chain.
-S3 uses a selected review set: the mandatory spec, code, and independent
-reviewers, plus the security reviewer when the engine-derived security control is
-selected. Every selected review host records the same
+S3 uses a selected review set: the mandatory spec, code, independent review, and
+goal-verification reviewers, plus the security reviewer when the engine-derived
+security control is selected. Every selected review host records the same
 `context_origin:stage=review=<handle>` wire token, but the R2 lattice keys those
 participants by the recording review skill name rather than by the shared
-`review` stage. The non-review participants are the S2 wave `executor`, the S1
-plan-audit `audit_origin` (paired against the plan's `plan_origin` author),
-`goal`, and `closeout`. The collision lattice is owned per seam so no stage
-re-checks an edge another seam already owns:
+`review` stage. The other review-authority participants are the S2 wave
+`executor` and optional S3 review-finding `fix` handles recorded on reviewer
+evidence; S1 `audit_origin` is owned by the plan gate, not the live S3 review
+seam. The collision lattice is owned per seam so no stage re-checks an edge
+another seam already owns:
+
+Selected reviewer freshness is keyed through
+`verification/suite-result.yaml`, not a silent execution-summary fallback. The
+suite-result record carries the current run-summary version plus the shared
+full-suite and guardrail SAST digests. Missing or mismatched suite-result data
+fails selected S3 review freshness closed; changed shared suite inputs stale the
+selected peer set.
 
 | Seam | Owns | Edges |
 | --- | --- | --- |
 | Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
-| Review authority | every edge among `{executor, audit_origin}` plus the selected review-skill keys | variable: mandatory set has 10, selected security expands it to 15 |
-| Ship authority | every edge introducing `{goal, closeout}` to that selected review base | variable: mandatory set adds 11, selected security expands it to 13 |
+| Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable: mandatory set has 15, selected security expands it to 21 |
+| Ship authority | no additional context-origin edges; ship owns final ordering and closeout presence attestations | 0 |
 
 When a seam fails closed, recovery is to re-run the owning stage or selected
 reviewer in a fresh native subagent so it re-emits a distinct `context_origin`

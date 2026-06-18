@@ -73,7 +73,7 @@ func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "repair restores missing bound worktree scope metadata")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -397,7 +397,7 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "repair reports unreadable execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -434,7 +434,7 @@ func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing
 		slug := createGovernedRequest(t, root, "L2", "repair should converge unreadable execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -535,7 +535,7 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		slug := createGovernedRequest(t, root, "L2", "repair should recover wave execution artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "t-01",
@@ -590,7 +590,7 @@ func TestRepairClearsStaleCheckpointWhenExecutionSummaryUnreadable(t *testing.T)
 		slug := createGovernedRequest(t, root, "L2", "repair should clear stale checkpoint despite unreadable summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "t-01",
@@ -651,7 +651,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "repair should rebuild unreadable wave artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -701,7 +701,7 @@ func TestRepairReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "repair reports malformed task evidence")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -739,7 +739,7 @@ func TestRepairReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
 	})
 }
 
-func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing.T) {
+func TestRepairRebuildsWavePlanButPreservesHistoricalExecutionEvidenceWhenTasksDrifted(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -747,7 +747,7 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		slug := createGovernedRequest(t, root, "L2", "repair should not rewrite drifted historical execution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "t-01",
@@ -796,9 +796,9 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 		var summary repairSummary
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 
-		assert.NotContains(t, summary.MaterializedWavePlans, slug)
+		assert.Contains(t, summary.MaterializedWavePlans, slug)
 		assert.NotContains(t, summary.RecoveredWaveRuns, slug)
-		assert.NotContains(t, summary.ClearedCheckpoints, slug)
+		assert.Contains(t, summary.ClearedCheckpoints, slug)
 		assert.NotContains(t, summary.PrunedTaskEvidence, filepath.ToSlash(filepath.Join(slug, "t-01.json")))
 
 		foundBlocked := false
@@ -808,28 +808,25 @@ func TestRepairDoesNotRewriteHistoricalExecutionStateWhenTasksDrifted(t *testing
 				break
 			}
 		}
-		assert.True(t, foundBlocked, "expected repair summary to report blocked wave-plan reconstruction")
-		require.NotEmpty(t, summary.UnrepairedDrift)
-		foundWavePlanDrift := false
+		assert.False(t, foundBlocked, "wave-plan drift must rebuild the derived plan instead of becoming non-repairable")
 		for _, drift := range summary.UnrepairedDrift {
 			if drift.Target == slug && strings.Contains(drift.Reason, "wave plan repair blocked") {
-				foundWavePlanDrift = true
-				assert.Contains(t, drift.NextAction, "regenerate or rescope")
-				break
+				t.Fatalf("wave-plan drift must not remain a repair blocker: %+v", drift)
 			}
 		}
-		assert.True(t, foundWavePlanDrift, "expected unrepaired drift to keep the wave-plan repair blocker")
 
 		_, err = os.Stat(evidencePath)
 		require.NoError(t, err, "historical task evidence must be preserved")
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
-		_, err = state.LoadWavePlanForChange(root, change)
-		require.Error(t, err, "repair must not materialize a replacement wave-plan when current tasks drifted")
+		wavePlan, err := state.LoadWavePlanForChange(root, change)
+		require.NoError(t, err, "repair must materialize the current derived wave-plan")
+		plannedTasks := state.PlannedTaskIDSet(wavePlan)
+		assert.Contains(t, plannedTasks, "t-02")
+		assert.NotContains(t, plannedTasks, "t-01")
 
-		require.NotNil(t, change.ActiveCheckpoint, "repair must preserve the historical checkpoint when reconstruction is blocked")
-		assert.Equal(t, "t-01", change.ActiveCheckpoint.PausedTaskID)
+		assert.Nil(t, change.ActiveCheckpoint, "repair should clear stale checkpoints that reference tasks outside the current plan")
 	})
 }
 
@@ -1118,15 +1115,13 @@ REQ-001: Original requirement.
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 		assert.NotContains(t, summary.RebuiltExecutionSummaries, slug)
 
-		foundPlanningDrift := false
 		for _, drift := range summary.UnrepairedDrift {
-			if strings.Contains(drift.Target, "tasks.md") &&
-				strings.Contains(drift.Reason, state.StalePlanningEvidenceBlockerToken) {
-				foundPlanningDrift = true
-				assert.Contains(t, drift.NextAction, "plan-audit")
-			}
+			assert.False(t,
+				strings.Contains(drift.Target, "tasks.md") &&
+					strings.Contains(drift.Reason, state.StalePlanningEvidenceBlockerToken),
+				"S3 task-plan amendments belong to review/fix, not local repair",
+			)
 		}
-		assert.True(t, foundPlanningDrift, "expected stale planning evidence to remain unrepaired")
 	})
 }
 

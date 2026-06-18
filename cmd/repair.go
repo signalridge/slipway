@@ -164,6 +164,13 @@ func makeRepairCmd() *cobra.Command {
 
 				for _, slug := range archivedSlugs {
 					if _, err := state.RepairArchivedTerminalStatus(root, slug); err != nil {
+						if state.IsMissingBundleAuthority(err) {
+							summary.NonRepairableFindings = append(
+								summary.NonRepairableFindings,
+								fmt.Sprintf("%s: archived change authority missing: %v", slug, err),
+							)
+							continue
+						}
 						return err
 					}
 				}
@@ -405,6 +412,9 @@ func buildFreshnessRepairDriftFindings(root string, changes []model.Change) []re
 		if diagnostics.Status != "stale" {
 			continue
 		}
+		if state.ExecutionFreshnessIsS3TaskPlanAmendment(change.CurrentState, diagnostics) {
+			continue
+		}
 		target := ""
 		reason := state.StaleExecutionEvidenceBlockerToken
 		nextAction := strings.TrimSpace(diagnostics.NextAction)
@@ -593,7 +603,7 @@ func repairDriftNextAction(reason, target string) string {
 	case strings.Contains(lower, "evidence digest"), strings.Contains(lower, "required_skill_stale"):
 		return governanceDigestRunNextAction(target)
 	case strings.Contains(lower, "wave plan"):
-		return "regenerate or rescope tasks.md and rerun wave orchestration"
+		return "run `slipway repair` to rebuild wave-plan.yaml from current tasks.md, then run `slipway run` to refresh affected execution evidence"
 	case strings.Contains(lower, "execution summary"):
 		return "regenerate execution-summary.yaml from current wave-backed task evidence"
 	case strings.Contains(lower, "change authority"), strings.Contains(lower, "change.yaml"):
@@ -601,7 +611,7 @@ func repairDriftNextAction(reason, target string) string {
 	case strings.Contains(lower, "multiple active changes"):
 		return "run `slipway status` to inspect, then resolve one with `slipway cancel --change <slug>` or `slipway done --change <slug>`"
 	default:
-		return "run `slipway run` to reopen the earliest affected authority and re-run the owning stage"
+		return "run `slipway run` to repair the current lifecycle evidence and continue alignment"
 	}
 }
 
@@ -648,9 +658,9 @@ func buildGovernanceDigestDriftFindings(root string, changes []model.Change) []r
 func governanceDigestRunNextAction(skillName string) string {
 	skillName = strings.TrimSpace(skillName)
 	if skillName == "" {
-		return "run `slipway run` to reopen the earliest affected authority and re-run the owning stage"
+		return "run `slipway run` to repair stale lifecycle evidence and continue alignment"
 	}
-	return fmt.Sprintf("run `slipway run` to reopen the earliest affected authority for %s and re-run the owning stage", skillName)
+	return fmt.Sprintf("run `slipway run` to repair stale lifecycle evidence for %s and continue alignment", skillName)
 }
 
 func repairAppliedFindingStrings(findings []repairAppliedFinding) []string {

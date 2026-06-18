@@ -18,14 +18,14 @@ import (
 
 // TestScopeContractRecoveryGuidanceHasSurfaceParity pins #86 dead-end (4): the
 // scope-contract recovery guidance diagnostic is emitted whenever the contract
-// has blockers, at any lifecycle state (S2_EXECUTE as well as S3/S4) — no
+// has blockers, at any lifecycle state (S2_IMPLEMENT as well as S3) — no
 // state-gated suppression.
 func TestScopeContractRecoveryGuidanceHasSurfaceParity(t *testing.T) {
 	t.Parallel()
 
 	withBlockers := scopecontract.Report{Blockers: []model.ReasonCode{model.NewReasonCode("scope_contract_drift", "")}}
 	assert.True(t, scopeContractNeedsRecoveryGuidance(withBlockers),
-		"scope guidance must surface whenever there are blockers, including at S2_EXECUTE")
+		"scope guidance must surface whenever there are blockers, including at S2_IMPLEMENT")
 
 	clean := scopecontract.Report{}
 	assert.False(t, scopeContractNeedsRecoveryGuidance(clean))
@@ -62,7 +62,7 @@ func evaluateSensitiveMigrationReadiness(t *testing.T, evidenceRef string, migra
 	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 	change := model.NewChange("readiness-sensitive-evidence")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorkflowPreset = model.WorkflowPresetLight
 	require.NoError(t, state.SaveChange(root, change))

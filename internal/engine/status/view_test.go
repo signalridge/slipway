@@ -57,7 +57,7 @@ func TestBuildProjectionKeepsExecutionSummaryProgressInExecutionStates(t *testin
 
 	change := model.NewChange("execution-progress")
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, change.WorkflowPreset))
@@ -95,7 +95,7 @@ func TestBuildProjectionDoesNotSynthesizeWaveProgressWhenWaveRunsAreMissing(t *t
 
 	change := model.NewChange("missing-wave-runs-progress")
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, change.WorkflowPreset))
@@ -141,7 +141,7 @@ func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing
 
 	change := model.NewChange("completed-wave-progress")
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, change.WorkflowPreset))
@@ -186,7 +186,7 @@ func TestBuildProjectionDoesNotLabelCompletedExecutionAsResumableWave(t *testing
 
 func TestBuildProjectionBuildsEvidenceInventoryAndDiagnostics(t *testing.T) {
 	change := model.NewChange("inventory")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 
 	summary := &model.ExecutionSummary{
 		RunSummaryVersion: 7,

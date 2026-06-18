@@ -1,0 +1,34 @@
+{{- define "command-fix-body" -}}
+# Fix
+
+Dispatch fresh-context fixes for S3 review findings.
+
+## Invocation
+```bash
+slipway fix
+slipway fix --json
+slipway fix --reviewer <skill>
+```
+
+## Contract
+- `fix` is the explicit S3 review-finding repair surface.
+- It does not advance lifecycle state and does not run local-integrity repair.
+- It discovers actionable review repair targets from selected reviewer evidence and review blockers.
+- Collect the full selected S3 review batch findings first; do not repair one reviewer finding while other selected reviewers are still reporting.
+- Consolidate findings by root cause into one repair brief for the current `repair_batch_id`.
+- Each repair batch MUST be performed by a fresh-context repair subagent, not inline in the host context.
+- Pass the subagent paths, blockers, reviewer notes, and acceptance target; do not pass the host conversation as authority.
+- The repair subagent may update code, artifacts, tests, and current-change scope/task evidence when needed for the same governed intent.
+- After repair, rerun the affected selected reviewers under separate fresh review contexts.
+- Record reviewer evidence through `slipway evidence skill`, including both:
+  - `context_origin:stage=review=<reviewer-handle>`
+  - `context_origin:stage=fix=<repair-subagent-handle>`
+- Then run `slipway review` to close the finding.
+- Intent conflict is not a fix. If a reviewer records `new_change_required:intent_conflict`, start a new governed change.
+- Do not use `slipway repair` for review findings; `repair` is local integrity only.
+
+## Flags
+- `--json`: JSON output
+- `--reviewer <skill>`: limit repair target discovery to one selected review skill
+- `--change <slug>`: target a specific active change
+{{- end -}}

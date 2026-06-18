@@ -53,14 +53,15 @@ func splitSubjectDetail(detail string) (string, string) {
 type RecoveryClass string
 
 const (
-	RecoveryClassConfirmPreset  RecoveryClass = "confirm_preset"
-	RecoveryClassDiscardChange  RecoveryClass = "discard_change"
-	RecoveryClassSatisfyControl RecoveryClass = "satisfy_control"
-	RecoveryClassReopenEvidence RecoveryClass = "reopen_evidence"
-	RecoveryClassRerunSkill     RecoveryClass = "rerun_skill"
-	RecoveryClassFixScope       RecoveryClass = "fix_scope"
-	RecoveryClassRefreshWave    RecoveryClass = "refresh_execution"
-	RecoveryClassAdvance        RecoveryClass = "advance"
+	RecoveryClassConfirmPreset   RecoveryClass = "confirm_preset"
+	RecoveryClassDiscardChange   RecoveryClass = "discard_change"
+	RecoveryClassNewChange       RecoveryClass = "new_change"
+	RecoveryClassSatisfyControl  RecoveryClass = "satisfy_control"
+	RecoveryClassReviewAlignment RecoveryClass = "review_alignment"
+	RecoveryClassRerunSkill      RecoveryClass = "rerun_skill"
+	RecoveryClassFixScope        RecoveryClass = "fix_scope"
+	RecoveryClassRefreshWave     RecoveryClass = "refresh_execution"
+	RecoveryClassAdvance         RecoveryClass = "advance"
 )
 
 // recoveryClassPriority orders recovery classes from root-most (earliest
@@ -70,9 +71,10 @@ const (
 // higher priority for selecting the single primary command.
 var recoveryClassPriority = []RecoveryClass{
 	RecoveryClassConfirmPreset,
+	RecoveryClassNewChange,
 	RecoveryClassDiscardChange,
 	RecoveryClassSatisfyControl,
-	RecoveryClassReopenEvidence,
+	RecoveryClassReviewAlignment,
 	RecoveryClassRerunSkill,
 	RecoveryClassFixScope,
 	RecoveryClassRefreshWave,
@@ -212,6 +214,21 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassSatisfyControl,
 	},
+	"new_change_required": {
+		Remediation:     "The requested work is no longer the same governed intent; open a new governed change and carry over only the relevant reviewed context.",
+		CommandTemplate: "slipway new",
+		Class:           RecoveryClassNewChange,
+	},
+	"review_required": {
+		Remediation:     "Run review convergence before finalization; review owns plan/code/evidence alignment gates.",
+		CommandTemplate: "slipway review",
+		Class:           RecoveryClassReviewAlignment,
+	},
+	"review_alignment_required": {
+		Remediation:     "Run `slipway fix` to dispatch a fresh-context repair subagent for the stale authority, update code/artifacts/evidence inside the current change, record affected reviewer evidence with `context_origin:stage=fix=<handle>`, then rerun `slipway review`.",
+		CommandTemplate: "slipway fix",
+		Class:           RecoveryClassReviewAlignment,
+	},
 	"preset_confirmation_required": {
 		Remediation:     "Confirm the workflow preset before continuing.",
 		CommandTemplate: "slipway preset <light|standard|strict>",
@@ -238,7 +255,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"incomplete_execution_task": {
-		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or rescope tasks.md to drop it, then re-run wave-orchestration.",
+		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or update tasks.md if the task no longer belongs, then continue wave-orchestration.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
@@ -395,7 +412,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"required_skill_missing": {
-		Remediation:     "Run the {subject} governance skill and record its verification evidence, then advance. In S3 review this means the selected review-set skills: spec-compliance-review, code-quality-review, independent-review, and security-review only when selected by the security control.",
+		Remediation:     "Run the {subject} governance skill and record its skill evidence, then advance. In S3 this means the selected peer skills: spec-compliance-review, code-quality-review, goal-verification, independent-review when selected, and security-review when selected.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
@@ -415,7 +432,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"required_skill_stale": {
-		Remediation:     "Inputs certified by {subject} changed; run Slipway to reopen the earliest affected authority and re-run the owning stage.",
+		Remediation:     "Inputs certified by {subject} changed; repair the owning lifecycle evidence and rerun the current alignment gate.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
@@ -435,14 +452,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRefreshWave,
 	},
 	"stale_planning_evidence": {
-		Remediation:     "Planning artifacts changed after execution evidence; reopen planning audit, then refresh execution evidence in order.",
+		Remediation:     "Planning artifacts changed after execution evidence; repair plan/code alignment, then refresh affected S2+ execution evidence in order.",
 		CommandTemplate: "slipway run",
-		Class:           RecoveryClassReopenEvidence,
-	},
-	"stale_evidence_recovery_available": {
-		Remediation:     "Stale evidence can be recovered by reopening the earliest affected authority.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassReopenEvidence,
+		Class:           RecoveryClassRefreshWave,
 	},
 	"stale_execution_evidence": {
 		Remediation:     "Execution evidence is stale; re-run wave-orchestration for the affected tasks.",
@@ -470,11 +482,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"plan_audit_budget_exhausted": {
-		// rescope is S2_EXECUTE-only (gate.EvaluateGPivot); from S1 plan-audit the
-		// runnable escape is reroute (valid S1-S4) or manual bundle revision.
-		Remediation:     "Plan audit exhausted its checker iteration budget; revise the plan bundle to resolve the outstanding checker feedback and re-run plan-audit, or reroute the change to a different approach.",
-		CommandTemplate: "slipway pivot --reroute",
-		Class:           RecoveryClassSatisfyControl,
+		Remediation:     "Plan audit exhausted its checker iteration budget; revise the plan bundle to resolve the outstanding checker feedback and re-run plan-audit.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
 	},
 	"plan_checker_feedback_required": {
 		Remediation:     "Apply the plan checker feedback to the bundle before re-running plan-audit.",
@@ -482,13 +492,12 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"plan_checker_loop_terminated": {
-		// Same S1 constraint as plan_audit_budget_exhausted: reroute, not rescope.
-		Remediation:     "The plan checker loop terminated before plan audit could pass; revise the plan bundle and re-run plan-audit, or reroute the change to a different approach.",
-		CommandTemplate: "slipway pivot --reroute",
-		Class:           RecoveryClassSatisfyControl,
+		Remediation:     "The plan checker loop terminated before plan audit could pass; revise the plan bundle and re-run plan-audit.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
 	},
 	"verification_evidence_missing": {
-		Remediation:     "Required verification evidence is missing; in S4 recovery re-run goal-verification, then final-closeout.",
+		Remediation:     "Required verification evidence is missing; re-run goal-verification, then final-closeout before done.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        10,
@@ -509,7 +518,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        20,
 	},
 	"closeout_chain_order_invalid": {
-		Remediation:     "The independence-critical verdicts are out of order; re-run the selected review-set skills (spec-compliance-review, code-quality-review, independent-review, and security-review when the security control selected it) so every selected review precedes goal-verification, which precedes final-closeout, then re-run final-closeout.",
+		Remediation:     "Final-closeout is not later than one or more selected S3 peers; re-run final-closeout after the selected S3 peer skills (spec-compliance-review, code-quality-review, goal-verification, independent-review when selected, and security-review when selected) have fresh evidence. Goal-verification is an unordered S3 peer, not a serialized post-review step.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        15,
@@ -548,8 +557,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"review_layer_failed": {
-		Remediation:     "Resolve review findings for layer {subject}, then re-run review.",
-		CommandTemplate: "slipway review",
+		Remediation:     "Run `slipway fix` to dispatch a fresh-context repair subagent for review layer {subject}, then rerun the affected reviewer and `slipway review`.",
+		CommandTemplate: "slipway fix",
 		Class:           RecoveryClassRerunSkill,
 	},
 	"ship_gate_blocked": {
@@ -559,9 +568,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        90,
 	},
 	"scope_contract_drift": {
-		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If a listed file is a build artifact or scratch file, remove it or rely on an existing ignore/local exclude. If it is a legitimate change to keep, amend the owning task's target_files in tasks.md to include it, then re-run — scope is re-derived from the plan and only review/verify evidence covering the change needs re-certification (non-destructive). Reserve `slipway pivot --rescope` for a full re-plan: it resets the change to S0_INTAKE and clears the Approved Summary.",
-		CommandTemplate: "slipway validate",
-		Class:           RecoveryClassFixScope,
+		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If it is legitimate same-intent work, run `slipway fix`, dispatch a fresh-context repair subagent, update the owning task `target_files` in `tasks.md`, refresh affected evidence, and rerun `slipway review`. If the objective changed, open a new governed change.",
+		CommandTemplate: "slipway fix",
+		Class:           RecoveryClassReviewAlignment,
 	},
 	"scope_contract_missing": {
 		Remediation:     "The Scope Contract is missing required target files; add them to the tasks.md plan.",
@@ -579,7 +588,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassFixScope,
 	},
 	"sensitive_evidence_missing": {
-		Remediation:     "Sensitive changed file {detail} is missing owning evidence for {subject}. Run the workflow to stay in or reopen S2_EXECUTE, then record task evidence with `slipway evidence task` using the required marker: schema_migration uses `migration-applied:<command>`, auth_authz uses `auth-review:<review-ref>`, and api_contract uses `contract-test:<test-command>`.",
+		Remediation:     "Sensitive changed file {detail} is missing owning evidence for {subject}. Keep or return to S2_IMPLEMENT through the lifecycle, then record task evidence with `slipway evidence task` using the required marker: schema_migration uses `migration-applied:<command>`, auth_authz uses `auth-review:<review-ref>`, and api_contract uses `contract-test:<test-command>`.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 		SplitDetail:     true,
@@ -635,29 +644,29 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_drift": {
-		Remediation:     "Refresh the wave plan from the current tasks.md before continuing execution.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRefreshWave,
+		Remediation:     "Rebuild the derived wave plan from the current tasks.md, then refresh affected execution evidence.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_load_failed": {
-		Remediation:     "Repair wave-plan.yaml so status can load the authoritative wave plan.",
+		Remediation:     "Repair or rebuild the task-derived wave projection so status can load wave execution state.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_missing": {
-		Remediation:     "Materialize the wave plan from tasks.md before wave execution.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRefreshWave,
+		Remediation:     "Rebuild wave-plan.yaml from the current tasks.md before wave execution.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_repair_blocked": {
-		Remediation:     "Fix the blocking wave plan issue before attempting repair again.",
+		Remediation:     "Rebuild the derived wave plan from current tasks.md, then refresh affected execution evidence.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_unreadable": {
-		Remediation:     "Fix wave-plan.yaml so it is readable, then re-run validation.",
-		CommandTemplate: "slipway validate",
-		Class:           RecoveryClassFixScope,
+		Remediation:     "Rebuild wave-plan.yaml from the current tasks.md before relying on wave execution state.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_run_missing": {
 		Remediation:     "Record passing wave run evidence by re-running wave-orchestration.",
@@ -914,7 +923,7 @@ func groupMessage(code string, rep ReasonCode, size int) string {
 
 // resolveCommandTemplate fills a command template and falls back to a generic
 // advance command if the template needs a subject the blocker did not carry, so
-// a recovery command is never emitted with an empty placeholder.
+// a repair command is never emitted with an empty placeholder.
 func resolveCommandTemplate(template string, parsed ParsedBlocker) string {
 	if template == "" {
 		return ""
@@ -975,14 +984,7 @@ func lessRecoveryStep(a, b RecoveryStep) bool {
 	return a.Code < b.Code
 }
 
-func recoveryPrimaryOverrideRank(step RecoveryStep) int {
-	switch step.Code {
-	case "stale_evidence_recovery_available":
-		return 0
-	default:
-		return 1
-	}
-}
+func recoveryPrimaryOverrideRank(step RecoveryStep) int { return 1 }
 
 func recoveryClassRank(class RecoveryClass) int {
 	for i, c := range recoveryClassPriority {

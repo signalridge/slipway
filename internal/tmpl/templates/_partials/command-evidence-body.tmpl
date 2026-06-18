@@ -3,7 +3,7 @@
 
 Record runtime task evidence for the active execution run, or governance skill
 verification evidence for the current lifecycle host. The wave-orchestration
-host calls `evidence task` once per completed task during `S2_EXECUTE`.
+host calls `evidence task` once per completed task during `S2_IMPLEMENT`.
 Governance hosts call `evidence skill` to write `verification/<skill>.yaml`
 through the CLI instead of hand-editing verification files.
 
@@ -17,7 +17,7 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
 ```
 
 ## Contract
-- Only valid for an active change in `S2_EXECUTE` with a materialized wave plan.
+- Only valid for an active change in `S2_IMPLEMENT` with a materialized wave plan.
 - `--task-id` must exist in `wave-plan.yaml`; `--task-kind` must match the planned kind.
 - `--target-file` defaults to the planned task's target files when omitted.
 - The engine computes `freshness_inputs`; never hand-write the evidence JSON.

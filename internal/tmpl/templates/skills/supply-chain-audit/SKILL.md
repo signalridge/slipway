@@ -4,7 +4,7 @@ domain: review-security
 function: audit third-party dependencies for CVE, provenance, and pinning risk
 tier: T2
 primary_attachment: checklist
-summary: "Use when dependency manifests or lockfiles change. Triggers on review or repair commands or on changes to package/lock files."
+summary: "Use when dependency manifests or lockfiles change. Triggers on review or fix commands or on changes to package/lock files."
 trigger_signals:
   - changed_files_include:
       - "go.mod"
@@ -20,8 +20,8 @@ trigger_signals:
       - "poetry.lock"
       - "uv.lock"
     reason: "Dependency manifest or lockfile changed"
-  - command: ["review", "repair"]
-    reason: "Review or repair command invoked; dependency surface may apply"
+  - command: ["review", "fix"]
+    reason: "Review or fix command invoked; dependency surface may apply"
 evidence_contract: verdict
 hydrate_references:
   - name: results-template.md
@@ -33,7 +33,7 @@ bindings:
     target: review
     attachment: checklist
   - type: command-auto
-    target: repair
+    target: fix
     attachment: tool-recipe
 ---
 

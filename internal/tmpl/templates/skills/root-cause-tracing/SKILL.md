@@ -4,10 +4,10 @@ domain: debugging
 function: trace root cause before attempting fixes; branch competing hypotheses when traces disagree
 tier: T1
 primary_attachment: procedure
-summary: "Use when a fix is being considered before the root cause is documented. Triggers on repair, wave-orchestration host, or debugging-centric user text."
+summary: "Use when a fix is being considered before the root cause is documented. Triggers on fix, wave-orchestration host, or debugging-centric user text."
 trigger_signals:
-  - command: repair
-    reason: "repair command invoked; block fixes until root cause is documented"
+  - command: fix
+    reason: "fix command invoked; block fixes until root cause is documented"
   - host: wave-orchestration
     reason: "Execution host may be masking a missing root-cause step"
   - user_text_matches: ["debug", "crash", "flaky", "regression"]
@@ -25,7 +25,7 @@ bindings:
     target: wave-orchestration
     attachment: procedure
   - type: command-auto
-    target: repair
+    target: fix
     attachment: procedure
   - type: technique-hint
     target: wave-orchestration

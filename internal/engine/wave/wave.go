@@ -33,7 +33,6 @@ const (
 	ControlDecisionRetry     ControlDecision = "retry"
 	ControlDecisionSkip      ControlDecision = "skip"
 	ControlDecisionAbortWave ControlDecision = "abort_wave"
-	ControlDecisionPivot     ControlDecision = "pivot"
 )
 
 type ControlCheckpoint struct {
@@ -43,10 +42,9 @@ type ControlCheckpoint struct {
 }
 
 type ExecutionResult struct {
-	TaskResults   map[string]model.TaskRun `json:"task_results"`
-	Checkpoint    *ControlCheckpoint       `json:"checkpoint,omitempty"`
-	PivotRequired bool                     `json:"pivot_required,omitempty"`
-	Aborted       bool                     `json:"aborted,omitempty"`
+	TaskResults map[string]model.TaskRun `json:"task_results"`
+	Checkpoint  *ControlCheckpoint       `json:"checkpoint,omitempty"`
+	Aborted     bool                     `json:"aborted,omitempty"`
 }
 
 // PlanWaves computes the wave assignment for the given tasks from their

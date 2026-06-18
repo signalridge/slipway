@@ -29,10 +29,9 @@ type TraceabilityInput struct {
 	SchemaName model.ArtifactSchemaName
 	// LifecycleState is the change's current workflow state. It makes
 	// closeout-time checks (per-requirement assurance coverage verdicts)
-	// stage-aware: before S3_REVIEW those gaps are advisory because the
-	// assurance verdicts are authored during review/verify, while at and after
-	// S3_REVIEW they remain blocking. An empty/unknown state stays fail-closed
-	// (blocking).
+	// stage-aware: before S3_REVIEW those gaps are advisory because assurance
+	// verdicts are authored at the retained review/ship gate, while S3_REVIEW,
+	// DONE, and unknown non-empty states remain blocking. The transitional
 	LifecycleState model.WorkflowState
 	// AssuranceOptional is true when the effective workflow preset does not
 	// require assurance.md. The zero value preserves standard/strict behavior.
@@ -42,33 +41,30 @@ type TraceabilityInput struct {
 	ArtifactResolver func(artifactName string) string
 }
 
-// assuranceVerdictsExpectedLater reports whether the change is still before the
-// review phase, where per-requirement assurance coverage verdicts have not yet
-// been authored. For those states, a missing assurance verdict is expected and
-// must not be a blocking traceability incident. Any other state — including an
-// empty/unknown state — is treated as at/after review, keeping the assurance
-// gaps fail-closed.
-func assuranceVerdictsExpectedLater(state model.WorkflowState) bool {
+// assuranceVerdictsBlockingNow reports whether per-requirement assurance
+// coverage verdicts are blocking in the current lifecycle state. S3_REVIEW is
+// the retained review/ship gate. Unknown non-empty states still fail closed.
+func assuranceVerdictsBlockingNow(state model.WorkflowState) bool {
 	switch state {
-	case model.StateS0Intake, model.StateS1Plan, model.StateS2Execute:
-		return true
-	default:
+	case model.StateS0Intake, model.StateS1Plan, model.StateS2Implement:
 		return false
+	default:
+		return true
 	}
 }
 
 func assuranceArtifactRequiredNow(state model.WorkflowState) bool {
 	switch state {
-	case model.StateS3Review, model.StateS4Verify, model.StateDone:
+	case model.StateS3Review, model.StateDone:
 		return true
 	case "":
 		// Empty state means the caller did not provide lifecycle context, which is
 		// still used by standalone traceability scans. Preserve that mode: if an
 		// assurance file exists, its contents are checked below, but mere absence is
-		// not a lifecycle blocker without an explicit review/verify/done state.
+		// not a lifecycle blocker without an explicit review/ship/done state.
 		return false
 	default:
-		return !assuranceVerdictsExpectedLater(state)
+		return assuranceVerdictsBlockingNow(state)
 	}
 }
 
@@ -250,10 +246,11 @@ func EvaluateTraceability(input TraceabilityInput) model.TraceabilitySummary {
 	}
 
 	// Check: assurance must include per-requirement coverage verdicts.
-	// These verdicts are authored during review/verify, so before S3_REVIEW a
-	// missing verdict is expected and reported as a non-blocking warning; at and
-	// after review (and for an unknown state) it fails closed.
-	assuranceBlocking := !assuranceVerdictsExpectedLater(input.LifecycleState)
+	// These verdicts are authored at S3_REVIEW, the retained review/ship gate.
+	// Before S3_REVIEW a missing verdict is expected and reported as a
+	// non-blocking warning; at S3_REVIEW, DONE, and unknown states it fails
+	// closed.
+	assuranceBlocking := assuranceVerdictsBlockingNow(input.LifecycleState)
 	assuranceRequiredNow := assuranceBlocking &&
 		!input.AssuranceOptional &&
 		assuranceArtifactRequiredNow(input.LifecycleState)

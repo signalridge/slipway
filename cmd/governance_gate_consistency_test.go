@@ -32,7 +32,7 @@ func TestGateStatusUsesPlanningEvidenceAcrossStatusValidateAndNext(t *testing.T)
 	normalizedWT, err := state.NormalizePath(worktreeRoot)
 	require.NoError(t, err)
 	changeBeforeWT := change
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = normalizedWT
 	change.WorktreeBranch = branch
@@ -234,6 +234,7 @@ func TestMissingReviewEvidenceBlockersIncludeSelectedReviewSetAcrossStatusValida
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
+		progression.SkillGoalVerification,
 	}, nextResp.NextSkill.SelectedReviewSkills)
 }
 
@@ -325,7 +326,7 @@ func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
 	slug := createGovernedRequest(t, root, "L2", "done should reuse shared ship gate result")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -362,7 +363,7 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 	slug := createGovernedRequest(t, root, "L2", "ship-only blockers should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.BaseRef = ""
 	require.NoError(t, state.SaveChange(root, change))
@@ -371,8 +372,10 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 	writeAssuranceMD(t, root, slug, validAssuranceContent())
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
+	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{})
 	writePassingReviewEvidencePack(t, root, slug, 1)
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
 

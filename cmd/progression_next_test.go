@@ -23,19 +23,23 @@ func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *tes
 	t.Parallel()
 
 	change := model.NewChange("passing-display-skill")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
+	passingRecord := model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Timestamp: time.Now().UTC(),
+	}
 	readiness := progression.GovernanceReadiness{
 		PassingSkills: map[string]model.VerificationRecord{
-			progression.SkillGoalVerification: {
-				Verdict:   model.VerificationVerdictPass,
-				Timestamp: time.Now().UTC(),
-			},
+			progression.SkillSpecComplianceReview: passingRecord,
+			progression.SkillCodeQualityReview:    passingRecord,
+			progression.SkillIndependentReview:    passingRecord,
+			progression.SkillGoalVerification:     passingRecord,
 		},
 	}
 
 	assert.Nil(t, buildActionableNextSkillView(change, readiness))
 
-	view := nextView{CurrentState: model.StateS4Verify}
+	view := nextView{CurrentState: model.StateS3Review}
 	err := assembleSkillViewWithOptions(
 		t.TempDir(),
 		&view,
@@ -50,7 +54,7 @@ func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *tes
 	)
 	require.NoError(t, err)
 	assert.Nil(t, view.NextSkill)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S4_VERIFY")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S3_REVIEW")
 }
 
 func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
@@ -121,7 +125,7 @@ func TestNextS0ResearchActionReportsRunGuidanceWithoutPrematureScopeGate(t *test
 	})
 }
 
-func TestNextS3ReviewWithPassingEvidenceReportsRunGuidance(t *testing.T) {
+func TestNextS3ReviewWithPassingPeerEvidenceReportsGoalVerificationHandoff(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -140,9 +144,10 @@ func TestNextS3ReviewWithPassingEvidenceReportsRunGuidance(t *testing.T) {
 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
 	require.NoError(t, err)
-	assert.Nil(t, view.NextSkill)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S3_REVIEW")
-	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:goal-verification")
+	assert.Equal(t, "skill_handoff:"+progression.SkillGoalVerification, view.ConfirmationRequirement.Reason)
 	for _, blocker := range view.Blockers {
 		if blocker.Code == "no_skill_required" {
 			assert.NotEqual(t, model.ReasonSeverityError, blocker.Severity)
@@ -150,39 +155,34 @@ func TestNextS3ReviewWithPassingEvidenceReportsRunGuidance(t *testing.T) {
 	}
 }
 
-func TestNextStalePlanningEvidenceReportsRecoveryRunGuidance(t *testing.T) {
+func TestNextStalePlanningEvidenceReportsReviewAlignmentHandoff(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range []struct {
-		name  string
-		state model.WorkflowState
-	}{
-		{name: "review", state: model.StateS3Review},
-		{name: "verify", state: model.StateS4Verify},
-	} {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			root := t.TempDir()
-			slug, _ := prepareStalePlanningRecoveryFixture(t, root, tt.state)
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
 
-			view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
-			require.NoError(t, err)
+	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	require.NoError(t, err)
 
-			assert.Nil(t, view.NextSkill)
-			assert.Equal(t, tt.state, view.CurrentState)
-			reasons := model.ReasonSpecs(view.Blockers)
-			assert.Contains(t, reasons, "stale_planning_evidence")
-			assert.Contains(t, reasons, "run_slipway_run_to_advance:"+string(tt.state))
-			assert.Contains(t, reasons, "stale_evidence_recovery_available:S1_PLAN/audit")
-			assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, model.StateS3Review, view.CurrentState)
+	assert.NotEqual(t, progression.SkillPlanAudit, view.NextSkill.Name)
+	reasons := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
+	assert.NotContains(t, reasons, "required_skill_stale:plan-audit:")
+	assert.NotContains(t, reasons, "required_skill_stale:wave-orchestration:")
+	assert.NotContains(t, reasons, "required_skill_stale:intake-clarification:")
+	assert.NotContains(t, reasons, state.StalePlanningEvidenceBlockerToken)
+	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
+	assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
+	require.NotNil(t, view.FreshnessDiagnostics)
+	assert.Equal(t, "fresh", view.FreshnessDiagnostics.Status)
+	assert.Empty(t, view.FreshnessDiagnostics.StalePairs)
+	assert.Contains(t, view.Warnings, state.S3TaskPlanAmendmentDiagnostic)
 
-			loaded, err := state.LoadChange(root, slug)
-			require.NoError(t, err)
-			assert.Equal(t, tt.state, loaded.CurrentState, "next must remain read-only")
-			assert.Equal(t, model.PlanSubStepNone, loaded.PlanSubStep)
-		})
-	}
+	loaded, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS3Review, loaded.CurrentState, "next must remain read-only")
+	assert.Equal(t, model.PlanSubStepNone, loaded.PlanSubStep)
 }
 
 func TestNextS0ConfirmWithoutApprovedSummaryDoesNotReportRunGuidance(t *testing.T) {
@@ -256,7 +256,7 @@ func TestNextS1BundleSurfacesPlanAuditHandoff(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
 		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S1_PLAN")
 		assert.Contains(t, strings.Join(view.Warnings, "\n"), "S1_PLAN/bundle")
@@ -418,15 +418,14 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "done_ready", view.Advanced.Action)
-	require.Len(t, view.Advanced.AutoPassedStates, 1)
-	assert.Equal(t, model.StateS4Verify, view.Advanced.AutoPassedStates[0].State)
+	assert.Empty(t, view.Advanced.AutoPassedStates)
 	assert.Empty(t, view.AutoPassEligible)
 	assert.Nil(t, view.NextSkill)
 
 	updated, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS4Verify, updated.CurrentState)
-	require.Len(t, updated.LastAutoPassedStates, 1)
+	assert.Equal(t, model.StateS3Review, updated.CurrentState)
+	assert.Empty(t, updated.LastAutoPassedStates)
 }
 
 func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) {
@@ -453,16 +452,15 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, false, true)
 	require.NoError(t, err)
 	require.NotNil(t, view.Advanced)
-	assert.Equal(t, "advanced", view.Advanced.Action)
+	assert.Equal(t, "done_ready", view.Advanced.Action)
 	assert.Empty(t, view.Advanced.AutoPassedStates)
-	require.Len(t, view.AutoPassEligible, 1)
-	assert.Equal(t, model.StateS4Verify, view.AutoPassEligible[0].State)
+	assert.Empty(t, view.AutoPassEligible)
 	assert.Nil(t, view.NextSkill)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S4_VERIFY")
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 
 	updated, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS4Verify, updated.CurrentState)
+	assert.Equal(t, model.StateS3Review, updated.CurrentState)
 	assert.Empty(t, updated.LastAutoPassedStates)
 }
 
@@ -493,7 +491,7 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 		if view.Advanced != nil {
 			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing execution-summary blockers")
 		}
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
 	})
 }
@@ -505,11 +503,11 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "verify auto-pass still requires goal verification")
+		slug := createGovernedRequest(t, root, "L2", "done-ready still requires goal verification")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = model.WorkflowPresetLight
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -534,11 +532,11 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		assert.Equal(t, model.StateS4Verify, view.CurrentState)
+		assert.Equal(t, model.StateS3Review, view.CurrentState)
 		if view.Advanced != nil {
 			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing goal-verification evidence")
 		}
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
 	})
 }
@@ -566,7 +564,7 @@ func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
 		if view.Advanced != nil {
 			assert.Empty(t, view.Advanced.AutoPassedStates)
@@ -584,7 +582,7 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "goal verification hint contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -660,7 +658,7 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
 		assert.Empty(t, view.NextSkill.TechniqueHints)
 	})
@@ -675,7 +673,7 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 	slug := createGovernedRequest(t, root, "L2", "final closeout hint contract")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.QualityMode = model.QualityModeFull
 	require.NoError(t, state.SaveChange(root, change))
@@ -688,16 +686,10 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 		root,
 		view,
 		changeRef{Slug: slug},
-		progression.AdvanceSummary{Action: "query", FromState: model.StateS4Verify},
+		progression.AdvanceSummary{Action: "query", FromState: model.StateS3Review},
 		&change,
 		nil,
-		map[string]model.VerificationRecord{
-			progression.SkillGoalVerification: {
-				Verdict:   model.VerificationVerdictPass,
-				Blockers:  []model.ReasonCode{},
-				Timestamp: time.Now().UTC(),
-			},
-		},
+		passingSelectedReviewAndGoalEvidenceForNextSkillTests(1),
 		nil,
 		true,
 	)
@@ -705,6 +697,36 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 	require.NotNil(t, view.NextSkill)
 	assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
 	assert.Empty(t, view.NextSkill.TechniqueHints)
+}
+
+func passingSelectedReviewAndGoalEvidenceForNextSkillTests(runVersion int) map[string]model.VerificationRecord {
+	now := time.Now().UTC()
+	out := map[string]model.VerificationRecord{}
+	for _, skillName := range []string{
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillGoalVerification,
+	} {
+		out[skillName] = model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  now,
+			RunVersion: runVersion,
+		}
+	}
+	return out
+}
+
+func reviewBatchSkillNames(batch *reviewBatchView) []string {
+	if batch == nil {
+		return nil
+	}
+	names := make([]string, 0, len(batch.Skills))
+	for _, skill := range batch.Skills {
+		names = append(names, skill.Name)
+	}
+	return names
 }
 
 func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
@@ -813,6 +835,7 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, view.NextSkill.SelectedReviewSkills)
 		require.NotNil(t, view.NextSkill.ReviewContext)
@@ -822,6 +845,18 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
 		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:R3=pass")
 		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
+		require.NotNil(t, view.ReviewBatch)
+		assert.Equal(t, "parallel", view.ReviewBatch.Mode)
+		assert.Equal(t, string(model.StateS3Review), view.ReviewBatch.State)
+		assert.ElementsMatch(t, []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}, reviewBatchSkillNames(view.ReviewBatch))
+		assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
+		assert.Equal(t, "review_batch", view.ConfirmationRequirement.NextActionKind)
 	})
 }
 
@@ -915,6 +950,7 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
 		}, view.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
@@ -1052,6 +1088,7 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}
 
@@ -1074,6 +1111,14 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Contains(t, handoff.NextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.Contains(t, handoff.NextSkill.RequiredTokens, "layer:IR3=pass")
 		assert.NotContains(t, handoff.NextSkill.RequiredTokens, "layer:R0=pass")
+		require.NotNil(t, handoff.ReviewBatch)
+		assert.Equal(t, "parallel", handoff.ReviewBatch.Mode)
+		assert.ElementsMatch(t, []string{
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}, reviewBatchSkillNames(handoff.ReviewBatch))
 
 		nextDiagCmd := commandForRoot(t, root, makeNextCmd())
 		nextDiagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -1086,6 +1131,14 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Equal(t, progression.SkillCodeQualityReview, nextDiag.NextSkill.Name)
 		assert.ElementsMatch(t, selectedReviewSkills, nextDiag.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, nextDiag.NextSkill.RequiredTokens, "layer:IR1=pass")
+		require.NotNil(t, nextDiag.ReviewBatch)
+		assert.ElementsMatch(t, []string{
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}, reviewBatchSkillNames(nextDiag.ReviewBatch))
+		assert.Equal(t, "review_batch", nextDiag.ConfirmationRequirement.Reason)
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
 		validateCmd.SetArgs([]string{"--json", "--change", slug})
@@ -1117,6 +1170,14 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Empty(t, runView.NextSkill.BlockingName)
 		assert.ElementsMatch(t, selectedReviewSkills, runView.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, runView.NextSkill.RequiredTokens, "layer:IR1=pass")
+		require.NotNil(t, runView.ReviewBatch)
+		assert.ElementsMatch(t, []string{
+			progression.SkillCodeQualityReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}, reviewBatchSkillNames(runView.ReviewBatch))
+		assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
 	})
 }
 
@@ -1128,29 +1189,22 @@ func TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking(t *testing.T) {
 
 	change := model.NewChange("optional-final-closeout")
 	change.QualityMode = model.QualityModeStandard
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 
 	view := nextView{
 		Slug:         change.Slug,
-		CurrentState: model.StateS4Verify,
+		CurrentState: model.StateS3Review,
 		InputContext: nextContext{WorkspaceRoot: root},
 	}
 	err := assembleSkillViewWithOptions(
 		root,
 		&view,
 		changeRef{Slug: change.Slug},
-		progression.AdvanceSummary{Action: "blocked", FromState: model.StateS4Verify, Blockers: []model.ReasonCode{model.NewReasonCode("ship_gate_blocked", "assurance.md")}},
+		progression.AdvanceSummary{Action: "blocked", FromState: model.StateS3Review, Blockers: []model.ReasonCode{model.NewReasonCode("ship_gate_blocked", "assurance.md")}},
 		&change,
 		nil,
-		map[string]model.VerificationRecord{
-			progression.SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				Blockers:   []model.ReasonCode{},
-				Timestamp:  time.Now().UTC(),
-				RunVersion: 1,
-			},
-		},
+		passingSelectedReviewAndGoalEvidenceForNextSkillTests(1),
 		nil,
 		true,
 		handoffSkillViewOptions,
@@ -1340,7 +1394,7 @@ func TestShouldExposeAdvancedSummaryToCaller(t *testing.T) {
 	assert.True(t, shouldExposeAdvancedSummaryToCaller(progression.AdvanceSummary{
 		Action:    "advanced",
 		FromState: model.StateS1Plan,
-		ToState:   model.StateS2Execute,
+		ToState:   model.StateS2Implement,
 	}))
 }
 
@@ -1411,7 +1465,7 @@ REQ-001: The plan audit path MUST advance only when the task checklist is valid.
 #### Scenario: Advance only on a valid checklist
 GIVEN a governed change with passing plan-audit evidence and a valid task checklist
 WHEN next evaluates planning readiness
-THEN the change advances to S2_EXECUTE.
+THEN the change advances to S2_IMPLEMENT.
 `)))
 	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`
 - [ ] `+"`t-01`"+` implement plan audit checks
@@ -1435,11 +1489,11 @@ THEN the change advances to S2_EXECUTE.
 	assert.Equal(t, "advanced", view.Advanced.Action)
 	assert.Equal(t, model.StateS1Plan, view.Advanced.FromState)
 	// Audit clean path: post-audit machine validation runs inline.
-	// If validation passes, it advances to S2_EXECUTE.
+	// If validation passes, it advances to S2_IMPLEMENT.
 	// If it fails, it persists at S1_PLAN/validate.
 	// This test provides sufficient artifacts for the clean path.
-	assert.Equal(t, model.StateS2Execute, view.Advanced.ToState)
-	assert.Equal(t, model.StateS2Execute, view.CurrentState)
+	assert.Equal(t, model.StateS2Implement, view.Advanced.ToState)
+	assert.Equal(t, model.StateS2Implement, view.CurrentState)
 }
 
 func TestNextReadOnlyReportsRunGuidanceAfterPassingPlanAudit(t *testing.T) {
@@ -1756,7 +1810,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	require.NoError(t, err)
 
 	change.WorkflowPreset = model.WorkflowPresetLight
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1777,7 +1831,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "done_ready", view.Advanced.Action)
-	assert.Equal(t, model.StateS4Verify, view.CurrentState)
+	assert.Equal(t, model.StateS3Review, view.CurrentState)
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 	assert.Contains(t, view.Warnings, "optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired")
@@ -1791,7 +1845,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	require.NoError(t, json.Unmarshal(out.Bytes(), &handoff))
 	assert.Nil(t, handoff.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "run_slipway_done_to_finalize")
-	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S4_VERIFY")
+	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S3_REVIEW")
 }
 
 func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(t *testing.T) {
@@ -1805,7 +1859,7 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 	require.NoError(t, err)
 
 	change.QualityMode = model.QualityModeStandard
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1825,7 +1879,7 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "done_ready", view.Advanced.Action)
-	assert.Equal(t, model.StateS4Verify, view.CurrentState)
+	assert.Equal(t, model.StateS3Review, view.CurrentState)
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
@@ -1845,7 +1899,7 @@ func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.
 
 		change.WorkflowPreset = model.WorkflowPresetStandard
 		change.QualityMode = model.QualityModeStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -1868,7 +1922,7 @@ func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		require.NotNil(t, view.NextSkill)
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
 		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:final-closeout")
 
@@ -1896,7 +1950,7 @@ func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -2244,12 +2298,12 @@ func TestNextHandoffViewStopBudgetKeepsRecoveryPathsWithoutDiagnostics(t *testin
 		Slug:            "budget-stop",
 		Phase:           model.PhaseBuilding,
 		ExecutionMode:   governedExecutionMode,
-		CurrentState:    model.StateS2Execute,
+		CurrentState:    model.StateS2Implement,
 		LifecycleStatus: string(model.ChangeStatusActive),
 		NextSkill: &nextSkillView{
 			Name:            progression.SkillWaveOrchestration,
 			VerificationDir: "artifacts/changes/budget-stop/verification/wave-orchestration",
-			State:           string(model.StateS2Execute),
+			State:           string(model.StateS2Implement),
 		},
 		InputContext: nextContext{
 			WorkspaceRoot:  "/repo",
@@ -2320,7 +2374,7 @@ func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:   "task-01",
@@ -2350,7 +2404,7 @@ func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort without wave-backed state should not require resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -2383,7 +2437,7 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort with wave-backed state should require resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -2421,6 +2475,19 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "resume_required", cliErr.ErrorCode)
 
+		implementCmd := commandForRoot(t, root, makeImplementCmd())
+		implementCmd.SetArgs([]string{"--json", "--change", slug})
+		var implementOut bytes.Buffer
+		implementCmd.SetOut(&implementOut)
+		implementCmd.SetErr(&implementOut)
+		err = implementCmd.Execute()
+		require.Error(t, err)
+		cliErr = asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "resume_required", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "`slipway implement --resume`")
+		assert.NotContains(t, cliErr.Remediation, "`slipway run --resume`")
+
 		resumeCmd := commandForRoot(t, root, makeRunCmd())
 		resumeCmd.SetArgs([]string{"--json", "--resume", "--change", slug})
 		var resumeOut bytes.Buffer
@@ -2430,6 +2497,69 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.True(t, after.InterruptedExecutionAt.IsZero())
+	})
+}
+
+func TestRunDoesNotRequireResumeWhenPlanningEvidenceIsStale(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "stale planning should not resume old wave")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Implement
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writePassingExecutionSummary(t, root, slug, 1, "task-01")
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` preserve completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` continue next wave after abort
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		materializeWaveExecutionForSummary(t, root, slug)
+
+		abortCmd := commandForRoot(t, root, makeAbortCmd())
+		abortCmd.SetArgs([]string{"--json", "--change", slug})
+		var abortOut bytes.Buffer
+		abortCmd.SetOut(&abortOut)
+		require.NoError(t, abortCmd.Execute())
+
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
+- [x] `+"`task-01`"+` preserve completed first wave
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-02`"+` continue next wave after abort
+  - depends_on: ["task-01"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+
+- [ ] `+"`task-03`"+` changed planning evidence after abort
+  - depends_on: ["task-02"]
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`)))
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		runCmd.SetErr(&runOut)
+		require.NoError(t, runCmd.Execute())
+		assert.NotContains(t, runOut.String(), "resume_required")
+		assert.Contains(t, runOut.String(), "stale_planning_evidence")
 	})
 }
 
@@ -2444,7 +2574,7 @@ func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -2501,7 +2631,7 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -2541,18 +2671,18 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 	})
 }
 
-func TestRunRejectsResumeResponseWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+func TestRunRejectsResumeResponseWhenCheckpointTaskIsMissingFromCurrentTasks(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when pre-summary wave plan is missing")
+		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when checkpoint task is missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -2571,7 +2701,7 @@ func TestRunRejectsResumeResponseWhenWavePlanIsMissingBeforeExecutionSummaryRead
 
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "wave_plan_missing", cliErr.ErrorCode)
+		assert.Equal(t, "checkpoint_task_missing_from_wave_plan", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 
 		after, loadErr := state.LoadChange(root, slug)
@@ -2592,7 +2722,7 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -2632,18 +2762,18 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 	})
 }
 
-func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummaryReady(t *testing.T) {
+func TestNextRejectsCheckpointContextWhenCheckpointTaskIsMissingFromCurrentTasks(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should fail closed when pre-summary checkpoint wave plan is missing")
+		slug := createGovernedRequest(t, root, "L2", "next should fail closed when checkpoint task is missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -2662,7 +2792,7 @@ func TestNextRejectsCheckpointContextWhenWavePlanIsMissingBeforeExecutionSummary
 
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "wave_plan_missing", cliErr.ErrorCode)
+		assert.Equal(t, "checkpoint_task_missing_from_wave_plan", cliErr.ErrorCode)
 		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 
 		after, loadErr := state.LoadChange(root, slug)
@@ -2683,7 +2813,7 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -2750,7 +2880,7 @@ func TestRunResumeUnavailableExplainsLifecycleBoundary(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "resume_unavailable", cliErr.ErrorCode)
 		assert.Equal(t, model.StateS3Review, cliErr.Details["current_state"])
-		assert.Contains(t, cliErr.Remediation, "S2_EXECUTE")
+		assert.Contains(t, cliErr.Remediation, "S2_IMPLEMENT")
 	})
 }
 
@@ -2765,7 +2895,7 @@ func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:     "task-02",
@@ -2876,7 +3006,7 @@ func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
 	t.Parallel()
 	t.Run("informational resume progress does not stop run", func(t *testing.T) {
 		view := nextView{
-			CurrentState: model.StateS2Execute,
+			CurrentState: model.StateS2Implement,
 			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
 			InputContext: nextContext{
 				ResumeCheckpoint: &resumeCheckpoint{
@@ -2891,7 +3021,7 @@ func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
 
 	t.Run("checkpoint response payload does not stop run", func(t *testing.T) {
 		view := nextView{
-			CurrentState: model.StateS2Execute,
+			CurrentState: model.StateS2Implement,
 			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
 			InputContext: nextContext{
 				ResumeCheckpoint: &resumeCheckpoint{
@@ -2907,7 +3037,7 @@ func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
 
 	t.Run("pending checkpoint still stops run", func(t *testing.T) {
 		view := nextView{
-			CurrentState: model.StateS2Execute,
+			CurrentState: model.StateS2Implement,
 			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
 			InputContext: nextContext{
 				ResumeCheckpoint: &resumeCheckpoint{
@@ -2934,7 +3064,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 
 		// Set to wave execution state with persisted execution summary
 		// and some completed tasks to trigger resume checkpoint.
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "task-01")
@@ -2974,7 +3104,7 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
@@ -3021,7 +3151,7 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
@@ -3067,7 +3197,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -3150,7 +3280,7 @@ func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
 				change, err := state.LoadChange(root, slug)
 				require.NoError(t, err)
 
-				change.CurrentState = model.StateS2Execute
+				change.CurrentState = model.StateS2Implement
 				change.PlanSubStep = model.PlanSubStepNone
 				require.NoError(t, state.SaveChange(root, change))
 
@@ -3195,24 +3325,24 @@ func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
 	}
 }
 
-func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
+func TestNextPreviewUsesCurrentTasksDuringS2Implementation(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "authoritative wave plan should win during execution")
+		slug := createGovernedRequest(t, root, "L2", "current tasks should drive S2 wave preview")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
-- [ ] `+"`t-01`"+` authoritative wave task
+- [ ] `+"`t-01`"+` initial wave task before S2 amendment
   - depends_on: []
   - target_files: ["cmd/next.go"]
   - task_kind: code
@@ -3221,7 +3351,7 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
-- [ ] `+"`t-01`"+` mutated tasks.md should not replace authoritative wave plan
+- [ ] `+"`t-01`"+` amended S2 task should drive live wave preview
   - depends_on: []
   - target_files: ["cmd/run.go"]
   - task_kind: code
@@ -3254,8 +3384,8 @@ func TestNextPreviewUsesAuthoritativeWavePlanDuringExecution(t *testing.T) {
 
 		firstTask, ok := rawTasks[0].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "authoritative wave task", firstTask["objective"])
-		assert.Equal(t, []any{"cmd/next.go"}, firstTask["target_files"])
+		assert.Equal(t, "amended S2 task should drive live wave preview", firstTask["objective"])
+		assert.Equal(t, []any{"cmd/run.go"}, firstTask["target_files"])
 	})
 }
 
@@ -3270,7 +3400,7 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-09",
@@ -3341,7 +3471,7 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -3402,7 +3532,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 
 		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-01.json")
@@ -3837,7 +3967,7 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 	slug := createGovernedRequest(t, root, "L2", "materialize run summary")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -3897,7 +4027,7 @@ func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) 
 	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
 	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task")
 	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
-	assert.Equal(t, model.StateS2Execute, view.CurrentState)
+	assert.Equal(t, model.StateS2Implement, view.CurrentState)
 }
 
 func TestReadOnlyS2DiagnosticsKeepSingleRunSummaryMissingForAbsentTaskEvidence(t *testing.T) {
@@ -3940,7 +4070,7 @@ func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *
 	slug := createGovernedRequest(t, root, "L2", "surface stale task evidence diagnostics")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -4038,7 +4168,7 @@ func prepareMissingTaskEvidenceForWaveRunSummaryFixture(t *testing.T) (string, s
 	slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -4122,7 +4252,16 @@ func writeTaskEvidenceFile(t *testing.T, root, slug string, runSummaryVersion in
 		payload["evidence_ref"] = "test:" + taskID
 	}
 	if _, ok := payload["captured_at"]; !ok {
-		payload["captured_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+		capturedAt := time.Now().UTC()
+		if summary, err := state.LoadExecutionSummary(root, slug); err == nil {
+			for _, task := range summary.Tasks {
+				if task.TaskID == taskID && !task.CapturedAt.IsZero() {
+					capturedAt = task.CapturedAt.UTC()
+					break
+				}
+			}
+		}
+		payload["captured_at"] = capturedAt.Format(time.RFC3339Nano)
 	}
 	if _, ok := payload["freshness_inputs"]; !ok {
 		change, err := state.LoadChange(root, slug)

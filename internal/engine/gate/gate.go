@@ -12,15 +12,7 @@ type GateID string
 const (
 	GateScope GateID = "G_scope"
 	GatePlan  GateID = "G_plan"
-	GatePivot GateID = "G_pivot"
 	GateShip  GateID = "G_ship"
-)
-
-type PivotKind string
-
-const (
-	PivotKindReroute PivotKind = "reroute"
-	PivotKindRescope PivotKind = "rescope"
 )
 
 type GateEvaluation struct {
@@ -63,13 +55,10 @@ func EvaluateGScope(
 	}
 }
 
-func EvaluateGPlan(bundleReady bool, planAuditPass bool, blockers []model.ReasonCode) GateEvaluation {
+func EvaluateGPlan(bundleReady bool, blockers []model.ReasonCode) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
 	if !bundleReady {
 		reasonCodes = append(reasonCodes, model.NewReasonCode("artifact_not_ready", ""))
-	}
-	if !planAuditPass {
-		reasonCodes = append(reasonCodes, model.NewReasonCode("plan_audit_failed", ""))
 	}
 	reasonCodes = append(reasonCodes, blockers...)
 
@@ -85,47 +74,6 @@ func EvaluateGPlan(bundleReady bool, planAuditPass bool, blockers []model.Reason
 	}
 }
 
-func EvaluateGPivot(kind PivotKind, approved bool, state model.WorkflowState) GateEvaluation {
-	reasonCodes := []model.ReasonCode{}
-	if kind != PivotKindReroute && kind != PivotKindRescope {
-		reasonCodes = append(reasonCodes, model.NewReasonCode("invalid_pivot_kind", string(kind)))
-	}
-	if !approved {
-		reasonCodes = append(reasonCodes, model.NewReasonCode("pivot_not_approved", ""))
-	}
-	switch kind {
-	case PivotKindReroute:
-		switch state {
-		case model.StateS1Plan, model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
-			// OK: reroute is available from planning through verification.
-		default:
-			reasonCodes = append(reasonCodes, model.NewReasonCode("pivot_state_invalid", string(state)))
-		}
-	case PivotKindRescope:
-		switch state {
-		case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
-			// OK: rescope is reachable once execution has begun. It resets the
-			// change to S0_INTAKE regardless of the starting state, so restricting
-			// it to S2_EXECUTE only stranded changes whose stale review/verify
-			// evidence had already reopened them to S3_REVIEW/S4_VERIFY, leaving the
-			// documented scope-drift recovery (`slipway pivot --rescope`) unreachable.
-		default:
-			reasonCodes = append(reasonCodes, model.NewReasonCode("rescope_state_invalid", string(state)))
-		}
-	}
-
-	reasonCodes = model.NormalizeReasonCodes(reasonCodes)
-	status := model.GateStatusApproved
-	if len(reasonCodes) > 0 {
-		status = model.GateStatusBlocked
-	}
-	return GateEvaluation{
-		GateID:      GatePivot,
-		Status:      status,
-		ReasonCodes: reasonCodes,
-	}
-}
-
 func EvaluateGShip(
 	change model.Change,
 	artifactReady bool,
@@ -135,6 +83,12 @@ func EvaluateGShip(
 	highRiskChecks map[string]bool,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
+	if change.CurrentState != model.StateS3Review {
+		reasonCodes = append(
+			reasonCodes,
+			model.NewReasonCode("review_required", "ship_gate_s3_exit:"+string(change.CurrentState)),
+		)
+	}
 	if !artifactReady {
 		reasonCodes = append(reasonCodes, model.NewReasonCode("artifact_not_ready", ""))
 	}

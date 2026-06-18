@@ -31,13 +31,53 @@ func TestStatusViewIncludesLifecycleTimeline(t *testing.T) {
 		AfterState:  model.StateS1Plan,
 	})
 	require.NoError(t, err)
+	_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+		EventID:     "event-status-2",
+		OccurredAt:  time.Date(2026, 5, 24, 1, 3, 3, 0, time.UTC),
+		Command:     "run",
+		EventType:   "state.transitioned",
+		Action:      "advanced",
+		Result:      "advanced",
+		BeforeState: model.StateS1Plan,
+		AfterState:  model.StateS2Implement,
+	})
+	require.NoError(t, err)
+
+	view, err := buildStatusViewFromChange(root, change)
+	require.NoError(t, err)
+	require.Len(t, view.Timeline, 2)
+	assert.Equal(t, "event-status-1", view.Timeline[0].EventID)
+	assert.Equal(t, "state.transitioned", view.Timeline[0].EventType)
+	assert.Equal(t, "2026-05-24T01:02:03Z", view.Timeline[0].OccurredAt)
+	assert.Equal(t, model.StateS2Implement, view.Timeline[1].ToState)
+}
+
+func TestStatusTimelineCanonicalizesRetiredWorkflowStates(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("timeline-retired-state")
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+	_, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+		EventID:     "event-retired-state",
+		OccurredAt:  time.Date(2026, 6, 18, 1, 2, 3, 0, time.UTC),
+		Command:     "run",
+		EventType:   "state.transitioned",
+		Action:      "advanced",
+		Result:      "advanced",
+		BeforeState: model.RetiredStateS2Execute,
+		AfterState:  model.RetiredStateS4Verify,
+	})
+	require.NoError(t, err)
 
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
 	require.Len(t, view.Timeline, 1)
-	assert.Equal(t, "event-status-1", view.Timeline[0].EventID)
-	assert.Equal(t, "state.transitioned", view.Timeline[0].EventType)
-	assert.Equal(t, "2026-05-24T01:02:03Z", view.Timeline[0].OccurredAt)
+	assert.Equal(t, model.StateS2Implement, view.Timeline[0].FromState)
+	assert.Equal(t, model.StateS3Review, view.Timeline[0].ToState)
 }
 
 func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
@@ -61,7 +101,7 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 		Action:       "advanced",
 		Reason:       "state_progression",
 		Result:       "advanced",
-		BeforeState:  model.StateS2Execute,
+		BeforeState:  model.StateS2Implement,
 		AfterState:   model.StateS3Review,
 		EvidenceRefs: evidenceRefs,
 	}
@@ -75,7 +115,7 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 		Action:       "advanced",
 		Reason:       "verification_evidence_consumed",
 		Result:       "recorded",
-		BeforeState:  model.StateS2Execute,
+		BeforeState:  model.StateS2Implement,
 		AfterState:   model.StateS3Review,
 		SkillID:      "wave-orchestration",
 		EvidenceRefs: evidenceRefs,
@@ -88,15 +128,15 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 	_, err = state.AppendLifecycleEvent(root, change, duplicateTransition)
 	require.NoError(t, err)
 	_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
-		EventID:     "event-recovery-1",
+		EventID:     "event-repair-1",
 		OccurredAt:  time.Date(2026, 6, 15, 17, 11, 12, 0, time.UTC),
 		Command:     "run",
-		EventType:   "state.transitioned",
-		Action:      "advanced",
-		Reason:      "stale_evidence_recovery_started",
-		Result:      "advanced",
-		BeforeState: model.StateS4Verify,
-		AfterState:  model.StateS1Plan,
+		EventType:   "state.blocked",
+		Action:      "blocked",
+		Reason:      "stale_evidence_requires_review_alignment",
+		Result:      "blocked",
+		BeforeState: model.StateS3Review,
+		AfterState:  model.StateS3Review,
 	})
 	require.NoError(t, err)
 	_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
@@ -108,7 +148,7 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 		Reason:      "state_progression",
 		Result:      "advanced",
 		BeforeState: model.StateS1Plan,
-		AfterState:  model.StateS2Execute,
+		AfterState:  model.StateS2Implement,
 	})
 	require.NoError(t, err)
 	reexecutedTransition := firstTransition
@@ -124,7 +164,7 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 	assert.Equal(t, "skill.evidence_recorded", view.Timeline[1].EventType)
 	assert.Equal(t, "state.transition.replayed", view.Timeline[2].EventType)
 	assert.Equal(t, "event-transition-2", view.Timeline[2].EventID)
-	assert.Equal(t, model.StateS2Execute, view.Timeline[2].FromState)
+	assert.Equal(t, model.StateS2Implement, view.Timeline[2].FromState)
 	assert.Equal(t, model.StateS3Review, view.Timeline[2].ToState)
 	assert.Equal(t, "state.transitioned", view.Timeline[5].EventType)
 	assert.Equal(t, "event-transition-3", view.Timeline[5].EventID)

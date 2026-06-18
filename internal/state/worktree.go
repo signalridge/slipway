@@ -273,7 +273,7 @@ func ValidateChangeWorktree(root string, change model.Change) (model.WorktreeVal
 			return result, nil
 		}
 		switch change.CurrentState {
-		case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+		case model.StateS2Implement, model.StateS3Review:
 			result.Blockers = []model.ReasonCode{model.NewReasonCode(WorktreeReasonMetadataRequired, "")}
 		}
 		return result, nil

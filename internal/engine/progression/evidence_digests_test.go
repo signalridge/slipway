@@ -2,6 +2,7 @@ package progression
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,7 +172,7 @@ func TestGovernedSkillInputDigestsCoverStageAuthorities(t *testing.T) {
 	} {
 		assert.Contains(t, planAudit.Inputs, rel)
 	}
-	assert.NotContains(t, planAudit.Inputs, "assurance.md", "S1 plan-audit does not own the S4 assurance contract")
+	assert.NotContains(t, planAudit.Inputs, "assurance.md", "S1 plan-audit does not own the closeout assurance contract")
 
 	finalCloseout, err := certifiedSkillInputDigest(root, change, SkillFinalCloseout, summary)
 	require.NoError(t, err)
@@ -425,7 +426,7 @@ func TestMissingWaveDigestEntryStampsCurrentRuntimeTaskEvidenceWithoutTimestampR
 
 	root := t.TempDir()
 	change := model.NewChange("missing-wave-digest-stamps-current")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 	writeTasksAndMaterializeWavePlan(t, root, change, uncheckedDigestTasks())
 	plan, err := state.LoadWavePlanForChange(root, change)
@@ -483,7 +484,7 @@ func TestStampPassingSkillDigestsDoesNotBlockCurrentStageOnFutureAcceptedEvidenc
 	t.Parallel()
 
 	root, change := createReviewInputDigestFixture(t)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
 	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 	writeTasksAndMaterializeWavePlan(t, root, change, uncheckedDigestTasks())
@@ -588,13 +589,13 @@ func TestStampPassingSkillDigestsStampsPreviouslyConsumedEvidenceWithoutLegacyEv
 	require.Empty(t, firstStamp.Blockers)
 }
 
-func TestStampPassingSkillDigestsStampsPreviouslyAcceptedResearchWithoutStoredDigest(t *testing.T) {
+func TestStampPassingSkillDigestsDoesNotBackfillEarlierResearchAfterPlanningClosed(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	change := model.NewChange("previously-accepted-research-missing-digest")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
@@ -622,9 +623,11 @@ func TestStampPassingSkillDigestsStampsPreviouslyAcceptedResearchWithoutStoredDi
 	require.NoError(t, err)
 	require.Empty(t, result.Blockers)
 
-	digests, err := state.LoadEvidenceDigestsForChange(root, change)
+	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
 	require.NoError(t, err)
-	assert.Contains(t, digests.Skills, SkillResearchOrchestration)
+	if digests != nil {
+		assert.NotContains(t, digests.Skills, SkillResearchOrchestration)
+	}
 }
 
 func TestStampPassingSkillDigestsUsesStoredDigestForPreviouslyAcceptedPlanAuditCheckboxWriteback(t *testing.T) {
@@ -633,7 +636,7 @@ func TestStampPassingSkillDigestsUsesStoredDigestForPreviouslyAcceptedPlanAuditC
 	root := t.TempDir()
 	change := model.NewChange("plan-audit-checkbox-writeback")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
@@ -857,13 +860,13 @@ func TestFeatureActiveMissingDigestEntryBackfillsWhenInputsUnchanged(t *testing.
 	assert.Contains(t, digests.Skills, SkillPlanAudit)
 }
 
-func TestStampPassingSkillDigestsBackfillsFeatureActiveMissingResearchDigestWhenUnchanged(t *testing.T) {
+func TestStampPassingSkillDigestsDoesNotBackfillFeatureActiveMissingResearchDigestAfterPlanningClosed(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	change := model.NewChange("feature-active-research-digest")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
@@ -902,7 +905,8 @@ func TestStampPassingSkillDigestsBackfillsFeatureActiveMissingResearchDigestWhen
 	require.Empty(t, result.Blockers)
 	digests, err := state.LoadEvidenceDigestsForChange(root, change)
 	require.NoError(t, err)
-	assert.Contains(t, digests.Skills, SkillResearchOrchestration, "missing digest entry is stamped from the current accepted inputs")
+	assert.NotContains(t, digests.Skills, SkillResearchOrchestration,
+		"closed planning evidence is no longer backfilled after S2/S3; review owns later alignment")
 
 	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepResearch)
 	require.NoError(t, err)
@@ -944,7 +948,7 @@ func TestStoredGoalDigestStalesWhenInputContentChanges(t *testing.T) {
 	t.Parallel()
 
 	root, change := createReviewInputDigestFixture(t)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
@@ -964,7 +968,63 @@ func TestStoredGoalDigestStalesWhenInputContentChanges(t *testing.T) {
 	assert.Contains(t, blockers, "required_skill_stale:goal-verification:tracked.go")
 }
 
-func TestGoalAndCloseoutDigestIgnoresEvidenceRefOnlyChangeYAMLMutation(t *testing.T) {
+func TestReviewWorkspaceInputPathsIncludeGitErrorMarkers(t *testing.T) {
+	t.Parallel()
+
+	paths := state.ResolvedChangePaths{
+		WorkspaceRoot: filepath.Join(t.TempDir(), "missing-workspace"),
+	}
+
+	inputs := reviewWorkspaceInputPaths(paths)
+	assert.Contains(t, inputs, "__git_error__/diff_name_only")
+	assert.Contains(t, inputs, "__git_error__/ls_files_others")
+}
+
+func TestSelectedS3ReviewerDigestRequiresSuiteResult(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixtureWithoutSuiteResult(t)
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 15, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillSpecComplianceReview, record)
+
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
+	require.NoError(t, err)
+	assert.NotContains(t, passing, SkillSpecComplianceReview)
+	assert.Contains(t, blockers, "required_skill_stale:spec-compliance-review:input_digest_unavailable")
+}
+
+func TestGoalVerificationDigestStalesWhenSharedSuiteInputsChange(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 20, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:full-suite-v2")
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:goal-verification:suite-result:full_suite")
+	assert.NotContains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
+func TestGoalAndCloseoutDigestIgnoresRuntimeOnlyChangeYAMLMutation(t *testing.T) {
 	t.Parallel()
 
 	for _, skillName := range []string{SkillGoalVerification, SkillFinalCloseout} {
@@ -972,7 +1032,7 @@ func TestGoalAndCloseoutDigestIgnoresEvidenceRefOnlyChangeYAMLMutation(t *testin
 			t.Parallel()
 
 			root, change := createReviewInputDigestFixture(t)
-			change.CurrentState = model.StateS4Verify
+			change.CurrentState = model.StateS3Review
 			require.NoError(t, state.SaveChange(root, change))
 			changeYAMLRel := filepath.ToSlash(filepath.Join("artifacts", "changes", change.Slug, "change.yaml"))
 			summary := digestPolicyExecutionSummary(change, []string{changeYAMLRel})
@@ -989,6 +1049,25 @@ func TestGoalAndCloseoutDigestIgnoresEvidenceRefOnlyChangeYAMLMutation(t *testin
 			require.NoError(t, state.SaveChange(root, change))
 
 			blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
+			require.NoError(t, err)
+			assert.NotContains(t, blockers, "required_skill_stale:"+skillName+":"+changeYAMLRel)
+			assert.Empty(t, blockers)
+
+			change.Artifacts["intent"] = model.ArtifactState{
+				ID:          "intent",
+				State:       model.ArtifactLifecycleDraft,
+				ContentHash: "runtime-refresh",
+				UpdatedAt:   time.Date(2026, 6, 4, 1, 5, 0, 0, time.UTC),
+			}
+			change.LastAutoPassedStates = []model.AutoPassedState{{
+				State:  model.StateS3Review,
+				Reason: "done_ready",
+			}}
+			change.ReviewIntentDriftFailures = 2
+			change.InterruptedExecutionAt = time.Date(2026, 6, 4, 1, 7, 0, 0, time.UTC)
+			require.NoError(t, state.SaveChange(root, change))
+
+			blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, skillName, summary)
 			require.NoError(t, err)
 			assert.NotContains(t, blockers, "required_skill_stale:"+skillName+":"+changeYAMLRel)
 			assert.Empty(t, blockers)
@@ -1074,12 +1153,96 @@ func TestStoredReviewDigestStalesWhenInputFileIsDeleted(t *testing.T) {
 	assert.Contains(t, blockers, "required_skill_stale:independent-review:tracked.go")
 }
 
+func TestStoredReviewAndGoalDigestsStaleWhenPlanArtifactsChange(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	verdictAt := time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC)
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  verdictAt,
+		RunVersion: 1,
+	}
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` revised review scope
+  - target_files: ["tracked.go"]
+  - task_kind: code
+  - acceptance: updated task scope remains in current S3 review alignment
+`), 0o644))
+
+	reviewBlockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, summary)
+	require.NoError(t, err)
+	assert.Contains(t, reviewBlockers, "required_skill_stale:independent-review:tasks.md")
+
+	goalBlockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, goalBlockers, "required_skill_stale:goal-verification:tasks.md")
+}
+
+func TestStoredReviewAndGoalDigestsStaleWhenOnlyTaskTargetsChange(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	verdictAt := time.Date(2026, 6, 4, 1, 30, 0, 0, time.UTC)
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  verdictAt,
+		RunVersion: 1,
+	}
+	reviewBase, err := certifiedSkillInputDigest(root, change, SkillIndependentReview, summary)
+	require.NoError(t, err)
+	goalBase, err := certifiedSkillInputDigest(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	require.Contains(t, reviewBase.Inputs, "tasks.md:scope")
+	require.Contains(t, goalBase.Inputs, "tasks.md:scope")
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIndependentReview, record, summary))
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(scopeOnlyDigestTasks()), 0o644))
+
+	reviewCurrent, err := certifiedSkillInputDigest(root, change, SkillIndependentReview, summary)
+	require.NoError(t, err)
+	assert.Equal(t, reviewBase.Inputs["tasks.md"], reviewCurrent.Inputs["tasks.md"])
+	assert.NotEqual(t, reviewBase.Inputs["tasks.md:scope"], reviewCurrent.Inputs["tasks.md:scope"])
+
+	goalCurrent, err := certifiedSkillInputDigest(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Equal(t, goalBase.Inputs["tasks.md"], goalCurrent.Inputs["tasks.md"])
+	assert.NotEqual(t, goalBase.Inputs["tasks.md:scope"], goalCurrent.Inputs["tasks.md:scope"])
+
+	reviewBlockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillIndependentReview, summary)
+	require.NoError(t, err)
+	assert.Contains(t, reviewBlockers, "required_skill_stale:independent-review:tasks.md")
+	assert.NotContains(t, reviewBlockers, "required_skill_stale:independent-review:tasks.md:scope")
+
+	goalBlockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, goalBlockers, "required_skill_stale:goal-verification:tasks.md")
+	assert.NotContains(t, goalBlockers, "required_skill_stale:goal-verification:tasks.md:scope")
+}
+
 func TestGatePlanningSkillRecordsPreservesStaleDigestArtifactName(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	change := model.NewChange("gate-plan-stale-digest")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
@@ -1103,7 +1266,7 @@ func TestExecutionSummaryFreshnessUsesTaskPlanHashNotTaskMTime(t *testing.T) {
 
 	root := t.TempDir()
 	change := model.NewChange("execution-summary-digest")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, uncheckedDigestTasks())
 	plan, err := state.LoadWavePlanForChange(root, change)
@@ -1292,7 +1455,7 @@ func TestDiffClassReviewInputDigestIncludesSecurityAndIndependentReview(t *testi
 	}
 }
 
-func TestReviewInputDigestExcludesIgnoredAndRuntimeEvidence(t *testing.T) {
+func TestReviewInputDigestIncludesSuiteResultAndExcludesRuntimeEvidenceChurn(t *testing.T) {
 	t.Parallel()
 
 	root, change := createReviewInputDigestFixture(t)
@@ -1300,6 +1463,8 @@ func TestReviewInputDigestExcludesIgnoredAndRuntimeEvidence(t *testing.T) {
 
 	base, err := certifiedSkillInputDigest(root, change, SkillSpecComplianceReview, summary)
 	require.NoError(t, err)
+	assert.Contains(t, base.Inputs, "suite-result:run_summary_version")
+	assert.Contains(t, base.Inputs, "suite-result:full_suite")
 	assert.NotContains(t, base.Inputs, "execution-summary.yaml")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "ignored.tmp"), []byte("ignored\n"), 0o644))
 	runtimeDir := filepath.Join(state.ChangeDir(root, change.Slug), "evidence", "tasks")
@@ -1307,8 +1472,10 @@ func TestReviewInputDigestExcludesIgnoredAndRuntimeEvidence(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "t-01.json"), []byte("{}\n"), 0o644))
 	regeneratedSummary := *summary
 	regeneratedSummary.CapturedAt = regeneratedSummary.CapturedAt.Add(time.Hour)
+	regeneratedSummary.Tasks[0].CapturedAt = regeneratedSummary.Tasks[0].CapturedAt.Add(time.Hour)
 	current, err := certifiedSkillInputDigest(root, change, SkillSpecComplianceReview, &regeneratedSummary)
 	require.NoError(t, err)
+	assert.Contains(t, current.Inputs, "suite-result:run_summary_version")
 	assert.NotContains(t, current.Inputs, "execution-summary.yaml")
 
 	fresh, changed := model.EvidenceFreshness(base, current.Inputs)
@@ -1328,7 +1495,7 @@ func TestReviewInputDigestExcludesGovernedChangeBundles(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, base.Inputs, bundleRel)
 
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte("# Assurance\nchanged after review\n"), 0o644))
 	archivedPath := filepath.Join(root, "artifacts", "changes", "archived", "other-change", "change.yaml")
@@ -1369,6 +1536,40 @@ func TestGoalVerificationInputDigestIgnoresUnrelatedUntrackedUnlessSummarized(t 
 	assert.Contains(t, changed, "scratch.go")
 }
 
+func TestGoalVerificationInputDigestExcludesEngineOwnedBundleChurn(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	eventsDir := filepath.Join(bundleDir, "events")
+	verificationDir := filepath.Join(bundleDir, "verification")
+	require.NoError(t, os.MkdirAll(eventsDir, 0o755))
+	require.NoError(t, os.MkdirAll(verificationDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(eventsDir, "lifecycle.jsonl"), []byte("event: one\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, "goal-verification.yaml"), []byte("verdict: pass\n"), 0o644))
+
+	summary := digestPolicyExecutionSummary(change, []string{"artifacts/changes/" + change.Slug + "/**"})
+	base, err := certifiedSkillInputDigest(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.NotContains(t, base.Inputs, "artifacts/changes/"+change.Slug+"/events/lifecycle.jsonl")
+	assert.NotContains(t, base.Inputs, "artifacts/changes/"+change.Slug+"/verification/goal-verification.yaml")
+
+	require.NoError(t, os.WriteFile(filepath.Join(eventsDir, "lifecycle.jsonl"), []byte("event: two\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, "security-review.yaml"), []byte("verdict: pass\n"), 0o644))
+	current, err := certifiedSkillInputDigest(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	fresh, changed := model.EvidenceFreshness(base, current.Inputs)
+	require.True(t, fresh)
+	assert.Empty(t, changed)
+
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte("# Decision\nchanged authority\n"), 0o644))
+	authoredChange, err := certifiedSkillInputDigest(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	fresh, changed = model.EvidenceFreshness(current, authoredChange.Inputs)
+	require.False(t, fresh)
+	assert.Contains(t, changed, "artifacts/changes/"+change.Slug+"/decision.md")
+}
+
 func TestGoalAndFinalCloseoutInputDigestExcludesExecutionSummaryMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1385,15 +1586,18 @@ func TestGoalAndFinalCloseoutInputDigestExcludesExecutionSummaryMetadata(t *test
 			require.NoError(t, err)
 			require.Contains(t, base.Inputs, "changed_target_files")
 			require.Contains(t, base.Inputs, "tracked.go")
-			assert.NotContains(t, base.Inputs, "execution-summary.yaml")
-			assert.NotContains(t, base.Inputs, "run_summary_version")
-			assert.NotContains(t, base.Inputs, "tasks_plan_hash")
 			if skillName == SkillFinalCloseout {
 				assert.Contains(t, base.Inputs, "assurance.md")
 			}
+			assert.Contains(t, base.Inputs, "suite-result:run_summary_version")
+			assert.Contains(t, base.Inputs, "suite-result:full_suite")
+			assert.NotContains(t, base.Inputs, "execution-summary.yaml")
+			assert.NotContains(t, base.Inputs, "run_summary_version")
+			assert.NotContains(t, base.Inputs, "tasks_plan_hash")
 
 			regeneratedSummary := *summary
 			regeneratedSummary.CapturedAt = summary.CapturedAt.Add(time.Hour)
+			regeneratedSummary.Tasks[0].CapturedAt = summary.Tasks[0].CapturedAt.Add(time.Hour)
 			current, err := certifiedSkillInputDigest(root, change, skillName, &regeneratedSummary)
 			require.NoError(t, err)
 
@@ -1477,20 +1681,20 @@ func TestFinalCloseoutInputDigestIncludesAssuranceEvenWhenNotSummarized(t *testi
 	assert.Contains(t, changed, "assurance.md")
 }
 
-func TestS4ShipGateReopensWhenStoredReviewDigestIsStale(t *testing.T) {
+func TestS4ShipGateBlocksForReviewAlignmentWhenStoredReviewDigestIsStale(t *testing.T) {
 	t.Parallel()
 
 	root, change := createReviewInputDigestFixture(t)
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.NeedsDiscovery = false
 	change.WorkflowPreset = model.WorkflowPresetStandard
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\nINT-001: ship digest replacement.\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
-### Requirement: Review digest recovery
-REQ-001: S4 ship gate approval reopens stale review digests. Traces to INT-001.
+### Requirement: Review digest repair
+REQ-001: S3 ship gate approval blocks stale review digests for review alignment. Traces to INT-001.
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
 - [x] `+"`t-01`"+` update digest input
@@ -1553,22 +1757,34 @@ REQ-001: S4 ship gate approval reopens stale review digests. Traces to INT-001.
 
 	advanced, err := AdvanceGoverned(root, change.Slug)
 	require.NoError(t, err)
-	require.Equal(t, "advanced", advanced.Action, "advanced=%+v", advanced)
-	assert.Equal(t, model.StateS4Verify, advanced.FromState)
-	assert.Equal(t, model.StateS3Review, advanced.ToState)
-	assert.Equal(t, "stale_evidence_recovery_started", advanced.Reason)
-	assert.True(t, advanced.RecoveryOnly)
+	require.Equal(t, "blocked", advanced.Action, "advanced=%+v", advanced)
+	assert.Equal(t, model.StateS3Review, advanced.FromState)
+	assert.Empty(t, advanced.ToState)
+	assert.Equal(t, "stale_evidence_requires_review_alignment", advanced.Reason)
+	assert.False(t, advanced.RecoveryOnly)
 
 	digests, err := state.LoadEvidenceDigestsForChange(root, change)
 	require.NoError(t, err)
 	for _, skillName := range []string{SkillSpecComplianceReview, SkillCodeQualityReview} {
-		assert.NotContains(t, digests.Skills, skillName, "%s digest should be pruned with stale review evidence", skillName)
+		assert.Contains(t, digests.Skills, skillName, "%s digest should be preserved until review alignment replaces it", skillName)
 	}
 	assert.NotContains(t, digests.Skills, SkillGoalVerification)
 	assert.NotContains(t, digests.Skills, SkillFinalCloseout)
 }
 
 func createReviewInputDigestFixture(t *testing.T) (string, model.Change) {
+	t.Helper()
+
+	return createReviewInputDigestFixtureWithSuiteResult(t, true)
+}
+
+func createReviewInputDigestFixtureWithoutSuiteResult(t *testing.T) (string, model.Change) {
+	t.Helper()
+
+	return createReviewInputDigestFixtureWithSuiteResult(t, false)
+}
+
+func createReviewInputDigestFixtureWithSuiteResult(t *testing.T, withSuiteResult bool) (string, model.Change) {
 	t.Helper()
 
 	root := t.TempDir()
@@ -1581,9 +1797,30 @@ func createReviewInputDigestFixture(t *testing.T) (string, model.Change) {
 	change := model.NewChange("digest-policy")
 	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	if withSuiteResult {
+		writeSuiteResultForDigestTest(t, root, change, 1, "sha256:full-suite-v1")
+	}
 	gitForReadinessOptimizationTests(t, root, "add", ".")
 	gitForReadinessOptimizationTests(t, root, "commit", "-m", "change")
 	return root, change
+}
+
+func writeSuiteResultForDigestTest(t *testing.T, root string, change model.Change, runVersion int, fullSuiteDigest string) {
+	t.Helper()
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	verificationDir := filepath.Join(bundleDir, "verification")
+	require.NoError(t, os.MkdirAll(verificationDir, 0o755))
+	if strings.TrimSpace(fullSuiteDigest) == "" {
+		fullSuiteDigest = "sha256:full-suite-v1"
+	}
+	content := fmt.Sprintf(`version: %d
+run_summary_version: %d
+full_suite_digest: %q
+`, model.SuiteResultVersion, runVersion, fullSuiteDigest)
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, suiteResultFileName), []byte(content), 0o644))
 }
 
 func digestPolicyExecutionSummary(change model.Change, targetFiles []string) *model.ExecutionSummary {
@@ -1650,7 +1887,7 @@ func scopeOnlyDigestTasks() string {
 	return `# Tasks
 
 - [ ] ` + "`t-01`" + ` prove digest freshness
-  - target_files: ["internal/engine/progression/stale_evidence_recovery.go"]
+  - target_files: ["internal/engine/progression/evidence_repair.go"]
   - task_kind: test
   - acceptance: digest contract is covered
 `
@@ -1677,7 +1914,7 @@ Verification records are fixture-authored.
 Review, goal, and closeout records exist for run_version 1.
 
 ## Requirement Coverage
-Digest replacement at S4 is covered.
+Digest replacement at closeout is covered.
 
 ## Residual Risks and Exceptions
 No residual fixture risk.

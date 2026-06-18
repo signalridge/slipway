@@ -1,7 +1,8 @@
 {{- define "command-run-body" -}}
 # Run
 
-Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome.
+Shortcut-drive the current lifecycle stage until it surfaces a next skill,
+blocker, checkpoint, or done-ready outcome.
 
 ## Invocation
 ```bash
@@ -11,7 +12,10 @@ slipway run --resume-response "<response>" --json
 ```
 
 ## Contract
-- `run` owns continuous governed execution.
+- `run` is an auto-driver shortcut. The primary stage commands are `intake`,
+  `plan`, `implement`, `review`, and `done`.
+- JSON output includes `delegated_to` so hosts can see which primary stage
+  command `run` invoked for the current state.
 - `run --resume` resumes governed execution from the latest incomplete wave when no active checkpoint exists.
 - `run --resume-response "<response>"` resumes an active checkpoint and consumes the checkpoint payload.
 - When returned JSON includes `input_context.resume_checkpoint.user_response_payload`, carry that response and `checkpoint_type` into the next execution skill; do not drop or rewrite operator input.
@@ -44,10 +48,12 @@ or `slipway next --json`:
 - If `context_budget.guard_action` equals `stop`, stop execution, preserve the returned recovery paths, and resume in a fresh context.
 
 ## Fresh Reviewer Pause Rule
-When `run` reaches a governed review skill (`spec-compliance-review`,
-`code-quality-review`, `independent-review`, selected `security-review`, or
-`final-closeout`), stop and hand off to a fresh reviewer agent. Do not let the
-same long-running execution context review its own prior implementation work.
+When `run` reaches a selected S3 peer reviewer (`spec-compliance-review`,
+`code-quality-review`, `independent-review`, `goal-verification`, plus
+`security-review` when selected), stop and hand off to a fresh reviewer agent.
+Do not let the same long-running execution context review its own prior
+implementation work. `final-closeout` is the last closeout step after the
+selected peer set, not a selected S3 peer.
 
 ## Subagent Continuation Rule (HARD RULE)
 After any checkpoint pause, user intervention, or governed review handoff, a fresh subagent MUST be spawned to continue execution. Do not resume in the same context that produced the prior evidence.

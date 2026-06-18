@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// issue227TwoWavePlan seeds an S2_EXECUTE change with a two-wave plan: wave 1
+// twoWavePlanForResumeTest seeds an S2_IMPLEMENT change with a two-wave plan: wave 1
 // holds task-a, wave 2 holds task-b (which depends on task-a).
-func issue227TwoWavePlan(t *testing.T) (string, model.Change) {
+func twoWavePlanForResumeTest(t *testing.T) (string, model.Change) {
 	t.Helper()
 	root := t.TempDir()
 	change := model.NewChange("wave-boundary")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	writeTasksAndMaterializeWavePlan(t, root, change, "# Tasks\n\n"+
@@ -35,7 +35,7 @@ func issue227TwoWavePlan(t *testing.T) (string, model.Change) {
 	return root, change
 }
 
-func issue227WriteTaskEvidence(t *testing.T, root string, change model.Change, taskID string, changedFiles []string) {
+func writeTaskEvidenceForResumeTest(t *testing.T, root string, change model.Change, taskID string, changedFiles []string) {
 	t.Helper()
 	payload := map[string]any{
 		"task_id":             taskID,
@@ -56,10 +56,10 @@ func issue227WriteTaskEvidence(t *testing.T, root string, change model.Change, t
 }
 
 // Without any per-task evidence, the resolver reports "no usable evidence" so the
-// caller keeps its wave-1 default (issue #227a).
-func TestIssue227ResumeWaveIndexFromTaskEvidenceNoEvidence(t *testing.T) {
+// caller keeps its wave-1 default.
+func TestResumeWaveIndexFromTaskEvidenceNoEvidence(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
+	root, change := twoWavePlanForResumeTest(t)
 	plan, err := state.LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
 
@@ -71,11 +71,11 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceNoEvidence(t *testing.T) {
 
 // With only wave 1's task recorded as passing, the resolver derives wave 2 as the
 // current incomplete wave — the boundary that the documented per-task-evidence
-// flow must be able to checkpoint before any run summary exists (issue #227a).
-func TestIssue227ResumeWaveIndexFromTaskEvidenceCompletesFirstWave(t *testing.T) {
+// flow must be able to checkpoint before any run summary exists.
+func TestResumeWaveIndexFromTaskEvidenceCompletesFirstWave(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
-	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	root, change := twoWavePlanForResumeTest(t)
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
 	plan, err := state.LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
 
@@ -87,11 +87,11 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceCompletesFirstWave(t *testing.T)
 
 // When every wave's task is recorded passing, the resolver reports index 0
 // (all-waves-passed), distinct from the no-evidence case via the derived flag.
-func TestIssue227ResumeWaveIndexFromTaskEvidenceAllWavesPassed(t *testing.T) {
+func TestResumeWaveIndexFromTaskEvidenceAllWavesPassed(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
-	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
-	issue227WriteTaskEvidence(t, root, change, "task-b", []string{"cmd/evidence.go"})
+	root, change := twoWavePlanForResumeTest(t)
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-b", []string{"cmd/evidence.go"})
 	plan, err := state.LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
 
@@ -104,12 +104,12 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceAllWavesPassed(t *testing.T) {
 // A malformed task-evidence file must be soft-tolerated, exactly like the
 // read-only sibling surfaces (LoadExecutionTasksFromEvidence), instead of making
 // checkpoint hard-fail. The resolver reports the safe wave-1 default
-// (derived=false) with no error (issue #227a review follow-up).
-func TestIssue227ResumeWaveIndexFromTaskEvidenceToleratesMalformedFile(t *testing.T) {
+// (derived=false) with no error.
+func TestResumeWaveIndexFromTaskEvidenceToleratesMalformedFile(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
+	root, change := twoWavePlanForResumeTest(t)
 	// A valid wave-1 record plus a corrupt sibling file in the same directory.
-	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
 	corrupt := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "task-b.json")
 	require.NoError(t, os.WriteFile(corrupt, []byte("{not valid json"), 0o644))
 
@@ -125,12 +125,12 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceToleratesMalformedFile(t *testin
 // Task-evidence files spanning more than one run version are ambiguous: the
 // resolver cannot pick a single authoritative run, so it reports no usable
 // evidence (derived=false) and the caller keeps the safe wave-1 default rather
-// than guessing (issue #227a).
-func TestIssue227ResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.T) {
+// than guessing.
+func TestResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
+	root, change := twoWavePlanForResumeTest(t)
 	// task-a at run version 1, task-b at run version 2 — two distinct versions.
-	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
 	dir := state.EvidenceTasksDir(root, change.Slug)
 	v2 := map[string]any{
 		"task_id":             "task-b",
@@ -158,11 +158,11 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.
 
 // Non-JSON siblings (and subdirectories) in the task-evidence directory are
 // skipped during run-version detection; a valid wave-1 record alongside them
-// still drives the resume index to wave 2 (issue #227a).
-func TestIssue227ResumeWaveIndexFromTaskEvidenceSkipsNonJSONEntries(t *testing.T) {
+// still drives the resume index to wave 2.
+func TestResumeWaveIndexFromTaskEvidenceSkipsNonJSONEntries(t *testing.T) {
 	t.Parallel()
-	root, change := issue227TwoWavePlan(t)
-	issue227WriteTaskEvidence(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	root, change := twoWavePlanForResumeTest(t)
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
 	dir := state.EvidenceTasksDir(root, change.Slug)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not evidence\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0o755))
@@ -176,15 +176,15 @@ func TestIssue227ResumeWaveIndexFromTaskEvidenceSkipsNonJSONEntries(t *testing.T
 	assert.Equal(t, 2, index, "the .txt file and subdirectory are ignored for version detection")
 }
 
-// issue227ScopeContractMissingChange seeds an S2_EXECUTE change whose single code
+// scopeContractMissingChangedFilesFixture seeds an S2_IMPLEMENT change whose single code
 // task passed but recorded NO changed files, and materializes the matching
 // execution-summary.yaml + passing wave-orchestration evidence. This is the
 // self-wiping-mask scenario: scope contract flags scope_contract_changed_files_missing.
-func issue227ScopeContractMissingChange(t *testing.T) (string, model.Change) {
+func scopeContractMissingChangedFilesFixture(t *testing.T) (string, model.Change) {
 	t.Helper()
 	root := t.TempDir()
 	change := model.NewChange("scope-missing-s2")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorkflowPreset = model.WorkflowPresetLight
 	require.NoError(t, state.SaveChange(root, change))
@@ -250,28 +250,28 @@ func issue227ScopeContractMissingChange(t *testing.T) (string, model.Change) {
 	return root, change
 }
 
-// At S2_EXECUTE, a scope_contract_changed_files_missing failure must block VISIBLY
+// At S2_IMPLEMENT, a scope_contract_changed_files_missing failure must block VISIBLY
 // without wiping execution-summary.yaml / wave-orchestration.yaml. Wiping would
-// mask the real blocker behind run_summary_missing and loop forever (issue #227b).
-func TestIssue227AdvanceBlocksScopeContractMissingAtS2WithoutWiping(t *testing.T) {
+// mask the real blocker behind run_summary_missing and loop forever.
+func TestAdvanceBlocksScopeContractMissingAtS2WithoutWiping(t *testing.T) {
 	t.Parallel()
-	root, change := issue227ScopeContractMissingChange(t)
+	root, change := scopeContractMissingChangedFilesFixture(t)
 
 	summary, err := AdvanceGoverned(root, change.Slug)
 	require.NoError(t, err)
 
-	assert.Equal(t, "blocked", summary.Action, "advance must fail closed, not reopen-and-wipe")
-	assert.Equal(t, model.StateS2Execute, summary.FromState)
-	assert.NotEqual(t, "stale_evidence_recovery_started", summary.Reason,
-		"the in-S2 scope-contract miss must not route through the summary-wiping reopen")
+	assert.Equal(t, "blocked", summary.Action, "advance must fail closed without wiping evidence")
+	assert.Equal(t, model.StateS2Implement, summary.FromState)
+	assert.NotEqual(t, "stale_evidence_requires_review_alignment", summary.Reason,
+		"the in-S2 scope-contract miss must block in its owning stage")
 	assert.Contains(t, model.ReasonSpecs(summary.Blockers),
 		scopecontract.ReasonScopeContractChangedFilesMissing+":task-a",
 		"the real scope_contract_changed_files_missing blocker must stay visible")
 
-	// The change stays in S2_EXECUTE.
+	// The change stays in S2_IMPLEMENT.
 	reloaded, err := state.LoadChange(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS2Execute, reloaded.CurrentState)
+	assert.Equal(t, model.StateS2Implement, reloaded.CurrentState)
 
 	// And, critically, the engine-owned evidence is preserved so the next read of
 	// validate/status/next still surfaces the real blocker instead of being reset

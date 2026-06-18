@@ -67,7 +67,8 @@ Repair is intended for bounded local integrity issues such as stale locks, inter
 In JSON output, `applied_repairs` lists fixes that were performed, while
 `unrepaired_drift` lists drift that still needs operator action with a target,
 reason, and next action. Do not edit freshness fields or timestamps by hand;
-regenerate the named evidence or rescope the source artifact instead.
+regenerate the named evidence or make a same-intent change amendment to the
+source artifact instead.
 For ready execution summaries that are stale only because runtime task evidence
 is newer, repair can rebuild the summary from current wave-backed task evidence.
 Planning-source drift remains unrepaired and points back to planning or review

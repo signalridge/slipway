@@ -18,70 +18,84 @@ func attemptAutoPassSequence(
 	fromState model.WorkflowState,
 	startState model.WorkflowState,
 ) (AdvanceSummary, bool, error) {
-	if startState != model.StateS3Review && startState != model.StateS4Verify {
+	if startState != model.StateS3Review {
 		return AdvanceSummary{}, false, nil
 	}
 
 	candidate := change
 	candidate.PlanSubStep = model.PlanSubStepNone
-	current := startState
 	autoPassed := make([]model.AutoPassedState, 0, 2)
 
-	for {
-		candidate.CurrentState = current
-		policy, err := governance.ResolvePresetPolicy(root, candidate)
-		if err != nil {
-			return AdvanceSummary{}, false, err
-		}
-		eligible, reason, err := autoPassEligibleForState(root, candidate, policy)
-		if err != nil {
-			return AdvanceSummary{}, false, err
-		}
-		if !eligible {
-			break
-		}
-		stampResult, err := stampAutoPassedSkillDigests(root, candidate)
-		if err != nil {
-			return AdvanceSummary{}, false, err
-		}
-		if len(stampResult.Blockers) > 0 {
-			summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
-			summary.AutoPassedStates = autoPassed
-			return summary, true, nil
-		}
-		autoPassed = append(autoPassed, model.AutoPassedState{
-			State:  current,
-			Reason: reason,
-		})
-		if current == model.StateS4Verify {
-			candidate.CurrentState = model.StateS4Verify
-			candidate.LastAutoPassedStates = autoPassed
-			summary, err := saveChangeAndReturn(root, candidate, AdvanceSummary{
-				Action:           "done_ready",
-				FromState:        fromState,
-				ToState:          model.StateS4Verify,
-				Reason:           "auto_pass_complete",
-				Message:          "All governance gates passed. Run `slipway done` to finalize.",
-				Blockers:         []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
-				AutoPassedStates: autoPassed,
-			})
-			return summary, true, err
-		}
-		current = model.StateS4Verify
+	policy, err := governance.ResolvePresetPolicy(root, candidate)
+	if err != nil {
+		return AdvanceSummary{}, false, err
 	}
+	candidate.CurrentState = startState
 
-	if len(autoPassed) == 0 {
+	eligible, reason, err := autoPassReviewEligible(root, candidate, policy)
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+	if !eligible {
 		return AdvanceSummary{}, false, nil
 	}
+	stampResult, err := stampAutoPassedSkillDigests(root, candidate)
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+	if len(stampResult.Blockers) > 0 {
+		summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
+		summary.AutoPassedStates = autoPassed
+		return summary, true, nil
+	}
+	autoPassed = append(autoPassed, model.AutoPassedState{
+		State:  model.StateS3Review,
+		Reason: reason,
+	})
 
-	candidate.CurrentState = current
+	shipEligible, shipReason, err := autoPassShipEligible(root, candidate, policy)
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+	if !shipEligible {
+		candidate.CurrentState = model.StateS3Review
+		candidate.LastAutoPassedStates = autoPassed
+		summary, err := saveChangeAndReturn(root, candidate, AdvanceSummary{
+			Action:           "advanced",
+			FromState:        fromState,
+			ToState:          model.StateS3Review,
+			Reason:           "auto_pass_partial",
+			Message:          fmt.Sprintf("Advanced to %s.", model.StateS3Review),
+			AutoPassedStates: autoPassed,
+		})
+		return summary, true, err
+	}
+	shipAuthority, err := EvaluateShipAuthority(root, candidate)
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+	stampResult, err = stampPassingSkillDigests(root, candidate, shipAuthorityPassingSkills(shipAuthority))
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+	if len(stampResult.Blockers) > 0 {
+		summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
+		summary.AutoPassedStates = autoPassed
+		return summary, true, nil
+	}
+	autoPassed = append(autoPassed, model.AutoPassedState{
+		State:  model.StateS3Review,
+		Reason: shipReason,
+	})
+	candidate.CurrentState = model.StateS3Review
 	candidate.LastAutoPassedStates = autoPassed
 	summary, err := saveChangeAndReturn(root, candidate, AdvanceSummary{
-		Action:           "advanced",
+		Action:           "done_ready",
 		FromState:        fromState,
-		ToState:          current,
-		Reason:           "auto_pass_partial",
-		Message:          fmt.Sprintf("Advanced to %s.", current),
+		ToState:          model.StateS3Review,
+		Reason:           "auto_pass_complete",
+		Message:          "All governance gates passed. Run `slipway done` to finalize.",
+		Blockers:         []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
 		AutoPassedStates: autoPassed,
 	})
 	return summary, true, err
@@ -91,7 +105,7 @@ func attemptAutoPassSequence(
 // persisting any state change. It evaluates from the change's current state
 // forward so callers never see eligibility for states already advanced past.
 func AutoPassEligibility(root string, change model.Change) ([]model.AutoPassedState, error) {
-	if change.CurrentState != model.StateS3Review && change.CurrentState != model.StateS4Verify {
+	if change.CurrentState != model.StateS3Review {
 		return nil, nil
 	}
 	policy, err := governance.ResolvePresetPolicy(root, change)
@@ -100,67 +114,58 @@ func AutoPassEligibility(root string, change model.Change) ([]model.AutoPassedSt
 	}
 	var eligible []model.AutoPassedState
 	candidate := change
-	for current := change.CurrentState; current != ""; {
-		candidate.CurrentState = current
-		ok, reason, err := autoPassEligibleForState(root, candidate, policy)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			eligible = append(eligible, model.AutoPassedState{State: current, Reason: reason})
-		} else {
-			break
-		}
-		if current == model.StateS4Verify {
-			break
-		}
-		current = model.StateS4Verify
+	candidate.CurrentState = change.CurrentState
+	ok, reason, err := autoPassReviewEligible(root, candidate, policy)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		eligible = append(eligible, model.AutoPassedState{State: model.StateS3Review, Reason: reason})
+	}
+	ok, reason, err = autoPassShipEligible(root, candidate, policy)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		eligible = append(eligible, model.AutoPassedState{State: model.StateS3Review, Reason: reason})
 	}
 	return eligible, nil
 }
 
-func autoPassEligibleForState(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {
-	if change.CurrentState != model.StateS3Review && change.CurrentState != model.StateS4Verify {
+func autoPassReviewEligible(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {
+	reviewAuthority, err := EvaluateReviewAuthority(root, change)
+	if err != nil {
+		return false, "", err
+	}
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	if err != nil {
+		return false, "", err
+	}
+	if !policy.ReviewAutoPassEnabled || hasUnsatisfiedBlockingAction(readiness.RequiredActions, model.ControlScopeReview) {
 		return false, "", nil
 	}
+	if len(reviewAuthority.Blockers) > 0 {
+		return false, "", nil
+	}
+	return true, autoPassReasonNoBlockingReviewObligations, nil
+}
 
-	switch change.CurrentState {
-	case model.StateS3Review:
-		reviewAuthority, err := EvaluateReviewAuthority(root, change)
-		if err != nil {
-			return false, "", err
-		}
-		readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
-		if err != nil {
-			return false, "", err
-		}
-		if !policy.ReviewAutoPassEnabled || hasUnsatisfiedBlockingAction(readiness.RequiredActions, model.ControlScopeReview) {
-			return false, "", nil
-		}
-		if len(reviewAuthority.Blockers) > 0 {
-			return false, "", nil
-		}
-		return true, autoPassReasonNoBlockingReviewObligations, nil
-	case model.StateS4Verify:
-		shipAuthority, err := EvaluateShipAuthority(root, change)
-		if err != nil {
-			return false, "", err
-		}
-		if !policy.VerifyAutoPassEnabled || hasUnsatisfiedBlockingAction(shipAuthority.Actions, model.ControlScopeRelease) {
-			return false, "", nil
-		}
-		if shipAuthority.Result.Status != model.GateStatusApproved {
-			return false, "", nil
-		}
-		return true, autoPassReasonNoBlockingReleaseObligations, nil
-	default:
+func autoPassShipEligible(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {
+	shipAuthority, err := EvaluateShipAuthority(root, change)
+	if err != nil {
+		return false, "", err
+	}
+	if !policy.VerifyAutoPassEnabled || hasUnsatisfiedBlockingAction(shipAuthority.Actions, model.ControlScopeRelease) {
 		return false, "", nil
 	}
+	if shipAuthority.Result.Status != model.GateStatusApproved {
+		return false, "", nil
+	}
+	return true, autoPassReasonNoBlockingReleaseObligations, nil
 }
 
 func stampAutoPassedSkillDigests(root string, change model.Change) (skillDigestStampResult, error) {
-	switch change.CurrentState {
-	case model.StateS3Review:
+	if change.CurrentState == model.StateS3Review {
 		reviewAuthority, err := EvaluateReviewAuthority(root, change)
 		if err != nil {
 			return skillDigestStampResult{}, err
@@ -170,25 +175,8 @@ func stampAutoPassedSkillDigests(root string, change model.Change) (skillDigestS
 			return skillDigestStampResult{}, err
 		}
 		return result, nil
-	case model.StateS4Verify:
-		shipAuthority, err := EvaluateShipAuthority(root, change)
-		if err != nil {
-			return skillDigestStampResult{}, err
-		}
-		reviewResult, err := stampPassingSkillDigests(root, change, shipAuthority.ReviewAuthority.PassingSkills)
-		if err != nil {
-			return skillDigestStampResult{}, err
-		}
-		verifyResult, err := stampPassingSkillDigests(root, change, shipAuthority.VerifyPassingSkills)
-		if err != nil {
-			return skillDigestStampResult{}, err
-		}
-		return skillDigestStampResult{
-			Blockers: append(append([]string{}, reviewResult.Blockers...), verifyResult.Blockers...),
-		}, nil
-	default:
-		return skillDigestStampResult{}, nil
 	}
+	return skillDigestStampResult{}, nil
 }
 
 func hasUnsatisfiedBlockingAction(actions []governance.RequiredAction, scope model.ControlScope) bool {

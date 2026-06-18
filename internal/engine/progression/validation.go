@@ -334,7 +334,7 @@ func ShouldCheckGovernedBundle(change model.Change) bool {
 		default:
 			return false
 		}
-	case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+	case model.StateS2Implement, model.StateS3Review:
 		return true
 	default:
 		return false
@@ -359,7 +359,7 @@ func DeriveWorktreeBlockers(
 	change model.Change,
 	passingSkills map[string]model.VerificationRecord,
 ) (WorktreeDerivation, error) {
-	isWorktreeState := change.CurrentState == model.StateS2Execute
+	isWorktreeState := change.CurrentState == model.StateS2Implement
 	if !change.NeedsDiscovery || !isWorktreeState {
 		return WorktreeDerivation{}, nil
 	}
@@ -455,11 +455,11 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 	resolution := ResolveChangeSchemaDiagnostics(change)
 
 	// Worktree validation is deferred to the dedicated worktree gate (step 5 in
-	// AdvanceGoverned) for S2_EXECUTE when the worktree is not yet bound. Checking
+	// AdvanceGoverned) for S2_IMPLEMENT when the worktree is not yet bound. Checking
 	// it here would return dedicated_worktree_metadata_required before
 	// DeriveWorktreeBlockers has a chance to extract worktree-preflight evidence
 	// — creating a deadlock.
-	skipWorktreeCheck := change.CurrentState == model.StateS2Execute &&
+	skipWorktreeCheck := change.CurrentState == model.StateS2Implement &&
 		change.NeedsDiscovery &&
 		change.WorktreePath == ""
 	if !skipWorktreeCheck {
@@ -533,7 +533,7 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 // AssuranceContractBlockers, which fails closed at S3_REVIEW and later. The generic
 // gates run before S3 too, so they must skip it — otherwise a deferred (and thus
 // absent) assurance.md would surface as missing_required_artifact and strand the
-// change at S1_PLAN/S2_EXECUTE. Skipping it here also avoids double-reporting the
+// change at S1_PLAN/S2_IMPLEMENT. Skipping it here also avoids double-reporting the
 // same gap at S3+ (assurance_contract_missing is the specific, owning blocker).
 func existenceOwnedByDedicatedGate(name string) bool {
 	return name == "assurance.md"
@@ -554,7 +554,7 @@ func AssuranceContractBlockers(root string, change model.Change) []string {
 		return nil
 	}
 	switch change.CurrentState {
-	case model.StateS0Intake, model.StateS1Plan, model.StateS2Execute:
+	case model.StateS0Intake, model.StateS1Plan, model.StateS2Implement:
 		return nil
 	default:
 		// enforce

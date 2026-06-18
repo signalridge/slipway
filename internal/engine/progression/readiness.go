@@ -84,7 +84,7 @@ type GovernanceReadinessOptions struct {
 	IncludeShipSurface        bool
 }
 
-const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift preserves recorded wave evidence. Remove a build-artifact/scratch file or rely on an ignore/local exclude; to keep a legitimate change, amend the owning task's target_files in tasks.md and re-run — scope is re-derived from the plan and only review/verify evidence covering the change is re-certified (non-destructive). Reserve `slipway pivot --rescope` for a full re-plan: it resets the change to S0_INTAKE and clears the Approved Summary. A task missing its changed-file evidence instead reopens to S2_EXECUTE via `slipway run` to re-record it."
+const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift preserves recorded wave evidence. Remove a build-artifact/scratch file or rely on an ignore/local exclude; to keep legitimate same-intent work, record a scope amendment by amending the owning task target_files in tasks.md. In S2, refresh the affected implementation evidence; in S3 review, keep the state in review/fix and let the selected reviewers verify the current plan/code/evidence. If the objective changed, open a new governed change."
 
 type ArtifactReadinessReader interface {
 	Evaluate(root string, change model.Change) (ArtifactReadiness, error)
@@ -129,10 +129,10 @@ func EvaluateGovernanceReadiness(
 		if opts.WorkflowStateOverride != nil && *opts.WorkflowStateOverride != "" {
 			effectiveState = *opts.WorkflowStateOverride
 		}
-		if shipSurface != nil && effectiveState == model.StateS4Verify {
-			// Verify-state read surfaces must expose the same ship blockers that
-			// finalization uses; otherwise G_ship can be blocked while the shared
-			// blocker surface still reports "ready".
+		if shipSurface != nil && effectiveState == model.StateS3Review {
+			// S3 read surfaces must expose the same ship blockers that finalization
+			// uses; otherwise G_ship can be blocked while the shared blocker
+			// surface still reports "ready".
 			readiness.Blockers = model.NormalizeReasonCodes(append(readiness.Blockers, shipSurface.Result.ReasonCodes...))
 		}
 		if opts.IncludeGateEvaluations {
@@ -174,13 +174,13 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		return GovernanceReadiness{}, err
 	}
 	readiness.ExecutionSummary = execCtx.Summary
-	readiness.FreshnessDiagnostics = execCtx.Diagnostics
+	readiness.FreshnessDiagnostics = state.ProjectExecutionFreshnessDiagnosticsForState(effectiveState, execCtx.Diagnostics)
 	readiness.SummaryIssues = model.ReasonCodesFromSpecs(execCtx.Issues)
 	if state.ExecutionSummaryReady(execCtx.Summary) {
-		readiness.EvidenceFreshness = ctxpack.EvidenceFreshness(strings.TrimSpace(execCtx.Diagnostics.Status))
-		if readiness.EvidenceFreshness == "" {
-			readiness.EvidenceFreshness = ctxpack.EvidenceFreshnessUnknown
-		}
+		readiness.EvidenceFreshness = state.ProjectExecutionFreshnessForState(effectiveState, execCtx.Diagnostics)
+	}
+	if state.ExecutionFreshnessIsS3TaskPlanAmendment(effectiveState, execCtx.Diagnostics) {
+		readiness.Diagnostics = append(readiness.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
 	}
 
 	paths, err := state.ResolveChangePaths(root, evaluationChange)
@@ -238,7 +238,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 	readiness.Blockers = append(readiness.Blockers, readiness.SkillBlockers...)
 	readiness.Blockers = append(readiness.Blockers, wavePreviewBlockers...)
-	if effectiveState == model.StateS2Execute && evaluationChange.NeedsDiscovery && strings.TrimSpace(evaluationChange.WorktreePath) == "" {
+	if effectiveState == model.StateS2Implement && evaluationChange.NeedsDiscovery && strings.TrimSpace(evaluationChange.WorktreePath) == "" {
 		derivation, err := DeriveWorktreeBlockers(root, evaluationChange, passingSkills)
 		if err != nil {
 			return GovernanceReadiness{}, err
@@ -318,7 +318,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.Diagnostics = append(readiness.Diagnostics, projection.Diagnostics...)
 	}
 
-	if opts.IncludeReviewSurface || effectiveState == model.StateS3Review || effectiveState == model.StateS4Verify {
+	if opts.IncludeReviewSurface || effectiveState == model.StateS3Review {
 		reviewSurface, err := EvaluateReviewAuthority(root, evaluationChange)
 		if err != nil {
 			return GovernanceReadiness{}, err
@@ -327,12 +327,15 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		if opts.IncludeReviewSurface {
 			readiness.ReviewSurface = &reviewSurface
 		}
-		if effectiveState == model.StateS3Review || effectiveState == model.StateS4Verify {
+		if effectiveState == model.StateS3Review {
 			readiness.Blockers = append(readiness.Blockers, reviewSurface.Blockers...)
 		}
 	}
 
 	readiness.Blockers = append(readiness.Blockers, readiness.SummaryIssues...)
+	if effectiveState == model.StateS3Review {
+		readiness.Blockers = filterS3ReviewAlignmentInputBlockers(readiness.Blockers)
+	}
 	readiness.Blockers = model.NormalizeReasonCodes(readiness.Blockers)
 	readiness.Diagnostics = stringutil.UniqueSorted(readiness.Diagnostics)
 	return readiness, nil
@@ -345,7 +348,7 @@ func refineS2WaveExecutionSkillBlockers(
 	summary *model.ExecutionSummary,
 	skillBlockers []model.ReasonCode,
 ) ([]model.ReasonCode, []model.ReasonCode, error) {
-	if effectiveState != model.StateS2Execute ||
+	if effectiveState != model.StateS2Implement ||
 		state.ExecutionSummaryReady(summary) ||
 		!hasWaveRunSummaryMissingSkillBlocker(skillBlockers) {
 		return skillBlockers, nil, nil
@@ -439,9 +442,9 @@ func wavePreviewHasReplacementBlockers(blockers []model.ReasonCode) bool {
 
 // scopeContractNeedsRecoveryGuidance reports whether the scope-contract recovery
 // guidance diagnostic should be surfaced. It is emitted whenever the contract has
-// blockers, at any lifecycle state (S2_EXECUTE as well as S3_REVIEW/S4_VERIFY) so
+// blockers, at any lifecycle state (S2_IMPLEMENT as well as S3_REVIEW) so
 // the explanation has surface parity. The executable next action at S2 is already
-// carried by per-blocker remediation and the scope-contract advance-reopen gate;
+// carried by per-blocker remediation and the scope-contract repair gate;
 // this diagnostic is the narrative complement.
 func scopeContractNeedsRecoveryGuidance(report scopecontract.Report) bool {
 	return len(report.Blockers) > 0
@@ -478,52 +481,58 @@ func evaluateGateReadiness(
 		effectiveState = *opts.WorkflowStateOverride
 	}
 	if opts.IncludeGateEvaluations {
-		planSkills, planSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
-		if err != nil {
-			return nil, nil, err
-		}
-		// Resolve the preset policy so the plan gate's plan-audit self-audit edge
-		// enforces on standard/strict and stays advisory on light. A resolution
-		// failure falls back to the zero policy (EffectivePreset != light), which
-		// fails closed rather than silently relaxing the edge.
-		planPresetPolicy, _ := governance.ResolvePresetPolicy(root, change)
-		planEval := EvaluatePlanGate(root, change, planSkills, planPresetPolicy)
-		planEval.ReasonCodes = model.NormalizeReasonCodes(append(planEval.ReasonCodes, model.ReasonCodesFromSpecs(planSkillBlockers)...))
-		if len(planEval.ReasonCodes) > 0 {
-			planEval.Status = model.GateStatusBlocked
-		}
-		result = map[gate.GateID]gate.GateEvaluation{
-			gate.GatePlan: planEval,
-		}
-		if change.NeedsDiscovery && effectiveState != model.StateS0Intake {
-			scopeSkills, scopeSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
+		result = map[gate.GateID]gate.GateEvaluation{}
+		if planningGatesClosed(effectiveState) {
+			result[gate.GatePlan] = approvedGateEvaluation(gate.GatePlan)
+			if change.NeedsDiscovery {
+				result[gate.GateScope] = approvedGateEvaluation(gate.GateScope)
+			}
+		} else {
+			planSkills, planSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
 			if err != nil {
 				return nil, nil, err
 			}
-			scopeEval, err := EvaluateScopeGate(root, change, scopeSkills)
-			if err != nil {
-				return nil, nil, err
+			// Resolve the preset policy so the plan gate's plan-audit self-audit edge
+			// enforces on standard/strict and stays advisory on light. A resolution
+			// failure falls back to the zero policy (EffectivePreset != light), which
+			// fails closed rather than silently relaxing the edge.
+			planPresetPolicy, _ := governance.ResolvePresetPolicy(root, change)
+			planEval := EvaluatePlanGate(root, change, planSkills, planPresetPolicy)
+			planEval.ReasonCodes = model.NormalizeReasonCodes(append(planEval.ReasonCodes, model.ReasonCodesFromSpecs(planSkillBlockers)...))
+			if len(planEval.ReasonCodes) > 0 {
+				planEval.Status = model.GateStatusBlocked
 			}
-			scopeEval.ReasonCodes = model.NormalizeReasonCodes(append(scopeEval.ReasonCodes, model.ReasonCodesFromSpecs(scopeSkillBlockers)...))
-			if len(scopeEval.ReasonCodes) > 0 {
-				scopeEval.Status = model.GateStatusBlocked
+			result[gate.GatePlan] = planEval
+			if change.NeedsDiscovery && effectiveState != model.StateS0Intake {
+				scopeSkills, scopeSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
+				if err != nil {
+					return nil, nil, err
+				}
+				scopeEval, err := EvaluateScopeGate(root, change, scopeSkills)
+				if err != nil {
+					return nil, nil, err
+				}
+				scopeEval.ReasonCodes = model.NormalizeReasonCodes(append(scopeEval.ReasonCodes, model.ReasonCodesFromSpecs(scopeSkillBlockers)...))
+				if len(scopeEval.ReasonCodes) > 0 {
+					scopeEval.Status = model.GateStatusBlocked
+				}
+				result[gate.GateScope] = scopeEval
 			}
-			result[gate.GateScope] = scopeEval
 		}
 	}
 	shipReadiness := currentReadiness
-	needsVerifyRefresh := effectiveState != model.StateS4Verify
-	if !needsVerifyRefresh {
-		_, needsVerifyRefresh = currentReadiness.cachedReviewAuthority()
-		needsVerifyRefresh = !needsVerifyRefresh
+	needsShipRefresh := effectiveState != model.StateS3Review
+	if !needsShipRefresh {
+		_, needsShipRefresh = currentReadiness.cachedReviewAuthority()
+		needsShipRefresh = !needsShipRefresh
 	}
-	if needsVerifyRefresh {
-		verifyState := model.StateS4Verify
+	if needsShipRefresh {
+		shipState := model.StateS3Review
 		shipReadiness, err = evaluateGovernanceReadinessBase(
 			root,
 			change,
 			GovernanceReadinessOptions{
-				WorkflowStateOverride: &verifyState,
+				WorkflowStateOverride: &shipState,
 				IncludeReviewSurface:  true,
 			},
 		)
@@ -539,6 +548,61 @@ func evaluateGateReadiness(
 		result[gate.GateShip] = shipSurface.Result
 	}
 	return result, &shipSurface, nil
+}
+
+func planningGatesClosed(state model.WorkflowState) bool {
+	switch state {
+	case model.StateS2Implement, model.StateS3Review, model.StateDone:
+		return true
+	default:
+		return false
+	}
+}
+
+func approvedGateEvaluation(gateID gate.GateID) gate.GateEvaluation {
+	return gate.GateEvaluation{
+		GateID: gateID,
+		Status: model.GateStatusApproved,
+	}
+}
+
+func filterS3ReviewAlignmentInputBlockers(blockers []model.ReasonCode) []model.ReasonCode {
+	if len(blockers) == 0 {
+		return nil
+	}
+	out := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if s3ReviewAlignmentInputBlocker(blocker) {
+			continue
+		}
+		out = append(out, blocker)
+	}
+	return out
+}
+
+func s3ReviewAlignmentInputBlocker(blocker model.ReasonCode) bool {
+	code := strings.TrimSpace(blocker.Code)
+	switch code {
+	case state.StalePlanningEvidenceBlockerToken,
+		state.StaleExecutionEvidenceBlockerToken,
+		"tasks_plan_changed_since_task_evidence",
+		scopecontract.ReasonScopeContractDrift,
+		scopecontract.ReasonScopeContractChangedFilesMissing:
+		return true
+	case "required_skill_stale":
+		target, _, _ := strings.Cut(strings.TrimSpace(blocker.Detail), ":")
+		switch strings.TrimSpace(target) {
+		case SkillIntakeClarification,
+			SkillResearchOrchestration,
+			SkillPlanAudit,
+			SkillWaveOrchestration:
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }
 
 func (r contextualArtifactReadinessReader) Evaluate(root string, change model.Change) (ArtifactReadiness, error) {
@@ -963,10 +1027,18 @@ func gitHeadFileContent(workspaceRoot, file string) (string, bool) {
 }
 
 func gitNameOnly(workspaceRoot string, args ...string) []string {
+	files, err := gitNameOnlyResult(workspaceRoot, args...)
+	if err != nil {
+		return nil
+	}
+	return files
+}
+
+func gitNameOnlyResult(workspaceRoot string, args ...string) ([]string, error) {
 	cmd := exec.Command("git", append([]string{"-C", workspaceRoot}, args...)...) // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	lines := strings.Split(string(out), "\n")
 	files := make([]string, 0, len(lines))
@@ -976,7 +1048,7 @@ func gitNameOnly(workspaceRoot string, args ...string) []string {
 			files = append(files, line)
 		}
 	}
-	return files
+	return files, nil
 }
 
 func gatePlanningSkillRecords(

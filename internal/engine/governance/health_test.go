@@ -207,7 +207,7 @@ func TestCollectGovernanceHealthFailsOnInvalidBoundWorktree(t *testing.T) {
 
 	change := model.Change{
 		Slug:           slug,
-		CurrentState:   model.StateS2Execute,
+		CurrentState:   model.StateS2Implement,
 		PlanSubStep:    model.PlanSubStepNone,
 		WorktreePath:   root,
 		WorktreeBranch: "main",
@@ -238,7 +238,7 @@ func TestCollectGovernanceHealthSkipsSignalControlCoherenceWhenBoundWorktreeInva
 	snap := newTestSnapshot()
 	change := model.Change{
 		Slug:           slug,
-		CurrentState:   model.StateS2Execute,
+		CurrentState:   model.StateS2Implement,
 		PlanSubStep:    model.PlanSubStepNone,
 		WorktreePath:   root,
 		WorktreeBranch: "main",
@@ -269,7 +269,7 @@ func TestCollectGovernanceHealthSnapshotReadFailureStillChecksWorktreeBinding(t 
 
 	change := model.Change{
 		Slug:           slug,
-		CurrentState:   model.StateS2Execute,
+		CurrentState:   model.StateS2Implement,
 		PlanSubStep:    model.PlanSubStepNone,
 		WorktreePath:   root,
 		WorktreeBranch: "main",
@@ -971,12 +971,12 @@ REQ-001: verified via tests
 	const assuranceIssue = "requirement missing assurance coverage verdict"
 	const missingAssuranceIssue = "assurance.md missing at review/verify phase"
 
-	t.Run("S2_EXECUTE reports WARN, not a blocking incident", func(t *testing.T) {
+	t.Run("S2_IMPLEMENT reports WARN, not a blocking incident", func(t *testing.T) {
 		t.Parallel()
 		root, slug, bundleDir := writeBundle(t, true)
 		change := model.Change{
 			Slug:           slug,
-			CurrentState:   model.StateS2Execute,
+			CurrentState:   model.StateS2Implement,
 			WorkflowPreset: model.WorkflowPresetStandard,
 			ArtifactSchema: model.ArtifactSchemaExpanded,
 		}

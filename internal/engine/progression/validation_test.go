@@ -739,7 +739,7 @@ Retired-ish
 		t.Parallel()
 		root := writeDecision(t, "dec-exec", template)
 		change := expandedAudit("dec-exec")
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		blockers := DecisionContractBlockers(root, change)
 		require.NotEmpty(t, blockers, "post-plan states must still enforce decision substance")
@@ -806,7 +806,7 @@ func TestGovernedBundleBlockers_DefersAssuranceToContractGate(t *testing.T) {
 
 	change := model.Change{
 		Slug:           slug,
-		CurrentState:   model.StateS2Execute,
+		CurrentState:   model.StateS2Implement,
 		ArtifactSchema: model.ArtifactSchemaCore,
 		WorkflowPreset: model.WorkflowPresetLight,
 	}
@@ -900,7 +900,7 @@ func TestShouldCheckGovernedBundle(t *testing.T) {
 		{
 			name: "execution still requires governed bundle",
 			change: model.Change{
-				CurrentState: model.StateS2Execute,
+				CurrentState: model.StateS2Implement,
 			},
 			want: true,
 		},
@@ -936,7 +936,7 @@ func TestDeriveAndApplyWorktreeMetadataSeedsScopeMetadataForBoundWorktree(t *tes
 
 	change := model.NewChange("worktree-marker")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1046,7 +1046,7 @@ func TestResolveChangeSchemaDiagnosticsBlocksWhenChangeHasNoFrozenSchema(t *test
 func TestAssuranceContractBlockers_SkippedBeforeReview(t *testing.T) {
 	t.Parallel()
 	// AssuranceContractBlockers should return nil for states before S3_REVIEW.
-	for _, st := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Execute} {
+	for _, st := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Implement} {
 		change := model.Change{
 			Slug:         "test-slug",
 			CurrentState: st,
@@ -1062,7 +1062,7 @@ func TestAssuranceContractBlockers_MissingFile(t *testing.T) {
 	t.Parallel()
 	for _, st := range []model.WorkflowState{
 		model.StateS3Review,
-		model.StateS4Verify,
+		model.StateS3Review,
 		model.StateDone,
 		"S5_UNKNOWN",
 	} {
@@ -1149,7 +1149,7 @@ Five`
 	}
 	change := model.Change{
 		Slug:         slug,
-		CurrentState: model.StateS4Verify,
+		CurrentState: model.StateS3Review,
 	}
 	blockers := AssuranceContractBlockers(root, change)
 	if len(blockers) != 0 {

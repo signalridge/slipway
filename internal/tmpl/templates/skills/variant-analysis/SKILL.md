@@ -4,10 +4,10 @@ domain: review-change-shape
 function: hunt additional variants of a known bug across the codebase
 tier: T1
 primary_attachment: procedure
-summary: "Use when a bug has been fixed in one place and variants elsewhere are plausible. Triggers on review or repair commands or user text asking for similar-bug hunts."
+summary: "Use when a bug has been fixed in one place and variants elsewhere are plausible. Triggers on review or fix commands or user text asking for similar-bug hunts."
 trigger_signals:
-  - command: ["review", "repair"]
-    reason: "Review or repair command invoked; hunt variants of the fix"
+  - command: ["review", "fix"]
+    reason: "Review or fix command invoked; hunt variants of the fix"
   - user_text_matches: ["variants", "similar bug", "elsewhere"]
     reason: "User text asks for variant hunting"
 evidence_contract: artifact
@@ -16,7 +16,7 @@ bindings:
     target: review
     attachment: procedure
   - type: command-auto
-    target: repair
+    target: fix
     attachment: procedure
 ---
 

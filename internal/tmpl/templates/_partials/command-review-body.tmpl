@@ -1,7 +1,7 @@
 {{- define "command-review-body" -}}
 # Review
 
-Trigger artifact and implementation review for the active governed change.
+Run review convergence for the active governed change.
 
 ## Invocation
 ```bash
@@ -9,8 +9,11 @@ slipway review
 ```
 
 ## Contract
-- Evaluates artifact completeness and implementation quality.
-- Produces review findings with required/optional layers.
+- `review` is the explicit S3 review stage command.
+- Evaluates artifact completeness, implementation quality, selected reviewer evidence, and plan/code alignment.
+- Review feedback is repaired through `slipway fix`: dispatch a fresh-context repair subagent, record the affected reviewer evidence, then close by reviewer rereview.
+- Same-intent scope gaps found during review are change amendments inside the current change.
+- Intent conflict is not review alignment; surface `new_change_required:intent_conflict` and start a new governed change.
 - Show review summary to user with pass/fail per layer.
 
 ## Flags

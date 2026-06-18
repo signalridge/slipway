@@ -112,7 +112,7 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 
 		change := model.NewChange("ship-standard-missing-closeout")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		policy, err := governance.ResolvePresetPolicy(root, change)
@@ -144,7 +144,7 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 
 		change := model.NewChange("ship-standard-missing-attestation")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		policy, err := governance.ResolvePresetPolicy(root, change)
@@ -177,7 +177,7 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 		change := model.NewChange("ship-light-full-no-attestation")
 		change.WorkflowPreset = model.WorkflowPresetLight
 		change.QualityMode = model.QualityModeFull
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		policy, err := governance.ResolvePresetPolicy(root, change)
@@ -208,11 +208,13 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 
 	change := model.NewChange("ship-closeout-reuse")
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
 	capturedAt := time.Now().UTC().Add(-time.Minute)
 	summary := closeoutReuseExecutionSummary(change, 1, capturedAt)
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:closeout-reuse-suite")
 	passing := passingCloseoutReuseRecords(1)
 	assert.Empty(t, closeoutGoalVerificationReuseBlockers(root, change, passing, nil, summary))
 
@@ -292,7 +294,13 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte("# Tasks\n\n- [ ] `task-a` updated plan\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`task-a`"+` updated plan
+  - target_files: ["internal/reuse-target.go"]
+  - task_kind: code
+  - acceptance: stale plan is rejected before closeout reuse
+`), 0o644))
 	staleSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(-time.Hour))
 	staleSummary.TasksPlanHash = "previous-task-plan-hash"
 	blockers = closeoutGoalVerificationReuseBlockers(root, change, passing, nil, staleSummary)
@@ -310,7 +318,7 @@ func TestBuildShipAuthoritySurfacesCloseoutReuseBlocker(t *testing.T) {
 
 	change := model.NewChange("ship-closeout-reuse-blocked")
 	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 
 	passing := passingCloseoutReuseRecords(1)
@@ -335,7 +343,7 @@ func TestCloseoutGoalVerificationReuseInvalidBlockerRoutesS4Recovery(t *testing.
 	t.Parallel()
 
 	blocker := closeoutGoalVerificationReuseInvalidBlocker("assurance.md changed after reused proof")
-	assert.Contains(t, blocker.Detail, "goal-verification")
+	assert.Contains(t, blocker.Detail, "selected reviewer set")
 	assert.Contains(t, blocker.Detail, "final-closeout")
 	assert.Contains(t, blocker.Detail, "assurance.md")
 }
@@ -373,8 +381,8 @@ func TestCloseoutReviewerIndependenceBlockers(t *testing.T) {
 	assert.Empty(t, closeoutReviewerIndependenceBlockers(missing, false))
 }
 
-// TestCloseoutChainOrderBlockers covers the always-on P1 ordering invariant
-// (REQ-001): closeout >= goal >= max(selected review evidence) under its own
+// TestCloseoutChainOrderBlockers covers the always-on P1 ordering invariant:
+// final-closeout must be stamped after every selected S3 peer under its own
 // distinct closeout_chain_order_invalid code, advisory on light.
 func TestCloseoutChainOrderBlockers(t *testing.T) {
 	t.Parallel()
@@ -396,23 +404,23 @@ func TestCloseoutChainOrderBlockers(t *testing.T) {
 	assert.Empty(t, closeoutChainOrderBlockers(inOrder, reviewsBeforeGoal, selectedReviewers, true),
 		"in-order chain with reviews before goal and goal before closeout must pass")
 
-	// review after goal -> blocker.
+	// selected reviewer after final-closeout -> blocker.
 	reviewsAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(time.Second), goalAt.Add(2*time.Second))
 	blockers := closeoutChainOrderBlockers(inOrder, reviewsAfterGoal, selectedReviewers, true)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "review evidence")
+	assert.Contains(t, blockers[0].Detail, "selected reviewer evidence")
 
-	// Every selected reviewer must be ordered before goal-verification, not only
-	// the historical spec/code pair.
+	// Every selected reviewer must be ordered before final-closeout, not only the
+	// historical spec/code pair.
 	selectedReviewsAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
 	selectedReviewsAfterGoal[SkillIndependentReview] = model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(time.Second),
+		Timestamp: goalAt.Add(2 * time.Second),
 	}
 	selectedReviewsAfterGoal[SkillSecurityReview] = model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(2 * time.Second),
+		Timestamp: goalAt.Add(3 * time.Second),
 	}
 	blockers = closeoutChainOrderBlockers(inOrder, selectedReviewsAfterGoal, selectedReviewers, true)
 	require.Len(t, blockers, 1)
@@ -422,7 +430,7 @@ func TestCloseoutChainOrderBlockers(t *testing.T) {
 	unselectedSecurityAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
 	unselectedSecurityAfterGoal[SkillSecurityReview] = model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(time.Second),
+		Timestamp: goalAt.Add(2 * time.Second),
 	}
 	assert.Empty(t, closeoutChainOrderBlockers(inOrder, unselectedSecurityAfterGoal, selectedReviewers, true),
 		"security-review evidence is silent when the security control did not select it")
@@ -432,7 +440,8 @@ func TestCloseoutChainOrderBlockers(t *testing.T) {
 	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillSecurityReview)
 
-	// closeout before goal -> blocker.
+	// closeout before goal-verification -> blocker because goal-verification is
+	// a selected review-set peer.
 	closeoutBeforeGoal := map[string]model.VerificationRecord{
 		SkillGoalVerification: {
 			Verdict:   model.VerificationVerdictPass,
@@ -446,7 +455,7 @@ func TestCloseoutChainOrderBlockers(t *testing.T) {
 	blockers = closeoutChainOrderBlockers(closeoutBeforeGoal, nil, selectedReviewers, true)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "final-closeout must not predate")
+	assert.Contains(t, blockers[0].Detail, SkillGoalVerification)
 
 	// Genuinely-absent goal: nothing to compare, no blocker (owned elsewhere).
 	assert.Empty(t, closeoutChainOrderBlockers(map[string]model.VerificationRecord{}, reviewsAfterGoal, selectedReviewers, true))
@@ -497,23 +506,6 @@ func hasReasonCode(codes []model.ReasonCode, code string) bool {
 	return slices.ContainsFunc(codes, func(c model.ReasonCode) bool { return c.Code == code })
 }
 
-func hasReasonCodeDetail(codes []model.ReasonCode, code, detail string) bool {
-	return slices.ContainsFunc(codes, func(c model.ReasonCode) bool {
-		return c.Code == code && c.Detail == detail
-	})
-}
-
-// countReasonCode counts how many entries in codes carry the given reason code.
-func countReasonCode(codes []model.ReasonCode, code string) int {
-	n := 0
-	for _, c := range codes {
-		if c.Code == code {
-			n++
-		}
-	}
-	return n
-}
-
 func TestCrossStageContextDistinctBlockersUsesSelectedReviewSkillParticipants(t *testing.T) {
 	t.Parallel()
 
@@ -529,7 +521,7 @@ func TestCrossStageContextDistinctBlockersUsesSelectedReviewSkillParticipants(t 
 		return root, change
 	}
 
-	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
+	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
 	reviewStages := crossStageContextReviewStagesForSelectedSkills(selectedReviewers)
 	ownedReview := crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewers)
 
@@ -596,16 +588,19 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 	change.WorkflowPreset = model.WorkflowPresetStandard
 	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 
 	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
 	summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
 	summary.SyncDerivedFields()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:review-authority-suite")
 
 	selectedRecords := reviewSkillContextRecords(map[string]string{
 		SkillSpecComplianceReview: "ctx-spec-reviewer",
 		SkillCodeQualityReview:    "ctx-code-reviewer",
 		SkillIndependentReview:    "ctx-independent-reviewer",
+		SkillGoalVerification:     "ctx-goal-reviewer",
 	})
 	for skillName, record := range selectedRecords {
 		record.RunVersion = 1
@@ -638,9 +633,10 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 	assert.Contains(t, passingSkills, SkillSpecComplianceReview)
 	assert.Contains(t, passingSkills, SkillCodeQualityReview)
 	assert.Contains(t, passingSkills, SkillIndependentReview)
+	assert.Contains(t, passingSkills, SkillGoalVerification)
 	assert.NotContains(t, passingSkills, SkillSecurityReview)
 
-	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
+	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
 	assert.Empty(t, crossStageContextDistinctBlockers(
 		root,
 		change,
@@ -715,6 +711,20 @@ func TestCrossStageContextDistinctBlockers(t *testing.T) {
 		assert.Equal(t, model.StageContextExecutor+"|"+SkillSpecComplianceReview, blockers[0].Detail)
 	})
 
+	t.Run("recorded fix handle collides with reviewer handle", func(t *testing.T) {
+		t.Parallel()
+		root, change := newRoot(t, "lattice-fix-context")
+		records := reviewContextRecords("handle-spec", "handle-code")
+		spec := records[SkillSpecComplianceReview]
+		spec.References = append(spec.References, contextOriginRef(model.StageContextFix, "handle-spec"))
+		records[SkillSpecComplianceReview] = spec
+
+		blockers := crossStageContextDistinctBlockers(root, change, records, reviewStages, ownedReview, true)
+		require.Len(t, blockers, 1)
+		assert.Equal(t, "cross_stage_context_not_distinct", blockers[0].Code)
+		assert.Equal(t, model.StageContextFix+"|"+SkillSpecComplianceReview, blockers[0].Detail)
+	})
+
 	t.Run("present-passing record missing its handle fails closed", func(t *testing.T) {
 		t.Parallel()
 		root, change := newRoot(t, "lattice-missing-handle")
@@ -769,7 +779,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 		change := model.NewChange("ship-lattice-no-refire")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		// spec and code share a handle (a review-owned collision), but goal and
@@ -786,7 +796,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 			SkillGoalVerification: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextGoal, "handle-goal")},
+				References: []string{contextOriginRef(model.StageContextReview, "handle-goal")},
 			},
 			SkillFinalCloseout: {
 				Verdict:    model.VerificationVerdictPass,
@@ -804,7 +814,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 		change := model.NewChange("ship-lattice-security-no-refire")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
 		merged := map[string]model.VerificationRecord{
@@ -822,7 +832,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 			SkillGoalVerification: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextGoal, "handle-goal")},
+				References: []string{contextOriginRef(model.StageContextReview, "handle-goal")},
 			},
 			SkillFinalCloseout: {
 				Verdict:    model.VerificationVerdictPass,
@@ -833,17 +843,18 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		assert.Empty(t, blockers, "selected security peer collisions are review-owned and must not re-fire at ship")
 	})
 
-	t.Run("ship-owned goal/spec edge fires and never emits executor_agent_missing", func(t *testing.T) {
+	t.Run("folded goal/spec review edge does not fire at ship", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 		change := model.NewChange("ship-lattice-goal-collision")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
-		// goal shares a handle with spec -> a goal-owned edge fires.
+		// goal-verification shares a handle with spec, but it is now a folded S3
+		// review peer. The review gate owns that edge; ship must not re-fire it.
 		merged := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
@@ -855,7 +866,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 			SkillGoalVerification: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextGoal, "shared-goal-spec")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-spec")},
 			},
 			SkillFinalCloseout: {
 				Verdict:    model.VerificationVerdictPass,
@@ -863,14 +874,12 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 		}
 		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, crossStageContextOwnedShipStages, true)
-		require.Equal(t, 1, countReasonCode(blockers, "cross_stage_context_not_distinct"))
-		// lexical order: goal < spec-compliance-review.
-		assert.Equal(t, model.StageContextGoal+"|"+SkillSpecComplianceReview, blockers[0].Detail)
+		assert.Empty(t, blockers)
 		assert.False(t, hasReasonCode(blockers, "executor_agent_missing"),
 			"the distinct-context lattice must never emit executor_agent_missing")
 	})
 
-	t.Run("selected security participates at ship and unselected security stays silent", func(t *testing.T) {
+	t.Run("selected security folded review edge stays silent at ship", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
@@ -898,7 +907,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			SkillGoalVerification: {
 				Verdict:    model.VerificationVerdictPass,
 				Timestamp:  time.Now().UTC(),
-				References: []string{contextOriginRef(model.StageContextGoal, "shared-goal-security")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-security")},
 			},
 			SkillFinalCloseout: {
 				Verdict: model.VerificationVerdictPass,
@@ -909,11 +918,9 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 				},
 			},
 		}
-		wantDetail := model.StageContextGoal + "|" + SkillSecurityReview
-
 		selectedChange := model.NewChange("ship-lattice-security-selected")
 		selectedChange.WorkflowPreset = model.WorkflowPresetStandard
-		selectedChange.CurrentState = model.StateS4Verify
+		selectedChange.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, selectedChange))
 		selectedShip, err := buildShipAuthorityFromReadiness(root, selectedChange, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},
@@ -924,16 +931,16 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.True(t,
-			hasReasonCodeDetail(selectedShip.VerifySkillBlockers, "cross_stage_context_not_distinct", wantDetail),
-			"selected security-review must participate in ship-owned goal edges")
-		assert.True(t,
-			hasReasonCodeDetail(selectedShip.Result.ReasonCodes, "cross_stage_context_not_distinct", wantDetail),
-			"selected security-review ship blocker must reach G_ship reasons")
+		assert.False(t,
+			hasReasonCode(selectedShip.VerifySkillBlockers, "cross_stage_context_not_distinct"),
+			"selected security-review folded review edges must not re-fire at ship")
+		assert.False(t,
+			hasReasonCode(selectedShip.Result.ReasonCodes, "cross_stage_context_not_distinct"),
+			"selected security-review folded review edges must not reach G_ship reasons")
 
 		unselectedChange := model.NewChange("ship-lattice-security-unselected")
 		unselectedChange.WorkflowPreset = model.WorkflowPresetStandard
-		unselectedChange.CurrentState = model.StateS4Verify
+		unselectedChange.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, unselectedChange))
 		unselectedShip, err := buildShipAuthorityFromReadiness(root, unselectedChange, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},
@@ -956,12 +963,12 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 		change := model.NewChange("ship-lattice-dual-surface")
 		change.WorkflowPreset = model.WorkflowPresetStandard
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Build a passing set where goal and closeout collide (a ship-owned edge),
-		// carried through both the review surface (spec/code) and verify surface
-		// (goal/closeout).
+		// Build a passing set where folded goal and final-closeout carry colliding
+		// legacy-looking handles. Ship no longer owns context-origin lattice edges, so
+		// the collision stays silent here.
 		reviewPassing := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
@@ -976,7 +983,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			SkillGoalVerification: {
 				Verdict:    model.VerificationVerdictPass,
 				Timestamp:  time.Now().UTC(),
-				References: []string{contextOriginRef(model.StageContextGoal, "shared-go-close")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-go-close")},
 			},
 			SkillFinalCloseout: {
 				Verdict: model.VerificationVerdictPass,
@@ -994,15 +1001,15 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			ReviewSurface:     &ReviewAuthority{PassingSkills: reviewPassing},
 		})
 		require.NoError(t, err)
-		assert.True(t, hasReasonCode(ship.VerifySkillBlockers, "cross_stage_context_not_distinct"),
-			"ship-owned goal<->closeout collision must surface in VerifySkillBlockers")
-		assert.True(t, hasReasonCode(ship.Result.ReasonCodes, "cross_stage_context_not_distinct"),
-			"the actionable lattice blocker must reach G_ship reasons (dual-surfaced into unresolved)")
+		assert.False(t, hasReasonCode(ship.VerifySkillBlockers, "cross_stage_context_not_distinct"),
+			"ship no longer owns goal/closeout context-origin lattice edges")
+		assert.False(t, hasReasonCode(ship.Result.ReasonCodes, "cross_stage_context_not_distinct"),
+			"ship-owned context lattice blockers must not reach G_ship reasons after S3 folding")
 
 		// Light preset: same colliding records, advisory (no blocker).
 		lightChange := model.NewChange("ship-lattice-light")
 		lightChange.WorkflowPreset = model.WorkflowPresetLight
-		lightChange.CurrentState = model.StateS4Verify
+		lightChange.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, lightChange))
 		lightShip, err := buildShipAuthorityFromReadiness(root, lightChange, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},

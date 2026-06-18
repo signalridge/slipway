@@ -260,7 +260,7 @@ func TestPresetCommandAllowsUpgradeAfterLeavingS1Plan(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate having advanced past S1_PLAN.
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.IntakeSubStep = ""
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))

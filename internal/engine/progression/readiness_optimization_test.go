@@ -136,7 +136,7 @@ func TestEvaluateGovernanceReadinessRetainsRequiredActionBlockersWhenSnapshotCac
 
 	change := model.NewChange("readiness-required-actions-preview")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -167,7 +167,7 @@ func TestEvaluateGovernanceReadinessKeepsReviewSurfaceOptInAtVerify(t *testing.T
 	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 	change := model.NewChange("readiness-review-surface-opt-in")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 
 	readOnly, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
@@ -221,7 +221,7 @@ func TestEvaluateGovernanceReadinessDoesNotRetainStaleControlsFromPersistedSnaps
 	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 	change := model.NewChange("readiness-monotonic-controls")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -262,7 +262,7 @@ func TestBuildShipAuthorityUsesStructuredVerifySkillBlockers(t *testing.T) {
 	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 	change := model.NewChange("ship-structured-skill-blockers")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 
 	shipAuthority, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
@@ -283,7 +283,7 @@ func TestBuildShipAuthorityUsesCachedReviewAuthorityWhenReviewSurfaceIsHidden(t 
 	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
 	change := model.NewChange("ship-hidden-review-surface-cache")
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	require.NoError(t, state.SaveChange(root, change))
 
 	cachedReviewAuthority := ReviewAuthority{

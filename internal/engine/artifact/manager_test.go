@@ -1008,7 +1008,7 @@ func TestReconcileFromFilesystemFrozenAmendableUnreadableArtifactReturnsError(t 
 
 	change := &model.Change{
 		Slug:         slug,
-		CurrentState: model.StateS2Execute,
+		CurrentState: model.StateS2Implement,
 		Artifacts: map[string]model.ArtifactState{
 			"intent": {
 				ID:          "intent",
@@ -1035,7 +1035,7 @@ func TestStalePropagationOrderUnknownArtifactError(t *testing.T) {
 // regression guard (REQ-002 scenario A / REQ-009). A governed text artifact is
 // frozen with its content hash recorded while stored as LF, then re-read from
 // disk with CRLF line endings (the Windows `git core.autocrlf=true` checkout
-// case). Reconciliation runs in an amendment-eligible state (S2_EXECUTE), where
+// case). Reconciliation runs in an amendment-eligible state (S2_IMPLEMENT), where
 // a real content change would unfreeze the artifact to approved and record an
 // AmendmentEvent. Because ComputeFileContentHash CRLF-normalizes text, the
 // CRLF re-materialization must hash identically to the LF original, so
@@ -1071,7 +1071,7 @@ func TestReconcileFromFilesystemCRLFRematerializationIsNotStale(t *testing.T) {
 
 	change := &model.Change{
 		Slug:         slug,
-		CurrentState: model.StateS2Execute, // amendment-eligible: a real change would unfreeze.
+		CurrentState: model.StateS2Implement, // amendment-eligible: a real change would unfreeze.
 		Artifacts: map[string]model.ArtifactState{
 			"intent": {
 				ID:          "intent",

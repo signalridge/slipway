@@ -239,18 +239,18 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 
 	findings = append(findings, runtimeStateHealthFindings(change)...)
 
-	if change.ActiveCheckpoint != nil && change.CurrentState != model.StateS2Execute {
+	if change.ActiveCheckpoint != nil && change.CurrentState != model.StateS2Implement {
 		findings = append(findings, HealthFinding{
 			Severity:   model.ReasonSeverityError,
 			Category:   "execution_checkpoint",
 			Slug:       change.Slug,
-			Message:    "Active checkpoint exists outside S2_EXECUTE",
+			Message:    "Active checkpoint exists outside S2_IMPLEMENT",
 			Repairable: true,
 			RepairHint: "Run `slipway repair` to clear the stale checkpoint and rewrite execution state.",
 			Reasons:    []model.ReasonCode{model.NewReasonCode("stale_checkpoint_state", string(change.CurrentState))},
 		})
 	}
-	if change.ActiveCheckpoint != nil && change.CurrentState == model.StateS2Execute {
+	if change.ActiveCheckpoint != nil && change.CurrentState == model.StateS2Implement {
 		if staleAfter := checkpointStaleAfter(root); staleAfter > 0 &&
 			!change.ActiveCheckpoint.PausedAt.IsZero() &&
 			nowUTC().Sub(change.ActiveCheckpoint.PausedAt) > staleAfter {
@@ -271,75 +271,72 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 	}
 
 	summary, summaryErr := LoadOptionalRelevantExecutionSummary(root, change)
-	plan, err := LoadOptionalWavePlanForChange(root, change)
-	if err != nil {
-		findings = append(findings, HealthFinding{
-			Severity: model.ReasonSeverityError,
-			Category: "wave_execution",
-			Slug:     change.Slug,
-			Message:  "Wave plan authority is unreadable",
-			Reasons:  []model.ReasonCode{model.NewReasonCode("wave_plan_unreadable", err.Error())},
-		})
-		if blockedReason, blockerErr := wavePlanRepairBlockedReason(root, change, summary); blockerErr != nil {
-			return nil, blockerErr
-		} else if strings.TrimSpace(blockedReason) != "" {
-			findings[len(findings)-1].Message = "Wave plan authority is unreadable and cannot be safely reconstructed from current tasks.md"
-			findings[len(findings)-1].Repairable = false
-			findings[len(findings)-1].RepairHint = wavePlanRepairHint()
-			findings[len(findings)-1].Reasons = append(findings[len(findings)-1].Reasons, model.NewReasonCode("wave_plan_repair_blocked", blockedReason))
-		} else {
-			findings[len(findings)-1].Repairable = true
-			findings[len(findings)-1].RepairHint = "Run `slipway repair` to reconstruct wave-plan.yaml or fix the file manually if reconstruction fails."
-		}
-		return findings, nil
-	}
-	if plan == nil {
-		if blockedReason, blockerErr := wavePlanRepairBlockedReason(root, change, summary); blockerErr != nil {
-			return nil, blockerErr
-		} else if strings.TrimSpace(blockedReason) != "" {
+	var plan *model.WavePlan
+	if change.CurrentState == model.StateS2Implement {
+		derived, _, err := MaterializeWavePlanTransactionOpAt(root, change, nowUTC())
+		if err != nil {
 			findings = append(findings, HealthFinding{
 				Severity:   model.ReasonSeverityError,
 				Category:   "wave_execution",
 				Slug:       change.Slug,
-				Message:    "Wave plan is missing and cannot be safely reconstructed from current tasks.md",
+				Message:    "Current tasks.md cannot be converted into a wave plan",
 				Repairable: false,
-				RepairHint: wavePlanRepairHint(),
-				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_repair_blocked", blockedReason)},
+				RepairHint: "Update tasks.md so task IDs, dependencies, and target files form a schedulable plan.",
+				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_load_failed", err.Error())},
 			})
 			return findings, nil
 		}
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityError,
-			Category:   "wave_execution",
-			Slug:       change.Slug,
-			Message:    "Wave plan is missing",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to materialize wave-plan.yaml from the governed tasks plan.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_missing", change.Slug)},
-		})
-		return findings, nil
-	}
+		plan = &derived
+	} else {
+		loadedPlan, err := LoadOptionalWavePlanForChange(root, change)
+		if err != nil {
+			findings = append(findings, HealthFinding{
+				Severity:   model.ReasonSeverityError,
+				Category:   "wave_execution",
+				Slug:       change.Slug,
+				Message:    "Derived wave plan is unreadable",
+				Repairable: true,
+				RepairHint: wavePlanRepairHint(),
+				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_unreadable", err.Error())},
+			})
+			return findings, nil
+		}
+		if loadedPlan == nil {
+			findings = append(findings, HealthFinding{
+				Severity:   model.ReasonSeverityError,
+				Category:   "wave_execution",
+				Slug:       change.Slug,
+				Message:    "Derived wave plan is missing",
+				Repairable: true,
+				RepairHint: wavePlanRepairHint(),
+				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_missing", change.Slug)},
+			})
+			return findings, nil
+		}
+		plan = loadedPlan
 
-	plan.Normalize()
-	planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
-	}
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanHash)
-	}
-	if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil &&
-		planHash != "" &&
-		currentHash != planHash {
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityError,
-			Category:   "wave_execution",
-			Slug:       change.Slug,
-			Message:    "Wave plan drift detected against tasks.md",
-			Repairable: false,
-			RepairHint: wavePlanRepairHint(),
-			Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_drift", currentHash)},
-		})
+		plan.Normalize()
+		planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
+		if planHash == "" {
+			planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+		}
+		if planHash == "" {
+			planHash = strings.TrimSpace(plan.TasksPlanHash)
+		}
+		if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil &&
+			planHash != "" &&
+			currentHash != planHash {
+			findings = append(findings, HealthFinding{
+				Severity:   model.ReasonSeverityError,
+				Category:   "wave_execution",
+				Slug:       change.Slug,
+				Message:    "Derived wave plan is stale against tasks.md",
+				Repairable: true,
+				RepairHint: wavePlanRepairHint(),
+				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_drift", currentHash)},
+			})
+			return findings, nil
+		}
 	}
 
 	if change.ActiveCheckpoint != nil {
@@ -474,7 +471,7 @@ func runtimeStateHealthFindings(change model.Change) []HealthFinding {
 	// Check for interrupted execution from the change itself.
 	if !change.InterruptedExecutionAt.IsZero() &&
 		change.Status == model.ChangeStatusActive &&
-		change.CurrentState == model.StateS2Execute {
+		change.CurrentState == model.StateS2Implement {
 		interruptedAt := change.InterruptedExecutionAt.UTC().Format(time.RFC3339)
 		findings = append(findings, HealthFinding{
 			Severity:   model.ReasonSeverityWarning,
@@ -499,7 +496,7 @@ func checkpointStaleAfter(root string) time.Duration {
 
 func dedicatedWorktreeHealthReasons(root string, change model.Change) ([]model.ReasonCode, error) {
 	switch change.CurrentState {
-	case model.StateS1Plan, model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+	case model.StateS1Plan, model.StateS2Implement, model.StateS3Review:
 	default:
 		return nil, nil
 	}

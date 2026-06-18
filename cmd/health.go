@@ -742,7 +742,7 @@ func doctorResumeAction(root, changeSlug string) (*doctorAction, error) {
 	if change == nil {
 		return nil, nil
 	}
-	if change.Status != model.ChangeStatusActive || change.CurrentState != model.StateS2Execute {
+	if change.Status != model.ChangeStatusActive || change.CurrentState != model.StateS2Implement {
 		return nil, nil
 	}
 	execCtx, err := loadExecutionContext(root, *change)

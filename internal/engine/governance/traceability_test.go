@@ -510,7 +510,7 @@ func TestTraceabilityAssuranceCoverageGapIsStageAware(t *testing.T) {
 
 	const issue = "requirement missing assurance coverage verdict"
 
-	for _, state := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Execute} {
+	for _, state := range []model.WorkflowState{model.StateS0Intake, model.StateS1Plan, model.StateS2Implement} {
 		state := state
 		t.Run("non-blocking before review/"+string(state), func(t *testing.T) {
 			t.Parallel()
@@ -526,7 +526,7 @@ func TestTraceabilityAssuranceCoverageGapIsStageAware(t *testing.T) {
 		})
 	}
 
-	for _, state := range []model.WorkflowState{model.StateS3Review, model.StateS4Verify, model.StateDone} {
+	for _, state := range []model.WorkflowState{model.StateS3Review, model.StateDone} {
 		state := state
 		t.Run("blocking at or after review/"+string(state), func(t *testing.T) {
 			t.Parallel()
@@ -563,7 +563,7 @@ func TestTraceabilityMissingOrEmptyAssuranceIsStageAware(t *testing.T) {
 		result := EvaluateTraceability(TraceabilityInput{
 			BundleDir:      dir,
 			Slug:           slug,
-			LifecycleState: model.StateS2Execute,
+			LifecycleState: model.StateS2Implement,
 		})
 		assert.Equal(t, model.TraceabilityStatusOK, result.Status)
 		assert.False(t, hasGapIssue(result.Gaps, missingIssue))
@@ -578,11 +578,6 @@ func TestTraceabilityMissingOrEmptyAssuranceIsStageAware(t *testing.T) {
 		{
 			name:  "missing at S3_REVIEW",
 			state: model.StateS3Review,
-			issue: missingIssue,
-		},
-		{
-			name:  "missing at S4_VERIFY",
-			state: model.StateS4Verify,
 			issue: missingIssue,
 		},
 		{
@@ -642,13 +637,13 @@ All tests pass.
 		return dir, slug
 	}
 
-	t.Run("non-blocking at S2_EXECUTE", func(t *testing.T) {
+	t.Run("non-blocking at S2_IMPLEMENT", func(t *testing.T) {
 		t.Parallel()
 		dir, slug := writeBundle(t)
 		result := EvaluateTraceability(TraceabilityInput{
 			BundleDir:      dir,
 			Slug:           slug,
-			LifecycleState: model.StateS2Execute,
+			LifecycleState: model.StateS2Implement,
 		})
 		assert.Equal(t, model.TraceabilityStatusWarning, result.Status)
 		assert.True(t, hasGapIssue(result.Gaps, issue))
@@ -671,7 +666,7 @@ All tests pass.
 func TestTraceabilityAssuranceCompleteCoverageOKAcrossStates(t *testing.T) {
 	t.Parallel()
 
-	for _, state := range []model.WorkflowState{model.StateS2Execute, model.StateS3Review} {
+	for _, state := range []model.WorkflowState{model.StateS2Implement, model.StateS3Review} {
 		state := state
 		t.Run(string(state), func(t *testing.T) {
 			t.Parallel()

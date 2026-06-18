@@ -11,13 +11,12 @@ func WorkflowPath(_ bool) []model.WorkflowState {
 	return []model.WorkflowState{
 		model.StateS0Intake,
 		model.StateS1Plan,
-		model.StateS2Execute,
+		model.StateS2Implement,
 		model.StateS3Review,
-		model.StateS4Verify,
 		model.StateDone,
 	}
 }
 
 func CanFinalizeDone(state model.WorkflowState) bool {
-	return state == model.StateS4Verify
+	return state == model.StateS3Review
 }

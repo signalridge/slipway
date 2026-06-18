@@ -10,12 +10,15 @@ import (
 )
 
 type nextHandoffView struct {
+	Command          string                  `json:"command,omitempty"`
+	DelegatedTo      string                  `json:"delegated_to,omitempty"`
 	Slug             string                  `json:"slug"`
 	Phase            model.UserPhase         `json:"phase"`
 	ExecutionMode    string                  `json:"execution_mode,omitempty"`
 	CurrentState     model.WorkflowState     `json:"current_state"`
 	LifecycleStatus  string                  `json:"lifecycle_status,omitempty"`
 	NextSkill        *nextSkillHandoff       `json:"next_skill"`
+	ReviewBatch      *reviewBatchView        `json:"review_batch,omitempty"`
 	ContextBudget    *contextBudgetHandoff   `json:"context_budget,omitempty"`
 	InputContext     nextHandoffContext      `json:"input_context"`
 	AutoPassEligible []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
@@ -57,12 +60,13 @@ type nextHandoffContext struct {
 }
 
 func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, "next")
 	if err != nil {
 		return nextView{}, err
 	}
 
 	view := nextView{
+		Command:                 "next",
 		Slug:                    ref.Slug,
 		Phase:                   model.PhasePlanning,
 		ConfirmationRequirement: confirmationNoBoundary("initializing"),
@@ -120,7 +124,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		// handoff payload stays consistent with the full next view (issue #140).
 		view.planLocked = planLockedFromGates(readiness)
 	}
-	if view.CurrentState == model.StateS2Execute && governedChange != nil {
+	if view.CurrentState == model.StateS2Implement && governedChange != nil {
 		view.InputContext.WavePlan = buildWavePlan(root, governedChange, view.InputContext.ArtifactBundle)
 	}
 
@@ -220,12 +224,15 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		changeAuthority = view.InputContext.HandoffContext.ChangeAuthority
 	}
 	return nextHandoffView{
+		Command:         view.Command,
+		DelegatedTo:     view.DelegatedTo,
 		Slug:            view.Slug,
 		Phase:           view.Phase,
 		ExecutionMode:   view.ExecutionMode,
 		CurrentState:    view.CurrentState,
 		LifecycleStatus: view.LifecycleStatus,
 		NextSkill:       nextSkill,
+		ReviewBatch:     cloneReviewBatch(view.ReviewBatch),
 		ContextBudget:   budget,
 		InputContext: nextHandoffContext{
 			WorkspaceRoot:        view.InputContext.WorkspaceRoot,
@@ -293,6 +300,30 @@ func cloneTechniqueHints(in []techniqueHint) []techniqueHint {
 	for _, hint := range in {
 		hint.HydrateReferences = append([]string(nil), hint.HydrateReferences...)
 		out = append(out, hint)
+	}
+	return out
+}
+
+func cloneReviewBatch(in *reviewBatchView) *reviewBatchView {
+	if in == nil {
+		return nil
+	}
+	out := &reviewBatchView{
+		Mode:            in.Mode,
+		VerificationDir: in.VerificationDir,
+		State:           in.State,
+	}
+	if len(in.Skills) > 0 {
+		out.Skills = make([]reviewBatchSkillView, 0, len(in.Skills))
+		for _, batchSkill := range in.Skills {
+			out.Skills = append(out.Skills, reviewBatchSkillView{
+				Name:             batchSkill.Name,
+				RequiredTokens:   append([]string(nil), batchSkill.RequiredTokens...),
+				ReviewContext:    cloneReviewContext(batchSkill.ReviewContext),
+				TechniqueHints:   cloneTechniqueHints(batchSkill.TechniqueHints),
+				SkillConstraints: cloneSkillConstraints(batchSkill.SkillConstraints),
+			})
+		}
 	}
 	return out
 }

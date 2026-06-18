@@ -28,8 +28,9 @@ Slipway exposes three AI-facing layers; this skill is only the top entry:
 - **Command surfaces (`slipway:<command>`)** — one per CLI command with the exact
   arguments and contract; prefer these over re-deriving a command here.
 - **Governed host skills (`slipway-<name>`)** — the stage skills the CLI selects
-  via `slipway next`/`run` (intake, research, plan-audit, wave-orchestration,
-  review, …); never guess these, load the one the CLI returns.
+  via `slipway next` or the explicit stage commands (intake, research,
+  plan-audit, wave-orchestration, review, …); never guess these, load the one
+  the CLI returns.
 
 ## Primary Route Table
 | Situation | Command |
@@ -37,7 +38,12 @@ Slipway exposes three AI-facing layers; this skill is only the top entry:
 | Unsure whether a governed change already exists | `slipway status --json` |
 | No active change and governed work should begin | `slipway new --json` |
 | Active change and you need the next governed host without advancing | `slipway next --json` |
-| Active change and you want the CLI to advance to the next governed step | `slipway run --json` |
+| Active change at S0_INTAKE | `slipway intake --json` |
+| Active change at S1_PLAN | `slipway plan --json` |
+| Active change at S2_IMPLEMENT | `slipway implement --json` |
+| Active change at S3_REVIEW | `slipway review --json` |
+| S3 reviewer feedback needs a code/artifact fix | `slipway fix --json` |
+| Active change and you want an auto-driver shortcut | `slipway run --json` |
 | The change is already `done-ready` and should be finalized | `slipway done` |
 
 ## Entry Rules
@@ -68,7 +74,7 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 - derive the SKILL.md path from your own tool convention using `slipway-{name}`
 - treat the default JSON as an action contract; do not expect diagnostic context fields
 - `context_budget` appears only when the guard action is `warn` or `stop`
-- if governance controls, policy prose, or full readiness details are needed, run `slipway health --governance --json --change <slug>` or rerun `next/run` with `--diagnostics`
+- if governance controls, policy prose, or full readiness details are needed, run `slipway health --governance --json --change <slug>` or rerun `next` / the current stage command with `--diagnostics`
 - read policy packs by path; do not expect inline policy-pack prose in default JSON
 - do not look for retired agent fields or a second exported prompt file
 - do not guess the next governed host without the CLI response

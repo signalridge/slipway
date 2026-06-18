@@ -12,7 +12,7 @@ func (c *Change) AdvancePlanSubStep(next PlanSubStep) {
 	c.PlanSubStep = next
 }
 
-// EnterIntake reopens the intake phase and seeds its entry substep.
+// EnterIntake records a transition into S0_INTAKE and seeds its entry substep.
 func (c *Change) EnterIntake() []string {
 	c.CurrentState = StateS0Intake
 	c.IntakeSubStep = IntakeEntrySubStep()
@@ -154,23 +154,4 @@ func (c *Change) ResetReviewIntentDriftFailures() bool {
 	}
 	c.ReviewIntentDriftFailures = 0
 	return true
-}
-
-// ResetPivotExecutionResidue clears runtime residue that must not survive a
-// reroute or rescope pivot.
-func (c *Change) ResetPivotExecutionResidue() []string {
-	var cleared []string
-	if c.ResetEvidenceRefs() {
-		cleared = append(cleared, "evidence_refs")
-	}
-	if c.ClearActiveCheckpoint() {
-		cleared = append(cleared, "active_checkpoint")
-	}
-	if c.ResetPlanAuditIterations() {
-		cleared = append(cleared, "plan_audit_iterations")
-	}
-	if c.ResetReviewIntentDriftFailures() {
-		cleared = append(cleared, "review_intent_drift_failures")
-	}
-	return cleared
 }

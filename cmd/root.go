@@ -28,13 +28,18 @@ type commandGroup struct {
 var helpGroups = []commandGroup{
 	{
 		Title:       "Core lifecycle",
-		Description: "new -> [next|run -> (AI executes skill)]* -> done",
+		Description: "new -> intake -> plan -> implement -> review -> done; run is a shortcut driver.",
 		Commands: []groupedCommand{
 			{Name: "new", Description: desc("new")},
+			{Name: "intake", Description: desc("intake")},
+			{Name: "plan", Description: desc("plan")},
+			{Name: "implement", Description: desc("implement")},
+			{Name: "review", Description: desc("review")},
+			{Name: "fix", Description: desc("fix")},
+			{Name: "done", Description: desc("done")},
 			{Name: "next", Description: desc("next")},
 			{Name: "run", Description: desc("run")},
 			{Name: "status", Description: desc("status")},
-			{Name: "done", Description: desc("done")},
 		},
 	},
 	{
@@ -49,9 +54,7 @@ var helpGroups = []commandGroup{
 		Description: "Commands used when workflow decisions are needed.",
 		Commands: []groupedCommand{
 			{Name: "preset", Description: desc("preset")},
-			{Name: "review", Description: desc("review")},
 			{Name: "validate", Description: desc("validate")},
-			{Name: "pivot", Description: desc("pivot")},
 			{Name: "abort", Description: desc("abort")},
 			{Name: "cancel", Description: desc("cancel")},
 			{Name: "delete", Description: desc("delete")},
@@ -160,6 +163,9 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeInitCmd())
 	cmd.AddCommand(makeCodebaseMapCmd())
 	cmd.AddCommand(makeNewCmd())
+	cmd.AddCommand(makeIntakeCmd())
+	cmd.AddCommand(makePlanCmd())
+	cmd.AddCommand(makeImplementCmd())
 	cmd.AddCommand(makePresetCmd())
 	cmd.AddCommand(makeNextCmd())
 	cmd.AddCommand(makeRunCmd())
@@ -174,8 +180,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeCancelCmd())
 	cmd.AddCommand(makeDeleteCmd())
 	cmd.AddCommand(makeReviewCmd())
+	cmd.AddCommand(makeFixCmd())
 	cmd.AddCommand(makeValidateCmd())
-	cmd.AddCommand(makePivotCmd())
 	cmd.AddCommand(makeRepairCmd())
 	cmd.AddCommand(makeCheckpointCmd())
 	cmd.AddCommand(makeEvidenceCmd())

@@ -42,7 +42,7 @@ func TestAuthoritativeWavePlanViewReDerivesParallelFromCurrentConfig(t *testing.
 
 		root := t.TempDir()
 		change := model.NewChange("stale-wave-plan-default")
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		require.NoError(t, state.SaveChange(root, change))
 		require.NoError(t, state.SaveWavePlan(root, change.Slug, model.WavePlan{
 			Version: model.WavePlanVersion,
@@ -71,7 +71,7 @@ func TestAuthoritativeWavePlanViewReDerivesParallelFromCurrentConfig(t *testing.
 
 		root := t.TempDir()
 		change := model.NewChange("stale-wave-plan-off")
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		require.NoError(t, state.SaveChange(root, change))
 		require.NoError(t, os.WriteFile(
 			state.ConfigPath(root),
@@ -209,7 +209,7 @@ func TestMaterializeWavePlanComputesWavesFromDependencies(t *testing.T) {
 
 	root := t.TempDir()
 	change := model.NewChange("waveless-materialization")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
 	writeWavePlanTasksFixture(t, root, change.Slug, wavelessDependencyTasksFixture)
 
@@ -257,7 +257,7 @@ func TestWavePlanRejectsDeclaredWaveMetadata(t *testing.T) {
 
 		root := t.TempDir()
 		change := model.NewChange("declared-wave-materialization")
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		require.NoError(t, state.SaveChange(root, change))
 		writeWavePlanTasksFixture(t, root, change.Slug, declaredWaveTasksFixture)
 
@@ -397,7 +397,7 @@ func TestAuthoritativeWavePlanViewPreservesExplicitDirectoryAdvisory(t *testing.
 
 	root := t.TempDir()
 	change := model.NewChange("explicit-directory-advisory")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
 	writeWavePlanTasksFixture(t, root, change.Slug, `# Tasks
 
@@ -495,7 +495,7 @@ func TestNarrowingAdvisoriesAreViewOnlyAndExcludedFromPersistedPlan(t *testing.T
 
 	root := t.TempDir()
 	change := model.NewChange("advisories-view-only")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
 	writeWavePlanTasksFixture(t, root, change.Slug, narrowingTasksFixture)
 

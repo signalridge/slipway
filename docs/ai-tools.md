@@ -64,21 +64,24 @@ auth-required error, and fail closed when neither backend exists.
 Core commands:
 
 - `new` (`$slipway-new`)
+- `intake` (`$slipway-intake`)
+- `plan` (`$slipway-plan`)
+- `implement` (`$slipway-implement`)
+- `review` (`$slipway-review`)
+- `fix` (`$slipway-fix`)
+- `done` (`$slipway-done`)
 - `next` (`$slipway-next`)
 - `run` (`$slipway-run`)
 - `status` (`$slipway-status`)
-- `done` (`$slipway-done`)
 
 Situational commands:
 
 - `init` (`$slipway-init`)
 - `cancel` (`$slipway-cancel`)
 - `delete` (`$slipway-delete`)
-- `review` (`$slipway-review`)
 - `validate` (`$slipway-validate`)
 - `checkpoint` (`$slipway-checkpoint`)
 - `preset` (`$slipway-preset`)
-- `pivot` (`$slipway-pivot`)
 - `abort` (`$slipway-abort`)
 - `repair` (`$slipway-repair`)
 - `evidence` (`$slipway-evidence`; the wave-orchestration host records task evidence via `slipway evidence task ...`)

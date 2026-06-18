@@ -50,7 +50,7 @@ func repairMissingConfig(configPath string) (string, error) {
 // interrupted terminal archive rewrite. Archived bundles must be terminal,
 // frozen, scrubbed of runtime-only refs, and detached from git-local runtime state.
 func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
-	change, candidate, err := loadArchivedChangeWithCandidate(root, slug)
+	change, candidate, strippedLegacyRuntimeFields, err := loadArchivedChangeWithCandidateForRepair(root, slug)
 	if err != nil {
 		if isNotExist(err) {
 			return false, nil
@@ -58,7 +58,7 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 		return false, err
 	}
 
-	repaired := false
+	repaired := strippedLegacyRuntimeFields
 	before := cloneChangeForRepairComparison(change)
 	archiveDir := filepath.Dir(candidate.Path)
 
@@ -99,6 +99,71 @@ func RepairArchivedTerminalStatus(root, slug string) (bool, error) {
 	}
 
 	return repaired, nil
+}
+
+func loadArchivedChangeWithCandidateForRepair(root, slug string) (model.Change, bundleCandidate, bool, error) {
+	paths, err := candidateArchivedBundlePaths(root, slug)
+	if err != nil {
+		return model.Change{}, bundleCandidate{}, false, err
+	}
+	strippedByPath := map[string]bool{}
+	change, candidate, err := loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, func(path string) (model.Change, error) {
+		change, stripped, err := loadArchivedChangeCandidateForRepair(path)
+		if stripped {
+			strippedByPath[path] = true
+		}
+		return change, err
+	})
+	if err != nil {
+		return model.Change{}, bundleCandidate{}, false, err
+	}
+	return change, candidate, strippedByPath[candidate.Path], nil
+}
+
+func loadArchivedChangeCandidateForRepair(path string) (model.Change, bool, error) {
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
+	if err != nil {
+		return model.Change{}, false, err
+	}
+	sanitized, stripped, err := stripArchivedChangeRuntimeOnlyFields(raw)
+	if err != nil {
+		return model.Change{}, false, err
+	}
+	change, err := decodeAndValidateChange(sanitized)
+	return change, stripped, err
+}
+
+func stripArchivedChangeRuntimeOnlyFields(raw []byte) ([]byte, bool, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, false, err
+	}
+	node := &doc
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
+		node = doc.Content[0]
+	}
+	if node.Kind != yaml.MappingNode {
+		return raw, false, nil
+	}
+
+	stripped := false
+	for i := 0; i+1 < len(node.Content); {
+		key := node.Content[i]
+		if key != nil && key.Value == "worktree_path" {
+			node.Content = append(node.Content[:i], node.Content[i+2:]...)
+			stripped = true
+			continue
+		}
+		i += 2
+	}
+	if !stripped {
+		return raw, false, nil
+	}
+	sanitized, err := yaml.Marshal(&doc)
+	if err != nil {
+		return nil, false, err
+	}
+	return sanitized, true, nil
 }
 
 func cloneChangeForRepairComparison(change model.Change) model.Change {
@@ -329,7 +394,6 @@ func DiagnoseBundleConsistency(root string, change model.Change) BundleConsisten
 	// bundle consistency error. Optional on the light effective preset.
 	assuranceRequired := bundleConsistencyRequiresAssurance(root, change)
 	assuranceEnforced := change.CurrentState == model.StateS3Review ||
-		change.CurrentState == model.StateS4Verify ||
 		change.CurrentState == model.StateDone
 	if assuranceRequired && assuranceEnforced && !assuranceExists && changeYamlExists {
 		result.Errors = append(result.Errors,
