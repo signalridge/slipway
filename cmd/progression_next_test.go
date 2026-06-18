@@ -1181,6 +1181,99 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 	})
 }
 
+func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "docs review next skill")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		change.WorkflowProfile = model.WorkflowProfileDocs
+		change.GuardrailDomain = "external_api_contracts"
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+			References: []string{
+				"layer:R0=pass",
+				"layer:R3=pass",
+			},
+		})
+		selectedReviewSkills := []string{
+			progression.SkillSpecComplianceReview,
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}
+		pendingReviewSkills := []string{
+			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
+			progression.SkillSecurityReview,
+		}
+
+		nextCmd := commandForRoot(t, root, makeNextCmd())
+		nextCmd.SetArgs([]string{"--json", "--change", slug})
+		var nextOut bytes.Buffer
+		nextCmd.SetOut(&nextOut)
+		require.NoError(t, nextCmd.Execute())
+		var handoff nextHandoffView
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
+		require.NotNil(t, handoff.NextSkill)
+		assert.Equal(t, progression.SkillIndependentReview, handoff.NextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, handoff.NextSkill.SelectedReviewSkills)
+		assert.NotContains(t, handoff.NextSkill.SelectedReviewSkills, progression.SkillCodeQualityReview)
+		require.NotNil(t, handoff.ReviewBatch)
+		assert.ElementsMatch(t, pendingReviewSkills, reviewBatchSkillNames(handoff.ReviewBatch))
+
+		nextDiagCmd := commandForRoot(t, root, makeNextCmd())
+		nextDiagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var nextDiagOut bytes.Buffer
+		nextDiagCmd.SetOut(&nextDiagOut)
+		require.NoError(t, nextDiagCmd.Execute())
+		var nextDiag nextView
+		require.NoError(t, json.Unmarshal(nextDiagOut.Bytes(), &nextDiag))
+		require.NotNil(t, nextDiag.NextSkill)
+		assert.Equal(t, progression.SkillIndependentReview, nextDiag.NextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, nextDiag.NextSkill.SelectedReviewSkills)
+		require.NotNil(t, nextDiag.ReviewBatch)
+		assert.ElementsMatch(t, pendingReviewSkills, reviewBatchSkillNames(nextDiag.ReviewBatch))
+
+		validateCmd := commandForRoot(t, root, makeValidateCmd())
+		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		var validateOut bytes.Buffer
+		validateCmd.SetOut(&validateOut)
+		require.NoError(t, validateCmd.Execute())
+		var validate validateView
+		require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+		assert.ElementsMatch(t, selectedReviewSkills, validate.SelectedReviewSkills)
+		require.NotNil(t, validate.ActionableNextSkill)
+		assert.Equal(t, progression.SkillIndependentReview, validate.ActionableNextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, validate.ActionableNextSkill.SelectedReviewSkills)
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		require.NoError(t, runCmd.Execute())
+		var runView nextView
+		require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
+		require.NotNil(t, runView.NextSkill)
+		assert.Equal(t, progression.SkillIndependentReview, runView.NextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, runView.NextSkill.SelectedReviewSkills)
+		require.NotNil(t, runView.ReviewBatch)
+		assert.ElementsMatch(t, pendingReviewSkills, reviewBatchSkillNames(runView.ReviewBatch))
+	})
+}
+
 func TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

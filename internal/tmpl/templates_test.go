@@ -213,9 +213,10 @@ func assertSelectedS3ReviewPeerSet(t *testing.T, content string) {
 	assert.Contains(
 		t,
 		normalized,
-		"always includes spec-compliance-review, code-quality-review, independent-review, and goal-verification",
+		"includes spec-compliance-review, independent-review, and goal-verification",
 	)
-	assert.Contains(t, normalized, "includes security-review when the security control is selected")
+	assert.Contains(t, normalized, "adds code-quality-review when the workflow profile requires code-quality review")
+	assert.Contains(t, normalized, "adds security-review when the security control is selected")
 }
 
 func assertSelectedS3SuiteResultKeystone(t *testing.T, content string) {
@@ -320,8 +321,9 @@ func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testi
 	assert.Contains(t, content, "closeout_reviewer_independence_missing")
 	// Always-on final-ordering invariant with its own distinct reason code.
 	assert.Contains(t, content, "final-closeout >= every selected S3 review peer")
-	assert.Contains(t, content, "spec-compliance-review, code-quality-review, independent-review, and")
-	assert.Contains(t, content, "it also includes security-review")
+	assert.Contains(t, content, "spec-compliance-review, independent-review, and goal-verification")
+	assert.Contains(t, content, "code-quality-review when the workflow profile requires code-quality review")
+	assert.Contains(t, content, "adds security-review when the security control is selected")
 	assert.Contains(t, content, "goal-verification")
 	assert.Contains(t, content, "every selected S3 review skill has passing verification")
 	assert.NotContains(t, content, "both review skills have passing verification")

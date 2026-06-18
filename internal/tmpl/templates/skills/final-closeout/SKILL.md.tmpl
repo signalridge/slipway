@@ -173,10 +173,11 @@ The ship gate now consumes the independence attestation it previously ignored.
   Recovery: re-run final-closeout and record the token. Advisory on light.
 - **Final ordering (always-on invariant):** the engine enforces
   `final-closeout >= every selected S3 review peer` across the
-  independence-critical verdict timestamps. The selected S3 peer set always
-  includes spec-compliance-review, code-quality-review, independent-review, and
-  goal-verification; it also includes security-review when the security control
-  is selected. This invariant is always on — it does NOT depend on the opt-in
+  independence-critical verdict timestamps. The selected S3 peer set includes
+  spec-compliance-review, independent-review, and goal-verification; it adds
+  code-quality-review when the workflow profile requires code-quality review,
+  and adds security-review when the security control is selected. This invariant
+  is always on — it does NOT depend on the opt-in
   `closeout:goal_verification_reuse=pass` token. If final-closeout predates any
   selected peer, the ship gate fails closed with `closeout_chain_order_invalid`
   (a distinct code, not `closeout_goal_verification_reuse_invalid`). Recovery:

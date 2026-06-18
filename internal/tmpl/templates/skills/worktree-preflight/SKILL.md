@@ -1,7 +1,7 @@
 ---
 skill_id: worktree-preflight
 name: slipway-worktree-preflight
-description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on missing, invalid, or operator-supplied worktree bindings after automatic early binding is unavailable."
+description: "Use when governed execution requires a dedicated worktree and baseline verification. Triggers on missing or unavailable early worktree binding before governed execution."
 ---
 
 # Worktree Preflight
@@ -14,7 +14,7 @@ IRON LAW: NO DISCOVERY-REQUIRED GOVERNED EXECUTION WITHOUT A DEDICATED WORKTREE 
 Verify or repair the dedicated worktree binding required before governed
 execution begins. `slipway new` creates the default `.worktrees/<slug>` binding
 early when Git has a usable HEAD; this standalone governance preflight handles
-the remaining cases where binding is missing, invalid, or operator-supplied.
+the remaining cases where the early binding is missing or unavailable.
 Mitigates: worktree isolation and baseline drift before governed execution.
 
 ## Workflow Outline
@@ -27,7 +27,7 @@ Mitigates: worktree isolation and baseline drift before governed execution.
 For discovery-required governed changes, the normal path is early automatic
 binding during `slipway new`. If `slipway next --json` later returns
 `next_skill: worktree-preflight`, treat that as a repair/preflight path for a
-missing or invalid binding before wave execution.
+missing or unavailable binding before wave execution.
 
 ## Process
 

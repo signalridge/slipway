@@ -1,7 +1,7 @@
 ---
 skill_id: security-review
 name: slipway-security-review
-description: "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths."
+description: "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or security-review control selected by blast-radius policy."
 hydrate_references:
   - name: authentication.md
     reason: "Password storage / session / MFA / recovery secure-default rules"
@@ -29,6 +29,9 @@ risky escape hatches. At `S3_REVIEW` this is a workflow-owned host that
 dispatches its own native subagent on the SHARED change worktree. Every
 deviation from a secure default must be called out with a reproducible
 observation, not a taste argument.
+
+Changed security-sensitive paths and external surfaces are review scope hints
+after this peer is selected; they are not resolver triggers by themselves.
 
 ## Workflow Outline
 1. Read the change diff, threat-relevant artifacts, and dependency/config changes yourself.

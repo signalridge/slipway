@@ -300,7 +300,7 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	if change.CurrentState == model.StateS3Review {
-		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile())
 	}
 	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)
 	applyGovernanceSurfaceToValidate(readiness, &view)
@@ -346,7 +346,7 @@ func buildActionableNextSkillView(change model.Change, readiness progression.Gov
 	reviewSelection := progression.ReviewSkillSelectionFromControls(readiness.ActiveControls)
 	var selectedReviewSkills []string
 	if change.CurrentState == model.StateS3Review {
-		selectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+		selectedReviewSkills = selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile())
 	} else {
 		reviewSelection = skill.ReviewSkillSelection{}
 	}

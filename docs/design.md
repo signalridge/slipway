@@ -58,9 +58,10 @@ or self-stamp path; the engine stays the sole verdict stamper.
 
 `context_origin:stage=<stage>=<handle>` is one chain-wide grammar — emitted by the
 independence skills on the shared worktree — that spans the whole governed chain.
-S3 uses a selected review set: the mandatory spec, code, independent review, and
-goal-verification reviewers, plus the security reviewer when the engine-derived
-security control is selected. Every selected review host records the same
+S3 uses a selected review set: spec, independent review, and goal-verification
+reviewers are selected for every profile; code-quality review joins when the
+workflow profile requires code-quality review; security review joins when the
+engine-derived security control is selected. Every selected review host records the same
 `context_origin:stage=review=<handle>` wire token, but the R2 lattice keys those
 participants by the recording review skill name rather than by the shared
 `review` stage. The other review-authority participants are the S2 wave
@@ -79,7 +80,7 @@ selected peer set.
 | Seam | Owns | Edges |
 | --- | --- | --- |
 | Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
-| Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable: mandatory set has 15, selected security expands it to 21 |
+| Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable by workflow profile, selected security control, and optional fix handle |
 | Ship authority | no additional context-origin edges; ship owns final ordering and closeout presence attestations | 0 |
 
 When a seam fails closed, recovery is to re-run the owning stage or selected

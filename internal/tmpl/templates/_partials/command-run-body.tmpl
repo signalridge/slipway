@@ -48,10 +48,12 @@ or `slipway next --json`:
 - If `context_budget.guard_action` equals `stop`, stop execution, preserve the returned recovery paths, and resume in a fresh context.
 
 ## Fresh Reviewer Pause Rule
-When `run` reaches a selected S3 peer reviewer (`spec-compliance-review`,
-`code-quality-review`, `independent-review`, `goal-verification`, plus
-`security-review` when selected), stop and hand off to a fresh reviewer agent.
-Do not let the same long-running execution context review its own prior
+When `run` reaches a selected S3 peer reviewer, stop and hand off to a fresh reviewer agent.
+Follow `next_skill.selected_review_skills` from the current output. The
+baseline selected peer set is `spec-compliance-review`,
+`independent-review`, and `goal-verification`; it adds `code-quality-review`
+when selected by the workflow profile and `security-review` when selected by
+policy. Do not let the same long-running execution context review its own prior
 implementation work. `final-closeout` is the last closeout step after the
 selected peer set, not a selected S3 peer.
 

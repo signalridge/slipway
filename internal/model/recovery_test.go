@@ -175,9 +175,11 @@ func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 			name: "missing selected security review",
 			spec: "required_skill_missing:security-review",
 			want: []string{
+				"profile-filtered selected peer skills",
 				"selected peer skills",
 				"goal-verification",
-				"security-review when selected",
+				"code-quality-review when selected by the workflow profile",
+				"security-review when selected by policy",
 			},
 		},
 		{
@@ -186,7 +188,8 @@ func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 			want: []string{
 				"selected S3 peer",
 				"independent-review",
-				"security-review when selected",
+				"code-quality-review when selected by the workflow profile",
+				"security-review when selected by policy",
 				"goal-verification",
 				"unordered S3 peer",
 				"re-run final-closeout",
@@ -204,6 +207,7 @@ func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 			for _, want := range tt.want {
 				assert.Contains(t, step.Remediation, want)
 			}
+			assert.NotContains(t, step.Remediation, "spec-compliance-review, code-quality-review")
 			assert.NotContains(t, step.Remediation, "{")
 		})
 	}

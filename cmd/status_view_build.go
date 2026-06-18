@@ -121,7 +121,7 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.ScopeContract = buildScopeContractView(readiness.ScopeContract)
 	if change.CurrentState == model.StateS3Review {
-		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness)
+		view.SelectedReviewSkills = selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile())
 	}
 	if !change.ContextDependencies.IsEmpty() {
 		deps := change.ContextDependencies

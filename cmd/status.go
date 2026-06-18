@@ -299,7 +299,7 @@ func makeStatusCmd() *cobra.Command {
 	cmd.Flags().StringVar(&focus, "focus", "", "Status focus override (e.g. incident)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
-	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict --hydrate output to the selected `<skill-id>/<name>` reference (repeatable)")
 	cmd.Flags().BoolVar(&statsMode, "stats", false, "Show workspace diagnostics (active count, stale summaries, integrity issues)")
 	cmd.Flags().BoolVar(&rootMode, "root", false, "Print the canonical slipway scope root")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")

@@ -1,7 +1,7 @@
 ---
 skill_id: goal-verification
 name: slipway-goal-verification
-description: "Use when verifying acceptance criteria with fresh evidence before completion claims. Triggers on post-review completion checks or whenever completion is being asserted."
+description: "Use when verifying acceptance criteria with fresh evidence as a selected S3 review peer before final closeout. Triggers on the S3 selected reviewer set including goal-verification or whenever completion is being asserted."
 ---
 
 # Goal Verification
@@ -21,8 +21,8 @@ fresh, concrete proof from the current run.
 
 ## When This Runs
 At `S3_REVIEW` as one selected review peer. It runs in parallel with the other
-selected reviewers; it does not wait for spec, code, independent, or security
-review evidence.
+selected reviewers; it does not wait for spec, independent, selected
+code-quality, or selected security review evidence.
 
 ## Peer-Review Invariant
 Goal-verification is part of the unordered selected S3 review set. Final-closeout

@@ -45,6 +45,10 @@ func SelectedReviewSkills(selection ReviewSkillSelection) []string {
 	return selected
 }
 
+func SelectedReviewSkillsForWorkflowProfile(selection ReviewSkillSelection, profile model.WorkflowProfile) []string {
+	return FilterRequiredSkillsForWorkflowProfileWithReviewSelection(SelectedReviewSkills(selection), profile, selection)
+}
+
 func ReviewSkillSelected(skillName string, selection ReviewSkillSelection) bool {
 	return slices.Contains(SelectedReviewSkills(selection), strings.TrimSpace(skillName))
 }
