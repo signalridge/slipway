@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0](https://github.com/signalridge/slipway/compare/v0.29.0...v0.30.0) (2026-06-18)
+
+
+### Features
+
+* **governance:** add handoff authoring guidance ([#269](https://github.com/signalridge/slipway/issues/269)) ([2696ff7](https://github.com/signalridge/slipway/commit/2696ff736680591803f3cadfee8a067140244c65))
+* resolve current open issues ([#267](https://github.com/signalridge/slipway/issues/267)) ([532ed32](https://github.com/signalridge/slipway/commit/532ed3250d5399a16ee01ca4a658ec5e989f7e21))
+
 ## [0.29.0](https://github.com/signalridge/slipway/compare/v0.28.0...v0.29.0) (2026-06-18)
 
 
