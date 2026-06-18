@@ -435,8 +435,20 @@ func parseContextMetricTimestamp(raw map[string]any) (time.Time, bool) {
 func contextPressureMessage(result contextPressureResult) string {
 	switch result.State {
 	case contextPressureCritical:
-		return fmt.Sprintf("CONTEXT CRITICAL: usage is approximately %d%%. Context pressure is high; run `slipway checkpoint` at the next safe S2 task boundary or preserve a handoff before continuing in a fresh context.", result.Percent)
+		return fmt.Sprintf(
+			"CONTEXT CRITICAL: usage is approximately %d%%. Context pressure is high; "+
+				"run `slipway checkpoint` at the next safe S2 task boundary or write "+
+				"`.git/slipway/runtime/handoff.md` using the workflow handoff contract "+
+				"before continuing in a fresh context. The handoff is advisory; fresh "+
+				"sessions still run `slipway status --json` and `slipway next --json`.",
+			result.Percent,
+		)
 	default:
-		return fmt.Sprintf("CONTEXT WARNING: usage is approximately %d%%. Avoid starting new complex work; consider reaching a checkpoint before continuing.", result.Percent)
+		return fmt.Sprintf(
+			"CONTEXT WARNING: usage is approximately %d%%. Avoid starting new complex work; "+
+				"consider reaching a checkpoint or preserving `.git/slipway/runtime/handoff.md` "+
+				"with the workflow handoff contract before continuing.",
+			result.Percent,
+		)
 	}
 }

@@ -85,6 +85,12 @@ func TestContextPressureHookCommandEmitsAdditionalContextAtCriticalThreshold(t *
 	require.True(t, ok)
 	assert.Contains(t, additionalContext, "CONTEXT CRITICAL")
 	assert.Contains(t, additionalContext, "slipway checkpoint")
+	assert.Contains(t, additionalContext, "workflow handoff contract")
+	assert.Contains(t, additionalContext, "The handoff is advisory")
+	assert.Contains(t, additionalContext, "slipway status --json")
+	assert.Contains(t, additionalContext, "slipway next --json")
+	assert.NotContains(t, additionalContext, "lifecycle authority")
+	assert.NotContains(t, additionalContext, "governed evidence")
 }
 
 func TestContextPressureHookCommandReadsLiveUsageFromClaudeTranscript(t *testing.T) {
@@ -214,6 +220,36 @@ func TestContextPressureHookCommandFailsSilentOnUnusableInput(t *testing.T) {
 				assert.Empty(t, stderr)
 			})
 		})
+	}
+}
+
+func TestContextPressureMessagesKeepRuntimeHandoffAdvisory(t *testing.T) {
+	t.Parallel()
+
+	critical := contextPressureMessage(contextPressureResult{
+		Percent: 72,
+		State:   contextPressureCritical,
+	})
+	warning := contextPressureMessage(contextPressureResult{
+		Percent: 63,
+		State:   contextPressureWarning,
+	})
+
+	assert.Contains(t, critical, "workflow handoff contract")
+	assert.Contains(t, critical, "The handoff is advisory")
+	assert.Contains(t, critical, "slipway status --json")
+	assert.Contains(t, critical, "slipway next --json")
+	assert.Contains(t, warning, "workflow handoff contract")
+
+	for name, message := range map[string]string{
+		"critical": critical,
+		"warning":  warning,
+	} {
+		assert.NotContains(t, message, "lifecycle authority", name)
+		assert.NotContains(t, message, "governed evidence", name)
+		assert.NotContains(t, message, "freshness input", name)
+		assert.NotContains(t, message, "handoff is a gate", name)
+		assert.NotContains(t, message, "governed host skill", name)
 	}
 }
 

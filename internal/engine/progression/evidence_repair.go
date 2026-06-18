@@ -98,6 +98,15 @@ func staleEvidenceRepairTarget(root string, change model.Change) (EvidenceRepair
 		if !record.IsPassing() {
 			continue
 		}
+		if authority.SkillName == SkillIntakeClarification {
+			superseded, err := freshPlanAuditSupersedesIntakeDrift(root, change)
+			if err != nil {
+				return EvidenceRepairTarget{}, false, err
+			}
+			if superseded {
+				continue
+			}
+		}
 		blockers, err := skillDigestFreshnessBlockers(root, change, authority.SkillName)
 		if err != nil {
 			return EvidenceRepairTarget{}, false, err
@@ -114,6 +123,46 @@ func staleEvidenceRepairTarget(root string, change model.Change) (EvidenceRepair
 		}, true, nil
 	}
 	return EvidenceRepairTarget{}, false, nil
+}
+
+func freshPlanAuditSupersedesIntakeDrift(root string, change model.Change) (bool, error) {
+	if compareStaleEvidencePosition(
+		currentStaleEvidencePosition(change),
+		staleEvidencePositionFor(model.StateS1Plan, model.PlanSubStepAudit),
+	) < 0 {
+		return false, nil
+	}
+	record, err := state.LoadVerification(root, change.Slug, SkillPlanAudit)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !record.IsPassing() {
+		return false, nil
+	}
+	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
+	if err != nil {
+		return false, err
+	}
+	if digests == nil {
+		return false, nil
+	}
+	digests.Normalize()
+	stored, ok := digests.Skills[SkillPlanAudit]
+	if !ok {
+		return false, nil
+	}
+	current, err := certifiedSkillInputDigest(root, change, SkillPlanAudit, nil)
+	if err != nil {
+		if digestStampUnavailable(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	fresh, _ := model.EvidenceFreshness(stored, current.Inputs)
+	return fresh, nil
 }
 
 func staleEvidenceRepairFromReasonCodes(change model.Change, blockers []model.ReasonCode) EvidenceRepairTarget {
