@@ -310,6 +310,115 @@ func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
 	assert.Contains(t, blockers[0].Detail, "freshness must be fresh")
 }
 
+func TestProofReuseEdgeBlockersUsesConfiguredSourceAndConsumer(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("generic-proof-reuse-edge")
+	executionAt := time.Date(2026, 6, 4, 2, 0, 0, 0, time.UTC)
+	summary := closeoutReuseExecutionSummary(change, 7, executionAt)
+	passing := map[string]model.VerificationRecord{
+		"source-proof": {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  executionAt,
+			RunVersion: 7,
+		},
+		"consumer-proof": {
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  executionAt.Add(time.Second),
+			RunVersion: 7,
+		},
+	}
+	edge := proofReuseEdge{
+		sourceSkill:                         "source-proof",
+		sourceLabel:                         "source-proof",
+		consumerSkill:                       "consumer-proof",
+		consumerLabel:                       "consumer-proof",
+		reuseRunVersion:                     7,
+		requireSourceAfterExecutionEvidence: true,
+		blocker:                             closeoutGoalVerificationReuseInvalidBlocker,
+	}
+
+	assert.Empty(t, proofReuseEdgeBlockers(t.TempDir(), change, passing, summary, edge))
+
+	missingSource := map[string]model.VerificationRecord{
+		"consumer-proof": passing["consumer-proof"],
+	}
+	blockers := proofReuseEdgeBlockers(t.TempDir(), change, missingSource, summary, edge)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "source-proof must be passing before consumer-proof can reuse it")
+
+	sourceRunMismatch := map[string]model.VerificationRecord{
+		"source-proof":   passing["source-proof"],
+		"consumer-proof": passing["consumer-proof"],
+	}
+	source := sourceRunMismatch["source-proof"]
+	source.RunVersion = 8
+	sourceRunMismatch["source-proof"] = source
+	blockers = proofReuseEdgeBlockers(t.TempDir(), change, sourceRunMismatch, summary, edge)
+	require.Len(t, blockers, 1)
+	assert.Contains(t, blockers[0].Detail, "source-proof run_version mismatch")
+
+	consumerRunMismatch := map[string]model.VerificationRecord{
+		"source-proof":   passing["source-proof"],
+		"consumer-proof": passing["consumer-proof"],
+	}
+	consumer := consumerRunMismatch["consumer-proof"]
+	consumer.RunVersion = 8
+	consumerRunMismatch["consumer-proof"] = consumer
+	blockers = proofReuseEdgeBlockers(t.TempDir(), change, consumerRunMismatch, summary, edge)
+	require.Len(t, blockers, 1)
+	assert.Contains(t, blockers[0].Detail, "consumer-proof run_version mismatch")
+
+	sourceBeforeExecutionEvidence := map[string]model.VerificationRecord{
+		"source-proof":   passing["source-proof"],
+		"consumer-proof": passing["consumer-proof"],
+	}
+	source = sourceBeforeExecutionEvidence["source-proof"]
+	source.Timestamp = executionAt.Add(-time.Second)
+	sourceBeforeExecutionEvidence["source-proof"] = source
+	blockers = proofReuseEdgeBlockers(t.TempDir(), change, sourceBeforeExecutionEvidence, summary, edge)
+	require.Len(t, blockers, 1)
+	assert.Contains(t, blockers[0].Detail, "source-proof timestamp must be at or after latest execution evidence")
+}
+
+func TestCloseoutGoalVerificationReuseRequiresSuiteResult(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("ship-closeout-reuse-missing-suite-result")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	executionAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
+	passing := passingCloseoutReuseRecords(1)
+	goal := passing[SkillGoalVerification]
+	goal.Timestamp = executionAt.Add(time.Minute)
+	passing[SkillGoalVerification] = goal
+	closeout := passing[SkillFinalCloseout]
+	closeout.Timestamp = executionAt.Add(2 * time.Minute)
+	passing[SkillFinalCloseout] = closeout
+
+	blockers := closeoutGoalVerificationReuseBlockers(
+		root,
+		change,
+		passing,
+		nil,
+		closeoutReuseExecutionSummary(change, 1, executionAt),
+	)
+	require.Len(t, blockers, 1)
+	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
+	assert.Contains(t, blockers[0].Detail, "goal-verification inputs changed")
+	assert.Contains(t, blockers[0].Detail, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
 func TestBuildShipAuthoritySurfacesCloseoutReuseBlocker(t *testing.T) {
 	t.Parallel()
 

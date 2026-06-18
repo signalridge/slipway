@@ -16,7 +16,8 @@ rest on stale evidence.
 
 ## Workflow Outline
 1. Re-read the verification index and closeout prerequisites.
-2. Re-run the proving commands, or validate the goal-verification reuse branch.
+2. Prefer engine-validated goal-verification proof reuse when the current proof
+   is fresh; rerun the proving commands when reuse validation fails.
 3. Confirm freshness, completeness, and assurance.
 4. Write the closeout verdict and wait for approval.
 
@@ -46,9 +47,10 @@ freshness/readiness state. Examine:
 Verify ALL of the following before producing closeout verification:
 - [ ] verification records match current `run_version`
 - [ ] every required governance skill has a passing verification record
-- [ ] full test suite runs green (not cached, not partial)
-- [ ] if reusing goal-verification proof, reuse is for the current run_version
-      and active content state
+- [ ] full-suite proof is green, either by engine-validated goal-verification
+      reuse or by rerunning the suite (not cached, not partial)
+- [ ] if reusing goal-verification proof, engine-visible state proves reuse is
+      for the current run_version and active content state
 - [ ] `validate --json` proves active-change freshness/readiness before `done`;
       archived bundles are frozen records, not inputs to this active gate
 - [ ] blocker list is empty
@@ -72,9 +74,16 @@ Minimum record:
 {{template "fresh-evidence-minimum-record"}}
 
 ## Goal-Verification Reuse Branch
-You may avoid rerunning duplicate full-suite proof only when goal-verification is
-already fresh for the current run_version and current content state. Before
-using this branch:
+Prefer this branch before rerunning duplicate full-suite or SAST proof when
+current goal-verification proof is already fresh. Reuse is valid only when the
+engine can validate the edge from engine-visible state: passing
+goal-verification and final-closeout records, matching run_version across
+goal-verification, final-closeout, and execution-summary, ready/fresh
+execution-summary state, goal-verification proof at or after the latest
+execution evidence, and fresh digest inputs for both records, including
+`verification/suite-result.yaml`.
+
+Before recording this branch:
 
 1. Run `slipway validate --json` (freshness/readiness) and `slipway status --json`
    (`progress.run_summary_version`).
@@ -91,9 +100,12 @@ using this branch:
    - `closeout:goal_verification_reuse=pass`
    - `closeout:goal_verification_reuse_run_version=<current run_version>`
 
-If any check fails, rerun the normal closeout proof instead. The ship gate
-rejects reuse when the final-closeout record, goal-verification record, and
-execution-summary.yaml do not agree on the same fresh run_version.
+After recording the references, run `slipway validate --json` and treat the
+engine verdict as authoritative. Lifecycle advancement belongs only to the
+Present and Advance section below after explicit confirmation. If the engine
+returns `closeout_goal_verification_reuse_invalid`, or any preflight check above
+fails, rerun the normal closeout proof instead. Do not override the engine's
+reuse verdict with a manual freshness judgment.
 
 ## Assurance Artifact Verification
 On light preset, skip this section — `assurance.md` is optional.

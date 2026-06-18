@@ -49,6 +49,12 @@ If the file is absent, malformed, or tied to a different run version, stop and
 produce fresh suite-result proof before recording goal-verification evidence.
 Selected S3 peer evidence is not fresh without this keystone.
 
+Do not treat S2 execution proof, execution-summary, or an earlier full-suite
+transcript as a substitute for `verification/suite-result.yaml`. Those artifacts
+may inform the suite-result only after you confirm they match the current
+run_version and content state, and only if you still produce or refresh the
+suite-result record.
+
 ## Read Context
 Run `slipway next --json` for the handoff, `slipway status --json` for the
 current `run_summary_version` (`progress.run_summary_version`), and
