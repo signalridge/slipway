@@ -27,6 +27,8 @@ Slipway keeps these core surfaces separate:
 
 `status`, `validate`, and `next` recompute readiness without mutating state. `run` is the primary governed execution surface: it advances until a skill, blocker, checkpoint, or done-ready state is surfaced.
 
+What makes "done" hard to fake is that every stage owns evidence the engine *re-derives instead of trusting*. The [Advantage Axes](design.md#advantage-axes) — attested fresh context, tamper-evident evidence, two-sided parallel safety, scope containment, drift-aware forward recovery, local-first audit, and risk-tiered guardrails — describe the depth behind that claim and the honest enforcement tier of each.
+
 ## First Actions
 
 1. Install or build the CLI using [Installation](installation.md).
