@@ -473,14 +473,6 @@ var catalogSkillIDs = func() []string {
 	return capability.DefaultRegistry().IDs()
 }()
 
-func exportedCapabilityRegistry(reg *capability.Registry) (*capability.Registry, error) {
-	closure, err := installProfileClosure(SkillInstallProfileFull)
-	if err != nil {
-		return nil, err
-	}
-	return exportedCapabilityRegistryForInstallClosure(reg, closure)
-}
-
 func exportedCapabilityRegistryForInstallClosure(
 	reg *capability.Registry,
 	closure skillInstallClosure,
@@ -1971,10 +1963,6 @@ func writeDeterministic(path, content string, refresh bool) error {
 
 func writeDeterministicWithPlan(plan *toolRefreshPlan, path, content string, refresh bool) error {
 	return writeDeterministicModeWithPlan(plan, path, content, refresh, defaultFileModeForPath(path))
-}
-
-func writeDeterministicMode(path, content string, refresh bool, mode os.FileMode) error {
-	return writeDeterministicModeWithPlan(nil, path, content, refresh, mode)
 }
 
 func writeDeterministicModeWithPlan(plan *toolRefreshPlan, path, content string, refresh bool, mode os.FileMode) error {

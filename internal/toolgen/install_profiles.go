@@ -406,23 +406,6 @@ func (c skillInstallClosure) routerDefinitions() []namespaceRouterDefinition {
 	return out
 }
 
-func (c skillInstallClosure) metadataForPublicName(publicName string) (skillInstallMetadata, bool) {
-	meta, ok := c.byPublic[strings.TrimSpace(publicName)]
-	return meta, ok
-}
-
-func (c skillInstallClosure) metadataForHostSkill(id string) (skillInstallMetadata, bool) {
-	return c.metadataForPublicName(adapterSkillName(id))
-}
-
-func (c skillInstallClosure) metadataForCommandSkill(id string) (skillInstallMetadata, bool) {
-	return c.metadataForPublicName(adapterSkillName(id))
-}
-
-func (c skillInstallClosure) metadataForRouter(id string) (skillInstallMetadata, bool) {
-	return c.metadataForPublicName(adapterSkillName(id))
-}
-
 func allGeneratedSkillDirNameSet(cfg ToolConfig) map[string]struct{} {
 	managed := map[string]struct{}{}
 	for _, names := range [][]string{
