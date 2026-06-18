@@ -22,12 +22,49 @@ go run . --help
 go test ./... -count=1
 go build ./...
 go vet ./...
+go run ./internal/testlint/cmd/testlint ./...
 ```
 
 For final proof, use the same timeout as CI:
 
 ```bash
 go test -timeout=20m ./... -count=1
+```
+
+## Test Quality Policy
+
+Tests should prove behavior, not implementation trivia or machine timing. Do
+not skip bad tests to quiet CI. Delete them and replace them in the same PR with
+deterministic behavior coverage.
+
+- **Vacuous tests**: delete tests that only execute code, check hard-coded
+  constants, or assert that mocks were called without constraining user-visible
+  behavior.
+- **Source-grep tests**: delete tests that read `.go` files and assert
+  `strings.Contains` over source text. Replace them with tests that exercise
+  the exported behavior, parser result, state transition, or rendered output the
+  source was supposed to protect.
+- **Elapsed-time tests**: delete tests that assert wall-clock elapsed time with
+  `time.Since`, duration thresholds, sleeps, or scheduler timing. Replace them
+  with deterministic synchronization, fake clocks, controlled contexts, or
+  explicit events.
+- **Real-race tests**: delete tests that try to prove races by hoping goroutines
+  interleave a certain way. Replace them with synchronization barriers, race
+  detector coverage, or direct state-machine assertions.
+
+Text assertions are still valid when text is the product behavior: generated
+surfaces, golden-output fixtures, and CLI/API contract tests may assert exact
+text or required substrings. Keep those fixtures close to the behavior under
+test and name the test so reviewers can see that the text is the contract, not
+an implementation grep.
+
+The `internal/testlint` analyzer covers the highest-signal local policy checks:
+source-grep tests that read `.go` files and assert `strings.Contains`, and
+elapsed-time assertions based on `time.Since` or measured duration comparisons.
+Run it directly with:
+
+```bash
+go run ./internal/testlint/cmd/testlint ./...
 ```
 
 ## Documentation

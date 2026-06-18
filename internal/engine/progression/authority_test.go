@@ -686,6 +686,59 @@ func TestCrossStageContextDistinctBlockersUsesSelectedReviewSkillParticipants(t 
 	})
 }
 
+func TestSelectedReviewContextOriginInvalidTargetsOnlySameSelectedPassingSkill(t *testing.T) {
+	t.Parallel()
+
+	authority := ReviewAuthority{
+		SelectedReviewSkills: []string{SkillSpecComplianceReview, SkillCodeQualityReview},
+		PassingSkills: map[string]model.VerificationRecord{
+			SkillSpecComplianceReview: {
+				Verdict:    model.VerificationVerdictPass,
+				References: []string{"layer:R0=pass"},
+			},
+			SkillCodeQualityReview: {
+				Verdict: model.VerificationVerdictPass,
+				References: []string{
+					contextOriginRef(model.StageContextReview, "ctx-code-reviewer"),
+				},
+			},
+			SkillSecurityReview: {
+				Verdict:    model.VerificationVerdictPass,
+				References: []string{"security-review:pass"},
+			},
+		},
+		Blockers: []model.ReasonCode{
+			selectedReviewContextOriginInvalidBlocker(SkillSpecComplianceReview),
+			selectedReviewContextOriginInvalidBlocker(SkillSecurityReview),
+		},
+	}
+
+	assert.True(t, selectedReviewContextOriginInvalid(authority, SkillSpecComplianceReview))
+	assert.False(t, selectedReviewContextOriginInvalid(authority, SkillCodeQualityReview),
+		"valid current selected-review evidence must not be replaceable")
+	assert.False(t, selectedReviewContextOriginInvalid(authority, SkillSecurityReview),
+		"unselected review evidence must not be replaceable through the selected-review repair path")
+
+	noMatchingBlocker := authority
+	noMatchingBlocker.Blockers = []model.ReasonCode{selectedReviewContextOriginInvalidBlocker(SkillCodeQualityReview)}
+	assert.False(t, selectedReviewContextOriginInvalid(noMatchingBlocker, SkillSpecComplianceReview),
+		"the invalid-context blocker must target the same selected skill")
+
+	malformed := authority
+	malformed.PassingSkills = map[string]model.VerificationRecord{
+		SkillSpecComplianceReview: {
+			Verdict: model.VerificationVerdictPass,
+			References: []string{
+				contextOriginRef(model.StageContextReview, "ctx-a"),
+				contextOriginRef(model.StageContextReview, "ctx-b"),
+			},
+		},
+	}
+	malformed.Blockers = []model.ReasonCode{selectedReviewContextOriginInvalidBlocker(SkillSpecComplianceReview)}
+	assert.True(t, selectedReviewContextOriginInvalid(malformed, SkillSpecComplianceReview),
+		"malformed duplicate review handles are recoverable through the same narrow repair path")
+}
+
 func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnDisk(t *testing.T) {
 	t.Parallel()
 

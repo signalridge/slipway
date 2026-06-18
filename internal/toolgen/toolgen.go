@@ -474,12 +474,23 @@ var catalogSkillIDs = func() []string {
 }()
 
 func exportedCapabilityRegistry(reg *capability.Registry) (*capability.Registry, error) {
+	closure, err := installProfileClosure(SkillInstallProfileFull)
+	if err != nil {
+		return nil, err
+	}
+	return exportedCapabilityRegistryForInstallClosure(reg, closure)
+}
+
+func exportedCapabilityRegistryForInstallClosure(
+	reg *capability.Registry,
+	closure skillInstallClosure,
+) (*capability.Registry, error) {
 	if reg == nil {
 		return capability.NewRegistry()
 	}
 	skills := make([]capability.Skill, 0, reg.Len())
 	for _, sk := range reg.All() {
-		if shouldExportAsHostSkill(sk.ID) {
+		if shouldExportAsHostSkill(sk.ID) && closure.includesHostSkill(sk.ID) {
 			skills = append(skills, sk)
 		}
 	}
@@ -759,12 +770,24 @@ func DetectExistingTools(root string) []string {
 
 // Generate creates tool skills and command surfaces for the given tools.
 func Generate(root string, tools []string, refresh bool) error {
+	return GenerateWithInstallProfile(root, tools, refresh, SkillInstallProfileFull)
+}
+
+// GenerateWithInstallProfile creates tool skills and command surfaces for the
+// given tools using an explicit generated-skill install profile. Command prompt
+// files for hosts that expose commands outside skills remain complete; the
+// profile applies only to generated SKILL.md surfaces.
+func GenerateWithInstallProfile(root string, tools []string, refresh bool, profile SkillInstallProfile) error {
+	closure, err := installProfileClosure(profile)
+	if err != nil {
+		return err
+	}
 	for _, tool := range tools {
 		cfg, ok := toolRegistry[tool]
 		if !ok {
 			return fmt.Errorf("unsupported tool %q", tool)
 		}
-		if err := generateForTool(root, cfg, refresh); err != nil {
+		if err := generateForTool(root, cfg, refresh, closure); err != nil {
 			return err
 		}
 	}
@@ -816,23 +839,41 @@ func SkillIndexPath(cfg ToolConfig) string {
 	)
 }
 
-func generateForTool(root string, cfg ToolConfig, refresh bool) error {
+func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillInstallClosure) (err error) {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	_, sentinelErr := os.Stat(sentinelPath)
 	hadGeneratedAdapter := sentinelErr == nil
+	if !hadGeneratedAdapter {
+		_, manifestFound, manifestErr := loadOwnershipManifest(root, cfg)
+		if manifestErr != nil {
+			return manifestErr
+		}
+		hadGeneratedAdapter = manifestFound
+	}
+	plan, err := newToolRefreshPlan(root, cfg, refresh)
+	if err != nil {
+		return err
+	}
+	if refresh && hadGeneratedAdapter && plan != nil {
+		defer func() {
+			if err == nil || plan.transactionStarted {
+				return
+			}
+			if invalidateErr := invalidateFailedRefreshTrustSurfaces(root, cfg, sentinelPath, plan); invalidateErr != nil {
+				err = errors.Join(err, invalidateErr)
+			}
+		}()
+	}
 
 	if refresh {
-		// Remove existing sentinel before the mutating pass.
-		_ = os.Remove(sentinelPath)
-
 		// Purge direct command prompt surfaces before rewrite (project-local only).
 		if cfg.CommandsDir != "" {
-			if err := purgeCommandPromptSurfaces(root, cfg); err != nil {
+			if err := purgeCommandPromptSurfaces(root, cfg, plan); err != nil {
 				return err
 			}
 		}
 
-		if err := cleanupStaleGeneratedArtifacts(root, cfg, hadGeneratedAdapter); err != nil {
+		if err := cleanupStaleGeneratedArtifacts(root, cfg, hadGeneratedAdapter, plan, closure); err != nil {
 			return err
 		}
 	}
@@ -842,6 +883,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	allStaticGovernance := append([]string{}, GovernanceSkillNames...)
 	allStaticGovernance = append(allStaticGovernance, standaloneGovernanceNames...)
 	for _, name := range allStaticGovernance {
+		if !closure.includesHostSkill(name) {
+			continue
+		}
 		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
 		if err != nil {
 			return fmt.Errorf("load governance skill %q: %w", name, err)
@@ -851,25 +895,28 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return fmt.Errorf("canonicalize governance skill %q: %w", name, err)
 		}
 		skillPath := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, plan); err != nil {
 			return fmt.Errorf("emit support files for governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
 
 	// Templated governance skills (tool-aware .md.tmpl)
 	for _, name := range TemplatedGovernanceSkillNames {
+		if !closure.includesHostSkill(name) {
+			continue
+		}
 		content, err := renderTemplatedGovernanceSkill(cfg, name)
 		if err != nil {
 			return fmt.Errorf("render templated governance skill %q for %s: %w", name, cfg.ID, err)
 		}
 		skillPath := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, plan); err != nil {
 			return fmt.Errorf("emit support files for templated governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
@@ -878,6 +925,9 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	// typed templates in fixed order).
 	reg := capability.DefaultRegistry()
 	for _, id := range catalogSkillIDs {
+		if !closure.includesHostSkill(id) {
+			continue
+		}
 		if isGovernanceSurfaceID(id) {
 			continue
 		}
@@ -893,26 +943,29 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return fmt.Errorf("render catalog skill %q for %s: %w", id, cfg.ID, err)
 		}
 		skillPath := filepath.Join(root, SkillPath(cfg, id))
-		if err := writeDeterministic(skillPath, content, refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, skillPath, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, id, refresh); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, id, refresh, plan); err != nil {
 			return fmt.Errorf("emit support files for catalog skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
 
 	// Standalone skills (static content, not governance, not technique)
 	for _, name := range standaloneNames {
+		if !closure.includesHostSkill(name) {
+			continue
+		}
 		if name == "workflow" {
 			content, err := renderStandaloneWorkflowSkill(cfg)
 			if err != nil {
 				return fmt.Errorf("render standalone %q for %s: %w", name, cfg.ID, err)
 			}
 			skillPath := filepath.Join(root, SkillPath(cfg, name))
-			if err := writeDeterministic(skillPath, content, refresh); err != nil {
+			if err := writeDeterministicWithPlan(plan, skillPath, content, refresh); err != nil {
 				return err
 			}
-			if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+			if err := emitSkillSupportFiles(root, cfg, name, refresh, plan); err != nil {
 				return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
 			}
 			refContent, err := renderStandaloneWorkflowCommandReference(cfg)
@@ -925,7 +978,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 				"references",
 				"command-reference.md",
 			)
-			if err := writeDeterministic(refPath, refContent, refresh); err != nil {
+			if err := writeDeterministicWithPlan(plan, refPath, refContent, refresh); err != nil {
 				return err
 			}
 			continue
@@ -936,16 +989,19 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return fmt.Errorf("load standalone %q: %w", name, err)
 		}
 		p := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(p, content, refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, p, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, plan); err != nil {
 			return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
 
 	// Technique skills (static content)
 	for _, name := range techniqueNames {
+		if !closure.includesHostSkill(name) {
+			continue
+		}
 		if !shouldExportAsHostSkill(name) {
 			continue
 		}
@@ -958,11 +1014,24 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			return fmt.Errorf("canonicalize technique %q: %w", name, err)
 		}
 		p := filepath.Join(root, SkillPath(cfg, name))
-		if err := writeDeterministic(p, content, refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, p, content, refresh); err != nil {
 			return err
 		}
-		if err := emitSkillSupportFiles(root, cfg, name, refresh); err != nil {
+		if err := emitSkillSupportFiles(root, cfg, name, refresh, plan); err != nil {
 			return fmt.Errorf("emit support files for technique skill %q (%s): %w", name, cfg.ID, err)
+		}
+	}
+
+	// Namespace router skills keep the eager skill list small for profile-based
+	// installs. They point agents back to command/host surfaces and never own
+	// lifecycle transitions or evidence gates.
+	for _, router := range closure.routerDefinitions() {
+		content, err := renderSurfaceRouterSkill(cfg, router)
+		if err != nil {
+			return fmt.Errorf("render namespace router %q for %s: %w", router.ID, cfg.ID, err)
+		}
+		if err := writeDeterministicWithPlan(plan, filepath.Join(root, SkillPath(cfg, router.ID)), content, refresh); err != nil {
+			return err
 		}
 	}
 
@@ -985,7 +1054,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 			default: // "nested"
 				p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
 			}
-			if err := writeDeterministic(p, content, refresh); err != nil {
+			if err := writeDeterministicWithPlan(plan, p, content, refresh); err != nil {
 				return err
 			}
 		}
@@ -995,20 +1064,22 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	// SkillsDir.
 	if cfg.CommandSkillSurface {
 		for _, id := range commandIDs() {
+			if !closure.includesCommandSkill(id) {
+				continue
+			}
 			content, err := renderCommandSkill(cfg, id)
 			if err != nil {
 				return fmt.Errorf("render command skill %q for %s: %w", id, cfg.ID, err)
 			}
-			if err := writeDeterministic(filepath.Join(root, SkillPath(cfg, id)), content, refresh); err != nil {
+			if err := writeDeterministicWithPlan(plan, filepath.Join(root, SkillPath(cfg, id)), content, refresh); err != nil {
 				return err
 			}
 		}
-		// Legacy migration: prior versions wrote host-global Codex prompt files.
-		// Remove them on refresh so the retired surface does not linger.
+		// Legacy migration note: prior versions wrote host-global Codex prompt
+		// files. Preserve them because $CODEX_HOME/prompts is outside the
+		// project-local ownership manifest and has no checksum proof.
 		if refresh {
-			if err := cleanupLegacyCodexPrompts(cfg); err != nil {
-				return err
-			}
+			preserveLegacyCodexPrompts(cfg)
 		}
 	}
 
@@ -1023,14 +1094,14 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	//     have no settings.json to register an inline command in.
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
 		if refresh {
-			if err := pruneHookLauncherFiles(root, cfg.SessionHook); err != nil {
+			if err := pruneHookLauncherFiles(root, cfg.SessionHook, plan); err != nil {
 				return err
 			}
-			if err := pruneHookLauncherFiles(root, cfg.PostToolHook); err != nil {
+			if err := pruneHookLauncherFiles(root, cfg.PostToolHook, plan); err != nil {
 				return err
 			}
 		}
-		if err := mergeHookSettingsJSON(root, cfg, refresh); err != nil {
+		if err := mergeHookSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
 			return err
 		}
 	} else if strings.TrimSpace(cfg.SessionHook) != "" {
@@ -1040,12 +1111,12 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 				return fmt.Errorf("render session hook launcher for %s: %w", cfg.ID, err)
 			}
 			p := filepath.Join(root, launcher.path)
-			if err := writeDeterministicMode(p, content, refresh, launcher.mode); err != nil {
+			if err := writeDeterministicModeWithPlan(plan, p, content, refresh, launcher.mode); err != nil {
 				return err
 			}
 		}
 		if refresh {
-			if err := cleanupLegacyHookLauncher(root, cfg.SessionHook); err != nil {
+			if err := cleanupLegacyHookLauncher(root, cfg.SessionHook, plan); err != nil {
 				return err
 			}
 		}
@@ -1054,7 +1125,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 	// Workflow skill index (read by external agents; not consumed by the
 	// Slipway kernel). Regenerated deterministically from the Go-owned
 	// capability registry so every adapter sees direct host skill paths.
-	exportedReg, err := exportedCapabilityRegistry(reg)
+	exportedReg, err := exportedCapabilityRegistryForInstallClosure(reg, closure)
 	if err != nil {
 		return err
 	}
@@ -1062,21 +1133,21 @@ func generateForTool(root string, cfg ToolConfig, refresh bool) error {
 		return filepath.ToSlash(SkillPath(cfg, id))
 	})
 	indexPath := filepath.Join(root, SkillIndexPath(cfg))
-	if err := writeDeterministic(indexPath, index, refresh); err != nil {
+	if err := writeDeterministicWithPlan(plan, indexPath, index, refresh); err != nil {
 		return err
 	}
 
 	// Write sentinel last — a missing sentinel means the tree is invalid.
-	if err := writeDeterministic(sentinelPath, "generated\n", true); err != nil {
-		return err
+	if plan != nil {
+		return plan.commit(sentinelPath, []byte("generated\n"))
 	}
-	return nil
+	return writeDeterministic(sentinelPath, "generated\n", true)
 }
 
 // purgeCommandPromptSurfaces removes all expected command prompt files for
 // project-local adapters before rewrite. This ensures a failed refresh
 // cannot leave previously trusted prompt surfaces in place.
-func purgeCommandPromptSurfaces(root string, cfg ToolConfig) error {
+func purgeCommandPromptSurfaces(root string, cfg ToolConfig, plan *toolRefreshPlan) error {
 	if cfg.CommandsDir == "" {
 		return nil
 	}
@@ -1092,55 +1163,82 @@ func purgeCommandPromptSurfaces(root string, cfg ToolConfig) error {
 		default:
 			p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
 		}
-		if err := removePathIfExists(p); err != nil {
+		if err := removePathIfExistsWithPlan(plan, p); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func cleanupStaleGeneratedArtifacts(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
-	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter); err != nil {
+func invalidateFailedRefreshTrustSurfaces(root string, cfg ToolConfig, sentinelPath string, plan *toolRefreshPlan) error {
+	if err := plan.invalidateTrustedGeneratedFile(sentinelPath); err != nil {
 		return err
 	}
-	if err := cleanupStaleCommandEntries(root, cfg, hadGeneratedAdapter); err != nil {
+	if cfg.CommandsDir == "" {
+		return nil
+	}
+	ext := ".md"
+	if cfg.CommandFormat == "toml" {
+		ext = ".toml"
+	}
+	for _, id := range commandIDs() {
+		var p string
+		switch cfg.CommandStyle {
+		case "flat":
+			p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
+		default:
+			p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
+		}
+		if err := plan.invalidateTrustedGeneratedFile(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupStaleGeneratedArtifacts(
+	root string,
+	cfg ToolConfig,
+	hadGeneratedAdapter bool,
+	plan *toolRefreshPlan,
+	closure skillInstallClosure,
+) error {
+	if err := cleanupStaleSkillDirs(root, cfg, hadGeneratedAdapter, plan, closure); err != nil {
+		return err
+	}
+	if err := cleanupStaleCommandEntries(root, cfg, hadGeneratedAdapter, plan); err != nil {
 		return err
 	}
 	return nil
 }
 
-func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
+func cleanupStaleSkillDirs(
+	root string,
+	cfg ToolConfig,
+	hadGeneratedAdapter bool,
+	plan *toolRefreshPlan,
+	closure skillInstallClosure,
+) error {
 	if !hadGeneratedAdapter {
 		return nil
 	}
 	skillsRoot := filepath.Join(root, cfg.SkillsDir)
-	if err := removePathIfExists(filepath.Join(skillsRoot, "slipway")); err != nil {
+	if err := removePathIfExistsWithPlan(plan, filepath.Join(skillsRoot, "slipway")); err != nil {
 		return err
 	}
 
 	expected := map[string]struct{}{}
-	for _, names := range [][]string{
-		GovernanceSkillNames,
-		standaloneGovernanceNames,
-		TemplatedGovernanceSkillNames,
-		standaloneNames,
-		techniqueNames,
-	} {
-		for _, name := range names {
-			if !shouldExportAsHostSkill(name) {
-				continue
-			}
-			expected[adapterSkillName(name)] = struct{}{}
+	for _, meta := range closure.Skills {
+		if meta.Kind == generatedSkillKindCommand && !cfg.CommandSkillSurface {
+			continue
 		}
-	}
-	for _, name := range catalogSkillIDs {
-		if shouldExportAsHostSkill(name) {
-			expected[adapterSkillName(name)] = struct{}{}
-		}
+		expected[meta.PublicName] = struct{}{}
 	}
 	if cfg.CommandSkillSurface {
-		for _, name := range commandSkillDirNames() {
-			expected[name] = struct{}{}
+		for _, meta := range closure.Skills {
+			if meta.Kind == generatedSkillKindCommand {
+				expected[meta.PublicName] = struct{}{}
+			}
 		}
 	}
 	managed := generatedSkillDirNameSet(cfg)
@@ -1158,7 +1256,7 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 			continue
 		}
 		if _, ok := managed[name]; ok {
-			if err := os.RemoveAll(filepath.Join(skillsRoot, name)); err != nil {
+			if err := removePathIfExistsWithPlan(plan, filepath.Join(skillsRoot, name)); err != nil {
 				return err
 			}
 		}
@@ -1167,28 +1265,10 @@ func cleanupStaleSkillDirs(root string, cfg ToolConfig, hadGeneratedAdapter bool
 }
 
 func generatedSkillDirNameSet(cfg ToolConfig) map[string]struct{} {
-	managed := map[string]struct{}{}
-	for _, names := range [][]string{
-		GovernanceSkillNames,
-		standaloneGovernanceNames,
-		TemplatedGovernanceSkillNames,
-		standaloneNames,
-		techniqueNames,
-		catalogSkillIDs,
-	} {
-		for _, name := range names {
-			managed[adapterSkillName(name)] = struct{}{}
-		}
-	}
-	if cfg.CommandSkillSurface {
-		for _, name := range commandSkillDirNames() {
-			managed[name] = struct{}{}
-		}
-	}
-	return managed
+	return allGeneratedSkillDirNameSet(cfg)
 }
 
-func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter bool) error {
+func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter bool, plan *toolRefreshPlan) error {
 	if cfg.CommandsDir == "" {
 		return nil
 	}
@@ -1208,22 +1288,22 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter
 
 	switch cfg.CommandStyle {
 	case "flat":
-		if err := cleanupPrefixedEntries(filepath.Join(root, cfg.CommandsDir), "slipway-", expected); err != nil {
+		if err := cleanupPrefixedEntries(filepath.Join(root, cfg.CommandsDir), "slipway-", expected, plan); err != nil {
 			return err
 		}
 		if hadGeneratedAdapter {
-			return cleanupLegacyNestedCommandEntries(root, cfg, ext)
+			return cleanupLegacyNestedCommandEntries(root, cfg, ext, plan)
 		}
 		return nil
 	default:
-		return cleanupUnexpectedEntries(filepath.Join(root, cfg.CommandsDir, "slipway"), expected)
+		return cleanupUnexpectedEntries(filepath.Join(root, cfg.CommandsDir, "slipway"), expected, plan)
 	}
 }
 
-func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string) error {
+func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string, plan *toolRefreshPlan) error {
 	dir := filepath.Join(root, cfg.CommandsDir, "slipway")
 	for _, id := range commandIDs() {
-		if err := removePathIfExists(filepath.Join(dir, id+ext)); err != nil {
+		if err := removePathIfExistsWithPlan(plan, filepath.Join(dir, id+ext)); err != nil {
 			return err
 		}
 	}
@@ -1237,30 +1317,22 @@ func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string) 
 	if len(entries) > 0 {
 		return nil
 	}
+	if plan != nil {
+		return nil
+	}
 	return os.Remove(dir)
 }
 
-// cleanupLegacyCodexPrompts removes the retired pre-skill Codex command prompt
-// files that Slipway used to generate. Keep cleanup scoped to the command
-// registry: $CODEX_HOME/prompts is shared user state, so a user-owned
-// slipway-*.md prompt that was never generated by Slipway must survive refresh.
-func cleanupLegacyCodexPrompts(cfg ToolConfig) error {
+// preserveLegacyCodexPrompts intentionally keeps retired pre-skill Codex prompt
+// files under $CODEX_HOME/prompts. That directory is host-global user state, and
+// the project-local ownership manifest cannot prove Slipway owns those files.
+func preserveLegacyCodexPrompts(cfg ToolConfig) {
 	if !cfg.CommandSkillSurface {
-		return nil
+		return
 	}
-	promptsDir, err := codexPromptsDir()
-	if err != nil {
-		return err
-	}
-	for _, id := range commandIDs() {
-		if err := removePathIfExists(filepath.Join(promptsDir, "slipway-"+id+".md")); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
-func cleanupUnexpectedEntries(dir string, expected map[string]struct{}) error {
+func cleanupUnexpectedEntries(dir string, expected map[string]struct{}, plan *toolRefreshPlan) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1273,14 +1345,14 @@ func cleanupUnexpectedEntries(dir string, expected map[string]struct{}) error {
 		if _, ok := expected[entry.Name()]; ok {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+		if err := removePathIfExistsWithPlan(plan, filepath.Join(dir, entry.Name())); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) error {
+func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}, plan *toolRefreshPlan) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1299,7 +1371,7 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}) er
 				continue
 			}
 		}
-		if err := os.RemoveAll(filepath.Join(dir, name)); err != nil {
+		if err := removePathIfExistsWithPlan(plan, filepath.Join(dir, name)); err != nil {
 			return err
 		}
 	}
@@ -1383,7 +1455,42 @@ func injectAdapterFrontmatter(raw, publicName, description string) (string, erro
 
 	header := "name: " + publicName + "\n" +
 		"description: " + yamlDoubleQuoted(description) + "\n"
+	header += installMetadataFrontmatter(publicName)
 	return "---\n" + header + fm + tail, nil
+}
+
+func installMetadataFrontmatter(publicName string) string {
+	meta, ok := skillInstallMetadataByPublicName()[strings.TrimSpace(publicName)]
+	if !ok {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("install_profiles:")
+	if len(meta.Profiles) == 0 {
+		b.WriteString(" []\n")
+	} else {
+		b.WriteByte('\n')
+		for _, profile := range meta.Profiles {
+			b.WriteString("  - ")
+			b.WriteString(string(profile))
+			b.WriteByte('\n')
+		}
+	}
+	if meta.AlwaysInstall {
+		b.WriteString("always_install: true\n")
+	}
+	b.WriteString("requires:")
+	if len(meta.Requires) == 0 {
+		b.WriteString(" []\n")
+		return b.String()
+	}
+	b.WriteByte('\n')
+	for _, required := range meta.Requires {
+		b.WriteString("  - ")
+		b.WriteString(required)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func extractAndStripAdapterFields(raw, id string) (description string, stripped string, err error) {
@@ -1495,20 +1602,24 @@ var optionalSkillSupportDirs = []string{"references", "scripts"}
 // emitSkillSupportFiles copies optional support artifacts next to a generated
 // skill. Skill scripts are intentionally not exported anymore; the `scripts`
 // entry remains only as a refresh-time stale cleanup target.
-func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool) error {
+func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh bool, plan *toolRefreshPlan) error {
 	skillDirRel := filepath.Dir(SkillPath(cfg, skillID))
 	dstBase := filepath.Join(root, skillDirRel)
-	return emitSkillSupportFilesFromFS(tmpl.TemplateFS(), skillID, dstBase, refresh)
+	return emitSkillSupportFilesFromFSWithPlan(tmpl.TemplateFS(), skillID, dstBase, refresh, plan)
 }
 
 // emitSkillSupportFilesFromFS is the testable core: it sources support files
 // from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin with
 // "skills/<id>/...") and writes them under dstBase on the local filesystem.
 func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh bool) error {
+	return emitSkillSupportFilesFromFSWithPlan(srcFS, skillID, dstBase, refresh, nil)
+}
+
+func emitSkillSupportFilesFromFSWithPlan(srcFS fs.FS, skillID, dstBase string, refresh bool, plan *toolRefreshPlan) error {
 	for _, sub := range optionalSkillSupportDirs {
 		dstDir := filepath.Join(dstBase, sub)
 		if refresh {
-			if err := removePathIfExists(dstDir); err != nil {
+			if err := removePathIfExistsWithPlan(plan, dstDir); err != nil {
 				return err
 			}
 		}
@@ -1516,11 +1627,11 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 			continue
 		}
 		if sub == "references" {
-			if err := emitSharedReferenceSupportFromFS(srcFS, skillID, dstDir, refresh); err != nil {
+			if err := emitSharedReferenceSupportFromFS(srcFS, skillID, dstDir, refresh, plan); err != nil {
 				return fmt.Errorf("copy shared references for %q: %w", skillID, err)
 			}
 		}
-		if err := copyTemplateSubtreeFromFS(srcFS, sourceSkillTemplatePath(skillID, sub), dstDir, refresh); err != nil {
+		if err := copyTemplateSubtreeFromFS(srcFS, sourceSkillTemplatePath(skillID, sub), dstDir, refresh, plan); err != nil {
 			return fmt.Errorf("copy %s for %q: %w", sub, skillID, err)
 		}
 	}
@@ -1535,7 +1646,7 @@ func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh b
 // path emitted).
 var sharedReferenceDocs = []string{"checklist-quality.md"}
 
-func emitSharedReferenceSupportFromFS(srcFS fs.FS, skillID, dstDir string, refresh bool) error {
+func emitSharedReferenceSupportFromFS(srcFS fs.FS, skillID, dstDir string, refresh bool, plan *toolRefreshPlan) error {
 	for _, doc := range sharedReferenceDocs {
 		referenced, err := skillReferencesSharedDoc(srcFS, skillID, doc)
 		if err != nil {
@@ -1548,7 +1659,7 @@ func emitSharedReferenceSupportFromFS(srcFS fs.FS, skillID, dstDir string, refre
 		if err != nil {
 			return err
 		}
-		if err := writeDeterministic(filepath.Join(dstDir, doc), string(content), refresh); err != nil {
+		if err := writeDeterministicWithPlan(plan, filepath.Join(dstDir, doc), string(content), refresh); err != nil {
 			return err
 		}
 	}
@@ -1582,10 +1693,17 @@ func removePathIfExists(name string) error {
 	return nil
 }
 
+func removePathIfExistsWithPlan(plan *toolRefreshPlan, name string) error {
+	if plan != nil {
+		return plan.removeGeneratedPath(name)
+	}
+	return removePathIfExists(name)
+}
+
 // copyTemplateSubtreeFromFS walks an embedded template directory and writes each
 // file to dstDir preserving relative paths. Missing source directories are
 // a no-op.
-func copyTemplateSubtreeFromFS(tfs fs.FS, srcPrefix, dstDir string, refresh bool) error {
+func copyTemplateSubtreeFromFS(tfs fs.FS, srcPrefix, dstDir string, refresh bool, plan *toolRefreshPlan) error {
 	info, err := fs.Stat(tfs, srcPrefix)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1617,7 +1735,7 @@ func copyTemplateSubtreeFromFS(tfs fs.FS, srcPrefix, dstDir string, refresh bool
 		if err != nil {
 			return err
 		}
-		return writeDeterministic(filepath.Join(dstDir, filepath.FromSlash(rel)), string(content), refresh)
+		return writeDeterministicWithPlan(plan, filepath.Join(dstDir, filepath.FromSlash(rel)), string(content), refresh)
 	})
 }
 
@@ -1678,6 +1796,77 @@ func renderStandaloneWorkflowCommandReference(cfg ToolConfig) (string, error) {
 		return "", err
 	}
 	return tmpl.Render(sourceSkillTemplatePath("workflow", "command-reference.md.tmpl"), data)
+}
+
+type surfaceRouterCommandData struct {
+	ID          string
+	Description string
+	Trigger     string
+	Tier        string
+	Class       CommandClass
+}
+
+type surfaceRouterHostData struct {
+	ID          string
+	PublicName  string
+	Path        string
+	Description string
+}
+
+type surfaceRouterData struct {
+	SkillID         string
+	PublicName      string
+	Title           string
+	DescriptionYAML string
+	ToolID          string
+	Requires        []string
+	Commands        []surfaceRouterCommandData
+	HostSkills      []surfaceRouterHostData
+	Notes           []string
+}
+
+func renderSurfaceRouterSkill(cfg ToolConfig, def namespaceRouterDefinition) (string, error) {
+	meta, ok := skillInstallMetadataByPublicName()[adapterSkillName(def.ID)]
+	if !ok {
+		return "", fmt.Errorf("missing install metadata for namespace router %q", def.ID)
+	}
+	data := surfaceRouterData{
+		SkillID:         def.ID,
+		PublicName:      adapterSkillName(def.ID),
+		Title:           def.Title,
+		DescriptionYAML: yamlDoubleQuoted(def.Summary),
+		ToolID:          cfg.ID,
+		Requires:        append([]string(nil), meta.Requires...),
+		Notes:           append([]string(nil), def.Notes...),
+	}
+	for _, id := range def.CommandIDs {
+		meta, err := buildCommandRenderData(id)
+		if err != nil {
+			return "", err
+		}
+		data.Commands = append(data.Commands, surfaceRouterCommandData{
+			ID:          meta.ID,
+			Description: meta.Description,
+			Trigger:     commandTrigger(cfg, meta.ID),
+			Tier:        meta.Tier,
+			Class:       meta.Class,
+		})
+	}
+	for _, id := range def.HostSkillIDs {
+		description := commandDescriptions[id]
+		if description == "" {
+			if sk, ok := capability.DefaultRegistry().Lookup(id); ok {
+				description = sk.Summary
+			}
+		}
+		data.HostSkills = append(data.HostSkills, surfaceRouterHostData{
+			ID:          id,
+			PublicName:  adapterSkillName(id),
+			Path:        filepath.ToSlash(SkillPath(cfg, id)),
+			Description: description,
+		})
+	}
+	return tmpl.Render(sourceSkillTemplatePath("surface", "SKILL.md.tmpl"), data)
 }
 
 // renderCommandEntry renders an inline command prompt from the appropriate template.
@@ -1777,14 +1966,25 @@ func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
 }
 
 func writeDeterministic(path, content string, refresh bool) error {
-	return writeDeterministicMode(path, content, refresh, defaultFileModeForPath(path))
+	return writeDeterministicWithPlan(nil, path, content, refresh)
+}
+
+func writeDeterministicWithPlan(plan *toolRefreshPlan, path, content string, refresh bool) error {
+	return writeDeterministicModeWithPlan(plan, path, content, refresh, defaultFileModeForPath(path))
 }
 
 func writeDeterministicMode(path, content string, refresh bool, mode os.FileMode) error {
+	return writeDeterministicModeWithPlan(nil, path, content, refresh, mode)
+}
+
+func writeDeterministicModeWithPlan(plan *toolRefreshPlan, path, content string, refresh bool, mode os.FileMode) error {
 	if !refresh {
 		if _, err := os.Stat(path); err == nil {
 			return nil
 		}
+	}
+	if refresh && plan != nil {
+		return plan.writeGeneratedFile(path, []byte(content), mode)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
@@ -1800,6 +2000,10 @@ func defaultFileModeForPath(path string) os.FileMode {
 }
 
 func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
+	return mergeHookSettingsJSONWithPlan(root, cfg, refresh, nil)
+}
+
+func mergeHookSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
 	settingsPath := filepath.Join(root, cfg.SettingsPath)
 	if !refresh {
 		if _, err := os.Stat(settingsPath); err == nil {
@@ -1845,6 +2049,9 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 		return err
 	}
 	content = append(content, '\n')
+	if refresh && plan != nil {
+		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
+	}
 	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
 }
 
@@ -1852,11 +2059,11 @@ func legacyShellHookPath(basePath string) string {
 	return filepath.ToSlash(strings.TrimSpace(basePath) + ".sh")
 }
 
-func cleanupLegacyHookLauncher(root, basePath string) error {
+func cleanupLegacyHookLauncher(root, basePath string, plan *toolRefreshPlan) error {
 	if strings.TrimSpace(basePath) == "" {
 		return nil
 	}
-	return removePathIfExists(filepath.Join(root, filepath.FromSlash(legacyShellHookPath(basePath))))
+	return removePathIfExistsWithPlan(plan, filepath.Join(root, filepath.FromSlash(legacyShellHookPath(basePath))))
 }
 
 // hookLauncherFileSuffixes lists the extensions Slipway has ever emitted for a
@@ -1868,14 +2075,14 @@ var hookLauncherFileSuffixes = []string{"", ".ps1", ".cmd", ".sh"}
 // from basePath (the extensionless POSIX entry plus its .ps1/.cmd/.sh variants).
 // It is the refresh-time orphan cleanup for settings-capable hosts that no
 // longer emit launcher scripts.
-func pruneHookLauncherFiles(root, basePath string) error {
+func pruneHookLauncherFiles(root, basePath string, plan *toolRefreshPlan) error {
 	basePath = strings.TrimSpace(basePath)
 	if basePath == "" {
 		return nil
 	}
 	for _, suffix := range hookLauncherFileSuffixes {
 		p := filepath.Join(root, filepath.FromSlash(basePath+suffix))
-		if err := removePathIfExists(p); err != nil {
+		if err := removePathIfExistsWithPlan(plan, p); err != nil {
 			return err
 		}
 	}
@@ -2104,19 +2311,6 @@ func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
 		return true
 	}
 	return false
-}
-
-// codexPromptsDir resolves the Codex global prompts directory.
-// Uses $CODEX_HOME/prompts/ if set, otherwise ~/.codex/prompts/.
-func codexPromptsDir() (string, error) {
-	if home := os.Getenv("CODEX_HOME"); home != "" {
-		return filepath.Join(home, "prompts"), nil
-	}
-	userHome, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return filepath.Join(userHome, ".codex", "prompts"), nil
 }
 
 // InvocationSummary describes, for humans, how generated command surfaces are

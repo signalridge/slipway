@@ -1,0 +1,63 @@
+version: 1
+slug: resolve-current-open-issues
+description: resolve current open issues
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: critical
+base_ref: HEAD
+created_at: 2026-06-18T10:35:33.79017Z
+guardrail_domain: irreversible_operations
+quality_mode: standard
+workflow_profile: code
+workflow_preset: strict
+worktree_branch: feat/resolve-current-open-issues
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: e195aabcace99bcec5a38c2a59dd7d47c1cdf987a15edaa1bc56cd2e1ce64cab
+        updated_at: 2026-06-18T12:49:55.571338171Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 5a051b0bb4c0f536a4bd00e675032008aa14d5842796063179ad66c21f3adc76
+        updated_at: 2026-06-18T10:49:18.009772517Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: bd68c1b41a1cd1ab28d390079c5ed9aadc00cc25f448d65482b85cff7f9f6b34
+        updated_at: 2026-06-18T10:39:06.948402867Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8db4296eeb6c19c7929612930948a46208ce671ac3be528befc7ddb2e4b3c9ef
+        updated_at: 2026-06-18T10:49:18.009256646Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: cb20df2bdb2511709c82f720fa0daf3414744611e82a999d01cf963f063eabd5
+        updated_at: 2026-06-18T10:49:36.868007589Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: e8e66711d2c309a8d5d31bca28c3aaf07020f173a3a5d4af3186c5ca7dd4c34b
+        updated_at: 2026-06-18T12:49:55.570729029Z
+evidence_refs:
+    code-quality-review: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/code-quality-review.yaml
+    final-closeout: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/final-closeout.yaml
+    goal-verification: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/goal-verification.yaml
+    independent-review: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/independent-review.yaml
+    intake-clarification: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/intake-clarification.yaml
+    plan-audit: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/plan-audit.yaml
+    research-orchestration: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/research-orchestration.yaml
+    security-review: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/security-review.yaml
+    spec-compliance-review: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/resolve-current-open-issues/artifacts/changes/resolve-current-open-issues/verification/wave-orchestration.yaml

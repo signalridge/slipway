@@ -82,6 +82,45 @@ func TestApplyFileTransactionRestoresRemovedFileOnLaterFailure(t *testing.T) {
 	}
 }
 
+func TestApplyFileTransactionRestoresRemovedTreeOnLaterFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	treePath := filepath.Join(dir, "generated")
+	nestedPath := filepath.Join(treePath, "references", "guide.md")
+	laterPath := filepath.Join(dir, "later.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(nestedPath), 0o755))
+	require.NoError(t, os.WriteFile(nestedPath, []byte("managed"), 0o640))
+
+	writeErr := errors.New("later write failed")
+	ops := []FileTransactionOp{
+		RemoveAllTransactionOp(treePath),
+		WriteFileTransactionOp(laterPath, []byte("state"), 0o644),
+	}
+
+	err := applyFileTransaction(ops, fileTransactionHooks{
+		writeFile: func(path string, data []byte, perm os.FileMode) error {
+			if path == laterPath {
+				return writeErr
+			}
+			return WriteFileAtomic(path, data, perm)
+		},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, writeErr)
+
+	got, readErr := os.ReadFile(nestedPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "managed", string(got))
+
+	info, statErr := os.Stat(nestedPath)
+	require.NoError(t, statErr)
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	}
+}
+
 func TestApplyFileTransactionRollsBackAppliedWriteOnLaterSnapshotFailure(t *testing.T) {
 	t.Parallel()
 

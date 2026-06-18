@@ -44,7 +44,7 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		row, ok := rowsByKey["command/"+def.ID]
 		require.Truef(t, ok, "missing command row for %s", def.ID)
 		assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", row.Source)
-		assert.Equal(t, "docs/commands.md", row.Docs)
+		assert.Equal(t, "docs/reference/commands.md", row.Docs)
 		assert.Equal(t, "slipway "+def.ID, row.Token)
 	}
 
@@ -52,7 +52,7 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		row, ok := rowsByKey["adapter/"+cfg.ID]
 		require.Truef(t, ok, "missing adapter row for %s", cfg.ID)
 		assert.Equal(t, "internal/toolgen/toolgen.go:toolRegistry", row.Source)
-		assert.Equal(t, "docs/ai-tools.md", row.Docs)
+		assert.Equal(t, "docs/reference/ai-tools.md", row.Docs)
 		assert.Equal(t, "`"+cfg.ID+"`", row.Token)
 	}
 
@@ -65,7 +65,7 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 			row, ok := rowsByKey["skill/"+name]
 			require.Truef(t, ok, "missing %s command skill row for %s", cfg.ID, id)
 			assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", row.Source)
-			assert.Equal(t, "docs/ai-tools.md", row.Docs)
+			assert.Equal(t, "docs/reference/ai-tools.md", row.Docs)
 			assert.Equal(t, commandSkillDocsToken(id), row.Token)
 		}
 	}
@@ -110,7 +110,7 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 				row, ok := rowsByKey["json-contract/"+id]
 				require.Truef(t, ok, "missing json contract row for %s", id)
 				assert.Equal(t, "cmd/evidence.go", row.Source)
-				assert.Equal(t, "docs/commands.md", row.Docs)
+				assert.Equal(t, "docs/reference/commands.md", row.Docs)
 				assert.Contains(t, row.Token, "json")
 			}
 			continue
@@ -118,11 +118,11 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		row, ok := rowsByKey["json-contract/"+def.ID+"-json"]
 		require.Truef(t, ok, "missing json contract row for %s", def.ID)
 		assert.Equal(t, commandSourcePath(def.ID), row.Source)
-		assert.Equal(t, "docs/commands.md", row.Docs)
+		assert.Equal(t, "docs/reference/commands.md", row.Docs)
 		assert.Contains(t, row.Token, "json")
 	}
 
-	for _, path := range []string{"README.md", "docs/ai-tools.md", "docs/commands.md", "docs/operator-guide.md"} {
+	for _, path := range []string{"README.md", "docs/reference/ai-tools.md", "docs/reference/commands.md", "docs/how-to/recover-and-troubleshoot.md"} {
 		key := "documentation/" + path
 		row, ok := rowsByKey[key]
 		require.Truef(t, ok, "missing documentation row for %s", path)

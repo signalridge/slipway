@@ -1,5 +1,54 @@
 # Architecture
 
+Re-authored for change `resolve-current-open-issues` (#263/#170/#169/#168/#167/#161).
+
+## Current Change Focus: Open Issue Batch
+
+This change spans five implementation seams and one tracker/documentation seam:
+
+- Evidence recovery: `cmd/evidence.go` validates whether a skill can be recorded.
+  In S3 it rejects an already passing selected reviewer unless
+  `selectedReviewContextOriginRefreshRequired` or an active review alignment fix
+  allows replacement (`cmd/evidence.go:1078-1110`). The ship/review authority can
+  still fail closed when a present passing selected reviewer lacks a valid
+  `context_origin:stage=review=<handle>` (`internal/engine/progression/authority.go:828-845`,
+  `:1002-1006`). The recovery path belongs in the public evidence/fix command
+  surfaces, not in hand-edited verification files.
+- Adapter generation: `internal/fsutil/transaction.go` already exposes
+  `ApplyFileTransaction` with rollback (`:47-52`, `:149-172`), but
+  `internal/toolgen/toolgen.go` still emits skills, commands, support files,
+  indexes, hooks, and the sentinel through repeated `writeDeterministic` calls
+  and performs cleanup before the write pass (`:824-1072`, `:1102-1125`). This is
+  a generation transaction/ownership boundary, not a new filesystem framework.
+- Generated-surface ownership: `internal/toolgen/surface_manifest.go` defines a
+  public inventory row with kind/name/source/docs/token only (`:21-29`). A new
+  adapter ownership manifest can be separate from the public surface manifest so
+  it can track path and sha256 without changing the public docs inventory shape.
+- Install profiles/routers: generated skills are currently selected from
+  hardcoded governance/template/standalone/technique/catalog slices in
+  `internal/toolgen/toolgen.go` (`:840-1005`). A profile closure should be
+  computed over this existing registry and must never prune lifecycle-critical,
+  gate-owning, or sensitive-domain review skills.
+- Docs: `docs/` and `mkdocs.yml` are flat. Diataxis can be added by moving or
+  adding docs under tutorials/how-to/reference/explanation while keeping
+  command/surface manifest contracts intact. GSD Core's local docs tree provides
+  the Diataxis structure and two-tutorial baseline; Trellis provides a practical
+  Start Here model with first-task setup, how-it-works runtime flow, real-world
+  scenarios, and task/spec/memory concepts that fit Slipway onboarding.
+- Test quality: `.golangci.yaml` enables only stock linters (`:7-12`). A
+  Go-native analyzer package can live under `internal/testlint` with a small CLI
+  for CI and targeted tests, while policy text belongs in `docs/contributing.md`.
+
+### Boundaries
+
+- Preserve `internal/model` as pure contract vocabulary and keep lifecycle
+  policy in `internal/engine/progression`.
+- Keep toolgen file ownership separate from the public `docs/SURFACE-MANIFEST.json`.
+- Treat generated adapters as user-adjacent output: unknown or modified files are
+  preserved or backed up, not silently deleted.
+- Do not copy GSD-core internals. Borrow the mechanism shape only where it fits
+  Slipway's Go toolgen and fail-closed lifecycle.
+
 Re-authored for change `generalize-digest-proof-reuse` (#258).
 
 ## Current Change Focus: Digest-Keyed Proof Reuse

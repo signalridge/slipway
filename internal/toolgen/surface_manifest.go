@@ -38,7 +38,7 @@ func BuildSurfaceManifest() SurfaceManifest {
 			Kind:   "command",
 			Name:   def.ID,
 			Source: "internal/toolgen/toolgen.go:commandRegistry",
-			Docs:   "docs/commands.md",
+			Docs:   "docs/reference/commands.md",
 			Token:  "slipway " + def.ID,
 		})
 	}
@@ -48,7 +48,7 @@ func BuildSurfaceManifest() SurfaceManifest {
 			Kind:   "adapter",
 			Name:   cfg.ID,
 			Source: "internal/toolgen/toolgen.go:toolRegistry",
-			Docs:   "docs/ai-tools.md",
+			Docs:   "docs/reference/ai-tools.md",
 			Token:  "`" + cfg.ID + "`",
 		})
 	}
@@ -156,14 +156,14 @@ func jsonContractRows() []SurfaceManifestRow {
 					Kind:   "json-contract",
 					Name:   "evidence-task-json",
 					Source: commandSourcePath(def.ID),
-					Docs:   "docs/commands.md",
+					Docs:   "docs/reference/commands.md",
 					Token:  "slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref \"test:go-test\" --json",
 				},
 				SurfaceManifestRow{
 					Kind:   "json-contract",
 					Name:   "evidence-skill-json",
 					Source: commandSourcePath(def.ID),
-					Docs:   "docs/commands.md",
+					Docs:   "docs/reference/commands.md",
 					Token:  "slipway evidence skill --skill <name> --verdict pass --json",
 				},
 			)
@@ -173,7 +173,7 @@ func jsonContractRows() []SurfaceManifestRow {
 			Kind:   "json-contract",
 			Name:   def.ID + "-json",
 			Source: commandSourcePath(def.ID),
-			Docs:   "docs/commands.md",
+			Docs:   "docs/reference/commands.md",
 			Token:  jsonContractDocsToken(def.ID),
 		})
 	}
@@ -192,7 +192,7 @@ func commandSkillRows() []SurfaceManifestRow {
 				Kind:   "skill",
 				Name:   name,
 				Source: "internal/toolgen/toolgen.go:commandRegistry",
-				Docs:   "docs/ai-tools.md",
+				Docs:   "docs/reference/ai-tools.md",
 				Token:  commandSkillDocsToken(id),
 			})
 		}
@@ -237,23 +237,23 @@ func documentationRows() []SurfaceManifestRow {
 		},
 		{
 			Kind:   "documentation",
-			Name:   "docs/ai-tools.md",
-			Source: "docs/ai-tools.md",
-			Docs:   "docs/ai-tools.md",
+			Name:   "docs/reference/ai-tools.md",
+			Source: "docs/reference/ai-tools.md",
+			Docs:   "docs/reference/ai-tools.md",
 			Token:  "Generated Command Surface",
 		},
 		{
 			Kind:   "documentation",
-			Name:   "docs/commands.md",
-			Source: "docs/commands.md",
-			Docs:   "docs/commands.md",
+			Name:   "docs/reference/commands.md",
+			Source: "docs/reference/commands.md",
+			Docs:   "docs/reference/commands.md",
 			Token:  "Command Reference", // #nosec G101 -- manifest token is a docs search string, not a credential.
 		},
 		{
 			Kind:   "documentation",
-			Name:   "docs/operator-guide.md",
-			Source: "docs/operator-guide.md",
-			Docs:   "docs/operator-guide.md",
+			Name:   "docs/how-to/recover-and-troubleshoot.md",
+			Source: "docs/how-to/recover-and-troubleshoot.md",
+			Docs:   "docs/how-to/recover-and-troubleshoot.md",
 			Token:  "Diagnostic JSON",
 		},
 	}

@@ -37,10 +37,18 @@ plugins:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Design Philosophy: design.md
-  - Governed Workflow: workflow.md
-  - Command Reference: commands.md
-  - AI Tool Adapters: ai-tools.md
-  - Operator Guide: operator-guide.md
-  - Contributing: contributing.md
+  - Start Here: start-here.md
+  - Real-World Scenarios: real-world-scenarios.md
+  - Tutorials:
+      - First Governed Change: tutorials/first-governed-change.md
+      - Onboarding Existing Codebase: tutorials/onboarding-existing-codebase.md
+  - How-To:
+      - Install and Refresh Adapters: how-to/install-and-refresh-adapters.md
+      - Recover and Troubleshoot: how-to/recover-and-troubleshoot.md
+  - Reference:
+      - Commands: reference/commands.md
+      - AI Tool Adapters: reference/ai-tools.md
+      - Contributing: contributing.md
+  - Explanation:
+      - Design: explanation/design.md
+      - Workflow: explanation/workflow.md

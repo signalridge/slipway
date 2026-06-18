@@ -11,6 +11,12 @@ linters:
     - revive
     - unused
   settings:
+    # Registered for custom golangci-lint binaries. The stock runnable path is:
+    # go run ./internal/testlint/cmd/testlint ./...
+    custom:
+      testlint:
+        type: module
+        description: Slipway test policy analyzer for source-grep and elapsed-time tests.
     revive:
       rules:
         - name: blank-imports

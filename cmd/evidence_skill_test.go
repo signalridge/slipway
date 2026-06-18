@@ -83,6 +83,112 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 	})
 }
 
+func TestEvidenceSkillAllowsStaleResearchRestampFromAuditSubstep(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L3", "evidence skill restamps stale research")
+		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+		writeMinimalGovernedBundle(t, root, change)
+		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 0,
+			References: []string{"research:pass"},
+			Notes:      "Original research certification.",
+		})
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillResearchOrchestration)
+
+		researchPath := filepath.Join(root, "artifacts", "changes", slug, "research.md")
+		raw, err := os.ReadFile(researchPath)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(researchPath, append(raw, []byte("\nAdditional current research.\n")...), 0o644))
+
+		target, ok, err := progression.StaleEvidenceRepairAvailable(root, change, nil)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, progression.SkillResearchOrchestration, target.SkillName)
+
+		readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
+			IncludeGateEvaluations: true,
+		})
+		require.NoError(t, err)
+		require.True(t,
+			hasRecoverableRequiredSkillStaleForSkill(readinessBlockers(readiness), progression.SkillResearchOrchestration),
+			"public readiness blockers must identify the same stale required skill",
+		)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillResearchOrchestration,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "research:pass",
+			"--notes", "Research re-certified after current artifact updates.",
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, progression.SkillResearchOrchestration, view.SkillName)
+		assert.True(t, view.Recorded)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillResearchOrchestration)
+		require.NoError(t, err)
+		assert.Equal(t, "Research re-certified after current artifact updates.", rec.Notes)
+
+		target, ok, err = progression.StaleEvidenceRepairAvailable(root, change, nil)
+		require.NoError(t, err)
+		assert.False(t, ok, "research restamp should clear the stale evidence repair target")
+		assert.Empty(t, target.SkillName)
+	})
+}
+
+func TestEvidenceSkillRejectsNonStaleResearchRestampFromAuditSubstep(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L3", "evidence skill rejects non-stale research restamp")
+		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+		writeMinimalGovernedBundle(t, root, change)
+		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 0,
+			References: []string{"research:pass"},
+			Notes:      "Original current research certification.",
+		})
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillResearchOrchestration)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillResearchOrchestration,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "research:pass",
+			"--notes", "Unexpected research overwrite.",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_wrong_plan_substep", cliErr.ErrorCode)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillResearchOrchestration)
+		require.NoError(t, err)
+		assert.Equal(t, "Original current research certification.", rec.Notes)
+	})
+}
+
 func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -271,6 +377,42 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 		require.True(t, ok)
 		assert.Equal(t, "fresh-goal-review-context", handle.Handle)
 		assert.NotContains(t, rec.References, model.ContextOriginReferencePrefix+model.StageContextGoal+"=retired-goal-context")
+	})
+}
+
+func TestEvidenceSkillRejectsSelectedReviewerRestampWithValidContextOrigin(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects valid review origin overwrite")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillGoalVerification,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "fresh:command_ref=verification/full-suite-transcript.txt",
+			"--reference", "scope_contract:pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=unexpected-overwrite-context",
+			"--notes", "Unexpected goal verification overwrite.",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_not_current", cliErr.ErrorCode)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillGoalVerification)
+		require.NoError(t, err)
+		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
+		require.True(t, ok)
+		assert.Equal(t, testGoalContextHandle, handle.Handle)
+		assert.NotEqual(t, "Unexpected goal verification overwrite.", rec.Notes)
 	})
 }
 

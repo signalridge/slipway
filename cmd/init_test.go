@@ -210,14 +210,24 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 
 			_, _, err := runRootCommand([]string{"init", "--tools", "claude"})
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(cmdPath, []byte("tampered"), 0o644))
+
+			pristine, readErr := os.ReadFile(cmdPath)
+			require.NoError(t, readErr)
 
 			_, _, err = runRootCommand([]string{"init", "--refresh"})
 			require.NoError(t, err)
+			refreshed, readErr := os.ReadFile(cmdPath)
+			require.NoError(t, readErr)
+			assert.Equal(t, string(pristine), string(refreshed))
+
+			require.NoError(t, os.WriteFile(cmdPath, []byte("tampered"), 0o644))
+
+			_, _, err = runRootCommand([]string{"init", "--refresh"})
+			require.Error(t, err)
 
 			content, readErr := os.ReadFile(cmdPath)
 			require.NoError(t, readErr)
-			assert.NotEqual(t, "tampered", string(content))
+			assert.Equal(t, "tampered", string(content))
 		})
 	})
 
@@ -299,7 +309,7 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		})
 	})
 
-	t.Run("codex legacy command prompts prune only after successful rewrite", func(t *testing.T) {
+	t.Run("codex legacy command prompts preserve without ownership proof", func(t *testing.T) {
 		root := t.TempDir()
 		codexHome := t.TempDir()
 		t.Setenv("CODEX_HOME", codexHome)
@@ -328,7 +338,7 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
 
 		_, statErr = os.Stat(legacyPrompt)
-		assert.True(t, os.IsNotExist(statErr), "successful codex refresh must prune legacy generated command prompts")
+		assert.NoError(t, statErr, "successful codex refresh must preserve host-global prompts without ownership proof")
 		_, statErr = os.Stat(userPrompt)
 		assert.NoError(t, statErr, "successful codex refresh must preserve user-owned slipway-* prompts")
 	})

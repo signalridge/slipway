@@ -1,5 +1,39 @@
 # Testing
 
+Re-authored for change `resolve-current-open-issues` (#263/#170/#169/#168/#167/#161).
+
+## Current Change Focus: Open Issue Batch
+
+Focused coverage should land near the ownership seams rather than only as broad
+end-to-end assertions:
+
+- `cmd/evidence_skill_test.go`: reproduce #263 with a passing selected reviewer
+  record that lacks a valid `context_origin:stage=review=<handle>`, prove
+  replacement is allowed only for that invalid/repairable case, and prove normal
+  already-current passing evidence is still rejected.
+- `internal/toolgen/toolgen_test.go` or a new focused test: prove a failed
+  refresh rolls back generated outputs when a later operation fails, using the
+  existing `fsutil.ApplyFileTransaction` hooks/patterns instead of real crashes.
+- `internal/toolgen` ownership tests: classify pristine generated, modified
+  generated, and unknown user files; prove stale cleanup preserves unknown files
+  and backs up or refuses modified generated files.
+- `internal/toolgen` profile tests: prove profile closure includes required
+  dependencies and cannot prune lifecycle-critical or sensitive-domain skills.
+- Docs tests / manifest checks: update the docs surface manifest/nav contracts so
+  Diataxis pages and tutorials are discoverable and command snippets remain tied
+  to real command surfaces.
+- `internal/testlint` analyzer tests: fixture-driven tests for source-grep and
+  timing/elapsed assertions, plus explicit allowed cases for generated-surface,
+  golden, and command-output contract tests.
+
+Expected verification commands:
+
+```bash
+go test ./cmd ./internal/toolgen ./internal/testlint -count=1
+go test ./... -count=1
+go run ./internal/toolgen/cmd/gen-surface-manifest --check
+```
+
 Re-authored for change `generalize-digest-proof-reuse` (#258).
 
 ## Current Change Focus: Digest-Keyed Proof Reuse
