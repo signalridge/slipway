@@ -95,7 +95,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"intake_substep_invalid",
 		"intent_drift",
 		"invalid_blocker",
-		"invalid_pivot_kind",
 		"lifecycle_event_log_unreadable",
 		"lifecycle_event_scan_failed",
 		"lifecycle_event_scan_skipped",
@@ -110,6 +109,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"missing_worktree_branch",
 		"missing_worktree_path",
 		"multiple_active_changes",
+		"new_change_required",
 		"no_skill_required",
 		"non_pass_task",
 		"non_pass_wave",
@@ -118,9 +118,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"orphan_task_evidence",
 		"orphaned_change_bundle",
 		"parallel_wave_changed_file_overlap",
-		"pivot_not_approved",
-		"pivot_required",
-		"pivot_state_invalid",
 		"plan_audit_budget_exhausted",
 		"plan_audit_evidence_missing",
 		"plan_audit_failed",
@@ -151,11 +148,12 @@ func canonicalReasonCodeSnapshot() []string {
 		"required_skill_not_passed",
 		"required_skill_not_ready",
 		"required_skill_stale",
-		"rescope_state_invalid",
 		"research_section_placeholder",
 		"research_structure_invalid",
+		"review_alignment_required",
 		"review_layer_failed",
 		"review_layer_missing",
+		"review_required",
 		"run_slipway_done_to_finalize",
 		"run_slipway_run_to_advance",
 		"scope_contract_changed_files_missing",
@@ -169,7 +167,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"skill_prompt_surface_unreadable",
 		"skill_registry_invalid",
 		"stale_checkpoint_state",
-		"stale_evidence_recovery_available",
 		"stale_execution_evidence",
 		"stale_planning_evidence",
 		"stale_runtime_binding",
@@ -234,7 +231,6 @@ func canonicalReasonSeveritySnapshot(codes []string) map[string]ReasonSeverity {
 		"run_slipway_run_to_advance":           ReasonSeverityWarning,
 		"session_isolation_warning":            ReasonSeverityWarning,
 		"stale_checkpoint_state":               ReasonSeverityWarning,
-		"stale_evidence_recovery_available":    ReasonSeverityWarning,
 	} {
 		severities[code] = severity
 	}
@@ -286,6 +282,94 @@ func TestReviewOriginHandleVocabularyRetired(t *testing.T) {
 
 	assert.Falsef(t, IsCanonicalReasonCode(retired),
 		"%q must no longer be recognized as a canonical reason code", retired)
+}
+
+func TestSuiteResultDigestKeystoneContract(t *testing.T) {
+	t.Parallel()
+
+	result := SuiteResult{
+		RunSummaryVersion: 3,
+		FullSuiteDigest:   " sha256:full-suite ",
+		SASTDigests: map[string]string{
+			" external_api_contracts.safety_baseline ": " sha256:sast ",
+		},
+	}
+	result.Normalize()
+
+	assert.Equal(t, SuiteResultVersion, result.Version)
+	assert.Equal(t, "sha256:full-suite", result.FullSuiteDigest)
+	assert.Equal(t, map[string]string{
+		"external_api_contracts.safety_baseline": "sha256:sast",
+	}, result.SASTDigests)
+	require.NoError(t, result.Validate())
+
+	inputs, err := result.SharedReviewerInputDigests()
+	require.NoError(t, err)
+	runVersionDigest, err := ComputeInputHash(map[string]any{"run_summary_version": 3})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"suite-result:run_summary_version":                         runVersionDigest,
+		"suite-result:full_suite":                                  "sha256:full-suite",
+		"suite-result:sast:external_api_contracts.safety_baseline": "sha256:sast",
+	}, inputs)
+
+	assert.ErrorContains(t, SuiteResult{Version: SuiteResultVersion}.Validate(), "run_summary_version")
+	assert.ErrorContains(t,
+		SuiteResult{Version: SuiteResultVersion, RunSummaryVersion: 1}.Validate(),
+		"full_suite_digest")
+}
+
+func TestReviewAlignmentAndNewChangeRecoveryVocabularyRegistered(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		spec          string
+		wantCommand   string
+		wantClass     RecoveryClass
+		wantReminders []string
+	}{
+		{
+			name:        "review alignment",
+			spec:        "review_alignment_required:code-quality-review",
+			wantCommand: "slipway fix",
+			wantClass:   RecoveryClassReviewAlignment,
+			wantReminders: []string{
+				"repair subagent",
+				"evidence",
+				"rerun",
+			},
+		},
+		{
+			name:        "new change",
+			spec:        "new_change_required:intent_conflict",
+			wantCommand: "slipway new",
+			wantClass:   RecoveryClassNewChange,
+			wantReminders: []string{
+				"same governed intent",
+				"new governed change",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			reason := ReasonCodeFromSpec(tt.spec)
+			assert.NotEqual(t, unknownReasonCode, reason.Code)
+
+			step, ok := recoveryStepFor(reason)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantCommand, step.Command)
+			assert.Equal(t, tt.wantClass, step.RecoveryClass)
+			for _, want := range tt.wantReminders {
+				assert.Contains(t, step.Remediation, want)
+			}
+			assert.NotContains(t, step.Remediation, "{")
+		})
+	}
 }
 
 func TestNewReasonCodeMakesUnknownCodeExplicit(t *testing.T) {

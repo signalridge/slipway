@@ -23,10 +23,10 @@ func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 worktree gate")
 
-		// Advance to S2_EXECUTE where the worktree gate is now checked.
+		// Advance to S2_IMPLEMENT where the worktree gate is now checked.
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.IntakeSubStep = ""
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
@@ -39,14 +39,14 @@ func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+		assert.Equal(t, model.StateS2Implement, view.CurrentState)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required")
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillWorktreePreflight, view.NextSkill.Name)
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Equal(t, model.StateS2Execute, change.CurrentState)
+		assert.Equal(t, model.StateS2Implement, change.CurrentState)
 	})
 }
 
@@ -239,10 +239,10 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 		initGitRepoForWorktreeTests(t, root)
 		slug := createGovernedRequest(t, root, "L3", "l3 invalid main worktree")
 
-		// Advance to S2_EXECUTE where the worktree gate is now checked.
+		// Advance to S2_IMPLEMENT where the worktree gate is now checked.
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.IntakeSubStep = ""
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
@@ -258,20 +258,20 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 
 		var view validateView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+		assert.Equal(t, model.StateS2Implement, view.CurrentState)
 		assert.False(t, view.CanAdvance)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), state.WorktreeReasonDedicatedRequired)
 	})
 }
 
-// TestNextL3WorktreePreflightEvidenceUnblocksS2Execute is a regression test
+// TestNextL3WorktreePreflightEvidenceUnblocksS2Implement is a regression test
 // for the deadlock where GovernedBundleBlockers() called ValidateChangeWorktree()
 // before the explicit DeriveWorktreeBlockers + ApplyWorktreeMetadata path had
 // a chance to consume worktree-preflight evidence and persist metadata.
-// Without the fix, this test would hang at S2_EXECUTE with
+// Without the fix, this test would hang at S2_IMPLEMENT with
 // blocker=dedicated_worktree_metadata_required and next_skill=worktree-preflight
 // simultaneously.
-func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
+func TestNextL3WorktreePreflightEvidenceUnblocksS2Implement(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -288,9 +288,9 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 	normalizedWT, normErr := state.NormalizePath(worktreePath)
 	require.NoError(t, normErr)
 
-	// Place the change at S2_EXECUTE with NO worktree bound — this is the
+	// Place the change at S2_IMPLEMENT with NO worktree bound — this is the
 	// state after S1_PLAN completes when worktree gate is at S2.
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.IntakeSubStep = ""
 	change.PlanSubStep = model.PlanSubStepNone
 	// WorktreePath deliberately left empty.
@@ -305,7 +305,7 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Execute(t *testing.T) {
 	// Key assertion: the advance must NOT deadlock. The worktree metadata
 	// should be persisted from the preflight evidence.
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required",
-		"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_EXECUTE so the explicit derive/apply path can consume evidence")
+		"GovernedBundleBlockers must skip worktree check when worktree is unbound at S2_IMPLEMENT so the explicit derive/apply path can consume evidence")
 
 	change, err = state.LoadChange(root, slug)
 	require.NoError(t, err)

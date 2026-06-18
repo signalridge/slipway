@@ -12,6 +12,8 @@ import (
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func hasAdvanceReasonCode(reasons []model.ReasonCode, code string) bool {
@@ -122,25 +124,67 @@ func TestComputeNextGovernedState_Valid(t *testing.T) {
 	}
 }
 
-func TestCheckGateWithIteration_MissingEvidence(t *testing.T) {
+func TestCheckGateWithIterationReadyBundleWithoutAuditEvidenceDoesNotIterate(t *testing.T) {
 	t.Parallel()
-	change := model.Change{
-		Slug: "test-slug",
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
 	}
-	passingSkills := map[string]model.VerificationRecord{}
-	result := CheckGateWithIteration("/tmp/nonexistent", change, passingSkills, 3)
-	if !result.Blocked {
-		t.Fatal("expected blocked when plan audit evidence is missing")
+	change := model.NewChange("test-slug")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
 	}
-	found := false
-	for _, b := range result.Blockers {
-		if b.Code == "plan_audit_evidence_missing" {
-			found = true
-			break
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	for _, file := range []string{"intent.md", "requirements.md", "decision.md", "tasks.md"} {
+		content := "# " + file + "\n"
+		if file == "requirements.md" {
+			content = `# Requirements
+
+### Requirement: Plan audit
+REQ-001: A ready planning bundle MUST NOT iterate solely because plan-audit evidence is absent.
+
+#### Scenario: Missing plan-audit evidence does not block
+GIVEN a ready planning bundle
+WHEN plan-audit evidence is absent
+THEN the plan gate does not consume a checker iteration.
+`
+		}
+		if file == "decision.md" {
+			content = `# Decision
+
+## Alternatives Considered
+- A: Skip plan-audit evidence.
+- B: Let ready planning bundles proceed without consuming checker iteration.
+
+## Selected Approach
+Use B.
+
+## Interfaces and Data Flow
+The plan gate reads governed artifacts and verification evidence.
+
+## Rollout and Rollback
+Limited to plan gate evaluation and revertible directly.
+
+## Risk
+Low; review owns downstream artifact-code alignment.
+`
+		}
+		if file == "tasks.md" {
+			content = "# Tasks\n\n- [ ] `t-01` Implement the change\n  - target_files: [\"cmd/root.go\"]\n  - task_kind: code\n  - covers: [REQ-001]\n"
+		}
+		if err := os.WriteFile(filepath.Join(bundleDir, file), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", file, err)
 		}
 	}
-	if !found {
-		t.Fatalf("expected plan_audit_evidence_missing blocker, got %v", result.Blockers)
+	passingSkills := map[string]model.VerificationRecord{}
+	result := CheckGateWithIteration(root, change, passingSkills, 3)
+	if result.Blocked {
+		t.Fatalf("expected ready bundle without plan-audit evidence to avoid iteration blockers, got %v", result.Blockers)
 	}
 	if change.PlanAuditIterations != 0 {
 		t.Fatalf("expected CheckGateWithIteration to keep input unchanged, got %d", change.PlanAuditIterations)
@@ -149,14 +193,14 @@ func TestCheckGateWithIteration_MissingEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply plan gate result: %v", err)
 	}
-	if change.PlanAuditIterations != 1 {
-		t.Fatalf("expected PlanAuditIterations=1, got %d", change.PlanAuditIterations)
+	if change.PlanAuditIterations != 0 {
+		t.Fatalf("expected PlanAuditIterations=0, got %d", change.PlanAuditIterations)
 	}
-	if len(sideEffects) == 0 {
-		t.Fatal("expected explicit side effects when applying plan gate result")
+	if len(sideEffects) != 0 {
+		t.Fatalf("expected no iteration side effects, got %+v", sideEffects)
 	}
-	if strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]) == "" {
-		t.Fatal("expected checker feedback to be recorded in evidence refs")
+	if strings.TrimSpace(change.EvidenceRefs[planAuditLastCheckerFeedbackKey]) != "" {
+		t.Fatal("expected checker feedback to remain empty")
 	}
 }
 
@@ -186,13 +230,13 @@ func TestCheckGateWithIterationDetectsStalledFeedback(t *testing.T) {
 	if !hasAdvanceReasonCode(second.Blockers, "plan_checker_loop_terminated") {
 		t.Fatalf("expected loop termination blocker, got %v", second.Blockers)
 	}
-	expectedRecovery := "consider `slipway pivot --reroute` or manual plan revision"
+	expectedRecovery := "manual plan revision required before continuing"
 	if !hasAdvanceReasonDetail(second.Blockers, "plan_audit_budget_exhausted", expectedRecovery) {
-		t.Fatalf("expected valid reroute recovery detail, got %v", second.Blockers)
+		t.Fatalf("expected manual plan recovery detail, got %v", second.Blockers)
 	}
 	for _, blocker := range second.Blockers {
-		if strings.Contains(blocker.Detail, "--kind") {
-			t.Fatalf("blocker detail must not recommend invalid pivot --kind syntax: %v", second.Blockers)
+		if strings.Contains(blocker.Detail, "slipway ") {
+			t.Fatalf("blocker detail must not recommend a separate repair command: %v", second.Blockers)
 		}
 	}
 	if !hasAdvanceReasonDetail(second.Blockers, "plan_audit_iteration", "2/3") {
@@ -911,7 +955,7 @@ func TestAdvanceGoverned_SyncDoesNotRewriteUnchangedChangeAuthority(t *testing.T
 	}
 
 	change := model.NewChange("sync-no-change-rewrite")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorkflowPreset = model.WorkflowPresetLight
 	if err := state.SaveChange(root, change); err != nil {
@@ -1034,7 +1078,7 @@ func TestAdvanceGoverned_S2PassesWithCompleteRuntimeTaskEvidence(t *testing.T) {
 	}
 
 	change := model.NewChange("s2-complete-runtime-evidence")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorkflowPreset = model.WorkflowPresetLight
 	if err := state.SaveChange(root, change); err != nil {
@@ -1170,7 +1214,7 @@ Low; incomplete or stale evidence still blocks the advance.
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if summary.Action != "advanced" || summary.ToState != model.StateS3Review {
-		t.Fatalf("expected S2 to advance to S3 without stale recovery, got %+v", summary)
+		t.Fatalf("expected S2 to advance to S3 without stale repair, got %+v", summary)
 	}
 	if _, err := state.LoadExecutionSummary(root, change.Slug); err != nil {
 		t.Fatalf("load execution summary: %v", err)
@@ -1178,6 +1222,88 @@ Low; incomplete or stale evidence still blocks the advance.
 	if _, err := state.LoadVerification(root, change.Slug, SkillWaveOrchestration); err != nil {
 		t.Fatalf("load wave-orchestration verification: %v", err)
 	}
+}
+
+func TestAdvanceGoverned_S2DefersUpstreamStaleEvidenceToReview(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+	change := model.NewChange("s2-defers-upstream-stale-evidence")
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetLight
+	require.NoError(t, state.SaveChange(root, change))
+	writeValidPlanningBundleForTransactionTest(t, root, change)
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
+
+## Task List
+
+- [x] `+"`t-01`"+` verify S2 forward-only alignment
+  - target_files: ["internal/engine/progression/advance_governed.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)
+
+	base := time.Date(2026, 6, 17, 10, 0, 0, 0, time.UTC)
+	taskPayload := map[string]any{
+		"task_id":             "t-01",
+		"run_summary_version": 1,
+		"task_kind":           model.TaskKindVerification,
+		"verdict":             model.TaskVerdictPass,
+		"target_files":        []string{"internal/engine/progression/advance_governed.go"},
+		"evidence_ref":        "test:upstream-stale-deferred-to-review",
+		"captured_at":         base.Add(time.Minute).Format(time.RFC3339Nano),
+		"freshness_inputs": expectedTaskFreshnessInputsForWavePlan(
+			t,
+			root,
+			change,
+			1,
+			"t-01",
+		),
+	}
+	rawTask, err := json.MarshalIndent(taskPayload, "", "  ")
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "t-01.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, rawTask, 0o644))
+
+	waveRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  base.Add(2 * time.Minute),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillWaveOrchestration, waveRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillWaveOrchestration, waveRecord, nil))
+
+	intakeRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  base.Add(3 * time.Minute),
+		RunVersion: 0,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, intakeRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, intakeRecord, nil))
+
+	intentPath := filepath.Join(bundleDir, "intent.md")
+	require.NoError(t, os.WriteFile(intentPath, []byte(`# Intent
+
+Same objective with a current-change scope alignment amendment.
+`), 0o644))
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, "advanced", summary.Action)
+	assert.Equal(t, model.StateS2Implement, summary.FromState)
+	assert.Equal(t, model.StateS3Review, summary.ToState)
+	assert.NotContains(t, model.ReasonSpecs(summary.Blockers), "required_skill_stale:intake-clarification:intent.md")
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS3Review, reloaded.CurrentState)
 }
 
 func TestAdvanceGoverned_AppliesWorktreePreflightBeforeRequiredActionBlockers(t *testing.T) {
@@ -1191,7 +1317,7 @@ func TestAdvanceGoverned_AppliesWorktreePreflightBeforeRequiredActionBlockers(t 
 
 	change := model.NewChange("worktree-preflight-before-actions")
 	change.NeedsDiscovery = true
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorkflowPreset = model.WorkflowPresetStrict
 	if err := state.SaveChange(root, change); err != nil {
@@ -1470,7 +1596,7 @@ Internal docs.
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// G_scope should NOT block due to empty worktree; worktree gate is at S2_EXECUTE.
+	// G_scope should NOT block due to empty worktree; worktree gate is at S2_IMPLEMENT.
 	// The change should advance from S1_PLAN/research to S1_PLAN/bundle.
 	if summary.Action == "blocked" {
 		for _, b := range summary.Blockers {

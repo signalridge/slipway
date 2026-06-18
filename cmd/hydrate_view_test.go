@@ -40,7 +40,7 @@ func TestStatusTextRendersHydrateLine(t *testing.T) {
 		Slug:              "demo",
 		Phase:             "execution",
 		LifecycleStatus:   "active",
-		CurrentState:      "S2_EXECUTE",
+		CurrentState:      "S2_IMPLEMENT",
 		Mode:              "incident-response",
 		EvidenceFreshness: "fresh",
 		HydrateReferences: []string{"incident-response/incident-response-framework.md", "incident-response/incident-severity-matrix.md"},
@@ -105,7 +105,7 @@ func TestNextTextRendersSupportHydrateOnly(t *testing.T) {
 		Phase:           "execution",
 		LifecycleStatus: "active",
 		ExecutionMode:   "governed",
-		CurrentState:    "S2_EXECUTE",
+		CurrentState:    "S2_IMPLEMENT",
 		NextSkill: &nextSkillView{
 			Name:            "security-review",
 			VerificationDir: ".slipway/changes/demo/security-review/",

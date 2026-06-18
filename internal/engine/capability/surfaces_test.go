@@ -16,7 +16,7 @@ func TestPrimarySurfaceForCommand(t *testing.T) {
 		backingID  string
 	}{
 		{command: "review", publicName: "independent-review", backingID: "independent-review"},
-		{command: "repair", publicName: "root-cause-tracing", backingID: "root-cause-tracing"},
+		{command: "fix", publicName: "root-cause-tracing", backingID: "root-cause-tracing"},
 	}
 
 	for _, tc := range cases {

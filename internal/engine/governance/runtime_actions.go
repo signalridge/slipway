@@ -154,18 +154,18 @@ func actionBlocksCurrentState(change model.Change, action RequiredAction) bool {
 		if change.CurrentState == model.StateS1Plan {
 			return !change.NeedsDiscovery
 		}
-		return change.CurrentState == model.StateS2Execute ||
-			change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify
+		return change.CurrentState == model.StateS2Implement ||
+			change.CurrentState == model.StateS3Review
 	case model.ControlScopeExecution:
 		// Execution-scope controls (e.g. worktree-isolation) only block from
-		// S2_EXECUTE onward. S0_INTAKE and S1_PLAN are pre-execution phases;
-		// the worktree gate lives at S2_EXECUTE/preflight per design.
-		return change.CurrentState == model.StateS2Execute ||
-			change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify
+		// S2_IMPLEMENT onward. S0_INTAKE and S1_PLAN are pre-execution phases;
+		// the worktree gate lives at S2_IMPLEMENT/preflight per design.
+		return change.CurrentState == model.StateS2Implement ||
+			change.CurrentState == model.StateS3Review
 	case model.ControlScopeReview:
-		return change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify
+		return change.CurrentState == model.StateS3Review
 	case model.ControlScopeRelease:
-		return change.CurrentState == model.StateS4Verify
+		return change.CurrentState == model.StateS3Review
 	default:
 		return false
 	}

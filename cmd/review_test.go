@@ -21,7 +21,7 @@ func TestHasIntentDriftSignal_BlockerExactMatch(t *testing.T) {
 	t.Parallel()
 	empty := model.VerificationRecord{}
 
-	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"pivot_required:intent_drift"}), empty))
+	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"new_change_required:intent_conflict"}), empty))
 	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"intent_drift"}), empty))
 	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"intent_drift:severe"}), empty))
 }
@@ -129,7 +129,7 @@ func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review hydrate/json rejection must be side-effect free")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -147,7 +147,7 @@ func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Equal(t, model.StateS2Execute, after.CurrentState, "invalid hydrate/json request must not advance review state")
+		assert.Equal(t, model.StateS2Implement, after.CurrentState, "invalid hydrate/json request must not advance review state")
 		assert.Zero(t, after.ReviewIntentDriftFailures, "invalid hydrate/json request must not mutate review counters")
 	})
 }
@@ -167,7 +167,7 @@ func TestReviewRejectsUnexpectedArgs(t *testing.T) {
 func TestEnsureReviewEntryStateRequiresRunSummary(t *testing.T) {
 	t.Parallel()
 
-	err := ensureReviewEntryState(model.StateS2Execute, nil)
+	err := ensureReviewEntryState(model.StateS3Review, nil)
 	cliErr := asCLIError(err)
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "missing_run_summary", cliErr.ErrorCode)
@@ -186,7 +186,33 @@ func TestEnsureReviewEntryStateAcceptsSummaryLevelBlockersWithoutTasks(t *testin
 		OpenBlockers:      model.ReasonCodesFromSpecs([]string{"session_isolation_warning:session_id=abc:shared_by=task-a,task-b"}),
 	}
 
-	require.NoError(t, ensureReviewEntryState(model.StateS2Execute, summary))
+	require.NoError(t, ensureReviewEntryState(model.StateS3Review, summary))
+}
+
+func TestEnsureReviewEntryStateRejectsS2Implement(t *testing.T) {
+	t.Parallel()
+
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-a",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
+	}
+
+	err := ensureReviewEntryState(model.StateS2Implement, summary)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "review_state_invalid", cliErr.ErrorCode)
+	assert.Equal(t, categoryGovernanceBlocked, cliErr.Category)
+	assert.Equal(t, exitCodeGovernanceBlocked, cliErr.ExitCode)
+	require.NotNil(t, cliErr.Details)
+	assert.Equal(t, "slipway implement", cliErr.Details["next_command"])
 }
 
 func TestEnsureReviewEntryStateRejectsEarlierState(t *testing.T) {
@@ -219,6 +245,65 @@ func TestReviewExplicitRequestRejectsInactiveGovernedChange(t *testing.T) {
 		assert.Equal(t, "not_active", cliErr.ErrorCode)
 		assert.Equal(t, categoryPrecondition, cliErr.Category)
 		assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	})
+}
+
+func TestReviewRejectsS2ImplementWithoutMutatingState(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "review should not advance S2")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Implement
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		err = cmd.Execute()
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "review_state_invalid", cliErr.ErrorCode)
+		assert.Equal(t, categoryGovernanceBlocked, cliErr.Category)
+		require.NotNil(t, cliErr.Details)
+		assert.Equal(t, "slipway implement", cliErr.Details["next_command"])
+
+		after, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS2Implement, after.CurrentState)
+	})
+}
+
+func TestReviewDiagnosticsFlagEmitsJSON(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, "L2", "review diagnostics json")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, root, change)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+
+		var out bytes.Buffer
+		cmd := makeReviewCmd()
+		cmd.SetArgs([]string{"--diagnostics", "--change", slug})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view reviewView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+		assert.Equal(t, string(model.StateS3Review), view.CurrentState)
 	})
 }
 
@@ -256,7 +341,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 	})
 }
 
-func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
+func TestReviewPassFromS3ReviewPreservesGovernedState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -264,7 +349,7 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review should preserve governed done-ready state")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
@@ -285,17 +370,19 @@ func TestReviewPassFromS7VerifyPreservesGovernedState(t *testing.T) {
 
 ### Requirement: ReviewContract
 
-REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed review-state when review prerequisites remain valid.
 
-#### Scenario: Verify-state preserved on valid review
-GIVEN a governed change at S4_VERIFY with valid review prerequisites
+#### Scenario: Review-state preserved on valid review
+GIVEN a governed change at S3_REVIEW with valid review prerequisites
 WHEN the review runs
-THEN the governed verify-state is preserved.
+THEN the governed review-state is preserved.
 `), 0o644))
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingSelectedReviewEvidencePack(t, root, slug, 1)
+		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
@@ -305,17 +392,18 @@ THEN the governed verify-state is preserved.
 
 		var view reviewView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Equal(t, "pass", view.Verdict)
-		assert.Equal(t, string(model.StateS4Verify), view.CurrentState)
+		assert.Equal(t, "pass", view.Verdict, model.ReasonSpecs(view.Blockers))
+		assert.Equal(t, string(model.StateS3Review), view.CurrentState)
 		assert.ElementsMatch(t, []string{
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
+			progression.SkillGoalVerification,
 		}, view.SelectedReviewSkills)
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Equal(t, model.StateS4Verify, change.CurrentState)
+		assert.Equal(t, model.StateS3Review, change.CurrentState)
 	})
 }
 
@@ -373,7 +461,7 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review should use execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
@@ -394,31 +482,16 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 
 ### Requirement: ReviewContract
 
-REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed review-state when review prerequisites remain valid.
 
-#### Scenario: Verify-state preserved on valid review
-GIVEN a governed change at S4_VERIFY with valid review prerequisites
+#### Scenario: Review-state preserved on valid review
+GIVEN a governed change at S3_REVIEW with valid review prerequisites
 WHEN the review runs
-THEN the governed verify-state is preserved.
+THEN the governed review-state is preserved.
 `), 0o644))
 
 		now := time.Now().UTC()
-		require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        now,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "t-01",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindVerification,
-					ChangedFiles: []string{"cmd/review.go"},
-					CapturedAt:   now,
-				},
-			},
-		}))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		_, err = state.MaterializeWavePlan(root, change)
 		require.NoError(t, err)
 
@@ -464,7 +537,7 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
 		slug := createGovernedRequest(t, root, "L2", "review should fail closed when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
@@ -485,31 +558,16 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
 
 ### Requirement: ReviewContract
 
-REQ-001: The system MUST preserve governed verify-state when review prerequisites remain valid.
+REQ-001: The system MUST preserve governed review-state when review prerequisites remain valid.
 
-#### Scenario: Verify-state preserved on valid review
-GIVEN a governed change at S4_VERIFY with valid review prerequisites
+#### Scenario: Review-state preserved on valid review
+GIVEN a governed change at S3_REVIEW with valid review prerequisites
 WHEN the review runs
-THEN the governed verify-state is preserved.
+THEN the governed review-state is preserved.
 `), 0o644))
 
 		now := time.Now().UTC()
-		require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
-			Version:           model.ExecutionSummaryVersion,
-			RunSummaryVersion: 1,
-			CapturedAt:        now,
-			OverallVerdict:    model.ExecutionVerdictPass,
-			CompletedTasks:    []string{"t-01"},
-			Tasks: []model.ExecutionTaskSummary{
-				{
-					TaskID:       "t-01",
-					Verdict:      model.TaskVerdictPass,
-					TaskKind:     model.TaskKindVerification,
-					ChangedFiles: []string{"cmd/review.go"},
-					CapturedAt:   now,
-				},
-			},
-		}))
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		_, err = state.MaterializeWavePlan(root, change)
 		require.NoError(t, err)
 
@@ -544,7 +602,7 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 	slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -625,7 +683,7 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 	assert.Equal(t, categoryStateIntegrity, cliErr.Category)
 }
 
-func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
+func TestReviewDoesNotPreGateOnStaleExecutionEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -663,7 +721,7 @@ func TestReviewFailsWhenExecutionEvidenceIsStale(t *testing.T) {
 		var view reviewView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, "fail", view.Verdict)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
+		assert.NotContains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 		require.NotEmpty(t, view.Waves, "review should still surface wave status on blocked paths when wave execution data is available")
 		assert.Equal(t, "pass", view.Waves[0].Verdict)
 	})
@@ -716,7 +774,7 @@ func TestReviewChangedOnlyUsesInMemoryArtifactReconcile(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review changed-only should follow stale artifact projection")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
 		require.NoError(t, state.SaveChange(root, change))
@@ -813,7 +871,7 @@ func TestReviewChangedOnlyIncludesNonRequiredRuntimeArtifacts(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review changed-only should include non-required runtime artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.GuardrailDomain = string(model.GuardrailDomainAuthAuthZ)
 		require.NoError(t, state.SaveChange(root, change))
@@ -912,7 +970,7 @@ func TestReviewFailsWhenTasksChecklistCoverageDrifts(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "review should fail when requirement coverage drifts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		change.Artifacts = map[string]model.ArtifactState{}
 		require.NoError(t, state.SaveChange(root, change))
@@ -957,7 +1015,7 @@ REQ-002: The system must emit audit logs.
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Equal(t, model.StateS2Execute, change.CurrentState)
+		assert.Equal(t, model.StateS3Review, change.CurrentState)
 	})
 }
 

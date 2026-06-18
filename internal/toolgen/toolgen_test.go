@@ -88,8 +88,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 22 commands (5 core + 12 situational + 5 diagnostics).
-	assert.Len(t, commandRegistry, 22)
+	// Verify registry has 25 commands (10 core + 10 situational + 5 diagnostics).
+	assert.Len(t, commandRegistry, 25)
 
 	// Verify all registry entries have the required fields.
 	for _, def := range commandRegistry {
@@ -121,17 +121,17 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 			diag++
 		}
 	}
-	assert.Equal(t, 5, core, "expected 5 core commands")
-	assert.Equal(t, 12, sit, "expected 12 situational commands")
+	assert.Equal(t, 10, core, "expected 10 core commands")
+	assert.Equal(t, 10, sit, "expected 10 situational commands")
 	assert.Equal(t, 5, diag, "expected 5 diagnostics commands")
 	assert.Equal(t, 7, query, "expected 7 query commands")
-	assert.Equal(t, 15, mutation, "expected 15 mutation commands")
+	assert.Equal(t, 18, mutation, "expected 18 mutation commands")
 
 	// Verify commandIDs() returns a sorted list covering every command that
 	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
 	// but intentionally do not generate host prompt wrappers.
 	ids := commandIDs()
-	assert.Len(t, ids, 21)
+	assert.Len(t, ids, 24)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -976,9 +976,10 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 
 	// Build set of valid commands.
 	validCmds := map[string]bool{
-		"new": true, "next": true, "run": true, "status": true, "done": true,
+		"new": true, "intake": true, "plan": true, "implement": true,
+		"next": true, "run": true, "status": true, "done": true, "fix": true,
 		"abort": true, "cancel": true, "review": true, "validate": true,
-		"pivot": true, "preset": true, "repair": true, "init": true, "checkpoint": true,
+		"preset": true, "repair": true, "init": true, "checkpoint": true,
 		"instructions": true,
 	}
 
@@ -1263,8 +1264,9 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 
 	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
 	require.NoError(t, err)
-	assert.Contains(t, runEntry, "Advance governed execution until it surfaces a next skill, blocker, checkpoint, or done-ready outcome")
-	assert.Contains(t, runEntry, "`run` owns continuous governed execution")
+	assert.Contains(t, runEntry, "Shortcut driver for the current lifecycle stage")
+	assert.Contains(t, runEntry, "`run` is an auto-driver shortcut")
+	assert.Contains(t, runEntry, "JSON output includes `delegated_to`")
 	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
 }
 
@@ -1289,7 +1291,7 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	assert.NotContains(t, readme, "`openspec/`: change and spec artifacts used by governed workflows")
 
 	assert.Equal(t, "Create a governed change with intake-first workflow", commandDescriptions["new"])
-	assert.Equal(t, "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", commandDescriptions["run"])
+	assert.Equal(t, "Shortcut driver for the current lifecycle stage", commandDescriptions["run"])
 	assert.Equal(t, "Finalize a done-ready change and archive it", commandDescriptions["done"])
 }
 

@@ -145,7 +145,7 @@ type CommandDef struct {
 // commandRegistry is the single source of truth for adapter command metadata.
 // Entry order is for readability; commandIDs() returns IDs sorted alphabetically.
 var commandRegistry = []CommandDef{
-	// Core (5)
+	// Core (10)
 	{ID: "new", Class: CommandClassMutation, Description: "Create a governed change with intake-first workflow", Tier: "core", HasPromptSurface: true,
 		Arguments:     `"<description>" [--preset light|standard|strict] [--profile code|docs|research|config|meta] [--discuss] [--full] [--trivial] [--from-doc <path>] [--json]`,
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "No conflicting active change should already exist in the workspace."},
@@ -153,16 +153,47 @@ var commandRegistry = []CommandDef{
 			"JSON stdin fields for `slipway new --json`, not command-line flags: `guardrail_domain`, `needs_discovery`, and `complexity`.",
 			"Minimal explicit-classification example: `echo '{\"description\":\"fix typo\",\"guardrail_domain\":\"\",\"needs_discovery\":false,\"complexity\":\"simple\"}' | slipway new --json`.",
 		}},
+	{ID: "intake", Class: CommandClassMutation, Description: "Complete intake clarification and authorization for the active change", Tier: "core", HasPromptSurface: true,
+		Arguments:     "[--json] [--diagnostics] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S0_INTAKE."},
+		Notes: []string{
+			"`slipway intake` is the explicit S0 stage command. `slipway run` delegates here when the current state is S0_INTAKE.",
+		}},
+	{ID: "plan", Class: CommandClassMutation, Description: "Author or amend the governed plan artifacts for the active change", Tier: "core", HasPromptSurface: true,
+		Arguments:     "[--json] [--diagnostics] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S1_PLAN."},
+		Notes: []string{
+			"`slipway plan` is the explicit S1 stage command. Same-intent change amendments update the current bundle without a separate recovery command.",
+		}},
+	{ID: "implement", Class: CommandClassMutation, Description: "Execute governed implementation waves for the active change", Tier: "core", HasPromptSurface: true,
+		Arguments:     "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_IMPLEMENT with a materialized wave plan."},
+		Notes: []string{
+			"`slipway implement` is the explicit S2 stage command. `slipway run` delegates here when the current state is S2_IMPLEMENT.",
+		}},
+	{ID: "review", Class: CommandClassMutation, Description: "Run review convergence for artifact-code alignment and feedback repairs", Tier: "core", HasPromptSurface: true,
+		Arguments:     "[--json] [--diagnostics] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with execution-summary evidence (run wave-orchestration first)."}},
+	{ID: "fix", Class: CommandClassMutation, Description: "Dispatch fresh-context fixes for S3 review findings", Tier: "core", HasPromptSurface: true,
+		Arguments:     "[--json] [--reviewer <skill>] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with review findings to repair."},
+		Notes: []string{
+			"`slipway fix` does not run local-integrity repair and does not advance lifecycle state; it surfaces review repair targets and the fresh-context repair contract.",
+			"After the repair subagent edits code/artifacts, rerun and record the affected reviewer evidence, then run `slipway review`.",
+		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--diagnostics] [--context-guard] [--no-auto-pass] [--change <slug>]"},
-	{ID: "run", Class: CommandClassMutation, Description: "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]"},
+	{ID: "run", Class: CommandClassMutation, Description: "Shortcut driver for the current lifecycle stage", Tier: "core", HasPromptSurface: true,
+		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]",
+		Notes: []string{
+			"`slipway run` is an auto-driver shortcut. JSON output includes `delegated_to` so hosts can see the primary stage command it invoked.",
+		}},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Situational (12)
+	// Situational (10)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
@@ -176,29 +207,24 @@ var commandRegistry = []CommandDef{
 			"`--worktree` also removes the bound git worktree (refused on dirty or unsafe-untracked changes unless `--force`); `--archived` purges an archived terminal record. The implementation/PR branch is never deleted.",
 			"`cancel` archives a terminal record; `delete` discards local governed state. `status`/`next` route here when a change is abandoned, broken, or bound elsewhere.",
 		}},
-	{ID: "review", Class: CommandClassMutation, Description: "Bidirectional artifact-code alignment review", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "[--json] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE, S3_REVIEW, or S4_VERIFY with execution-summary evidence (run wave-orchestration first)."}},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "checkpoint", Class: CommandClassMutation, Description: "Set an active checkpoint to pause wave execution and request user input", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE with a materialized wave plan (run `slipway repair` if `wave-plan.yaml` is missing)."}},
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_IMPLEMENT with a materialized wave plan (run `slipway repair` if `wave-plan.yaml` is missing)."}},
 	{ID: "preset", Class: CommandClassMutation, Description: "Confirm or override the active change workflow preset", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "<light|standard|strict> [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change should already exist, or pass `--change <slug>`."}},
-	{ID: "pivot", Class: CommandClassMutation, Description: "Reroute or rescope an active change", Tier: "situational", HasPromptSurface: true,
-		Arguments: "[--reroute|--rescope] [--json] [--change <slug>]"},
 	{ID: "abort", Class: CommandClassMutation, Description: "Abort the active execution session without archiving the change", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_EXECUTE; outside S2_EXECUTE use `slipway cancel` instead."}},
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_IMPLEMENT; outside S2_IMPLEMENT use `slipway cancel` instead."}},
 	{ID: "repair", Class: CommandClassMutation, Description: "Run safe local integrity and layout repairs", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_EXECUTE with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
 	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "situational", HasPromptSurface: false,
 		Arguments:     "<helper> [helper flags]",
 		Prerequisites: []string{"None — public CLI-only helper namespace used by generated skills. Individual helpers may require GitHub tokens, local files, or explicit confirmation."},
@@ -337,10 +363,9 @@ const workflowEntryPublicName = "slipway"
 // standaloneNames lists standalone skills (not governance, not technique) to generate.
 var standaloneNames = []string{workflowSkillID}
 
-var workflowLifecycleCommandIDs = []string{"new", "status", "next", "run", "done"}
+var workflowLifecycleCommandIDs = []string{"new", "intake", "plan", "implement", "review", "fix", "done", "next", "run", "status"}
 
 var workflowSupportingCommandIDs = []string{
-	"review",
 	"validate",
 	"repair",
 	"evidence",
@@ -349,7 +374,6 @@ var workflowSupportingCommandIDs = []string{
 	"delete",
 	"checkpoint",
 	"preset",
-	"pivot",
 	"abort",
 }
 

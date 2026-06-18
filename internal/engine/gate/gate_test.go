@@ -57,10 +57,10 @@ Internal API docs, RFC-2024-auth.`
 
 func TestEvaluateGPlan(t *testing.T) {
 	t.Parallel()
-	eval := EvaluateGPlan(true, true, nil)
+	eval := EvaluateGPlan(true, nil)
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 
-	eval = EvaluateGPlan(false, true, []model.ReasonCode{model.NewReasonCode("missing_spec", "")})
+	eval = EvaluateGPlan(false, []model.ReasonCode{model.NewReasonCode("missing_spec", "")})
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "artifact_not_ready"))
 }
@@ -68,6 +68,7 @@ func TestEvaluateGPlan(t *testing.T) {
 func TestEvaluateGShip(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("slug")
+	change.CurrentState = model.StateS3Review
 
 	eval := EvaluateGShip(change, true, true, true, nil, nil)
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
@@ -88,8 +89,8 @@ func TestEvaluateGShipMissingVerificationEvidenceRoutesS4Recovery(t *testing.T) 
 	assert.Equal(t, model.ReasonSeverityError, reason.Severity)
 	recovery := model.BuildRecovery(eval.ReasonCodes)
 	require.NotNil(t, recovery)
-	assert.Equal(t, model.RecoveryClassRerunSkill, recovery.RecoveryClass)
-	assert.Equal(t, "slipway run", recovery.PrimaryCommand)
+	assert.Equal(t, model.RecoveryClassReviewAlignment, recovery.RecoveryClass)
+	assert.Equal(t, "slipway review", recovery.PrimaryCommand)
 }
 
 func TestGuardrailHighRiskChecks(t *testing.T) {
@@ -109,55 +110,4 @@ func findGateReasonCode(t *testing.T, reasons []model.ReasonCode, code string) m
 	}
 	require.Failf(t, "reason code not found", "missing %s in %#v", code, reasons)
 	return model.ReasonCode{}
-}
-
-func TestEvaluateGPivot(t *testing.T) {
-	t.Parallel()
-
-	eval := EvaluateGPivot(PivotKindRescope, false, model.StateS2Execute)
-	assert.Equal(t, model.GateStatusBlocked, eval.Status)
-	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "pivot_not_approved"))
-
-	for _, state := range []model.WorkflowState{
-		model.StateS1Plan,
-		model.StateS2Execute,
-		model.StateS3Review,
-		model.StateS4Verify,
-	} {
-		eval := EvaluateGPivot(PivotKindReroute, true, state)
-		assert.Equal(t, model.GateStatusApproved, eval.Status, "reroute state %s", state)
-		assert.Empty(t, eval.ReasonCodes, "reroute state %s", state)
-	}
-
-	for _, state := range []model.WorkflowState{
-		model.StateS0Intake,
-		model.StateDone,
-	} {
-		eval := EvaluateGPivot(PivotKindReroute, true, state)
-		assert.Equal(t, model.GateStatusBlocked, eval.Status, "reroute state %s", state)
-		assert.True(t, hasGateReasonCode(eval.ReasonCodes, "pivot_state_invalid"), "reroute state %s", state)
-	}
-
-	// Rescope is reachable once execution has begun; it resets to S0_INTAKE
-	// regardless of the starting state, so S3_REVIEW/S4_VERIFY must be accepted —
-	// otherwise scope-drift recovery is unreachable after a stale-evidence reopen.
-	for _, state := range []model.WorkflowState{
-		model.StateS2Execute,
-		model.StateS3Review,
-		model.StateS4Verify,
-	} {
-		eval := EvaluateGPivot(PivotKindRescope, true, state)
-		assert.Equal(t, model.GateStatusApproved, eval.Status, "rescope state %s", state)
-		assert.Empty(t, eval.ReasonCodes, "rescope state %s", state)
-	}
-
-	for _, state := range []model.WorkflowState{
-		model.StateS0Intake,
-		model.StateS1Plan,
-		model.StateDone,
-	} {
-		eval := EvaluateGPivot(PivotKindRescope, true, state)
-		assert.Equal(t, model.GateStatusBlocked, eval.Status, "rescope state %s", state)
-		assert.True(t, hasGateReasonCode(eval.ReasonCodes, "rescope_state_invalid"), "rescope state %s", state)
-	}
 }

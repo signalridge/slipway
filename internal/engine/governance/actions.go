@@ -59,7 +59,7 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 			}
 
 		case model.ControlIndependentReview:
-			// Independent review is a review-scope gate (S3/S4), so it runs on
+			// Independent review is a review-scope gate (S3), so it runs on
 			// execution evidence — not before execution. Wording that says
 			// "before further execution" contradicts the gate and the review
 			// command (which requires an execution summary), misdirecting agents

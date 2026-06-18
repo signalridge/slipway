@@ -8,7 +8,7 @@ import (
 )
 
 // singleSkill asserts the resolved skill set is at most one skill and returns
-// it (or "") for the single-skill states (S0/S1/S2/S4).
+// it (or "") for the single-skill states (S0/S1/S2/S3).
 func singleSkill(t *testing.T, skills []string) string {
 	t.Helper()
 	if len(skills) > 1 {
@@ -73,18 +73,18 @@ func TestResolveNextSkill_S1Plan_SubSteps(t *testing.T) {
 	}
 }
 
-func TestResolveNextSkill_S2Execute(t *testing.T) {
+func TestResolveNextSkill_S2Implement(t *testing.T) {
 	t.Parallel()
 
 	// Without guardrail domain -> wave-orchestration
-	change := model.Change{CurrentState: model.StateS2Execute}
+	change := model.Change{CurrentState: model.StateS2Implement}
 	skills, state := ResolveNextSkill(change)
 	name := singleSkill(t, skills)
 	if name != SkillWaveOrchestration {
 		t.Errorf("expected %s, got %s", SkillWaveOrchestration, name)
 	}
-	if state != string(model.StateS2Execute) {
-		t.Errorf("expected %s, got %s", model.StateS2Execute, state)
+	if state != string(model.StateS2Implement) {
+		t.Errorf("expected %s, got %s", model.StateS2Implement, state)
 	}
 
 	// With guardrail domain -> still wave-orchestration (no kernel-level dispatch override)
@@ -107,7 +107,7 @@ func TestResolveNextSkill_S3Review(t *testing.T) {
 		t,
 		"default-selection",
 		skills,
-		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview},
+		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification},
 	)
 }
 
@@ -126,7 +126,7 @@ func TestResolveNextSkill_S3Review_SelectedSecurityReview(t *testing.T) {
 		t,
 		"security-selected",
 		skills,
-		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillSecurityReview},
+		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification, SkillSecurityReview},
 	)
 }
 
@@ -139,7 +139,7 @@ func TestResolveNextSkill_S3Review_ReviewSetIndependentOfEvidence(t *testing.T) 
 	t.Parallel()
 
 	base := model.Change{CurrentState: model.StateS3Review}
-	wantPair := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
+	wantPair := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
 
 	// No recorded review evidence.
 	skills, _ := ResolveNextSkill(base)
@@ -165,19 +165,6 @@ func assertReviewPair(t *testing.T, label string, got, want []string) {
 		if !gotSet[w] {
 			t.Errorf("[%s] S3 review set %v missing %s", label, got, w)
 		}
-	}
-}
-
-func TestResolveNextSkill_S4Verify(t *testing.T) {
-	t.Parallel()
-	change := model.Change{CurrentState: model.StateS4Verify}
-	skills, state := ResolveNextSkill(change)
-	name := singleSkill(t, skills)
-	if name != SkillGoalVerification {
-		t.Errorf("expected %s, got %s", SkillGoalVerification, name)
-	}
-	if state != string(model.StateS4Verify) {
-		t.Errorf("expected %s, got %s", model.StateS4Verify, state)
 	}
 }
 

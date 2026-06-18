@@ -15,11 +15,9 @@ import (
 //
 //   - For S0_INTAKE, it dispatches based on the change's IntakeSubStep.
 //   - For S1_PLAN, it dispatches based on the change's PlanSubStep.
-//   - For S2_EXECUTE, it returns wave-orchestration.
+//   - For S2_IMPLEMENT, it returns wave-orchestration.
 //   - For S3_REVIEW, it returns the selected review peer set (all run
 //     concurrently; none precedes another).
-//   - For S4_VERIFY, it returns goal-verification (then final-closeout via
-//     evidence evaluation).
 func ResolveNextSkill(change model.Change) (skillNames []string, evidenceState string) {
 	return ResolveNextSkillWithReviewSelection(change, skill.ReviewSkillSelection{})
 }
@@ -34,15 +32,13 @@ func ResolveNextSkillWithReviewSelection(
 		return resolveS0Intake(change)
 	case model.StateS1Plan:
 		return resolveS1Plan(change)
-	case model.StateS2Execute:
-		return resolveS2Execute(change)
+	case model.StateS2Implement:
+		return resolveS2Implement(change)
 	case model.StateS3Review:
 		// Parallel review set: all selected peer reviews dispatch concurrently
-		// and are unordered. Per-skill evidence evaluation gates progression.
+		// and are unordered. Per-skill evidence evaluation then routes S3
+		// closeout authorities.
 		return skill.SelectedReviewSkills(reviewSelection), string(model.StateS3Review)
-	case model.StateS4Verify:
-		return []string{SkillGoalVerification}, string(model.StateS4Verify)
-
 	default:
 		return nil, ""
 	}
@@ -112,11 +108,11 @@ func resolveS1Plan(change model.Change) ([]string, string) {
 	}
 }
 
-// resolveS2Execute returns the execution skill. Discovery changes without a
+// resolveS2Implement returns the execution skill. Discovery changes without a
 // bound worktree must complete worktree-preflight first.
-func resolveS2Execute(change model.Change) ([]string, string) {
+func resolveS2Implement(change model.Change) ([]string, string) {
 	if change.NeedsDiscovery && change.WorktreePath == "" {
-		return []string{SkillWorktreePreflight}, string(model.StateS2Execute)
+		return []string{SkillWorktreePreflight}, string(model.StateS2Implement)
 	}
-	return []string{SkillWaveOrchestration}, string(model.StateS2Execute)
+	return []string{SkillWaveOrchestration}, string(model.StateS2Implement)
 }

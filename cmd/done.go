@@ -529,22 +529,10 @@ func refreshDoneShipGate(root string, change *model.Change) (gate.GateEvaluation
 
 func shipGateBlockedError(root string, change model.Change, eval gate.GateEvaluation) error {
 	reasonCodes := append([]model.ReasonCode(nil), eval.ReasonCodes...)
-	// Mirror the read-only surfaces (next/validate/status): when the ship gate is
-	// blocked because evidence went stale, surface the computed reopen target and
-	// the stale_evidence_recovery_available token so the recovery payload at `done`
-	// names the same authority and next action that mutating `slipway run`
-	// performs (REQ-008 parity). BuildRecovery prioritizes that token, so the
-	// primary action becomes `slipway run`.
 	remediation := "Refresh verification evidence, resolve ship gate blockers, and rerun `slipway done`."
-	if staleTarget, staleAvailable, staleErr := progression.StaleEvidenceRecoveryAvailable(root, change, reasonCodes); staleErr == nil && staleAvailable {
-		reasonCodes = append(
-			[]model.ReasonCode{
-				model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
-				model.NewReasonCode("run_slipway_run_to_advance", string(change.CurrentState)),
-			},
-			reasonCodes...,
-		)
-		remediation = "Run `slipway run` to reopen " + staleTarget.Label() + " and re-run the owning stage, then rerun `slipway done`."
+	if staleTarget, staleAvailable, staleErr := progression.StaleEvidenceRepairAvailable(root, change, reasonCodes); staleErr == nil && staleAvailable {
+		reasonCodes = append(reasonCodes, model.NewReasonCode("review_alignment_required", staleTarget.SkillName))
+		remediation = "Realign stale evidence through review alignment for " + staleTarget.Label() + ", refresh affected S2+ evidence, then rerun `slipway done`."
 	}
 	reasons := model.ReasonSpecs(reasonCodes)
 	message := "fresh G_ship check blocked finalization"

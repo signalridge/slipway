@@ -773,7 +773,7 @@ func TestArchiveChangeNotDiscoverableAfterArchive(t *testing.T) {
 
 	change := model.NewChange(slug)
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 
@@ -810,7 +810,7 @@ func TestContextDependenciesPersistsThroughArchive(t *testing.T) {
 
 	change := model.NewChange(slug)
 	change.Status = model.ChangeStatusActive
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.GuardrailDomain = "security_credentials"
 	change.ContextDependencies = model.ContextDependencies{

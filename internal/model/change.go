@@ -20,7 +20,7 @@ type Change struct {
 
 	// Lifecycle
 	Status          ChangeStatus  `yaml:"status" json:"status"`                                         // active|done|cancelled
-	CurrentState    WorkflowState `yaml:"current_state" json:"current_state"`                           // S0_INTAKE / S1_PLAN / S2_EXECUTE / S3_REVIEW / S4_VERIFY / DONE
+	CurrentState    WorkflowState `yaml:"current_state" json:"current_state"`                           // S0_INTAKE / S1_PLAN / S2_IMPLEMENT / S3_REVIEW / DONE
 	IntakeSubStep   IntakeSubStep `yaml:"intake_substep,omitempty" json:"intake_substep,omitempty"`     // Progress within S0_INTAKE
 	PlanSubStep     PlanSubStep   `yaml:"plan_substep,omitempty" json:"plan_substep,omitempty"`         // Planning progress within S1_PLAN
 	NeedsDiscovery  bool          `yaml:"needs_discovery,omitempty" json:"needs_discovery,omitempty"`   // Whether discovery path is included in planning
@@ -112,6 +112,7 @@ func (c *Change) Normalize() {
 	if c.Version == 0 {
 		c.Version = ChangeVersion
 	}
+	c.CurrentState = c.CurrentState.Canonical()
 	// Enforce substep consistency: clear substeps that do not belong to the
 	// current state and seed entry defaults for states that require them.
 	if c.CurrentState != StateS0Intake {

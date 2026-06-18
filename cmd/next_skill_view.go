@@ -177,35 +177,46 @@ func assembleSkillViewWithOptions(
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
 	}
-	staleRecoveryAvailable := false
-	if governedChange != nil {
-		staleTarget, staleAvailable, err := progression.StaleEvidenceRecoveryAvailable(root, *governedChange, blockersForResolution)
+	if governedChange != nil && governedChange.CurrentState == model.StateS3Review {
+		staleTarget, staleAvailable, err := progression.StaleEvidenceRepairAvailable(root, *governedChange, blockersForResolution)
 		if err != nil {
 			return err
 		}
 		if staleAvailable {
-			staleRecoveryAvailable = true
-			nextSkillName = ""
-			nextState = string(staleTarget.State)
-			view.Blockers = appendReasonCodes(
-				view.Blockers,
-				[]model.ReasonCode{
-					model.NewReasonCode("stale_evidence_recovery_available", staleTarget.Label()),
-					model.NewReasonCode("run_slipway_run_to_advance", string(governedChange.CurrentState)),
-				},
-			)
-			view.Warnings = append(view.Warnings, "stale_evidence_recovery_available: run `slipway run` to reopen "+staleTarget.Label()+" and re-run the owning stage.")
-			blockersForResolution = append([]model.ReasonCode(nil), view.Blockers...)
-			if advanced.Action == "blocked" {
-				blockersForResolution = append(blockersForResolution, advanced.Blockers...)
-			}
+			reviewAlignmentBlockers := append([]model.ReasonCode(nil), staleTarget.Blockers...)
+			reviewAlignmentBlockers = append(reviewAlignmentBlockers, model.NewReasonCode("review_alignment_required", staleTarget.SkillName))
+			view.Blockers = appendReasonCodes(view.Blockers, reviewAlignmentBlockers)
+			blockersForResolution = append(blockersForResolution, reviewAlignmentBlockers...)
 		}
 	}
-	if !staleRecoveryAvailable && len(selectedReviewSkills) > 0 {
+	if len(selectedReviewSkills) > 0 {
 		nextSkillName = firstPendingSelectedReviewSkill(selectedReviewSkills, evidenceMap, blockersForResolution)
 		displaySkillName = nextSkillName
 		resolutionReason = ""
 		blockingResolution = false
+		if nextSkillName == "" {
+			if repairSkill := reviewAlignmentSkillForBlockers(selectedReviewSkills, blockersForResolution); repairSkill != "" {
+				nextSkillName = repairSkill
+				blockingResolution = true
+				resolutionReason = fmt.Sprintf("review alignment required for stale upstream evidence; rerun %s", repairSkill)
+				view.Warnings = append(view.Warnings, resolutionReason)
+			} else if closeoutSkill := nextS3CloseoutAuthoritySkill(evidenceMap, blockersForResolution); closeoutSkill != "" {
+				nextSkillName = closeoutSkill
+				blockingResolution = hasRequiredSkillBlockerFor(blockersForResolution, closeoutSkill)
+			} else if autoSkipEvidence && skillHasPassingEvidence(evidenceMap, progression.SkillGoalVerification) &&
+				!skillHasPassingEvidence(evidenceMap, progression.SkillFinalCloseout) {
+				nextSkillName = progression.SkillFinalCloseout
+				displaySkillName = progression.SkillGoalVerification
+				resolutionReason = "passing goal-verification evidence makes final-closeout available before finalization"
+			} else if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
+				nextSkillName = actionableSkill
+				blockingResolution = true
+				if reason != "" {
+					resolutionReason = reason
+					view.Warnings = append(view.Warnings, reason)
+				}
+			}
+		}
 	} else if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
 		nextSkillName = actionableSkill
 		blockingResolution = true
@@ -319,7 +330,7 @@ func assembleSkillViewWithOptions(
 
 	// Codebase-map relevance self-check (#80): a populated/partial map reflects
 	// content presence, not scope relevance, and can be consumed stale at any
-	// durable-map consumer — including wave-orchestration at S2_EXECUTE, the exact
+	// durable-map consumer — including wave-orchestration at S2_IMPLEMENT, the exact
 	// handoff issue #80 reproduces — so this fires independent of lifecycle state.
 	// It is disjoint by status from the S1 consume/discovery advisories above
 	// (those own scaffold_only/baseline/missing), so it never double-fires.
@@ -348,6 +359,22 @@ func assembleSkillViewWithOptions(
 	}
 
 	view.NextSkill = ns
+	if governedChange != nil && governedChange.CurrentState == model.StateS3Review && len(selectedReviewSkills) > 0 {
+		view.ReviewBatch = buildReviewBatchView(reviewBatchBuildInput{
+			root:                 root,
+			registry:             registry,
+			change:               governedChange,
+			artifactProjection:   artifactProjection,
+			view:                 view,
+			selectedReviewSkills: selectedReviewSkills,
+			evidenceMap:          evidenceMap,
+			blockers:             blockersForResolution,
+			verificationDir:      verificationDir,
+			nextState:            nextState,
+			includeReviewContext: options.IncludeReviewContext,
+			planLocked:           view.planLocked,
+		})
+	}
 	if options.IncludeContextBudget {
 		view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)
 	}
@@ -434,7 +461,7 @@ func codebaseMapConsumeAdvisory(status, nextSkillName string) string {
 // codebaseMapRelevanceAdvisory returns a non-blocking advisory when a durable-map
 // consumer is next and the codebase map is durable (populated or partial). The
 // consumers are research-orchestration and plan-audit (S1_PLAN) and
-// wave-orchestration (S2_EXECUTE) — the same set the codebase-mapping skill names
+// wave-orchestration (S2_IMPLEMENT) — the same set the codebase-mapping skill names
 // as SHOULD-consume — so the advisory fires at the exact handoff issue #80
 // reproduces: a stale populated map consumed at wave-orchestration. The map status
 // reflects content presence, not scope relevance — a map authored for a prior
@@ -507,7 +534,7 @@ func resolveActionableBlockingSkill(
 	blockers []model.ReasonCode,
 ) (string, string) {
 	current = strings.TrimSpace(current)
-	if current == "" || !skillHasPassingEvidence(evidenceMap, current) {
+	if current != "" && !skillHasPassingEvidence(evidenceMap, current) {
 		return "", ""
 	}
 	for _, blocker := range blockers {
@@ -515,8 +542,11 @@ func resolveActionableBlockingSkill(
 			continue
 		}
 		skillName := blockerSkillName(blocker)
-		if skillName == "" || skillName == current {
+		if skillName == "" || (current != "" && skillName == current) {
 			continue
+		}
+		if current == "" {
+			return skillName, ""
 		}
 		return skillName, fmt.Sprintf("blocking skill evidence supersedes already-passing display skill: %s", skillName)
 	}
@@ -563,6 +593,146 @@ func firstPendingSelectedReviewSkill(
 		if !skillHasPassingEvidence(evidenceMap, skillName) {
 			return skillName
 		}
+	}
+	return ""
+}
+
+type reviewBatchBuildInput struct {
+	root                 string
+	registry             []skill.Definition
+	change               *model.Change
+	artifactProjection   *progression.ArtifactProjection
+	view                 *nextView
+	selectedReviewSkills []string
+	evidenceMap          map[string]model.VerificationRecord
+	blockers             []model.ReasonCode
+	verificationDir      string
+	nextState            string
+	includeReviewContext bool
+	planLocked           bool
+}
+
+func buildReviewBatchView(input reviewBatchBuildInput) *reviewBatchView {
+	if input.change == nil || len(input.selectedReviewSkills) == 0 {
+		return nil
+	}
+	pending := pendingReviewBatchSkills(input.selectedReviewSkills, input.evidenceMap, input.blockers)
+	if len(pending) == 0 {
+		if repairSkill := reviewAlignmentSkillForBlockers(input.selectedReviewSkills, input.blockers); repairSkill != "" {
+			pending = []string{repairSkill}
+		}
+	}
+	if len(pending) < 2 {
+		return nil
+	}
+	nextState := strings.TrimSpace(input.nextState)
+	if nextState == "" {
+		nextState = string(model.StateS3Review)
+	}
+	batch := &reviewBatchView{
+		Mode:            "parallel",
+		VerificationDir: input.verificationDir,
+		State:           nextState,
+		Skills:          make([]reviewBatchSkillView, 0, len(pending)),
+	}
+	for _, skillName := range pending {
+		item := reviewBatchSkillView{
+			Name:           skillName,
+			RequiredTokens: progression.RequiredReviewLayerTokensForSkill(*input.change, input.artifactProjection, false, skillName),
+		}
+		if input.includeReviewContext &&
+			(skillName == progression.SkillSpecComplianceReview || skillName == progression.SkillCodeQualityReview) {
+			item.ReviewContext = buildReviewContext(input.change, input.artifactProjection, false, skillName)
+		}
+		item.TechniqueHints = appendCatalogHints(item.TechniqueHints, skillName, input.change, input.view)
+		item.TechniqueHints = appendWorkflowProfileTechniqueHints(item.TechniqueHints, skillName, input.change)
+		item.TechniqueHints = appendLanguageTestingHints(item.TechniqueHints, input.root, input.change)
+		if def, ok := skill.LookupDefinitionInRegistry(input.registry, skillName); ok {
+			item.SkillConstraints = buildSkillConstraints(input.root, def, input.change, input.planLocked)
+		}
+		batch.Skills = append(batch.Skills, item)
+	}
+	return batch
+}
+
+func pendingReviewBatchSkills(
+	selectedReviewSkills []string,
+	evidenceMap map[string]model.VerificationRecord,
+	blockers []model.ReasonCode,
+) []string {
+	pending := make([]string, 0, len(selectedReviewSkills))
+	seen := map[string]bool{}
+	add := func(skillName string) {
+		skillName = strings.TrimSpace(skillName)
+		if skillName == "" || seen[skillName] {
+			return
+		}
+		seen[skillName] = true
+		pending = append(pending, skillName)
+	}
+	for _, skillName := range selectedReviewSkills {
+		if hasRequiredSkillBlockerFor(blockers, skillName) {
+			add(skillName)
+		}
+	}
+	for _, skillName := range selectedReviewSkills {
+		if !skillHasPassingEvidence(evidenceMap, skillName) {
+			add(skillName)
+		}
+	}
+	return pending
+}
+
+func nextS3CloseoutAuthoritySkill(
+	evidenceMap map[string]model.VerificationRecord,
+	blockers []model.ReasonCode,
+) string {
+	if hasRequiredSkillBlockerFor(blockers, progression.SkillGoalVerification) ||
+		!skillHasPassingEvidence(evidenceMap, progression.SkillGoalVerification) {
+		return progression.SkillGoalVerification
+	}
+	if hasRequiredSkillBlockerFor(blockers, progression.SkillFinalCloseout) {
+		return progression.SkillFinalCloseout
+	}
+	return ""
+}
+
+func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []model.ReasonCode) string {
+	for _, blocker := range blockers {
+		switch strings.TrimSpace(blocker.Code) {
+		case "review_alignment_required":
+			if skillName := reviewAlignmentSkillForTarget(selectedReviewSkills, blocker.Detail); skillName != "" {
+				return skillName
+			}
+		case "required_skill_stale":
+			target := blockerSkillName(blocker)
+			if !stringInSlice(selectedReviewSkills, target) {
+				if skillName := reviewAlignmentSkillForTarget(selectedReviewSkills, target); skillName != "" {
+					return skillName
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func reviewAlignmentSkillForTarget(selectedReviewSkills []string, target string) string {
+	target = strings.TrimSpace(target)
+	if stringInSlice(selectedReviewSkills, target) {
+		return target
+	}
+	switch target {
+	case progression.SkillPlanAudit:
+		if stringInSlice(selectedReviewSkills, progression.SkillSpecComplianceReview) {
+			return progression.SkillSpecComplianceReview
+		}
+	case progression.SkillWaveOrchestration:
+		if stringInSlice(selectedReviewSkills, progression.SkillCodeQualityReview) {
+			return progression.SkillCodeQualityReview
+		}
+	}
+	if len(selectedReviewSkills) > 0 {
+		return strings.TrimSpace(selectedReviewSkills[0])
 	}
 	return ""
 }

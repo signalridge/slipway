@@ -29,11 +29,11 @@ func rootCauseTracing() Skill {
 		Function:          "trace root cause before attempting fixes; branch competing hypotheses when traces disagree",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when a fix is being considered before the root cause is documented. Triggers on repair, wave-orchestration host, or debugging-centric user text.",
+		Summary:           "Use when a fix is being considered before the root cause is documented. Triggers on fix, wave-orchestration host, or debugging-centric user text.",
 		Evidence:          EvidenceArtifact,
 		Bindings: []Binding{
 			{Type: BindingHostEmbedded, Target: "wave-orchestration", Attachment: AttachmentProcedure},
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentProcedure},
 			{Type: BindingTechniqueHint, Target: "wave-orchestration", Attachment: AttachmentProcedure},
 		},
 		HydrateReferences: []HydrateReference{

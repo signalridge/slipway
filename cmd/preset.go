@@ -60,7 +60,7 @@ func makePresetCmd() *cobra.Command {
 				}
 				// After leaving S1_PLAN, only allow upgrades (never downgrades).
 				// This prevents relaxing governance mid-flight (e.g., switching
-				// from strict to light at S3/S4 to bypass review/closeout).
+				// from strict to light at S3 to bypass review/closeout).
 				// Both S0_INTAKE and S1_PLAN allow free preset changes.
 				if change.CurrentState != model.StateS0Intake && change.CurrentState != model.StateS1Plan {
 					current := change.WorkflowPreset
@@ -72,7 +72,7 @@ func makePresetCmd() *cobra.Command {
 							categoryInvalidUsage,
 							"preset_downgrade_rejected",
 							fmt.Sprintf("cannot downgrade preset from %s to %s after leaving S1_PLAN", current, preset),
-							"Preset can only be upgraded after planning. To restart with a lighter preset, pivot or cancel the change.",
+							"Preset can only be upgraded after planning. To restart with a lighter preset, cancel this change and open a new governed change.",
 							"",
 							nil,
 						)

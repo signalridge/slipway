@@ -259,8 +259,11 @@ func TestEvidenceSkillRejectsFinalCloseoutBeforeGoalVerification(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects closeout ordering")
-		setEvidenceSkillChangeState(t, root, slug, model.StateS4Verify, model.PlanSubStepNone)
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{})
+		writePassingReviewEvidencePack(t, root, slug, 1)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
@@ -376,7 +379,7 @@ func TestEvidenceSkillRecordsWaveOrchestrationFromRuntimeTaskEvidence(t *testing
 
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Equal(t, model.StateS2Execute, reloaded.CurrentState)
+		assert.Equal(t, model.StateS2Implement, reloaded.CurrentState)
 		assert.Equal(t, expectedPath, reloaded.EvidenceRefs[progression.SkillWaveOrchestration])
 	})
 }
@@ -433,20 +436,20 @@ func TestEvidenceSkillWrongStateForWaveOrchestrationInS3RoutesToReviewAndVerific
 	})
 }
 
-func TestEvidenceSkillWrongStateForReviewEvidenceInS4RoutesToVerificationEvidence(t *testing.T) {
+func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToCloseoutEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill review wrong state in verify")
-		setEvidenceSkillChangeState(t, root, slug, model.StateS4Verify, model.PlanSubStepNone)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill wave wrong state in review")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
 			"skill",
 			"--change", slug,
-			"--skill", progression.SkillSpecComplianceReview,
+			"--skill", progression.SkillWaveOrchestration,
 			"--verdict", model.VerificationVerdictPass,
 		})
 		cliErr := asCLIError(cmd.Execute())

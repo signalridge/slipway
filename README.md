@@ -50,11 +50,12 @@ You:  Add a --dry-run flag to the export command.
  is pushed in automatically, so no action is needed from you.)
 
 Agent (routing on its own):
-  → slipway new      captures intent, scope, and guardrail class
-  → slipway next     intake → planning; writes requirements / decision / tasks
-  → implements the flag, runs your test + build commands
-  → slipway run      spec review, quality review, goal verification
-  → done-ready ✓     every step backed by evidence committed beside the code
+  → slipway new        creates the governed change
+  → slipway intake     captures intent, scope, and guardrail class
+  → slipway plan       writes requirements, decision, tasks, and plan-audit evidence
+  → slipway implement  implements the flag and runs your test + build commands
+  → slipway review     runs selected S3 peers and review-finding repairs
+  → done-ready ✓       every step backed by evidence committed beside the code
 
 You:  Looks good, finalize it.
 
@@ -103,9 +104,8 @@ A single "did you run the tests?" check is easy to fake. The point of Slipway is
 
 - **Intake** fixes intent, scope, open questions, and a **guardrail class**. Sensitive domains (auth, credentials/PII, financial, schema migration, irreversible ops, external-API contracts) fail closed harder and get no bypass, force-close, or private attestation path.
 - **Planning** binds a `requirements.md` / `decision.md` / `tasks.md` bundle that execution is held to, so the agent can't quietly re-scope mid-flight.
-- **Review** is *two independent passes* (spec-compliance, then code-quality) read with fresh context, not by the agent that wrote the code.
-- **Goal verification** re-checks the acceptance criteria against fresh evidence before anything may claim done.
-- **Drift and freshness** are enforced, not trusted: edit the plan or let evidence go stale, and Slipway reopens the *earliest* affected stage and re-walks it. A change can't limp to done on half-stale proof.
+- **Review** uses fresh-context selected S3 peers: spec-compliance and code-quality always run independently of the implementer, goal-verification is an unordered peer, and optional peers join when selected. Final closeout is stamped last before done-ready.
+- **Drift and freshness** are enforced, not trusted: edit the plan or let evidence go stale, and Slipway routes the gap to the owning forward path. In S3, same-intent plan and task amendments stay in review/fix while S2 remains completed. A change can't limp to done on half-stale proof.
 
 That chain is what command-driven spec toolkits and in-context skill packs don't carry. Instead of a single end-of-run checkbox, you get an auditable trail of stage-owned evidence that the next session, human or AI, can re-inspect and trust.
 
@@ -140,7 +140,10 @@ For each `--tools` target, this writes `.slipway.yaml`, a managed `.gitignore` b
 ```bash
 slipway new "refresh governance docs" --preset standard
 slipway next --json        # read-only handoff: what's next, what's blocking
-slipway run --json         # advance until a skill, blocker, or done-ready stop
+slipway plan --json        # explicit lifecycle stage command
+slipway implement --json
+slipway review --json
+slipway run --json         # shortcut: delegates to the current stage command
 slipway status --json
 slipway done --json
 ```
@@ -150,17 +153,17 @@ slipway done --json
 ## How it works
 
 <div align="center">
-  <img alt="Slipway governed lifecycle: new, S0 Intake, S1 Plan, S2 Execute, S3 Review, S4 Verify, done" src="docs/assets/diagrams/lifecycle.svg" width="920">
+  <img alt="Slipway governed lifecycle: new, S0 Intake, S1 Plan, S2 Implement, S3 Review, done-ready, done" src="docs/assets/diagrams/lifecycle.svg" width="920">
 </div>
 
-A governed change moves through intake → planning → execution → review → verification → closeout. `change.yaml` holds the current authority; mutating lifecycle events append to `events/lifecycle.jsonl`; evidence accumulates beside the code. `slipway next`, `slipway status`, and `slipway validate` are read-only inspection surfaces; `slipway new`, `slipway run`, `slipway done`, and a few others are the explicit mutation surfaces.
+A governed change moves through S0 Intake, S1 Plan, S2 Implement, S3 Review, done-ready, then done. S3 owns the selected peer evidence; goal-verification is one unordered peer, and final closeout is strictly last before done-ready. `change.yaml` holds the current authority; mutating lifecycle events append to `events/lifecycle.jsonl`; evidence accumulates beside the code. `slipway next`, `slipway status`, and `slipway validate` are read-only inspection surfaces. The primary mutation surfaces are `slipway new`, `slipway intake`, `slipway plan`, `slipway implement`, `slipway review`, `slipway fix`, and `slipway done`; `slipway run` is an auto-driver shortcut that delegates to the current primary stage.
 
 The plain-language experience rests on generated surfaces per AI tool:
 
 - **A thin entry skill** (every supported tool) whose description triggers on natural-language change requests and routes into the right CLI command. It never re-implements governance; it hands off to the CLI, and the CLI decides state, readiness, recovery, and the next governed step.
 - **A session-start hook** (on tools that support session hooks: Claude, Cursor, Gemini, OpenCode, but not Codex) that asks the CLI for current governed state every session and injects a compact handoff, so the agent knows whether a change is active before you prompt it. Where a tool has no hook, the entry skill has the agent pull the same state with `slipway status --json` on first contact, so enforcement is identical and the state is just pulled instead of pushed.
 
-All these surfaces emit `--json`, so agents and scripts get structured handoffs, and `slipway health`, `repair`, `stats`, and `codebase-map` inspect or recover local state. When evidence drifts, `slipway next` shows the recovery path and `slipway run` re-walks it. The deeper JSON contracts live in the [Operator Guide](docs/operator-guide.md#diagnostic-json) and [Command Reference](docs/commands.md).
+All these surfaces emit `--json`, so agents and scripts get structured handoffs, and `slipway health`, `repair`, `stats`, and `codebase-map` inspect or recover local state. When evidence drifts, `slipway next` shows the forward repair path and `slipway run` delegates to the current primary stage command. The deeper JSON contracts live in the [Operator Guide](docs/operator-guide.md#diagnostic-json) and [Command Reference](docs/commands.md).
 
 ## Design philosophy
 

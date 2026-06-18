@@ -88,7 +88,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"closeout_chain_order_invalid": {
 		Severity: ReasonSeverityError,
-		Message:  "The independence-critical verdict chain (review -> goal-verification -> final-closeout) is out of order",
+		Message:  "Final-closeout must be stamped after every selected S3 peer; goal-verification is an unordered peer, not a serialized post-review step",
 	},
 	"closeout_reviewer_independence_missing": {
 		Severity: ReasonSeverityError,
@@ -238,10 +238,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A blocker token is invalid",
 	},
-	"invalid_pivot_kind": {
-		Severity: ReasonSeverityError,
-		Message:  "The requested pivot kind is invalid",
-	},
 	"intake_clarification_incomplete": {
 		Severity: ReasonSeverityError,
 		Message:  "Intake clarification is incomplete",
@@ -322,6 +318,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A governed execution wave did not pass",
 	},
+	"new_change_required": {
+		Severity: ReasonSeverityError,
+		Message:  "The requested work no longer belongs to the current governed change",
+	},
 	"not_done_ready": {
 		Severity: ReasonSeverityError,
 		Message:  "The governed change is not ready for finalization",
@@ -345,14 +345,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"stale_runtime_binding": {
 		Severity: ReasonSeverityError,
 		Message:  "A per-change runtime binding remains after its governed bundle was removed",
-	},
-	"pivot_required": {
-		Severity: ReasonSeverityError,
-		Message:  "A pivot is required before continuing",
-	},
-	"pivot_not_approved": {
-		Severity: ReasonSeverityError,
-		Message:  "The requested pivot is not approved",
 	},
 	"plan_audit_budget_exhausted": {
 		Severity: ReasonSeverityError,
@@ -470,6 +462,14 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required governance skill certified inputs that changed; rerun the skill to re-certify the named artifact",
 	},
+	"review_alignment_required": {
+		Severity: ReasonSeverityError,
+		Message:  "A stale authority requires plan/code/evidence alignment review before finalization",
+	},
+	"review_required": {
+		Severity: ReasonSeverityError,
+		Message:  "Review convergence is required before finalization",
+	},
 	"research_structure_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "The research artifact structure is invalid",
@@ -485,14 +485,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"run_slipway_run_to_advance": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Run `slipway run` to advance the workflow",
-	},
-	"pivot_state_invalid": {
-		Severity: ReasonSeverityError,
-		Message:  "Pivot is not allowed from the current workflow state",
-	},
-	"rescope_state_invalid": {
-		Severity: ReasonSeverityError,
-		Message:  "Rescope pivots are only allowed from S2_EXECUTE",
 	},
 	"review_layer_missing": {
 		Severity: ReasonSeverityError,
@@ -556,7 +548,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"stale_checkpoint_state": {
 		Severity: ReasonSeverityWarning,
-		Message:  "Active checkpoint exists outside S2_EXECUTE",
+		Message:  "Active checkpoint exists outside S2_IMPLEMENT",
 	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
@@ -565,10 +557,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"stale_planning_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Planning artifacts changed after execution evidence; rerun affected planning gates before refreshing execution evidence",
-	},
-	"stale_evidence_recovery_available": {
-		Severity: ReasonSeverityWarning,
-		Message:  "Stale evidence can be recovered by reopening the earliest affected authority",
 	},
 	"tasks_checklist_invalid_format": {
 		Severity: ReasonSeverityError,
@@ -604,7 +592,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"task_changed_file_scope_escape": {
 		Severity: ReasonSeverityError,
-		Message:  "A task recorded a changed file outside its planned target_files; fix target_files and re-record evidence, or rescope tasks.md",
+		Message:  "A task recorded a changed file outside its planned target_files; fix target_files and re-record evidence, then let review verify plan/code alignment",
 	},
 	"task_blocker": {
 		Severity: ReasonSeverityError,
@@ -636,7 +624,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"verification_evidence_missing": {
 		Severity: ReasonSeverityError,
-		Message:  "Required verification evidence is missing; in S4_VERIFY recovery, rerun goal-verification, then rerun final-closeout",
+		Message:  "Required verification evidence is missing; rerun goal-verification, then rerun final-closeout before done",
 	},
 	"wave_orchestration_run_summary_version_invalid": {
 		Severity: ReasonSeverityError,
@@ -656,7 +644,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"wave_plan_drift": {
 		Severity: ReasonSeverityError,
-		Message:  "Wave plan drift detected against tasks.md",
+		Message:  "Derived wave plan is stale against tasks.md",
 	},
 	"wave_plan_load_failed": {
 		Severity: ReasonSeverityError,
@@ -664,7 +652,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"wave_plan_missing": {
 		Severity: ReasonSeverityError,
-		Message:  "The wave plan is missing; materialize the wave plan from tasks.md before wave execution",
+		Message:  "The derived wave plan is missing; rebuild wave-plan.yaml from tasks.md before wave execution",
 	},
 	"wave_plan_repair_blocked": {
 		Severity: ReasonSeverityError,

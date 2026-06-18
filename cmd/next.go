@@ -13,6 +13,8 @@ import (
 )
 
 type nextView struct {
+	Command                   string                               `json:"command,omitempty"`
+	DelegatedTo               string                               `json:"delegated_to,omitempty"`
 	Slug                      string                               `json:"slug"`
 	QualityMode               string                               `json:"quality_mode,omitempty"`
 	WorkflowProfile           string                               `json:"workflow_profile,omitempty"`
@@ -35,6 +37,7 @@ type nextView struct {
 	Advanced                  *progression.AdvanceSummary          `json:"advanced,omitempty"`
 	AutoTransitions           []progression.AdvanceSummary         `json:"auto_transitions,omitempty"`
 	NextSkill                 *nextSkillView                       `json:"next_skill"`
+	ReviewBatch               *reviewBatchView                     `json:"review_batch,omitempty"`
 	InputContext              nextContext                          `json:"input_context"`
 	ContextBudget             *contextBudget                       `json:"context_budget,omitempty"`
 	Constraints               *agentConstraints                    `json:"constraints,omitempty"`
@@ -119,6 +122,21 @@ type nextSkillView struct {
 	SkillConstraints     *skillConstraints  `json:"skill_constraints,omitempty"`
 	ReviewContext        *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
+}
+
+type reviewBatchView struct {
+	Mode            string                 `json:"mode"`
+	Skills          []reviewBatchSkillView `json:"skills"`
+	VerificationDir string                 `json:"verification_dir"`
+	State           string                 `json:"state"`
+}
+
+type reviewBatchSkillView struct {
+	Name             string             `json:"name"`
+	RequiredTokens   []string           `json:"required_tokens,omitempty"`
+	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
+	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
+	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
 }
 
 // skillConstraints carries per-skill metadata from the Go registry
@@ -302,7 +320,7 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextView(root, ref, "", true, !jsonOutput, noAutoPass)
+				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next")
 				if err != nil {
 					return err
 				}
@@ -335,12 +353,18 @@ func makeNextCmd() *cobra.Command {
 }
 
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass)
+	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run")
+}
+
+func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, command string) (nextView, error) {
+	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, command)
 	if err != nil {
 		return nextView{}, err
 	}
+	command = strings.TrimSpace(command)
 
 	view := nextView{
+		Command:                 command,
 		Slug:                    ref.Slug,
 		Phase:                   model.PhasePlanning,
 		ConfirmationRequirement: confirmationNoBoundary("initializing"),
@@ -415,8 +439,8 @@ func buildNextView(root string, ref changeRef, resumeResponse string, preview bo
 		view.planLocked = planLockedFromGates(readiness)
 	}
 
-	// Attach wave plan when at S2_EXECUTE for governed changes.
-	if view.CurrentState == model.StateS2Execute && governedChange != nil {
+	// Attach wave plan when at S2_IMPLEMENT for governed changes.
+	if view.CurrentState == model.StateS2Implement && governedChange != nil {
 		view.InputContext.WavePlan = buildWavePlan(root, governedChange, view.InputContext.ArtifactBundle)
 	}
 
@@ -489,20 +513,24 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 // advanceIfReady attempts state advancement unless in preview mode.
 // When skipAutoPass is true, advancement proceeds but auto-pass is
 // suppressed so the caller can decide whether to accept auto-pass.
-func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool) (progression.AdvanceSummary, error) {
+func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, command string) (progression.AdvanceSummary, error) {
 	if preview {
 		return progression.AdvanceSummary{Action: "query"}, nil
+	}
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "run"
 	}
 
 	var opts []progression.AdvanceOptions
 	if skipAutoPass {
 		opts = append(opts, progression.AdvanceOptions{
 			SkipAutoPass: skipAutoPass,
-			Command:      "run",
+			Command:      command,
 		})
 	} else {
 		opts = append(opts, progression.AdvanceOptions{
-			Command: "run",
+			Command: command,
 		})
 	}
 	advanced, err := tryAdvance(root, ref, opts...)
@@ -524,7 +552,7 @@ func shouldExposeAdvancedSummaryToCaller(summary progression.AdvanceSummary) boo
 }
 
 func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advanced *progression.AdvanceSummary) error {
-	if change == nil || advanced == nil || advanced.Action != "query" || change.CurrentState != model.StateS4Verify {
+	if change == nil || advanced == nil || advanced.Action != "query" || change.CurrentState != model.StateS3Review {
 		return nil
 	}
 	shipAuthority, err := progression.EvaluateShipAuthority(root, *change)
@@ -536,7 +564,7 @@ func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advance
 	}
 	*advanced = progression.AdvanceSummary{
 		Action:    "done_ready",
-		FromState: model.StateS4Verify,
+		FromState: model.StateS3Review,
 		Reason:    "governance_gates_passed",
 		Message:   "Governance gates passed; run `slipway done` to finalize.",
 		Blockers:  []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
@@ -545,7 +573,7 @@ func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advance
 }
 
 func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model.Change, execCtx *executionContext, view nextView) ([]string, error) {
-	if governedChange == nil || view.CurrentState != model.StateS4Verify {
+	if governedChange == nil || view.CurrentState != model.StateS3Review {
 		return nil, nil
 	}
 
@@ -637,6 +665,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 		return confirmationHardStop("preset_confirmation_required")
 	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
 		return confirmationHardStop("resume_checkpoint")
+	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
+		return confirmationHardStop("review_batch")
 	case view.NextSkill != nil:
 		reason := "skill_handoff"
 		if strings.TrimSpace(view.NextSkill.BlockingName) != "" {
@@ -735,6 +765,8 @@ func hardStopNextAction(reason string, resumeResponseSupported bool) string {
 	switch reason {
 	case "preset_confirmation_required":
 		return "confirm workflow preset before continuing"
+	case "review_batch":
+		return "run the parallel S3 review batch and record evidence for each listed skill; --resume-response is only for active checkpoints"
 	default:
 		return "complete required confirmation before continuing"
 	}
@@ -762,6 +794,8 @@ func hardStopNextActionKind(reason string, resumeResponseSupported bool) string 
 		return "checkpoint_resume"
 	case reason == "preset_confirmation_required":
 		return "preset_confirmation"
+	case reason == "review_batch":
+		return "review_batch"
 	case strings.HasPrefix(reason, "skill_handoff"):
 		return "skill_handoff"
 	default:
@@ -882,6 +916,13 @@ func writeNextHuman(w io.Writer, view nextView) error {
 			if len(view.NextSkill.ReviewContext.RequiredImplementationLayers) > 0 {
 				writer.Writef("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
 			}
+		}
+		if view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0 {
+			names := make([]string, 0, len(view.ReviewBatch.Skills))
+			for _, batchSkill := range view.ReviewBatch.Skills {
+				names = append(names, batchSkill.Name)
+			}
+			writer.Writef("  Review Batch: %s\n", strings.Join(names, ", "))
 		}
 
 		if len(view.NextSkill.TechniqueHints) > 0 {

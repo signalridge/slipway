@@ -109,7 +109,7 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedWaveIndex: 0,
@@ -130,7 +130,7 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 		assert.Equal(t, slug, view.Slug)
 		assert.Equal(t, governedExecutionMode, view.ExecutionMode)
 		assert.Equal(t, string(model.ChangeStatusActive), view.Status)
-		assert.Equal(t, string(model.StateS2Execute), view.CurrentState)
+		assert.Equal(t, string(model.StateS2Implement), view.CurrentState)
 
 		active, err := state.FindActiveChange(root)
 		require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, after.ActiveCheckpoint)
 		assert.Equal(t, model.ChangeStatusActive, after.Status)
-		assert.Equal(t, model.StateS2Execute, after.CurrentState)
+		assert.Equal(t, model.StateS2Implement, after.CurrentState)
 		assert.False(t, after.InterruptedExecutionAt.IsZero())
 	})
 }
@@ -153,7 +153,7 @@ func TestAbortRepairBranchGuidanceNamesRun(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort repair branch names run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -185,7 +185,7 @@ func TestAbortTextUsesRunWhenNoResumableWaveStateExists(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort text should suggest fresh run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -209,7 +209,7 @@ func TestAbortTextUsesRunResumeWhenResumableWaveStateExists(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "abort text should suggest resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 

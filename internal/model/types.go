@@ -29,19 +29,32 @@ func (s ChangeStatus) IsValid() bool {
 type WorkflowState string
 
 const (
-	StateS0Intake  WorkflowState = "S0_INTAKE"
-	StateS1Plan    WorkflowState = "S1_PLAN"
-	StateS2Execute WorkflowState = "S2_EXECUTE"
-	StateS3Review  WorkflowState = "S3_REVIEW"
-	StateS4Verify  WorkflowState = "S4_VERIFY"
-	StateDone      WorkflowState = "DONE"
+	StateS0Intake    WorkflowState = "S0_INTAKE"
+	StateS1Plan      WorkflowState = "S1_PLAN"
+	StateS2Implement WorkflowState = "S2_IMPLEMENT"
+	StateS3Review    WorkflowState = "S3_REVIEW"
+	StateDone        WorkflowState = "DONE"
+
+	RetiredStateS2Execute WorkflowState = "S2_EXECUTE"
+	RetiredStateS4Verify  WorkflowState = "S4_VERIFY"
 )
 
 func (s WorkflowState) String() string { return string(s) }
 
+func (s WorkflowState) Canonical() WorkflowState {
+	switch s {
+	case RetiredStateS2Execute:
+		return StateS2Implement
+	case RetiredStateS4Verify:
+		return StateS3Review
+	default:
+		return s
+	}
+}
+
 func (s WorkflowState) IsValid() bool {
 	switch s {
-	case StateS0Intake, StateS1Plan, StateS2Execute, StateS3Review, StateS4Verify, StateDone:
+	case StateS0Intake, StateS1Plan, StateS2Implement, StateS3Review, StateDone:
 		return true
 	default:
 		return false

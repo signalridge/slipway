@@ -23,7 +23,7 @@ func TestSaveChangeOmitsWorktreePathFromTrackedBundle(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("omit-worktree-path")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -53,7 +53,7 @@ func TestLoadChangeResolvesBoundWorktreeFromRepoRoot(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("resolve-from-root")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -73,7 +73,7 @@ func TestFindActiveChangeFromInsideWorktreeResolves(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("resolve-from-worktree")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -95,7 +95,7 @@ func TestResolutionRecoversWhenBindingMissing(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("recover-binding")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -118,7 +118,7 @@ func TestArchiveRemovesWorktreeBindingAndStripsPath(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("archive-strips-path")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -150,7 +150,7 @@ func TestTrackedChangeYamlWithWorktreePathIsRejected(t *testing.T) {
 	root, worktreeRoot := setupRepoWithWorktree(t)
 
 	change := model.NewChange("reject-worktree-path")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = worktreeRoot
 	change.WorktreeBranch = "feature"
@@ -195,7 +195,7 @@ func TestLoadChangeFailsClosedWhenBindingMissingAndLocationFallbackAmbiguous(t *
 	require.NoError(t, ensureScopeMarkerFile(WorkspaceScopeMarkerPath(staleScopeRoot)))
 
 	change := model.NewChange("ambiguous-location-fallback")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = owningWorktree
 	change.WorktreeBranch = "bbb-owner"

@@ -20,20 +20,34 @@ fresh, concrete proof from the current run.
 3. Aggregate blockers, write verification, and wait for approval.
 
 ## When This Runs
-After review passes. `slipway next` returns `next_skill: goal-verification`.
+At `S3_REVIEW` as one selected review peer. It runs in parallel with the other
+selected reviewers; it does not wait for spec, code, independent, or security
+review evidence.
 
-## Chain-Ordering Invariant
-Goal-verification MUST NOT predate any selected S3 review and final-closeout
-MUST NOT predate goal-verification.
-The ship gate enforces an always-on invariant
-`closeout >= goal-verification >= latest(selected S3 review set)` across the
-independence-critical verdict timestamps. The selected S3 review set always
-includes spec-compliance-review, code-quality-review, and independent-review;
-it also includes security-review when the security control is selected. If
-goal-verification predates the latest selected review verdict, the closeout
-chain-order gate fails closed with `closeout_chain_order_invalid` on
-standard/strict (advisory on light). Run this skill only once every selected S3
-review has passing verification, so the closeout chain-order gate passes.
+## Peer-Review Invariant
+Goal-verification is part of the unordered selected S3 review set. Final-closeout
+is the only last step: it must be stamped at or after every selected S3 peer,
+including goal-verification. Do not serialize goal-verification after the other
+reviewers, and do not use a retired goal-stage context-origin handle.
+
+## S3 Suite-Result Keystone
+Selected S3 reviewer freshness is anchored by
+`verification/suite-result.yaml`. As the full-suite verification peer, produce or
+refresh that keystone before recording a passing goal-verification verdict. It
+must match the current execution-summary run version and summarize the shared
+reviewer proof all S3 peers depend on:
+
+```yaml
+version: 1
+run_summary_version: <current run_summary_version>
+full_suite_digest: "<digest of the fresh full-suite proof artifact or transcript>"
+sast_digests:
+  <domain>.safety_baseline: "<digest of the SAST proof artifact or transcript>"  # when guardrail_domain is set
+```
+
+If the file is absent, malformed, or tied to a different run version, stop and
+produce fresh suite-result proof before recording goal-verification evidence.
+Selected S3 peer evidence is not fresh without this keystone.
 
 ## Read Context
 Run `slipway next --json` for the handoff, `slipway status --json` for the
@@ -165,7 +179,7 @@ run_version: <current run_summary_version from slipway status --json>  # progres
 references:
   - "fresh:command_ref=<path or transcript ref>"
   - "scope_contract:pass"
-  - "context_origin:stage=goal=<handle>"   # the dispatched verifier subagent's handle/identity
+  - "context_origin:stage=review=<handle>"   # the dispatched verifier subagent's handle/identity
   - "high_risk_check:<domain>.safety_baseline=pass"   # required when guardrail_domain is set
 notes: |
   Criteria:
@@ -176,7 +190,7 @@ notes: |
 ## Present and Advance
 Show verification summary. {{template "hard-gate"}}
 
-After confirmation, advance with `slipway run`; the engine rechecks S4_VERIFY
+After confirmation, advance with `slipway run`; the engine rechecks S3 review
 evidence and surfaces final-closeout or done-ready when the gate is satisfied
 (`slipway next` only previews it, it does not advance).
 

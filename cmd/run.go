@@ -106,6 +106,20 @@ func validateRunFlags(resume bool, resumeResponse string) error {
 }
 
 func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse string) error {
+	return validateResumeEntryForCommand(root, ref, resume, resumeResponse, "run")
+}
+
+func validateResumeEntryForCommand(
+	root string,
+	ref changeRef,
+	resume bool,
+	resumeResponse string,
+	commandName string,
+) error {
+	commandName = strings.TrimSpace(commandName)
+	if commandName == "" {
+		commandName = "run"
+	}
 	change, err := state.LoadChange(root, ref.Slug)
 	if err != nil {
 		return err
@@ -120,47 +134,73 @@ func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse st
 			return newInvalidUsageError(
 				"resume_response_required",
 				"active checkpoint exists; use --resume-response instead of --resume",
-				"Resume the active checkpoint with `slipway run --resume-response \"<response>\"`.",
+				"Resume the active checkpoint with `slipway "+commandName+" --resume-response \"<response>\"`.",
 				nil,
 			)
 		}
 		if strings.TrimSpace(resumeResponse) == "" {
 			return validateResumeResponse(change.ActiveCheckpoint, "")
 		}
-		if err := validateActiveCheckpointAuthority(root, change, execCtx, "run"); err != nil {
+		if err := validateActiveCheckpointAuthority(root, change, execCtx, commandName); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, "run")
+	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, commandName)
 	if err != nil {
-		return err
+		if !resumableWavePlanHasStructuralDrift(root, change) {
+			return err
+		}
+		resumeWaveIndex = 0
 	}
 	hasResumeContext := resumeWaveIndex > 0
+	if hasResumeContext && resumableWavePlanHasStructuralDrift(root, change) {
+		hasResumeContext = false
+	}
 
 	switch {
 	case resume && !hasResumeContext:
 		return newInvalidUsageError(
 			"resume_unavailable",
 			"--resume requested but no resumable governed execution state is available; current_state="+string(change.CurrentState),
-			"Resume only applies to interrupted S2_EXECUTE wave execution. For the current state, use `slipway run`, `slipway validate --json`, or record the required review evidence.",
+			"Resume only applies to interrupted S2_IMPLEMENT wave execution. For the current state, use `slipway "+commandName+"`, `slipway validate --json`, or record the required review evidence.",
 			map[string]any{
 				"current_state":    change.CurrentState,
-				"resumable_states": []model.WorkflowState{model.StateS2Execute},
-				"next_action":      "use normal run/validate/review evidence flow for non-resumable states",
+				"resumable_states": []model.WorkflowState{model.StateS2Implement},
+				"next_action":      "use normal " + commandName + "/validate/review evidence flow for non-resumable states",
 			},
 		)
 	case !resume && hasResumeContext:
 		return newInvalidUsageError(
 			"resume_required",
 			"resumable governed execution detected; use --resume to continue from the latest incomplete wave",
-			"Resume the current incomplete wave with `slipway run --resume`.",
+			"Resume the current incomplete wave with `slipway "+commandName+" --resume`.",
 			nil,
 		)
 	}
 
 	return nil
+}
+
+func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool {
+	plan, err := state.LoadWavePlanForChange(root, change)
+	if err != nil {
+		return false
+	}
+	currentHash, err := state.CurrentTasksPlanStructuralState(root, change)
+	if err != nil {
+		return false
+	}
+	plan.Normalize()
+	planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
+	if planHash == "" {
+		planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+	}
+	if planHash == "" {
+		planHash = strings.TrimSpace(plan.TasksPlanHash)
+	}
+	return planHash != "" && currentHash != "" && planHash != currentHash
 }
 
 func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextView, error) {
@@ -169,11 +209,16 @@ func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextVie
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
 	nextResumeResponse := resumeResponse
+	delegatedTo := "run"
+	if change, err := state.LoadChange(root, ref.Slug); err == nil {
+		delegatedTo = primaryCommandForState(change.CurrentState)
+	}
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextView(root, ref, nextResumeResponse, false, true, false)
+		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run")
 		if err != nil {
 			return nextView{}, err
 		}
+		setRunDelegation(&view, delegatedTo)
 		nextResumeResponse = ""
 		lastView = view
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {

@@ -111,7 +111,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(staleBlockers)}, nil
 	}
 
-	wavePlan, err := state.LoadWavePlanForChange(root, change)
+	wavePlan, err := currentWavePlanForExecution(root, change, mutate)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return WaveSyncResult{
@@ -120,30 +120,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		}
 		return WaveSyncResult{}, err
 	}
-	tasksPlanHash, err := state.CurrentTasksPlanStructuralState(root, change)
-	if err != nil {
-		return WaveSyncResult{}, err
-	}
-	currentScopeHash, err := state.CurrentTasksPlanScopeState(root, change)
-	if err != nil {
-		return WaveSyncResult{}, err
-	}
-	previousTasksPlanHash := wavePlanStructuralHash(wavePlan)
-	previousScopeHash := strings.TrimSpace(wavePlan.TasksPlanScopeHash)
-	// Re-materialize the wave-plan in place when the structure is unchanged but the
-	// scope (target_files) drifted. An empty previousScopeHash is treated as drift
-	// too, so a plan that predates the scope-hash field backfills it on first touch
-	// instead of carrying stale target_files until some later rebuild — the
-	// structural-equality precondition keeps this a scope-compatible rebuild.
-	if mutate && previousTasksPlanHash != "" && previousTasksPlanHash == strings.TrimSpace(tasksPlanHash) &&
-		currentScopeHash != "" && previousScopeHash != currentScopeHash {
-		materialized, err := state.MaterializeWavePlan(root, change)
-		if err != nil {
-			return WaveSyncResult{}, err
-		}
-		wavePlan = materialized
-		previousTasksPlanHash = wavePlanStructuralHash(wavePlan)
-	}
+	tasksPlanHash := wavePlanStructuralHash(wavePlan)
 	wavePlan = state.ApplyEffectiveParallel(wavePlan, state.EffectiveForcedParallel(root))
 	dispatchModes, err := model.WaveDispatchModesFromVerification(record)
 	if err != nil {
@@ -154,13 +131,12 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		return WaveSyncResult{}, err
 	}
 
-	planDriftBlockers := tasksPlanChangedSinceTaskEvidenceBlockers(previousTasksPlanHash, tasks, tasksPlanHash)
-	planDriftBlockers = append(planDriftBlockers, taskEvidencePlanHashBlockers(previousTasksPlanHash, tasks)...)
+	planDriftBlockers := taskEvidencePlanHashBlockers(tasksPlanHash, tasks)
 	executionSummary := BuildExecutionSummary(record.RunVersion, tasks, record.Timestamp, &record)
 	if len(planDriftBlockers) == 0 {
 		executionSummary.TasksPlanHash = tasksPlanHash
 	} else {
-		executionSummary.TasksPlanHash = previousTasksPlanHash
+		executionSummary.TasksPlanHash = tasksPlanHash
 	}
 	if len(parseIssues) > 0 || len(planDriftBlockers) > 0 {
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
@@ -171,14 +147,11 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	// "ready" summary exists, refineS2WaveExecutionSkillBlockers short-circuits
 	// the preview path, so a returned-only blocker would vanish from read-only
 	// surfaces after the partial summary is written (issue #95 REQ-001).
-	// Suppressed under plan-drift, which owns its own remediation.
 	var incompleteBlockers []model.ReasonCode
-	if len(planDriftBlockers) == 0 {
-		incompleteBlockers = IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
-		if len(incompleteBlockers) > 0 {
-			executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, incompleteBlockers...))
-			executionSummary.SyncDerivedFields()
-		}
+	incompleteBlockers = IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
+	if len(incompleteBlockers) > 0 {
+		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, incompleteBlockers...))
+		executionSummary.SyncDerivedFields()
 	}
 	// Resolve the preset policy once here so the preset-sensitive safety nets
 	// (#5 test/impl distinctness, #6 degraded-dispatch justification) fail closed
@@ -197,19 +170,16 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	// Each turns already-recorded host evidence (target_files/changed_files, and
 	// the plan's per-wave Parallel flag) into a hard blocker. Mirrors the
 	// incompleteBlockers durability contract: surfaced in OpenBlockers so
-	// read-only readiness reports them, and suppressed under plan-drift, which
-	// owns its own remediation. Extended by later safety-net gates (C2/C3).
+	// read-only readiness reports them. Extended by later safety-net gates
+	// (C2/C3).
 	var safetyNetBlockers []model.ReasonCode
-	if len(planDriftBlockers) == 0 {
-		safetyNetBlockers = append(safetyNetBlockers, TaskChangedFileScopeEscapeBlockers(wavePlan, tasks)...)
-		safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
-		safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes, model.DegradedDispatchJustificationsFromVerification(record), enforced)...)
-		safetyNetBlockers = append(safetyNetBlockers, ExecutorAgentBlockers(wavePlan, tasks, dispatchModes, model.ExecutorAgentHandlesFromVerification(record))...)
-		safetyNetBlockers = append(safetyNetBlockers, TestImplDistinctnessBlockers(wavePlan, enforced)...)
-		if len(safetyNetBlockers) > 0 {
-			executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, safetyNetBlockers...))
-			executionSummary.SyncDerivedFields()
-		}
+	safetyNetBlockers = append(safetyNetBlockers, TaskChangedFileScopeEscapeBlockers(wavePlan, tasks)...)
+	safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
+	safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes, model.DegradedDispatchJustificationsFromVerification(record), enforced)...)
+	safetyNetBlockers = append(safetyNetBlockers, ExecutorAgentBlockers(wavePlan, tasks, dispatchModes, model.ExecutorAgentHandlesFromVerification(record))...)
+	if len(safetyNetBlockers) > 0 {
+		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, safetyNetBlockers...))
+		executionSummary.SyncDerivedFields()
 	}
 	if !mutate {
 		runs := executionSummary.TaskRunMap()
@@ -300,6 +270,14 @@ func syncCompletedTaskCheckboxes(root string, change model.Change, runs map[stri
 		return false, err
 	}
 	return true, nil
+}
+
+func currentWavePlanForExecution(root string, change model.Change, mutate bool) (model.WavePlan, error) {
+	if mutate {
+		return state.MaterializeWavePlan(root, change)
+	}
+	plan, _, err := state.MaterializeWavePlanTransactionOpAt(root, change, time.Unix(0, 0).UTC())
+	return plan, err
 }
 
 func wavePlanStructuralHash(plan model.WavePlan) string {
@@ -681,9 +659,9 @@ func CollectNonPassTaskBlockers(runs map[string]model.TaskRun) []model.ReasonCod
 // for the full task set, so a task missing from runs has no task evidence at all
 // — distinct from a recorded-but-failing task, which CollectNonPassTaskBlockers
 // reports. Without this check a host that records evidence for only the early
-// tasks would let wave-orchestration "pass" and advance S2_EXECUTE -> S3_REVIEW
+// tasks would let wave-orchestration "pass" and advance S2_IMPLEMENT -> S3_REVIEW
 // while later planned tasks were never executed (issue #95). The remedy is to
-// execute and record the named task, or rescope tasks.md so the plan no longer
+// execute and record the named task, or update tasks.md if the plan no longer
 // claims it.
 func IncompleteExecutionTaskBlockers(plan model.WavePlan, runs map[string]model.TaskRun) []model.ReasonCode {
 	plannedIDs := plan.TaskIDs()
@@ -719,7 +697,8 @@ func IncompleteExecutionTaskBlockers(plan model.WavePlan, runs map[string]model.
 // executor that legitimately owns it. Coverage uses wave.TargetCoversPath, the
 // same directional scope predicate the wave planner's conflict detection relies
 // on, so "covers" and "conflicts" share one implementation (REQ-002). The
-// remedy is to fix target_files and re-record evidence, or rescope tasks.md.
+// remedy is to fix target_files and re-record evidence; S3 review owns final
+// plan/code alignment.
 func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
 	if len(tasks) == 0 {
 		return nil

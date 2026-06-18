@@ -23,6 +23,12 @@ type ExecutionRepairResult struct {
 	NonRepairableFindings []string
 }
 
+type wavePlanRepairOutcome struct {
+	Plan                                *model.WavePlan
+	Materialized                        bool
+	PreserveHistoricalExecutionEvidence bool
+}
+
 func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
 	if err != nil {
@@ -53,17 +59,13 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 				summaryForPlan = nil
 			}
 
-			plan, planChanged, blockedReason, err := ensureWavePlan(root, change, summaryForPlan)
+			planRepair, err := ensureWavePlan(root, change, summaryForPlan)
 			if err != nil {
 				result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: %v", change.Slug, err))
-			} else if strings.TrimSpace(blockedReason) != "" {
-				result.NonRepairableFindings = append(
-					result.NonRepairableFindings,
-					fmt.Sprintf("%s: wave plan repair blocked: %s. %s", change.Slug, blockedReason, wavePlanRepairHint()),
-				)
-			} else if planChanged {
+			} else if planRepair.Materialized {
 				result.MaterializedWavePlans = append(result.MaterializedWavePlans, change.Slug)
 			}
+			plan := planRepair.Plan
 
 			if repaired, cleared := repairCheckpointAgainstWavePlan(&change, plan, now, staleAfter); repaired {
 				changed = true
@@ -76,7 +78,7 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 
 			if summaryErr != nil {
 				result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: execution summary unreadable: %v", change.Slug, summaryErr))
-			} else if plan != nil && ExecutionSummaryReady(summary) {
+			} else if plan != nil && ExecutionSummaryReady(summary) && !planRepair.PreserveHistoricalExecutionEvidence {
 				recovered, recoveryErr := recoverWaveRunsFromSummary(root, change.Slug, *plan, *summary)
 				if recoveryErr != nil {
 					result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: wave run recovery failed: %v", change.Slug, recoveryErr))
@@ -121,60 +123,64 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 
 func relevantWaveExecutionState(state model.WorkflowState) bool {
 	switch state {
-	case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+	case model.StateS2Implement, model.StateS3Review:
 		return true
 	default:
 		return false
 	}
 }
 
-func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSummary) (*model.WavePlan, bool, string, error) {
+func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSummary) (wavePlanRepairOutcome, error) {
 	plan, err := LoadOptionalWavePlanForChange(root, change)
 	if err == nil && plan != nil {
-		planChanged, blockedReason, err := wavePlanRepairDrift(root, change, *plan, summary)
+		planChanged, preserveHistoricalEvidence, err := wavePlanRepairDrift(root, change, *plan, summary)
 		if err != nil {
-			return nil, false, "", err
-		}
-		if strings.TrimSpace(blockedReason) != "" {
-			return plan, false, blockedReason, nil
+			return wavePlanRepairOutcome{}, err
 		}
 		if planChanged {
 			materialized, materializeErr := MaterializeWavePlan(root, change)
 			if materializeErr != nil {
-				return nil, false, "", fmt.Errorf("wave plan stale and could not be rematerialized: %w", materializeErr)
+				return wavePlanRepairOutcome{}, fmt.Errorf("wave plan stale and could not be rematerialized: %w", materializeErr)
 			}
-			return &materialized, true, "", nil
+			return wavePlanRepairOutcome{
+				Plan:                                &materialized,
+				Materialized:                        true,
+				PreserveHistoricalExecutionEvidence: preserveHistoricalEvidence,
+			}, nil
 		}
-		return plan, false, "", nil
+		return wavePlanRepairOutcome{Plan: plan}, nil
 	}
 	unreadable := err != nil
-	if blockedReason, err := wavePlanRepairBlockedReason(root, change, summary); err != nil {
-		return nil, false, "", err
-	} else if strings.TrimSpace(blockedReason) != "" {
-		return nil, false, blockedReason, nil
+	boundaryReason, err := executionSummaryBoundaryDrift(root, change, summary)
+	if err != nil {
+		return wavePlanRepairOutcome{}, err
 	}
 	materialized, materializeErr := MaterializeWavePlan(root, change)
 	if materializeErr != nil {
 		if unreadable {
-			return nil, false, "", fmt.Errorf("wave plan unreadable and could not be reconstructed: %w", materializeErr)
+			return wavePlanRepairOutcome{}, fmt.Errorf("wave plan unreadable and could not be reconstructed: %w", materializeErr)
 		}
-		return nil, false, "", fmt.Errorf("wave plan missing and could not be materialized: %w", materializeErr)
+		return wavePlanRepairOutcome{}, fmt.Errorf("wave plan missing and could not be materialized: %w", materializeErr)
 	}
-	return &materialized, true, "", nil
+	return wavePlanRepairOutcome{
+		Plan:                                &materialized,
+		Materialized:                        true,
+		PreserveHistoricalExecutionEvidence: strings.TrimSpace(boundaryReason) != "",
+	}, nil
 }
 
 func wavePlanRepairHint() string {
-	return "Run `slipway run` to reopen the owning planning stage or rebuild compatible generated evidence; restore the historical tasks.md only if recovering an old execution boundary."
+	return "Run `slipway repair` to rebuild wave-plan.yaml from the current tasks.md, then run `slipway run` to refresh affected execution evidence."
 }
 
-func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, summary *model.ExecutionSummary) (bool, string, error) {
+func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, summary *model.ExecutionSummary) (bool, bool, error) {
 	currentStructuralHash, err := CurrentTasksPlanStructuralState(root, change)
 	if err != nil {
-		return false, "", err
+		return false, false, err
 	}
 	currentScopeHash, err := CurrentTasksPlanScopeState(root, change)
 	if err != nil {
-		return false, "", err
+		return false, false, err
 	}
 	plan.Normalize()
 	planStructuralHash := strings.TrimSpace(plan.EffectiveStructuralHash)
@@ -185,22 +191,19 @@ func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, 
 		planStructuralHash = strings.TrimSpace(plan.TasksPlanHash)
 	}
 	if planStructuralHash != "" && currentStructuralHash != "" && planStructuralHash != currentStructuralHash {
-		if ExecutionSummaryReady(summary) {
-			return false, fmt.Sprintf("current tasks.md structural hash %q no longer matches wave plan hash %q", currentStructuralHash, planStructuralHash), nil
-		}
-		return true, "", nil
+		return true, ExecutionSummaryReady(summary), nil
 	}
 	// Structure matched above; a scope drift (including a plan that predates the
 	// scope-hash field, where planScopeHash is empty) rebuilds in place to refresh
 	// target_files and backfill the scope hash rather than reusing a stale plan.
 	planScopeHash := strings.TrimSpace(plan.TasksPlanScopeHash)
 	if currentScopeHash != "" && planScopeHash != currentScopeHash {
-		return true, "", nil
+		return true, false, nil
 	}
-	return false, "", nil
+	return false, false, nil
 }
 
-func wavePlanRepairBlockedReason(root string, change model.Change, summary *model.ExecutionSummary) (string, error) {
+func executionSummaryBoundaryDrift(root string, change model.Change, summary *model.ExecutionSummary) (string, error) {
 	if !ExecutionSummaryReady(summary) {
 		return "", nil
 	}
@@ -243,7 +246,7 @@ func repairCheckpointAgainstWavePlan(change *model.Change, plan *model.WavePlan,
 	if change == nil || change.ActiveCheckpoint == nil {
 		return false, false
 	}
-	if change.CurrentState != model.StateS2Execute {
+	if change.CurrentState != model.StateS2Implement {
 		change.ActiveCheckpoint = nil
 		return true, true
 	}

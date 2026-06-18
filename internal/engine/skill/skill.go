@@ -24,6 +24,7 @@ const (
 	reviewSkillSpecCompliance = "spec-compliance-review"
 	reviewSkillCodeQuality    = "code-quality-review"
 	reviewSkillIndependent    = "independent-review"
+	reviewSkillGoal           = "goal-verification"
 	reviewSkillSecurity       = "security-review"
 )
 
@@ -36,6 +37,7 @@ func SelectedReviewSkills(selection ReviewSkillSelection) []string {
 		reviewSkillSpecCompliance,
 		reviewSkillCodeQuality,
 		reviewSkillIndependent,
+		reviewSkillGoal,
 	}
 	if selection.SecurityReviewSelected {
 		selected = append(selected, reviewSkillSecurity)
@@ -49,7 +51,7 @@ func ReviewSkillSelected(skillName string, selection ReviewSkillSelection) bool 
 
 func IsReviewSkill(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
-	case reviewSkillSpecCompliance, reviewSkillCodeQuality, reviewSkillIndependent, reviewSkillSecurity:
+	case reviewSkillSpecCompliance, reviewSkillCodeQuality, reviewSkillIndependent, reviewSkillGoal, reviewSkillSecurity:
 		return true
 	default:
 		return false
@@ -84,7 +86,7 @@ var defaultGovernanceRegistry = map[string]Definition{
 	},
 	"wave-orchestration": {
 		Name:              "wave-orchestration",
-		State:             model.StateS2Execute,
+		State:             model.StateS2Implement,
 		Mitigation:        "uncontrolled parallel execution drift",
 		RunSummaryBound:   true,
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_code", "run_tests", "write_evidence", "git_commit"},
@@ -124,7 +126,7 @@ var defaultGovernanceRegistry = map[string]Definition{
 	},
 	"goal-verification": {
 		Name:              "goal-verification",
-		State:             model.StateS4Verify,
+		State:             model.StateS3Review,
 		Mitigation:        "false completion claims",
 		RunSummaryBound:   true,
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"},
@@ -133,7 +135,7 @@ var defaultGovernanceRegistry = map[string]Definition{
 	},
 	"final-closeout": {
 		Name:                "final-closeout",
-		State:               model.StateS4Verify,
+		State:               model.StateS3Review,
 		Mitigation:          "stale final evidence before governed ship decision",
 		RunSummaryBound:     true,
 		CloseoutConditional: true,

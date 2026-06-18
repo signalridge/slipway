@@ -50,6 +50,15 @@ reviews.
 - Do NOT downgrade auth/authz, secrets, SSRF, injection, or insecure-default findings without a reproducible reason.
 - Do NOT replace a finding with a vague hardening suggestion; name the unsafe path and concrete remediation.
 
+## S3 Suite-Result Keystone
+Selected S3 reviewer freshness depends on
+`verification/suite-result.yaml`. Before recording a passing review verdict,
+confirm that file exists, is valid, and matches the current
+`run_summary_version`. It carries the shared reviewer input digests for the full
+suite and guardrail SAST proof. If it is absent, malformed, or from a different
+run version, stop and require fresh suite-result proof before this review is
+recorded; otherwise the engine will stale the selected reviewer set.
+
 ## Disk-Handoff Contract
 For bulky review artifacts, keep the coordinator thin:
 - Pass required-reading paths from `slipway next --json`; do not paste artifact

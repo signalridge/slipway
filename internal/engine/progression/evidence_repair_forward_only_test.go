@@ -1,9 +1,9 @@
 package progression
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStaleEvidenceRecoveryRestoresEvidenceWhenAuthorityWriteFails(t *testing.T) {
+func TestS3DefersStalePlanningEvidenceToReviewWithoutMutatingAuthorityOrEvidence(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
 
-	change := model.NewChange("stale-reopen-transaction-rollback")
+	change := model.NewChange("stale-repair-transaction-rollback")
 	change.CurrentState = model.StateS3Review
 	change.WorkflowPreset = model.WorkflowPresetLight
 	require.NoError(t, state.SaveChange(root, change))
@@ -46,12 +46,12 @@ func TestStaleEvidenceRecoveryRestoresEvidenceWhenAuthorityWriteFails(t *testing
   - covers: [REQ-001]
 `), 0o644))
 
-	writeErr := errors.New("change authority write failed")
-	withFailingGovernedTransactionWrite(t, "change.yaml", writeErr)
-
-	_, err = AdvanceGoverned(root, change.Slug)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, writeErr)
+	summary, err := AdvanceGoverned(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", summary.Action)
+	assert.Empty(t, summary.Reason)
+	assert.Contains(t, model.ReasonSpecs(summary.Blockers), "required_skill_missing:spec-compliance-review")
+	assert.NotContains(t, strings.Join(model.ReasonSpecs(summary.Blockers), "\n"), "required_skill_stale:plan-audit")
 
 	_, statErr := os.Stat(verificationPath)
 	require.NoError(t, statErr)

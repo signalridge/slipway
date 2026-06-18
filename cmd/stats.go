@@ -84,8 +84,8 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 				// Stats only requests the optional surfaces it actually summarizes.
 				// It does not need artifact projection because it never renders an
 				// artifact-centric view.
-				IncludeReviewSurface: change.CurrentState == model.StateS3Review || change.CurrentState == model.StateS4Verify,
-				IncludeShipSurface:   change.CurrentState == model.StateS4Verify,
+				IncludeReviewSurface: change.CurrentState == model.StateS3Review,
+				IncludeShipSurface:   change.CurrentState == model.StateS3Review,
 			},
 		)
 		if err != nil {
@@ -103,7 +103,7 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 		if err != nil {
 			return statsView{}, err
 		}
-		if !presetPolicy.CloseoutRefreshRequired || change.CurrentState != model.StateS4Verify {
+		if !presetPolicy.CloseoutRefreshRequired || change.CurrentState != model.StateS3Review {
 			continue
 		}
 
@@ -169,7 +169,7 @@ func statsExecutionSummaryMissing(change model.Change, readiness progression.Gov
 
 func requiresFrozenRunSummary(currentState model.WorkflowState) bool {
 	switch currentState {
-	case model.StateS3Review, model.StateS4Verify:
+	case model.StateS3Review:
 		return true
 	default:
 		return false

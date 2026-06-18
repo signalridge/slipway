@@ -268,7 +268,7 @@ func TestLoadExecutionContextWrapsCorruptExecutionSummaryIntegrity(t *testing.T)
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -362,7 +362,7 @@ func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChang
 		slug := createGovernedRequest(t, root, "L3", "hidden worktree summary path should stay authoritative")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -407,7 +407,7 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 	slug := createGovernedRequest(t, root, "L2", "freshness should ignore derived task checkbox sync")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -472,7 +472,7 @@ func TestProjectFreshnessTracksTasksPlanHash(t *testing.T) {
 	slug := createGovernedRequest(t, root, "L2", "freshness tracks tasks plan hash")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -559,7 +559,7 @@ func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing
 	slug := createGovernedRequest(t, root, "L2", "freshness fails closed on unreadable artifact")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -634,7 +634,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L3", "bound worktree should read main-scope config")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.NeedsDiscovery = true
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -697,7 +697,7 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L3", "nested bound worktree active change resolution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.NeedsDiscovery = true
 		require.NoError(t, state.SaveChange(root, change))

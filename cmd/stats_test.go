@@ -25,7 +25,7 @@ func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.QualityMode = model.QualityModeFull
-		change.CurrentState = model.StateS4Verify
+		change.CurrentState = model.StateS3Review
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -51,7 +51,7 @@ func TestStatsUsesExecutionSummaryForFrozenEvidenceFreshness(t *testing.T) {
 
 	slug := "stats-execution-summary"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.NeedsDiscovery = false
 	change.GuardrailDomain = ""
@@ -110,12 +110,13 @@ func TestStatsDoesNotTreatMissingReviewEvidenceAsStaleRunSummary(t *testing.T) {
 	slug := createGovernedRequest(t, root, "L2", "stats should separate stale execution evidence from missing review evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
+	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{})
 
 	view, err := buildStatsView(root, time.Now().UTC())
 	require.NoError(t, err)
@@ -216,7 +217,7 @@ func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing
 	require.NoError(t, err)
 
 	changeBeforeWT := change
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.WorktreePath = normalizedWT
 	change.WorktreeBranch = branch
@@ -258,7 +259,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	require.NoError(t, err)
 
 	changeBeforeWT := change
-	change.CurrentState = model.StateS4Verify
+	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
 	change.QualityMode = model.QualityModeFull
 	change.WorktreePath = normalizedWT

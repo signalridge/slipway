@@ -16,8 +16,10 @@ Execute implementation tasks in dependency order, detect conflicts early, and
 keep wave results reviewable. This host owns the execution dispatch contract.
 
 ## Workflow Outline
-Read task/checkpoint state, group dependency-ordered waves, execute one wave at
-a time, spot-check results, write verification, and wait for approval.
+Read task/checkpoint state, group dependency-ordered waves, then execute every
+ready wave in sequence during this same host run until a natural execution stop
+point appears. Wave boundaries are internal scheduling boundaries, not operator
+commands.
 
 ## Read Context
 Run `slipway next --json` and read the task plan from the governed change bundle.
@@ -51,27 +53,31 @@ Apply `slipway-coding-discipline` while splitting work: keep task scopes
 minimal, prefer simple changes, and reject executor plans that broaden beyond
 the governed objective.
 
-## Read the Authoritative Wave Plan
-At `S2_EXECUTE`, read the engine-authoritative wave plan from
+## Read the Current Wave Plan
+At `S2_IMPLEMENT`, read the current task-derived wave projection from
 `input_context.wave_plan` in `slipway next --json`: `wave_count`, `total_tasks`,
 and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
 `depends_on`, `target_files`, `task_kind`). Slipway has already dependency-ordered
-the waves and detected cycles from the persisted `wave-plan.yaml`; do not
-re-derive a grouping from `tasks.md` that could diverge from it. (Before
-`S2_EXECUTE` the same field is only a preview derived from `tasks.md`.) If
-`input_context.wave_plan.parse_error` is set (e.g. a dependency cycle, or
-"authoritative wave-plan.yaml is missing; run `slipway repair`"), treat it as a
+the waves and detected cycles from the current `tasks.md`; do not re-derive a
+separate grouping that could diverge from the engine projection. The persisted
+`wave-plan.yaml` is an execution cache/audit artifact materialized from this
+projection, not S1 planning authority. If `input_context.wave_plan.parse_error`
+is set (for example, a dependency cycle or invalid task metadata), treat it as a
 blocker and follow the named remediation rather than executing.
 
 Report the wave plan before execution: description, total tasks, wave count,
 and one row per wave with task IDs plus a 3-8 word build summary.
 
 ## Execute Waves
-Execute waves in sequence. **Within a wave, dispatch every task concurrently by
-default.** Wave planning already guarantees a wave's tasks are dependency-free
-and file-disjoint, and `slipway next --json` marks such a wave `parallel: true`
-in `input_context.wave_plan.waves[]`; do not serialize a `parallel: true` wave
-for convenience. A `parallel: true` wave requires real executor subagent fan-out
+Execute waves in sequence within this single wave-orchestration host run. After a
+wave passes its executor collection, changed-file safety check, task evidence
+recording, and post-wave integration gate, immediately continue to the next
+ready wave. Do not ask the operator to run `slipway run` merely to cross a
+wave boundary. **Within a wave, dispatch every task concurrently by default.**
+Wave planning already guarantees a wave's tasks are dependency-free and
+file-disjoint, and `slipway next --json` marks such a wave `parallel: true` in
+`input_context.wave_plan.waves[]`; do not serialize a `parallel: true` wave for
+convenience. A `parallel: true` wave requires real executor subagent fan-out
 where the runtime has a subagent or fresh-session primitive; same-context inline
 execution is not an equivalent dispatch mode for a capable runtime. If a capable
 runtime cannot spawn, wait, collect, parse, and close executor sessions, stop and
@@ -105,8 +111,8 @@ four engine-enforced wave blockers are:
   re-record evidence.
 - `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
   in the same `parallel: true` wave recorded the same changed file. Sequential
-  waves sharing a file are allowed; a parallel overlap must be rescoped or
-  re-planned.
+  waves sharing a file are allowed; a parallel overlap must be handled by a
+  scope/plan amendment before evidence is re-recorded.
 - `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
   parallel wave recorded no dispatch-mode evidence. The engine no longer infers
   parallel dispatch silently; you must record
@@ -121,18 +127,28 @@ To stay clear of these gates, run a target-overlap PREFLIGHT before spawning a
 Before spawning, compare the current wave's planned `target_files`: if any two
 tasks overlap by exact path, path alias, parent/child scope, case-insensitive
 match, or glob scope, do not spawn them in parallel. Record a host blocker such
-as `dispatch_blocker:wave=<wave_index>:target_overlap` and rescope/replan before
-continuing. After executor results return, run the post-result changed-file
+as `dispatch_blocker:wave=<wave_index>:target_overlap` and stop for operator
+direction before continuing. After executor results return, run the post-result changed-file
 conflict check across returned `changed_files`; if parallel executors touched
 the same file scope or escaped their declared target scope, record a post-result
 changed-file conflict and do not run the integration gate or start the next wave
 until it is resolved — this is the same condition the engine audits as
 `parallel_wave_changed_file_overlap` and `task_changed_file_scope_escape`.
 
-For each wave: describe the build goal before spawning, wait
-for all executors, spot-check the first 2 files from each task's
-`changed_files`, check blocker evidence, report what the wave enables next, and
-after any checkpoint pause continue with a **fresh** subagent context.
+For each wave: describe the build goal before spawning, wait for all executors,
+spot-check the first 2 files from each task's `changed_files`, check blocker
+evidence, report what the wave enables next, and continue directly to the next
+wave unless a natural stop point is reached. After any checkpoint pause, continue
+with a **fresh** subagent context.
+
+Natural execution stop points:
+- an active checkpoint requires user input
+- target-overlap preflight or post-result changed-file conflict makes parallel
+  dispatch unsafe
+- executor spawn, wait, result parsing, or handle cleanup fails
+- post-wave integration gate fails or times out
+- task evidence cannot be recorded through `slipway evidence task`
+- every planned wave has completed and review should begin
 
 ## Post-Wave Integration Gate
 Before starting the next wave, run a post-wave integration gate against the
@@ -152,7 +168,7 @@ gate unless a task owns a genuinely isolated command.
 - Dispatch one fresh-context executor subagent per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host genuinely cannot run concurrent executors (note that degradation, as above).
 - For a capable runtime, failing to spawn real executors for `parallel: true` is a blocker or operator-direction point, not permission for same-context inline execution.
 - Executor agents run in a single worktree unless a runtime explicitly provides stronger isolation; do not claim per-executor worktree isolation.
-- Before spawn, perform the target-overlap preflight against the current wave's `target_files`; block or replan on overlap instead of parallelizing unsafe writes.
+- Before spawn, perform the target-overlap preflight against the current wave's `target_files`; stop for operator direction on overlap instead of parallelizing unsafe writes.
 - After results, perform the post-result changed-file conflict check before integration.
 - Record dispatch references for successful fan-out: `dispatch_mode:wave=<wave_index>:parallel_subagents` plus one `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` per spawned task.
 - If an executor handle is lost, no parseable result returns, or waiting stalls, record `executor_handle_lost`, `executor_result_missing`, or `executor_dispatch_stalled` with known handles and last observed state; ask for operator direction and do not inline or mark the task complete without explicit authorization.
@@ -190,8 +206,9 @@ freshness or write verification YAML directly.
 **Completeness contract:** record passing evidence for EVERY planned task in the
 wave plan before the change can advance to review. A planned task left without
 passing evidence blocks advancement with `incomplete_execution_task:<task_id>` —
-partial execution does not reach S3_REVIEW. To intentionally drop a task, rescope
-`tasks.md` (re-plan) so the wave plan no longer claims it; never skip its evidence.
+partial execution does not reach S3_REVIEW. To intentionally drop a task, record
+a same-intent scope amendment in `tasks.md` so the wave plan no longer claims it;
+never skip its evidence.
 
 ## Guardrails
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
@@ -252,9 +269,12 @@ re-run the wave with real concurrent dispatch). Do not fabricate the justificati
 when concurrent executors were actually available.
 
 ## Present and Advance
-Show execution summary. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
-
-After confirmation, advance with `slipway run`.
+Show one execution summary for the full continuous S2 run, including every wave
+attempted and every natural stop point encountered. {{template "hard-gate"}}
+When all planned waves have passing task evidence and the wave-orchestration
+verification record is written, run `slipway implement` or `slipway run` once to
+let the lifecycle advance to S3_REVIEW. Do not call an advancing command between
+wave boundaries; wave-to-wave continuation belongs to this host run.
 
 ## DO NOT SKIP
 1. Dependency ordering before execution.

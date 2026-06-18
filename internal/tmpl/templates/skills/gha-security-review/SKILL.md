@@ -4,12 +4,12 @@ domain: review-security
 function: review GitHub Actions workflows for privilege, pinning, and agentic-action risk
 tier: T2
 primary_attachment: checklist
-summary: "Use when reviewing GitHub Actions workflows. Triggers on review or repair commands or on changes to .github/workflows paths."
+summary: "Use when reviewing GitHub Actions workflows. Triggers on review or fix commands or on changes to .github/workflows paths."
 trigger_signals:
   - changed_files_include: [".github/workflows/*", ".github/workflows/**/*"]
     reason: "GitHub Actions workflow changed"
-  - command: ["review", "repair"]
-    reason: "Review or repair command invoked; workflow surface may be in scope"
+  - command: ["review", "fix"]
+    reason: "Review or fix command invoked; workflow surface may be in scope"
 evidence_contract: verdict
 hydrate_references:
   - name: pwn-request.md
@@ -25,7 +25,7 @@ bindings:
     target: review
     attachment: checklist
   - type: command-auto
-    target: repair
+    target: fix
     attachment: tool-recipe
 ---
 

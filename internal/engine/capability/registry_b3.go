@@ -52,12 +52,12 @@ func ghaSecurityReview() Skill {
 		Function:          "review GitHub Actions workflows for privilege, pinning, and agentic-action risk",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when reviewing GitHub Actions workflows. Triggers on review or repair commands or on changes to .github/workflows paths.",
-		Evidence:          EvidenceVerdict, // Suggested-only on review / repair (§5.2). Command-auto feeds the
+		Summary:           "Use when reviewing GitHub Actions workflows. Triggers on review or fix commands or on changes to .github/workflows paths.",
+		Evidence:          EvidenceVerdict, // Suggested-only on review / fix (§5.2). Command-auto feeds the
 		// suggested_capabilities[] channel when workflow paths change.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentToolRecipe},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "pwn-request.md", Reason: "pull_request_target fork-code execution vector"},
@@ -75,13 +75,13 @@ func supplyChainAudit() Skill {
 		Function:          "audit third-party dependencies for CVE, provenance, and pinning risk",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review or repair commands or on changes to package/lock files.",
-		Evidence:          EvidenceVerdict, // Suggested-only on review / repair (§5.2). The status
+		Summary:           "Use when dependency manifests or lockfiles change. Triggers on review or fix commands or on changes to package/lock files.",
+		Evidence:          EvidenceVerdict, // Suggested-only on review / fix (§5.2). The status
 		// --view=supply-chain-audit surface was removed (§5.5), and status no
 		// longer carries this skill as a suggested surface.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentToolRecipe},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentToolRecipe},
 		},
 		HydrateReferences: []HydrateReference{
 			{Name: "results-template.md", Reason: "Audit report schema for supply-chain findings"},

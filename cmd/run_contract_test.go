@@ -34,7 +34,7 @@ func TestRunGovernedLoopDelegatesToBuildNextView(t *testing.T) {
 				return true
 			}
 			ident, ok := call.Fun.(*ast.Ident)
-			if ok && ident.Name == "buildNextView" {
+			if ok && ident.Name == "buildNextViewForCommand" {
 				found = true
 				return false
 			}
@@ -42,5 +42,5 @@ func TestRunGovernedLoopDelegatesToBuildNextView(t *testing.T) {
 		})
 	}
 
-	assert.True(t, found, "runGovernedLoop must keep reusing buildNextView for the returned next-skill/blocker contract")
+	assert.True(t, found, "runGovernedLoop must keep reusing buildNextViewForCommand for the returned next-skill/blocker contract")
 }

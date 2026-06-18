@@ -4,19 +4,14 @@ domain: repair-ci
 function: recover git state without destroying unsaved work or bypassing hooks
 tier: T2
 primary_attachment: procedure
-summary: "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on the `slipway repair` command or user text describing those operations."
+summary: "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on git-state blockers or user text describing those operations."
 trigger_signals:
-  - command: repair
-    reason: "repair command invoked; git recovery may be in scope"
   - blocker_reason: ["worktree_dirty", "branch_diverged", "detached_head"]
     reason: "Blocker cites an entangled git state"
   - user_text_matches: ["git reset", "git rebase", "--no-verify", "force push", "detached head"]
     reason: "User text names a destructive or high-risk git operation"
 evidence_contract: artifact
 bindings:
-  - type: command-auto
-    target: repair
-    attachment: procedure
   - type: host-embedded
     target: worktree-preflight
     attachment: procedure

@@ -87,10 +87,24 @@
     },
     {
       "kind": "command",
+      "name": "fix",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/commands.md",
+      "token": "slipway fix"
+    },
+    {
+      "kind": "command",
       "name": "health",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/commands.md",
       "token": "slipway health"
+    },
+    {
+      "kind": "command",
+      "name": "implement",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/commands.md",
+      "token": "slipway implement"
     },
     {
       "kind": "command",
@@ -105,6 +119,13 @@
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/commands.md",
       "token": "slipway instructions"
+    },
+    {
+      "kind": "command",
+      "name": "intake",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/commands.md",
+      "token": "slipway intake"
     },
     {
       "kind": "command",
@@ -129,10 +150,10 @@
     },
     {
       "kind": "command",
-      "name": "pivot",
+      "name": "plan",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/commands.md",
-      "token": "slipway pivot"
+      "token": "slipway plan"
     },
     {
       "kind": "command",
@@ -276,6 +297,13 @@
     },
     {
       "kind": "json-contract",
+      "name": "fix-json",
+      "source": "cmd/fix.go",
+      "docs": "docs/commands.md",
+      "token": "slipway fix --json"
+    },
+    {
+      "kind": "json-contract",
       "name": "health-json",
       "source": "cmd/health.go",
       "docs": "docs/commands.md",
@@ -283,10 +311,24 @@
     },
     {
       "kind": "json-contract",
+      "name": "implement-json",
+      "source": "cmd/implement.go",
+      "docs": "docs/commands.md",
+      "token": "slipway implement --json"
+    },
+    {
+      "kind": "json-contract",
       "name": "instructions-json",
       "source": "cmd/instructions.go",
       "docs": "docs/commands.md",
       "token": "slipway instructions \u003cartifact\u003e --json"
+    },
+    {
+      "kind": "json-contract",
+      "name": "intake-json",
+      "source": "cmd/intake.go",
+      "docs": "docs/commands.md",
+      "token": "slipway intake --json"
     },
     {
       "kind": "json-contract",
@@ -311,10 +353,10 @@
     },
     {
       "kind": "json-contract",
-      "name": "pivot-json",
-      "source": "cmd/pivot.go",
+      "name": "plan-json",
+      "source": "cmd/plan.go",
       "docs": "docs/commands.md",
-      "token": "slipway pivot --json"
+      "token": "slipway plan --json"
     },
     {
       "kind": "json-contract",
@@ -472,6 +514,13 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-fix",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-fix"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-git-recovery",
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
@@ -490,6 +539,13 @@
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/ai-tools.md",
       "token": "$slipway-health"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-implement",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-implement"
     },
     {
       "kind": "skill",
@@ -521,6 +577,13 @@
     },
     {
       "kind": "skill",
+      "name": "slipway-intake",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/ai-tools.md",
+      "token": "$slipway-intake"
+    },
+    {
+      "kind": "skill",
       "name": "slipway-intake-clarification",
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
@@ -549,10 +612,10 @@
     },
     {
       "kind": "skill",
-      "name": "slipway-pivot",
+      "name": "slipway-plan",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/ai-tools.md",
-      "token": "$slipway-pivot"
+      "token": "$slipway-plan"
     },
     {
       "kind": "skill",

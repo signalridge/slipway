@@ -14,9 +14,11 @@ slipway-delete/SKILL.md	skill_md	non-exec
 slipway-done/SKILL.md	skill_md	non-exec
 slipway-evidence/SKILL.md	skill_md	non-exec
 slipway-final-closeout/SKILL.md	skill_md	non-exec
+slipway-fix/SKILL.md	skill_md	non-exec
 slipway-git-recovery/SKILL.md	skill_md	non-exec
 slipway-goal-verification/SKILL.md	skill_md	non-exec
 slipway-health/SKILL.md	skill_md	non-exec
+slipway-implement/SKILL.md	skill_md	non-exec
 slipway-incident-response/SKILL.md	skill_md	non-exec
 slipway-incident-response/references/incident-response-framework.md	reference	non-exec
 slipway-incident-response/references/incident-severity-matrix.md	reference	non-exec
@@ -24,13 +26,14 @@ slipway-independent-review/SKILL.md	skill_md	non-exec
 slipway-init/SKILL.md	skill_md	non-exec
 slipway-instructions/SKILL.md	skill_md	non-exec
 slipway-intake-clarification/SKILL.md	skill_md	non-exec
+slipway-intake/SKILL.md	skill_md	non-exec
 slipway-learn/SKILL.md	skill_md	non-exec
 slipway-new/SKILL.md	skill_md	non-exec
 slipway-next/SKILL.md	skill_md	non-exec
-slipway-pivot/SKILL.md	skill_md	non-exec
 slipway-plan-audit/SKILL.md	skill_md	non-exec
 slipway-plan-audit/references/audit-smells.md	reference	non-exec
 slipway-plan-audit/references/checklist-quality.md	reference	non-exec
+slipway-plan/SKILL.md	skill_md	non-exec
 slipway-preset/SKILL.md	skill_md	non-exec
 slipway-repair/SKILL.md	skill_md	non-exec
 slipway-research-orchestration/SKILL.md	skill_md	non-exec
@@ -67,4 +70,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:a448f02fb3ba75ef74c5861b32aa6eb9620f96daa5f53201431f99e53f5f677c
+# inventory_sha256:10995a25bf2e7bfc0a561bf257a88f2ba4af5f391592fecba6870b58bcdd7368

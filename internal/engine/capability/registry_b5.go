@@ -9,10 +9,10 @@ func ciTriage() Skill {
 		Function:          "triage failing CI runs to root cause before retrying",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when CI, a build, or a pipeline is failing and a retry is being considered. Triggers on the `slipway repair` command or user text naming CI/build/pipeline failures.",
-		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). No public explicit selector.
+		Summary:           "Use when CI, a build, or a pipeline is failing and a retry is being considered. Triggers on the `slipway fix` command or user text naming CI/build/pipeline failures.",
+		Evidence:          EvidenceArtifact, // Suggested-only on fix (§5.2). No public explicit selector.
 		Bindings: []Binding{
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentProcedure},
 		},
 	}
 }
@@ -24,10 +24,10 @@ func reviewCommentTriage() Skill {
 		Function:          "triage reviewer comments into accept, push-back, or defer with a written disposition",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when addressing reviewer comments on an open PR. Triggers on repair command or user text naming PR review comments.",
-		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). No public explicit selector.
+		Summary:           "Use when addressing reviewer comments on an open PR. Triggers on fix command or user text naming PR review comments.",
+		Evidence:          EvidenceArtifact, // Suggested-only on fix (§5.2). No public explicit selector.
 		Bindings: []Binding{
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
+			{Type: BindingCommandAuto, Target: "fix", Attachment: AttachmentProcedure},
 		},
 	}
 }
@@ -39,11 +39,9 @@ func gitRecovery() Skill {
 		Function:          "recover git state without destroying unsaved work or bypassing hooks",
 		Tier:              TierT2,
 		PrimaryAttachment: AttachmentProcedure,
-		Summary:           "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on the `slipway repair` command or user text describing those operations.",
-		Evidence:          EvidenceArtifact, // Suggested-only on repair (§5.2). Host-embedded attachment
-		// on worktree-preflight remains so preflight flows still route recovery.
+		Summary:           "Use when git state is entangled and a destructive operation is being considered (git reset --hard, rebase, force-push, --no-verify, detached HEAD). Triggers on destructive-operation user text.",
+		Evidence:          EvidenceArtifact, // Host-embedded attachment on worktree-preflight remains so preflight flows still route recovery.
 		Bindings: []Binding{
-			{Type: BindingCommandAuto, Target: "repair", Attachment: AttachmentProcedure},
 			{Type: BindingHostEmbedded, Target: "worktree-preflight", Attachment: AttachmentProcedure},
 		},
 	}

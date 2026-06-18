@@ -1,0 +1,23 @@
+{{- define "command-plan-body" -}}
+# Plan
+
+Run the explicit S1 planning stage for the active governed change.
+
+## Invocation
+```bash
+slipway plan --json
+```
+
+## Contract
+- `plan` is valid only while `current_state` is `S1_PLAN`.
+- It surfaces the current planning host skill, blocker, or transition to implementation.
+- `run` may delegate to `plan`, but `plan` is the primary stage command.
+- Same-intent scope changes are change amendments: update the current artifacts and evidence, then continue forward.
+- Do not use a separate recovery command for same-intent artifact changes.
+- Intent conflict is not a plan amendment; start a new governed change.
+
+## Flags
+- `--json`: JSON output
+- `--change <slug>`: target a specific active change
+- `--diagnostics`: include governance/readiness diagnostic fields
+{{- end -}}

@@ -854,9 +854,9 @@ func ReconcileFromFilesystem(root string, change *model.Change, preset ...model.
 		return result, err
 	}
 
-	// Amendment-eligible states: S2_EXECUTE and S3_REVIEW allow frozen
+	// Amendment-eligible states: S2_IMPLEMENT and S3_REVIEW allow frozen
 	// artifacts to be amended (unfrozen to approved) when their content changes.
-	amendable := change.CurrentState == model.StateS2Execute ||
+	amendable := change.CurrentState == model.StateS2Implement ||
 		change.CurrentState == model.StateS3Review
 
 	for id, artifact := range change.Artifacts {

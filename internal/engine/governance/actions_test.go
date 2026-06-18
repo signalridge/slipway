@@ -98,7 +98,7 @@ func TestAdvisoryActionsDoNotBlock(t *testing.T) {
 
 func TestIndependentReviewActionDescribesPostExecutionTiming(t *testing.T) {
 	t.Parallel()
-	// Independent review is a review-scope gate (S3/S4): it runs on execution
+	// Independent review is a review-scope gate (S3): it runs on execution
 	// evidence, not before execution. The wording must not tell agents to run it
 	// "before further execution" at S2, which contradicts the gate and the
 	// review command's execution-summary requirement (issue #36, comment 1).

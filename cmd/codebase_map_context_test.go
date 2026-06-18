@@ -297,7 +297,7 @@ func TestBuildNextContextIncludesSelectedArchivedDependencyContext(t *testing.T)
 	initTestWorkspace(t, root)
 
 	archived := model.NewChange("baseline-auth")
-	archived.CurrentState = model.StateS4Verify
+	archived.CurrentState = model.StateS3Review
 	archived.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, archived))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "changes", archived.Slug), 0o755))

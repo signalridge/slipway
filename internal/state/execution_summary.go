@@ -24,6 +24,10 @@ const StaleExecutionEvidenceBlockerToken = "stale_execution_evidence"
 const StalePlanningEvidenceBlockerToken = "stale_planning_evidence"
 const planAuditFileName = "plan-audit.yaml"
 
+// S3TaskPlanAmendmentDiagnostic explains why S3 task-plan edits stay in the
+// review/fix loop instead of forcing S2 execution evidence replay.
+const S3TaskPlanAmendmentDiagnostic = "s3_task_plan_amendment_review_required: tasks.md changed after S2 execution evidence; continue S3 review/fix without rerunning S2 solely for task-plan edits"
+
 type ExecutionSummaryLoadError struct {
 	Path string
 	Err  error
@@ -68,7 +72,7 @@ func ExecutionSummaryReady(summary *model.ExecutionSummary) bool {
 
 func ExecutionSummaryRelevantState(state model.WorkflowState) bool {
 	switch state {
-	case model.StateS2Execute, model.StateS3Review, model.StateS4Verify, model.StateDone:
+	case model.StateS2Implement, model.StateS3Review, model.StateDone:
 		return true
 	default:
 		return false
@@ -292,6 +296,9 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 	blockers := make([]string, 0, len(summary.OpenBlockers)+1)
 	blockers = append(blockers, model.ReasonSpecs(summary.OpenBlockers)...)
 	if diagnostics.Status == string(ctxpack.EvidenceFreshnessStale) {
+		if ExecutionFreshnessIsS3TaskPlanAmendment(change.CurrentState, diagnostics) {
+			return stringutil.UniqueSorted(blockers)
+		}
 		hasPlanningDrift := false
 		for _, pair := range diagnostics.StalePairs {
 			if pair.Reason == StalePlanningEvidenceBlockerToken {
@@ -306,6 +313,63 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 		}
 	}
 	return stringutil.UniqueSorted(blockers)
+}
+
+// ProjectExecutionFreshnessForState maps raw execution-summary freshness into
+// the lifecycle state's public gate meaning.
+func ProjectExecutionFreshnessForState(
+	workflowState model.WorkflowState,
+	diagnostics ExecutionFreshnessDiagnostics,
+) ctxpack.EvidenceFreshness {
+	status := ctxpack.EvidenceFreshness(strings.TrimSpace(diagnostics.Status))
+	if status == "" {
+		status = ctxpack.EvidenceFreshnessUnknown
+	}
+	if ExecutionFreshnessIsS3TaskPlanAmendment(workflowState, diagnostics) {
+		return ctxpack.EvidenceFreshnessFresh
+	}
+	return status
+}
+
+// ProjectExecutionFreshnessDiagnosticsForState hides raw S2 replay diagnostics
+// when the active S3 review loop owns the same-intent task-plan amendment.
+func ProjectExecutionFreshnessDiagnosticsForState(
+	workflowState model.WorkflowState,
+	diagnostics ExecutionFreshnessDiagnostics,
+) ExecutionFreshnessDiagnostics {
+	if !ExecutionFreshnessIsS3TaskPlanAmendment(workflowState, diagnostics) {
+		return diagnostics
+	}
+	return ExecutionFreshnessDiagnostics{
+		Status:        string(ctxpack.EvidenceFreshnessFresh),
+		PathAuthority: diagnostics.PathAuthority,
+	}
+}
+
+// ExecutionFreshnessIsS3TaskPlanAmendment reports whether raw task-plan drift
+// should be handled as current S3 review/fix input instead of S2 replay input.
+func ExecutionFreshnessIsS3TaskPlanAmendment(
+	workflowState model.WorkflowState,
+	diagnostics ExecutionFreshnessDiagnostics,
+) bool {
+	return workflowState == model.StateS3Review && ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics)
+}
+
+// ExecutionFreshnessIsTaskPlanOnlyDrift reports a stale execution summary whose
+// only cause is the tasks.md -> wave-plan/execution-summary planning chain.
+func ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics ExecutionFreshnessDiagnostics) bool {
+	if strings.TrimSpace(diagnostics.Status) != string(ctxpack.EvidenceFreshnessStale) {
+		return false
+	}
+	if len(diagnostics.TaskInputDiffs) > 0 || len(diagnostics.StalePairs) == 0 {
+		return false
+	}
+	for _, pair := range diagnostics.StalePairs {
+		if strings.TrimSpace(pair.Reason) != StalePlanningEvidenceBlockerToken {
+			return false
+		}
+	}
+	return true
 }
 
 func ExpectedExecutionTaskFreshnessInputs(change model.Change, runSummaryVersion int, taskID string, tasksPlanHash ...string) model.ExecutionTaskFreshnessInputs {
@@ -559,18 +623,36 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 
 	sources := []stalePlanningSource{}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	tasksPlanDrift := false
 	if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil {
 		if strings.TrimSpace(summary.TasksPlanHash) != "" && currentHash != strings.TrimSpace(summary.TasksPlanHash) {
+			tasksPlanDrift = true
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,
-				nextAction: "regenerate wave-plan.yaml and execution-summary.yaml from the current tasks.md plan",
+				nextAction: "rerun wave-orchestration so Slipway derives the current wave projection and refreshes execution-summary.yaml",
 			})
 		}
 	} else if strings.TrimSpace(summary.TasksPlanHash) != "" {
+		tasksPlanDrift = true
 		sources = append(sources, stalePlanningSource{
 			path:       tasksPath,
-			nextAction: "restore readable tasks.md, then regenerate wave-plan.yaml and execution-summary.yaml",
+			nextAction: "restore readable tasks.md, then rerun wave-orchestration to refresh execution-summary.yaml",
 		})
+	}
+	if !tasksPlanDrift {
+		currentScopeHash, currentScopeErr := CurrentTasksPlanScopeState(root, change)
+		storedScopeHash, hasStoredScopeHash, storedScopeErr := storedTasksPlanScopeHash(root, change)
+		if currentScopeErr == nil && storedScopeErr == nil && hasStoredScopeHash && currentScopeHash != storedScopeHash {
+			sources = append(sources, stalePlanningSource{
+				path:       tasksPath,
+				nextAction: "rerun wave-orchestration so Slipway derives the current wave projection and refreshes execution-summary.yaml",
+			})
+		} else if currentScopeErr != nil && storedScopeErr == nil && hasStoredScopeHash {
+			sources = append(sources, stalePlanningSource{
+				path:       tasksPath,
+				nextAction: "restore readable tasks.md, then rerun wave-orchestration to refresh execution-summary.yaml",
+			})
+		}
 	}
 
 	slices.SortFunc(sources, func(a, b stalePlanningSource) int {
@@ -590,6 +672,18 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 	return pairs
 }
 
+func storedTasksPlanScopeHash(root string, change model.Change) (string, bool, error) {
+	plan, err := LoadWavePlanForChange(root, change)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	hash := strings.TrimSpace(plan.TasksPlanScopeHash)
+	return hash, hash != "", nil
+}
+
 type stalePlanningSource struct {
 	path       string
 	updatedAt  time.Time
@@ -599,7 +693,6 @@ type stalePlanningSource struct {
 func stalePlanningEvidenceChain(root, bundleDir, executionSummaryArtifact string, executionSummaryCapturedAt time.Time, source stalePlanningSource) []ExecutionFreshnessPair {
 	stagePaths := []string{}
 	for _, rel := range []string{
-		filepath.Join("verification", planAuditFileName),
 		filepath.Join("verification", WavePlanFileName),
 	} {
 		path := filepath.Join(bundleDir, rel)
@@ -649,9 +742,9 @@ func stalePlanningEvidenceChain(root, bundleDir, executionSummaryArtifact string
 func nextActionForPlanningStage(path string) string {
 	switch filepath.Base(path) {
 	case planAuditFileName:
-		return "rerun plan-audit before rebuilding downstream wave and execution evidence"
+		return "rerun plan-audit to refresh stale plan review evidence"
 	case WavePlanFileName:
-		return "rerun plan-audit and regenerate wave-plan.yaml from current planning evidence before rerunning execution"
+		return "rerun wave-orchestration so Slipway refreshes the task-derived wave projection before rerunning execution"
 	default:
 		return "regenerate stale planning evidence before repairing downstream execution evidence"
 	}

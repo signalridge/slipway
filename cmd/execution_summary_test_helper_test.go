@@ -10,6 +10,7 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func writeExecutionSummary(t *testing.T, root, slug string, summary model.ExecutionSummary) {
@@ -72,9 +73,36 @@ func writePassingExecutionSummary(t *testing.T, root, slug string, runVersion in
 		if hash, err := state.CurrentTasksPlanStructuralState(root, *change); err == nil {
 			summary.TasksPlanHash = hash
 		}
+		state.ApplyExecutionSummaryFreshnessInputs(&summary, *change)
 	}
 	writeExecutionSummary(t, root, slug, summary)
+	if change != nil {
+		writeSuiteResultForCommandTest(t, root, slug, runVersion)
+	}
 	refreshPassingSkillDigestsForTest(t, root, slug)
+}
+
+func writeSuiteResultForCommandTest(t *testing.T, root, slug string, runVersion int) {
+	t.Helper()
+
+	change, err := state.LoadChange(root, slug)
+	if err != nil {
+		return
+	}
+	paths, err := state.ResolveChangePaths(root, change)
+	require.NoError(t, err)
+	result := model.SuiteResult{
+		Version:           model.SuiteResultVersion,
+		RunSummaryVersion: runVersion,
+		FullSuiteDigest:   "sha256:test-full-suite",
+		CapturedAt:        time.Now().UTC(),
+	}
+	result.Normalize()
+	raw, err := yaml.Marshal(result)
+	require.NoError(t, err)
+	verificationDir := filepath.Join(paths.GovernedBundleDir, "verification")
+	require.NoError(t, os.MkdirAll(verificationDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, "suite-result.yaml"), raw, 0o644))
 }
 
 func ensureExecutionSummaryInputFile(t *testing.T, root, rel string) {

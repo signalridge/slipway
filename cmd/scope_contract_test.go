@@ -26,37 +26,35 @@ func TestValidateIncludesScopeContractDriftReport(t *testing.T) {
 	require.NotNil(t, view.ScopeContract)
 	assert.Equal(t, "fail", view.ScopeContract.Status)
 	assert.Equal(t, []string{"cmd/review.go"}, view.ScopeContract.OutOfScopeFiles)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
 }
 
-func TestValidateAndNextGuideS3ScopeContractDriftToRecoveryPath(t *testing.T) {
+func TestValidateAndNextTreatS3ScopeContractDriftAsReviewInput(t *testing.T) {
 	t.Parallel()
 
 	root, slug := writeScopeContractDriftFixtureInState(t, model.StateS3Review)
 
 	validateView, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)
-	assert.Contains(t, model.ReasonSpecs(validateView.Blockers), "scope_contract_drift:cmd/review.go")
+	assert.NotContains(t, model.ReasonSpecs(validateView.Blockers), "scope_contract_drift:cmd/review.go")
 	diagnostics := strings.Join(validateView.Diagnostics, "\n")
 	assert.Contains(t, diagnostics, "scope_contract_recovery_guidance")
 	assert.Contains(t, diagnostics, "target_files in tasks.md")
-	assert.Contains(t, diagnostics, "non-destructive")
-	assert.Contains(t, diagnostics, "slipway pivot --rescope")
-	// rescope must be described honestly as a full re-plan that resets to intake,
-	// not as a non-destructive target_files edit.
-	assert.Contains(t, diagnostics, "S0_INTAKE")
-	assert.Contains(t, diagnostics, "slipway run")
+	assert.Contains(t, diagnostics, "same-intent")
+	assert.Contains(t, diagnostics, "scope amendment")
+	assert.Contains(t, diagnostics, "S3 review")
 
 	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
 	require.NoError(t, err)
-	assert.Contains(t, model.ReasonSpecs(nextView.Blockers), "scope_contract_drift:cmd/review.go")
+	assert.NotContains(t, model.ReasonSpecs(nextView.Blockers), "scope_contract_drift:cmd/review.go")
+	require.NotNil(t, nextView.ReviewBatch)
+	assert.Equal(t, "parallel", nextView.ReviewBatch.Mode)
 	warnings := strings.Join(nextView.Warnings, "\n")
 	assert.Contains(t, warnings, "scope_contract_recovery_guidance")
 	assert.Contains(t, warnings, "target_files in tasks.md")
-	assert.Contains(t, warnings, "non-destructive")
-	assert.Contains(t, warnings, "slipway pivot --rescope")
-	assert.Contains(t, warnings, "S0_INTAKE")
-	assert.Contains(t, warnings, "slipway run")
+	assert.Contains(t, warnings, "same-intent")
+	assert.Contains(t, warnings, "scope amendment")
+	assert.Contains(t, warnings, "S3 review")
 }
 
 func TestStatusSurfacesScopeContractDriftBlocker(t *testing.T) {
@@ -70,10 +68,10 @@ func TestStatusSurfacesScopeContractDriftBlocker(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, view.ScopeContract)
 	assert.Equal(t, "fail", view.ScopeContract.Status)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
 }
 
-func TestReviewFailsOnScopeContractDrift(t *testing.T) {
+func TestReviewTreatsScopeContractDriftAsReviewInput(t *testing.T) {
 	t.Parallel()
 
 	root, slug := writeScopeContractDriftFixture(t)
@@ -83,11 +81,12 @@ func TestReviewFailsOnScopeContractDrift(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, view.ScopeContract)
 	assert.Equal(t, "fail", view.Verdict)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
-	assert.Contains(t, strings.Join(view.Gaps.ArtifactToCode, "\n"), "scope_contract_drift")
+	assert.Equal(t, "fail", view.ScopeContract.Status)
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "scope_contract_drift:cmd/review.go")
+	assert.NotContains(t, strings.Join(view.Gaps.ArtifactToCode, "\n"), "scope_contract_drift")
 }
 
-// writeAdvanceableS2Fixture builds a governed change at S2_EXECUTE whose recorded
+// writeAdvanceableS2Fixture builds a governed change at S2_IMPLEMENT whose recorded
 // execution + wave evidence is fresh and in-scope, recorded through the canonical
 // `slipway evidence task` path so a plain `slipway run` reaches the Scope Contract
 // advance gate (rather than blocking earlier on execution-summary freshness). The
@@ -125,7 +124,7 @@ func writeAdvanceableS2Fixture(t *testing.T, root string) string {
 // An untracked, out-of-scope file in the worktree — the common developer case
 // from issue #136 (a scratch file, or the dogfooded `slipway` build binary) —
 // must block `slipway run` visibly with the real scope_contract_drift cause and
-// must NOT clear the earned wave evidence. Before the fix, the gate reopened S2
+// must NOT clear the earned wave evidence. Before the fix, the gate rewrote S2
 // in place and deleted wave-orchestration.yaml + execution-summary.yaml, which
 // then masked the drift behind a "wave-orchestration missing" blocker.
 func TestRunScopeContractDriftBlocksWithoutClearingWaveEvidence(t *testing.T) {
@@ -157,19 +156,19 @@ func TestRunScopeContractDriftBlocksWithoutClearingWaveEvidence(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
 		// The real cause is surfaced (not masked) and the change stays in its
-		// owning stage rather than being reopened-in-place.
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+		// owning stage rather than being rewritten in place.
+		assert.Equal(t, model.StateS2Implement, view.CurrentState)
 		specs := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
 		assert.Contains(t, specs, "scope_contract_drift")
 		assert.Contains(t, specs, "scratch.txt")
 
-		// Non-destructive: the earned wave evidence survives (the reopen/clear path
+		// Non-destructive: the earned wave evidence survives (the legacy wipe path
 		// would have deleted wave-orchestration.yaml and masked the cause).
 		require.FileExists(t, waveOrchestrationPath)
 		require.FileExists(t, executionSummaryPath)
 		if view.Advanced != nil {
-			assert.NotEqual(t, "stale_evidence_recovery_started", view.Advanced.Reason,
-				"scope drift must not trigger the stale-evidence reopen/clear path")
+			assert.NotEqual(t, "stale_evidence_requires_review_alignment", view.Advanced.Reason,
+				"scope drift must block directly without stale-evidence repair handoff")
 			for _, effect := range view.Advanced.SideEffects {
 				assert.NotEqual(t, "cleared_stale_generated_evidence", effect.Kind,
 					"scope drift must not clear generated wave evidence")
@@ -196,7 +195,7 @@ func TestRunScopeContractDriftBlocksWithoutClearingWaveEvidence(t *testing.T) {
 func writeScopeContractDriftFixture(t *testing.T) (string, string) {
 	t.Helper()
 
-	return writeScopeContractDriftFixtureInState(t, model.StateS2Execute)
+	return writeScopeContractDriftFixtureInState(t, model.StateS3Review)
 }
 
 func writeScopeContractDriftFixtureInState(t *testing.T, workflowState model.WorkflowState) (string, string) {

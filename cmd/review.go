@@ -51,6 +51,7 @@ func makeReviewCmd() *cobra.Command {
 	opts := reviewOptions{}
 	var changeSlug string
 	var jsonOutput bool
+	var diagnostics bool
 	var hydrate bool
 	var hydrateRefs []string
 	var listFocuses bool
@@ -92,11 +93,11 @@ func makeReviewCmd() *cobra.Command {
 					map[string]any{"hydrate_refs": normalizeHydrateKeys(hydrateRefs)},
 				)
 			}
-			if jsonOutput && hydrate {
+			if (jsonOutput || diagnostics) && hydrate {
 				return newInvalidUsageError(
 					"mutually_exclusive_flags",
-					"`--hydrate` cannot be combined with `--json`",
-					"Drop `--json` to emit hydrate bodies, or omit `--hydrate`.",
+					"`--hydrate` cannot be combined with JSON output",
+					"Drop `--json`/`--diagnostics` to emit hydrate bodies, or omit `--hydrate`.",
 					nil,
 				)
 			}
@@ -125,7 +126,7 @@ func makeReviewCmd() *cobra.Command {
 					return err
 				}
 
-				if jsonOutput {
+				if jsonOutput || diagnostics {
 					return encodeJSONResponse(cmd, view)
 				}
 				if err := writeReviewText(cmd.OutOrStdout(), view); err != nil {
@@ -145,6 +146,7 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
 	cmd.Flags().StringVar(&opts.focus, "focus", "", "Review focus (e.g. sast, calibration)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic review details")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
 	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
@@ -169,9 +171,6 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 	}
 	if err := ensureReviewEntryState(change.CurrentState, execCtx.Summary); err != nil {
 		return reviewView{}, err
-	}
-	if change.CurrentState == model.StateS2Execute {
-		change.CurrentState = model.StateS3Review
 	}
 
 	reviewState := model.StateS3Review
@@ -221,14 +220,7 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 	} else {
 		change.ReviewIntentDriftFailures = 0
 	}
-	if change.ReviewIntentDriftFailures >= 2 {
-		blockers = appendReasonCodes(blockers, []model.ReasonCode{model.NewReasonCode("pivot_required", "intent_drift")})
-		verdict = "fail"
-	}
 
-	if verdict == "fail" {
-		change.CurrentState = model.StateS2Execute
-	}
 	if err := state.SaveChange(root, change); err != nil {
 		return reviewView{}, err
 	}
@@ -304,7 +296,7 @@ func writeReviewText(w io.Writer, view reviewView) error {
 func ensureReviewEntryState(current model.WorkflowState, summary *model.ExecutionSummary) error {
 	summaryReady := state.ExecutionSummaryReady(summary)
 	switch current {
-	case model.StateS2Execute, model.StateS3Review, model.StateS4Verify:
+	case model.StateS3Review:
 		if !summaryReady {
 			return newGovernanceBlockedError(
 				"missing_run_summary",
@@ -316,12 +308,17 @@ func ensureReviewEntryState(current model.WorkflowState, summary *model.Executio
 		}
 		return nil
 	default:
+		currentCommand := primaryCommandForState(current)
 		return newGovernanceBlockedError(
 			"review_state_invalid",
-			"review is allowed only in S2_EXECUTE/S3_REVIEW/S4_VERIFY",
-			"Advance the change to S2_EXECUTE or later before reviewing.",
+			fmt.Sprintf("slipway review can only run while current_state is %s; current_state=%s", model.StateS3Review, current),
+			fmt.Sprintf("Use `slipway %s` for the current state, or `slipway run` to drive the current stage automatically.", currentCommand),
 			"",
-			nil,
+			map[string]any{
+				"current_state":  current,
+				"expected_state": model.StateS3Review,
+				"next_command":   "slipway " + currentCommand,
+			},
 		)
 	}
 }
@@ -389,7 +386,7 @@ func hasIntentDriftSignal(blockers []model.ReasonCode, artifactReviewEvidence mo
 	for _, blocker := range blockers {
 		normalizedCode := strings.ToLower(strings.TrimSpace(blocker.Code))
 		normalizedDetail := strings.ToLower(strings.TrimSpace(blocker.Detail))
-		if (normalizedCode == "pivot_required" && normalizedDetail == "intent_drift") ||
+		if (normalizedCode == "new_change_required" && normalizedDetail == "intent_conflict") ||
 			normalizedCode == "intent_drift" {
 			return true
 		}

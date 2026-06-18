@@ -29,7 +29,7 @@ func TestAppendLifecycleEventVerified(t *testing.T) {
 			"blank":      " ",
 		},
 		BeforeState: model.StateS1Plan,
-		AfterState:  model.StateS2Execute,
+		AfterState:  model.StateS2Implement,
 	})
 	require.NoError(t, err)
 

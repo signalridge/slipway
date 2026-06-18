@@ -44,7 +44,7 @@ func TestStatusCommandDefaultsToBoundWorktreeChangeWhenMultipleActiveChanges(t *
 		boundSlug := createGovernedRequest(t, root, "L3", "bound worktree status default route")
 		boundChange, err := state.LoadChange(root, boundSlug)
 		require.NoError(t, err)
-		boundChange.CurrentState = model.StateS2Execute
+		boundChange.CurrentState = model.StateS2Implement
 		boundChange.PlanSubStep = model.PlanSubStepNone
 		boundChange.NeedsDiscovery = true
 		require.NoError(t, state.SaveChange(root, boundChange))
@@ -80,7 +80,7 @@ func TestStatusCommandDefaultsToBoundWorktreeChangeWhenMultipleActiveChanges(t *
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, boundSlug, view.Slug)
 		assert.Equal(t, "governed", view.ExecutionMode)
-		assert.Equal(t, model.StateS2Execute, view.CurrentState)
+		assert.Equal(t, model.StateS2Implement, view.CurrentState)
 		assert.NotEqual(t, otherSlug, view.Slug)
 	})
 }

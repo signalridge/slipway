@@ -119,7 +119,7 @@ func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "doctor should surface wave repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -145,12 +145,12 @@ func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 
 		found := false
 		for _, action := range view.Doctor.Actions {
-			if action.Command == "slipway repair" && strings.Contains(strings.ToLower(action.Summary), "wave plan") {
+			if action.Command == "slipway repair" && strings.Contains(strings.ToLower(action.Summary), "wave runs") {
 				found = true
 				assert.True(t, action.Repairable)
 			}
 		}
-		assert.True(t, found, "expected doctor to recommend slipway repair for missing wave artifacts")
+		assert.True(t, found, "expected doctor to recommend slipway repair for missing wave-run artifacts")
 	})
 }
 
@@ -183,16 +183,16 @@ func TestHealthCommandDoctorUsesCommandSpecificRepairHint(t *testing.T) {
 	})
 }
 
-func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRepair(t *testing.T) {
+func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRunsExist(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before wave repair")
+		slug := createGovernedRequest(t, root, "L2", "doctor should wait for wave runs before resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -235,7 +235,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRepair(t *testing.T) {
 				foundRepair = true
 			}
 		}
-		assert.True(t, foundRepair, "expected doctor to recommend repair instead of resume")
+		assert.True(t, foundRepair, "expected doctor to recommend repair before resume when wave runs are missing")
 	})
 }
 
@@ -248,7 +248,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before pre-summary wave plan repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.ActiveCheckpoint = &model.ActiveCheckpoint{
 			PausedTaskID:    "task-02",
@@ -268,14 +268,9 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.Doctor)
 
-		foundRepair := false
 		for _, action := range view.Doctor.Actions {
 			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
-			if action.Category == "wave_execution" && action.Slug == slug && action.Command == "slipway repair" {
-				foundRepair = true
-			}
 		}
-		assert.True(t, foundRepair, "expected doctor to recommend repair instead of resume")
 	})
 }
 
@@ -320,7 +315,7 @@ func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
 		slug := createGovernedRequest(t, root, "L2", "doctor should explain interrupted execution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		change.InterruptedExecutionAt = time.Date(2026, time.April, 11, 10, 30, 0, 0, time.UTC)
 		require.NoError(t, state.SaveChange(root, change))
@@ -366,16 +361,16 @@ func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
 	})
 }
 
-func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testing.T) {
+func TestHealthCommandDoctorIgnoresMissingPersistedWavePlanDuringS2(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should not auto-repair drifted wave state")
+		slug := createGovernedRequest(t, root, "L2", "doctor should ignore missing persisted wave cache")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -416,13 +411,11 @@ func TestHealthCommandDoctorBlocksWavePlanRepairWhenCurrentTasksDrifted(t *testi
 			if action.Category != "wave_execution" || action.Slug != slug {
 				continue
 			}
-			if strings.Contains(strings.ToLower(action.Summary), "cannot be safely reconstructed") {
+			if strings.Contains(strings.ToLower(action.Summary), "derived wave plan is missing") {
 				found = true
-				assert.False(t, action.Repairable)
-				assert.Equal(t, "slipway run", action.Command)
 			}
 		}
-		assert.True(t, found, "expected doctor to route drifted wave-plan reconstruction through run")
+		assert.False(t, found, "S2 doctor must not surface missing persisted wave-plan cache")
 	})
 }
 
@@ -435,7 +428,7 @@ func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceE
 		slug := createGovernedRequest(t, root, "L2", "health should promote repairable execution summary finding")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -468,16 +461,16 @@ func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceE
 	})
 }
 
-func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
+func TestHealthCommandDoctorIgnoresPersistedWavePlanDriftDuringS2(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should surface pivot for wave drift")
+		slug := createGovernedRequest(t, root, "L2", "doctor should ignore stale persisted wave cache")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		change.CurrentState = model.StateS2Execute
+		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
@@ -515,13 +508,12 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 			if action.Category != "wave_execution" || action.Slug != slug {
 				continue
 			}
-			if strings.Contains(strings.ToLower(action.Summary), "wave plan drift") {
+			if strings.Contains(strings.Join([]string{action.Summary, action.Command}, "\n"), "wave_plan_drift") ||
+				strings.Contains(strings.ToLower(action.Summary), "wave plan drift") {
 				found = true
-				assert.False(t, action.Repairable)
-				assert.Equal(t, "slipway run", action.Command)
 			}
 		}
-		assert.True(t, found, "expected doctor to recommend run for wave plan drift")
+		assert.False(t, found, "S2 doctor must not treat stale persisted wave-plan cache as drift")
 
 		foundFinding := false
 		for _, finding := range view.Findings {
@@ -530,11 +522,9 @@ func TestHealthCommandDoctorUsesPivotForWavePlanDrift(t *testing.T) {
 			}
 			if strings.Contains(strings.Join(model.ReasonSpecs(finding.Reasons), "\n"), "wave_plan_drift") {
 				foundFinding = true
-				assert.True(t, finding.ActiveChangeBlocking)
-				assert.Equal(t, "blocking_for_active_change", finding.ActiveChangeImpact)
 			}
 		}
-		assert.True(t, foundFinding, "expected wave drift finding to be marked blocking")
+		assert.False(t, foundFinding, "S2 health must derive from current tasks instead of persisted wave-plan cache")
 	})
 }
 
@@ -1683,7 +1673,7 @@ func TestGovernanceDoctorActionsSuppressNonBlockingTraceabilityWarning(t *testin
 }
 
 // TestHealthCommandDoctorTracksAssuranceBlockingState is the end-to-end
-// regression for #92 and issue #141's deferred assurance file: at S2_EXECUTE
+// regression for #92 and issue #141's deferred assurance file: at S2_IMPLEMENT
 // incomplete assurance coverage is an advisory WARN with no doctor action,
 // while at S3_REVIEW incomplete or missing assurance fails closed and surfaces a
 // doctor action. The bundle is authored so the assurance gap is the only
@@ -1703,7 +1693,7 @@ func TestHealthCommandDoctorTracksAssuranceBlockingState(t *testing.T) {
 	}{
 		{
 			name:           "S2 assurance pending is advisory",
-			state:          model.StateS2Execute,
+			state:          model.StateS2Implement,
 			writeAssurance: true,
 			assuranceBody: `# Assurance
 ## Requirement Coverage

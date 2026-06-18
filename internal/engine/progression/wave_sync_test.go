@@ -309,7 +309,7 @@ func TestLoadExecutionTasksFromEvidenceRejectsFreshnessInputMismatch(t *testing.
 
 	root := t.TempDir()
 	change := model.NewChange("freshness-mismatch")
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	change.GuardrailDomain = "external_api_contracts"
 	require.NoError(t, state.SaveChange(root, change))
@@ -403,7 +403,7 @@ func TestSyncGovernedWaveExecution_PersistsExecutionSummaryAndRuntimeSummary(t *
 	slug := "wave-sync"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -503,7 +503,7 @@ func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
 			slug := tt.slug
 			recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 			change := model.NewChange(slug)
-			change.CurrentState = model.StateS2Execute
+			change.CurrentState = model.StateS2Implement
 			change.PlanSubStep = model.PlanSubStepNone
 			require.NoError(t, state.SaveChange(root, change))
 
@@ -613,7 +613,7 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 			root := t.TempDir()
 			recordedAt := time.Date(2026, 6, 9, 2, 0, 0, 0, time.UTC)
 			change := model.NewChange(tt.slug)
-			change.CurrentState = model.StateS2Execute
+			change.CurrentState = model.StateS2Implement
 			change.PlanSubStep = model.PlanSubStepNone
 			require.NoError(t, state.SaveChange(root, change))
 			if tt.config != "" {
@@ -632,6 +632,8 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
   - target_files: ["cmd/run.go"]
   - task_kind: code
 `), 0o644))
+			tasksPlanHash, err := state.CurrentTasksPlanStructuralState(root, change)
+			require.NoError(t, err)
 			writeVerificationForTest(t, root, tt.slug, SkillWaveOrchestration, model.VerificationRecord{
 				Verdict:    model.VerificationVerdictPass,
 				Blockers:   []model.ReasonCode{},
@@ -668,7 +670,7 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 					"blockers":         []string{},
 					"evidence_ref":     "test:" + taskID,
 					"captured_at":      recordedAt.Add(-time.Minute).Format(time.RFC3339Nano),
-					"freshness_inputs": state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID),
+					"freshness_inputs": state.ExpectedExecutionTaskFreshnessInputs(change, 1, taskID, tasksPlanHash),
 				}
 				raw, err := json.Marshal(taskEvidence)
 				require.NoError(t, err)
@@ -698,7 +700,7 @@ func TestSyncGovernedWaveExecution_PersistsIncompleteExecutionBlockerInSummary(t
 	slug := "wave-sync-incomplete"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -785,7 +787,7 @@ func TestSyncGovernedWaveExecutionRejectsWaveEvidenceOlderThanTaskEvidence(t *te
 	slug := "wave-sync-stale-wave-record"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -838,7 +840,7 @@ func TestSyncGovernedWaveExecutionSurfacesParseIssuesAlongsideStaleEvidence(t *t
 	slug := "wave-sync-stale-and-invalid"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -902,7 +904,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummary(t *tes
 	slug := "wave-sync-stable"
 	capturedAt := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -965,7 +967,7 @@ func TestSyncGovernedWaveExecution_DoesNotRewriteMatchingExecutionSummaryWithMon
 	slug := "wave-sync-stable-monotonic"
 	capturedAt := time.Now().UTC()
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1066,7 +1068,7 @@ func TestSyncGovernedWaveExecution_ChecksOffPassingTasksInTasksChecklist(t *test
 
 	slug := "wave-sync-checklist"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 	record := model.VerificationRecord{
@@ -1158,7 +1160,7 @@ func TestSyncGovernedWaveExecution_SharedSessionProducesBlocker(t *testing.T) {
 
 	slug := "wave-sync-shared-session"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1240,7 +1242,7 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 	root := t.TempDir()
 	slug := "wave-sync-plan-drift"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1317,7 +1319,9 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "tasks_plan_changed_since_task_evidence", "task-a"))
-	assert.Equal(t, initialHash, summary.TasksPlanHash)
+	currentHash, err := wave.TaskPlanStructuralHash(updatedTasks)
+	require.NoError(t, err)
+	assert.Equal(t, currentHash, summary.TasksPlanHash)
 
 	planChangedAgainAt := planChangedAt.Add(time.Minute)
 	require.NoError(t, os.Chtimes(tasksPath, planChangedAgainAt, planChangedAgainAt))
@@ -1332,7 +1336,72 @@ func TestSyncGovernedWaveExecutionBlocksWhenTasksPlanChangedSinceEvidence(t *tes
 	summary, err = state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "tasks_plan_changed_since_task_evidence", "task-a"))
-	assert.Equal(t, initialHash, summary.TasksPlanHash)
+	assert.Equal(t, currentHash, summary.TasksPlanHash)
+}
+
+func TestSyncGovernedWaveExecutionBlocksNewTaskMissingEvidenceUnderPlanDrift(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug := "wave-sync-plan-drift-new-task"
+	change := model.NewChange(slug)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, slug, SkillWaveOrchestration, record)
+
+	initialTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Initial objective
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+`
+	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
+
+	taskEvidence := map[string]any{
+		"task_id":             "task-a",
+		"run_summary_version": 1,
+		"task_kind":           "code",
+		"verdict":             "pass",
+		"evidence_ref":        "test:task-a",
+		"captured_at":         record.Timestamp.Format(time.RFC3339Nano),
+		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
+	}
+	raw, err := json.Marshal(taskEvidence)
+	require.NoError(t, err)
+	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+
+	updatedTasks := `# Tasks
+
+- [ ] ` + "`task-a`" + ` Updated objective
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+- [ ] ` + "`task-b`" + ` Newly added objective
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`
+	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))
+
+	result, err := SyncGovernedWaveExecution(root, change)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "tasks_plan_changed_since_task_evidence", "task-a"),
+		"plan-drift blocker must be present, got %+v", result.Blockers)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "incomplete_execution_task", "task-b"),
+		"newly planned task without task evidence must block even under plan drift, got %+v", result.Blockers)
+
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "incomplete_execution_task", "task-b"),
+		"incomplete blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
 }
 
 func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *testing.T) {
@@ -1341,7 +1410,7 @@ func TestSyncGovernedWaveExecutionRematerializesScopeOnlyTaskPlanChanges(t *test
 	root := t.TempDir()
 	slug := "wave-sync-scope-only"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1433,7 +1502,7 @@ func TestSyncGovernedWaveExecutionClearsPlanDriftAfterFreshEvidence(t *testing.T
 	root := t.TempDir()
 	slug := "wave-sync-plan-drift-recovery"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1559,7 +1628,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 	root := t.TempDir()
 	slug := "wave-sync-first-summary-plan-drift"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -1622,7 +1691,7 @@ func TestSyncGovernedWaveExecutionBlocksFirstSummaryWhenTasksChangedAfterEvidenc
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "tasks_plan_changed_since_task_evidence", "task-a"))
 	currentHash, err := wave.TaskPlanStructuralHash(updatedTasks)
 	require.NoError(t, err)
-	assert.NotEqual(t, currentHash, summary.TasksPlanHash, "first sync must not bind stale evidence to the current tasks hash")
+	assert.Equal(t, currentHash, summary.TasksPlanHash, "summary binds the current task plan while blockers mark stale task evidence")
 }
 
 func scopeEscapePlan(taskID string, targets ...string) model.WavePlan {
@@ -1982,7 +2051,7 @@ func TestSyncGovernedWaveExecutionSurfacesScopeEscapeBlocker(t *testing.T) {
 	slug := "wave-sync-scope-escape"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -2045,7 +2114,7 @@ func TestSyncGovernedWaveExecutionSurfacesParallelOverlapBlocker(t *testing.T) {
 	slug := "wave-sync-parallel-overlap"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -2119,7 +2188,7 @@ func TestSyncGovernedWaveExecutionBlocksStartedParallelWaveMissingDispatchEviden
 	slug := "wave-sync-missing-dispatch"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -2194,7 +2263,7 @@ func TestSyncGovernedWaveExecutionBlocksParallelSubagentsWaveMissingExecutorHand
 	slug := "wave-sync-missing-executor-handle"
 	recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -2257,16 +2326,16 @@ func TestSyncGovernedWaveExecutionBlocksParallelSubagentsWaveMissingExecutorHand
 		"executor-handle blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
 }
 
-// TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift proves the
-// safety-net gate honors the same len(planDriftBlockers)==0 suppression guard
-// that incomplete-execution blockers use: when plan drift is present (which owns
-// its own remediation), the scope-escape blocker is not surfaced.
-func TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift(t *testing.T) {
+// TestSyncGovernedWaveExecutionSurfacesSafetyNetsUnderPlanDrift proves plan
+// drift does not mask the shared-worktree safety nets. Plan drift owns stale
+// plan remediation, but recorded execution evidence still needs scope and
+// overlap checks so S3 cannot hide a post-result collision.
+func TestSyncGovernedWaveExecutionSurfacesSafetyNetsUnderPlanDrift(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	slug := "wave-sync-safetynet-suppressed"
+	slug := "wave-sync-safetynet-under-drift"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
@@ -2283,34 +2352,44 @@ func TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift(t *testing.
 - [ ] ` + "`task-a`" + ` Initial objective
   - target_files: ["cmd/next.go"]
   - task_kind: code
+- [ ] ` + "`task-b`" + ` Peer objective
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
 `
 	tasksPath := writeTasksAndMaterializeWavePlan(t, root, change, initialTasks)
 
 	evidenceAt := record.Timestamp
-	// changed_files escapes target_files (would normally fire scope-escape)...
-	taskEvidence := map[string]any{
-		"task_id":             "task-a",
-		"run_summary_version": 1,
-		"task_kind":           "code",
-		"verdict":             "pass",
-		"changed_files":       []string{"cmd/run.go"},
-		"target_files":        []string{"cmd/next.go"},
-		"evidence_ref":        "test:task-a",
-		"captured_at":         evidenceAt.Format(time.RFC3339Nano),
-		"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, "task-a"),
+	writeTaskEvidence := func(taskID, targetFile string) {
+		t.Helper()
+		taskEvidence := map[string]any{
+			"task_id":             taskID,
+			"run_summary_version": 1,
+			"task_kind":           "code",
+			"verdict":             "pass",
+			"changed_files":       []string{"cmd/shared.go"},
+			"target_files":        []string{targetFile},
+			"evidence_ref":        "test:" + taskID,
+			"captured_at":         evidenceAt.Format(time.RFC3339Nano),
+			"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
+		}
+		raw, err := json.Marshal(taskEvidence)
+		require.NoError(t, err)
+		taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
+		require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
+		require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
 	}
-	raw, err := json.Marshal(taskEvidence)
-	require.NoError(t, err)
-	taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), "task-a.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
-	require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
+	writeTaskEvidence("task-a", "cmd/next.go")
+	writeTaskEvidence("task-b", "cmd/run.go")
 
 	// ...but the tasks plan changed after evidence capture, raising plan drift,
-	// which must suppress the safety-net blockers.
+	// which must not suppress the safety-net blockers.
 	updatedTasks := `# Tasks
 
 - [ ] ` + "`task-a`" + ` Updated objective
   - target_files: ["cmd/status.go"]
+  - task_kind: code
+- [ ] ` + "`task-b`" + ` Updated peer objective
+  - target_files: ["cmd/run.go"]
   - task_kind: code
 `
 	require.NoError(t, os.WriteFile(tasksPath, []byte(updatedTasks), 0o644))
@@ -2321,8 +2400,10 @@ func TestSyncGovernedWaveExecutionSuppressesSafetyNetsUnderPlanDrift(t *testing.
 	require.NoError(t, err)
 	assert.True(t, hasWaveReasonCode(result.Blockers, "tasks_plan_changed_since_task_evidence", "task-a"),
 		"plan-drift blocker must be present, got %+v", result.Blockers)
-	assert.False(t, hasReasonCodeWithCode(result.Blockers, "task_changed_file_scope_escape"),
-		"safety-net blockers must be suppressed under plan drift, got %+v", result.Blockers)
+	assert.True(t, hasReasonCodeWithCode(result.Blockers, "task_changed_file_scope_escape"),
+		"scope-escape blockers must survive plan drift, got %+v", result.Blockers)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
+		"parallel-overlap blockers must survive plan drift, got %+v", result.Blockers)
 }
 
 func hasWaveReasonCode(reasons []model.ReasonCode, code, detail string) bool {
@@ -2498,11 +2579,10 @@ func TestImplDistinctnessBlockers_SessionIDIrrelevant(t *testing.T) {
 	assert.Empty(t, TestImplDistinctnessBlockers(clearedPlan, true))
 }
 
-// TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating proves the #5/#6
-// gates are preset-sensitive end-to-end through SyncGovernedWaveExecution: the
-// same shared-target-files wave plan with no preceding distinct test fails closed
-// on strict and is omitted on light (advisory). The preset is resolved internally
-// from the change, so no signature change is needed.
+// TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating proves
+// test/impl distinctness is not a S2 wave-execution hard blocker. The pure
+// analyzer still exists for review, but wave synchronization should not stop
+// execution before S3 review convergence.
 func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T) {
 	t.Parallel()
 
@@ -2512,7 +2592,7 @@ func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T)
 		slug    string
 		wantHit bool
 	}{
-		{name: "strict fails closed", preset: model.WorkflowPresetStrict, slug: "wave-sync-distinct-strict", wantHit: true},
+		{name: "strict defers to review", preset: model.WorkflowPresetStrict, slug: "wave-sync-distinct-strict", wantHit: false},
 		{name: "light is advisory", preset: model.WorkflowPresetLight, slug: "wave-sync-distinct-light", wantHit: false},
 	}
 
@@ -2525,7 +2605,7 @@ func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T)
 			slug := tt.slug
 			recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 			change := model.NewChange(slug)
-			change.CurrentState = model.StateS2Execute
+			change.CurrentState = model.StateS2Implement
 			change.PlanSubStep = model.PlanSubStepNone
 			change.WorkflowPreset = tt.preset
 			require.NoError(t, state.SaveChange(root, change))
@@ -2577,7 +2657,7 @@ func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T)
 			result, err := SyncGovernedWaveExecution(root, change)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantHit, hasWaveReasonCode(result.Blockers, "wave_test_impl_not_distinct", "t-code"),
-				"distinctness blocker presence must follow the preset, got %+v", result.Blockers)
+				"distinctness must not hard-block wave sync, got %+v", result.Blockers)
 		})
 	}
 }

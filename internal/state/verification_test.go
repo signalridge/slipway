@@ -220,12 +220,17 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 			}},
 		}},
 	}))
+	require.NoError(t, os.WriteFile(filepath.Join(VerificationDir(root, slug), "suite-result.yaml"), []byte(`version: 1
+run_summary_version: 1
+full_suite_digest: "sha256:full-suite"
+`), 0o644))
 
 	result, err := ListVerifications(root, slug)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Contains(t, result, "plan-audit")
 	assert.NotContains(t, result, "wave-plan")
+	assert.NotContains(t, result, "suite-result")
 }
 
 func TestListVerificationsRejectsInvalidFiles(t *testing.T) {
@@ -279,7 +284,7 @@ func TestVerificationFilePathForReadPrefersHiddenSiblingWorktreeBundle(t *testin
 	root, worktreeRoot := setupRepoWithWorktree(t)
 	slug := "hidden-worktree-verification-path"
 	change := model.NewChange(slug)
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, PersistScopeWorktreeMetadata(&change, worktreeRoot, "feature"))
 	require.NoError(t, SaveChange(root, change))
@@ -348,7 +353,7 @@ func TestLoadVerificationRejectsHiddenSiblingWorktreeFallback(t *testing.T) {
 
 	change := model.NewChange(slug)
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
@@ -372,7 +377,7 @@ func TestListVerificationsRejectsHiddenSiblingWorktreeFallback(t *testing.T) {
 
 	change := model.NewChange(slug)
 	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Execute
+	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, SaveChange(root, change))
 	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
