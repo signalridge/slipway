@@ -24,19 +24,38 @@
   <a href="docs/installation.md"><img alt="Go" src="https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white"></a>
 </p>
 
-[Documentation](https://signalridge.github.io/slipway/) | [Installation](docs/installation.md) | [Release Notes](CHANGELOG.md)
+[Documentation](https://signalridge.github.io/slipway/) | [Quick Start](#quick-start) | [Installation](docs/installation.md) | [Release Notes](CHANGELOG.md)
 
 </div>
 
 # Slipway
 
-**Governance that keeps your AI coding agent honest: "done" means proven, not promised. You drive it in plain language and never memorize a slash command.**
+**Governance that keeps your AI coding agent honest: "done" means proven, not promised. You drive it in plain language; Slipway turns that work into a local, reviewable lifecycle with hard gates.**
 
-AI coding agents are fast — and they cut corners. They skip the tests, drift from the plan, and report work "done" that was never verified. Slipway makes that hard to fake. It's a local, Git-native governance layer that turns each change into a durable, inspectable record and keeps lifecycle authority in your repository, not a hosted service. **Your AI tool does the work; Slipway decides when it's actually done** — across **Claude Code, Codex, Cursor, Gemini, and OpenCode**.
+## What is Slipway?
 
-- **The model can't fake "done."** Completion is gated on fresh review *and* verification evidence: checks compiled into the CLI, not advisory prompts the agent can rationalize past. If the evidence goes stale or the work drifts from the plan, Slipway reopens the change instead of waving it through.
-- **No commands to learn.** After a one-time `slipway init`, a generated entry skill routes your ordinary plain-language requests through the governed lifecycle; on tools that support session hooks, live governed state is also surfaced every session, unprompted. You describe the change, and the agent drives the process.
-- **Lighter on tokens.** The governance logic runs as compiled Go in the CLI, not as phase prompts your model re-reads and re-reasons every turn. One thin entry skill stays resident; stage skills load only when the CLI asks for them.
+Slipway is a local, Git-native governance CLI for AI-assisted software delivery.
+It wraps coding-agent work in a durable change record, checks that the plan,
+implementation, review, and verification still match, and refuses to archive a
+change until the evidence is fresh. Your AI tool writes the code; Slipway decides
+whether the work is actually done.
+
+It is built for teams that like the structured phase loop of
+[GSD Core](https://github.com/open-gsd/gsd-core) and the repo-persisted specs,
+tasks, and memory model of [Trellis](https://github.com/mindfold-ai/Trellis),
+but want the final authority to live in a compiled CLI rather than in prompts or
+Markdown the model can quietly skip.
+
+## Why Slipway?
+
+| Capability | What it changes |
+| --- | --- |
+| **Fail-closed done gate** | `slipway done` rechecks fresh review, verification, scope, and guardrail evidence before archive. Missing or stale proof blocks the change. |
+| **Plain-language agent entry** | After `slipway init`, generated skills route normal requests through the lifecycle across Claude Code, Codex, Cursor, Gemini, and OpenCode. |
+| **Repo-owned memory and audit** | Plans, decisions, evidence, lifecycle events, and archived bundles stay in the repository, so a later human or AI session can inspect what happened. |
+| **Fresh-context review discipline** | Selected S3 peer reviews, goal verification, and final closeout are recorded separately, and the engine checks that the independence chain still holds. |
+| **Parallel work with after-the-fact safety** | Implementation waves can run in file-disjoint parallel work, then Slipway audits the actual changed files for overlap, scope drift, and stale evidence. |
+| **Compiled governance, lower prompt load** | The rules run in Go and emit JSON handoffs. The model sees compact instructions instead of re-reading a full governance playbook every turn. |
 
 ## See it in action
 
@@ -85,18 +104,19 @@ Instead of a single end-of-run checkbox, you get an auditable trail of stage-own
 
 ## How Slipway compares
 
-Spec, workflow, and skill toolkits for AI coding are all good at *structuring* work. The axis that sets Slipway apart is **where the rules live and whether the model can ignore them**: almost all of them encode the process as prompts or Markdown the agent is *asked* to follow, so the gates stay advisory. Slipway compiles the process into a deterministic CLI backed by repo evidence, so the gates fail closed.
+Spec, workflow, and skill toolkits for AI coding are all good at *structuring* work. GSD Core is especially strong at fresh-context phase execution and workstream orchestration; Trellis is especially clear about repo-persisted specs, tasks, and project memory. Slipway's narrower bet is **where the rules live and whether the model can ignore them**: most adjacent systems encode the process as prompts, skills, or Markdown the agent is *asked* to follow, while Slipway compiles the process into a deterministic CLI backed by repo evidence, so the gates fail closed.
 
 | Tool | How you drive it | Enforcement of "done" |
 | --- | --- | --- |
 | [Spec Kit](https://github.com/github/spec-kit) (GitHub) | `/speckit.*` slash command per phase | Advisory: an incomplete checklist passes on a "yes" |
 | [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `/opsx:*` slash commands | Advisory by design: "fluid, not rigid," and verify is optional |
 | [spec-kitty](https://github.com/Priivacy-ai/spec-kitty) | `/spec-kitty.*` plus a `spec-kitty next` autopilot loop | Partial: `merge` gates on status, but review is an advisory "nudge" |
-| [gsd](https://github.com/gsd-build/get-shit-done) | 80+ `/gsd-*` slash commands | Advisory: hooks must not block, and `--skip-*` / `--auto` bypass |
+| [GSD Core](https://github.com/open-gsd/gsd-core) | Installer-generated runtime surfaces plus `/gsd-*` phase commands | Strong phase loop and fresh-context orchestration; final enforcement still rests on agent-followed workflow artifacts |
+| [Trellis](https://github.com/mindfold-ai/Trellis) | `trellis init` plus generated specs, tasks, and platform surfaces | Strong repo-persisted specs/tasks/memory and broad platform reach; checks are orchestrated by agents, not a compiled lifecycle authority |
 | [superpowers](https://github.com/obra/superpowers) | Skills auto-fire from a session bootstrap (no commands) | Self-discipline: an "Iron Law" the model is *asked* to obey |
 | **Slipway** | **Plain language; an entry skill auto-fires (no commands)** | **Compiled, fail-closed**: gates live in the CLI and repo evidence |
 
-The pattern is consistent: those tools enforce process by asking the model to comply, while Slipway enforces it in code the model runs but can't rewrite. (superpowers is the closest on *experience*, since its skills also auto-trigger without slash commands, but its rules live in the model's context, not in a binary.) The capability set overlaps — Slipway also runs dependency-ordered waves, dedicated worktrees, and TDD governance — so the divide is not feature count but enforcement: across the [axes where Slipway goes deep](#where-slipway-goes-deep), the engine re-derives evidence instead of trusting it. Where the peers genuinely lead is **reach and ecosystem**: far more supported agents, more mileage, and models Slipway lacks, like OpenSpec's delta-specs or Spec Kit's large integration catalog.
+The pattern is consistent: those tools enforce process by asking the model to comply, while Slipway enforces it in code the model runs but can't rewrite. GSD Core and Trellis both informed the shape of Slipway's public README because they explain workflow and onboarding clearly; Slipway differs at the enforcement boundary. The capability set overlaps — Slipway also runs dependency-ordered waves, dedicated worktrees, and TDD governance — so the divide is not feature count but enforcement: across the [axes where Slipway goes deep](#where-slipway-goes-deep), the engine re-derives evidence instead of trusting it. Where the peers genuinely lead is **reach and ecosystem**: far more supported agents, more mileage, and models Slipway lacks, like OpenSpec's delta-specs, GSD Core's broad runtime matrix, Trellis' multi-platform harness, or Spec Kit's large integration catalog.
 
 ### What Slipway deliberately trades off
 
@@ -104,7 +124,7 @@ Several of the differences above are intentional, not gaps. Slipway optimizes fo
 
 | Dimension | Most spec / skill toolkits | Slipway's deliberate choice | What the trade-off buys |
 | --- | --- | --- | --- |
-| Agent reach | 15 to 30+ agents via generated prompt files | 5 first-class adapters (growing) | A tested contract per tool, not a lowest-common-denominator prompt |
+| Agent reach | Broad generated surfaces across many agents, as in GSD Core and Trellis | 5 first-class adapters (growing) | A tested contract per tool, not a lowest-common-denominator prompt |
 | Install & runtime | `npx` / `uvx`, no binary | A single versioned Go binary | One deterministic engine; no per-session prompt or version drift |
 | State integrity | Repo or spec files the model maintains | Engine-owned state with freshness digests | Stale or hand-edited evidence is detected, not trusted |
 | Flexibility | Edit any artifact anytime ("fluid") | A staged lifecycle that reopens on drift | Plan and code can't silently diverge, at the cost of less freeform editing |

@@ -260,38 +260,47 @@ func snapshotTreeForTransaction(path string) (fileSnapshot, error) {
 		isDir:   true,
 		perm:    info.Mode().Perm(),
 	}
-	err = filepath.WalkDir(path, func(entryPath string, d fs.DirEntry, walkErr error) error {
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", path, err)
+	}
+	defer func() {
+		_ = root.Close()
+	}()
+
+	var entryPaths []string
+	err = fs.WalkDir(root.FS(), ".", func(entryPath string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entryPath == path {
+		if entryPath == "." {
 			return nil
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(path, entryPath)
-		if err != nil {
-			return err
-		}
-		item := fileTreeSnapshotEntry{
-			rel:   rel,
-			isDir: info.IsDir(),
-			perm:  info.Mode().Perm(),
-		}
-		if !info.IsDir() {
-			data, err := os.ReadFile(entryPath) // #nosec G304 -- transaction paths are supplied by governed artifact/state code or tests.
-			if err != nil {
-				return err
-			}
-			item.data = data
-		}
-		snapshot.entries = append(snapshot.entries, item)
+		entryPaths = append(entryPaths, entryPath)
 		return nil
 	})
 	if err != nil {
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", path, err)
+	}
+
+	for _, entryPath := range entryPaths {
+		info, err := root.Stat(entryPath)
+		if err != nil {
+			return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", filepath.Join(path, entryPath), err)
+		}
+		item := fileTreeSnapshotEntry{
+			rel:   filepath.FromSlash(entryPath),
+			isDir: info.IsDir(),
+			perm:  info.Mode().Perm(),
+		}
+		if !info.IsDir() {
+			data, err := root.ReadFile(entryPath)
+			if err != nil {
+				return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", filepath.Join(path, entryPath), err)
+			}
+			item.data = data
+		}
+		snapshot.entries = append(snapshot.entries, item)
 	}
 	return snapshot, nil
 }
