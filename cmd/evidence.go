@@ -815,6 +815,21 @@ func currentS3ReviewAlignmentActive(root string, change model.Change) (bool, err
 	return true, nil
 }
 
+func selectedReviewContextOriginRefreshRequired(root string, change model.Change, skillName string) (bool, error) {
+	record, err := state.LoadVerification(root, change.Slug, skillName)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !record.IsPassing() {
+		return false, nil
+	}
+	_, ok := model.ReviewContextOriginHandleFromVerification(record)
+	return !ok, nil
+}
+
 func evidenceTaskWrongStateRemediation(root string, change model.Change) string {
 	switch change.CurrentState {
 	case model.StateS3Review:
@@ -1072,6 +1087,13 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 		}
 		if stringInSlice(selectedReviewSkills, def.Name) {
 			if _, ok := passing[def.Name]; ok {
+				refreshRequired, err := selectedReviewContextOriginRefreshRequired(root, change, def.Name)
+				if err != nil {
+					return err
+				}
+				if refreshRequired {
+					return nil
+				}
 				repairActive, err := currentS3ReviewAlignmentActive(root, change)
 				if err != nil {
 					return err

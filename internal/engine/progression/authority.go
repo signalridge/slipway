@@ -395,6 +395,23 @@ const closeoutGoalVerificationReuseReference = "closeout:goal_verification_reuse
 const closeoutGoalVerificationReuseRunVersionPrefix = "closeout:goal_verification_reuse_run_version="
 const closeoutRecoveryRemediation = "rerun the selected reviewer set, then rerun final-closeout"
 
+type proofReuseEdge struct {
+	sourceSkill                         string
+	sourceLabel                         string
+	consumerSkill                       string
+	consumerLabel                       string
+	reuseRunVersion                     int
+	requireExecutionSummaryFreshness    bool
+	requireSourceAfterExecutionEvidence bool
+	digestChecks                        []proofReuseDigestCheck
+	blocker                             func(string) model.ReasonCode
+}
+
+type proofReuseDigestCheck struct {
+	skillName string
+	label     string
+}
+
 func CloseoutRecoveryRemediation() string {
 	return closeoutRecoveryRemediation
 }
@@ -458,59 +475,115 @@ func closeoutGoalVerificationReuseBlockers(
 		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("reuse run_version must be >= 1")}
 	}
 
-	goalRecord, ok := passingSkills[SkillGoalVerification]
-	if !ok || !goalRecord.IsPassing() {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"goal-verification must be passing before final-closeout can reuse it",
+	blockers := proofReuseEdgeBlockers(root, change, passingSkills, summary, proofReuseEdge{
+		sourceSkill:                         SkillGoalVerification,
+		sourceLabel:                         "goal-verification",
+		consumerSkill:                       SkillFinalCloseout,
+		consumerLabel:                       "final-closeout",
+		reuseRunVersion:                     reuseRunVersion,
+		requireExecutionSummaryFreshness:    true,
+		requireSourceAfterExecutionEvidence: true,
+		digestChecks: []proofReuseDigestCheck{
+			{skillName: SkillGoalVerification, label: "goal-verification"},
+			{skillName: SkillFinalCloseout, label: "final-closeout"},
+		},
+		blocker: closeoutGoalVerificationReuseInvalidBlocker,
+	})
+	if len(blockers) > 0 {
+		return blockers
+	}
+	return nil
+}
+
+func proofReuseEdgeBlockers(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	summary *model.ExecutionSummary,
+	edge proofReuseEdge,
+) []model.ReasonCode {
+	blocker := edge.blocker
+	if blocker == nil {
+		blocker = func(detail string) model.ReasonCode {
+			return model.NewReasonCode("proof_reuse_invalid", strings.TrimSpace(detail))
+		}
+	}
+	if edge.reuseRunVersion < 1 {
+		return []model.ReasonCode{blocker("reuse run_version must be >= 1")}
+	}
+
+	sourceRecord, ok := passingSkills[edge.sourceSkill]
+	if !ok || !sourceRecord.IsPassing() {
+		return []model.ReasonCode{blocker(
+			proofReuseLabel(edge.sourceLabel, edge.sourceSkill) + " must be passing before " +
+				proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " can reuse it",
 		)}
 	}
-	if goalRecord.RunVersion != reuseRunVersion {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			fmtReuseRunMismatch("goal-verification", reuseRunVersion, goalRecord.RunVersion),
+	consumerRecord, ok := passingSkills[edge.consumerSkill]
+	if !ok || !consumerRecord.IsPassing() {
+		return []model.ReasonCode{blocker(
+			proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " must be passing before it can reuse " +
+				proofReuseLabel(edge.sourceLabel, edge.sourceSkill),
 		)}
 	}
-	if closeoutRecord.RunVersion != reuseRunVersion {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			fmtReuseRunMismatch("final-closeout", reuseRunVersion, closeoutRecord.RunVersion),
+	if sourceRecord.RunVersion != edge.reuseRunVersion {
+		return []model.ReasonCode{blocker(
+			fmtReuseRunMismatch(proofReuseLabel(edge.sourceLabel, edge.sourceSkill), edge.reuseRunVersion, sourceRecord.RunVersion),
+		)}
+	}
+	if consumerRecord.RunVersion != edge.reuseRunVersion {
+		return []model.ReasonCode{blocker(
+			fmtReuseRunMismatch(proofReuseLabel(edge.consumerLabel, edge.consumerSkill), edge.reuseRunVersion, consumerRecord.RunVersion),
 		)}
 	}
 	if !state.ExecutionSummaryReady(summary) {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"execution-summary.yaml must be ready before final-closeout can reuse goal-verification",
+		return []model.ReasonCode{blocker(
+			"execution-summary.yaml must be ready before " +
+				proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " can reuse " +
+				proofReuseLabel(edge.sourceLabel, edge.sourceSkill),
 		)}
 	}
-	if summary.RunSummaryVersion != reuseRunVersion {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			fmtReuseRunMismatch("execution-summary", reuseRunVersion, summary.RunSummaryVersion),
+	if summary.RunSummaryVersion != edge.reuseRunVersion {
+		return []model.ReasonCode{blocker(
+			fmtReuseRunMismatch("execution-summary", edge.reuseRunVersion, summary.RunSummaryVersion),
 		)}
 	}
-	latestExecutionEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
-	if !latestExecutionEvidenceAt.IsZero() && goalRecord.Timestamp.UTC().Before(latestExecutionEvidenceAt) {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"goal-verification timestamp must be at or after latest execution evidence",
-		)}
+	if edge.requireSourceAfterExecutionEvidence {
+		latestExecutionEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
+		if !latestExecutionEvidenceAt.IsZero() && sourceRecord.Timestamp.UTC().Before(latestExecutionEvidenceAt) {
+			return []model.ReasonCode{blocker(
+				proofReuseLabel(edge.sourceLabel, edge.sourceSkill) +
+					" timestamp must be at or after latest execution evidence",
+			)}
+		}
 	}
-	// Selected peer/final-closeout ordering has moved out of this opt-in reuse
-	// gate into the always-on closeoutChainOrderBlockers invariant, which carries
-	// its own distinct reason code.
-	diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
-	freshness := state.ProjectExecutionFreshnessForState(model.StateS3Review, diagnostics)
-	if freshness != ctxpack.EvidenceFreshnessFresh {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"execution-summary freshness must be fresh, got " + string(freshness),
-		)}
+	if edge.requireExecutionSummaryFreshness {
+		diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
+		freshness := state.ProjectExecutionFreshnessForState(model.StateS3Review, diagnostics)
+		if freshness != ctxpack.EvidenceFreshnessFresh {
+			return []model.ReasonCode{blocker(
+				"execution-summary freshness must be fresh, got " + string(freshness),
+			)}
+		}
 	}
-	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary); err != nil {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification digest cannot be evaluated: " + err.Error())}
-	} else if len(blockers) > 0 {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("goal-verification inputs changed: " + strings.Join(blockers, ","))}
-	}
-	if blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillFinalCloseout, summary); err != nil {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout digest cannot be evaluated: " + err.Error())}
-	} else if len(blockers) > 0 {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("final-closeout inputs changed: " + strings.Join(blockers, ","))}
+	for _, check := range edge.digestChecks {
+		label := proofReuseLabel(check.label, check.skillName)
+		blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, check.skillName, summary)
+		if err != nil {
+			return []model.ReasonCode{blocker(label + " digest cannot be evaluated: " + err.Error())}
+		}
+		if len(blockers) > 0 {
+			return []model.ReasonCode{blocker(label + " inputs changed: " + strings.Join(blockers, ","))}
+		}
 	}
 	return nil
+}
+
+func proofReuseLabel(label, fallback string) string {
+	if trimmed := strings.TrimSpace(label); trimmed != "" {
+		return trimmed
+	}
+	return strings.TrimSpace(fallback)
 }
 
 // closeoutReviewerIndependenceReference is the engine-consumed presence facet of
@@ -938,7 +1011,7 @@ func crossStageContextNotDistinctBlocker(detail string) model.ReasonCode {
 	)
 }
 
-func closeoutGoalVerificationReuseContentPaths(change model.Change, summary *model.ExecutionSummary) []string {
+func proofReuseContentPaths(change model.Change, summary *model.ExecutionSummary) []string {
 	if summary == nil {
 		return nil
 	}
@@ -949,7 +1022,7 @@ func closeoutGoalVerificationReuseContentPaths(change model.Change, summary *mod
 			if trimmed == "" {
 				continue
 			}
-			if closeoutGoalVerificationReuseSkipsContentPath(change, trimmed) {
+			if proofReuseSkipsContentPath(change, trimmed) {
 				continue
 			}
 			paths = append(paths, trimmed)
@@ -962,7 +1035,7 @@ func closeoutGoalVerificationReuseContentPaths(change model.Change, summary *mod
 	return stringutil.UniqueSorted(paths)
 }
 
-func closeoutGoalVerificationReuseSkipsContentPath(change model.Change, rel string) bool {
+func proofReuseSkipsContentPath(change model.Change, rel string) bool {
 	trimmed := strings.Trim(strings.TrimSpace(filepath.ToSlash(rel)), "/")
 	bundleDir := "artifacts/changes/" + strings.TrimSpace(change.Slug)
 	eventsDir := bundleDir + "/events"
@@ -973,7 +1046,7 @@ func closeoutGoalVerificationReuseSkipsContentPath(change model.Change, rel stri
 		strings.HasPrefix(trimmed, verificationDir+"/")
 }
 
-func closeoutGoalVerificationReuseWorkspacePaths(workspaceRoot, rel string) ([]string, bool, error) {
+func proofReuseWorkspacePaths(workspaceRoot, rel string) ([]string, bool, error) {
 	trimmed := strings.TrimSpace(filepath.ToSlash(rel))
 	if trimmed == "" {
 		return nil, false, nil

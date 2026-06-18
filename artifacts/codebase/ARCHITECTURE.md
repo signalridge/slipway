@@ -1,5 +1,47 @@
 # Architecture
 
+Re-authored for change `generalize-digest-proof-reuse` (#258).
+
+## Current Change Focus: Digest-Keyed Proof Reuse
+
+The active change touches the S3/S4 verification authority path, not the
+subagent-dispatch architecture documented below for #240. The primary seam is
+`internal/engine/progression/authority.go`: `buildShipAuthorityFromReadiness`
+loads fresh goal-verification and final-closeout records, then appends
+`closeoutGoalVerificationReuseBlockers` into both `VerifySkillBlockers` and the
+unresolved ship-gate reason set so a reuse failure reaches `G_ship` as
+`closeout_goal_verification_reuse_invalid`.
+
+The current reuse implementation is closeout-specific. It is activated only when
+final-closeout records `closeout:goal_verification_reuse=pass`, then validates
+the reuse run version against goal-verification, final-closeout, and
+execution-summary, verifies execution-summary freshness, and rechecks both
+goal-verification and final-closeout digest inputs. The helpers that collect
+changed and target file content now use proof-reuse-neutral names:
+`proofReuseContentPaths`, `proofReuseWorkspacePaths`, and
+`proofReuseSkipsContentPath`. The reuse run-version reference parser remains
+closeout-token-specific as `closeoutGoalVerificationReuseRunVersion`.
+
+The proof substrate already exists outside the closeout-specific gate:
+`internal/model/evidence_digests.go` defines `SuiteResult` with
+`run_summary_version`, `full_suite_digest`, and optional `sast_digests`, while
+`SharedReviewerInputDigests` exposes those values as digest inputs. In
+`internal/engine/progression/evidence_digests.go`, goal-verification already
+uses suite-result, planning artifacts, task-plan scope, changed/target file set,
+and changed/target file content as freshness inputs. This makes the smallest
+architecture change an extraction/generalization of the existing validation
+shape, not a second proof system.
+
+### Boundaries
+
+- Keep vocabulary and low-level proof structs in `internal/model` only when they
+  are external/data contracts.
+- Keep lifecycle and ship-gate policy in `internal/engine/progression`.
+- Keep host behavior in `internal/tmpl/templates/skills/*`.
+- Do not copy GSD-core's broader orchestration architecture; it is useful
+  background for context isolation and bounded handoff, but #258 is about
+  reusing already-digest-fresh proof inside Slipway's existing lifecycle gates.
+
 Re-authored for change
 `feat-governance-host-native-subagent-enforced-cross-stage-in` (#240).
 
@@ -171,13 +213,15 @@ chain.
 Each governed stage's host-native subagent runs on the shared worktree and
 returns claims only; the host inspects the written files and records a verdict via
 `slipway evidence skill`, stamping a self-describing handle token onto
-`References`: `context_origin:stage=review=<handle>` for every selected reviewer,
-`context_origin:stage=<stage>=<handle>` for goal/closeout,
+`References`: `context_origin:stage=review=<handle>` for every selected reviewer
+including goal-verification,
 `plan_origin:<handle>` + `audit_origin:<handle>` for the plan-audit author/auditor
 pair, and the reused `executor_agent:` grammar for the S2 wave executor set.
-`cmd/evidence.go` stamps engine-owned `Timestamp`/`RunVersion` and writes
-`verification/<skill>.yaml`. `internal/model/context_attestation.go` parses those
-tokens fail-closed and exposes `CrossStageContextCollisions`. The plan gate
+`cmd/evidence.go` stamps engine-owned `Timestamp`/`RunVersion`, writes
+`verification/<skill>.yaml`, and allows a selected reviewer to restamp when its
+passing evidence has an invalid or retired review context-origin token.
+`internal/model/context_attestation.go` parses those tokens fail-closed and
+exposes `CrossStageContextCollisions`. The plan gate
 (`advance_governed.go` `EvaluatePlanGate`) consumes the local
 `plan_origin`/`audit_origin` pair; the review and ship gates (`authority.go`
 `evaluateReviewAuthorityWithPolicy` / `buildShipAuthorityFromReadiness`) build the

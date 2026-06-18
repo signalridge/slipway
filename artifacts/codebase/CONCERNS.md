@@ -1,5 +1,29 @@
 # Concerns
 
+Re-authored for change `generalize-digest-proof-reuse` (#258).
+
+## Current Change Risks: Digest-Keyed Proof Reuse
+
+- False skip risk: proof reuse must never become an unconditional shortcut. A
+  stale run version, missing suite-result, changed task/source content, or
+  missing guardrail SAST digest must force a rerun or block ship.
+- Scope creep risk: GSD-core has useful orchestration and context-isolation
+  ideas, but #258 should not copy its multi-agent workflow or expand into
+  subagent dispatch. The local root cause is redundant proof execution inside
+  existing Slipway S4 evidence gates.
+- Taxonomy risk: the current blocker is
+  `closeout_goal_verification_reuse_invalid`. A generalized validator can reuse
+  that code for the existing closeout path, but any new public blocker needs the
+  existing reason-code and recovery contract updated, not an ad hoc string.
+- Guardrail risk: SAST proof is more expensive but higher-risk than the normal
+  suite. Guardrail-domain reuse must require the `SuiteResult.SASTDigests` entry
+  for the exact `<domain>.safety_baseline` that goal-verification used.
+- First-slice risk: execution-summary -> goal-verification reuse is attractive,
+  but it is harder than closeout reuse because goal-verification is the current
+  suite-result producer. The first slice should preserve the producer role and
+  only introduce upstream reuse when the no-source/content-delta predicate is
+  explicit and test-proven.
+
 Re-authored for change
 `feat-governance-host-native-subagent-enforced-cross-stage-in` (#240).
 

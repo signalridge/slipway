@@ -286,6 +286,8 @@ func TestGoalVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assertSelectedS3SuiteResultKeystone(t, content)
 	assert.Contains(t, content, "full_suite_digest")
+	assert.Contains(t, content, "Do not treat S2 execution proof, execution-summary, or an earlier full-suite")
+	assert.Contains(t, content, "only if you still produce or refresh the")
 	assert.NotContains(t, content, "context_origin:stage=goal=<handle>")
 	assert.NotContains(t, content, "review_origin:skill=")
 }
@@ -1190,13 +1192,30 @@ func TestFinalCloseoutSkillDocumentsGoalVerificationReuseContract(t *testing.T) 
 		"Trigger": "/slipway:final-closeout",
 	})
 	require.NoError(t, err)
+	flat := strings.Join(strings.Fields(content), " ")
 
 	assert.Contains(t, content, "## Goal-Verification Reuse Branch")
 	assert.Contains(t, content, "closeout:goal_verification_reuse=pass")
 	assert.Contains(t, content, "closeout:goal_verification_reuse_run_version=<current run_version>")
 	assert.Contains(t, content, "slipway validate --json")
 	assert.Contains(t, content, "captured at or after the latest execution")
-	assert.Contains(t, content, "current `run_version`, freshness inputs, and content state still match")
+	assert.Contains(t, content, "Prefer this branch before rerunning duplicate full-suite or SAST proof")
+	assert.Contains(t, content, "engine-visible state")
+	assert.Contains(t, flat, "If the engine returns")
+	assert.Contains(t, content, "closeout_goal_verification_reuse_invalid")
+	assert.Contains(t, content, "rerun the normal closeout proof instead")
+	assert.Contains(t, flat, "Do not override the engine's reuse")
+	assert.Contains(t, content, "manual freshness judgment")
+
+	reuseBranch := content
+	if start := strings.Index(content, "## Goal-Verification Reuse Branch"); start >= 0 {
+		reuseBranch = content[start:]
+	}
+	if end := strings.Index(reuseBranch, "## Assurance Artifact Verification"); end >= 0 {
+		reuseBranch = reuseBranch[:end]
+	}
+	assert.NotContains(t, reuseBranch, "`slipway run`")
+	assert.Contains(t, reuseBranch, "Present and Advance section below after explicit confirmation")
 }
 
 func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {

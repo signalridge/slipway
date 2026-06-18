@@ -97,6 +97,11 @@ func writeSuiteResultForCommandTest(t *testing.T, root, slug string, runVersion 
 		FullSuiteDigest:   "sha256:test-full-suite",
 		CapturedAt:        time.Now().UTC(),
 	}
+	if change.GuardrailDomain != "" {
+		result.SASTDigests = map[string]string{
+			change.GuardrailDomain + ".safety_baseline": "sha256:test-sast-baseline",
+		}
+	}
 	result.Normalize()
 	raw, err := yaml.Marshal(result)
 	require.NoError(t, err)

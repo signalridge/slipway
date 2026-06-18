@@ -222,6 +222,58 @@ func TestEvidenceSkillRecordsSelectedReviewPeerWithoutSpecPredecessor(t *testing
 	})
 }
 
+func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, "L2", "evidence skill restamps invalid review origin")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writeSkillVerification(t, root, slug, progression.SkillGoalVerification, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+			References: []string{
+				"verification:pass",
+				model.ContextOriginReferencePrefix + model.StageContextGoal + "=retired-goal-context",
+			},
+		})
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillGoalVerification)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillGoalVerification,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "fresh:command_ref=verification/full-suite-transcript.txt",
+			"--reference", "scope_contract:pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-goal-review-context",
+			"--notes", "Goal verification rerun in fresh review context.",
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, progression.SkillGoalVerification, view.SkillName)
+		assert.True(t, view.Recorded)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillGoalVerification)
+		require.NoError(t, err)
+		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
+		require.True(t, ok)
+		assert.Equal(t, "fresh-goal-review-context", handle.Handle)
+		assert.NotContains(t, rec.References, model.ContextOriginReferencePrefix+model.StageContextGoal+"=retired-goal-context")
+	})
+}
+
 func TestEvidenceSkillRejectsUnselectedSecurityReview(t *testing.T) {
 	t.Parallel()
 
