@@ -227,6 +227,143 @@ func TestStaleEvidenceRepairIgnoresIntakeOpenQuestionResolution(t *testing.T) {
 	assert.Contains(t, model.ReasonSpecs(target.Blockers), "required_skill_stale:intake-clarification:intent.md")
 }
 
+func TestStaleEvidenceRepairIgnoresHistoricalIntakeAfterFreshPlanAudit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+	change := model.NewChange("historical-intake-after-plan-audit")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	change.NeedsDiscovery = true
+	change.ComplexityLevel = "complex"
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	intentPath := filepath.Join(bundleDir, "intent.md")
+
+	intakeRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  time.Date(2026, 6, 16, 1, 0, 0, 0, time.UTC),
+		RunVersion: 0,
+		References: []string{"intake:pass"},
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, intakeRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, intakeRecord, nil))
+
+	require.NoError(t, os.WriteFile(
+		intentPath,
+		[]byte("# Intent\nship digest freshness after plan clarification\n"),
+		0o644,
+	))
+
+	planRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  time.Date(2026, 6, 16, 2, 0, 0, 0, time.UTC),
+		RunVersion: 0,
+		References: []string{"plan-audit:pass", "plan_origin:ctx-author", "audit_origin:ctx-auditor"},
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, planRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, planRecord, nil))
+
+	target, ok, err := StaleEvidenceRepairAvailable(root, change, nil)
+	require.NoError(t, err)
+	assert.Falsef(t, ok, "fresh plan-audit should supersede historical intake drift, got target=%+v", target)
+}
+
+func TestStaleEvidenceRepairRequiresDigestFreshPlanAuditToSupersedeHistoricalIntake(t *testing.T) {
+	cases := []struct {
+		name           string
+		setupPlanAudit func(t *testing.T, root string, change model.Change, bundleDir string, planRecord model.VerificationRecord)
+	}{
+		{
+			name: "absent_plan_audit",
+		},
+		{
+			name: "non_passing_plan_audit",
+			setupPlanAudit: func(t *testing.T, root string, change model.Change, _ string, planRecord model.VerificationRecord) {
+				t.Helper()
+				planRecord.Verdict = model.VerificationVerdictFail
+				writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, planRecord)
+			},
+		},
+		{
+			name: "passing_plan_audit_without_stored_digest",
+			setupPlanAudit: func(t *testing.T, root string, change model.Change, _ string, planRecord model.VerificationRecord) {
+				t.Helper()
+				writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, planRecord)
+			},
+		},
+		{
+			name: "passing_plan_audit_with_stale_stored_digest",
+			setupPlanAudit: func(t *testing.T, root string, change model.Change, bundleDir string, planRecord model.VerificationRecord) {
+				t.Helper()
+				writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, planRecord)
+				require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, planRecord, nil))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(bundleDir, "requirements.md"),
+					[]byte("# Requirements\nREQ-001 digest freshness after plan audit\n"),
+					0o644,
+				))
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
+
+			change := model.NewChange("historical-intake-fail-closed-" + tc.name)
+			change.CurrentState = model.StateS1Plan
+			change.PlanSubStep = model.PlanSubStepAudit
+			change.NeedsDiscovery = true
+			change.ComplexityLevel = "complex"
+			change.WorkflowPreset = model.WorkflowPresetStandard
+			require.NoError(t, state.SaveChange(root, change))
+
+			bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+			intentPath := filepath.Join(bundleDir, "intent.md")
+
+			intakeRecord := model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Timestamp:  time.Date(2026, 6, 16, 1, 0, 0, 0, time.UTC),
+				RunVersion: 0,
+				References: []string{"intake:pass"},
+			}
+			writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, intakeRecord)
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, intakeRecord, nil))
+
+			require.NoError(t, os.WriteFile(
+				intentPath,
+				[]byte("# Intent\nship digest freshness after plan clarification\n"),
+				0o644,
+			))
+
+			planRecord := model.VerificationRecord{
+				Verdict:    model.VerificationVerdictPass,
+				Timestamp:  time.Date(2026, 6, 16, 2, 0, 0, 0, time.UTC),
+				RunVersion: 0,
+				References: []string{"plan-audit:pass", "plan_origin:ctx-author", "audit_origin:ctx-auditor"},
+			}
+			if tc.setupPlanAudit != nil {
+				tc.setupPlanAudit(t, root, change, bundleDir, planRecord)
+			}
+
+			target, ok, err := StaleEvidenceRepairAvailable(root, change, nil)
+			require.NoError(t, err)
+			require.True(t, ok, "stale intake must remain actionable without fresh plan-audit digest proof")
+			assert.Equal(t, SkillIntakeClarification, target.SkillName)
+			assert.Equal(t, model.StateS0Intake, target.State)
+			assert.Contains(t, model.ReasonSpecs(target.Blockers), "required_skill_stale:intake-clarification:intent.md")
+		})
+	}
+}
+
 func issue238Intent(openQuestions string) string {
 	return `# Intent
 
