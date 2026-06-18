@@ -130,6 +130,28 @@ func TestResolveNextSkill_S3Review_SelectedSecurityReview(t *testing.T) {
 	)
 }
 
+func TestResolveNextSkill_S3Review_DocsProfileSkipsCodeQualityReview(t *testing.T) {
+	t.Parallel()
+
+	change := model.Change{
+		CurrentState:    model.StateS3Review,
+		WorkflowProfile: model.WorkflowProfileDocs,
+	}
+	skills, state := ResolveNextSkillWithReviewSelection(
+		change,
+		engineskill.ReviewSkillSelection{SecurityReviewSelected: true},
+	)
+	if state != string(model.StateS3Review) {
+		t.Errorf("expected %s, got %s", model.StateS3Review, state)
+	}
+	assertReviewPair(
+		t,
+		"docs-profile",
+		skills,
+		[]string{SkillSpecComplianceReview, SkillIndependentReview, SkillGoalVerification, SkillSecurityReview},
+	)
+}
+
 // TestResolveNextSkill_S3Review_ReviewSetIndependentOfEvidence proves the
 // routing surface exposes the selected review set at S3 regardless of any
 // recorded review evidence: ResolveNextSkill is a pure function of change

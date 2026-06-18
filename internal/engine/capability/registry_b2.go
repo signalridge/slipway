@@ -51,7 +51,7 @@ func securityReview() Skill {
 		Function:          "workflow-owned S3 secure-default, boundary- and framework-aware security review",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or changes to auth/crypto/session paths.",
+		Summary:           "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or security-review control selected by blast-radius policy.",
 		Evidence:          EvidenceVerdict,
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},

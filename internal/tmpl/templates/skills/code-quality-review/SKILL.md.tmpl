@@ -23,11 +23,11 @@ reviewers are unordered peers, neither gating the other.
 ## When This Runs
 At `S3_REVIEW` the workflow dispatches the selected review set as concurrent
 native subagents from one dispatch point. The selected set always includes
-spec-compliance-review, code-quality-review, independent-review, and
-goal-verification; it also includes security-review when the security control is
-selected. This review does not wait for any peer reviewer. `slipway next` returns
-the selected review set at `S3_REVIEW` independent of which review evidence is
-recorded first.
+spec-compliance-review, independent-review, and goal-verification. It adds
+code-quality-review when the workflow profile requires code-quality review, and
+adds security-review when the security control is selected. This review does not
+wait for any peer reviewer. `slipway next` returns the selected review set at
+`S3_REVIEW` independent of which review evidence is recorded first.
 
 ## Review Contract
 Use fresh context; do not carry assumptions from the implementer or from peer

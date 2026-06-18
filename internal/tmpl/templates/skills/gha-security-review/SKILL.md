@@ -41,6 +41,11 @@ privilege overreach, mutable action references, and agentic/untrusted-input
 exposure. The checklist is strict because remediation after compromise is
 painful.
 
+When mutable action refs need remediation, use the compiled helper
+`slipway tool pin-actions --mapping <mapping.tsv> <workflow.yml>...` to rewrite
+known GitHub Actions references to pinned SHAs, then inspect any unresolved refs
+manually.
+
 ## Checklist
 - [ ] `permissions:` is declared at workflow or job scope; defaults are not
       relied on. Read-only by default; write scopes justified per job.

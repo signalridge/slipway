@@ -138,7 +138,7 @@ type CommandDef struct {
 	Arguments        string
 	Prerequisites    []string
 	Notes            []string
-	Tier             string // "core" | "situational" | "diagnostics"
+	Tier             string // "core" | "discovery" | "situational" | "helpers" | "diagnostics" | "setup"
 	HasPromptSurface bool   // true = generates inline command prompt surface; false for CLI-only commands
 }
 
@@ -193,10 +193,11 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Situational (10)
-	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "situational", HasPromptSurface: true,
+	// Setup (1)
+	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "setup", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
+	// Situational (8)
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
 	{ID: "delete", Class: CommandClassMutation, Description: "Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record", Tier: "situational", HasPromptSurface: true,
@@ -225,13 +226,14 @@ var commandRegistry = []CommandDef{
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
-	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "situational", HasPromptSurface: false,
+	// Helpers (1)
+	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "helpers", HasPromptSurface: false,
 		Arguments:     "<helper> [helper flags]",
 		Prerequisites: []string{"None — public CLI-only helper namespace used by generated skills. Individual helpers may require GitHub tokens, local files, or explicit confirmation."},
 		Notes: []string{
 			"`tool` is intentionally CLI-only: generated skills call `slipway tool ...` directly, but Slipway does not export `$slipway-tool` or host command prompt wrappers.",
 		}},
-	// Diagnostics (5)
+	// Diagnostics (4)
 	{ID: "learn", Class: CommandClassQuery, Description: "Preview governance learning proposals from lifecycle evidence", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--preview] [--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
@@ -241,7 +243,8 @@ var commandRegistry = []CommandDef{
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics", HasPromptSurface: true,
 		Arguments:     "[--json] [--governance] [--all] [--observations] [--doctor] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
-	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "diagnostics", HasPromptSurface: true,
+	// Discovery (1)
+	{ID: "codebase-map", Class: CommandClassMutation, Description: "Create or refresh the durable repo-scoped codebase map", Tier: "discovery", HasPromptSurface: true,
 		Arguments:     "[--json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "instructions", Class: CommandClassQuery, Description: "Show the authoring contract (template, quality bar, and inside a change the resolved output path + dependency graph) for a governed artifact or codebase-map doc", Tier: "diagnostics", HasPromptSurface: true,
@@ -365,11 +368,12 @@ var standaloneNames = []string{workflowSkillID}
 
 var workflowLifecycleCommandIDs = []string{"new", "intake", "plan", "implement", "review", "fix", "done", "next", "run", "status"}
 
-var workflowSupportingCommandIDs = []string{
+var workflowDiscoveryCommandIDs = []string{"codebase-map"}
+
+var workflowSituationalCommandIDs = []string{
 	"validate",
 	"repair",
 	"evidence",
-	"init",
 	"cancel",
 	"delete",
 	"checkpoint",
@@ -377,16 +381,20 @@ var workflowSupportingCommandIDs = []string{
 	"abort",
 }
 
-var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "codebase-map", "instructions"}
+var workflowDiagnosticCommandIDs = []string{"learn", "stats", "health", "instructions"}
+
+var workflowSetupCommandIDs = []string{"init"}
 
 type workflowSkillData struct {
-	ToolID             string
-	PublicName         string
-	SkillIndexPath     string
-	CommandsDir        string
-	LifecycleCommands  []commandEntry
-	SupportingCommands []commandEntry
-	DiagnosticCommands []commandEntry
+	ToolID              string
+	PublicName          string
+	SkillIndexPath      string
+	CommandsDir         string
+	LifecycleCommands   []commandEntry
+	DiscoveryCommands   []commandEntry
+	SituationalCommands []commandEntry
+	DiagnosticCommands  []commandEntry
+	SetupCommands       []commandEntry
 }
 
 type commandEntry struct {
@@ -596,8 +604,10 @@ func validateWorkflowCommandCoverage(groups ...[]string) error {
 func buildWorkflowSkillData(cfg ToolConfig) (workflowSkillData, error) {
 	if err := validateWorkflowCommandCoverage(
 		workflowLifecycleCommandIDs,
-		workflowSupportingCommandIDs,
+		workflowDiscoveryCommandIDs,
+		workflowSituationalCommandIDs,
 		workflowDiagnosticCommandIDs,
+		workflowSetupCommandIDs,
 	); err != nil {
 		return workflowSkillData{}, err
 	}
@@ -606,7 +616,11 @@ func buildWorkflowSkillData(cfg ToolConfig) (workflowSkillData, error) {
 	if err != nil {
 		return workflowSkillData{}, err
 	}
-	supporting, err := buildWorkflowCommandEntries(workflowSupportingCommandIDs, "situational")
+	discovery, err := buildWorkflowCommandEntries(workflowDiscoveryCommandIDs, "discovery")
+	if err != nil {
+		return workflowSkillData{}, err
+	}
+	situational, err := buildWorkflowCommandEntries(workflowSituationalCommandIDs, "situational")
 	if err != nil {
 		return workflowSkillData{}, err
 	}
@@ -614,15 +628,21 @@ func buildWorkflowSkillData(cfg ToolConfig) (workflowSkillData, error) {
 	if err != nil {
 		return workflowSkillData{}, err
 	}
+	setup, err := buildWorkflowCommandEntries(workflowSetupCommandIDs, "setup")
+	if err != nil {
+		return workflowSkillData{}, err
+	}
 
 	return workflowSkillData{
-		ToolID:             cfg.ID,
-		PublicName:         adapterSkillName("workflow"),
-		SkillIndexPath:     filepath.ToSlash(SkillIndexPath(cfg)),
-		CommandsDir:        filepath.ToSlash(cfg.CommandsDir),
-		LifecycleCommands:  lifecycle,
-		SupportingCommands: supporting,
-		DiagnosticCommands: diagnostics,
+		ToolID:              cfg.ID,
+		PublicName:          adapterSkillName("workflow"),
+		SkillIndexPath:      filepath.ToSlash(SkillIndexPath(cfg)),
+		CommandsDir:         filepath.ToSlash(cfg.CommandsDir),
+		LifecycleCommands:   lifecycle,
+		DiscoveryCommands:   discovery,
+		SituationalCommands: situational,
+		DiagnosticCommands:  diagnostics,
+		SetupCommands:       setup,
 	}, nil
 }
 

@@ -48,9 +48,9 @@ settings entries while preserving user-owned hooks.
 
 ## Generated Command Surface
 
-Every governed workflow command ships a command surface on every tool: a command prompt file
-on Claude, Cursor, Gemini, and OpenCode, and a per-command skill
-(`.codex/skills/slipway-<command>/SKILL.md`) on Codex.
+Commands that opt into generated host prompts ship a command surface on every
+tool: a command prompt file on Claude, Cursor, Gemini, and OpenCode, and a
+per-command skill (`.codex/skills/slipway-<command>/SKILL.md`) on Codex.
 
 CLI-only helper namespaces such as `slipway tool` stay public in the Slipway
 binary but do not generate host command wrappers; generated skills invoke
@@ -61,7 +61,7 @@ commands may use explicit authenticated backends or domain tools: GitHub helpers
 prefer `gh`, fall back to token API when `gh` is unavailable or reports an
 auth-required error, and fail closed when neither backend exists.
 
-Core commands:
+Core lifecycle commands:
 
 - `new` (`$slipway-new`)
 - `intake` (`$slipway-intake`)
@@ -74,28 +74,39 @@ Core commands:
 - `run` (`$slipway-run`)
 - `status` (`$slipway-status`)
 
+Discovery commands:
+
+- `codebase-map` (`$slipway-codebase-map`)
+
 Situational commands:
 
-- `init` (`$slipway-init`)
+- `preset` (`$slipway-preset`)
+- `validate` (`$slipway-validate`)
+- `abort` (`$slipway-abort`)
 - `cancel` (`$slipway-cancel`)
 - `delete` (`$slipway-delete`)
-- `validate` (`$slipway-validate`)
-- `checkpoint` (`$slipway-checkpoint`)
-- `preset` (`$slipway-preset`)
-- `abort` (`$slipway-abort`)
 - `repair` (`$slipway-repair`)
+- `checkpoint` (`$slipway-checkpoint`)
 - `evidence` (`$slipway-evidence`; the wave-orchestration host records task evidence via `slipway evidence task ...`)
+
+Helpers:
+
+- `tool` is CLI-only. There is no `$slipway-tool` or generated host prompt wrapper; generated skills call `slipway tool <helper>` directly.
 
 Diagnostics commands:
 
 - `learn` (`$slipway-learn`)
 - `stats` (`$slipway-stats`)
 - `health` (`$slipway-health`)
-- `codebase-map` (`$slipway-codebase-map`)
 - `instructions` (`$slipway-instructions`)
 
-Every CLI command ships a command surface, so an agent never has to fall
-back to guessing one; the workflow skill's command reference indexes them all.
+Setup commands:
+
+- `init` (`$slipway-init`)
+
+The workflow skill's command reference indexes the generated command surfaces.
+For CLI-only helpers, use the explicit `slipway tool ...` commands named by the
+generated skill instructions.
 
 ## Surface Manifest
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,6 +129,33 @@ func TestDoneAllReadyFlagUsageMatchesBulkBehavior(t *testing.T) {
 	flag := makeDoneCmd().Flags().Lookup("all-ready")
 	require.NotNil(t, flag)
 	assert.Equal(t, "Archive every active change that is done-ready", flag.Usage)
+}
+
+func TestHydrateRefHelpUsesReferencePlaceholder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{name: "status", cmd: makeStatusCmd()},
+		{name: "review", cmd: makeReviewCmd()},
+		{name: "health", cmd: makeHealthCmd()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+			tt.cmd.SetOut(&out)
+			require.NoError(t, tt.cmd.Help())
+
+			help := out.String()
+			assert.Contains(t, help, "--hydrate-ref <skill-id>/<name>")
+			assert.NotContains(t, help, "--hydrate-ref --hydrate")
+		})
+	}
 }
 
 func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -645,6 +646,67 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 		crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewers),
 		true,
 	))
+}
+
+func TestReviewAuthorityDocsProfileIgnoresUnselectedCodeQualityEvidenceOnDisk(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n"), 0o644))
+
+	change := model.NewChange("review-authority-docs-unselected-code")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.WorkflowProfile = model.WorkflowProfileDocs
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
+	summary.SyncDerivedFields()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:review-authority-docs-suite")
+
+	selectedRecords := reviewSkillContextRecords(map[string]string{
+		SkillSpecComplianceReview: "ctx-spec-reviewer",
+		SkillIndependentReview:    "ctx-independent-reviewer",
+		SkillGoalVerification:     "ctx-goal-reviewer",
+	})
+	for skillName, record := range selectedRecords {
+		record.RunVersion = 1
+		record.Timestamp = time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC)
+		if skillName == SkillSpecComplianceReview {
+			record.References = append(record.References, "layer:R0=pass")
+		}
+		writeVerificationForTest(t, root, change.Slug, skillName, record)
+		require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
+		selectedRecords[skillName] = record
+	}
+
+	writeVerificationForTest(t, root, change.Slug, SkillCodeQualityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		RunVersion: 1,
+		Timestamp:  time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC),
+		References: []string{
+			"layer:IR1=pass",
+			contextOriginRef(model.StageContextReview, "ctx-stale-code-reviewer"),
+		},
+	})
+
+	authority, err := EvaluateReviewAuthority(root, change)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{
+		SkillSpecComplianceReview,
+		SkillIndependentReview,
+		SkillGoalVerification,
+	}, authority.SelectedReviewSkills)
+	assert.Contains(t, authority.PassingSkills, SkillSpecComplianceReview)
+	assert.Contains(t, authority.PassingSkills, SkillIndependentReview)
+	assert.Contains(t, authority.PassingSkills, SkillGoalVerification)
+	assert.NotContains(t, authority.PassingSkills, SkillCodeQualityReview)
+	assert.NotContains(t, strings.Join(model.ReasonSpecs(authority.Blockers), "\n"), SkillCodeQualityReview)
 }
 
 // TestCrossStageContextDistinctBlockers covers the generalized P2 distinct-context

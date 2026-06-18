@@ -117,7 +117,7 @@ func buildFixViewForSlug(root, slug, reviewerFilter string) (fixView, error) {
 		return fixView{}, wrapGovernanceReadinessError("evaluate review fix prerequisites", change.Slug, err)
 	}
 
-	selected := selectedReviewSkillsFromReadiness(readiness)
+	selected := selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile())
 	if reviewerFilter = strings.TrimSpace(reviewerFilter); reviewerFilter != "" && !stringInSlice(selected, reviewerFilter) {
 		return fixView{}, newInvalidUsageError(
 			"reviewer_not_selected",

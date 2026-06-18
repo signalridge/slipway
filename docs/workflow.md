@@ -8,6 +8,11 @@ Slipway routes work through a governed lifecycle:
 4. `S3_REVIEW`: verify implementation against artifacts, run selected review checks, repair feedback through separate subagents, author the `assurance.md` closeout record, and produce a done-ready outcome.
 
 The active lifecycle state is stored in `artifacts/changes/<slug>/change.yaml`.
+Bundle-local lifecycle events stay under
+`artifacts/changes/<slug>/events/`, and skill verification records stay under
+`artifacts/changes/<slug>/verification/`. Runtime task evidence recorded during
+wave execution lives under
+`.git/slipway/runtime/changes/<slug>/evidence/...`.
 
 <div align="center" markdown>
 
@@ -75,8 +80,9 @@ path that synchronizes governed wave execution, including the
 `slipway evidence skill` path — not only advance/next.
 
 `context_origin:stage=<stage>=<handle>` is one chain-wide grammar that spans the
-whole governed chain. The S3 selected review set is the mandatory spec, code,
-independent, and goal-verification reviewers, plus the security reviewer when the
+whole governed chain. The S3 selected review set includes spec, independent, and
+goal-verification reviewers for every workflow profile; code-quality review joins
+when the profile requires code-quality review, and security review joins when the
 engine-derived security control selects it. All selected review hosts emit
 `context_origin:stage=review=<handle>`; the R2 lattice keys each review
 participant by skill name, not by the shared `review` stage. The other
@@ -88,7 +94,7 @@ so each edge is checked exactly once:
 | Seam | Owns | Edges |
 | --- | --- | --- |
 | Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
-| Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable: mandatory set has 15, selected security expands it to 21 |
+| Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable by workflow profile, selected security control, and optional fix handle |
 | Ship authority | no additional context-origin edges; ship owns final ordering and closeout presence attestations | 0 |
 
 When a seam fails closed, re-run its owning stage or selected reviewer in a fresh
@@ -105,13 +111,15 @@ constraints, so no gate here is oversold as cryptographic distinct-context proof
 
 ## S3 Review Dispatch
 
-At `S3_REVIEW` the engine dispatches one selected review set from a single fan-out
-point. The mandatory reviewers are spec, code, independent review, and
-goal-verification; the security reviewer joins the set only when the
-engine-derived security control is selected. `slipway next` exposes the selected
-set, and the host fans those reviewers out as concurrent native subagents. Any
-conventional single primary skill is only a compatibility projection for surfaces
-that truly need one; it does not imply review ordering.
+At `S3_REVIEW` the engine resolves one selected review set and exposes that set
+through the command surfaces. Spec, independent review, and goal-verification are
+selected for every workflow profile; code-quality review joins only when the
+profile requires code-quality review, and the security reviewer joins only when
+the engine-derived security control is selected. `slipway next` exposes the
+selected set, and host adapters fan those reviewers out as concurrent native
+subagents. Any conventional single primary skill is only a
+compatibility projection for surfaces that truly need one; it does not imply
+review ordering.
 
 Selected reviewers are **unordered peers**: none blocks another, and requiredness,
 review authority, ship authority, and stale-evidence recovery all consume the

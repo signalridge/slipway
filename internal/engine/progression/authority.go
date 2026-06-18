@@ -86,7 +86,7 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 	if err != nil {
 		return ReviewAuthority{}, err
 	}
-	selectedReviewSkills := selectedReviewSkillsForSelection(reviewSelection)
+	selectedReviewSkills := selectedReviewSkillsForSelection(change, reviewSelection)
 	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		change,
@@ -878,11 +878,13 @@ func selectedReviewSkillsForAuthority(authority ReviewAuthority) []string {
 	if len(authority.SelectedReviewSkills) > 0 {
 		return normalizeReviewSkillNames(authority.SelectedReviewSkills)
 	}
-	return selectedReviewSkillsForSelection(engineskill.ReviewSkillSelection{})
+	return normalizeReviewSkillNames(engineskill.SelectedReviewSkills(engineskill.ReviewSkillSelection{}))
 }
 
-func selectedReviewSkillsForSelection(selection engineskill.ReviewSkillSelection) []string {
-	return normalizeReviewSkillNames(engineskill.SelectedReviewSkills(selection))
+func selectedReviewSkillsForSelection(change model.Change, selection engineskill.ReviewSkillSelection) []string {
+	return normalizeReviewSkillNames(
+		engineskill.SelectedReviewSkillsForWorkflowProfile(selection, change.EffectiveWorkflowProfile()),
+	)
 }
 
 func normalizeReviewSkillNames(skillNames []string) []string {

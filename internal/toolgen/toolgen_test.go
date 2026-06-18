@@ -88,22 +88,22 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 25 commands (10 core + 10 situational + 5 diagnostics).
+	// Verify registry has 25 commands across the same public groups as root help.
 	assert.Len(t, commandRegistry, 25)
 
 	// Verify all registry entries have the required fields.
+	validTiers := []string{"core", "discovery", "situational", "helpers", "diagnostics", "setup"}
 	for _, def := range commandRegistry {
 		assert.NotEmpty(t, def.ID, "registry entry missing ID")
 		assert.Contains(t, []CommandClass{CommandClassQuery, CommandClassMutation}, def.Class,
 			"registry entry %s has invalid Class %q", def.ID, def.Class)
 		assert.NotEmpty(t, def.Description, "registry entry %s missing Description", def.ID)
 		assert.NotEmpty(t, def.Tier, "registry entry %s missing Tier", def.ID)
-		assert.True(t, def.Tier == "core" || def.Tier == "situational" || def.Tier == "diagnostics",
-			"registry entry %s has invalid Tier %q", def.ID, def.Tier)
+		assert.Contains(t, validTiers, def.Tier, "registry entry %s has invalid Tier %q", def.ID, def.Tier)
 	}
 
 	// Count tiers.
-	core, sit, diag := 0, 0, 0
+	core, discovery, sit, helpers, diag, setup := 0, 0, 0, 0, 0, 0
 	query, mutation := 0, 0
 	for _, def := range commandRegistry {
 		switch def.Class {
@@ -115,15 +115,24 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		switch def.Tier {
 		case "core":
 			core++
+		case "discovery":
+			discovery++
 		case "situational":
 			sit++
+		case "helpers":
+			helpers++
 		case "diagnostics":
 			diag++
+		case "setup":
+			setup++
 		}
 	}
 	assert.Equal(t, 10, core, "expected 10 core commands")
-	assert.Equal(t, 10, sit, "expected 10 situational commands")
-	assert.Equal(t, 5, diag, "expected 5 diagnostics commands")
+	assert.Equal(t, 1, discovery, "expected 1 discovery command")
+	assert.Equal(t, 8, sit, "expected 8 situational commands")
+	assert.Equal(t, 1, helpers, "expected 1 helper command")
+	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
+	assert.Equal(t, 1, setup, "expected 1 setup command")
 	assert.Equal(t, 7, query, "expected 7 query commands")
 	assert.Equal(t, 18, mutation, "expected 18 mutation commands")
 
@@ -579,8 +588,7 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 	}
 }
 
-// referenceSectionFor returns the command-reference body from header up to the
-// next "### " command heading or "## " section heading (or end of file).
+// referenceSectionFor returns a command-reference section or command body.
 func referenceSectionFor(ref, header string) string {
 	idx := strings.Index(ref, header)
 	if idx < 0 {
@@ -588,8 +596,10 @@ func referenceSectionFor(ref, header string) string {
 	}
 	rest := ref[idx+len(header):]
 	cut := len(rest)
-	if next := strings.Index(rest, "\n### "); next >= 0 && next < cut {
-		cut = next
+	if strings.HasPrefix(header, "### ") {
+		if next := strings.Index(rest, "\n### "); next >= 0 && next < cut {
+			cut = next
+		}
 	}
 	if next := strings.Index(rest, "\n## "); next >= 0 && next < cut {
 		cut = next
@@ -622,6 +632,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		require.NoError(t, err, "%s: missing workflow skill", cfg.ID)
 
 		s := string(content)
+		sText := strings.Join(strings.Fields(s), " ")
 		fm := extractAdapterFrontmatter(t, s, cfg.ID, "workflow")
 		assert.Equal(t, "slipway", fm["name"], "%s: wrong workflow public name", cfg.ID)
 		assert.Equal(t, "workflow", fm["skill_id"], "%s: wrong workflow skill_id", cfg.ID)
@@ -647,22 +658,44 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, s, "informational only", "%s: missing skill index authority boundary", cfg.ID)
 		assert.NotContains(t, s, "follow the listed catalog artifact path", "%s: stale catalog artifact triage guidance leaked", cfg.ID)
 		assert.NotContains(t, s, "using-slipway-catalog.md", "%s: stale top-level catalog manifest leaked", cfg.ID)
+		assert.Contains(t, s, "Every workflow command listed in `references/command-reference.md` ships a", "%s: missing prompt-surface command boundary", cfg.ID)
+		assert.Contains(t, sText, "CLI-only helper namespaces such as `slipway tool` are intentionally", "%s: missing CLI-only helper command boundary", cfg.ID)
+		assert.NotContains(t, s, "Every CLI command ships a command surface", "%s: stale all-commands surface claim leaked", cfg.ID)
 
 		refPath := filepath.Join(root, cfg.SkillsDir, "slipway", "references", "command-reference.md")
 		refContent, err := os.ReadFile(refPath)
 		require.NoError(t, err, "%s: missing workflow command reference", cfg.ID)
 		ref := string(refContent)
+		refText := strings.Join(strings.Fields(ref), " ")
 		assert.Contains(t, ref, "## Lifecycle Core", "%s: missing lifecycle section", cfg.ID)
-		assert.Contains(t, ref, "## Supporting Commands", "%s: missing supporting section", cfg.ID)
+		assert.Contains(t, ref, "## Discovery", "%s: missing discovery section", cfg.ID)
+		assert.Contains(t, ref, "## Situational Commands", "%s: missing situational section", cfg.ID)
 		assert.Contains(t, ref, "## Diagnostics", "%s: missing diagnostics section", cfg.ID)
+		assert.Contains(t, ref, "## Setup", "%s: missing setup section", cfg.ID)
+		assert.NotContains(t, ref, "## Supporting Commands", "%s: stale supporting section leaked", cfg.ID)
 		assert.Contains(t, ref, "### `slipway new`", "%s: missing new command entry", cfg.ID)
 		assert.Contains(t, ref, "JSON stdin fields for `slipway new --json`, not command-line flags", "%s: missing new stdin contract notes", cfg.ID)
 		assert.Contains(t, ref, "`guardrail_domain`, `needs_discovery`, and `complexity`", "%s: missing new stdin classification shape", cfg.ID)
 		assert.Contains(t, ref, "### `slipway run`", "%s: missing run command entry", cfg.ID)
 		assert.Contains(t, ref, "### `slipway repair`", "%s: missing repair command entry", cfg.ID)
-		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing diagnostics command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway codebase-map`", "%s: missing discovery command entry", cfg.ID)
+		assert.Contains(t, ref, "### `slipway init`", "%s: missing setup command entry", cfg.ID)
+		discoverySection := referenceSectionFor(ref, "## Discovery")
+		assert.Contains(t, discoverySection, "### `slipway codebase-map`", "%s: codebase-map must be in discovery", cfg.ID)
+		assert.NotContains(t, discoverySection, "### `slipway init`", "%s: init must not be in discovery", cfg.ID)
+		situationalSection := referenceSectionFor(ref, "## Situational Commands")
+		assert.Contains(t, situationalSection, "### `slipway repair`", "%s: repair must be situational", cfg.ID)
+		assert.NotContains(t, situationalSection, "### `slipway init`", "%s: init must not be situational", cfg.ID)
+		diagnosticsSection := referenceSectionFor(ref, "## Diagnostics")
+		assert.Contains(t, diagnosticsSection, "### `slipway instructions`", "%s: instructions must remain diagnostic", cfg.ID)
+		assert.NotContains(t, diagnosticsSection, "### `slipway codebase-map`", "%s: codebase-map must not be diagnostic", cfg.ID)
+		setupSection := referenceSectionFor(ref, "## Setup")
+		assert.Contains(t, setupSection, "### `slipway init`", "%s: init must be in setup", cfg.ID)
 		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
 		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
+		assert.Contains(t, refText, "every non-hidden, non-help, non-exempt Cobra flag appears here", "%s: missing exempt-flag completeness wording", cfg.ID)
+		assert.Contains(t, ref, "`review --artifact`", "%s: missing documented flag exemption", cfg.ID)
+		assert.NotContains(t, refText, "every non-hidden Cobra flag appears here", "%s: stale all-visible-flags completeness wording leaked", cfg.ID)
 
 		// instructions reads embedded templates only; its reference section must
 		// declare it prereq-free and must NOT leak the catch-all default
@@ -905,6 +938,13 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
 			} else {
 				assert.Contains(t, s, commandTrigger(cfg, id), "%s/%s missing registry trigger", cfg.ID, id)
+			}
+			if id == "run" {
+				sText := strings.Join(strings.Fields(s), " ")
+				assert.Contains(t, s, "`next_skill.selected_review_skills`", "%s/%s must route reviewer set authority to current output", cfg.ID, id)
+				assert.Contains(t, sText, "code-quality-review` when selected by the workflow profile", "%s/%s must qualify code-quality-review by workflow profile", cfg.ID, id)
+				assert.Contains(t, sText, "security-review` when selected by policy", "%s/%s must qualify security-review by policy", cfg.ID, id)
+				assert.NotContains(t, sText, "`spec-compliance-review`, `code-quality-review`, `independent-review`", "%s/%s must not hard-code code-quality-review as a baseline peer", cfg.ID, id)
 			}
 		}
 
@@ -1443,6 +1483,14 @@ func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
 	assert.Contains(t, string(statusSkill), `class: "query"`, "query command skill missing class metadata")
 	assert.Contains(t, string(statusSkill), `tier: "core"`, "query command skill missing tier metadata")
 	assert.Contains(t, string(statusSkill), `surface: "skill"`, "query command skill missing surface metadata")
+
+	initSkill, err := os.ReadFile(codexCommandSkillPath(root, "init"))
+	require.NoError(t, err)
+	assert.Contains(t, string(initSkill), `tier: "setup"`, "setup command skill missing setup tier")
+
+	codebaseMapSkill, err := os.ReadFile(codexCommandSkillPath(root, "codebase-map"))
+	require.NoError(t, err)
+	assert.Contains(t, string(codebaseMapSkill), `tier: "discovery"`, "discovery command skill missing discovery tier")
 }
 
 func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
@@ -1749,6 +1797,58 @@ func TestGeneratedGovernanceSkillsHaveMinimalFrontmatter(t *testing.T) {
 			assert.NotContains(t, fm, field, "%s frontmatter has routing field %s", name, field)
 		}
 	}
+}
+
+func TestGeneratedSkillDescriptionsMatchCurrentRouting(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"claude"}, true))
+
+	readSkill := func(id string) string {
+		path := filepath.Join(root, ".claude", "skills", "slipway-"+id, "SKILL.md")
+		content, err := os.ReadFile(path)
+		require.NoError(t, err, "failed to read %s", id)
+		return string(content)
+	}
+	frontmatterDescription := func(id string, content string) string {
+		fm := extractAdapterFrontmatter(t, content, "claude", id)
+		return fm["description"]
+	}
+
+	goal := readSkill("goal-verification")
+	assert.Contains(t, frontmatterDescription("goal-verification", goal), "selected S3 review peer",
+		"goal-verification must be described as an unordered selected review peer")
+	assert.NotContains(t, goal, "post-review completion checks",
+		"goal-verification must not claim post-review routing")
+
+	preflight := readSkill("worktree-preflight")
+	assert.Contains(t, frontmatterDescription("worktree-preflight", preflight), "missing or unavailable early worktree binding",
+		"worktree-preflight must describe the resolver-supported binding gap")
+	assert.NotContains(t, frontmatterDescription("worktree-preflight", preflight), "invalid",
+		"worktree-preflight description must not claim invalid-binding routing")
+
+	security := readSkill("security-review")
+	securityText := strings.Join(strings.Fields(security), " ")
+	assert.Contains(t, frontmatterDescription("security-review", security), "blast-radius policy",
+		"security-review must name the current selected-control route")
+	assert.Contains(t, securityText, "review scope hints after this peer is selected",
+		"security-review must distinguish path/surface hints from resolver triggers")
+	assert.NotContains(t, security, "changes to auth/crypto/session paths",
+		"security-review must not claim path-glob resolver triggers")
+
+	gitRecovery := readSkill("git-recovery")
+	assert.Contains(t, gitRecovery, "host-embedded worktree-preflight guidance",
+		"git-recovery must keep the embedded preflight guidance route")
+	assert.NotContains(t, gitRecovery, "git-state blockers",
+		"git-recovery must not claim blocker-trigger routing")
+	assert.NotContains(t, gitRecovery, "blocker_reason",
+		"git-recovery must not expose unsupported blocker trigger metadata")
+
+	wave := readSkill("wave-orchestration")
+	assert.Contains(t, frontmatterDescription("wave-orchestration", wave), "parallel-wave fan-out",
+		"wave-orchestration must describe parallel fan-out")
+	assert.NotContains(t, frontmatterDescription("wave-orchestration", wave), "must be executed in sequence",
+		"wave-orchestration description must not serialize all task execution")
 }
 
 func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testing.T) {
@@ -2262,6 +2362,7 @@ func TestSkillHelperDocsUseSlipwayTool(t *testing.T) {
 		contains string
 	}{
 		{path: "skills/ci-triage/SKILL.md", contains: "slipway tool fetch-pr-checks"},
+		{path: "skills/gha-security-review/SKILL.md", contains: "slipway tool pin-actions"},
 		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-pr-feedback"},
 		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-review-requests"},
 		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool reply-to-thread"},

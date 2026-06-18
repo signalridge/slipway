@@ -79,6 +79,23 @@ func TestRequiredSkillsForStateWithRegistry_S3SecuritySelection(t *testing.T) {
 	)
 }
 
+func TestSelectedReviewSkillsForWorkflowProfileFiltersCodeQualityOnly(t *testing.T) {
+	t.Parallel()
+
+	selection := ReviewSkillSelection{SecurityReviewSelected: true}
+
+	assert.Equal(
+		t,
+		[]string{"spec-compliance-review", "independent-review", "goal-verification", "security-review"},
+		SelectedReviewSkillsForWorkflowProfile(selection, model.WorkflowProfileDocs),
+	)
+	assert.Equal(
+		t,
+		[]string{"spec-compliance-review", "code-quality-review", "independent-review", "goal-verification", "security-review"},
+		SelectedReviewSkillsForWorkflowProfile(selection, model.WorkflowProfileCode),
+	)
+}
+
 func TestFilterRequiredSkillsForWorkflowProfileWithReviewSelection_ProfilesKeepIndependentReview(t *testing.T) {
 	t.Parallel()
 
