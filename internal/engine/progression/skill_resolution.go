@@ -16,8 +16,8 @@ import (
 //   - For S0_INTAKE, it dispatches based on the change's IntakeSubStep.
 //   - For S1_PLAN, it dispatches based on the change's PlanSubStep.
 //   - For S2_IMPLEMENT, it returns wave-orchestration.
-//   - For S3_REVIEW, it returns the selected review peer set (all run
-//     concurrently; none precedes another).
+//   - For S3_REVIEW, it returns the workflow-profile-filtered selected review
+//     peer set (all run concurrently; none precedes another).
 func ResolveNextSkill(change model.Change) (skillNames []string, evidenceState string) {
 	return ResolveNextSkillWithReviewSelection(change, skill.ReviewSkillSelection{})
 }
@@ -38,7 +38,7 @@ func ResolveNextSkillWithReviewSelection(
 		// Parallel review set: all selected peer reviews dispatch concurrently
 		// and are unordered. Per-skill evidence evaluation then routes S3
 		// closeout authorities.
-		return skill.SelectedReviewSkills(reviewSelection), string(model.StateS3Review)
+		return skill.SelectedReviewSkillsForWorkflowProfile(reviewSelection, change.EffectiveWorkflowProfile()), string(model.StateS3Review)
 	default:
 		return nil, ""
 	}

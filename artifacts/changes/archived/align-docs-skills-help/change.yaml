@@ -1,0 +1,62 @@
+version: 1
+slug: align-docs-skills-help
+description: align docs skills help
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-18T02:23:46.792462Z
+quality_mode: standard
+workflow_profile: docs
+workflow_preset: standard
+worktree_branch: feat/align-docs-skills-help
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 982ffeaa818990ffe0d8dbad7b08ac2fc0248bbb966ffaa2eb85f7a5ac619815
+        updated_at: 2026-06-18T05:02:46.289689089Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: f096f525f27f0215cb89988a43ae328e99439b4f30cd249346983225c74907d2
+        updated_at: 2026-06-18T02:38:32.774349926Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 162b1fbf87b8b3a439a546284a429be6c26605deb626960c67ef293fec1bcdc9
+        updated_at: 2026-06-18T02:35:22.310133893Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 182d1fa52050419c83eb703c2341c6532a517ac213e2ad3635a8457064431040
+        updated_at: 2026-06-18T02:38:32.773505869Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 65b16dbe309b7d6205ced4a121041d4d6a31f13d0fe58d4bcafbcc244bac4f2b
+        updated_at: 2026-06-18T02:37:16.185102478Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 04a461e2be55a557b41189035a9ea4e9f21e4e58d40e6c8092fc20f99e63fe4c
+        updated_at: 2026-06-18T04:46:25.060580394Z
+evidence_refs:
+    code-quality-review: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/code-quality-review.yaml
+    final-closeout: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/final-closeout.yaml
+    goal-verification: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/goal-verification.yaml
+    independent-review: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/independent-review.yaml
+    intake-clarification: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/intake-clarification.yaml
+    plan-audit: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/plan-audit.yaml
+    research-orchestration: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/research-orchestration.yaml
+    security-review: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/security-review.yaml
+    spec-compliance-review: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/align-docs-skills-help/artifacts/changes/align-docs-skills-help/verification/wave-orchestration.yaml

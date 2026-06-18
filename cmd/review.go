@@ -148,7 +148,7 @@ func makeReviewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic review details")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
-	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict --hydrate output to the selected `<skill-id>/<name>` reference (repeatable)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
@@ -236,7 +236,7 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 		Mode:                 effectiveMode,
 		HydrateReferences:    hydrateKeys,
 		ScopeContract:        buildScopeContractView(readiness.ScopeContract),
-		SelectedReviewSkills: selectedReviewSkillsFromReadiness(readiness),
+		SelectedReviewSkills: selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile()),
 		Blockers:             blockers,
 		Waves:                waveViews,
 		Gaps:                 classifyReviewGaps(blockers),

@@ -412,7 +412,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"required_skill_missing": {
-		Remediation:     "Run the {subject} governance skill and record its skill evidence, then advance. In S3 this means the selected peer skills: spec-compliance-review, code-quality-review, goal-verification, independent-review when selected, and security-review when selected.",
+		Remediation:     "Run the {subject} governance skill and record its skill evidence, then advance. In S3 this means the profile-filtered selected peer skills reported by selected_review_skills: spec-compliance-review, independent-review, goal-verification, plus code-quality-review when selected by the workflow profile and security-review when selected by policy.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
@@ -518,7 +518,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        20,
 	},
 	"closeout_chain_order_invalid": {
-		Remediation:     "Final-closeout is not later than one or more selected S3 peers; re-run final-closeout after the selected S3 peer skills (spec-compliance-review, code-quality-review, goal-verification, independent-review when selected, and security-review when selected) have fresh evidence. Goal-verification is an unordered S3 peer, not a serialized post-review step.",
+		Remediation:     "Final-closeout is not later than one or more selected S3 peers; re-run final-closeout after the profile-filtered selected S3 peer skills reported by selected_review_skills have fresh evidence: spec-compliance-review, independent-review, goal-verification, plus code-quality-review when selected by the workflow profile and security-review when selected by policy. goal-verification is an unordered S3 peer, not a serialized post-review step.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        15,

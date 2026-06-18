@@ -5,10 +5,11 @@ exceptions: `slipway init` is setup-only (`--tools`/`--refresh`, no `--json`), a
 `slipway validate` emits JSON only (its `--format` flag shapes `--list-focuses`
 output, not the main report).
 
-Generated host command surfaces cover the governed workflow commands. Public
-CLI-only helper namespaces, such as `slipway tool`, are registered here and in
-the surface manifest, but they do not generate `$slipway-tool` or host prompt
-wrappers; generated skills invoke their helper subcommands directly.
+Generated host command surfaces cover registered commands that opt into host
+prompts. Public CLI-only helper namespaces, such as `slipway tool`, are
+registered here and in the surface manifest, but they do not generate
+`$slipway-tool` or host prompt wrappers; generated skills invoke their helper
+subcommands directly.
 
 ## Core Lifecycle
 
@@ -66,20 +67,38 @@ Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 `--discuss` persists unresolved gray areas into context before execution;
 `--full` requires a refreshed final-closeout verification before the ship gate.
 
+## Discovery
+
+| Command | Class | Purpose |
+| --- | --- | --- |
+| `slipway codebase-map` | mutation | Create or refresh advisory repo-scoped context under `artifacts/codebase/`. |
+
+`codebase-map --json` reports `status: "baseline"` when documents contain only
+CLI-detected repository facts. Baseline docs are useful starting context, not
+authored brownfield analysis; callers should refine them with source-backed
+findings before relying on them for planning or review.
+
+Codebase maps under `artifacts/codebase/` are git-tracked by default — durable
+brownfield context is meant to be reviewed and shared, not hidden as local-only
+state. Existing repositories auto-migrate the next time `slipway new`,
+`slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
+block (`next`/`run`/`status`/`repair` do not reconcile it); bundle-local
+`events/`, `verification/`, legacy per-change `evidence/`, and `.worktrees/`
+paths stay ignored. Runtime task evidence lives under
+`.git/slipway/runtime/changes/<slug>/evidence/`.
+
 ## Situational Commands
 
 | Command | Class | Purpose |
 | --- | --- | --- |
-| `slipway init` | mutation | Initialize `.slipway.yaml` and optional AI-tool adapters. |
 | `slipway preset <level>` | mutation | Confirm or change the active change preset. |
 | `slipway validate` | query | Recompute evidence and gate readiness without advancing. |
-| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_IMPLEMENT; `--task-id` required, `--allowed-responses` required for `--type decision`). |
-| `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
 | `slipway abort` | mutation | Abort the active execution session without archiving the change. |
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
-| `slipway tool <helper>` | mutation | Run helper tools used by generated skills; helpers fail closed on missing explicit backends or domain tools. |
+| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_IMPLEMENT; `--task-id` required, `--allowed-responses` required for `--type decision`). |
+| `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
 
 `slipway cancel` and `slipway delete` are not the same operation. `cancel`
 takes an **active** change to a terminal `cancelled` status and **archives** it
@@ -96,6 +115,16 @@ a change is abandoned, broken, or bound to another worktree, `slipway status`/
 `slipway next` and recovery output route to the exact
 `slipway delete --change <slug>` command.
 
+## Helpers
+
+| Command | Class | Purpose |
+| --- | --- | --- |
+| `slipway tool <helper>` | mutation | Run helper tools used by generated skills; helpers fail closed on missing explicit backends or domain tools. |
+
+`slipway tool` is intentionally CLI-only. It has no `$slipway-tool` or generated
+host prompt wrapper; generated skills call the specific helper subcommands
+directly.
+
 ## Diagnostics
 
 | Command | Class | Purpose |
@@ -103,7 +132,6 @@ a change is abandoned, broken, or bound to another worktree, `slipway status`/
 | `slipway learn --preview` | query | Preview governance learning proposals from lifecycle evidence. |
 | `slipway stats` | query | Show repo-wide governance freshness and workflow statistics. |
 | `slipway health` | query | Show repo-local integrity and repairability findings. |
-| `slipway codebase-map` | mutation | Create or refresh advisory repo-scoped context under `artifacts/codebase/`. |
 | `slipway instructions <artifact>` | query | Show the template, quality bar, and — inside a change — resolved output path + dependency graph for a governed artifact or codebase-map doc. |
 
 `slipway instructions <artifact>` serves the artifact template plus its quality
@@ -119,18 +147,6 @@ In `--json`, `context_is_baseline: true` marks codebase-map baseline context
 that should be preserved and extended into the authored doc; when absent or
 false, `context` is background to honor but not copy.
 
-`codebase-map --json` reports `status: "baseline"` when documents contain only
-CLI-detected repository facts. Baseline docs are useful starting context, not
-authored brownfield analysis; callers should refine them with source-backed
-findings before relying on them for planning or review.
-
-Codebase maps under `artifacts/codebase/` are git-tracked by default — durable
-brownfield context is meant to be reviewed and shared, not hidden as local-only
-state. Existing repositories auto-migrate the next time `slipway new`,
-`slipway codebase-map`, or `slipway init` rewrites the managed `.gitignore`
-block (`next`/`run`/`status`/`repair` do not reconcile it); the `evidence/`,
-`events/`, `verification/`, and `.worktrees/` paths stay ignored.
-
 `next --json` and `run --json` include `input_context.codebase_map_status`
 (and per-doc `input_context.codebase_map_doc_states`) in the default,
 non-`--diagnostics` handoff so callers can tell whether the referenced map is
@@ -140,6 +156,12 @@ durable. Values mirror the `slipway codebase-map` assessment (`missing`,
 map-consuming planning skill (research-orchestration or plan-audit) is next and
 the status is `scaffold_only` or `baseline`, `warnings` carries a non-blocking
 codebase-map advisory.
+
+## Setup
+
+| Command | Class | Purpose |
+| --- | --- | --- |
+| `slipway init` | mutation | Initialize `.slipway.yaml`, the repo-local runtime layout, and optional AI-tool adapters. |
 
 `docs/SURFACE-MANIFEST.json` is the committed generated-surface inventory for
 adapter, command, skill, JSON, and documentation rows. The manifest is rebuilt
@@ -265,9 +287,10 @@ inferred from a `git diff` disagreement, the exempted files are disclosed
 explicitly in the `scope_contract.exempt_context_files` field, surfaced by
 `slipway validate --json`, `slipway status --json`, and `slipway review --json`.
 
-`slipway evidence task` writes the flat runtime task JSON consumed by
-wave-orchestration sync. Required flags: `--task-id`, `--run-summary-version`,
-`--task-kind`, `--verdict`, `--evidence-ref`. Optional: `--changed-file` and
+`slipway evidence task` writes the flat runtime task JSON under
+`.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration
+sync. Required flags: `--task-id`, `--run-summary-version`, `--task-kind`,
+`--verdict`, `--evidence-ref`. Optional: `--changed-file` and
 `--target-file` (each repeatable), `--blocker <code[:detail]>` (repeatable;
 supply for non-pass verdicts), `--captured-at <RFC3339Nano>` (defaults to now),
 `--session-id`, and `--change <slug>`. The command computes `freshness_inputs`,
@@ -303,11 +326,12 @@ re-run.
 Selected S3 reviewer digests also require
 `verification/suite-result.yaml` for the current execution summary run. That file
 is the shared digest keystone for the full-suite proof and any guardrail SAST
-proof consumed by spec-compliance-review, code-quality-review,
-independent-review, goal-verification, and selected security-review. If the file
-is absent, invalid, or tied to a different `run_summary_version`, selected S3
-review evidence is not fresh. If a suite or SAST digest changes, the selected
-review set is conservatively staled.
+proof consumed by spec-compliance-review, independent-review,
+goal-verification, code-quality-review when selected by the workflow profile,
+and security-review when selected by policy. If the file is absent, invalid, or
+tied to a different `run_summary_version`, selected S3 review evidence is not
+fresh. If a suite or SAST digest changes, the selected review set is
+conservatively staled.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 

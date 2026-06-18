@@ -562,18 +562,18 @@ func selectedReviewSkillsForChange(root string, change model.Change) (skill.Revi
 	if err != nil {
 		return skill.ReviewSkillSelection{}, nil, err
 	}
-	selection, selected := selectedReviewSkillsFromControls(snap.ActiveControls)
+	selection, selected := selectedReviewSkillsFromControls(snap.ActiveControls, change.EffectiveWorkflowProfile())
 	return selection, selected, nil
 }
 
-func selectedReviewSkillsFromReadiness(readiness progression.GovernanceReadiness) []string {
-	_, selected := selectedReviewSkillsFromControls(readiness.ActiveControls)
+func selectedReviewSkillsFromReadiness(readiness progression.GovernanceReadiness, profile model.WorkflowProfile) []string {
+	_, selected := selectedReviewSkillsFromControls(readiness.ActiveControls, profile)
 	return selected
 }
 
-func selectedReviewSkillsFromControls(activeControls []model.ControlActivation) (skill.ReviewSkillSelection, []string) {
+func selectedReviewSkillsFromControls(activeControls []model.ControlActivation, profile model.WorkflowProfile) (skill.ReviewSkillSelection, []string) {
 	selection := progression.ReviewSkillSelectionFromControls(activeControls)
-	return selection, skill.SelectedReviewSkills(selection)
+	return selection, skill.SelectedReviewSkillsForWorkflowProfile(selection, profile)
 }
 
 func firstPendingSelectedReviewSkill(

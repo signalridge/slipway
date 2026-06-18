@@ -259,7 +259,7 @@ func makeHealthCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Synthesize prioritized repair and recovery actions without mutating state")
 	cmd.Flags().StringVar(&focus, "focus", "", "Health focus override (e.g. incident)")
 	cmd.Flags().BoolVar(&hydrate, "hydrate", false, "Append selected hydrate reference bodies (text output only)")
-	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict `--hydrate` output to the selected `<skill-id>/<name>` reference (repeatable)")
+	cmd.Flags().StringArrayVar(&hydrateRefs, "hydrate-ref", nil, "Restrict --hydrate output to the selected `<skill-id>/<name>` reference (repeatable)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	addChangeSelectorFlags(cmd, &changeSlug, "Target a specific change for governance health")

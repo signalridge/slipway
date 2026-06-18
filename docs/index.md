@@ -16,13 +16,14 @@ Use this page as the map for the documentation set.
 
 ## Mental Model
 
-Slipway keeps three surfaces separate:
+Slipway keeps these core surfaces separate:
 
 | Surface | Role |
 | --- | --- |
 | `artifacts/changes/<slug>/change.yaml` | Current lifecycle and routing authority; archived snapshots are Git-safe project records. |
 | `artifacts/changes/<slug>/*.md` | Intent, research, requirements, decisions, task plan, and assurance project records. |
-| `artifacts/changes/<slug>/events/`, `verification/`, and `evidence/` | Local-only raw proof directories by default. |
+| `artifacts/changes/<slug>/events/` and `verification/` | Bundle-local lifecycle traces and skill verification records. |
+| `.git/slipway/runtime/changes/<slug>/evidence/**` | Git-local runtime task evidence consumed by wave execution and freshness diagnostics. |
 
 `status`, `validate`, and `next` recompute readiness without mutating state. `run` is the primary governed execution surface: it advances until a skill, blocker, checkpoint, or done-ready state is surfaced.
 
