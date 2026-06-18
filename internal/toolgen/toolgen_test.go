@@ -1144,7 +1144,7 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 	assert.Equal(t, "custom", string(keptCommand))
 }
 
-func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
+func TestGenerateRefreshInvalidatesTrustedSurfacesAfterTransactionFailure(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
@@ -1152,8 +1152,6 @@ func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
 	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
 	manifestPath := filepath.Join(root, generatedOwnershipManifestPath(toolRegistry["claude"]))
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(toolRegistry["claude"]))
-	beforeCommand, err := os.ReadFile(commandPath)
-	require.NoError(t, err)
 	beforeManifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 
@@ -1188,15 +1186,14 @@ func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, failErr)
 
-	afterCommand, err := os.ReadFile(commandPath)
-	require.NoError(t, err)
-	assert.Equal(t, string(beforeCommand), string(afterCommand))
 	afterManifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(beforeManifest), string(afterManifest))
-	sentinel, err := os.ReadFile(sentinelPath)
-	require.NoError(t, err)
-	assert.Equal(t, "generated\n", string(sentinel))
+
+	_, statErr := os.Stat(sentinelPath)
+	assert.True(t, os.IsNotExist(statErr), "failed refresh must leave the sentinel absent")
+	_, statErr = os.Stat(commandPath)
+	assert.True(t, os.IsNotExist(statErr), "failed refresh must not leave previously trusted command prompts in place")
 }
 
 func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
