@@ -32,7 +32,7 @@
 
 **Governance that keeps your AI coding agent honest: "done" means proven, not promised. You drive it in plain language and never memorize a slash command.**
 
-AI coding agents are fast, but they cut corners. They skip the tests, drift from the plan, and call work "done" that was never verified. Slipway is a local, Git-native governance layer that makes that hard to fake: it turns the agent's work into a durable, inspectable change record and keeps the lifecycle authority in the repository itself, not in a hosted service. Your AI tool does the work; Slipway decides when it is actually done. It works with **Claude Code, Codex, Cursor, Gemini, and OpenCode**.
+AI coding agents are fast — and they cut corners. They skip the tests, drift from the plan, and report work "done" that was never verified. Slipway makes that hard to fake. It's a local, Git-native governance layer that turns each change into a durable, inspectable record and keeps lifecycle authority in your repository, not a hosted service. **Your AI tool does the work; Slipway decides when it's actually done** — across **Claude Code, Codex, Cursor, Gemini, and OpenCode**.
 
 - **The model can't fake "done."** Completion is gated on fresh review *and* verification evidence: checks compiled into the CLI, not advisory prompts the agent can rationalize past. If the evidence goes stale or the work drifts from the plan, Slipway reopens the change instead of waving it through.
 - **No commands to learn.** After a one-time `slipway init`, a generated entry skill routes your ordinary plain-language requests through the governed lifecycle; on tools that support session hooks, live governed state is also surfaced every session, unprompted. You describe the change, and the agent drives the process.
@@ -45,11 +45,10 @@ You talk to your AI tool the way you already do. The agent handles the governanc
 ```text
 You:  Add a --dry-run flag to the export command.
 
-(The agent already knows this repo is governed and that no change is active:
- the entry skill routes it there, and on tools with session hooks that state
- is pushed in automatically, so no action is needed from you.)
+(The repo is governed. The entry skill picks that up and routes the
+ request on its own — no command from you, nothing beyond the one-time init.)
 
-Agent (routing on its own):
+Agent (driving the lifecycle):
   → slipway new        creates the governed change
   → slipway intake     captures intent, scope, and guardrail class
   → slipway plan       writes requirements, decision, tasks, and plan-audit evidence
@@ -68,6 +67,22 @@ the agent drove it.
 
 And if the agent had tried to call it `done` before the tests ran and the review evidence existed? `slipway done` refuses: the gate lives in the CLI, not in a prompt the agent can decide to skip.
 
+## Where Slipway goes deep
+
+Behind the gate, every stage owns evidence the engine **re-derives instead of trusting**. These seven axes are what make a faked "done" fall over — and together, no adjacent tool enforces them in code. Each is stated at its honest enforcement tier; the [Design Philosophy](docs/design.md#advantage-axes) carries the full mechanism and the residual caveats.
+
+| Axis | What the engine does | Why it's hard to fake (and what no peer matches) |
+| --- | --- | --- |
+| **Attested fresh context** | Each stage records the distinct `context_origin` handle it ran under; a per-seam lattice fails closed if the reviewer, plan auditor, or fix collapses into the implementer's context | gsd and superpowers *spawn* fresh subagents; Slipway also *checks the independence held* (audit/structural tier, not cryptographic proof) |
+| **Tamper-evident evidence** | Re-derives freshness from the real inputs — code diff, planning artifacts, run-summary version, shared suite-result — never the verification file's own claims | Peers store state as Markdown/YAML the model can quietly edit; Slipway names the stale input (`required_skill_stale:…`), reopens the change, and stays the sole verdict stamper |
+| **Two-sided parallel safety** | Deterministic file-disjoint waves run concurrently; four safety nets then audit the *actual* changed files (scope escape, wave overlap, dispatch mode, executor handles) | Peers that parallelize check the *plan* before dispatch; Slipway also audits what the agents *actually edited* afterward |
+| **Scope containment** | Declared `target_files` is a contract checked with the planner's own path predicate; out-of-lane edits fail closed (`scope_contract_drift`) | The codebase map under `artifacts/codebase/` is the one *disclosed* exemption (`exempt_context_files`), not a silent gap |
+| **Drift-aware forward recovery** | Plan or evidence drift reopens the change *in place*, forward-only; `slipway next` projects the next repair as a concrete command with the blocker named | No backward cascade can hide the gap, and recovery never depends on the agent knowing a private sequence |
+| **Local-first, git-native audit** | `change.yaml` is the single authority; an append-only, readback-verified `events/lifecycle.jsonl` traces every mutation beside the code under `artifacts/changes/` | Nothing leaves the repository — the audit trail is sovereign by default and re-inspectable by any later human or AI session |
+| **Risk-tiered guardrails** | Sensitive domains (auth, credentials/PII, financial, schema migration, irreversible ops, external-API) require per-domain high-risk checks and gate sensitive evidence at S2 and S3 | No bypass, force-close, or private-attestation path — light on throwaway changes, unforgiving on dangerous ones |
+
+Instead of a single end-of-run checkbox, you get an auditable trail of stage-owned evidence the next session — human or AI — can re-inspect and trust.
+
 ## How Slipway compares
 
 Spec, workflow, and skill toolkits for AI coding are all good at *structuring* work. The axis that sets Slipway apart is **where the rules live and whether the model can ignore them**: almost all of them encode the process as prompts or Markdown the agent is *asked* to follow, so the gates stay advisory. Slipway compiles the process into a deterministic CLI backed by repo evidence, so the gates fail closed.
@@ -81,7 +96,7 @@ Spec, workflow, and skill toolkits for AI coding are all good at *structuring* w
 | [superpowers](https://github.com/obra/superpowers) | Skills auto-fire from a session bootstrap (no commands) | Self-discipline: an "Iron Law" the model is *asked* to obey |
 | **Slipway** | **Plain language; an entry skill auto-fires (no commands)** | **Compiled, fail-closed**: gates live in the CLI and repo evidence |
 
-The pattern is consistent: those tools enforce process by asking the model to comply, while Slipway enforces it in code the model runs but can't rewrite. (superpowers is the closest on *experience*, since its skills also auto-trigger without slash commands, but its rules live in the model's context, not in a binary.) On capability the lines blur, because Slipway also runs dependency-ordered waves, dedicated worktrees, and TDD governance, so the real divide is enforcement, not feature count. Where the peers genuinely lead is **reach and ecosystem**: far more supported agents, more mileage, and models Slipway lacks, like OpenSpec's delta-specs or Spec Kit's large integration catalog.
+The pattern is consistent: those tools enforce process by asking the model to comply, while Slipway enforces it in code the model runs but can't rewrite. (superpowers is the closest on *experience*, since its skills also auto-trigger without slash commands, but its rules live in the model's context, not in a binary.) The capability set overlaps — Slipway also runs dependency-ordered waves, dedicated worktrees, and TDD governance — so the divide is not feature count but enforcement: across the [axes where Slipway goes deep](#where-slipway-goes-deep), the engine re-derives evidence instead of trusting it. Where the peers genuinely lead is **reach and ecosystem**: far more supported agents, more mileage, and models Slipway lacks, like OpenSpec's delta-specs or Spec Kit's large integration catalog.
 
 ### What Slipway deliberately trades off
 
@@ -97,17 +112,6 @@ Several of the differences above are intentional, not gaps. Slipway optimizes fo
 | Failure mode | Skipping a step degrades silently | Missing or stale evidence fails closed | You learn the work isn't done *before* you ship, not after |
 
 One thing is **not** a deliberate trade-off, just where Slipway is today: mileage. It is younger and less battle-tested than Spec Kit or superpowers, and the five-tool list is still growing. The bet is that fail-closed depth is the harder thing to retrofit later, and breadth and mileage come with time.
-
-## Depth, not just a gate
-
-A single "did you run the tests?" check is easy to fake. The point of Slipway is the depth behind the gate: a chain of stage-owned checkpoints that each demand their own evidence, so quality is enforced all the way through instead of rubber-stamped at the end.
-
-- **Intake** fixes intent, scope, open questions, and a **guardrail class**. Sensitive domains (auth, credentials/PII, financial, schema migration, irreversible ops, external-API contracts) fail closed harder and get no bypass, force-close, or private attestation path.
-- **Planning** binds a `requirements.md` / `decision.md` / `tasks.md` bundle that execution is held to, so the agent can't quietly re-scope mid-flight.
-- **Review** uses fresh-context selected S3 peers: spec-compliance and code-quality always run independently of the implementer, goal-verification is an unordered peer, and optional peers join when selected. Final closeout is stamped last before done-ready.
-- **Drift and freshness** are enforced, not trusted: edit the plan or let evidence go stale, and Slipway routes the gap to the owning forward path. In S3, same-intent plan and task amendments stay in review/fix while S2 remains completed. A change can't limp to done on half-stale proof.
-
-That chain is what command-driven spec toolkits and in-context skill packs don't carry. Instead of a single end-of-run checkbox, you get an auditable trail of stage-owned evidence that the next session, human or AI, can re-inspect and trust.
 
 ## Quick start
 

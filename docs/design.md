@@ -13,6 +13,50 @@ Slipway is a small governance control plane for local AI-assisted development. I
 | Artifact traceability | Intent, research, requirements, decisions, tasks, execution evidence, review evidence, and assurance remain connected. |
 | Fresh verification | A completion claim is valid only when current evidence proves the current worktree state. |
 
+## Advantage Axes
+
+Slipway's value is not one gate; it is that every governed stage owns evidence the engine **re-derives instead of trusting**, across several independent axes. Each axis is stated at its honest enforcement tier — structural where it is structural, genuinely enforced where it is — and never oversold. Adjacent spec, workflow, and skill toolkits structure work well; the divide is that they enforce process by *asking* the model to comply, while these axes are checked in compiled code the model runs but cannot rewrite.
+
+| Axis | Enforcement tier | In one line |
+| --- | --- | --- |
+| 1. Attested fresh context | Audit/structural | A per-seam `context_origin` lattice fails closed when stages that must be independent share a handle |
+| 2. Tamper-evident evidence | Input digest (S3 certs) + structural (execution) | Freshness is re-derived from authoritative inputs, never the verification record's own claims |
+| 3. Two-sided parallel safety | Genuinely enforced | File-disjoint wave planning plus four post-dispatch changed-file safety nets |
+| 4. Scope containment | Genuinely enforced | `target_files` is a contract checked with the planner's own `TargetCoversPath` predicate |
+| 5. Drift-aware forward recovery | Genuinely enforced | Forward-only reopen; `next` projects the repair as a named command |
+| 6. Local-first, git-native audit | Genuinely enforced | `change.yaml` authority plus an append-only, readback-verified `lifecycle.jsonl` |
+| 7. Risk-tiered guardrails | Genuinely enforced (fail-closed) | Sensitive domains require high-risk checks and get no bypass, force-close, or self-attest path |
+
+The honest tier matters: axes 3–7 are mechanisms the engine genuinely enforces, axis 2 mixes an input-digest check (S3 review certificates) with structural freshness (execution summaries), and axis 1 is deliberately the *audit/structural* tier — it raises the cost of faking independence without claiming cryptographic proof. The sections below give each axis its mechanism and competitive boundary.
+
+### 1. Attested fresh context
+
+Every stage records the distinct context handle it ran under (`context_origin:stage=<stage>=<handle>`), and a per-seam collision lattice fails closed when two stages that must be independent share a handle — reviewer versus implementer, plan auditor versus plan author, fix versus either. Recovery is to re-run the owning stage in a fresh native subagent so it re-emits a distinct handle. This is **audit/structural tier**: the handles are host-emitted strings, so the lattice raises the cost and visibility of collapsing the chain into one authoring context, but it is not cryptographic proof of independence. gsd and superpowers *spawn* fresh subagents; Slipway also *checks the independence held*. See [Independence Attestation Tier](#independence-attestation-tier) for the full per-seam edge model and the honest residual.
+
+### 2. Tamper-evident evidence
+
+Freshness is computed from authoritative inputs, not from the verification record's own claims. Selected S3 review certificates are keyed to an engine-owned input digest (code diff, planning artifacts, task-scope hash, run-summary version, and the shared `verification/suite-result.yaml`); execution-summary task freshness is **structural** (`change_id`, `run_summary_version`, `task_id`, `guardrail_domain`), and old hash-only summaries are treated as stale and regenerated. Either way, a hand-edited verdict or a drifted input is detected and named (`required_skill_stale:<skill>:<input>`) rather than trusted. The engine remains the sole verdict and run-version stamper; no gate adds a self-stamp, restamp, or force-close path. Adjacent tools store state as Markdown/YAML the model maintains and could edit freely.
+
+### 3. Two-sided parallel safety
+
+The wave planner buckets tasks into dependency-ordered, file-disjoint waves with a deterministic topological sort; multi-task waves run concurrently by default (`execution.parallelization: off` opts out). The distinguishing half is the *post-dispatch* audit: four fail-closed safety nets check the **actual** recorded `changed_files` — scope escape, parallel-wave file overlap, missing or unjustified dispatch mode, and missing per-task executor handles. Dispatch itself is host-driven (the AI host fans out native subagents per the materialized plan); Slipway runs no concurrent scheduler, it validates the resulting evidence. Peers that parallelize check the plan before dispatch; Slipway also audits what the agents actually edited afterward.
+
+### 4. Scope containment
+
+Each task's declared `target_files` in `tasks.md` is a scope contract, evaluated with the same `TargetCoversPath` predicate the wave planner uses for conflict detection, so "covers" and "conflicts" share one implementation. Recorded changes outside the contract fail closed (`scope_contract_drift` and siblings), each mapped to an actionable remediation. The durable codebase map under `artifacts/codebase/` is the one disclosed exemption: when only those context files are dirty, they stay out of `scope_contract.changed_files` and are surfaced as `scope_contract.exempt_context_files` on `validate`/`status`/`review --json` rather than silently filtered.
+
+### 5. Drift-aware forward recovery
+
+When plan, code, and evidence diverge, the lifecycle reopens the change *in place* and forward-only — there is no backward state cascade that could hide the gap, and same-intent S3 plan or task amendments stay in review/fix while S2 remains completed. Blockers project into a `RecoverySummary` with one primary command and one step per blocker group, surfaced on the read-only `next`/`status`/`validate` JSON so the agent reads the next forward action directly instead of inferring private sequencing. A recovery that only works because the agent memorized a hidden flow is treated as a product defect, not a feature.
+
+### 6. Local-first, git-native audit
+
+`change.yaml` is the single current authority; `events/lifecycle.jsonl` is an append-only trace of every mutating event, written as an atomic rewrite with post-write readback verification and tagged with the acting surface (`actor_kind`, and `skill_id` for skill-driven steps). Evidence lives beside the code in the governed bundle under `artifacts/changes/`. Nothing requires a hosted service to understand a change, so the audit trail is sovereign by default and re-inspectable by any later human or AI session. The lifecycle log is audit evidence only — it never replaces `change.yaml` as current-state authority.
+
+### 7. Risk-tiered guardrails
+
+Sensitive domains — auth/authz, credentials/PII, financial flows, schema/data migration, irreversible operations, and external-API contracts — fail closed harder. They require per-domain high-risk checks before ship authority is granted, gate sensitive evidence at both S2 and S3, and get no bypass, force-close, or private-attestation path. The same lifecycle that is light on a throwaway change is unforgiving on the changes that can actually hurt you; `light` preset relaxes advisory tiers but never the sensitive-domain fail-closed lines.
+
 ## Architecture Model
 
 <div align="center" markdown>
