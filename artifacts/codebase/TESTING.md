@@ -1,5 +1,46 @@
 # Testing
 
+Re-authored for change `generalize-digest-proof-reuse` (#258).
+
+## Current Change Focus: Digest-Keyed Proof Reuse
+
+The highest-value existing coverage lives in
+`internal/engine/progression/authority_test.go`.
+`TestCloseoutGoalVerificationReuseBlockers` already proves the current
+closeout-only reuse gate accepts a valid reuse case and rejects run-version
+mismatch, missing reuse run-version reference, execution evidence newer than
+goal-verification, changed source content, and stale execution-summary
+freshness. `TestBuildShipAuthoritySurfacesCloseoutReuseBlocker` proves the reuse
+blocker is surfaced through both verification blockers and `G_ship` reason codes.
+
+Digest coverage lives in `internal/engine/progression/evidence_digests_test.go`.
+`TestGoalVerificationDigestStalesWhenSharedSuiteInputsChange` proves changing
+the suite-result full-suite digest stales goal-verification rather than falling
+back to an unavailable generic digest. Fixture helpers already create
+`suite-result.yaml` with `run_summary_version` and `full_suite_digest`, which is
+the right starting point for SAST digest and cross-stage proof-reuse tests.
+
+The implementation should extend these focused suites before broadening to a
+full repository test run:
+
+- Generalized proof-reuse validator accepts the existing closeout -> goal path.
+- Invalidations stay fail-closed for changed artifacts/source, run-version
+  mismatch, missing suite-result proof, missing guardrail SAST digest, and stale
+  execution-summary freshness.
+- `cmd/evidence_skill_test.go` covers selected-review restamp recovery when an
+  existing passing reviewer record has a malformed or retired
+  `context_origin:stage=review=<handle>` token.
+- Final-closeout template tests show reuse-first wording when validation applies
+  and rerun fallback when validation fails.
+- Goal-verification template tests must not imply unconditional S2 proof reuse.
+
+Expected focused command before completion claims:
+
+```bash
+go test ./internal/engine/wave ./internal/engine/progression -count=1
+go test ./cmd -run 'TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin$' -count=1
+```
+
 Re-authored for change
 `feat-governance-host-native-subagent-enforced-cross-stage-in` (#240).
 

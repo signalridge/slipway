@@ -14,6 +14,7 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestPlanAuditInputDigestExcludesAssuranceAndIncludesStructuralTasks(t *testing.T) {
@@ -1024,6 +1025,100 @@ func TestGoalVerificationDigestStalesWhenSharedSuiteInputsChange(t *testing.T) {
 	assert.NotContains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
 }
 
+func TestGoalVerificationDigestRequiresValidSuiteResult(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixture(t)
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 21, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	verificationDir := filepath.Join(bundleDir, "verification")
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, suiteResultFileName), []byte(fmt.Sprintf(`version: %d
+run_summary_version: 1
+`, model.SuiteResultVersion)), 0o644))
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
+func TestGoalVerificationDigestRejectsSuiteResultWrongRunVersion(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixtureWithoutSuiteResult(t)
+	writeSuiteResultForDigestTest(t, root, change, 2, "sha256:full-suite-v1")
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
+func TestGoalVerificationDigestRequiresGuardrailSASTDigest(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixtureWithoutSuiteResult(t)
+	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
+	require.NoError(t, state.SaveChange(root, change))
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:full-suite-v1")
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 21, 30, 0, time.UTC),
+		RunVersion: 1,
+		References: []string{
+			"high_risk_check:external_api_contracts.safety_baseline=pass",
+		},
+	}
+
+	err := StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary)
+	require.ErrorIs(t, err, errDigestInputsUnavailable)
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
+func TestGoalVerificationDigestStalesWhenSuiteResultSASTDigestDisappears(t *testing.T) {
+	t.Parallel()
+
+	root, change := createReviewInputDigestFixtureWithoutSuiteResult(t)
+	writeSuiteResultForDigestTestWithSAST(t, root, change, 1, "sha256:full-suite-v1", map[string]string{
+		"credentials.safety_baseline": "sha256:sast-v1",
+	})
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Date(2026, 6, 4, 1, 22, 0, 0, time.UTC),
+		RunVersion: 1,
+	}
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, record, summary))
+
+	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:full-suite-v1")
+
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillGoalVerification, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:goal-verification:suite-result:sast:credentials.safety_baseline")
+	assert.NotContains(t, blockers, "required_skill_stale:goal-verification:input_digest_unavailable")
+}
+
 func TestGoalAndCloseoutDigestIgnoresRuntimeOnlyChangeYAMLMutation(t *testing.T) {
 	t.Parallel()
 
@@ -1809,6 +1904,19 @@ func createReviewInputDigestFixtureWithSuiteResult(t *testing.T, withSuiteResult
 func writeSuiteResultForDigestTest(t *testing.T, root string, change model.Change, runVersion int, fullSuiteDigest string) {
 	t.Helper()
 
+	writeSuiteResultForDigestTestWithSAST(t, root, change, runVersion, fullSuiteDigest, nil)
+}
+
+func writeSuiteResultForDigestTestWithSAST(
+	t *testing.T,
+	root string,
+	change model.Change,
+	runVersion int,
+	fullSuiteDigest string,
+	sastDigests map[string]string,
+) {
+	t.Helper()
+
 	bundleDir, err := state.GovernedBundleDir(root, change)
 	require.NoError(t, err)
 	verificationDir := filepath.Join(bundleDir, "verification")
@@ -1816,11 +1924,15 @@ func writeSuiteResultForDigestTest(t *testing.T, root string, change model.Chang
 	if strings.TrimSpace(fullSuiteDigest) == "" {
 		fullSuiteDigest = "sha256:full-suite-v1"
 	}
-	content := fmt.Sprintf(`version: %d
-run_summary_version: %d
-full_suite_digest: %q
-`, model.SuiteResultVersion, runVersion, fullSuiteDigest)
-	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, suiteResultFileName), []byte(content), 0o644))
+	result := model.SuiteResult{
+		Version:           model.SuiteResultVersion,
+		RunSummaryVersion: runVersion,
+		FullSuiteDigest:   fullSuiteDigest,
+		SASTDigests:       sastDigests,
+	}
+	raw, err := yaml.Marshal(result)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(verificationDir, suiteResultFileName), raw, 0o644))
 }
 
 func digestPolicyExecutionSummary(change model.Change, targetFiles []string) *model.ExecutionSummary {

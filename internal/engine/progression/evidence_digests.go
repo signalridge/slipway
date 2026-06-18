@@ -750,8 +750,8 @@ func addContentPathInputs(
 	if err != nil {
 		return err
 	}
-	for _, rel := range closeoutGoalVerificationReuseContentPaths(change, summary) {
-		candidates, ok, err := closeoutGoalVerificationReuseWorkspacePaths(paths.WorkspaceRoot, rel)
+	for _, rel := range proofReuseContentPaths(change, summary) {
+		candidates, ok, err := proofReuseWorkspacePaths(paths.WorkspaceRoot, rel)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				hash, hashErr := deletedFileInputHash(rel)
@@ -774,7 +774,7 @@ func addContentPathInputs(
 					key = filepath.ToSlash(display)
 				}
 			}
-			if closeoutGoalVerificationReuseSkipsContentPath(change, key) {
+			if proofReuseSkipsContentPath(change, key) {
 				continue
 			}
 			var hash string
@@ -837,7 +837,7 @@ func addGoalVerificationInputs(
 }
 
 func addChangedTargetFileSetInput(change model.Change, summary *model.ExecutionSummary, inputs map[string]string) error {
-	contentPaths := closeoutGoalVerificationReuseContentPaths(change, summary)
+	contentPaths := proofReuseContentPaths(change, summary)
 	hash, err := model.ComputeInputHash(map[string]any{
 		"changed_target_files": contentPaths,
 	})
@@ -950,6 +950,9 @@ func addSharedReviewerInputs(
 				summary.RunSummaryVersion,
 			)
 		}
+		if err := requireGuardrailSuiteResultSASTDigest(change, result); err != nil {
+			return err
+		}
 		shared, err := result.SharedReviewerInputDigests()
 		if err != nil {
 			return err
@@ -963,6 +966,26 @@ func addSharedReviewerInputs(
 		return errDigestInputsUnavailable
 	}
 	return addExecutionSummaryInputs(summary, inputs)
+}
+
+func requireGuardrailSuiteResultSASTDigest(change model.Change, result model.SuiteResult) error {
+	required := requiredGuardrailSuiteResultSASTDigestName(change)
+	if required == "" {
+		return nil
+	}
+	result.Normalize()
+	if strings.TrimSpace(result.SASTDigests[required]) == "" {
+		return errDigestInputsUnavailable
+	}
+	return nil
+}
+
+func requiredGuardrailSuiteResultSASTDigestName(change model.Change) string {
+	domain := strings.TrimSpace(change.GuardrailDomain)
+	if domain == "" {
+		return ""
+	}
+	return domain + ".safety_baseline"
 }
 
 func requiresSuiteResultForSharedReviewerInputs(change model.Change) bool {
@@ -1006,7 +1029,7 @@ func addReviewSummaryContentInputs(root string, change model.Change, summary *mo
 	if err != nil {
 		return err
 	}
-	for _, rel := range closeoutGoalVerificationReuseContentPaths(change, summary) {
+	for _, rel := range proofReuseContentPaths(change, summary) {
 		rel = filepath.ToSlash(strings.TrimSpace(rel))
 		if rel == "" || reviewInputPathExcluded(rel) {
 			continue
@@ -1025,7 +1048,7 @@ func addReviewSummaryContentInputs(root string, change model.Change, summary *mo
 			}
 			continue
 		}
-		candidates, ok, err := closeoutGoalVerificationReuseWorkspacePaths(paths.WorkspaceRoot, rel)
+		candidates, ok, err := proofReuseWorkspacePaths(paths.WorkspaceRoot, rel)
 		if err != nil {
 			return err
 		}

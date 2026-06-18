@@ -84,7 +84,7 @@ func TestGenericEvidenceFreshnessDoesNotUseTimestampOrdering(t *testing.T) {
 	}
 }
 
-func TestAuthorityTimestampOrderingIsLimitedToCloseoutProofOrdering(t *testing.T) {
+func TestAuthorityTimestampOrderingIsLimitedToProofOrderingGates(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
@@ -94,10 +94,10 @@ func TestAuthorityTimestampOrderingIsLimitedToCloseoutProofOrdering(t *testing.T
 	}
 	if !sourceTokensLimitedToFunctions(string(raw),
 		[]string{".Before(", ".After("},
-		"func closeoutGoalVerificationReuseBlockers(",
+		"func proofReuseEdgeBlockers(",
 		"func closeoutChainOrderBlockers(",
 	) {
-		t.Fatalf("authority timestamp ordering must stay limited to closeout proof-ordering gates")
+		t.Fatalf("authority timestamp ordering must stay limited to proof-ordering gates")
 	}
 }
 

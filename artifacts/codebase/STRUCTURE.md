@@ -1,5 +1,33 @@
 # Structure
 
+Re-authored for change `generalize-digest-proof-reuse` (#258).
+
+## Current Change Focus: Digest-Keyed Proof Reuse
+
+The active change is structurally bounded to the progression engine's proof
+freshness path and the generated governance host templates:
+
+- `internal/engine/progression/authority.go` owns ship authority and the current
+  closeout -> goal-verification reuse validation. It is the target for the
+  internal proof-reuse edge/check extraction and for preserving the existing
+  closeout compatibility wrapper.
+- `internal/engine/progression/evidence_digests.go` owns digest input assembly
+  for goal-verification and final-closeout. It is only in scope for renaming or
+  sharing helpers when the helper is genuinely proof-reuse-neutral.
+- `internal/engine/progression/authority_test.go` and
+  `internal/engine/progression/evidence_digests_test.go` are the focused tests
+  for valid reuse, stale run versions, changed content, missing suite-result
+  proof, and missing guardrail SAST digest behavior.
+- `internal/tmpl/templates/skills/goal-verification/SKILL.md.tmpl` and
+  `internal/tmpl/templates/skills/final-closeout/SKILL.md.tmpl` own the
+  agent-facing proof production/reuse guidance. `internal/tmpl/templates_test.go`
+  pins the generated wording and token contracts.
+
+The change should not introduce a new top-level package, public evidence struct,
+or broad registry. The intended shape is a small internal validator in
+`internal/engine/progression` with only the existing closeout reuse edge enabled
+in production.
+
 Re-authored for change
 `feat-governance-host-native-subagent-enforced-cross-stage-in` (#240).
 
@@ -135,7 +163,10 @@ spec/code/independent trio and optional security from governance controls.
   - `evidence.go`: the producer. `makeEvidenceSkillCmd` ("evidence skill") stamps
     engine-owned `Timestamp`/`RunVersion`, passes host `--reference` values
     verbatim into the saved record, and rejects unselected security-review evidence
-    as not currently selected.
+    as not currently selected. When a selected reviewer already has passing
+    evidence but its `context_origin:stage=review=<handle>` is malformed or
+    retired, `evidence skill` allows the same reviewer to restamp fresh evidence
+    instead of dead-ending behind `evidence_skill_not_current`.
   - `next_skill_view.go`, `status_view_build.go`, `validate.go`, `review.go`,
     stale-evidence recovery, and fixtures expose `selected_review_skills` while
     preserving a conventional `Name` for single-skill consumers.
@@ -148,10 +179,11 @@ spec/code/independent trio and optional security from governance controls.
     `context_origin:stage=review=<handle>`.
   - `security-review/SKILL.md.tmpl`: selected-security S3 host; emits
     `context_origin:stage=review=<handle>` when dispatched.
-  - `goal-verification/SKILL.md.tmpl` (:88-95,166): emits
-    `context_origin:stage=goal=<handle>`.
-  - `final-closeout/SKILL.md.tmpl` (:122-149,161-181): emits
-    `context_origin:stage=closeout=<handle>`; RETAINS the engine-consumed
+  - `goal-verification/SKILL.md.tmpl` (:88-95,188): emits
+    `context_origin:stage=review=<handle>` because goal-verification is folded
+    into the selected S3 reviewer set.
+  - `final-closeout/SKILL.md.tmpl` (:122-149,161-181): no longer emits a
+    `context_origin:stage=closeout=<handle>` token; RETAINS the engine-consumed
     `closeout:reviewer_independence=pass` (#239, REQUIRED on standard/strict) and
     documents the always-on chain-order invariant.
   - `plan-audit/SKILL.md` (static, not .tmpl, :169-203): emits the author/auditor

@@ -1,0 +1,61 @@
+version: 1
+slug: generalize-digest-proof-reuse
+description: generalize digest proof reuse
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-18T06:14:24.4858Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/generalize-digest-proof-reuse
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 7fd153d21f608153d2d3c0f569f696c38d82046a80e46a70d2c4110fd7512171
+        updated_at: 2026-06-18T09:05:53.680430409Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 17586e3dfe03f79d182b276b4cd4cf18a0401b0663a434fe630854fceffd540b
+        updated_at: 2026-06-18T06:45:26.08653441Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 7ee39b70e00c90f613198fcccb6f04cbf17067cf37cb47154acca4ec8c717926
+        updated_at: 2026-06-18T06:24:38.181576065Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 4d623d86c6b16d469fb3d2982e8f12ae67831a71ced5a63b585a6b716d4085ad
+        updated_at: 2026-06-18T06:45:26.086366119Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 563b69bb9047c3128f9fe4ec51c15e4fa77851e775c220fa2a5811d36dc41b44
+        updated_at: 2026-06-18T06:43:57.461211241Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: e875a37c8f466124d73526ce35eb0150a389f738f89bd7fafba175110aa06581
+        updated_at: 2026-06-18T08:46:19.972718289Z
+evidence_refs:
+    code-quality-review: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/code-quality-review.yaml
+    final-closeout: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/final-closeout.yaml
+    goal-verification: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/goal-verification.yaml
+    independent-review: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/independent-review.yaml
+    intake-clarification: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/intake-clarification.yaml
+    plan-audit: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/plan-audit.yaml
+    research-orchestration: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/generalize-digest-proof-reuse/artifacts/changes/generalize-digest-proof-reuse/verification/wave-orchestration.yaml
