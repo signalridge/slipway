@@ -848,7 +848,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 	}
 	if refresh && hadGeneratedAdapter && plan != nil {
 		defer func() {
-			if err == nil || plan.transactionStarted {
+			if err == nil {
 				return
 			}
 			if invalidateErr := invalidateFailedRefreshTrustSurfaces(root, cfg, sentinelPath, plan); invalidateErr != nil {

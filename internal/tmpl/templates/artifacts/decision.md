@@ -6,6 +6,9 @@ Run `slipway instructions decision` for the quality bar, the resolved output
 path, and the upstream dependencies (intent.md, requirements.md) to read by path.
 Replace each section's guidance with concrete, change-specific content; an
 unwritten section cannot reach done.
+When a later decision replaces earlier guidance, keep the old guidance
+reviewable and mark it as superseded by the concrete replacement decision or
+section in this file.
 -->
 
 ## Alternatives Considered

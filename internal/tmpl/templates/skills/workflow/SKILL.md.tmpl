@@ -79,6 +79,33 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 - do not look for retired agent fields or a second exported prompt file
 - do not guess the next governed host without the CLI response
 
+## Runtime Session Handoff
+Use `.git/slipway/runtime/handoff.md` only as advisory continuation notes for a
+fresh session. Write or refresh it when context is tight, when a checkpoint or
+review handoff will split work across sessions, or before stopping with useful
+continuation context.
+
+Author it as a compact narrative:
+- current position: change slug, lifecycle state/substep, active task or review,
+  current blocker or next action, and the command output timestamp if relevant
+- session work completed: the material code, artifact, test, or investigation
+  changes made in this session
+- next-session focus: the smallest useful next action, open decisions, and any
+  risks or blockers the next agent should check first
+- path references: point to intent, requirements, tasks, decisions, diffs,
+  verification, evidence, and logs by path; do not paste or fork those contents
+- suggested next skills: derive them from fresh `slipway next --json` fields
+  such as `next_skill.name`, `next_skill.verification_dir`,
+  `next_skill.selected_review_skills`, and `confirmation_requirement.*`; do not
+  infer a governed host from the handoff body
+- redaction: remove secrets, credentials, tokens, private keys, and personally
+  identifiable information before writing
+
+`handoff.md` is not lifecycle authority, governed evidence, freshness input, or
+a gate. A fresh session must still run `slipway status --json` and
+`slipway next --json`, obey lifecycle gates, and rely on CLI-owned freshness and
+evidence checks before advancing.
+
 ## Delegation Surface
 Detailed command contracts live in `references/command-reference.md`. For
 commands that ship generated command surfaces, prefer those surfaces over
@@ -109,6 +136,8 @@ directly with `slipway tool ...`.
 ## Hard Rules
 - do not bypass lifecycle gates
 - do not treat this workflow skill as progression authority
+- do not treat `.git/slipway/runtime/handoff.md` as lifecycle authority,
+  governed evidence, freshness input, or a gate
 - do not invent command semantics not present in the CLI
 - do not guess the next governed host without `slipway next --json`
 - do not duplicate long per-command prose here when the reference file or command surface already owns it

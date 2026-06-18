@@ -55,7 +55,16 @@ func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) 
 
 	checklist, err := Content("skills/_shared/references/checklist-quality.md")
 	require.NoError(t, err)
+	flatChecklist := strings.Join(strings.Fields(checklist), " ")
 	assert.Contains(t, checklist, "Requirement-to-intent traceability")
+	assert.Contains(t, checklist, "## Generated Skill Template Quality")
+	assert.Contains(t, checklist, "Use this section only when editing generated Slipway skill templates under")
+	assert.Contains(t, checklist, "`internal/tmpl/templates/skills/`; it is not a general prompt-writing manual.")
+	assert.Contains(t, flatChecklist, "Start steps with familiar action words such as read, run, write, record, or stop unless a Slipway term is itself the contract.")
+	assert.Contains(t, flatChecklist, "Keep context pointers reliable: say when the agent should read referenced material, and keep must-have contract details inline when a pointer would be easy to miss.")
+	assert.Contains(t, checklist, "Make completion criteria checkable")
+	assert.Contains(t, checklist, "Prune no-op prose")
+	assert.Contains(t, flatChecklist, "preserving contract tokens such as `next_skill.name`, `verification_dir`, reason codes, command names, and evidence paths.")
 
 	planAudit, err := Content("skills/plan-audit/SKILL.md")
 	require.NoError(t, err)
@@ -68,6 +77,91 @@ func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) 
 	})
 	require.NoError(t, err)
 	assert.Contains(t, specCompliance, "checklist-quality.md")
+}
+
+func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/workflow/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway",
+		"Description": "Governed workflow entry",
+	})
+	require.NoError(t, err)
+	flat := strings.Join(strings.Fields(content), " ")
+
+	assert.Contains(t, content, "## Runtime Session Handoff")
+	assert.Contains(t, flat, "Use `.git/slipway/runtime/handoff.md` only as advisory continuation notes for a fresh session.")
+	assert.Contains(t, content, "Author it as a compact narrative:")
+	assert.Contains(t, content, "- current position:")
+	assert.Contains(t, content, "- session work completed:")
+	assert.Contains(t, content, "- next-session focus:")
+	assert.Contains(t, content, "- path references:")
+	assert.Contains(t, content, "- suggested next skills:")
+	assert.Contains(t, content, "- redaction:")
+	assert.Contains(t, content, "remove secrets, credentials, tokens, private keys, and personally")
+	assert.Contains(t, content, "identifiable information before writing")
+	assert.Contains(t, content, "derive them from fresh `slipway next --json` fields")
+	assert.Contains(t, content, "`next_skill.name`")
+	assert.Contains(t, content, "`next_skill.verification_dir`")
+	assert.Contains(t, content, "`next_skill.selected_review_skills`")
+	assert.Contains(t, content, "`confirmation_requirement.*`")
+	assert.Contains(t, flat, "do not infer a governed host from the handoff body")
+	assert.Contains(t, flat, "`handoff.md` is not lifecycle authority, governed evidence, freshness input, or a gate.")
+	assert.Contains(t, flat, "A fresh session must still run `slipway status --json` and `slipway next --json`")
+	assert.Contains(t, flat, "rely on CLI-owned freshness and evidence checks before advancing.")
+}
+
+func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
+	t.Parallel()
+
+	workflow, err := Render("skills/workflow/SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway",
+		"Description": "Governed workflow entry",
+	})
+	require.NoError(t, err)
+	runCommand, err := Render("commands/command-entry.md.tmpl", map[string]string{
+		"CommandID":    "run",
+		"ToolID":       "claude",
+		"Trigger":      "/slipway:run",
+		"Description":  "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
+		"BodyTemplate": "command-run-body",
+		"Arguments":    "--json",
+	})
+	require.NoError(t, err)
+
+	for name, content := range map[string]string{
+		"workflow":    workflow,
+		"run command": runCommand,
+	} {
+		flat := strings.Join(strings.Fields(content), " ")
+		assert.NotContains(t, flat, "handoff.md is lifecycle authority", name)
+		assert.NotContains(t, flat, "handoff.md is governed evidence", name)
+		assert.NotContains(t, flat, "handoff.md is a freshness input", name)
+		assert.NotContains(t, flat, "handoff.md is a gate", name)
+		assert.NotContains(t, flat, "handoff.md selects the governed host skill", name)
+		assert.NotContains(t, flat, "derive the governed host from the handoff", name)
+		assert.NotContains(t, flat, "use handoff.md as evidence", name)
+		assert.NotContains(t, flat, "use handoff.md for freshness", name)
+	}
+
+	flatRun := strings.Join(strings.Fields(runCommand), " ")
+	assert.Contains(t, flatRun, "using the workflow skill's Runtime Session Handoff contract.")
+	assert.Contains(t, flatRun, "The handoff is advisory only; it does not replace `slipway status --json`, `slipway next --json`, lifecycle gates, freshness, or evidence checks.")
+}
+
+func TestDecisionTemplatePinsSupersessionGuidance(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("artifacts/decision.md")
+	require.NoError(t, err)
+	flat := strings.Join(strings.Fields(content), " ")
+
+	assert.Contains(t, flat, "When a later decision replaces earlier guidance, keep the old guidance reviewable")
+	assert.Contains(t, flat, "mark it as superseded by the concrete replacement decision or section in this file.")
+	assert.NotContains(t, flat, "delete the old guidance")
+	assert.NotContains(t, flat, "rewrite earlier guidance in place")
 }
 
 func TestPlanAuditTemplateDoesNotReintroduceLightPresetVerificationBlocker(t *testing.T) {

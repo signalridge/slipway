@@ -655,6 +655,28 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.prompt_path`", "%s: stale prompt_path contract leaked", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
+		assert.Contains(t, s, "## Runtime Session Handoff", "%s: missing runtime handoff contract", cfg.ID)
+		assert.Contains(t, s, "Use `.git/slipway/runtime/handoff.md` only as advisory continuation notes", "%s: missing handoff advisory boundary", cfg.ID)
+		assert.Contains(t, s, "current position: change slug, lifecycle state/substep, active task or review", "%s: missing handoff current-position payload", cfg.ID)
+		assert.Contains(t, s, "session work completed: the material code, artifact, test, or investigation", "%s: missing handoff completed-work payload", cfg.ID)
+		assert.Contains(t, s, "next-session focus: the smallest useful next action", "%s: missing handoff next-focus payload", cfg.ID)
+		assert.Contains(t, s, "path references: point to intent, requirements, tasks, decisions, diffs", "%s: missing handoff path-reference payload", cfg.ID)
+		assert.Contains(t, s, "redaction: remove secrets, credentials, tokens, private keys", "%s: missing handoff redaction requirement", cfg.ID)
+		assert.Contains(t, s, "`next_skill.verification_dir`", "%s: missing handoff verification_dir token", cfg.ID)
+		assert.Contains(t, s, "`next_skill.selected_review_skills`", "%s: missing handoff selected_review_skills token", cfg.ID)
+		assert.Contains(t, s, "`confirmation_requirement.*`", "%s: missing handoff confirmation token", cfg.ID)
+		assert.Contains(t, s, "`handoff.md` is not lifecycle authority, governed evidence, freshness input, or", "%s: missing handoff non-authority boundary", cfg.ID)
+		assert.Contains(t, s, "A fresh session must still run `slipway status --json` and", "%s: missing status refresh requirement", cfg.ID)
+		assert.Contains(t, s, "`slipway next --json`, obey lifecycle gates, and rely on CLI-owned freshness and", "%s: missing next/freshness requirement", cfg.ID)
+		assert.Contains(t, s, "evidence checks before advancing", "%s: missing evidence-check requirement", cfg.ID)
+		assert.NotContains(t, s, "handoff.md is lifecycle authority", "%s: stale handoff authority wording leaked", cfg.ID)
+		assert.NotContains(t, s, "handoff.md is governed evidence", "%s: stale handoff evidence wording leaked", cfg.ID)
+		assert.NotContains(t, s, "handoff.md is freshness input", "%s: stale handoff freshness wording leaked", cfg.ID)
+		assert.NotContains(t, s, "handoff.md replaces", "%s: stale handoff replacement wording leaked", cfg.ID)
+		assert.NotContains(t, s, "skip `slipway status --json`", "%s: stale status bypass wording leaked", cfg.ID)
+		assert.NotContains(t, s, "skip `slipway next --json`", "%s: stale next bypass wording leaked", cfg.ID)
+		assert.NotContains(t, s, "skip lifecycle gates", "%s: stale lifecycle bypass wording leaked", cfg.ID)
+		assert.NotContains(t, s, "skip evidence checks", "%s: stale evidence bypass wording leaked", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(SkillIndexPath(cfg)), "%s: missing workflow skill index path", cfg.ID)
 		assert.Contains(t, s, "informational only", "%s: missing skill index authority boundary", cfg.ID)
@@ -1122,7 +1144,7 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 	assert.Equal(t, "custom", string(keptCommand))
 }
 
-func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
+func TestGenerateRefreshInvalidatesTrustedSurfacesAfterTransactionFailure(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
 
@@ -1130,8 +1152,6 @@ func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
 	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
 	manifestPath := filepath.Join(root, generatedOwnershipManifestPath(toolRegistry["claude"]))
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(toolRegistry["claude"]))
-	beforeCommand, err := os.ReadFile(commandPath)
-	require.NoError(t, err)
 	beforeManifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 
@@ -1166,15 +1186,14 @@ func TestGenerateRefreshRollsBackPriorTreeOnTransactionFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, failErr)
 
-	afterCommand, err := os.ReadFile(commandPath)
-	require.NoError(t, err)
-	assert.Equal(t, string(beforeCommand), string(afterCommand))
 	afterManifest, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(beforeManifest), string(afterManifest))
-	sentinel, err := os.ReadFile(sentinelPath)
-	require.NoError(t, err)
-	assert.Equal(t, "generated\n", string(sentinel))
+
+	_, statErr := os.Stat(sentinelPath)
+	assert.True(t, os.IsNotExist(statErr), "failed refresh must leave the sentinel absent")
+	_, statErr = os.Stat(commandPath)
+	assert.True(t, os.IsNotExist(statErr), "failed refresh must not leave previously trusted command prompts in place")
 }
 
 func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
