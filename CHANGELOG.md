@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0](https://github.com/signalridge/slipway/compare/v0.28.0...v0.29.0) (2026-06-18)
+
+
+### Features
+
+* **governance:** generalize digest proof reuse ([#264](https://github.com/signalridge/slipway/issues/264)) ([d5cf5a6](https://github.com/signalridge/slipway/commit/d5cf5a62824078b0c42e1ad9682b6a42fb92e2ad))
+
 ## [0.28.0](https://github.com/signalridge/slipway/compare/v0.27.0...v0.28.0) (2026-06-18)
 
 
