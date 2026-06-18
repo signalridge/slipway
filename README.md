@@ -46,6 +46,10 @@ Slipway is not a hosted service, project tracker, or replacement for an AI
 coding tool. It is the control plane that makes agent work legible and
 fail-closed.
 
+The core advantage is not another checklist. Slipway separates the current
+worktree, generated host instructions, lifecycle state, and review contexts,
+then makes the CLI recompute whether those pieces still agree.
+
 ## Why Slipway?
 
 | Capability | What it changes |
@@ -54,7 +58,9 @@ fail-closed.
 | **Thin AI adapters** | Generated Claude, Codex, Cursor, Gemini, and OpenCode files route agents back to the CLI instead of becoming separate workflow engines. |
 | **Plain-language entry** | After `slipway init --tools <id>`, users can describe a change normally; the generated entry skill routes the agent into the governed lifecycle. |
 | **Current-worktree authority** | `status`, `validate`, and `next` recompute state from the owning worktree instead of trusting stale summaries or archived records. |
-| **Fresh review chain** | S3 review peers, goal verification, and final closeout are recorded separately; the engine checks freshness and ordering before ship approval. |
+| **Context isolation checks** | Plan audit, implementation, selected S3 review peers, repair, goal verification, and final closeout carry distinct context-origin evidence and ordering checks. |
+| **Worktree-bound execution** | Discovery-heavy changes can run in a dedicated `.worktrees/<branch>` checkout; worktree path and branch binding are validated before execution continues. |
+| **Actual-edit wave audit** | Dependency-ordered waves can run in parallel, then Slipway audits real changed files, executor handles, dispatch mode, and scope containment after implementation. |
 | **Repo-owned audit trail** | `artifacts/changes/`, `.git/slipway/runtime/`, lifecycle events, and archived bundles keep the record inspectable after the session ends. |
 
 ## Quick Start
@@ -122,7 +128,9 @@ current primary stage command and stops at operator-facing boundaries.
 work, YAML verification records prove specific stages, and lifecycle events give
 an append-only trace of mutations. Read-only surfaces (`status`, `validate`,
 `next`) are the first place to look when a session resumes or a change is
-confusing.
+confusing. The primary mutation surfaces are `slipway new`, `slipway intake`,
+`slipway plan`, `slipway implement`, `slipway review`, `slipway fix`,
+`slipway done`, and the `slipway run` shortcut driver.
 
 ## Design Philosophy
 
@@ -130,6 +138,9 @@ Slipway follows three project rules:
 
 - **One current authority.** `change.yaml` owns lifecycle state; logs and
   Markdown support it but never replace it.
+- **Separated contexts, checked later.** Authoring, audit, review, repair, and
+  closeout evidence are recorded as separate participants; the gate checks that
+  the independence chain did not collapse.
 - **Human-readable, machine-checkable.** People can review the artifacts, while
   the CLI re-derives freshness from structured inputs.
 - **Smallest useful control plane.** Host adapters stay thin; governance lives
@@ -201,6 +212,21 @@ customizations.
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, session-start hook launchers |
 | Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/settings.json` hook entries |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, session-start hook launchers |
+
+Exported generated skill rows are pinned by public skill directory:
+`slipway/SKILL.md`, `slipway-ci-triage/SKILL.md`,
+`slipway-code-quality-review/SKILL.md`, `slipway-codebase-mapping/SKILL.md`,
+`slipway-coding-discipline/SKILL.md`, `slipway-context-assembly/SKILL.md`,
+`slipway-coverage-analysis/SKILL.md`, `slipway-final-closeout/SKILL.md`,
+`slipway-git-recovery/SKILL.md`, `slipway-goal-verification/SKILL.md`,
+`slipway-incident-response/SKILL.md`, `slipway-independent-review/SKILL.md`,
+`slipway-intake-clarification/SKILL.md`, `slipway-plan-audit/SKILL.md`,
+`slipway-research-orchestration/SKILL.md`,
+`slipway-root-cause-tracing/SKILL.md`, `slipway-security-review/SKILL.md`,
+`slipway-spec-compliance-review/SKILL.md`, `slipway-spec-trace/SKILL.md`,
+`slipway-tdd-governance/SKILL.md`, `slipway-test-design/SKILL.md`,
+`slipway-wave-orchestration/SKILL.md`, and
+`slipway-worktree-preflight/SKILL.md`.
 
 Codex does not have a session-hook surface; its entry skill pulls governed state
 with `slipway status --json` when needed. The other adapters can inject compact
