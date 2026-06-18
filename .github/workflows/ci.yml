@@ -55,6 +55,8 @@ jobs:
         with:
           version: v2.12.2
           args: --timeout=5m
+      - name: Run Slipway testlint
+        run: go run ./internal/testlint/cmd/testlint ./...
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

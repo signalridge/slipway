@@ -786,6 +786,13 @@ func validateEvidenceSkillStage(root string, change model.Change, def skill.Defi
 		)
 	}
 	if def.State == model.StateS1Plan && def.PlanSubStep != model.PlanSubStepNone && change.PlanSubStep != def.PlanSubStep {
+		refreshRequired, err := staleEvidenceSkillRefreshRequired(root, change, def.Name)
+		if err != nil {
+			return err
+		}
+		if refreshRequired {
+			return nil
+		}
 		return newInvalidUsageError(
 			"evidence_skill_wrong_plan_substep",
 			fmt.Sprintf("%s evidence requires S1_PLAN/%s, current substep: %s", def.Name, def.PlanSubStep, change.PlanSubStep),
@@ -804,6 +811,71 @@ func validateEvidenceSkillStage(root string, change model.Change, def skill.Defi
 	return nil
 }
 
+func staleEvidenceSkillRefreshRequired(root string, change model.Change, skillName string) (bool, error) {
+	skillName = strings.TrimSpace(skillName)
+	target, ok, err := progression.StaleEvidenceRepairAvailable(root, change, nil)
+	if err != nil {
+		return false, err
+	}
+	if ok && strings.TrimSpace(target.SkillName) == skillName {
+		return true, nil
+	}
+	return readinessRequiredSkillStaleRefreshRequired(root, change, skillName)
+}
+
+func readinessRequiredSkillStaleRefreshRequired(root string, change model.Change, skillName string) (bool, error) {
+	readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
+		IncludeGateEvaluations: true,
+	})
+	if err != nil {
+		return false, err
+	}
+	return hasRecoverableRequiredSkillStaleForSkill(readinessBlockers(readiness), skillName), nil
+}
+
+func readinessBlockers(readiness progression.GovernanceReadiness) []model.ReasonCode {
+	blockers := append([]model.ReasonCode{}, readiness.SkillBlockers...)
+	blockers = append(blockers, readiness.Blockers...)
+	for _, evaluation := range readiness.GateEvaluations {
+		blockers = append(blockers, evaluation.ReasonCodes...)
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+func hasRecoverableRequiredSkillStaleForSkill(blockers []model.ReasonCode, skillName string) bool {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" {
+		return false
+	}
+	for _, blocker := range blockers {
+		if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
+			continue
+		}
+		parsed := model.ParseBlocker(blocker)
+		if strings.TrimSpace(parsed.Subject) != skillName {
+			continue
+		}
+		if recoverableRequiredSkillStaleDetail(parsed.Detail) {
+			return true
+		}
+	}
+	return false
+}
+
+func recoverableRequiredSkillStaleDetail(detail string) bool {
+	detail = strings.TrimSpace(detail)
+	switch {
+	case detail == "":
+		return false
+	case detail == "input_digest_unavailable" || strings.HasSuffix(detail, ":input_digest_unavailable"):
+		return false
+	case detail == "input_digest_missing" || strings.HasSuffix(detail, ":input_digest_missing"):
+		return false
+	default:
+		return true
+	}
+}
+
 func currentS3ReviewAlignmentActive(root string, change model.Change) (bool, error) {
 	if change.CurrentState != model.StateS3Review {
 		return false, nil
@@ -816,18 +888,7 @@ func currentS3ReviewAlignmentActive(root string, change model.Change) (bool, err
 }
 
 func selectedReviewContextOriginRefreshRequired(root string, change model.Change, skillName string) (bool, error) {
-	record, err := state.LoadVerification(root, change.Slug, skillName)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	if !record.IsPassing() {
-		return false, nil
-	}
-	_, ok := model.ReviewContextOriginHandleFromVerification(record)
-	return !ok, nil
+	return progression.SelectedReviewContextOriginInvalid(root, change, skillName)
 }
 
 func evidenceTaskWrongStateRemediation(root string, change model.Change) string {
@@ -1136,6 +1197,14 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 				},
 			)
 		}
+		return nil
+	}
+
+	refreshRequired, err := staleEvidenceSkillRefreshRequired(root, change, def.Name)
+	if err != nil {
+		return err
+	}
+	if refreshRequired {
 		return nil
 	}
 

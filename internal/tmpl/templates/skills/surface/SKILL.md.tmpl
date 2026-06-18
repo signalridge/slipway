@@ -1,0 +1,48 @@
+---
+skill_id: {{.SkillID}}
+name: {{.PublicName}}
+description: {{.DescriptionYAML}}
+install_profiles:
+  - core
+{{- if .Requires }}
+requires:
+{{- range .Requires }}
+  - {{ . }}
+{{- end }}
+{{- else }}
+requires: []
+{{- end }}
+tool: "{{.ToolID}}"
+---
+
+# {{.Title}}
+
+This is a namespace router. It helps choose the right generated command or host
+surface; it does not execute lifecycle steps, replace evidence, or satisfy a
+gate.
+
+## Commands
+{{- range .Commands }}
+- `slipway {{.ID}}` ({{.Tier}}, {{.Class}}): {{.Description}}
+{{- end }}
+
+## Host Skills
+{{- range .HostSkills }}
+- `{{.PublicName}}` (`{{.Path}}`){{if .Description}}: {{.Description}}{{end}}
+{{- end }}
+
+## Routing Rules
+- Prefer the named `slipway <command>` CLI command or generated command skill
+  before loading a host skill.
+- If a governed stage is active, run `slipway next --json` and load the
+  returned host skill instead of guessing.
+- Treat public focus aliases as command selectors, not as lifecycle gates.
+- Never use this router as evidence for `G_plan`, `G_ship`, selected review,
+  sensitive-domain review, or final closeout.
+{{- if .Notes }}
+
+## Notes
+{{- range .Notes }}
+- {{ . }}
+{{- end }}
+{{- end }}

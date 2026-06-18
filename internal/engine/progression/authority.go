@@ -836,9 +836,7 @@ func crossStageContextParticipants(
 		}
 		handle, ok := model.ReviewContextOriginHandleFromVerification(record)
 		if !ok {
-			invalid = append(invalid, contextOriginHandleInvalidBlocker(
-				skillName+" ("+model.StageContextReview+") recorded no context-origin handle for selected reviewer",
-			))
+			invalid = append(invalid, selectedReviewContextOriginInvalidBlocker(skillName))
 			continue
 		}
 		participants[skillName] = model.ContextParticipant{Handle: handle.Handle}
@@ -1004,6 +1002,55 @@ func contextOriginHandleInvalidBlocker(detail string) model.ReasonCode {
 		"context_origin_handle_invalid",
 		strings.TrimSpace(detail)+"; re-run the owning stage in a fresh native subagent so it records a valid context-origin handle",
 	)
+}
+
+// SelectedReviewContextOriginInvalid reports whether the current review
+// authority has already accepted a selected review skill as passing but the same
+// selected skill is blocked only by its missing or malformed review
+// context_origin handle. Callers use this to permit a narrow replacement of the
+// invalid record without reopening arbitrary current passing evidence.
+func SelectedReviewContextOriginInvalid(root string, change model.Change, skillName string) (bool, error) {
+	authority, err := EvaluateReviewAuthority(root, change)
+	if err != nil {
+		return false, err
+	}
+	return selectedReviewContextOriginInvalid(authority, skillName), nil
+}
+
+func selectedReviewContextOriginInvalid(authority ReviewAuthority, skillName string) bool {
+	skillName = strings.TrimSpace(skillName)
+	if skillName == "" || !slices.Contains(normalizeReviewSkillNames(authority.SelectedReviewSkills), skillName) {
+		return false
+	}
+	record, ok := authority.PassingSkills[skillName]
+	if !ok || !record.IsPassing() {
+		return false
+	}
+	if _, ok := model.ReviewContextOriginHandleFromVerification(record); ok {
+		return false
+	}
+	return selectedReviewContextOriginInvalidBlockerForSkill(authority.Blockers, skillName)
+}
+
+func selectedReviewContextOriginInvalidBlockerForSkill(blockers []model.ReasonCode, skillName string) bool {
+	prefix := selectedReviewContextOriginInvalidDetail(skillName)
+	for _, blocker := range blockers {
+		if strings.TrimSpace(blocker.Code) != "context_origin_handle_invalid" {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(blocker.Detail), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectedReviewContextOriginInvalidBlocker(skillName string) model.ReasonCode {
+	return contextOriginHandleInvalidBlocker(selectedReviewContextOriginInvalidDetail(skillName))
+}
+
+func selectedReviewContextOriginInvalidDetail(skillName string) string {
+	return strings.TrimSpace(skillName) + " (" + model.StageContextReview + ") recorded no context-origin handle for selected reviewer"
 }
 
 func crossStageContextNotDistinctBlocker(detail string) model.ReasonCode {

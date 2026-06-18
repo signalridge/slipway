@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -12,8 +13,9 @@ import (
 type fileTransactionOpKind string
 
 const (
-	fileTransactionOpWrite  fileTransactionOpKind = "write"
-	fileTransactionOpRemove fileTransactionOpKind = "remove"
+	fileTransactionOpWrite     fileTransactionOpKind = "write"
+	fileTransactionOpRemove    fileTransactionOpKind = "remove"
+	fileTransactionOpRemoveAll fileTransactionOpKind = "remove_all"
 )
 
 // FileTransactionOp describes one ordered file mutation in a file transaction.
@@ -44,6 +46,15 @@ func RemoveFileTransactionOp(path string) FileTransactionOp {
 	}
 }
 
+// RemoveAllTransactionOp returns a transaction operation that removes a file or
+// directory tree when it exists.
+func RemoveAllTransactionOp(path string) FileTransactionOp {
+	return FileTransactionOp{
+		kind: fileTransactionOpRemoveAll,
+		path: path,
+	}
+}
+
 // ApplyFileTransaction applies ordered file writes/removes. If an operation
 // fails after earlier operations succeeded, earlier files are restored or
 // removed so callers do not observe a partial file set.
@@ -55,6 +66,7 @@ func ApplyFileTransaction(ops []FileTransactionOp) error {
 type FileTransactionHooks struct {
 	WriteFile  func(path string, data []byte, perm os.FileMode) error
 	RemoveFile func(path string) error
+	RemoveAll  func(path string) error
 }
 
 // ApplyFileTransactionWithHooks applies a file transaction with caller-supplied
@@ -63,12 +75,14 @@ func ApplyFileTransactionWithHooks(ops []FileTransactionOp, hooks FileTransactio
 	return applyFileTransaction(ops, fileTransactionHooks{
 		writeFile:  hooks.WriteFile,
 		removeFile: hooks.RemoveFile,
+		removeAll:  hooks.RemoveAll,
 	})
 }
 
 type fileTransactionHooks struct {
 	writeFile  func(path string, data []byte, perm os.FileMode) error
 	removeFile func(path string) error
+	removeAll  func(path string) error
 }
 
 func (hooks fileTransactionHooks) withDefaults() fileTransactionHooks {
@@ -78,16 +92,29 @@ func (hooks fileTransactionHooks) withDefaults() fileTransactionHooks {
 	if hooks.removeFile == nil {
 		hooks.removeFile = removeTransactionFileIfExists
 	}
+	if hooks.removeAll == nil {
+		hooks.removeAll = removeTransactionPathIfExists
+	}
 	return hooks
 }
 
 type fileSnapshot struct {
 	existed bool
+	isDir   bool
 	data    []byte
 	perm    os.FileMode
+	entries []fileTreeSnapshotEntry
+}
+
+type fileTreeSnapshotEntry struct {
+	rel   string
+	isDir bool
+	data  []byte
+	perm  os.FileMode
 }
 
 type appliedFileTransactionOp struct {
+	kind   fileTransactionOpKind
 	path   string
 	before fileSnapshot
 }
@@ -154,7 +181,7 @@ func applyFileTransaction(ops []FileTransactionOp, hooks fileTransactionHooks) e
 
 	applied := make([]appliedFileTransactionOp, 0, len(ops))
 	for _, op := range ops {
-		before, err := snapshotFileForTransaction(op.path)
+		before, err := snapshotPathForTransaction(op)
 		if err != nil {
 			if len(applied) > 0 {
 				return newFileTransactionError(err, rollbackFileTransaction(applied, hooks))
@@ -165,6 +192,7 @@ func applyFileTransaction(ops []FileTransactionOp, hooks fileTransactionHooks) e
 			return newFileTransactionError(err, rollbackFileTransaction(applied, hooks))
 		}
 		applied = append(applied, appliedFileTransactionOp{
+			kind:   op.kind,
 			path:   op.path,
 			before: before,
 		})
@@ -178,12 +206,19 @@ func validateFileTransactionOps(ops []FileTransactionOp) error {
 			return errors.New("file transaction path is required")
 		}
 		switch op.kind {
-		case fileTransactionOpWrite, fileTransactionOpRemove:
+		case fileTransactionOpWrite, fileTransactionOpRemove, fileTransactionOpRemoveAll:
 		default:
 			return fmt.Errorf("unknown file transaction operation %q for %s", op.kind, op.path)
 		}
 	}
 	return nil
+}
+
+func snapshotPathForTransaction(op FileTransactionOp) (fileSnapshot, error) {
+	if op.kind == fileTransactionOpRemoveAll {
+		return snapshotTreeForTransaction(op.path)
+	}
+	return snapshotFileForTransaction(op.path)
 }
 
 func snapshotFileForTransaction(path string) (fileSnapshot, error) {
@@ -208,6 +243,68 @@ func snapshotFileForTransaction(path string) (fileSnapshot, error) {
 	}, nil
 }
 
+func snapshotTreeForTransaction(path string) (fileSnapshot, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fileSnapshot{}, nil
+		}
+		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return snapshotFileForTransaction(path)
+	}
+
+	snapshot := fileSnapshot{
+		existed: true,
+		isDir:   true,
+		perm:    info.Mode().Perm(),
+	}
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", path, err)
+	}
+	defer func() {
+		_ = root.Close()
+	}()
+
+	var entryPaths []string
+	err = fs.WalkDir(root.FS(), ".", func(entryPath string, _ fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entryPath == "." {
+			return nil
+		}
+		entryPaths = append(entryPaths, entryPath)
+		return nil
+	})
+	if err != nil {
+		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", path, err)
+	}
+
+	for _, entryPath := range entryPaths {
+		info, err := root.Stat(entryPath)
+		if err != nil {
+			return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", filepath.Join(path, entryPath), err)
+		}
+		item := fileTreeSnapshotEntry{
+			rel:   filepath.FromSlash(entryPath),
+			isDir: info.IsDir(),
+			perm:  info.Mode().Perm(),
+		}
+		if !info.IsDir() {
+			data, err := root.ReadFile(entryPath)
+			if err != nil {
+				return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", filepath.Join(path, entryPath), err)
+			}
+			item.data = data
+		}
+		snapshot.entries = append(snapshot.entries, item)
+	}
+	return snapshot, nil
+}
+
 func applyFileTransactionOp(op FileTransactionOp, hooks fileTransactionHooks) error {
 	switch op.kind {
 	case fileTransactionOpWrite:
@@ -216,6 +313,10 @@ func applyFileTransactionOp(op FileTransactionOp, hooks fileTransactionHooks) er
 		}
 	case fileTransactionOpRemove:
 		if err := hooks.removeFile(op.path); err != nil {
+			return fmt.Errorf("remove %s: %w", op.path, err)
+		}
+	case fileTransactionOpRemoveAll:
+		if err := hooks.removeAll(op.path); err != nil {
 			return fmt.Errorf("remove %s: %w", op.path, err)
 		}
 	}
@@ -227,8 +328,12 @@ func rollbackFileTransaction(applied []appliedFileTransactionOp, hooks fileTrans
 	for i := len(applied) - 1; i >= 0; i-- {
 		item := applied[i]
 		var err error
-		if item.before.existed {
+		if item.before.existed && item.before.isDir {
+			err = restoreFileTreeSnapshot(item.path, item.before, hooks)
+		} else if item.before.existed {
 			err = hooks.writeFile(item.path, item.before.data, item.before.perm)
+		} else if item.kind == fileTransactionOpRemoveAll {
+			err = hooks.removeAll(item.path)
 		} else {
 			err = hooks.removeFile(item.path)
 		}
@@ -242,6 +347,31 @@ func rollbackFileTransaction(applied []appliedFileTransactionOp, hooks fileTrans
 	return rollbackErrs
 }
 
+func restoreFileTreeSnapshot(path string, snapshot fileSnapshot, hooks fileTransactionHooks) error {
+	if err := hooks.removeAll(path); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(path, snapshot.perm); err != nil { // #nosec G301 -- transaction restores a previously snapshotted mode.
+		return err
+	}
+	for _, item := range snapshot.entries {
+		target := filepath.Join(path, item.rel)
+		if item.isDir {
+			if err := os.MkdirAll(target, item.perm); err != nil { // #nosec G301 -- transaction restores a previously snapshotted mode.
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301 -- transaction restores caller-owned artifact directories.
+			return err
+		}
+		if err := hooks.writeFile(target, item.data, item.perm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func newFileTransactionError(operationErr error, rollbackErrs []error) error {
 	return &FileTransactionError{
 		OperationErr: operationErr,
@@ -251,6 +381,13 @@ func newFileTransactionError(operationErr error, rollbackErrs []error) error {
 
 func removeTransactionFileIfExists(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) { // #nosec G122 -- transaction paths are supplied by governed artifact/state code or tests.
+		return err
+	}
+	return nil
+}
+
+func removeTransactionPathIfExists(path string) error {
+	if err := os.RemoveAll(path); err != nil && !errors.Is(err, fs.ErrNotExist) { // #nosec G122 -- transaction paths are supplied by governed artifact/state code or tests.
 		return err
 	}
 	return nil

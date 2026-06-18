@@ -1,8 +1,10 @@
 package progression
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,23 +16,22 @@ func TestSteadyStateFreshnessPathsDoNotConsumeFileModTime(t *testing.T) {
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
 	for _, rel := range freshnessGuardProductionFiles(t, repoRoot) {
-		raw, err := os.ReadFile(filepath.Join(repoRoot, rel))
-		if err != nil {
-			t.Fatalf("read %s: %v", rel, err)
+		file := parseFreshnessGuardFile(t, repoRoot, rel)
+		allowedFunctions := []string(nil)
+		if rel == "internal/engine/progression/evidence_digests.go" {
+			allowedFunctions = []string{
+				"digestInputsChangedAfterVerdict",
+				"digestInputChangedAfterVerdict",
+				"digestInputPathChangedAfterVerdict",
+			}
 		}
-		source := string(raw)
-		if !strings.Contains(source, "ModTime(") {
-			continue
+		if disallowed := disallowedSelectorCalls(
+			file,
+			[]selectorCallMatch{{selector: "ModTime"}},
+			allowedFunctions...,
+		); len(disallowed) > 0 {
+			t.Fatalf("%s must not consume file mtimes on steady-state freshness paths: %v", rel, disallowed)
 		}
-		if rel == "internal/engine/progression/evidence_digests.go" &&
-			modTimeCallsLimitedToFunctions(source,
-				"func digestInputsChangedAfterVerdict(",
-				"func digestInputChangedAfterVerdict(",
-				"func digestInputPathChangedAfterVerdict(",
-			) {
-			continue
-		}
-		t.Fatalf("%s must not consume file mtimes on steady-state freshness paths", rel)
 	}
 }
 
@@ -39,25 +40,21 @@ func TestSteadyStateFreshnessPathsDoNotConsumeWallClockNow(t *testing.T) {
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
 	for _, rel := range freshnessGuardProductionFiles(t, repoRoot) {
-		raw, err := os.ReadFile(filepath.Join(repoRoot, rel))
-		if err != nil {
-			t.Fatalf("read %s: %v", rel, err)
-		}
-		source := string(raw)
-		if !strings.Contains(source, "time.Now(") {
-			continue
-		}
+		file := parseFreshnessGuardFile(t, repoRoot, rel)
+		allowedFunctions := []string(nil)
 		switch rel {
 		case "internal/engine/progression/wave_sync.go":
-			if sourceTokensLimitedToFunctions(source, []string{"time.Now("}, "func BuildExecutionSummary(") {
-				continue
-			}
+			allowedFunctions = []string{"BuildExecutionSummary"}
 		case "internal/state/wave_execution.go":
-			if sourceTokensLimitedToFunctions(source, []string{"time.Now("}, "func MaterializeWavePlan(") {
-				continue
-			}
+			allowedFunctions = []string{"MaterializeWavePlan"}
 		}
-		t.Fatalf("%s must not consume wall-clock time on steady-state freshness paths", rel)
+		if disallowed := disallowedSelectorCalls(
+			file,
+			[]selectorCallMatch{{receiverSuffix: "time", selector: "Now"}},
+			allowedFunctions...,
+		); len(disallowed) > 0 {
+			t.Fatalf("%s must not consume wall-clock time on steady-state freshness paths: %v", rel, disallowed)
+		}
 	}
 }
 
@@ -65,21 +62,18 @@ func TestGenericEvidenceFreshnessDoesNotUseTimestampOrdering(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
-	raw, err := os.ReadFile(filepath.Join(repoRoot, "internal/engine/context/context.go"))
-	if err != nil {
-		t.Fatalf("read context.go: %v", err)
+	contextFile := parseFreshnessGuardFile(t, repoRoot, "internal/engine/context/context.go")
+	disallowed := disallowedSelectorCalls(contextFile, []selectorCallMatch{
+		{receiverSuffix: "EvidenceTimestamp", selector: "Before"},
+		{receiverSuffix: "LatestRelevantUpdateAt", selector: "After"},
+		{receiverSuffix: "LatestRelevantUpdateAt", selector: "Before"},
+	})
+	if len(disallowed) > 0 {
+		t.Fatalf("generic evidence freshness must not compare timestamp ordering: %v", disallowed)
 	}
-	source := string(raw)
-	if strings.Contains(source, "EvidenceTimestamp.Before") ||
-		strings.Contains(source, "LatestRelevantUpdateAt.After") ||
-		strings.Contains(source, "LatestRelevantUpdateAt.Before") {
-		t.Fatalf("generic evidence freshness must not compare timestamp ordering")
-	}
-	raw, err = os.ReadFile(filepath.Join(repoRoot, "internal/state/execution_summary.go"))
-	if err != nil {
-		t.Fatalf("read execution_summary.go: %v", err)
-	}
-	if strings.Contains(string(raw), "func latestExecutionRelevantUpdateAt(") {
+
+	summaryFile := parseFreshnessGuardFile(t, repoRoot, "internal/state/execution_summary.go")
+	if hasFunctionDecl(summaryFile, "latestExecutionRelevantUpdateAt") {
 		t.Fatalf("execution-summary freshness must not keep artifact-clock baseline helpers")
 	}
 }
@@ -88,16 +82,15 @@ func TestAuthorityTimestampOrderingIsLimitedToProofOrderingGates(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
-	raw, err := os.ReadFile(filepath.Join(repoRoot, "internal/engine/progression/authority.go"))
-	if err != nil {
-		t.Fatalf("read authority.go: %v", err)
-	}
-	if !sourceTokensLimitedToFunctions(string(raw),
-		[]string{".Before(", ".After("},
-		"func proofReuseEdgeBlockers(",
-		"func closeoutChainOrderBlockers(",
-	) {
-		t.Fatalf("authority timestamp ordering must stay limited to proof-ordering gates")
+	file := parseFreshnessGuardFile(t, repoRoot, "internal/engine/progression/authority.go")
+	disallowed := disallowedSelectorCalls(
+		file,
+		[]selectorCallMatch{{selector: "Before"}, {selector: "After"}},
+		"proofReuseEdgeBlockers",
+		"closeoutChainOrderBlockers",
+	)
+	if len(disallowed) > 0 {
+		t.Fatalf("authority timestamp ordering must stay limited to proof-ordering gates: %v", disallowed)
 	}
 }
 
@@ -140,41 +133,89 @@ func freshnessGuardProductionFiles(t *testing.T, repoRoot string) []string {
 	return files
 }
 
-func modTimeCallsLimitedToFunctions(source string, signatures ...string) bool {
-	return sourceTokensLimitedToFunctions(source, []string{"ModTime("}, signatures...)
+type selectorCallMatch struct {
+	receiverSuffix string
+	selector       string
 }
 
-func sourceTokensLimitedToFunctions(source string, tokens []string, signatures ...string) bool {
-	lines := strings.Split(source, "\n")
-	allowed := make([]bool, len(lines))
-	for _, signature := range signatures {
-		start := -1
-		for idx, line := range lines {
-			if strings.Contains(line, signature) {
-				start = idx
-				break
-			}
-		}
-		if start < 0 {
-			return false
-		}
-		end := len(lines)
-		for idx := start + 1; idx < len(lines); idx++ {
-			if strings.HasPrefix(lines[idx], "func ") {
-				end = idx
-				break
-			}
-		}
-		for idx := start; idx < end; idx++ {
-			allowed[idx] = true
-		}
+func parseFreshnessGuardFile(t *testing.T, repoRoot string, rel string) *ast.File {
+	t.Helper()
+
+	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot, rel), nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", rel, err)
 	}
-	for idx, line := range lines {
-		for _, token := range tokens {
-			if strings.Contains(line, token) && !allowed[idx] {
+	return file
+}
+
+func disallowedSelectorCalls(file *ast.File, matches []selectorCallMatch, allowedFunctions ...string) []string {
+	allowed := make(map[string]struct{}, len(allowedFunctions))
+	for _, fn := range allowedFunctions {
+		allowed[fn] = struct{}{}
+	}
+
+	var disallowed []string
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if _, ok := allowed[fn.Name.Name]; ok {
+			continue
+		}
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			for _, match := range matches {
+				if !match.matches(sel) {
+					continue
+				}
+				disallowed = append(disallowed, fn.Name.Name+" uses "+selectorPath(sel))
 				return false
 			}
+			return true
+		})
+	}
+	return disallowed
+}
+
+func (match selectorCallMatch) matches(sel *ast.SelectorExpr) bool {
+	if sel.Sel.Name != match.selector {
+		return false
+	}
+	if match.receiverSuffix == "" {
+		return true
+	}
+	return strings.HasSuffix(selectorPath(sel.X), match.receiverSuffix)
+}
+
+func selectorPath(expr ast.Expr) string {
+	switch n := expr.(type) {
+	case *ast.Ident:
+		return n.Name
+	case *ast.SelectorExpr:
+		prefix := selectorPath(n.X)
+		if prefix == "" {
+			return n.Sel.Name
+		}
+		return prefix + "." + n.Sel.Name
+	default:
+		return ""
+	}
+}
+
+func hasFunctionDecl(file *ast.File, name string) bool {
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Name.Name == name {
+			return true
 		}
 	}
-	return true
+	return false
 }

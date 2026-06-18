@@ -5,210 +5,210 @@
       "kind": "adapter",
       "name": "claude",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "`claude`"
     },
     {
       "kind": "adapter",
       "name": "codex",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "`codex`"
     },
     {
       "kind": "adapter",
       "name": "cursor",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "`cursor`"
     },
     {
       "kind": "adapter",
       "name": "gemini",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "`gemini`"
     },
     {
       "kind": "adapter",
       "name": "opencode",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "`opencode`"
     },
     {
       "kind": "command",
       "name": "abort",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway abort"
     },
     {
       "kind": "command",
       "name": "cancel",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway cancel"
     },
     {
       "kind": "command",
       "name": "checkpoint",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway checkpoint"
     },
     {
       "kind": "command",
       "name": "codebase-map",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway codebase-map"
     },
     {
       "kind": "command",
       "name": "delete",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway delete"
     },
     {
       "kind": "command",
       "name": "done",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway done"
     },
     {
       "kind": "command",
       "name": "evidence",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway evidence"
     },
     {
       "kind": "command",
       "name": "fix",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway fix"
     },
     {
       "kind": "command",
       "name": "health",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway health"
     },
     {
       "kind": "command",
       "name": "implement",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway implement"
     },
     {
       "kind": "command",
       "name": "init",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway init"
     },
     {
       "kind": "command",
       "name": "instructions",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway instructions"
     },
     {
       "kind": "command",
       "name": "intake",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway intake"
     },
     {
       "kind": "command",
       "name": "learn",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway learn"
     },
     {
       "kind": "command",
       "name": "new",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway new"
     },
     {
       "kind": "command",
       "name": "next",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway next"
     },
     {
       "kind": "command",
       "name": "plan",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway plan"
     },
     {
       "kind": "command",
       "name": "preset",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway preset"
     },
     {
       "kind": "command",
       "name": "repair",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway repair"
     },
     {
       "kind": "command",
       "name": "review",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway review"
     },
     {
       "kind": "command",
       "name": "run",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway run"
     },
     {
       "kind": "command",
       "name": "stats",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway stats"
     },
     {
       "kind": "command",
       "name": "status",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway status"
     },
     {
       "kind": "command",
       "name": "tool",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway tool"
     },
     {
       "kind": "command",
       "name": "validate",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway validate"
     },
     {
@@ -220,191 +220,191 @@
     },
     {
       "kind": "documentation",
-      "name": "docs/ai-tools.md",
-      "source": "docs/ai-tools.md",
-      "docs": "docs/ai-tools.md",
+      "name": "docs/how-to/recover-and-troubleshoot.md",
+      "source": "docs/how-to/recover-and-troubleshoot.md",
+      "docs": "docs/how-to/recover-and-troubleshoot.md",
+      "token": "Diagnostic JSON"
+    },
+    {
+      "kind": "documentation",
+      "name": "docs/reference/ai-tools.md",
+      "source": "docs/reference/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "Generated Command Surface"
     },
     {
       "kind": "documentation",
-      "name": "docs/commands.md",
-      "source": "docs/commands.md",
-      "docs": "docs/commands.md",
+      "name": "docs/reference/commands.md",
+      "source": "docs/reference/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "Command Reference"
-    },
-    {
-      "kind": "documentation",
-      "name": "docs/operator-guide.md",
-      "source": "docs/operator-guide.md",
-      "docs": "docs/operator-guide.md",
-      "token": "Diagnostic JSON"
     },
     {
       "kind": "json-contract",
       "name": "abort-json",
       "source": "cmd/abort.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway abort --json"
     },
     {
       "kind": "json-contract",
       "name": "cancel-json",
       "source": "cmd/cancel.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway cancel --json"
     },
     {
       "kind": "json-contract",
       "name": "checkpoint-json",
       "source": "cmd/checkpoint.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway checkpoint --task-id \u003cid\u003e --json"
     },
     {
       "kind": "json-contract",
       "name": "codebase-map-json",
       "source": "cmd/codebase_map.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway codebase-map --json"
     },
     {
       "kind": "json-contract",
       "name": "delete-json",
       "source": "cmd/delete.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway delete --change \u003cslug\u003e --json"
     },
     {
       "kind": "json-contract",
       "name": "done-json",
       "source": "cmd/done.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway done --json"
     },
     {
       "kind": "json-contract",
       "name": "evidence-skill-json",
       "source": "cmd/evidence.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway evidence skill --skill \u003cname\u003e --verdict pass --json"
     },
     {
       "kind": "json-contract",
       "name": "evidence-task-json",
       "source": "cmd/evidence.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref \"test:go-test\" --json"
     },
     {
       "kind": "json-contract",
       "name": "fix-json",
       "source": "cmd/fix.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway fix --json"
     },
     {
       "kind": "json-contract",
       "name": "health-json",
       "source": "cmd/health.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway health --json"
     },
     {
       "kind": "json-contract",
       "name": "implement-json",
       "source": "cmd/implement.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway implement --json"
     },
     {
       "kind": "json-contract",
       "name": "instructions-json",
       "source": "cmd/instructions.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway instructions \u003cartifact\u003e --json"
     },
     {
       "kind": "json-contract",
       "name": "intake-json",
       "source": "cmd/intake.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway intake --json"
     },
     {
       "kind": "json-contract",
       "name": "learn-json",
       "source": "cmd/learn.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway learn --json"
     },
     {
       "kind": "json-contract",
       "name": "new-json",
       "source": "cmd/new.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway new --json"
     },
     {
       "kind": "json-contract",
       "name": "next-json",
       "source": "cmd/next.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway next --json"
     },
     {
       "kind": "json-contract",
       "name": "plan-json",
       "source": "cmd/plan.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway plan --json"
     },
     {
       "kind": "json-contract",
       "name": "preset-json",
       "source": "cmd/preset.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway preset \u003clevel\u003e --json"
     },
     {
       "kind": "json-contract",
       "name": "repair-json",
       "source": "cmd/repair.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway repair --json"
     },
     {
       "kind": "json-contract",
       "name": "review-json",
       "source": "cmd/review.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway review --json"
     },
     {
       "kind": "json-contract",
       "name": "run-json",
       "source": "cmd/run.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway run --json"
     },
     {
       "kind": "json-contract",
       "name": "stats-json",
       "source": "cmd/stats.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway stats --json"
     },
     {
       "kind": "json-contract",
       "name": "status-json",
       "source": "cmd/status.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway status --json"
     },
     {
       "kind": "json-contract",
       "name": "validate-json",
       "source": "cmd/validate.go",
-      "docs": "docs/commands.md",
+      "docs": "docs/reference/commands.md",
       "token": "slipway validate --json"
     },
     {
@@ -418,21 +418,21 @@
       "kind": "skill",
       "name": "slipway-abort",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-abort"
     },
     {
       "kind": "skill",
       "name": "slipway-cancel",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-cancel"
     },
     {
       "kind": "skill",
       "name": "slipway-checkpoint",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-checkpoint"
     },
     {
@@ -453,7 +453,7 @@
       "kind": "skill",
       "name": "slipway-codebase-map",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-codebase-map"
     },
     {
@@ -488,21 +488,21 @@
       "kind": "skill",
       "name": "slipway-delete",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-delete"
     },
     {
       "kind": "skill",
       "name": "slipway-done",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-done"
     },
     {
       "kind": "skill",
       "name": "slipway-evidence",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-evidence"
     },
     {
@@ -516,7 +516,7 @@
       "kind": "skill",
       "name": "slipway-fix",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-fix"
     },
     {
@@ -537,14 +537,14 @@
       "kind": "skill",
       "name": "slipway-health",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-health"
     },
     {
       "kind": "skill",
       "name": "slipway-implement",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-implement"
     },
     {
@@ -565,21 +565,21 @@
       "kind": "skill",
       "name": "slipway-init",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-init"
     },
     {
       "kind": "skill",
       "name": "slipway-instructions",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-instructions"
     },
     {
       "kind": "skill",
       "name": "slipway-intake",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-intake"
     },
     {
@@ -593,28 +593,28 @@
       "kind": "skill",
       "name": "slipway-learn",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-learn"
     },
     {
       "kind": "skill",
       "name": "slipway-new",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-new"
     },
     {
       "kind": "skill",
       "name": "slipway-next",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-next"
     },
     {
       "kind": "skill",
       "name": "slipway-plan",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-plan"
     },
     {
@@ -628,14 +628,14 @@
       "kind": "skill",
       "name": "slipway-preset",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-preset"
     },
     {
       "kind": "skill",
       "name": "slipway-repair",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-repair"
     },
     {
@@ -649,7 +649,7 @@
       "kind": "skill",
       "name": "slipway-review",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-review"
     },
     {
@@ -663,7 +663,7 @@
       "kind": "skill",
       "name": "slipway-run",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-run"
     },
     {
@@ -691,14 +691,14 @@
       "kind": "skill",
       "name": "slipway-stats",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-stats"
     },
     {
       "kind": "skill",
       "name": "slipway-status",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-status"
     },
     {
@@ -719,7 +719,7 @@
       "kind": "skill",
       "name": "slipway-validate",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
-      "docs": "docs/ai-tools.md",
+      "docs": "docs/reference/ai-tools.md",
       "token": "$slipway-validate"
     },
     {

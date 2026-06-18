@@ -83,15 +83,25 @@ func TestInitWorkspaceRefreshWithoutToolsAutoDetects(t *testing.T) {
 	_, err := os.Stat(sentinelPath)
 	require.NoError(t, err, "initial generation should create sentinel")
 
-	// Tamper with a command entry to verify refresh overwrites it.
 	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+	pristine, err := os.ReadFile(commandPath)
+	require.NoError(t, err)
+
+	// Refresh without --tools: should auto-detect .claude/ and refresh pristine content.
+	require.NoError(t, InitWorkspace(root, nil, true))
+	refreshed, err := os.ReadFile(commandPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(pristine), string(refreshed), "refresh should regenerate pristine managed content")
+
+	// Tampered marker-only files have no ownership-manifest proof, so refresh
+	// must refuse to overwrite them.
 	require.NoError(t, os.WriteFile(commandPath, []byte("tampered"), 0o644))
 
-	// Refresh without --tools: should auto-detect .claude/ and refresh.
-	require.NoError(t, InitWorkspace(root, nil, true))
+	err = InitWorkspace(root, nil, true)
+	require.Error(t, err)
 	content, err := os.ReadFile(commandPath)
 	require.NoError(t, err)
-	assert.NotEqual(t, "tampered", string(content), "refresh should have regenerated the file")
+	assert.Equal(t, "tampered", string(content), "refresh must preserve unknown modified content")
 }
 
 func TestInitWorkspaceRefreshWithoutToolsCleanWorkspace(t *testing.T) {
