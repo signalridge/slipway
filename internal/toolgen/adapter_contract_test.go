@@ -36,6 +36,7 @@ type frozenHookContract struct {
 }
 
 type frozenToolContract struct {
+	OwnershipRoot string
 	CommandBase   frozenSurfaceBase
 	CommandRoot   string
 	CommandStyle  string
@@ -43,6 +44,7 @@ type frozenToolContract struct {
 	TriggerPrefix string
 	TriggerStyle  string
 	SettingsPath  string
+	SettingsKind  string
 	SessionHook   frozenHookContract
 	PostToolHook  frozenHookContract
 }
@@ -77,13 +79,20 @@ var frozenAdapterCommandIDs = []string{
 var frozenToolOrder = []string{
 	"claude",
 	"codex",
+	"copilot",
 	"cursor",
 	"gemini",
+	"kilo",
+	"kiro",
 	"opencode",
+	"pi",
+	"qwen",
+	"windsurf",
 }
 
 var frozenToolContracts = map[string]frozenToolContract{
 	"claude": {
+		OwnershipRoot: ".claude",
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".claude/commands",
 		CommandStyle:  "nested",
@@ -107,6 +116,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		},
 	},
 	"codex": {
+		OwnershipRoot: ".codex",
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".codex/skills",
 		CommandStyle:  "skill",
@@ -114,7 +124,17 @@ var frozenToolContracts = map[string]frozenToolContract{
 		TriggerPrefix: "$slipway-",
 		TriggerStyle:  "dollar-mention",
 	},
+	"copilot": {
+		OwnershipRoot: ".github/copilot",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".github/prompts",
+		CommandStyle:  "flat",
+		CommandExt:    ".prompt.md",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+	},
 	"cursor": {
+		OwnershipRoot: ".cursor",
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".cursor/commands",
 		CommandStyle:  "flat",
@@ -128,6 +148,7 @@ var frozenToolContracts = map[string]frozenToolContract{
 		},
 	},
 	"gemini": {
+		OwnershipRoot: ".gemini",
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".gemini/commands",
 		CommandStyle:  "nested",
@@ -143,7 +164,26 @@ var frozenToolContracts = map[string]frozenToolContract{
 			EmitsLauncher: false,
 		},
 	},
+	"kilo": {
+		OwnershipRoot: ".kilocode",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".kilocode/workflows",
+		CommandStyle:  "flat",
+		CommandExt:    ".md",
+		TriggerPrefix: "/slipway",
+		TriggerStyle:  "slash-colon",
+	},
+	"kiro": {
+		OwnershipRoot: ".kiro",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".kiro/skills",
+		CommandStyle:  "skill",
+		CommandExt:    ".md",
+		TriggerPrefix: "@slipway",
+		TriggerStyle:  "at-colon",
+	},
 	"opencode": {
+		OwnershipRoot: ".opencode",
 		CommandBase:   frozenSurfaceRoot,
 		CommandRoot:   ".opencode/commands",
 		CommandStyle:  "flat",
@@ -155,6 +195,43 @@ var frozenToolContracts = map[string]frozenToolContract{
 			Registered:    false,
 			EmitsLauncher: true,
 		},
+	},
+	"pi": {
+		OwnershipRoot: ".pi",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".pi/prompts",
+		CommandStyle:  "flat",
+		CommandExt:    ".md",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		SettingsPath:  ".pi/settings.json",
+		SettingsKind:  settingsKindPiRegistration,
+	},
+	"qwen": {
+		OwnershipRoot: ".qwen",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".qwen/skills",
+		CommandStyle:  "skill",
+		CommandExt:    ".md",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		SettingsPath:  ".qwen/settings.json",
+		SessionHook: frozenHookContract{
+			Event:         "SessionStart",
+			Path:          ".qwen/hooks/slipway-session-start",
+			Registered:    true,
+			InlineCommand: sessionStartHookCommand,
+			EmitsLauncher: false,
+		},
+	},
+	"windsurf": {
+		OwnershipRoot: ".windsurf",
+		CommandBase:   frozenSurfaceRoot,
+		CommandRoot:   ".windsurf/workflows",
+		CommandStyle:  "flat",
+		CommandExt:    ".md",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
 	},
 }
 
@@ -169,9 +246,11 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 		toolID := toolID
 		t.Run(toolID, func(t *testing.T) {
 			contract := frozenToolContracts[toolID]
+			assertFrozenOwnershipContract(t, root, toolID, contract)
 			assertFrozenCommandSet(t, root, codexHome, toolID, contract)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.SessionHook)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.PostToolHook)
+			assertFrozenSettingsContract(t, root, contract)
 		})
 	}
 }
@@ -191,8 +270,11 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 			content, err := os.ReadFile(absPath)
 			require.NoError(t, err, "missing generated command skill for %s/%s", toolID, id)
 			assert.Contains(t, string(content), contract.commandContentMarker(id), "%s/%s contract marker drifted", toolID, id)
+			assert.Contains(t, string(content), contract.commandTrigger(id), "%s/%s command trigger drifted", toolID, id)
 		}
-		assertNoFrozenCodexCommandPrompts(t, codexHome)
+		if toolID == "codex" {
+			assertNoFrozenCodexCommandPrompts(t, codexHome)
+		}
 		return
 	}
 
@@ -267,10 +349,32 @@ func (c frozenToolContract) commandContentMarker(id string) string {
 }
 
 func (c frozenToolContract) commandTrigger(id string) string {
-	if c.TriggerStyle == "slash-colon" {
+	if c.TriggerStyle == "slash-colon" || c.TriggerStyle == "at-colon" {
 		return c.TriggerPrefix + ":" + id
 	}
 	return c.TriggerPrefix + id
+}
+
+func assertFrozenOwnershipContract(t *testing.T, root, toolID string, contract frozenToolContract) {
+	t.Helper()
+
+	cfg, ok := toolRegistry[toolID]
+	require.True(t, ok, "missing tool registry config for %s", toolID)
+	assert.Equal(t, contract.OwnershipRoot, filepath.ToSlash(ToolRootPath(cfg)), "%s ownership root drifted", toolID)
+
+	markerRel := filepath.ToSlash(filepath.Join(contract.OwnershipRoot, "slipway", ".adapter-generated"))
+	manifestRel := filepath.ToSlash(filepath.Join(contract.OwnershipRoot, "slipway", ownershipManifestFileName))
+	assert.Equal(t, markerRel, filepath.ToSlash(GeneratedAdapterMarkerPath(cfg)), "%s sentinel path drifted", toolID)
+	assert.Equal(t, manifestRel, filepath.ToSlash(generatedOwnershipManifestPath(cfg)), "%s ownership manifest path drifted", toolID)
+	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(markerRel)), "%s missing ownership sentinel", toolID)
+	assert.FileExists(t, filepath.Join(root, filepath.FromSlash(manifestRel)), "%s missing ownership manifest", toolID)
+
+	if toolID == "copilot" {
+		_, err := os.Stat(filepath.Join(root, ".github", "slipway", ".adapter-generated"))
+		assert.True(t, os.IsNotExist(err), "copilot must not claim shared .github sentinel ownership")
+		_, err = os.Stat(filepath.Join(root, ".github", "slipway", ownershipManifestFileName))
+		assert.True(t, os.IsNotExist(err), "copilot must not claim shared .github manifest ownership")
+	}
 }
 
 func collectRelativeFiles(t *testing.T, absRoot string, base frozenSurfaceBase, root, codexHome string) []string {
@@ -352,6 +456,20 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 	registered, err := hookCommandRegistered(settingsAbsPath, hook.Event, hook.InlineCommand)
 	require.NoError(t, err)
 	assert.Equal(t, hook.Registered, registered, "hook registration drifted for %s", hook.Path)
+}
+
+func assertFrozenSettingsContract(t *testing.T, root string, contract frozenToolContract) {
+	t.Helper()
+
+	switch contract.SettingsKind {
+	case "":
+		return
+	case settingsKindPiRegistration:
+		require.NotEmpty(t, contract.SettingsPath, "Pi registration settings require a settings path")
+		assertPiRegistrationSettings(t, filepath.Join(root, filepath.FromSlash(contract.SettingsPath)))
+	default:
+		t.Fatalf("unsupported frozen settings kind %q", contract.SettingsKind)
+	}
 }
 
 func assertShellNeutralHookCommand(t *testing.T, command string) {

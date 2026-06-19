@@ -17,6 +17,13 @@
     },
     {
       "kind": "adapter",
+      "name": "copilot",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`copilot`"
+    },
+    {
+      "kind": "adapter",
       "name": "cursor",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
       "docs": "docs/reference/ai-tools.md",
@@ -31,10 +38,45 @@
     },
     {
       "kind": "adapter",
+      "name": "kilo",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`kilo`"
+    },
+    {
+      "kind": "adapter",
+      "name": "kiro",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`kiro`"
+    },
+    {
+      "kind": "adapter",
       "name": "opencode",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
       "docs": "docs/reference/ai-tools.md",
       "token": "`opencode`"
+    },
+    {
+      "kind": "adapter",
+      "name": "pi",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`pi`"
+    },
+    {
+      "kind": "adapter",
+      "name": "qwen",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`qwen`"
+    },
+    {
+      "kind": "adapter",
+      "name": "windsurf",
+      "source": "internal/toolgen/toolgen.go:toolRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "`windsurf`"
     },
     {
       "kind": "command",
