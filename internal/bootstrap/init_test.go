@@ -75,7 +75,6 @@ func TestInitWorkspacePreservesExistingGitIgnoreEntries(t *testing.T) {
 
 func TestInitWorkspaceRefreshWithoutToolsAutoDetects(t *testing.T) {
 	root := initGitRepo(t)
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	// Initial generation with explicit tools.
 	require.NoError(t, InitWorkspace(root, []string{"claude"}, false))
@@ -114,9 +113,24 @@ func TestInitWorkspaceRefreshWithoutToolsCleanWorkspace(t *testing.T) {
 	assert.Contains(t, err.Error(), "no sentinelized adapters detected")
 }
 
+func TestInitWorkspaceExplicitRefreshWithoutSentinelPreservesUnknownSurface(t *testing.T) {
+	root := initGitRepo(t)
+
+	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(commandPath), 0o755))
+	require.NoError(t, os.WriteFile(commandPath, []byte("user command"), 0o644))
+
+	err := InitWorkspace(root, []string{"claude"}, true, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "refusing to overwrite unknown file")
+
+	got, readErr := os.ReadFile(commandPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "user command", string(got))
+}
+
 func TestInitWorkspaceWithToolsPreservesExistingConfig(t *testing.T) {
 	root := initGitRepo(t)
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	cfg := model.DefaultConfig()
 	cfg.Context.TechStack = "Go"

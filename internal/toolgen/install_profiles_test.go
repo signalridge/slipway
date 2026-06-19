@@ -45,7 +45,6 @@ func TestInstallProfileClosurePreservesFailClosedSkills(t *testing.T) {
 
 func TestCoreInstallProfileGeneratesRoutersAndPrunesOptionalCodexSkills(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, GenerateWithInstallProfile(root, []string{"codex"}, true, SkillInstallProfileCore))
 
@@ -99,7 +98,6 @@ func TestCoreInstallProfileGeneratesRoutersAndPrunesOptionalCodexSkills(t *testi
 
 func TestInstallProfileFrontmatterRecordsMetadata(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, GenerateWithInstallProfile(root, []string{"codex"}, true, SkillInstallProfileCore))
 

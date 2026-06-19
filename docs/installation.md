@@ -382,11 +382,10 @@ find .claude .codex .github/skills .github/prompts .github/copilot .cursor .gemi
 ```
 
 Codex command surfaces are generated as skills under
-`.codex/skills/slipway-<command>/SKILL.md`. `slipway init --tools codex
---refresh` also removes legacy generated command prompt files from
-`$CODEX_HOME/prompts/` (or `~/.codex/prompts/` when `CODEX_HOME` is unset) so
-the retired command surface does not linger. For hook-capable adapters,
-`--refresh` also removes Slipway-owned retired hook launchers. Settings-capable
+`.codex/skills/slipway-<command>/SKILL.md`. Codex refresh only manages the
+project-local `.codex/` adapter tree; it does not touch host-global
+`$CODEX_HOME/prompts/` or `~/.codex/prompts/` files. For hook-capable adapters,
+`--refresh` removes Slipway-owned retired hook launchers. Settings-capable
 hosts migrate retired launcher-path settings entries to bare inline
 `slipway hook ...` commands; Cursor and OpenCode keep their file-by-path
 session-start launchers.

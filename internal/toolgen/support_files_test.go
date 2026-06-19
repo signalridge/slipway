@@ -139,7 +139,6 @@ func TestCheckedInSkillTemplatesDoNotShipScriptHelpers(t *testing.T) {
 // Update the golden by running with UPDATE_GOLDEN=1.
 func TestGeneratedSkillTreeInventoryManifest(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	cfg := toolRegistry["codex"]
