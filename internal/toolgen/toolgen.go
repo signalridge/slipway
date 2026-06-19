@@ -966,15 +966,17 @@ func commandEntryPath(root string, cfg ToolConfig, id string) string {
 func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillInstallClosure) (err error) {
 	sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 	_, sentinelErr := os.Stat(sentinelPath)
-	hadGeneratedAdapter := sentinelErr == nil
-	if !hadGeneratedAdapter {
-		_, manifestFound, manifestErr := loadOwnershipManifest(root, cfg)
+	sentinelFound := sentinelErr == nil
+	manifestFound := false
+	if refresh || !sentinelFound {
+		_, found, manifestErr := loadOwnershipManifest(root, cfg)
 		if manifestErr != nil {
 			return manifestErr
 		}
-		hadGeneratedAdapter = manifestFound
+		manifestFound = found
 	}
-	plan, err := newToolRefreshPlan(root, cfg, refresh)
+	hadGeneratedAdapter := sentinelFound || manifestFound
+	plan, err := newToolRefreshPlan(root, cfg, refresh, sentinelFound && !manifestFound)
 	if err != nil {
 		return err
 	}
@@ -1188,12 +1190,6 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 				return err
 			}
 		}
-		// Legacy migration note: prior versions wrote host-global Codex prompt
-		// files. Preserve them because $CODEX_HOME/prompts is outside the
-		// project-local ownership manifest and has no checksum proof.
-		if refresh {
-			preserveLegacyCodexPrompts(cfg)
-		}
 	}
 
 	// Settings registration is keyed on whether the host owns a settings.json.
@@ -1396,7 +1392,10 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter
 func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string, plan *toolRefreshPlan) error {
 	dir := filepath.Join(root, cfg.CommandsDir, "slipway")
 	for _, id := range commandIDs() {
-		if err := removePathIfExistsWithPlan(plan, filepath.Join(dir, id+ext)); err != nil {
+		// Flat adapters may have old nested command directories from pre-flat
+		// generations. Without manifest proof, preserve them because nested
+		// migration cleanup cannot distinguish generated files from user commands.
+		if err := removePathIfExistsWithPlanPolicy(plan, filepath.Join(dir, id+ext), false); err != nil {
 			return err
 		}
 	}
@@ -1414,15 +1413,6 @@ func cleanupLegacyNestedCommandEntries(root string, cfg ToolConfig, ext string, 
 		return nil
 	}
 	return os.Remove(dir)
-}
-
-// preserveLegacyCodexPrompts intentionally keeps retired pre-skill Codex prompt
-// files under $CODEX_HOME/prompts. That directory is host-global user state, and
-// the project-local ownership manifest cannot prove Slipway owns those files.
-func preserveLegacyCodexPrompts(cfg ToolConfig) {
-	if !cfg.CommandSkillSurface {
-		return
-	}
 }
 
 func cleanupUnexpectedEntries(dir string, expected map[string]struct{}, plan *toolRefreshPlan) error {
@@ -1787,8 +1777,12 @@ func removePathIfExists(name string) error {
 }
 
 func removePathIfExistsWithPlan(plan *toolRefreshPlan, name string) error {
+	return removePathIfExistsWithPlanPolicy(plan, name, true)
+}
+
+func removePathIfExistsWithPlanPolicy(plan *toolRefreshPlan, name string, allowManifestlessBootstrap bool) error {
 	if plan != nil {
-		return plan.removeGeneratedPath(name)
+		return plan.removeGeneratedPath(name, allowManifestlessBootstrap)
 	}
 	return removePathIfExists(name)
 }

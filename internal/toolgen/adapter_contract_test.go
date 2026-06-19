@@ -15,8 +15,7 @@ import (
 type frozenSurfaceBase string
 
 const (
-	frozenSurfaceRoot      frozenSurfaceBase = "root"
-	frozenSurfaceCodexHome frozenSurfaceBase = "codex_home"
+	frozenSurfaceRoot frozenSurfaceBase = "root"
 )
 
 type frozenHookContract struct {
@@ -237,8 +236,6 @@ var frozenToolContracts = map[string]frozenToolContract{
 
 func TestAdapterContractsRemainStable(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
 
 	require.NoError(t, Generate(root, frozenToolOrder, true))
 
@@ -247,7 +244,7 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 		t.Run(toolID, func(t *testing.T) {
 			contract := frozenToolContracts[toolID]
 			assertFrozenOwnershipContract(t, root, toolID, contract)
-			assertFrozenCommandSet(t, root, codexHome, toolID, contract)
+			assertFrozenCommandSet(t, root, toolID, contract)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.SessionHook)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.PostToolHook)
 			assertFrozenSettingsContract(t, root, contract)
@@ -255,25 +252,20 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 	}
 }
 
-func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contract frozenToolContract) {
+func assertFrozenCommandSet(t *testing.T, root, toolID string, contract frozenToolContract) {
 	t.Helper()
 
 	// Codex exposes commands as per-command skills, not a flat command-surface
 	// directory. The skills dir also holds host/governance skills, so assert each
-	// frozen command id has its skill file rather than a strict directory match,
-	// and assert no retired generated command prompts remain under
-	// $CODEX_HOME/prompts.
+	// frozen command id has its skill file rather than a strict directory match.
 	if contract.CommandStyle == "skill" {
 		for _, id := range frozenAdapterCommandIDs {
 			relPath := contract.commandPath(id)
-			absPath := contract.resolvePath(root, codexHome, relPath)
+			absPath := contract.resolvePath(root, relPath)
 			content, err := os.ReadFile(absPath)
 			require.NoError(t, err, "missing generated command skill for %s/%s", toolID, id)
 			assert.Contains(t, string(content), contract.commandContentMarker(id), "%s/%s contract marker drifted", toolID, id)
 			assert.Contains(t, string(content), contract.commandTrigger(id), "%s/%s command trigger drifted", toolID, id)
-		}
-		if toolID == "codex" {
-			assertNoFrozenCodexCommandPrompts(t, codexHome)
 		}
 		return
 	}
@@ -283,28 +275,15 @@ func assertFrozenCommandSet(t *testing.T, root, codexHome, toolID string, contra
 		expectedPaths = append(expectedPaths, contract.commandPath(id))
 	}
 
-	actualPaths := collectRelativeFiles(t, contract.commandRootAbs(root, codexHome), contract.CommandBase, root, codexHome)
+	actualPaths := collectRelativeFiles(t, contract.commandRootAbs(root), contract.CommandBase, root)
 	assert.Equal(t, expectedPaths, actualPaths, "%s command paths drifted", toolID)
 
 	for _, id := range frozenAdapterCommandIDs {
 		relPath := contract.commandPath(id)
-		absPath := contract.resolvePath(root, codexHome, relPath)
+		absPath := contract.resolvePath(root, relPath)
 		content, err := os.ReadFile(absPath)
 		require.NoError(t, err, "missing generated command surface for %s/%s", toolID, id)
 		assert.Contains(t, string(content), contract.commandContentMarker(id), "%s/%s contract marker drifted", toolID, id)
-	}
-}
-
-// assertNoFrozenCodexCommandPrompts asserts the retired generated Codex command
-// prompt files are absent. It deliberately checks the command registry filenames
-// rather than the whole slipway-* namespace because $CODEX_HOME/prompts is user
-// state and may contain unrelated prompts with the same prefix.
-func assertNoFrozenCodexCommandPrompts(t *testing.T, codexHome string) {
-	t.Helper()
-	promptsDir := filepath.Join(codexHome, "prompts")
-	for _, id := range frozenAdapterCommandIDs {
-		_, err := os.Stat(filepath.Join(promptsDir, "slipway-"+id+".md"))
-		assert.True(t, os.IsNotExist(err), "codex must not write retired generated command prompt for %s", id)
 	}
 }
 
@@ -320,20 +299,12 @@ func (c frozenToolContract) commandPath(id string) string {
 	}
 }
 
-func (c frozenToolContract) commandRootAbs(root, codexHome string) string {
-	base := root
-	if c.CommandBase == frozenSurfaceCodexHome {
-		base = codexHome
-	}
-	return filepath.Join(base, filepath.FromSlash(c.CommandRoot))
+func (c frozenToolContract) commandRootAbs(root string) string {
+	return filepath.Join(root, filepath.FromSlash(c.CommandRoot))
 }
 
-func (c frozenToolContract) resolvePath(root, codexHome, relPath string) string {
-	base := root
-	if c.CommandBase == frozenSurfaceCodexHome {
-		base = codexHome
-	}
-	return filepath.Join(base, filepath.FromSlash(relPath))
+func (c frozenToolContract) resolvePath(root, relPath string) string {
+	return filepath.Join(root, filepath.FromSlash(relPath))
 }
 
 func (c frozenToolContract) commandContentMarker(id string) string {
@@ -377,7 +348,7 @@ func assertFrozenOwnershipContract(t *testing.T, root, toolID string, contract f
 	}
 }
 
-func collectRelativeFiles(t *testing.T, absRoot string, base frozenSurfaceBase, root, codexHome string) []string {
+func collectRelativeFiles(t *testing.T, absRoot string, base frozenSurfaceBase, root string) []string {
 	t.Helper()
 
 	var relPaths []string
@@ -389,13 +360,7 @@ func collectRelativeFiles(t *testing.T, absRoot string, base frozenSurfaceBase, 
 			return nil
 		}
 
-		var rel string
-		switch base {
-		case frozenSurfaceCodexHome:
-			rel, err = filepath.Rel(codexHome, path)
-		default:
-			rel, err = filepath.Rel(root, path)
-		}
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}

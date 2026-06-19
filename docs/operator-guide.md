@@ -156,9 +156,9 @@ Refresh generated AI-tool surfaces after changing templates or command contracts
 slipway init --tools all --refresh
 ```
 
-Check generated path changes before committing. Codex command surfaces now live
-under `.codex/skills/slipway-<command>/SKILL.md`; a full Codex refresh may also
-prune legacy generated command prompt files from `$CODEX_HOME/prompts`.
+Check generated path changes before committing. Codex command surfaces live
+under `.codex/skills/slipway-<command>/SKILL.md`; Codex refresh no longer
+touches host-global `$CODEX_HOME/prompts` files.
 
 ## Closeout
 

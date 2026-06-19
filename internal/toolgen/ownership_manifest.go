@@ -41,17 +41,23 @@ type ownershipManifestFile struct {
 }
 
 type toolRefreshPlan struct {
-	root               string
-	cfg                ToolConfig
-	previousIndex      map[string]ownershipManifestFile
-	generated          map[string]ownershipManifestFile
-	ops                []fsutil.FileTransactionOp
-	transactionStarted bool
+	root                         string
+	cfg                          ToolConfig
+	previousIndex                map[string]ownershipManifestFile
+	manifestlessBootstrapAllowed bool
+	generated                    map[string]ownershipManifestFile
+	ops                          []fsutil.FileTransactionOp
+	transactionStarted           bool
 }
 
 var toolgenApplyFileTransaction = fsutil.ApplyFileTransaction
 
-func newToolRefreshPlan(root string, cfg ToolConfig, refresh bool) (*toolRefreshPlan, error) {
+func newToolRefreshPlan(
+	root string,
+	cfg ToolConfig,
+	refresh bool,
+	manifestlessBootstrapAllowed bool,
+) (*toolRefreshPlan, error) {
 	if !refresh {
 		return nil, nil
 	}
@@ -64,10 +70,11 @@ func newToolRefreshPlan(root string, cfg ToolConfig, refresh bool) (*toolRefresh
 		previousIndex = manifest.index()
 	}
 	return &toolRefreshPlan{
-		root:          filepath.Clean(root),
-		cfg:           cfg,
-		previousIndex: previousIndex,
-		generated:     map[string]ownershipManifestFile{},
+		root:                         filepath.Clean(root),
+		cfg:                          cfg,
+		previousIndex:                previousIndex,
+		manifestlessBootstrapAllowed: manifestlessBootstrapAllowed,
+		generated:                    map[string]ownershipManifestFile{},
 	}, nil
 }
 
@@ -237,6 +244,12 @@ func (plan *toolRefreshPlan) ensureGeneratedWriteAllowed(path, rel string, data 
 		}
 		return nil
 	}
+	// Bootstrap: when no previous manifest exists but a pre-existing adapter
+	// sentinel proves Slipway generated the tree, allow overwriting so the
+	// adapter can be brought into manifest tracking.
+	if plan.isManifestlessBootstrap() {
+		return nil
+	}
 	if currentHash == hashBytes(data) {
 		return nil
 	}
@@ -251,7 +264,7 @@ func (plan *toolRefreshPlan) invalidateTrustedGeneratedFile(path string) error {
 	if !insideRoot {
 		return nil
 	}
-	classification, err := plan.classifyExistingRelPath(rel)
+	classification, err := plan.classifyExistingRelPath(rel, true)
 	if err != nil {
 		return err
 	}
@@ -270,7 +283,7 @@ func (plan *toolRefreshPlan) invalidateTrustedGeneratedFile(path string) error {
 	return nil
 }
 
-func (plan *toolRefreshPlan) removeGeneratedPath(path string) error {
+func (plan *toolRefreshPlan) removeGeneratedPath(path string, allowManifestlessBootstrap bool) error {
 	_, insideRoot, err := plan.relativePath(path)
 	if err != nil {
 		return err
@@ -286,12 +299,12 @@ func (plan *toolRefreshPlan) removeGeneratedPath(path string) error {
 		return err
 	}
 	if !info.IsDir() {
-		return plan.removeGeneratedFile(path)
+		return plan.removeGeneratedFile(path, allowManifestlessBootstrap)
 	}
-	return plan.removeGeneratedTree(path)
+	return plan.removeGeneratedTree(path, allowManifestlessBootstrap)
 }
 
-func (plan *toolRefreshPlan) removeGeneratedFile(path string) error {
+func (plan *toolRefreshPlan) removeGeneratedFile(path string, allowManifestlessBootstrap bool) error {
 	rel, insideRoot, err := plan.relativePath(path)
 	if err != nil {
 		return err
@@ -299,7 +312,7 @@ func (plan *toolRefreshPlan) removeGeneratedFile(path string) error {
 	if !insideRoot {
 		return nil
 	}
-	classification, err := plan.classifyExistingRelPath(rel)
+	classification, err := plan.classifyExistingRelPath(rel, allowManifestlessBootstrap)
 	if err != nil {
 		return err
 	}
@@ -316,7 +329,7 @@ func (plan *toolRefreshPlan) removeGeneratedFile(path string) error {
 	return nil
 }
 
-func (plan *toolRefreshPlan) removeGeneratedTree(path string) error {
+func (plan *toolRefreshPlan) removeGeneratedTree(path string, allowManifestlessBootstrap bool) error {
 	var pristineFiles []string
 	var hasUnknown bool
 	err := filepath.WalkDir(path, func(entryPath string, d fs.DirEntry, walkErr error) error {
@@ -334,7 +347,7 @@ func (plan *toolRefreshPlan) removeGeneratedTree(path string) error {
 			hasUnknown = true
 			return nil
 		}
-		classification, err := plan.classifyExistingRelPath(rel)
+		classification, err := plan.classifyExistingRelPath(rel, allowManifestlessBootstrap)
 		if err != nil {
 			return err
 		}
@@ -366,9 +379,12 @@ func (plan *toolRefreshPlan) removeGeneratedTree(path string) error {
 	return nil
 }
 
-func (plan *toolRefreshPlan) classifyExistingRelPath(rel string) (ownershipClassification, error) {
+func (plan *toolRefreshPlan) classifyExistingRelPath(rel string, allowManifestlessBootstrap bool) (ownershipClassification, error) {
 	record, ok := plan.previousIndex[rel]
 	if !ok {
+		if allowManifestlessBootstrap && plan.isManifestlessBootstrap() {
+			return ownershipPristineManagedFile, nil
+		}
 		return ownershipUnknownUserFile, nil
 	}
 	sum, err := hashFile(filepath.Join(plan.root, filepath.FromSlash(rel)))
@@ -382,6 +398,10 @@ func (plan *toolRefreshPlan) classifyExistingRelPath(rel string) (ownershipClass
 		return ownershipPristineManagedFile, nil
 	}
 	return ownershipManagedModifiedFile, nil
+}
+
+func (plan *toolRefreshPlan) isManifestlessBootstrap() bool {
+	return plan.manifestlessBootstrapAllowed && len(plan.previousIndex) == 0
 }
 
 func (plan *toolRefreshPlan) commit(sentinelPath string, sentinelContent []byte) error {

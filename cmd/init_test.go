@@ -291,58 +291,6 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 		})
 	})
 
-	t.Run("codex global prompts do not count as workspace-local existing tree", func(t *testing.T) {
-		root := t.TempDir()
-		withWorkspace(t, root, func() {
-			codexHome := t.TempDir()
-			t.Setenv("CODEX_HOME", codexHome)
-
-			stalePrompt := filepath.Join(codexHome, "prompts", "slipway-new.md")
-			require.NoError(t, os.MkdirAll(filepath.Dir(stalePrompt), 0o755))
-			require.NoError(t, os.WriteFile(stalePrompt, []byte("stale global prompt"), 0o644))
-
-			_, _, err := runRootCommand([]string{"init", "--tools", "codex"})
-			require.NoError(t, err)
-
-			_, statErr := os.Stat(filepath.Join(root, ".codex", "slipway", ".adapter-generated"))
-			require.NoError(t, statErr)
-		})
-	})
-
-	t.Run("codex legacy command prompts preserve without ownership proof", func(t *testing.T) {
-		root := t.TempDir()
-		codexHome := t.TempDir()
-		t.Setenv("CODEX_HOME", codexHome)
-
-		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
-
-		legacyPrompt := filepath.Join(codexHome, "prompts", "slipway-new.md")
-		userPrompt := filepath.Join(codexHome, "prompts", "slipway-stale.md")
-		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPrompt), 0o755))
-		require.NoError(t, os.WriteFile(legacyPrompt, []byte("legacy generated command prompt"), 0o644))
-		require.NoError(t, os.WriteFile(userPrompt, []byte("user prompt"), 0o644))
-
-		blockedSkillDir := filepath.Join(root, ".codex", "skills", "slipway-intake-clarification")
-		require.NoError(t, os.RemoveAll(blockedSkillDir))
-		require.NoError(t, os.WriteFile(blockedSkillDir, []byte("blocked"), 0o644))
-
-		err := toolgen.Generate(root, []string{"codex"}, true)
-		require.Error(t, err)
-
-		_, statErr := os.Stat(legacyPrompt)
-		require.NoError(t, statErr, "failed codex refresh must not prune legacy command prompts before rewrite succeeds")
-		_, statErr = os.Stat(userPrompt)
-		require.NoError(t, statErr, "failed codex refresh must not prune user prompts before rewrite succeeds")
-
-		require.NoError(t, os.Remove(blockedSkillDir))
-		require.NoError(t, toolgen.Generate(root, []string{"codex"}, true))
-
-		_, statErr = os.Stat(legacyPrompt)
-		assert.NoError(t, statErr, "successful codex refresh must preserve host-global prompts without ownership proof")
-		_, statErr = os.Stat(userPrompt)
-		assert.NoError(t, statErr, "successful codex refresh must preserve user-owned slipway-* prompts")
-	})
-
 	t.Run("typed cli error for fail-closed init", func(t *testing.T) {
 		root := t.TempDir()
 		withWorkspace(t, root, func() {
@@ -398,7 +346,6 @@ func TestWorkspaceAdapterSentinelContracts(t *testing.T) {
 // have to inspect source or docs to discover how to invoke the generated skills.
 func TestInitCommandCodexPrintsInvocationSurface(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	withWorkspace(t, root, func() {
 		stdout, stderr, err := runRootCommand([]string{"init", "--tools", "codex"})
 		require.NoError(t, err, "stderr: %s", stderr)

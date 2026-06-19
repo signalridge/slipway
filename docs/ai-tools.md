@@ -29,8 +29,9 @@ skills under each adapter's skills directory. Prompt-backed and workflow-backed
 hosts generate command files instead. All generated command surfaces call the
 `slipway` CLI; host files do not implement separate lifecycle, review, or
 evidence behavior. Slipway no longer writes global Codex prompt files, and
-`--refresh` removes the legacy generated command prompts left by older
-versions.
+Codex refresh does not prune host-global prompt directories. Prompt-backed
+project adapters still remove Slipway-owned retired prompt files during
+refresh.
 
 ## Generate Adapters
 
@@ -53,14 +54,17 @@ Refresh auto-detected managed adapters:
 slipway init --refresh
 ```
 
-Slipway detects adapters by its generated sentinel and ownership manifest, not
-by a bare `.claude`, `.codex`, `.cursor`, `.gemini`, `.opencode`, `.pi`,
-`.qwen`, `.kiro`, `.windsurf`, or `.kilocode` directory alone. Copilot keeps
-that managed state under `.github/copilot/slipway` instead of treating the
-shared `.github` tree as adapter-owned. Refresh removes Slipway-owned legacy
-shell hook launchers and retired `bash "<hook>.sh"` hook settings entries while
-preserving user-owned hooks, prompts, workflows, and skills beside generated
-files.
+Slipway detects adapters by its generated sentinel, not by a bare `.claude`,
+`.codex`, `.cursor`, `.gemini`, `.opencode`, `.pi`, `.qwen`, `.kiro`,
+`.windsurf`, or `.kilocode` directory alone. The ownership manifest protects
+generated files during refresh; sentinel-only legacy adapters can be
+bootstrapped into manifest tracking, while missing-sentinel path collisions stay
+fail-closed unless the existing content already matches the generated output.
+Copilot keeps that managed state under `.github/copilot/slipway` instead of
+treating the shared `.github` tree as adapter-owned. Refresh removes
+Slipway-owned legacy shell hook launchers and retired `bash "<hook>.sh"` hook
+settings entries while preserving user-owned hooks, prompts, workflows, and
+skills beside generated files.
 
 ## Generated Command Surface
 

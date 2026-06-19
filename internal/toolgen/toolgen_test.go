@@ -260,7 +260,6 @@ func TestPromotedReviewCatalogBindingsPreserveCommandAutoOnly(t *testing.T) {
 
 func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	cfg := toolRegistry["codex"]
@@ -321,7 +320,6 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 
 func TestGeneratedPromotedReviewHostsUseWorkflowTemplates(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	cfg := toolRegistry["codex"]
@@ -347,7 +345,6 @@ func TestGeneratedPromotedReviewHostsUseWorkflowTemplates(t *testing.T) {
 
 func TestNonExportedRegistrySkillsDoNotEmitAgentFacingCatalogArtifacts(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	cfg := toolRegistry["codex"]
@@ -446,7 +443,6 @@ func TestHasGeneratedAdapter(t *testing.T) {
 
 func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	toolIDs, err := ResolveTools("all")
 	require.NoError(t, err)
 	require.NoError(t, Generate(root, toolIDs, true))
@@ -689,8 +685,6 @@ func TestInstructionsCommandDeclaresNoFalsePrerequisites(t *testing.T) {
 
 func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
 
 	toolIDs, err := ResolveTools("all")
 	require.NoError(t, err)
@@ -817,14 +811,10 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		}
 	}
 
-	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
-	assert.True(t, os.IsNotExist(err), "codex should not emit a workflow global prompt")
 }
 
 func TestGeneratedNewCommandSurfacesDocumentJSONStdinClassification(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
 
 	require.NoError(t, Generate(root, []string{"claude", "codex"}, true))
 
@@ -1010,8 +1000,6 @@ func TestRenderCatalogSkillUsesTypedTemplatesForProductionSkill(t *testing.T) {
 
 func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
 
 	toolIDs, err := ResolveTools("all")
 	require.NoError(t, err)
@@ -1019,7 +1007,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 
 	for _, cfg := range Registry() {
 		for _, id := range commandIDs() {
-			_, absPath := commandSurfacePath(root, codexHome, cfg, id)
+			_, absPath := commandSurfacePath(root, cfg, id)
 			content, err := os.ReadFile(absPath)
 			require.NoError(t, err, "missing generated command surface for %s/%s", cfg.ID, id)
 
@@ -1214,7 +1202,6 @@ func TestGenerateDeterministicAndRefresh(t *testing.T) {
 
 func TestGenerateRefreshInvalidatesTrustedSurfacesAfterTransactionFailure(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 	commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
@@ -1266,7 +1253,6 @@ func TestGenerateRefreshInvalidatesTrustedSurfacesAfterTransactionFailure(t *tes
 
 func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"claude"}, true))
 
@@ -1315,7 +1301,6 @@ func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 
 func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	userOwnedSlipwayDir := filepath.Join(root, ".claude", "skills", "slipway-user-owned")
 	require.NoError(t, os.MkdirAll(userOwnedSlipwayDir, 0o755))
@@ -1329,7 +1314,6 @@ func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *te
 
 func TestGenerateRefreshPreservesUserOwnedCopilotGitHubFiles(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	userFiles := map[string]string{
 		".github/workflows/ci.yml":           "name: ci\n",
@@ -1377,7 +1361,6 @@ func TestGenerateRefreshPreservesUserOwnedCopilotGitHubFiles(t *testing.T) {
 
 func TestGenerateRefreshPreservesUnknownCleanupTargetsAndRefusesManagedModified(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	cfg := toolRegistry["claude"]
 
 	require.NoError(t, Generate(root, []string{"claude"}, true))
@@ -1402,10 +1385,14 @@ func TestGenerateRefreshPreservesUnknownCleanupTargetsAndRefusesManagedModified(
 	assert.Equal(t, "edited managed stale skill", string(got))
 }
 
-func TestGenerateRefreshWithoutOwnershipManifestRefusesModifiedLegacyPaths(t *testing.T) {
+func TestGenerateRefreshWithoutOwnershipManifestBootstrapsIntoTrackedState(t *testing.T) {
+	// When an adapter sentinel exists but no ownership manifest is present
+	// (pre-manifest legacy state), --refresh bootstraps by regenerating all
+	// files and writing the manifest. User modifications that predate
+	// manifest tracking cannot be distinguished from Slipway-generated
+	// content and will be overwritten.
 	t.Run("command prompt", func(t *testing.T) {
 		root := t.TempDir()
-		t.Setenv("CODEX_HOME", t.TempDir())
 		cfg := toolRegistry["claude"]
 		writeGeneratedAdapterMarker(t, root, cfg)
 
@@ -1414,38 +1401,157 @@ func TestGenerateRefreshWithoutOwnershipManifestRefusesModifiedLegacyPaths(t *te
 		require.NoError(t, os.WriteFile(commandPath, []byte("user modified command"), 0o644))
 
 		err := Generate(root, []string{"claude"}, true)
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "refusing to overwrite unknown file")
+		require.NoError(t, err)
 
+		// Bootstrap overwrites pre-existing file and creates the manifest.
 		got, readErr := os.ReadFile(commandPath)
 		require.NoError(t, readErr)
-		assert.Equal(t, "user modified command", string(got))
+		assert.NotEqual(t, "user modified command", string(got))
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "bootstrap refresh must create ownership manifest")
 	})
 
 	t.Run("sentinel", func(t *testing.T) {
 		root := t.TempDir()
-		t.Setenv("CODEX_HOME", t.TempDir())
 		cfg := toolRegistry["claude"]
 		sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
 		require.NoError(t, os.MkdirAll(filepath.Dir(sentinelPath), 0o755))
 		require.NoError(t, os.WriteFile(sentinelPath, []byte("user modified marker"), 0o644))
 
 		err := Generate(root, []string{"claude"}, true)
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "refusing to overwrite unknown file")
-		assert.ErrorContains(t, err, ".adapter-generated")
+		require.NoError(t, err)
 
+		// Bootstrap overwrites sentinel with canonical content.
 		got, readErr := os.ReadFile(sentinelPath)
 		require.NoError(t, readErr)
-		assert.Equal(t, "user modified marker", string(got))
-		_, statErr := os.Stat(filepath.Join(root, generatedOwnershipManifestPath(cfg)))
-		assert.True(t, os.IsNotExist(statErr), "failed marker-only refresh must not create ownership manifest")
+		assert.Equal(t, "generated\n", string(got))
+
+		// Manifest is created and tracks the sentinel.
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "bootstrap refresh must create ownership manifest")
+	})
+
+	t.Run("skill file", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["claude"]
+		writeGeneratedAdapterMarker(t, root, cfg)
+
+		// Sentinel-only legacy bootstrap overwrites pre-existing generated-path
+		// content and brings the adapter into manifest tracking.
+		skillPath := filepath.Join(root, ".claude", "skills", "slipway", "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, []byte("will be overwritten"), 0o644))
+
+		err := Generate(root, []string{"claude"}, true)
+		require.NoError(t, err)
+
+		got, readErr := os.ReadFile(skillPath)
+		require.NoError(t, readErr)
+		assert.NotEqual(t, "will be overwritten", string(got))
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "bootstrap refresh must create ownership manifest")
+	})
+
+	t.Run("stale generated cleanup targets", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["claude"]
+		writeGeneratedAdapterMarker(t, root, cfg)
+
+		staleCommand := filepath.Join(root, ".claude", "commands", "slipway", "advance.md")
+		staleSkill := filepath.Join(root, ".claude", "skills", "slipway-tdd", "SKILL.md")
+		staleHook := filepath.Join(root, ".claude", "hooks", "slipway-session-start")
+		for _, p := range []string{staleCommand, staleSkill, staleHook} {
+			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+			require.NoError(t, os.WriteFile(p, []byte("legacy generated content"), 0o644))
+		}
+
+		require.NoError(t, Generate(root, []string{"claude"}, true))
+
+		for _, p := range []string{staleCommand, staleSkill, staleHook} {
+			_, err := os.Stat(p)
+			assert.True(t, os.IsNotExist(err), "sentinel-only bootstrap must prune stale generated path %s", p)
+		}
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "bootstrap refresh must create ownership manifest")
+	})
+
+	t.Run("flat command stale entry", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["cursor"]
+		writeGeneratedAdapterMarker(t, root, cfg)
+
+		staleCommand := filepath.Join(root, ".cursor", "commands", "slipway-advance.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(staleCommand), 0o755))
+		require.NoError(t, os.WriteFile(staleCommand, []byte("legacy generated command"), 0o644))
+
+		require.NoError(t, Generate(root, []string{"cursor"}, true))
+
+		_, err := os.Stat(staleCommand)
+		assert.True(t, os.IsNotExist(err), "sentinel-only bootstrap must prune stale flat command path")
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "bootstrap refresh must create ownership manifest")
+	})
+}
+
+func TestGenerateRefreshWithoutOwnershipManifestRequiresBootstrapAuthority(t *testing.T) {
+	t.Run("missing sentinel refuses unknown generated path collision", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["claude"]
+
+		commandPath := filepath.Join(root, ".claude", "commands", "slipway", "new.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(commandPath), 0o755))
+		require.NoError(t, os.WriteFile(commandPath, []byte("user command"), 0o644))
+
+		err := Generate(root, []string{"claude"}, true)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "refusing to overwrite unknown file")
+
+		got, readErr := os.ReadFile(commandPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, "user command", string(got))
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.True(t, os.IsNotExist(statErr), "failed refresh must not create an ownership manifest")
+	})
+
+	t.Run("missing sentinel allows same content generated path collision", func(t *testing.T) {
+		cfg := toolRegistry["claude"]
+
+		canonicalRoot := t.TempDir()
+		require.NoError(t, Generate(canonicalRoot, []string{"claude"}, true))
+		relSkillPath := filepath.Join(".claude", "skills", "slipway", "SKILL.md")
+		canonicalSkill, err := os.ReadFile(filepath.Join(canonicalRoot, relSkillPath))
+		require.NoError(t, err)
+
+		root := t.TempDir()
+		skillPath := filepath.Join(root, relSkillPath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, canonicalSkill, 0o644))
+
+		require.NoError(t, Generate(root, []string{"claude"}, true))
+
+		got, readErr := os.ReadFile(skillPath)
+		require.NoError(t, readErr)
+		assert.Equal(t, string(canonicalSkill), string(got))
+
+		manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+		_, statErr := os.Stat(manifestPath)
+		assert.NoError(t, statErr, "same-content refresh should create ownership manifest")
 	})
 }
 
 func TestCodexGenerationOmitsProjectAgentSurfaces(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	_, err := os.Stat(filepath.Join(root, ".codex", "agents"))
@@ -1476,7 +1582,6 @@ func TestGeminiTOMLCommandFormat(t *testing.T) {
 
 func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"claude", "gemini"}, true))
 
 	// Claude registers BOTH the inline session-start and context-pressure
@@ -1529,7 +1634,6 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 
 func TestGenerateRefreshPrunesOrphanedHookLaunchersForSettingsCapableHosts(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	// Seed the full orphaned launcher family (extensionless + .ps1 + .cmd + .sh)
 	// for both settings-capable hosts (claude, gemini), plus the same for the
@@ -1740,7 +1844,6 @@ func codexCommandSkillPath(root, id string) string {
 
 func TestCodexCommandSkillsUseCommandSpecificPrerequisites(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
@@ -1763,7 +1866,6 @@ func TestCodexCommandSkillsUseCommandSpecificPrerequisites(t *testing.T) {
 
 func TestCodexCommandSkillsUseCommandRegistryArguments(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
@@ -1780,7 +1882,6 @@ func TestCodexCommandSkillsUseCommandRegistryArguments(t *testing.T) {
 
 func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
@@ -1809,7 +1910,6 @@ func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
 
 func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"claude", "gemini", "codex"}, true))
 
@@ -1842,7 +1942,6 @@ func TestGeneratedWaveOrchestrationSkillUsesWavePlanSummaryGuidance(t *testing.T
 
 func TestCodexRefreshDoesNotCreateManagedConfigTOML(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 	_, err := os.Stat(filepath.Join(root, ".codex", "config.toml"))
@@ -1866,7 +1965,6 @@ func TestCursorNoAgents(t *testing.T) {
 
 func TestCodexNoProjectLocalCommands(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	// No commands directory should be created.
@@ -1944,8 +2042,6 @@ func TestOpenCodeRefreshWithoutGeneratedMarkerDoesNotPruneNestedCommands(t *test
 
 func TestCodexCommandSkills(t *testing.T) {
 	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
@@ -1975,10 +2071,6 @@ func TestCodexCommandSkills(t *testing.T) {
 		assert.Contains(t, string(body), "description:", "codex command skill %s missing description frontmatter", id)
 	}
 
-	// No generated legacy command prompt files must be written under
-	// $CODEX_HOME/prompts.
-	assertNoCodexLegacyCommandPrompts(t, codexHome)
-
 	// Verify refresh protection.
 	require.NoError(t, os.WriteFile(skillPath, []byte("custom"), 0o644))
 	require.NoError(t, Generate(root, []string{"codex"}, false))
@@ -1993,55 +2085,12 @@ func TestCodexCommandSkills(t *testing.T) {
 	assert.Equal(t, "custom", string(refreshedContent), "command skill should not be overwritten with refresh")
 }
 
-func TestCodexRefreshPreservesLegacyPromptFilesWithoutOwnershipManifest(t *testing.T) {
-	root := t.TempDir()
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-	writeGeneratedAdapterMarker(t, root, toolRegistry["codex"])
-
-	promptsDir := filepath.Join(codexHome, "prompts")
-	require.NoError(t, os.MkdirAll(promptsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-new.md"), []byte("legacy generated command"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-run.md"), []byte("legacy generated command"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "slipway-personal.md"), []byte("user prompt"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "not-slipway.md"), []byte("user prompt"), 0o644))
-
-	require.NoError(t, Generate(root, []string{"codex"}, true))
-
-	newPrompt, err := os.ReadFile(filepath.Join(promptsDir, "slipway-new.md"))
-	require.NoError(t, err, "refresh must not delete command-named prompts without ownership proof")
-	assert.Equal(t, "legacy generated command", string(newPrompt))
-	runPrompt, err := os.ReadFile(filepath.Join(promptsDir, "slipway-run.md"))
-	require.NoError(t, err, "refresh must not delete command-named prompts without ownership proof")
-	assert.Equal(t, "legacy generated command", string(runPrompt))
-	personal, err := os.ReadFile(filepath.Join(promptsDir, "slipway-personal.md"))
-	require.NoError(t, err, "refresh must not delete user-owned slipway-* prompts outside the command registry")
-	assert.Equal(t, "user prompt", string(personal))
-	other, err := os.ReadFile(filepath.Join(promptsDir, "not-slipway.md"))
-	require.NoError(t, err, "refresh must not delete unrelated prompts")
-	assert.Equal(t, "user prompt", string(other))
-}
-
-// assertNoCodexLegacyCommandPrompts asserts that no retired generated Codex
-// command prompt files exist under $CODEX_HOME/prompts. It checks the command
-// registry filenames exactly instead of the whole slipway-* namespace because
-// that directory is user-owned host state.
-func assertNoCodexLegacyCommandPrompts(t *testing.T, codexHome string) {
-	t.Helper()
-	promptsDir := filepath.Join(codexHome, "prompts")
-	for _, id := range commandIDs() {
-		_, err := os.Stat(filepath.Join(promptsDir, "slipway-"+id+".md"))
-		assert.True(t, os.IsNotExist(err), "codex must not write retired generated command prompt for %s", id)
-	}
-}
-
 func TestByteStabilityAllTools(t *testing.T) {
 	toolIDs, err := ResolveTools("all")
 	require.NoError(t, err)
 	for _, toolID := range toolIDs {
 		t.Run(toolID, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("CODEX_HOME", t.TempDir())
 			require.NoError(t, Generate(root, []string{toolID}, true))
 
 			// Collect all generated files.
@@ -2249,8 +2298,7 @@ func splitFrontmatter(content string) []string {
 	return []string{content}
 }
 
-func commandSurfacePath(root, codexHome string, cfg ToolConfig, id string) (string, string) {
-	_ = codexHome
+func commandSurfacePath(root string, cfg ToolConfig, id string) (string, string) {
 	if cfg.CommandSkillSurface {
 		rel := filepath.ToSlash(SkillPath(cfg, id))
 		return rel, filepath.Join(root, filepath.FromSlash(rel))
@@ -2684,7 +2732,6 @@ func TestSharedChecklistReferenceIsEmittedToConsumingSkills(t *testing.T) {
 func generatedSkillsRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("CODEX_HOME", t.TempDir())
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 	cfg := toolRegistry["codex"]
 	return filepath.Join(root, cfg.SkillsDir)
