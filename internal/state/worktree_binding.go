@@ -95,6 +95,57 @@ func readWorktreeBinding(root, slug string) (worktreeBinding, bool) {
 	return binding, true
 }
 
+// FindActiveChangeByWorktreeBinding resolves the active change bound to the
+// current git worktree using only runtime binding records. Unlike
+// FindActiveChangeForWorktree, it deliberately avoids ListChanges so callers can
+// still prefer the current bound worktree when another workspace has stale
+// orphaned bundle residue.
+func FindActiveChangeByWorktreeBinding(root, currentWorktreePath string) (model.Change, error) {
+	normalizedCurrent, err := NormalizePath(currentWorktreePath)
+	if err != nil {
+		return model.Change{}, fmt.Errorf("normalize worktree path: %w", err)
+	}
+
+	entries, err := os.ReadDir(ChangesDir(root))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return model.Change{}, ErrNoActiveChange
+		}
+		return model.Change{}, err
+	}
+
+	var matches []model.Change
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		slug := entry.Name()
+		if err := ValidateChangeSlug(slug); err != nil {
+			continue
+		}
+		binding, ok := readWorktreeBinding(root, slug)
+		if !ok || binding.WorktreePath != normalizedCurrent {
+			continue
+		}
+		change, err := LoadChange(root, slug)
+		if err != nil {
+			return model.Change{}, err
+		}
+		if change.Status != model.ChangeStatusActive {
+			continue
+		}
+		matches = append(matches, change)
+	}
+
+	if len(matches) == 0 {
+		return model.Change{}, ErrNoActiveChange
+	}
+	if len(matches) > 1 {
+		return model.Change{}, ErrMultipleActiveChanges
+	}
+	return matches[0], nil
+}
+
 func gitCommonDirIdentity(root string) string {
 	normalized, err := NormalizePath(GitCommonDir(root))
 	if err != nil {
