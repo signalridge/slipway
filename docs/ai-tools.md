@@ -4,7 +4,7 @@
 
 <div align="center" markdown>
 
-![Slipway tool adapters: slipway init --tools generates per-tool adapter bundles for Claude, Codex, Cursor, Gemini and OpenCode plus the .slipway.yaml runtime config; each adapter's generated skills and commands route governed actions to the slipway CLI](assets/diagrams/tool-adapters.svg)
+![Slipway tool adapters: slipway init --tools generates per-tool adapter bundles for Claude, Codex, Copilot, Cursor, Gemini, Kilo, Kiro, OpenCode, Pi, Qwen, and Windsurf plus the .slipway.yaml runtime config; each adapter's generated skills and commands route governed actions to the slipway CLI](assets/diagrams/tool-adapters.svg)
 
 </div>
 
@@ -14,11 +14,23 @@
 | --- | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | `.claude/commands/slipway/*.md` | `/slipway:<command>` |
 | `codex` | `.codex/skills/slipway-*/SKILL.md` | `.codex/skills/slipway-*/SKILL.md` | `$slipway-<command>` (or `/skills`) |
+| `copilot` | `.github/skills/slipway-*/SKILL.md` | `.github/prompts/slipway-<command>.prompt.md` | `/slipway-<command>` |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `.cursor/commands/*.md` | `/slipway-<command>` |
 | `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `.gemini/commands/slipway/*.toml` | `/slipway-<command>` |
+| `kilo` | `.kilocode/skills/slipway-*/SKILL.md` | `.kilocode/workflows/slipway-<command>.md` | `/slipway:<command>` |
+| `kiro` | `.kiro/skills/slipway-*/SKILL.md` | `.kiro/skills/slipway-<command>/SKILL.md` | `@slipway:<command>` or host skill picker |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `.opencode/commands/slipway-*.md` | `/slipway-<command>` |
+| `pi` | `.pi/skills/slipway-*/SKILL.md` | `.pi/prompts/slipway-<command>.md` | `/slipway-<command>` |
+| `qwen` | `.qwen/skills/slipway-*/SKILL.md` | `.qwen/skills/slipway-<command>/SKILL.md` | `/slipway-<command>` or host skill picker |
+| `windsurf` | `.windsurf/skills/slipway-*/SKILL.md` | `.windsurf/workflows/slipway-<command>.md` | `/slipway-<command>` |
 
-Codex commands are generated as discoverable per-command skills under `.codex/skills/slipway-<command>/SKILL.md` (invoked `$slipway-<command>` or via `/skills`). Slipway no longer writes global prompt files, and `--refresh` removes the legacy generated command prompts left by older versions.
+Codex, Kiro, and Qwen commands are generated as discoverable per-command
+skills under each adapter's skills directory. Prompt-backed and workflow-backed
+hosts generate command files instead. All generated command surfaces call the
+`slipway` CLI; host files do not implement separate lifecycle, review, or
+evidence behavior. Slipway no longer writes global Codex prompt files, and
+`--refresh` removes the legacy generated command prompts left by older
+versions.
 
 ## Generate Adapters
 
@@ -41,16 +53,23 @@ Refresh auto-detected managed adapters:
 slipway init --refresh
 ```
 
-Slipway detects adapters by its generated markers, not by a bare `.claude`,
-`.codex`, `.cursor`, `.gemini`, or `.opencode` directory alone. Refresh removes
-Slipway-owned legacy shell hook launchers and retired `bash "<hook>.sh"` hook
-settings entries while preserving user-owned hooks.
+Slipway detects adapters by its generated sentinel and ownership manifest, not
+by a bare `.claude`, `.codex`, `.cursor`, `.gemini`, `.opencode`, `.pi`,
+`.qwen`, `.kiro`, `.windsurf`, or `.kilocode` directory alone. Copilot keeps
+that managed state under `.github/copilot/slipway` instead of treating the
+shared `.github` tree as adapter-owned. Refresh removes Slipway-owned legacy
+shell hook launchers and retired `bash "<hook>.sh"` hook settings entries while
+preserving user-owned hooks, prompts, workflows, and skills beside generated
+files.
 
 ## Generated Command Surface
 
 Commands that opt into generated host prompts ship a command surface on every
-tool: a command prompt file on Claude, Cursor, Gemini, and OpenCode, and a
-per-command skill (`.codex/skills/slipway-<command>/SKILL.md`) on Codex.
+tool:
+
+- Prompt and workflow files on Claude, Copilot, Cursor, Gemini, Kilo, OpenCode,
+  Pi, and Windsurf.
+- Per-command skills on Codex, Kiro, and Qwen.
 
 CLI-only helper namespaces such as `slipway tool` stay public in the Slipway
 binary but do not generate host command wrappers; generated skills invoke
@@ -165,18 +184,40 @@ Cursor follows the same pattern, shipping
 These launchers only delegate to `slipway hook ...`; hook behavior lives in the
 Slipway binary.
 
+## P1 Adapter Notes
+
+Copilot stores command prompts in `.github/prompts/` with the
+`.prompt.md` extension and generated skills in `.github/skills/`. Its sentinel
+and ownership manifest live under `.github/copilot/slipway`.
+
+Pi stores command prompts in `.pi/prompts/` and generated skills in
+`.pi/skills/`. Slipway also merges `.pi/settings.json` so `enableSkillCommands`
+is `true`, `./skills` is listed in `skills`, and `./prompts` is listed in
+`prompts`.
+
+Qwen and Kiro expose commands as generated command skills rather than separate
+prompt files. Qwen writes `.qwen/settings.json` for the session-start hook.
+Kiro command skills use `@slipway:<command>`.
+
+Windsurf and Kilo expose commands as workflow files under
+`.windsurf/workflows/` and `.kilocode/workflows/`. Kilo uses the
+`/slipway:<command>` trigger even though its workflow files are named
+`slipway-<command>.md`.
+
 ## Settings-Capable Hosts
 
-Claude (`.claude/settings.json`) and Gemini (`.gemini/settings.json`) register
-hooks inline in their own settings file rather than through a launcher script.
-Slipway writes bare `slipway hook ...` commands directly into `settings.json`:
+Claude (`.claude/settings.json`), Gemini (`.gemini/settings.json`), and Qwen
+(`.qwen/settings.json`) register hooks inline in their own settings file rather
+than through launcher scripts. Slipway writes bare `slipway hook ...` commands
+directly into `settings.json`:
 
 - `slipway hook context-pressure` on `PostToolUse`
 - `slipway hook session-start` on `SessionStart`
 
-No launcher file is generated under `.claude/hooks/` or `.gemini/hooks/`; the
-command resolves the `slipway` binary on `PATH` and the hook behavior lives in
-that binary.
+Claude registers both hooks. Gemini and Qwen register `SessionStart` only. No
+launcher file is generated for these settings-registered hooks; the command
+resolves the `slipway` binary on `PATH` and hook behavior lives in that binary.
+Pi settings are registration-only for skills and prompts, not hook settings.
 
 ## Safety Rules
 

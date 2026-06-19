@@ -58,23 +58,47 @@ func loadHydrateReferencesFromFS(t *testing.T, src fs.FS, name string) []hydrate
 	return fm.HydrateReferences
 }
 
-func TestRegistryHasFiveTools(t *testing.T) {
+func TestRegistryHasElevenTools(t *testing.T) {
 	t.Parallel()
 	registry := Registry()
-	require.Len(t, registry, 5)
+	require.Len(t, registry, 11)
 
 	ids := make([]string, len(registry))
 	for i, cfg := range registry {
 		ids[i] = cfg.ID
 	}
-	assert.Equal(t, []string{"claude", "codex", "cursor", "gemini", "opencode"}, ids)
+	assert.Equal(t, []string{
+		"claude",
+		"codex",
+		"copilot",
+		"cursor",
+		"gemini",
+		"kilo",
+		"kiro",
+		"opencode",
+		"pi",
+		"qwen",
+		"windsurf",
+	}, ids)
 }
 
 func TestResolveTools(t *testing.T) {
 	t.Parallel()
 	all, err := ResolveTools("all")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"claude", "codex", "cursor", "gemini", "opencode"}, all)
+	assert.Equal(t, []string{
+		"claude",
+		"codex",
+		"copilot",
+		"cursor",
+		"gemini",
+		"kilo",
+		"kiro",
+		"opencode",
+		"pi",
+		"qwen",
+		"windsurf",
+	}, all)
 
 	none, err := ResolveTools("none")
 	require.NoError(t, err)
@@ -389,6 +413,26 @@ func TestDetectExistingTools(t *testing.T) {
 	assert.Equal(t, []string{"claude", "cursor"}, detected)
 }
 
+func TestDetectExistingToolsIgnoresBareP1HostDirectories(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	for _, dir := range []string{
+		".pi",
+		".qwen",
+		".kiro",
+		".github",
+		".github/copilot",
+		".windsurf",
+		".kilocode",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
+	}
+
+	assert.Empty(t, DetectExistingTools(root),
+		"bare P1 host directories must not trigger refresh auto-detection without Slipway sentinels")
+}
+
 func TestHasGeneratedAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -403,14 +447,16 @@ func TestHasGeneratedAdapter(t *testing.T) {
 func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", t.TempDir())
-	require.NoError(t, Generate(root, []string{"claude", "cursor", "codex", "gemini", "opencode"}, true))
+	toolIDs, err := ResolveTools("all")
+	require.NoError(t, err)
+	require.NoError(t, Generate(root, toolIDs, true))
 
-	for _, toolID := range []string{"claude", "cursor", "codex", "gemini", "opencode"} {
+	for _, toolID := range toolIDs {
 		cfg := toolRegistry[toolID]
 
 		// Sentinel marker
 		sentinelPath := filepath.Join(root, GeneratedAdapterMarkerPath(cfg))
-		_, err := os.Stat(sentinelPath)
+		_, err = os.Stat(sentinelPath)
 		assert.NoError(t, err, "%s: missing adapter sentinel", toolID)
 
 		// Governance skills (static) + standalone governance guidance skills
@@ -438,18 +484,8 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 
 		// Command entries — per-tool path and format assertions
 		if cfg.CommandsDir != "" {
-			ext := ".md"
-			if cfg.CommandFormat == "toml" {
-				ext = ".toml"
-			}
 			for _, id := range commandIDs() {
-				var path string
-				switch cfg.CommandStyle {
-				case "flat":
-					path = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
-				default:
-					path = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
-				}
+				path := filepath.Join(root, filepath.FromSlash(commandEntryRelPath(cfg, id)))
 				_, err := os.Stat(path)
 				assert.NoError(t, err, "%s: missing command entry %s", toolID, id)
 			}
@@ -522,12 +558,13 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			}
 		}
 
-		// Hook emission is keyed on whether the host owns a settings.json.
-		// Settings-capable hosts (claude, gemini) register a bare inline command
-		// and emit NO launcher files. File-by-path hosts (cursor, opencode) still
-		// emit the session-start launcher family. Codex has no session hook.
+		// Hook emission is keyed on whether the host owns hook settings.
+		// Settings-capable hook hosts (claude, gemini, qwen) register a bare
+		// inline command and emit NO launcher files. Pi has settings registration
+		// without hook semantics. File-by-path hosts (cursor, opencode) still emit
+		// the session-start launcher family. Skill-only/no-hook hosts emit none.
 		switch {
-		case cfg.SettingsPath != "":
+		case cfg.SettingsPath != "" && cfg.SettingsKind != settingsKindPiRegistration:
 			// Settings-capable hosts must not write any launcher file for either
 			// hook (the extensionless POSIX entry or its .ps1/.cmd/.sh variants).
 			for _, base := range []string{cfg.SessionHook, cfg.PostToolHook} {
@@ -556,6 +593,8 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		}
 
 		switch {
+		case cfg.SettingsKind == settingsKindPiRegistration:
+			assertPiRegistrationSettings(t, filepath.Join(root, cfg.SettingsPath))
 		case cfg.SettingsPath != "":
 			settingsPath := filepath.Join(root, cfg.SettingsPath)
 			content, err := os.ReadFile(settingsPath)
@@ -588,6 +627,33 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.True(t, os.IsNotExist(err), "%s: unexpected settings file generated", toolID)
 		}
 	}
+
+	copilotCfg := toolRegistry["copilot"]
+	assert.Equal(t,
+		".github/prompts/slipway-new.prompt.md",
+		commandEntryRelPath(copilotCfg, "new"),
+		"copilot command prompts must use GitHub Copilot's .prompt.md extension",
+	)
+	assert.FileExists(t,
+		filepath.Join(root, ".github", "prompts", "slipway-new.prompt.md"),
+		"copilot command prompt must be written under the shared .github prompts root",
+	)
+	assert.FileExists(t,
+		filepath.Join(root, ".github", "copilot", "slipway", ".adapter-generated"),
+		"copilot ownership sentinel must stay under .github/copilot, not shared .github",
+	)
+	_, err = os.Stat(filepath.Join(root, ".github", "slipway", ".adapter-generated"))
+	assert.True(t, os.IsNotExist(err), "copilot must not claim the shared .github root")
+
+	assert.FileExists(t, filepath.Join(root, ".kilocode", "workflows", "slipway-new.md"))
+	assert.FileExists(t, filepath.Join(root, ".windsurf", "workflows", "slipway-new.md"))
+
+	qwenNew, err := os.ReadFile(filepath.Join(root, ".qwen", "skills", "slipway-new", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(qwenNew), "/slipway-new")
+	kiroNew, err := os.ReadFile(filepath.Join(root, ".kiro", "skills", "slipway-new", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(kiroNew), "@slipway:new")
 }
 
 // referenceSectionFor returns a command-reference section or command body.
@@ -626,7 +692,9 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 
-	require.NoError(t, Generate(root, []string{"claude", "codex", "cursor", "gemini", "opencode"}, true))
+	toolIDs, err := ResolveTools("all")
+	require.NoError(t, err)
+	require.NoError(t, Generate(root, toolIDs, true))
 
 	for _, cfg := range Registry() {
 		skillPath := filepath.Join(root, cfg.SkillsDir, "slipway", "SKILL.md")
@@ -749,7 +817,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		}
 	}
 
-	_, err := os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
+	_, err = os.Stat(filepath.Join(codexHome, "prompts", "slipway.md"))
 	assert.True(t, os.IsNotExist(err), "codex should not emit a workflow global prompt")
 }
 
@@ -1257,6 +1325,54 @@ func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *te
 
 	_, err := os.Stat(filepath.Join(userOwnedSlipwayDir, "SKILL.md"))
 	assert.NoError(t, err, "refresh without a generated adapter marker must not prune user-owned slipway-* skill dirs")
+}
+
+func TestGenerateRefreshPreservesUserOwnedCopilotGitHubFiles(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	userFiles := map[string]string{
+		".github/workflows/ci.yml":           "name: ci\n",
+		".github/prompts/user.prompt.md":     "# user prompt\n",
+		".github/skills/user-skill/SKILL.md": "# user skill\n",
+		".github/copilot/user-note.md":       "keep user note\n",
+	}
+	for rel, content := range userFiles {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	}
+
+	require.NoError(t, Generate(root, []string{"copilot"}, true))
+	require.NoError(t, Generate(root, []string{"copilot"}, true))
+
+	assert.FileExists(t, filepath.Join(root, ".github", "copilot", "slipway", ".adapter-generated"))
+	assert.FileExists(t, filepath.Join(root, ".github", "prompts", "slipway-new.prompt.md"))
+	assert.FileExists(t, filepath.Join(root, ".github", "skills", "slipway", "SKILL.md"))
+	_, err := os.Stat(filepath.Join(root, ".github", "slipway", ".adapter-generated"))
+	assert.True(t, os.IsNotExist(err), "copilot refresh must not claim shared .github ownership")
+
+	manifest, found, err := loadOwnershipManifest(root, toolRegistry["copilot"])
+	require.NoError(t, err)
+	require.True(t, found, "copilot refresh must write an ownership manifest")
+	owned := manifest.index()
+	assert.Contains(t, owned, ".github/copilot/slipway/.adapter-generated")
+	assert.Contains(t, owned, ".github/prompts/slipway-new.prompt.md")
+	assert.Contains(t, owned, ".github/skills/slipway/SKILL.md")
+
+	for rel, want := range userFiles {
+		got, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		require.NoError(t, readErr, "refresh must preserve user-owned %s", rel)
+		assert.Equal(t, want, string(got), "refresh must not rewrite user-owned %s", rel)
+		assert.NotContains(t, owned, rel, "refresh must not mark user-owned %s as generated", rel)
+	}
+	for rel := range owned {
+		assert.Truef(t,
+			strings.HasPrefix(rel, ".github/copilot/slipway/") ||
+				strings.HasPrefix(rel, ".github/prompts/slipway-") ||
+				strings.HasPrefix(rel, ".github/skills/slipway"),
+			"copilot ownership manifest must not claim non-generated shared .github path %s", rel)
+	}
 }
 
 func TestGenerateRefreshPreservesUnknownCleanupTargetsAndRefusesManagedModified(t *testing.T) {
@@ -1920,7 +2036,9 @@ func assertNoCodexLegacyCommandPrompts(t *testing.T, codexHome string) {
 }
 
 func TestByteStabilityAllTools(t *testing.T) {
-	for _, toolID := range []string{"claude", "codex", "cursor", "gemini", "opencode"} {
+	toolIDs, err := ResolveTools("all")
+	require.NoError(t, err)
+	for _, toolID := range toolIDs {
 		t.Run(toolID, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("CODEX_HOME", t.TempDir())
@@ -2138,18 +2256,31 @@ func commandSurfacePath(root, codexHome string, cfg ToolConfig, id string) (stri
 		return rel, filepath.Join(root, filepath.FromSlash(rel))
 	}
 
-	ext := ".md"
-	if cfg.CommandFormat == "toml" {
-		ext = ".toml"
-	}
-	var rel string
-	switch cfg.CommandStyle {
-	case "flat":
-		rel = filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway-"+id+ext))
-	default:
-		rel = filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway", id+ext))
-	}
+	rel := commandEntryRelPath(cfg, id)
 	return rel, filepath.Join(root, filepath.FromSlash(rel))
+}
+
+func assertPiRegistrationSettings(t *testing.T, settingsPath string) {
+	t.Helper()
+
+	content, err := os.ReadFile(settingsPath)
+	require.NoError(t, err, "missing Pi settings file")
+
+	settings := map[string]any{}
+	require.NoError(t, json.Unmarshal(content, &settings))
+	assert.Equal(t, true, settings["enableSkillCommands"])
+	assertJSONSettingArrayContains(t, settings, "skills", "./skills")
+	assertJSONSettingArrayContains(t, settings, "prompts", "./prompts")
+	assert.NotContains(t, settings, "hooks", "Pi settings register skills/prompts, not hooks")
+	assert.NotContains(t, string(content), "slipway hook", "Pi settings must not register hook commands")
+}
+
+func assertJSONSettingArrayContains(t *testing.T, settings map[string]any, name, want string) {
+	t.Helper()
+
+	raw, ok := settings[name].([]any)
+	require.True(t, ok, "settings missing %s array", name)
+	assert.Contains(t, raw, want, "settings %s must contain %q", name, want)
 }
 
 func assertHookCommandRegistered(t *testing.T, settingsPath, eventName, command string) {
@@ -2627,6 +2758,11 @@ func TestToolConfigInvocationSummary(t *testing.T) {
 		assert.Contains(t, summary, "invoke skills:")
 		assert.Contains(t, summary, "$slipway-<command>")
 		assert.NotContains(t, summary, "prompts")
+	})
+	t.Run("kiro command skills use at-colon triggers", func(t *testing.T) {
+		cfg, ok := LookupTool("kiro")
+		require.True(t, ok)
+		assert.Equal(t, "invoke command skills as @slipway:<command> or via host skill picker", cfg.InvocationSummary())
 	})
 }
 
