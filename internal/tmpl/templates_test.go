@@ -1211,8 +1211,14 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	assert.Contains(t, content, "`final-closeout` is the last closeout step",
 		"run command must classify final-closeout after selected peers")
 
-	assert.Contains(t, content, "Subagent Continuation Rule (HARD RULE)",
-		"run command missing subagent continuation hard rule")
+	assert.Contains(t, content, "Fresh Context Boundary Rule (HARD RULE)",
+		"run command missing fresh-context boundary rule")
+	assert.Contains(t, content, "plain operator confirmation",
+		"run command must not require fresh subagents for plain lifecycle confirmations")
+	assert.Contains(t, content, "does not by itself require spawning a subagent",
+		"run command must distinguish confirmation from checkpoint/review handoff")
+	assert.NotContains(t, content, "After any checkpoint pause, user intervention, or governed review handoff",
+		"run command must not treat every user intervention as a fresh-subagent boundary")
 
 	assert.Contains(t, content, "three consecutive skills fail",
 		"run command missing 3-consecutive-failure exit rule")
