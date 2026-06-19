@@ -240,6 +240,20 @@ func makeStatusCmd() *cobra.Command {
 				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 			}
 
+			if change, ok, err := statusChangeFromCurrentWorktreeBinding(root); err != nil {
+				return err
+			} else if ok {
+				effectiveView := resolveEffectiveFocus("status", explicitFocus)
+				hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
+				if hydrate {
+					hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
+					if err != nil {
+						return err
+					}
+				}
+				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
+			}
+
 			changes, err := state.ListChanges(root)
 			if err != nil {
 				// A partially-deleted change (a governed bundle directory that
@@ -339,6 +353,26 @@ func resolveStatusRouteForRoot(root string, active []model.Change) (statusRoute,
 		return statusRoute{}, err
 	}
 	return statusRoute{change: &change}, nil
+}
+
+func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, error) {
+	worktreePath, err := currentWorktreeRoot()
+	if err != nil {
+		return model.Change{}, false, wrapResolutionError(err)
+	}
+	if strings.TrimSpace(worktreePath) == "" {
+		return model.Change{}, false, nil
+	}
+	change, err := state.FindActiveChangeByWorktreeBinding(root, worktreePath)
+	if err == nil {
+		return change, true, nil
+	}
+	if errors.Is(err, state.ErrNoActiveChange) ||
+		errors.Is(err, os.ErrNotExist) ||
+		state.IsMissingBundleAuthority(err) {
+		return model.Change{}, false, nil
+	}
+	return model.Change{}, false, wrapResolutionError(err)
 }
 
 func shouldFallbackStatusMultiSummary(err error) bool {

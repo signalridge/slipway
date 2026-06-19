@@ -249,6 +249,31 @@ func TestStatusRoutesToDeleteAfterPartialDelete(t *testing.T) {
 	})
 }
 
+func TestStatusFromBoundWorktreePrefersActiveAuthorityOverRootOrphanSameSlug(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "bound worktree status")
+
+		rootOrphanDir := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, os.MkdirAll(rootOrphanDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(rootOrphanDir, "intent.md"), []byte("# stale root copy\n"), 0o644))
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(worktreePath))
+		defer func() { _ = os.Chdir(previousWD) }()
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
+		require.NoError(t, err, "status from a bound worktree must not route its active slug to delete recovery")
+		assert.Empty(t, stderr)
+
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "governed", payload["execution_mode"])
+		assert.Equal(t, slug, payload["slug"])
+		assert.NotContains(t, stdout, "orphaned_change_bundle")
+		assert.NotContains(t, stdout, "slipway delete --change "+slug)
+	})
+}
+
 func TestExplicitStatusRoutesToDeleteAfterPartialDelete(t *testing.T) {
 	withDeleteWorkspace(t, func(root string) {
 		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
@@ -308,6 +333,25 @@ func TestStatusRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
 		require.NoError(t, err)
 		assert.NoDirExists(t, bundleDir)
 		assert.NoDirExists(t, runtimeDir)
+	})
+}
+
+func TestStatusRoutesToDeleteAfterFullBundleDeleteFromBoundWorktree(t *testing.T) {
+	withDeleteWorkspace(t, func(root string) {
+		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
+		fullyDeleteBundleForDelete(t, worktreePath, slug)
+
+		previousWD, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(worktreePath))
+		defer func() { _ = os.Chdir(previousWD) }()
+
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
+		require.NoError(t, err, "status from a stale bound worktree must route to delete recovery")
+		assert.Empty(t, stderr)
+		payload := decodeJSONMap(t, stdout)
+		assert.Equal(t, "diagnostics", payload["execution_mode"])
+		assertStaleRuntimeStatusDeleteRecovery(t, payload, slug)
 	})
 }
 
