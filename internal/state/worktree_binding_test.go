@@ -66,6 +66,33 @@ func TestLoadChangeResolvesBoundWorktreeFromRepoRoot(t *testing.T) {
 	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 }
 
+func TestFindActiveChangeByWorktreeBindingIgnoresRootOrphanSameSlug(t *testing.T) {
+	t.Parallel()
+	root, worktreeRoot := setupRepoWithWorktree(t)
+
+	change := model.NewChange("binding-over-root-orphan")
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorktreePath = worktreeRoot
+	change.WorktreeBranch = "feature"
+	require.NoError(t, SaveChange(root, change))
+
+	rootOrphanDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	require.NoError(t, os.MkdirAll(rootOrphanDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(rootOrphanDir, "intent.md"), []byte("# stale root copy\n"), 0o644))
+
+	orphans, err := OrphanBundleSlugs(root)
+	require.NoError(t, err)
+	require.Contains(t, orphans, change.Slug)
+
+	resolved, err := FindActiveChangeByWorktreeBinding(root, worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, change.Slug, resolved.Slug)
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, resolved.WorktreePath)
+}
+
 // TestFindActiveChangeFromInsideWorktreeResolves covers commands invoked from
 // inside the dedicated worktree.
 func TestFindActiveChangeFromInsideWorktreeResolves(t *testing.T) {

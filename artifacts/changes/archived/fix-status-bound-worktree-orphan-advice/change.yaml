@@ -1,0 +1,61 @@
+version: 1
+slug: fix-status-bound-worktree-orphan-advice
+description: fix status bound worktree orphan advice
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-19T07:24:01.992305Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/fix-status-bound-worktree-orphan-advice
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 9ec731f0a471bed7cefd631afa8fb34f3b3db31e72b12a97c2a3c2517bb9cfe9
+        updated_at: 2026-06-19T12:38:40.853909312Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: d4f4d150f5b6e10a73095a83017dec6085b04f650a1b0915a4769dbab6cb4c28
+        updated_at: 2026-06-19T07:33:35.990059535Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 35704c300dbb4063d6d979c8d8a6fb7284d9fa9f623503ef27cdf58aeb774e36
+        updated_at: 2026-06-19T07:25:53.308483246Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8f59871fc2c8fcf89a3eb34981b9a3dd945c32210da4bb7cc558053d215ff316
+        updated_at: 2026-06-19T07:33:16.059375024Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: fef77533d6435a0638e8e618320086218a7a272298803974f2967420b5113230
+        updated_at: 2026-06-19T07:32:22.763482741Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 2b5e28ee761b38d199c8d0f28b97c335a1ec2f8c004afca559407aa6b7755b8d
+        updated_at: 2026-06-19T08:10:30.292609023Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/code-quality-review.yaml
+    final-closeout: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/final-closeout.yaml
+    goal-verification: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/goal-verification.yaml
+    independent-review: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/plan-audit.yaml
+    research-orchestration: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-status-bound-worktree-orphan-advice/artifacts/changes/fix-status-bound-worktree-orphan-advice/verification/wave-orchestration.yaml
