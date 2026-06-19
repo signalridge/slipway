@@ -1,0 +1,61 @@
+version: 1
+slug: expand-ai-tool-adapters
+description: expand ai tool adapters
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-19T04:41:01.073301Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/expand-ai-tool-adapters
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: ff22ced2ef3583889e27e432db8fbbabb3d7acd83486d9a3d7045a36951761c4
+        updated_at: 2026-06-19T08:58:56.930983152Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 9787b378d88a82cdc0924c4e617dfa903be4419e33e4eab1a272957ef60e33f8
+        updated_at: 2026-06-19T05:34:13.300692527Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: fa176760e066d210d6f77a5a4f79639c3e63a67fcabb082a3e7baefad530885f
+        updated_at: 2026-06-19T05:47:16.187811775Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: d4592987b285e099295d04e6bc5e760a7ffb7c547de6ed345137ba49b25f5fc0
+        updated_at: 2026-06-19T05:34:13.300428568Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: a2a363cd9b54b4ede37f4d9fd46cc4f66376a75f90c989bfdfff54408b113fc5
+        updated_at: 2026-06-19T05:31:03.201095763Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: c358bcf879af1760a8a8ee32c90b4b0e34221e9bb38aa404024fd6b270394005
+        updated_at: 2026-06-19T07:45:13.325382245Z
+evidence_refs:
+    code-quality-review: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/code-quality-review.yaml
+    final-closeout: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/final-closeout.yaml
+    goal-verification: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/goal-verification.yaml
+    independent-review: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/independent-review.yaml
+    intake-clarification: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/intake-clarification.yaml
+    plan-audit: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/plan-audit.yaml
+    research-orchestration: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/research-orchestration.yaml
+    spec-compliance-review: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/expand-ai-tool-adapters/artifacts/changes/expand-ai-tool-adapters/verification/wave-orchestration.yaml

@@ -20,19 +20,22 @@ import (
 // exported host skills to external agents.
 const skillIndexFileName = "skill-index.md"
 
-// ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode, Gemini).
+// ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode,
+// Gemini, and other generated AI-tool hosts).
 type ToolConfig struct {
-	ID            string
-	SkillsDir     string
-	CommandsDir   string // "" = no project-local commands (Codex)
-	CommandStyle  string // "nested", "flat", "" = no project-local commands
-	CommandFormat string // "md" (default), "toml" (Gemini)
+	ID               string
+	SkillsDir        string
+	CommandsDir      string // "" = no project-local commands (Codex/Qwen/Kiro)
+	CommandStyle     string // "nested", "flat", "" = no project-local commands
+	CommandFormat    string // "md" (default), "toml" (Gemini)
+	CommandExtension string // optional full extension override, for example ".prompt.md"
 	// CommandSkillSurface, when true, generates one host skill per Slipway command
 	// under SkillsDir (slipway-<command>/SKILL.md) instead of project-local command
-	// prompt files. Codex uses this: its current CLI discovers skills, not the
-	// deprecated custom-prompt surface.
+	// prompt files. Skill-first hosts use this when their CLI discovers skills
+	// instead of prompt/workflow command files.
 	CommandSkillSurface bool
 	SettingsPath        string
+	SettingsKind        string
 	SessionEvent        string
 	SessionHook         string
 	PostToolEvent       string
@@ -41,6 +44,10 @@ type ToolConfig struct {
 	TriggerStyle        string
 	AutoDetectPath      []string
 }
+
+const (
+	settingsKindPiRegistration = "pi-registration"
+)
 
 var toolRegistry = map[string]ToolConfig{
 	"claude": {
@@ -91,6 +98,22 @@ var toolRegistry = map[string]ToolConfig{
 			".codex",
 		},
 	},
+	"copilot": {
+		ID:               "copilot",
+		SkillsDir:        ".github/skills",
+		CommandsDir:      ".github/prompts",
+		CommandStyle:     "flat",
+		CommandFormat:    "md",
+		CommandExtension: ".prompt.md",
+		SettingsPath:     "",
+		SessionEvent:     "",
+		SessionHook:      "",
+		TriggerPrefix:    "/slipway-",
+		TriggerStyle:     "slash-hyphen",
+		AutoDetectPath: []string{
+			".github/copilot",
+		},
+	},
 	"opencode": {
 		ID:            "opencode",
 		SkillsDir:     ".opencode/skills",
@@ -119,6 +142,84 @@ var toolRegistry = map[string]ToolConfig{
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
 			".gemini",
+		},
+	},
+	"kilo": {
+		ID:            "kilo",
+		SkillsDir:     ".kilocode/skills",
+		CommandsDir:   ".kilocode/workflows",
+		CommandStyle:  "flat",
+		CommandFormat: "md",
+		SettingsPath:  "",
+		SessionEvent:  "",
+		SessionHook:   "",
+		TriggerPrefix: "/slipway",
+		TriggerStyle:  "slash-colon",
+		AutoDetectPath: []string{
+			".kilocode",
+		},
+	},
+	"kiro": {
+		ID:                  "kiro",
+		SkillsDir:           ".kiro/skills",
+		CommandsDir:         "",
+		CommandStyle:        "",
+		CommandFormat:       "",
+		CommandSkillSurface: true,
+		SettingsPath:        "",
+		SessionEvent:        "",
+		SessionHook:         "",
+		TriggerPrefix:       "@slipway",
+		TriggerStyle:        "at-colon",
+		AutoDetectPath: []string{
+			".kiro",
+		},
+	},
+	"pi": {
+		ID:            "pi",
+		SkillsDir:     ".pi/skills",
+		CommandsDir:   ".pi/prompts",
+		CommandStyle:  "flat",
+		CommandFormat: "md",
+		SettingsPath:  ".pi/settings.json",
+		SettingsKind:  settingsKindPiRegistration,
+		SessionEvent:  "",
+		SessionHook:   "",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		AutoDetectPath: []string{
+			".pi",
+		},
+	},
+	"qwen": {
+		ID:                  "qwen",
+		SkillsDir:           ".qwen/skills",
+		CommandsDir:         "",
+		CommandStyle:        "",
+		CommandFormat:       "",
+		CommandSkillSurface: true,
+		SettingsPath:        ".qwen/settings.json",
+		SessionEvent:        "SessionStart",
+		SessionHook:         ".qwen/hooks/slipway-session-start",
+		TriggerPrefix:       "/slipway-",
+		TriggerStyle:        "slash-hyphen",
+		AutoDetectPath: []string{
+			".qwen",
+		},
+	},
+	"windsurf": {
+		ID:            "windsurf",
+		SkillsDir:     ".windsurf/skills",
+		CommandsDir:   ".windsurf/workflows",
+		CommandStyle:  "flat",
+		CommandFormat: "md",
+		SettingsPath:  "",
+		SessionEvent:  "",
+		SessionHook:   "",
+		TriggerPrefix: "/slipway-",
+		TriggerStyle:  "slash-hyphen",
+		AutoDetectPath: []string{
+			".windsurf",
 		},
 	},
 }
@@ -715,7 +816,11 @@ func ResolveTools(selection string) ([]string, error) {
 		return nil, nil
 	}
 	if strings.EqualFold(selection, "all") {
-		return []string{"claude", "codex", "cursor", "gemini", "opencode"}, nil
+		tools := make([]string, 0, len(toolRegistry))
+		for _, cfg := range Registry() {
+			tools = append(tools, cfg.ID)
+		}
+		return tools, nil
 	}
 	if strings.EqualFold(selection, "none") {
 		return nil, nil
@@ -829,6 +934,33 @@ func SkillIndexPath(cfg ToolConfig) string {
 		"references",
 		skillIndexFileName,
 	)
+}
+
+func commandFileExtension(cfg ToolConfig) string {
+	if ext := strings.TrimSpace(cfg.CommandExtension); ext != "" {
+		if strings.HasPrefix(ext, ".") {
+			return ext
+		}
+		return "." + ext
+	}
+	if cfg.CommandFormat == "toml" {
+		return ".toml"
+	}
+	return ".md"
+}
+
+func commandEntryRelPath(cfg ToolConfig, id string) string {
+	ext := commandFileExtension(cfg)
+	switch cfg.CommandStyle {
+	case "flat":
+		return filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway-"+id+ext))
+	default:
+		return filepath.ToSlash(filepath.Join(cfg.CommandsDir, "slipway", id+ext))
+	}
+}
+
+func commandEntryPath(root string, cfg ToolConfig, id string) string {
+	return filepath.Join(root, filepath.FromSlash(commandEntryRelPath(cfg, id)))
 }
 
 func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillInstallClosure) (err error) {
@@ -1030,23 +1162,12 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 	// Command prompt surfaces (inline command prompts for prompt-backed adapters).
 	// Skip when CommandsDir is empty (Codex uses command skills instead).
 	if cfg.CommandsDir != "" {
-		ext := ".md"
-		if cfg.CommandFormat == "toml" {
-			ext = ".toml"
-		}
 		for _, id := range commandIDs() {
 			content, err := renderCommandEntry(cfg, id)
 			if err != nil {
 				return fmt.Errorf("render command prompt %q for %s: %w", id, cfg.ID, err)
 			}
-			var p string
-			switch cfg.CommandStyle {
-			case "flat":
-				p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
-			default: // "nested"
-				p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
-			}
-			if err := writeDeterministicWithPlan(plan, p, content, refresh); err != nil {
+			if err := writeDeterministicWithPlan(plan, commandEntryPath(root, cfg, id), content, refresh); err != nil {
 				return err
 			}
 		}
@@ -1075,26 +1196,35 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		}
 	}
 
-	// Hook registration is keyed on whether the host owns a settings.json.
+	// Settings registration is keyed on whether the host owns a settings.json.
 	//
 	//   - Settings-capable hosts (claude, gemini): register each hook event as a
 	//     bare inline `slipway hook <subcommand>` command directly in
 	//     settings.json. No launcher script files are written, and on refresh any
 	//     previously generated launcher files are pruned.
+	//   - Pi registers generated skills/prompts in settings.json without hook
+	//     semantics.
 	//   - Settings-less hosts (cursor, opencode): keep emitting the advisory
 	//     session-start launcher files (extensionless + .ps1 + .cmd), since they
 	//     have no settings.json to register an inline command in.
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
-		if refresh {
-			if err := pruneHookLauncherFiles(root, cfg.SessionHook, plan); err != nil {
+		switch cfg.SettingsKind {
+		case settingsKindPiRegistration:
+			if err := mergePiRegistrationSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
 				return err
 			}
-			if err := pruneHookLauncherFiles(root, cfg.PostToolHook, plan); err != nil {
+		default:
+			if refresh {
+				if err := pruneHookLauncherFiles(root, cfg.SessionHook, plan); err != nil {
+					return err
+				}
+				if err := pruneHookLauncherFiles(root, cfg.PostToolHook, plan); err != nil {
+					return err
+				}
+			}
+			if err := mergeHookSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
 				return err
 			}
-		}
-		if err := mergeHookSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
-			return err
 		}
 	} else if strings.TrimSpace(cfg.SessionHook) != "" {
 		for _, launcher := range hookLauncherOutputs(cfg.SessionHook, "session-start") {
@@ -1143,19 +1273,8 @@ func purgeCommandPromptSurfaces(root string, cfg ToolConfig, plan *toolRefreshPl
 	if cfg.CommandsDir == "" {
 		return nil
 	}
-	ext := ".md"
-	if cfg.CommandFormat == "toml" {
-		ext = ".toml"
-	}
 	for _, id := range commandIDs() {
-		var p string
-		switch cfg.CommandStyle {
-		case "flat":
-			p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
-		default:
-			p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
-		}
-		if err := removePathIfExistsWithPlan(plan, p); err != nil {
+		if err := removePathIfExistsWithPlan(plan, commandEntryPath(root, cfg, id)); err != nil {
 			return err
 		}
 	}
@@ -1169,19 +1288,8 @@ func invalidateFailedRefreshTrustSurfaces(root string, cfg ToolConfig, sentinelP
 	if cfg.CommandsDir == "" {
 		return nil
 	}
-	ext := ".md"
-	if cfg.CommandFormat == "toml" {
-		ext = ".toml"
-	}
 	for _, id := range commandIDs() {
-		var p string
-		switch cfg.CommandStyle {
-		case "flat":
-			p = filepath.Join(root, cfg.CommandsDir, "slipway-"+id+ext)
-		default:
-			p = filepath.Join(root, cfg.CommandsDir, "slipway", id+ext)
-		}
-		if err := plan.invalidateTrustedGeneratedFile(p); err != nil {
+		if err := plan.invalidateTrustedGeneratedFile(commandEntryPath(root, cfg, id)); err != nil {
 			return err
 		}
 	}
@@ -1265,17 +1373,10 @@ func cleanupStaleCommandEntries(root string, cfg ToolConfig, hadGeneratedAdapter
 		return nil
 	}
 
-	ext := ".md"
-	if cfg.CommandFormat == "toml" {
-		ext = ".toml"
-	}
+	ext := commandFileExtension(cfg)
 	expected := map[string]struct{}{}
 	for _, id := range commandIDs() {
-		name := id + ext
-		if cfg.CommandStyle == "flat" {
-			name = "slipway-" + id + ext
-		}
-		expected[name] = struct{}{}
+		expected[filepath.Base(commandEntryRelPath(cfg, id))] = struct{}{}
 	}
 
 	switch cfg.CommandStyle {
@@ -1991,6 +2092,68 @@ func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
 	return mergeHookSettingsJSONWithPlan(root, cfg, refresh, nil)
 }
 
+func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	if !refresh {
+		if _, err := os.Stat(settingsPath); err == nil {
+			return nil
+		}
+	}
+
+	settings := map[string]any{}
+	existing, err := os.ReadFile(settingsPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	if err == nil {
+		if err := json.Unmarshal(existing, &settings); err != nil {
+			return fmt.Errorf("parse %s: %w", cfg.SettingsPath, err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	settings["enableSkillCommands"] = true
+	if err := mergeStringArraySetting(settings, "skills", "./skills"); err != nil {
+		return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
+	}
+	if err := mergeStringArraySetting(settings, "prompts", "./prompts"); err != nil {
+		return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where searchable mode is intentional.
+		return err
+	}
+	content, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	if refresh && plan != nil {
+		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
+	}
+	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project artifact where operator-readable mode is intentional.
+}
+
+func mergeStringArraySetting(settings map[string]any, key, value string) error {
+	raw, ok := settings[key]
+	if !ok || raw == nil {
+		settings[key] = []any{value}
+		return nil
+	}
+
+	items, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("%s field must be an array", key)
+	}
+	for _, item := range items {
+		existing, ok := item.(string)
+		if ok && existing == value {
+			settings[key] = items
+			return nil
+		}
+	}
+	settings[key] = append(items, value)
+	return nil
+}
+
 func mergeHookSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
 	settingsPath := filepath.Join(root, cfg.SettingsPath)
 	if !refresh {
@@ -2277,7 +2440,8 @@ func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
 }
 
 func commandTrigger(cfg ToolConfig, commandID string) string {
-	if cfg.TriggerStyle == "slash-colon" {
+	switch cfg.TriggerStyle {
+	case "slash-colon", "at-colon":
 		return fmt.Sprintf("%s:%s", cfg.TriggerPrefix, commandID)
 	}
 	return fmt.Sprintf("%s%s", cfg.TriggerPrefix, commandID)
@@ -2306,9 +2470,13 @@ func hasGeneratedAdapter(root string, cfg ToolConfig) bool {
 // invocation surface is explicit at setup time.
 func (c ToolConfig) InvocationSummary() string {
 	if c.CommandSkillSurface {
+		if c.TriggerStyle != "" && c.TriggerStyle != "dollar-mention" {
+			return fmt.Sprintf("invoke command skills as %s or via host skill picker", commandTrigger(c, "<command>"))
+		}
 		return "invoke skills: $slipway (entry), $slipway-<command> per command, or /skills"
 	}
-	if c.TriggerStyle == "slash-colon" {
+	switch c.TriggerStyle {
+	case "slash-colon", "at-colon":
 		return fmt.Sprintf("invoke commands as %s:<command>", c.TriggerPrefix)
 	}
 	return fmt.Sprintf("invoke commands as %s<command>", c.TriggerPrefix)

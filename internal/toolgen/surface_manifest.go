@@ -181,21 +181,27 @@ func jsonContractRows() []SurfaceManifestRow {
 }
 
 func commandSkillRows() []SurfaceManifestRow {
-	rows := []SurfaceManifestRow{}
+	hasCommandSkillSurface := false
 	for _, cfg := range Registry() {
-		if !cfg.CommandSkillSurface {
-			continue
+		if cfg.CommandSkillSurface {
+			hasCommandSkillSurface = true
+			break
 		}
-		for _, id := range commandIDs() {
-			name := adapterSkillName(id)
-			rows = append(rows, SurfaceManifestRow{
-				Kind:   "skill",
-				Name:   name,
-				Source: "internal/toolgen/toolgen.go:commandRegistry",
-				Docs:   "docs/reference/ai-tools.md",
-				Token:  commandSkillDocsToken(id),
-			})
-		}
+	}
+	if !hasCommandSkillSurface {
+		return nil
+	}
+
+	rows := []SurfaceManifestRow{}
+	for _, id := range commandIDs() {
+		name := adapterSkillName(id)
+		rows = append(rows, SurfaceManifestRow{
+			Kind:   "skill",
+			Name:   name,
+			Source: "internal/toolgen/toolgen.go:commandRegistry",
+			Docs:   "docs/reference/ai-tools.md",
+			Token:  commandSkillDocsToken(id),
+		})
 	}
 	return rows
 }
