@@ -157,6 +157,108 @@ func TestRepairRecoversMissingConfigFromNestedDirectoryWhenRootMarkersExist(t *t
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
+func TestRepairReportsLegacyRuntimeHandoffAndCleansSafeRuntimeArtifacts(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{name: "base handoff", filename: "handoff.md"},
+		{name: "globbed handoff alias", filename: "handoff-old.md"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			withWorkspace(t, root, func() {
+				initTestWorkspace(t, root)
+				slug := createGovernedRequest(t, root, "L2", "repair runtime hygiene")
+
+				legacyHandoffPath := filepath.Join(state.GitRuntimeDir(root), tt.filename)
+				require.NoError(t, os.MkdirAll(filepath.Dir(legacyHandoffPath), 0o755))
+				require.NoError(t, os.WriteFile(legacyHandoffPath, []byte("old handoff"), 0o644))
+
+				legacyChangesDir := state.LegacyChangesDir(root)
+				require.NoError(t, os.MkdirAll(legacyChangesDir, 0o755))
+
+				lockPath := state.ChangeStateLockPath(root, slug)
+				require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o755))
+				require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
+
+				var out bytes.Buffer
+				cmd := makeRepairCmd()
+				cmd.SetArgs([]string{"--json"})
+				cmd.SetOut(&out)
+				require.NoError(t, cmd.Execute())
+
+				var summary repairSummary
+				require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+				assert.Contains(t, summary.CleanedLockAnchors, state.DisplayPath(root, lockPath))
+				assert.Contains(t, summary.RemovedLegacyRuntimeDirs, state.DisplayPath(root, legacyChangesDir))
+
+				foundLegacyHandoff := false
+				for _, finding := range summary.NonRepairableFindings {
+					if strings.Contains(finding, "legacy runtime handoff requires manual migration") &&
+						strings.Contains(finding, "runtime/changes/<slug>/handoff.md") &&
+						strings.Contains(finding, tt.filename) {
+						foundLegacyHandoff = true
+					}
+				}
+				assert.True(t, foundLegacyHandoff, "expected legacy handoff migration finding")
+
+				assert.FileExists(t, legacyHandoffPath, "ambiguous handoff content must not be silently deleted")
+				assert.NoDirExists(t, legacyChangesDir)
+				assert.NoFileExists(t, lockPath)
+			})
+		})
+	}
+}
+
+func TestRepairSummaryForRuntimeHygieneRequiresCanonicalReasonCode(t *testing.T) {
+	t.Parallel()
+
+	finding := state.HealthFinding{
+		Category:   "runtime_hygiene",
+		Repairable: false,
+		Reasons: []model.ReasonCode{
+			model.NewReasonCode("legacy_runtime_handoff", ".git/slipway/runtime/handoff-s3.md"),
+		},
+	}
+
+	summary := repairSummaryForHealthFinding(finding)
+	assert.Contains(t, summary, ".git/slipway/runtime/handoff-s3.md")
+	assert.Contains(t, summary, ".git/slipway/runtime/changes/<slug>/handoff.md")
+
+	unknownCodeFinding := finding
+	unknownCodeFinding.Reasons = []model.ReasonCode{
+		model.NewReasonCode("unknown_reason_code", "legacy_runtime_handoff: .git/slipway/runtime/handoff-s3.md"),
+	}
+	assert.Empty(t, repairSummaryForHealthFinding(unknownCodeFinding))
+}
+
+func TestCleanupUnheldLockAnchorsToleratesPerAnchorErrors(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	// An anchor whose parent path is a regular file makes the internal meta/anchor
+	// stat fail with a non-ENOENT (ENOTDIR) error, exercising the per-anchor error
+	// path. Best-effort hygiene must skip it rather than abort the whole repair.
+	notADir := filepath.Join(root, "notadir")
+	require.NoError(t, os.WriteFile(notADir, []byte(""), 0o644))
+	failingAnchor := filepath.Join(notADir, "state.lock")
+
+	// A normal unheld empty anchor that must still be cleaned despite the sibling
+	// failure listed before it.
+	cleanAnchor := filepath.Join(root, "locks", "state.lock")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cleanAnchor), 0o755))
+	require.NoError(t, os.WriteFile(cleanAnchor, []byte(""), 0o644))
+
+	cleaned := cleanupUnheldLockAnchors(root, []string{failingAnchor, cleanAnchor})
+
+	assert.Equal(t, []string{state.DisplayPath(root, cleanAnchor)}, cleaned)
+	assert.NoFileExists(t, cleanAnchor)
+}
+
 func TestRepairDoesNotCleanFreshAtomicTempArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

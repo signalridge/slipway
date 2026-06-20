@@ -31,6 +31,7 @@ func TestGitScopedPathsUseUnifiedSlipwayNamespace(t *testing.T) {
 	assert.Equal(t, filepath.Join(normalizedRoot, ".git", "slipway", "cache", "changes", "demo", "governance_snapshot.yaml"), GovernanceSnapshotCachePath(root, "demo"))
 	assert.Equal(t, filepath.Join(normalizedRoot, ".git", "slipway", "repair-backups", "config"), ConfigBackupDir(root))
 	assert.Equal(t, filepath.Join(normalizedRoot, ".git", "slipway", "runtime", "changes", "demo"), ChangeDir(root, "demo"))
+	assert.Equal(t, filepath.Join(normalizedRoot, ".git", "slipway", "runtime", "changes", "demo", "handoff.md"), ChangeHandoffPath(root, "demo"))
 }
 
 func TestGitScopedPathsNamespaceNestedScopeByScopeRoot(t *testing.T) {
@@ -48,6 +49,11 @@ func TestGitScopedPathsNamespaceNestedScopeByScopeRoot(t *testing.T) {
 		t,
 		filepath.Join(normalizedRoot, ".git", "slipway", "scopes", "services", "billing", "runtime", "changes", "demo"),
 		ChangeDir(scopeRoot, "demo"),
+	)
+	assert.Equal(
+		t,
+		filepath.Join(normalizedRoot, ".git", "slipway", "scopes", "services", "billing", "runtime", "changes", "demo", "handoff.md"),
+		ChangeHandoffPath(scopeRoot, "demo"),
 	)
 }
 

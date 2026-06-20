@@ -1,0 +1,48 @@
+version: 1
+slug: fix-runtime-handoff-isolation
+description: fix runtime handoff isolation
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-19T17:29:51.176804Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/fix-runtime-handoff-isolation
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 4a38610c09c08fcb83c71740ea40995170e61893562b0c704dcbad01a8972a72
+        updated_at: 2026-06-20T04:33:23.127378814Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: c8602637610b82b987d92981ba8b50bb72713e9c0432ad8bf6bd5573b88a943e
+        updated_at: 2026-06-19T17:32:00.710960149Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 18fffc59173440398bc49e6febf077920cd09b641707fff521897f1c4127e17b
+        updated_at: 2026-06-19T17:54:18.692643241Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 6d86fe793947cef4079dd459e13c4bd3e16a681631c4ebb1ab7dee8ffc176430
+        updated_at: 2026-06-20T04:01:59.479340384Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/code-quality-review.yaml
+    final-closeout: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/final-closeout.yaml
+    goal-verification: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/goal-verification.yaml
+    independent-review: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/plan-audit.yaml
+    security-review: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/security-review.yaml
+    spec-compliance-review: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-runtime-handoff-isolation/artifacts/changes/fix-runtime-handoff-isolation/verification/wave-orchestration.yaml
