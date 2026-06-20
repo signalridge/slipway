@@ -73,6 +73,55 @@ func TestBuildLearnViewAggregatesLifecycleSignalsIntoPreviewProposals(t *testing
 	assert.NotEmpty(t, view.Proposals[0].Risk)
 }
 
+func TestBuildLearnViewSplitsManualAndAutoCheckpointResolutionSignals(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("learn-checkpoint-resolution-signals")
+	require.NoError(t, state.SaveChange(root, change))
+	for range 2 {
+		_, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+			EventType: "checkpoint.opened",
+			Action:    "opened",
+		})
+		require.NoError(t, err)
+	}
+	_, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+		EventType: "checkpoint.resolved",
+		Action:    "resolved",
+		SideEffects: []state.LifecycleSideEffect{
+			{Kind: "active_checkpoint_cleared"},
+		},
+	})
+	require.NoError(t, err)
+	_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+		EventType: "checkpoint.resolved",
+		Action:    "resolved",
+		SideEffects: []state.LifecycleSideEffect{
+			{Kind: "active_checkpoint_cleared"},
+			{Kind: autoCheckpointAcknowledgedSideEffect},
+		},
+	})
+	require.NoError(t, err)
+
+	view, err := buildLearnView(root, time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	assert.Equal(t, 4, view.Signals.LifecycleEventCount)
+	assert.Equal(t, 2, view.Signals.CheckpointOpened)
+	assert.Equal(t, 2, view.Signals.CheckpointResolved)
+	assert.Equal(t, 1, view.Signals.CheckpointResolvedManual)
+	assert.Equal(t, 1, view.Signals.CheckpointResolvedAuto)
+	// The manual/auto counts must partition the total resolved count exactly.
+	assert.Equal(t, view.Signals.CheckpointResolved,
+		view.Signals.CheckpointResolvedManual+view.Signals.CheckpointResolvedAuto)
+	// checkpoint_resolution_rate keeps its historical TOTAL meaning (resolved/opened);
+	// the manual/auto rates break that total down by attribution.
+	assert.Equal(t, 1.0, view.Signals.CheckpointResolutionRate)
+	assert.Equal(t, 0.5, view.Signals.CheckpointManualResolutionRate)
+	assert.Equal(t, 0.5, view.Signals.CheckpointAutoResolutionRate)
+}
+
 func TestBuildLearnViewToleratesArchivedChangeWithoutLifecycleEvents(t *testing.T) {
 	t.Parallel()
 

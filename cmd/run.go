@@ -52,14 +52,14 @@ func makeRunCmd() *cobra.Command {
 				// the loop, so the checkpoint is consumed exactly as an operator
 				// --resume-response would. Decision/human_action/guardrail checkpoints
 				// are deliberately left untouched and still fail closed.
-				effectiveResumeResponse, err := autoAckResumeResponse(root, ref, effectiveAuto, resume, resumeResponse)
+				effectiveResumeResponse, autoCheckpointAcknowledged, err := autoAckResumeResponse(root, ref, effectiveAuto, resume, resumeResponse)
 				if err != nil {
 					return err
 				}
 				if err := validateRunEntry(root, ref, resume, effectiveResumeResponse); err != nil {
 					return err
 				}
-				view, err := runGovernedLoop(root, ref, effectiveResumeResponse, effectiveAuto)
+				view, err := runGovernedLoop(root, ref, effectiveResumeResponse, effectiveAuto, autoCheckpointAcknowledged)
 				if err != nil {
 					return err
 				}
@@ -141,22 +141,22 @@ func resolveEffectiveAuto(root string, cmd *cobra.Command, auto, noAuto bool) (b
 // the loop consumes the checkpoint. Decision and human_action checkpoints, and
 // any checkpoint in a guardrail/sensitive domain, are never auto-acknowledged —
 // they keep failing closed exactly as in the non-auto path.
-func autoAckResumeResponse(root string, ref changeRef, auto, resume bool, resumeResponse string) (string, error) {
+func autoAckResumeResponse(root string, ref changeRef, auto, resume bool, resumeResponse string) (string, bool, error) {
 	if !auto || resume || strings.TrimSpace(resumeResponse) != "" {
-		return resumeResponse, nil
+		return resumeResponse, false, nil
 	}
 	change, err := state.LoadChange(root, ref.Slug)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	eligible, err := autoAckEligibleCheckpoint(root, change)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if !eligible {
-		return resumeResponse, nil
+		return resumeResponse, false, nil
 	}
-	return autoAcknowledgedResponse, nil
+	return autoAcknowledgedResponse, true, nil
 }
 
 // autoAckEligibleCheckpoint reports whether the change has an active checkpoint
@@ -190,6 +190,11 @@ const autoAcknowledgedResponse = "auto-acknowledged"
 
 // isGuardrailSensitive reports whether a change's guardrail domain marks it as a
 // sensitive domain that must keep failing closed to manual review under auto.
+//
+// An empty domain reports non-sensitive on the authority of upstream intake
+// classification: a sensitive change carries a non-empty GuardrailDomain set by
+// the governed intake/plan stages, so a blank domain here means the classifier
+// found no sensitive domain rather than that classification was skipped.
 func isGuardrailSensitive(guardrailDomain string) bool {
 	return strings.TrimSpace(guardrailDomain) != ""
 }
@@ -306,7 +311,34 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 	return planHash != "" && currentHash != "" && planHash != currentHash
 }
 
-func runGovernedLoop(root string, ref changeRef, resumeResponse string, auto bool) (nextView, error) {
+func runGovernedLoop(
+	root string,
+	ref changeRef,
+	resumeResponse string,
+	auto bool,
+	autoCheckpointAcknowledged bool,
+) (nextView, error) {
+	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
+	buildNext := func(nextResumeResponse string) (nextView, error) {
+		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
+			ResumeResponse:             nextResumeResponse,
+			AutoSkipEvidence:           true,
+			Command:                    "run",
+			Auto:                       auto,
+			AutoCheckpointAcknowledged: nextAutoCheckpointAcknowledged,
+		})
+		nextAutoCheckpointAcknowledged = false
+		return view, err
+	}
+	return runGovernedLoopWithBuilder(root, ref, resumeResponse, buildNext)
+}
+
+func runGovernedLoopWithBuilder(
+	root string,
+	ref changeRef,
+	resumeResponse string,
+	buildNext func(string) (nextView, error),
+) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
@@ -317,7 +349,7 @@ func runGovernedLoop(root string, ref changeRef, resumeResponse string, auto boo
 		delegatedTo = primaryCommandForState(change.CurrentState)
 	}
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run", auto)
+		view, err := buildNext(nextResumeResponse)
 		if err != nil {
 			return nextView{}, err
 		}

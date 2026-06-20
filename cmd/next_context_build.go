@@ -51,7 +51,14 @@ func missingCodebaseMapDocStates(docs map[string]string) map[string]string {
 // (state, lifecycle, artifacts, checkpoints).
 // Returns the loaded Change plus its execution context so downstream next-path
 // consumers can reuse the same execution-summary read.
-func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeResponse string, preview bool) (*model.Change, *executionContext, error) {
+func buildNextContextByMode(
+	root string,
+	view *nextView,
+	ref changeRef,
+	resumeResponse string,
+	preview bool,
+	autoCheckpointAcknowledged bool,
+) (*model.Change, *executionContext, error) {
 	change, err := state.LoadChange(root, ref.Slug)
 	if err != nil {
 		return nil, nil, err
@@ -93,7 +100,7 @@ func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeRe
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview); err != nil {
+	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview, autoCheckpointAcknowledged); err != nil {
 		return nil, nil, err
 	}
 	return &change, &execCtx, nil
@@ -297,7 +304,15 @@ func buildHandoffRiskForReadiness(existing *handoffRiskView, controls []model.Co
 
 // buildResumeCheckpoint handles active checkpoint validation and wave execution
 // resume checkpoint construction for governed changes.
-func buildResumeCheckpoint(root string, change *model.Change, execCtx executionContext, view *nextView, resumeResponse string, preview bool) error {
+func buildResumeCheckpoint(
+	root string,
+	change *model.Change,
+	execCtx executionContext,
+	view *nextView,
+	resumeResponse string,
+	preview bool,
+	autoCheckpointAcknowledged bool,
+) error {
 	if err := validateActiveCheckpointAuthority(root, *change, execCtx, "next"); err != nil {
 		return err
 	}
@@ -327,6 +342,7 @@ func buildResumeCheckpoint(root string, change *model.Change, execCtx executionC
 				// so failed readiness/projection passes preserve the pending resume
 				// contract.
 				view.consumeActiveCheckpoint = true
+				view.consumeActiveCheckpointAutoAcknowledged = autoCheckpointAcknowledged
 			}
 		}
 		view.InputContext.ResumeCheckpoint = checkpoint
