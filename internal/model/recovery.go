@@ -54,6 +54,7 @@ type RecoveryClass string
 
 const (
 	RecoveryClassConfirmPreset   RecoveryClass = "confirm_preset"
+	RecoveryClassPreserveWork    RecoveryClass = "preserve_work"
 	RecoveryClassDiscardChange   RecoveryClass = "discard_change"
 	RecoveryClassNewChange       RecoveryClass = "new_change"
 	RecoveryClassSatisfyControl  RecoveryClass = "satisfy_control"
@@ -71,6 +72,10 @@ const (
 // higher priority for selecting the single primary command.
 var recoveryClassPriority = []RecoveryClass{
 	RecoveryClassConfirmPreset,
+	// PreserveWork outranks DiscardChange so that when a no-target recovery
+	// surfaces both an unmanaged-worktree orphan and a plain discardable orphan,
+	// the non-destructive preserve-first action is chosen as primary (#285).
+	RecoveryClassPreserveWork,
 	RecoveryClassNewChange,
 	RecoveryClassDiscardChange,
 	RecoveryClassSatisfyControl,
@@ -317,11 +322,16 @@ var blockerRemediations = map[string]blockerRemediation{
 	"orphaned_bundle_unmanaged_worktree": {
 		// Emitted as orphaned_bundle_unmanaged_worktree:<slug>. The bundle lost its
 		// change.yaml, but a live git worktree Slipway never provisioned still holds
-		// work for the slug. Lead with inspect/preserve and NEVER suggest --worktree:
-		// recovery must not endanger externally-managed, possibly-unmerged work.
+		// work for the slug. This is a PRESERVE-first recovery, not a discard: the
+		// structured surface must NOT route to `slipway delete` as the primary
+		// command and must NOT carry the discard_change class (#285). The CommandTemplate
+		// is deliberately empty — preservation is a manual, multi-step judgment with no
+		// single safe automated command — so primary_command is omitted and the prose
+		// carries the action. `slipway delete --change <slug>` survives only in prose as
+		// the FINAL residue cleanup after the work is saved, and never with --worktree.
 		Remediation:     "Governed bundle {subject} lost its change.yaml, but a live git worktree Slipway does not manage still holds work for this slug. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change {subject}` (never pass --worktree).",
-		CommandTemplate: "slipway delete --change {subject}",
-		Class:           RecoveryClassDiscardChange,
+		CommandTemplate: "",
+		Class:           RecoveryClassPreserveWork,
 	},
 	"orphaned_change_bundle": {
 		// Emitted as orphaned_change_bundle:<slug>. The governed bundle directory

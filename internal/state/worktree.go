@@ -33,6 +33,12 @@ type worktreeListProbe struct {
 	Exists     bool
 	ModTime    time.Time
 	EntryNames []string
+	// Heads fingerprints each linked worktree's HEAD ("<entry>\x00<head>", sorted).
+	// The cached records carry each worktree's Branch, but a branch switch rewrites
+	// .git/worktrees/<entry>/HEAD WITHOUT changing the parent dir's mtime or entry
+	// set — so without this, branch-sensitive matching (FindSlugWorktreeMatch, #285)
+	// could read a stale branch from the cache and misjudge SlipwayManaged.
+	Heads []string
 }
 
 type worktreeListCacheEntry struct {
@@ -727,10 +733,19 @@ func worktreeListProbeForRepo(repoRoot string) worktreeListProbe {
 		return probe
 	}
 	probe.EntryNames = make([]string, 0, len(entries))
+	probe.Heads = make([]string, 0, len(entries))
 	for _, entry := range entries {
-		probe.EntryNames = append(probe.EntryNames, entry.Name())
+		name := entry.Name()
+		probe.EntryNames = append(probe.EntryNames, name)
+		// Read each linked worktree's HEAD so an in-place branch switch (which
+		// rewrites HEAD but leaves the entry set and parent mtime untouched)
+		// invalidates the cache. A missing/unreadable HEAD contributes empty
+		// content; if it later appears the fingerprint changes and re-invalidates.
+		head, _ := os.ReadFile(filepath.Join(path, name, "HEAD")) // #nosec G304 -- path is derived from the repo's own git metadata dir, not user input.
+		probe.Heads = append(probe.Heads, name+"\x00"+strings.TrimSpace(string(head)))
 	}
 	slices.Sort(probe.EntryNames)
+	slices.Sort(probe.Heads)
 	return probe
 }
 
@@ -741,7 +756,7 @@ func worktreeListProbeMatches(a, b worktreeListProbe) bool {
 	if !a.Exists {
 		return true
 	}
-	return a.ModTime.Equal(b.ModTime) && slices.Equal(a.EntryNames, b.EntryNames)
+	return a.ModTime.Equal(b.ModTime) && slices.Equal(a.EntryNames, b.EntryNames) && slices.Equal(a.Heads, b.Heads)
 }
 
 func cloneWorktreeRecords(in []gitWorktreeRecord) []gitWorktreeRecord {

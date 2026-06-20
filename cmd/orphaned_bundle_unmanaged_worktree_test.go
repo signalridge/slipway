@@ -149,3 +149,76 @@ func TestOrphanedChangeBundleErrorNoWorktreeRoute(t *testing.T) {
 	assert.Contains(t, cliErr.Details["orphaned_change_bundles"], slug)
 	assert.Contains(t, cliErr.Remediation, "slipway delete --change "+slug)
 }
+
+// statusBlockerHasCode reports whether the status --json blockers list carries a
+// reason with the given code. Blockers are encoded as model.ReasonCode objects,
+// so each entry is a map with a "code" field.
+func statusBlockerHasCode(t *testing.T, payload map[string]any, code string) bool {
+	t.Helper()
+	blockers, _ := payload["blockers"].([]any)
+	for _, b := range blockers {
+		if bm, ok := b.(map[string]any); ok && bm["code"] == code {
+			return true
+		}
+	}
+	return false
+}
+
+// assertNonDestructiveUnmanagedRecovery checks the status --json recovery object
+// and full stdout for the #285 preserve-first contract: preserve_work class, no
+// destructive `slipway delete` primary command, no "add --worktree" escalation,
+// and the inspect/preserve prose present.
+func assertNonDestructiveUnmanagedRecovery(t *testing.T, payload map[string]any, stdout string) {
+	t.Helper()
+	recovery, ok := payload["recovery"].(map[string]any)
+	require.True(t, ok, "status must surface a recovery object")
+	assert.Equal(t, "preserve_work", recovery["recovery_class"])
+
+	// primary_command is omitempty, so it is absent (or empty) for preserve_work —
+	// it must never route to the destructive discard command.
+	primary, _ := recovery["primary_command"].(string)
+	assert.Empty(t, primary, "preserve_work recovery must carry no primary_command")
+	assert.NotContains(t, primary, "slipway delete")
+
+	assert.NotContains(t, stdout, "add --worktree", "must never suggest the destructive --worktree escalation")
+	assert.Contains(t, stdout, "never pass --worktree")
+}
+
+// TestStatusJSONUnmanagedWorktreeOrphanIsNonDestructive is the #285 status --json
+// contract: an orphan bundle whose slug names a live worktree Slipway does NOT
+// manage must surface a non-destructive preserve_work recovery, both unscoped and
+// with an explicit --change selector. NOT parallel: the workspace helper chdirs.
+func TestStatusJSONUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
+	root := orphanRecoveryWorkspace(t)
+	slug := "fix-283"
+	externalBranch := "fix/issue-283-archived-worktree-resolution"
+
+	writeOrphanBundle(t, root, slug)
+	addWorktreeOnBranch(t, root, state.DefaultWorktreePath(root, slug), externalBranch)
+
+	// Sanity: the match resolves as external (not managed).
+	match, ok, err := state.FindSlugWorktreeMatch(root, slug)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.False(t, match.SlipwayManaged)
+
+	// Unscoped status routes through the orphan diagnostics view.
+	stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json"})
+	require.NoError(t, err, "status must not dead-end on an orphan bundle with a live unmanaged worktree")
+	require.Empty(t, stderr)
+	payload := decodeJSONMap(t, stdout)
+	assert.Equal(t, "diagnostics", payload["execution_mode"])
+	assert.True(t, statusBlockerHasCode(t, payload, "orphaned_bundle_unmanaged_worktree"),
+		"blockers must include the orphaned_bundle_unmanaged_worktree reason")
+	assertNonDestructiveUnmanagedRecovery(t, payload, stdout)
+
+	// The same non-destructive recovery must hold with an explicit --change selector.
+	stdout, stderr, err = runRootCommandIn(root, []string{"status", "--json", "--change", slug})
+	require.NoError(t, err, "explicit status must not dead-end on the unmanaged-worktree orphan")
+	require.Empty(t, stderr)
+	payload = decodeJSONMap(t, stdout)
+	assert.Equal(t, "diagnostics", payload["execution_mode"])
+	assert.True(t, statusBlockerHasCode(t, payload, "orphaned_bundle_unmanaged_worktree"),
+		"explicit blockers must include the orphaned_bundle_unmanaged_worktree reason")
+	assertNonDestructiveUnmanagedRecovery(t, payload, stdout)
+}

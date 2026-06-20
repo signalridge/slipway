@@ -472,6 +472,49 @@ func TestBuildRecoveryUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
 	assert.Contains(t, got.PrimaryAction, "Inspect and preserve")
 	assert.Contains(t, got.PrimaryAction, "never pass --worktree")
 	assert.NotContains(t, got.PrimaryAction, "add --worktree")
+
+	// The recovery must be classed preserve_work, never discard_change, and must
+	// carry NO primary command — preservation is a manual, multi-step judgment, so
+	// the prose carries the action instead of routing to `slipway delete`.
+	assert.Equal(t, RecoveryClassPreserveWork, got.RecoveryClass)
+	assert.NotEqual(t, RecoveryClassDiscardChange, got.RecoveryClass)
+	assert.Empty(t, got.PrimaryCommand)
+	assert.NotContains(t, got.PrimaryCommand, "slipway delete")
+	assert.Empty(t, got.Steps[0].Command)
+	assert.Equal(t, RecoveryClassPreserveWork, got.Steps[0].RecoveryClass)
+}
+
+func TestBuildRecoveryUnmanagedOrphanOutranksPlainDiscard(t *testing.T) {
+	t.Parallel()
+
+	// #285: when a no-target recovery surfaces BOTH an unmanaged-worktree orphan
+	// (preserve_work) and a plain discardable orphan (discard_change), the
+	// non-destructive preserve-first action must win the primary slot, and no
+	// orphan may be dropped — the plain one still keeps its own discard step.
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("orphaned_bundle_unmanaged_worktree", "live-wt"),
+		NewReasonCode("orphaned_change_bundle", "dead-residue"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, RecoveryClassPreserveWork, got.RecoveryClass)
+	assert.Empty(t, got.PrimaryCommand)
+	assert.NotContains(t, got.PrimaryCommand, "slipway delete")
+	require.Len(t, got.Steps, 2)
+
+	var live, dead *RecoveryStep
+	for i := range got.Steps {
+		switch got.Steps[i].Subject {
+		case "live-wt":
+			live = &got.Steps[i]
+		case "dead-residue":
+			dead = &got.Steps[i]
+		}
+	}
+	require.NotNil(t, live, "the unmanaged-worktree orphan must keep its own step")
+	require.NotNil(t, dead, "the plain discardable orphan must not be dropped")
+	assert.Empty(t, live.Command, "the preserved worktree step must carry no destructive command")
+	assert.Equal(t, "slipway delete --change dead-residue", dead.Command,
+		"the plain orphan still routes to discard")
 }
 
 func TestBuildRecoveryStaleRuntimeBindingRoutesToDelete(t *testing.T) {

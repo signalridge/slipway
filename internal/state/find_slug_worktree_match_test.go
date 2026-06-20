@@ -17,6 +17,9 @@ func TestFindSlugWorktreeMatch_SlugifyBranchAssumptions(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "demo", model.SlugifyTitle("demo"))
 	assert.Equal(t, "my-feature", model.SlugifyTitle("my-feature"))
+	assert.Equal(t, "fix-issue-283-archived-worktree-resolution",
+		model.SlugifyTitle("fix/issue-283-archived-worktree-resolution"),
+		"a slash-bearing branch slugifies to the dashed slug the custom-path case relies on")
 	assert.Equal(t, "change", model.SlugifyTitle(""),
 		"empty branch slugifies to \"change\" — the collision a detached HEAD must avoid")
 }
@@ -157,21 +160,61 @@ func TestFindSlugWorktreeMatch_DetachedHeadDoesNotCollideWithChangeSlug(t *testi
 
 // TestFindSlugWorktreeMatch_ExternalSlugifiedBranchCustomPath covers an external
 // worktree at a custom (non-default) path whose branch slugifies to the slug:
-// it corresponds (ok==true) but is not managed (no default path proof).
+// it corresponds (ok==true) but is not managed (no default path proof). The
+// branch carries a "/" so the raw branch != slug, and the worktree sits on a
+// custom path != .worktrees/<slug> — so the ONLY thing that can make it
+// correspond is the slugified-branch == slug rule (model.SlugifyTitle(branch)).
 func TestFindSlugWorktreeMatch_ExternalSlugifiedBranchCustomPath(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	initGitRepoAt(t, root)
 
-	const slug = "my-feature"
-	customPath := addCustomWorktree(t, root, "elsewhere", "my-feature")
+	const slug = "fix-issue-283-archived-worktree-resolution"
+	const branch = "fix/issue-283-archived-worktree-resolution"
+	require.NotEqual(t, slug, branch, "branch must differ from slug so raw equality cannot match")
+	require.Equal(t, slug, model.SlugifyTitle(branch), "only slugified-branch correspondence can match")
+
+	customPath := addCustomWorktree(t, root, "elsewhere", branch)
 
 	match, ok, err := FindSlugWorktreeMatch(root, slug)
 	require.NoError(t, err)
 	require.True(t, ok, "a custom-path worktree whose branch slugifies to the slug must correspond")
 	assert.False(t, match.SlipwayManaged, "a custom path is no proof Slipway provisioned the worktree")
-	assert.Equal(t, "my-feature", match.Branch)
+	assert.Equal(t, branch, match.Branch)
 	assert.Equal(t, normalize(t, customPath), match.WorktreePath)
+}
+
+// TestFindSlugWorktreeMatch_BranchSwitchInvalidatesCache is the regression for
+// the worktree-list cache probe: an in-place branch switch (no worktree
+// add/remove) rewrites .git/worktrees/<entry>/HEAD but leaves the entry set and
+// the parent dir's mtime untouched. Before the probe fingerprinted each linked
+// worktree's HEAD, a warm cache returned the STALE feat/<slug> branch, so the
+// switched-away worktree still read SlipwayManaged==true. The match must instead
+// drop SlipwayManaged and report the hand-named branch even with a warm cache.
+func TestFindSlugWorktreeMatch_BranchSwitchInvalidatesCache(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+
+	const slug = "cache-slug"
+	path := addDefaultConventionWorktree(t, root, slug, DefaultWorktreeBranch(slug))
+
+	// Warm the cache on the genuine managed worktree.
+	m1, ok1, err1 := FindSlugWorktreeMatch(root, slug)
+	require.NoError(t, err1)
+	require.True(t, ok1)
+	require.True(t, m1.SlipwayManaged, "default path + feat/<slug> branch must be managed before the switch")
+
+	// Switch the SAME worktree to a hand-named branch in place: no worktree entry
+	// is added or removed, only HEAD is rewritten.
+	runGit(t, path, "checkout", "-b", "hand/local-work")
+
+	m2, ok2, err2 := FindSlugWorktreeMatch(root, slug)
+	require.NoError(t, err2)
+	require.True(t, ok2, "the worktree still sits at the default path, so it still corresponds")
+	assert.False(t, m2.SlipwayManaged,
+		"an in-place branch switch off feat/<slug> must drop SlipwayManaged even with a warm cache")
+	assert.Equal(t, "hand/local-work", m2.Branch)
 }
 
 // TestFindSlugWorktreeMatch_NoMatch confirms a slug with no corresponding live
