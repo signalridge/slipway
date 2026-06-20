@@ -193,7 +193,7 @@ func TestStaleEvidenceRepairIgnoresIntakeOpenQuestionResolution(t *testing.T) {
 	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
 	intentPath := filepath.Join(bundleDir, "intent.md")
-	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
+	require.NoError(t, os.WriteFile(intentPath, []byte(intakeDigestIntent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
 
 	record := model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
@@ -206,14 +206,14 @@ func TestStaleEvidenceRepairIgnoresIntakeOpenQuestionResolution(t *testing.T) {
 
 	resolvedOpenQuestions := "- [x] Which digest boundary owns research resolution?\n" +
 		"  Resolved: intake digest owns substantive scope; research owns this checklist state.\n"
-	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent(resolvedOpenQuestions)), 0o644))
+	require.NoError(t, os.WriteFile(intentPath, []byte(intakeDigestIntent(resolvedOpenQuestions)), 0o644))
 
 	target, ok, err := StaleEvidenceRepairAvailable(root, change, nil)
 	require.NoError(t, err)
 	assert.Falsef(t, ok, "Open Questions resolution must not block stale intake evidence, got target=%+v", target)
 
 	require.NoError(t, os.WriteFile(intentPath, []byte(strings.Replace(
-		issue238Intent(resolvedOpenQuestions),
+		intakeDigestIntent(resolvedOpenQuestions),
 		"Fix issue #238.",
 		"Fix issue #238 with revised substantive scope.",
 		1,
@@ -364,7 +364,11 @@ func TestStaleEvidenceRepairRequiresDigestFreshPlanAuditToSupersedeHistoricalInt
 	}
 }
 
-func issue238Intent(openQuestions string) string {
+// intakeDigestIntent builds an intent.md fixture body whose Open Questions block
+// is supplied by the caller, used to exercise intake-digest freshness recovery.
+//
+// issue #238
+func intakeDigestIntent(openQuestions string) string {
 	return `# Intent
 
 ## Summary
