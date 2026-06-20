@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -58,6 +59,11 @@ type nextView struct {
 	// It is unexported (never serialized) and drives whether a parsed decision.md
 	// selection is reported as a locked or pending skill_constraint (issue #140).
 	planLocked bool
+	// auto records whether auto-advance execution is in effect for this view. It is
+	// unexported (never serialized) and only softens pure-pacing host confirmation
+	// boundaries in deriveConfirmationRequirement for non-guardrail changes; it
+	// never weakens an evidence gate or a guardrail/sensitive boundary.
+	auto bool
 }
 
 type confirmationRequirement struct {
@@ -309,9 +315,17 @@ func makeNextCmd() *cobra.Command {
 				return err
 			}
 
+			// next reflects the project's effective auto setting in its rendered
+			// confirmation requirement, but never advances state (preview-only), so
+			// auto can soften the displayed requirement without any side effect.
+			auto, err := resolveEffectiveAuto(root, nil, false, false)
+			if err != nil {
+				return err
+			}
+
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
 				if jsonOutput && !diagnostics && !contextGuard {
-					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass)
+					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass, auto)
 					if err != nil {
 						return err
 					}
@@ -320,7 +334,7 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next")
+				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next", auto)
 				if err != nil {
 					return err
 				}
@@ -353,11 +367,16 @@ func makeNextCmd() *cobra.Command {
 }
 
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run")
+	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run", false)
 }
 
-func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, command string) (nextView, error) {
-	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, command)
+func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, command string, auto bool) (nextView, error) {
+	// READ-ONLY PREVIEW INVARIANT: only the advancing path (run/stage) carries
+	// auto into advancement so the engine preset auto-confirm can fire. A preview
+	// query (`slipway next`) must never trigger an auto-confirm side effect, so
+	// advancement-auto is forced false in preview. The preview still reflects the
+	// softened confirmation requirement below via view.auto, which is read-only.
+	advanced, err := advanceIfReadyAuto(root, ref, preview, skipAutoPass, command, auto && !preview)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -368,6 +387,7 @@ func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, 
 		Slug:                    ref.Slug,
 		Phase:                   model.PhasePlanning,
 		ConfirmationRequirement: confirmationNoBoundary("initializing"),
+		auto:                    auto,
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -389,6 +409,12 @@ func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, 
 	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref, resumeResponse, preview)
 	if err != nil {
 		return nextView{}, err
+	}
+	if governedChange != nil {
+		// Surface the authoritative guardrail/sensitivity domain on the view so
+		// deriveConfirmationRequirement can keep sensitive boundaries fail-closed
+		// under auto. buildNextContextByMode does not set this field.
+		view.GuardrailDomain = strings.TrimSpace(governedChange.GuardrailDomain)
 	}
 	finalize := func() (nextView, error) {
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
@@ -514,6 +540,14 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 // When skipAutoPass is true, advancement proceeds but auto-pass is
 // suppressed so the caller can decide whether to accept auto-pass.
 func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, command string) (progression.AdvanceSummary, error) {
+	return advanceIfReadyAuto(root, ref, preview, skipAutoPass, command, false)
+}
+
+// advanceIfReadyAuto is advanceIfReady with an explicit auto override. When auto
+// is true, the engine auto-confirms a pending preset upgrade-only; every
+// evidence gate and guardrail control still blocks as in the non-auto path.
+// Callers force auto false in preview so a query never mutates state.
+func advanceIfReadyAuto(root string, ref changeRef, preview bool, skipAutoPass bool, command string, auto bool) (progression.AdvanceSummary, error) {
 	if preview {
 		return progression.AdvanceSummary{Action: "query"}, nil
 	}
@@ -522,17 +556,11 @@ func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool,
 		command = "run"
 	}
 
-	var opts []progression.AdvanceOptions
-	if skipAutoPass {
-		opts = append(opts, progression.AdvanceOptions{
-			SkipAutoPass: skipAutoPass,
-			Command:      command,
-		})
-	} else {
-		opts = append(opts, progression.AdvanceOptions{
-			Command: command,
-		})
-	}
+	opts := []progression.AdvanceOptions{{
+		SkipAutoPass: skipAutoPass,
+		Command:      command,
+		Auto:         auto,
+	}}
 	advanced, err := tryAdvance(root, ref, opts...)
 	if err != nil {
 		return progression.AdvanceSummary{}, err
@@ -660,12 +688,24 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 }
 
 func deriveConfirmationRequirement(view nextView) confirmationRequirement {
+	// Auto softens pure-pacing host confirmation boundaries (review_batch and a
+	// non-sensitive skill_handoff) into a standing-authorization continuation, but
+	// only when the change is NOT in a guardrail/sensitive domain. Preset,
+	// resume_checkpoint, and decision boundaries are NOT pure pacing, so they keep
+	// their hard_stop even under auto.
+	autoSoftens := view.auto && !isGuardrailSensitive(view.GuardrailDomain)
 	switch {
 	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
 		return confirmationHardStop("preset_confirmation_required")
 	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
+		if autoSoftens && resumeCheckpointAutoAcknowledgeable(view.InputContext.ResumeCheckpoint) {
+			return autoAcknowledgedHumanVerifyContinuation()
+		}
 		return confirmationHardStop("resume_checkpoint")
 	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
+		if autoSoftens {
+			return autoStandingAuthorization("review_batch")
+		}
 		return confirmationHardStop("review_batch")
 	case view.NextSkill != nil:
 		reason := "skill_handoff"
@@ -673,6 +713,9 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.BlockingName)
 		} else if strings.TrimSpace(view.NextSkill.Name) != "" {
 			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.Name)
+		}
+		if autoSoftens {
+			return autoStandingAuthorization(reason)
 		}
 		return confirmationHardStop(reason)
 	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
@@ -728,6 +771,61 @@ func confirmationCommandRequired(reason string) confirmationRequirement {
 		NextAction:                   commandBoundaryNextAction(reason),
 		NextActionKind:               kind,
 		NextCommand:                  command,
+	}
+}
+
+// autoStandingAuthorization downgrades a pure-pacing host confirmation
+// (review_batch or a non-sensitive skill_handoff) to a standing-authorization
+// continuation under auto. It is NOT a hard stop and reports prior authorization
+// as sufficient, but it preserves the same next action (run the review batch or
+// the named skill, then record evidence). It never weakens an evidence gate: the
+// recorded evidence is still required, only the manual confirmation pause is
+// lifted. Guardrail/sensitive boundaries never reach this path.
+func autoStandingAuthorization(reason string) confirmationRequirement {
+	reason = strings.TrimSpace(reason)
+	return confirmationRequirement{
+		Required:                     false,
+		Boundary:                     "evidence_continuation",
+		FreshConfirmationRequired:    false,
+		PriorAuthorizationSufficient: true,
+		Reason:                       reason,
+		NextAction:                   hardStopNextAction(reason, false),
+		NextActionKind:               hardStopNextActionKind(reason, false),
+	}
+}
+
+// resumeCheckpointAutoAcknowledgeable reports whether a pending resume checkpoint
+// is the kind `slipway run` auto-acknowledges under auto: a FRESH human_verify
+// checkpoint. The caller's autoSoftens gate already excludes guardrail/sensitive
+// domains. Decision and human_action kinds, and stale or unknown-freshness
+// checkpoints, are never auto-acknowledged, so next keeps reporting their manual
+// hard stop — matching run.autoAckEligibleCheckpoint exactly so the next contract
+// never diverges from what run actually does.
+func resumeCheckpointAutoAcknowledgeable(cp *resumeCheckpoint) bool {
+	if cp == nil {
+		return false
+	}
+	if model.CheckpointKind(cp.CheckpointType) != model.CheckpointHumanVerify {
+		return false
+	}
+	return cp.Freshness == string(ctxpack.EvidenceFreshnessFresh)
+}
+
+// autoAcknowledgedHumanVerifyContinuation is the confirmation requirement reported
+// for a fresh non-sensitive human_verify checkpoint under auto. It mirrors the run
+// loop's auto-acknowledgment: not a hard stop, prior authorization sufficient, and
+// the next action is to run `slipway run`, which injects the acknowledgment and
+// continues. It never weakens an evidence gate.
+func autoAcknowledgedHumanVerifyContinuation() confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     false,
+		Boundary:                     "evidence_continuation",
+		FreshConfirmationRequired:    false,
+		PriorAuthorizationSufficient: true,
+		Reason:                       "resume_checkpoint",
+		NextAction:                   "run `slipway run`; the non-sensitive human_verify checkpoint is auto-acknowledged under auto",
+		NextActionKind:               "command",
+		NextCommand:                  "slipway run",
 	}
 }
 

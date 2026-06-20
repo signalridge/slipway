@@ -24,6 +24,7 @@ slipway run --resume-response "<response>" --json
 - `run` reuses the same `next --json` contract for the returned next-skill / blocker surface.
 - `advanced` reports the mutation performed by this invocation; `blockers` reports the current stop condition after that mutation. A successful advance can still return error-severity blockers for the next required skill.
 - `confirmation_requirement.resume_response_supported` is true only when `--resume-response` can be used for the current stop; otherwise branch on `confirmation_requirement.next_action_kind` and run `confirmation_requirement.next_command` when present (`next_action` is human prose, not a contract to parse).
+- Under auto (`execution.auto` or `slipway run --auto`), a `prior_authorization_sufficient` boundary may be crossed on prior authorization through pure-pacing pauses (review batches, non-sensitive skill handoffs, human-verify checkpoints) without a fresh stop. Sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, and every evidence gate still hard-stop and are never auto-advanced.
 - Treat default JSON as the action contract. Use `slipway run --json --diagnostics` only for full readiness fields.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.
 - Do not expect inline policy-pack prose in default JSON; read policy-pack content only by path from diagnostics or config.
@@ -81,4 +82,5 @@ implementation context perform its own selected S3 peer review evidence.
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 - `--diagnostics`: include governance/readiness diagnostic fields
+- `--auto`/`--no-auto`: override `execution.auto` for this run; auto-advances pure-pacing pauses only, never sensitive confirmations or evidence gates
 {{- end -}}

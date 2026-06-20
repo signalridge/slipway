@@ -2171,7 +2171,7 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, "", true, false, false)
+		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, "", true, false, false, false)
 		require.NoError(t, err)
 
 		require.NotNil(t, view.NextSkill)

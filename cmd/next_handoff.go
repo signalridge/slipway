@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/progression"
@@ -59,7 +60,7 @@ type nextHandoffContext struct {
 	ResumeCheckpoint     *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
 }
 
-func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
+func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, auto bool) (nextView, error) {
 	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, "next")
 	if err != nil {
 		return nextView{}, err
@@ -70,6 +71,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		Slug:                    ref.Slug,
 		Phase:                   model.PhasePlanning,
 		ConfirmationRequirement: confirmationNoBoundary("initializing"),
+		auto:                    auto,
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -87,6 +89,12 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 	governedChange, execCtx, err := buildNextHandoffContextByMode(root, &view, ref, resumeResponse, preview)
 	if err != nil {
 		return nextView{}, err
+	}
+	if governedChange != nil {
+		// Mirror buildNextViewForCommand: surface the authoritative guardrail
+		// domain so deriveConfirmationRequirement keeps sensitive boundaries
+		// fail-closed under auto even on the compact handoff path.
+		view.GuardrailDomain = strings.TrimSpace(governedChange.GuardrailDomain)
 	}
 	finalize := func() (nextView, error) {
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)

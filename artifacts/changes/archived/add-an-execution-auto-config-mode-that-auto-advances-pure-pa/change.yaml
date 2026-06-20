@@ -1,0 +1,40 @@
+version: 1
+slug: add-an-execution-auto-config-mode-that-auto-advances-pure-pa
+description: Add an execution.auto config mode that auto-advances pure-pacing lifecycle confirmations (auto-confirm preset to the suggested value, downgrade review-batch and non-sensitive skill-handoff host-confirmation to standing authorization, auto-acknowledge human-verify checkpoints) while keeping all sensitive/guardrail-domain confirmations, the intake Approved Summary final review, decision-type checkpoints, and every evidence gate fully fail-closed.
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-19T17:50:56.312304Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/add-an-execution-auto-config-mode-that-auto-advances-pure-pa
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: c5d3f5a11134b22bd4c20941b8bf5f469c06e0d3fbfaad3d3f1406fde5c98d80
+        updated_at: 2026-06-19T17:57:25.95733863Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ba3ec0a6a26d64851b4b0483e3a507804d2fc93ec7ebe2d9986298571d1bc9bb
+        updated_at: 2026-06-19T18:11:49.162154499Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 2181362cff463c3a8f9f36ed35a94d422106770063ab67f4e193d4ee582619b1
+        updated_at: 2026-06-20T06:33:05.466215766Z
+evidence_refs:
+    code-quality-review: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/code-quality-review.yaml
+    goal-verification: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/goal-verification.yaml
+    independent-review: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/independent-review.yaml
+    intake-clarification: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/intake-clarification.yaml
+    plan-audit: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/plan-audit.yaml
+    security-review: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/security-review.yaml
+    spec-compliance-review: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/artifacts/changes/add-an-execution-auto-config-mode-that-auto-advances-pure-pa/verification/wave-orchestration.yaml

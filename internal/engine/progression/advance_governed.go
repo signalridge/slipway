@@ -56,9 +56,23 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 
 	// 0. Preset confirmation gate — must precede all advancement, including
 	// S0_INTAKE, so pending presets cannot mutate change.yaml while surfacing a
-	// blocked CLI view.
+	// blocked CLI view. Under --auto, a pending preset is auto-confirmed
+	// UPGRADE-ONLY to the suggested/effective preset and advancement continues;
+	// this never downgrades and never bypasses a downstream evidence gate.
 	if blockers := PresetConfirmationBlockers(change); len(blockers) > 0 {
-		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
+		confirmed, err := autoConfirmPendingPreset(root, &change, options.Auto, presetPolicy)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		if !confirmed {
+			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
+		}
+		// The confirmed preset may change effective governance posture; re-resolve
+		// so the rest of advancement runs under the now-confirmed preset.
+		presetPolicy, err = governance.ResolvePresetPolicy(root, change)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
 	}
 
 	if target, ok, err := staleEvidenceRepairTarget(root, change); err != nil {
@@ -488,6 +502,95 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		ClearedFields: cleared,
 		Message:       fmt.Sprintf("Advanced to %s.", toState),
 	}, nil
+}
+
+// autoPresetConfirmTarget reports the preset a pending confirmation would be
+// auto-confirmed to under --auto, and whether the auto-confirm is allowed.
+//
+// The target is the effective preset resolved by ResolvePresetPolicy, which
+// folds in project min_preset and guardrail-domain forcing, so confirming to it
+// can only hold or raise governance posture. The confirm is UPGRADE-ONLY: it is
+// allowed only when the effective preset rank is >= the pending suggested preset
+// rank. It MUST NEVER auto-downgrade, so a (defensive) downgrade target returns
+// ok=false and the caller falls through to the manual preset hard-stop.
+func autoPresetConfirmTarget(change model.Change, policy governance.PresetPolicy) (model.WorkflowPreset, bool) {
+	if !change.WorkflowPresetConfirmationPending() {
+		return "", false
+	}
+	target := policy.EffectivePreset
+	if !target.IsValid() {
+		return "", false
+	}
+	// Upgrade-only: never confirm to a preset weaker than the pending suggestion.
+	if target.Rank() < change.SuggestedWorkflowPreset.Rank() {
+		return "", false
+	}
+	return target, true
+}
+
+// autoConfirmPendingPreset auto-confirms a pending workflow-preset suggestion
+// when --auto is effective, replicating the manual `slipway preset` confirm
+// scaffold step (cmd/preset.go) so the engine path does not ship a
+// confirm-without-scaffold divergence: at S0_INTAKE only intent.md is
+// materialized; otherwise the full governed bundle is scaffolded under the
+// confirmed effective preset. On success the change is persisted and a
+// distinct `auto_preset_confirmed` lifecycle event is appended. It returns false
+// (leaving the change untouched) when auto is off, nothing is pending, or the
+// confirm would be a downgrade.
+func autoConfirmPendingPreset(root string, change *model.Change, auto bool, policy governance.PresetPolicy) (bool, error) {
+	if change == nil || !auto {
+		return false, nil
+	}
+	target, ok := autoPresetConfirmTarget(*change, policy)
+	if !ok {
+		return false, nil
+	}
+
+	beforePreset := change.SuggestedWorkflowPreset
+	change.WorkflowPreset = target
+	change.SuggestedWorkflowPreset = ""
+
+	// Replicate the manual confirm scaffold step (cmd/preset.go): at S0_INTAKE
+	// keep only intent.md so a pending confirm never materializes downstream
+	// artifacts from empty templates; otherwise scaffold the full governed bundle
+	// under the confirmed effective preset.
+	if change.CurrentState == model.StateS0Intake {
+		if err := artifact.ScaffoldIntentForChange(root, *change); err != nil {
+			return false, err
+		}
+	} else {
+		resolution := ResolveChangeSchemaDiagnostics(*change)
+		if len(resolution.Blockers) > 0 {
+			return false, fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
+		}
+		if err := artifact.ScaffoldGovernedBundleForChange(root, *change, target, resolution.Schema); err != nil {
+			return false, err
+		}
+	}
+
+	if err := state.SaveChange(root, *change); err != nil {
+		return false, err
+	}
+
+	if _, err := state.AppendLifecycleEvent(root, *change, state.LifecycleEvent{
+		Command:       "advance",
+		EventType:     "preset.changed",
+		Action:        "confirmed",
+		Reason:        "auto_preset_confirmed",
+		Result:        "ok",
+		BeforeState:   change.CurrentState,
+		AfterState:    change.CurrentState,
+		BeforeSubStep: string(change.PlanSubStep),
+		AfterSubStep:  string(change.PlanSubStep),
+		SideEffects: []state.LifecycleSideEffect{
+			{Kind: "workflow_preset_confirmed", Detail: string(change.WorkflowPreset)},
+			{Kind: "auto_preset_confirmed", Detail: fmt.Sprintf("%s->%s", beforePreset, change.WorkflowPreset)},
+		},
+	}); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target EvidenceRepairTarget) AdvanceSummary {
