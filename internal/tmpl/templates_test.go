@@ -1257,6 +1257,7 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"`--auto`/`--no-auto`: override `execution.auto` for this run",
 		"Auto never crosses sensitive/guardrail confirmations",
 		"`security-review` boundaries",
+		"the intake Approved Summary",
 		"decision/human_action checkpoints",
 		"stale or unknown-freshness checkpoints",
 		"evidence gates",

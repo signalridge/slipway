@@ -51,11 +51,7 @@ func missingCodebaseMapDocStates(docs map[string]string) map[string]string {
 // (state, lifecycle, artifacts, checkpoints).
 // Returns the loaded Change plus its execution context so downstream next-path
 // consumers can reuse the same execution-summary read.
-func buildNextContextByMode(root string, view *nextView, ref changeRef, resumeResponse string, preview bool) (*model.Change, *executionContext, error) {
-	return buildNextContextByModeWithCheckpointAck(root, view, ref, resumeResponse, preview, false)
-}
-
-func buildNextContextByModeWithCheckpointAck(
+func buildNextContextByMode(
 	root string,
 	view *nextView,
 	ref changeRef,
@@ -104,7 +100,7 @@ func buildNextContextByModeWithCheckpointAck(
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := buildResumeCheckpointWithCheckpointAck(root, &change, execCtx, view, resumeResponse, preview, autoCheckpointAcknowledged); err != nil {
+	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview, autoCheckpointAcknowledged); err != nil {
 		return nil, nil, err
 	}
 	return &change, &execCtx, nil
@@ -308,11 +304,7 @@ func buildHandoffRiskForReadiness(existing *handoffRiskView, controls []model.Co
 
 // buildResumeCheckpoint handles active checkpoint validation and wave execution
 // resume checkpoint construction for governed changes.
-func buildResumeCheckpoint(root string, change *model.Change, execCtx executionContext, view *nextView, resumeResponse string, preview bool) error {
-	return buildResumeCheckpointWithCheckpointAck(root, change, execCtx, view, resumeResponse, preview, false)
-}
-
-func buildResumeCheckpointWithCheckpointAck(
+func buildResumeCheckpoint(
 	root string,
 	change *model.Change,
 	execCtx executionContext,

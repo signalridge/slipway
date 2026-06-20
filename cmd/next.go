@@ -449,7 +449,7 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 		return view, nil
 	}
 
-	governedChange, execCtx, err := buildNextContextByModeWithCheckpointAck(root, &view, ref, resumeResponse, preview, autoCheckpointAcknowledged)
+	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref, resumeResponse, preview, autoCheckpointAcknowledged)
 	if err != nil {
 		return nextView{}, err
 	}

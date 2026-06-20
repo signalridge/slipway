@@ -59,7 +59,7 @@ func makeRunCmd() *cobra.Command {
 				if err := validateRunEntry(root, ref, resume, effectiveResumeResponse); err != nil {
 					return err
 				}
-				view, err := runGovernedLoopWithCheckpointAck(root, ref, effectiveResumeResponse, effectiveAuto, autoCheckpointAcknowledged)
+				view, err := runGovernedLoop(root, ref, effectiveResumeResponse, effectiveAuto, autoCheckpointAcknowledged)
 				if err != nil {
 					return err
 				}
@@ -311,19 +311,7 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 	return planHash != "" && currentHash != "" && planHash != currentHash
 }
 
-func runGovernedLoop(root string, ref changeRef, resumeResponse string, auto bool) (nextView, error) {
-	buildNext := func(nextResumeResponse string) (nextView, error) {
-		return buildNextViewForCommand(root, ref, nextViewOptions{
-			ResumeResponse:   nextResumeResponse,
-			AutoSkipEvidence: true,
-			Command:          "run",
-			Auto:             auto,
-		})
-	}
-	return runGovernedLoopWithBuilder(root, ref, resumeResponse, buildNext)
-}
-
-func runGovernedLoopWithCheckpointAck(
+func runGovernedLoop(
 	root string,
 	ref changeRef,
 	resumeResponse string,

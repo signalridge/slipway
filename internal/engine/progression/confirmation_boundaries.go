@@ -46,6 +46,12 @@ func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 
 // ReviewCompanionSkillCanCarryBlockers reports skills whose handoff may carry
 // review/closeout companion blockers without turning them into a separate stop.
+//
+// SkillSecurityReview is intentionally listed here but is deliberately ABSENT
+// from SkillIsPurePacingAutoSafe: a security review may carry companion blockers
+// on its handoff, yet it must always hard-stop under execution.auto. Keep that
+// divergence intact when editing either list; it is pinned by
+// TestSecurityReviewDivergesAcrossAutoBoundaries.
 func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
 	case SkillSpecComplianceReview,
@@ -62,6 +68,11 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 
 // SkillIsPurePacingAutoSafe reports skills whose handoff is only a pacing
 // boundary and may be softened by execution.auto for non-guardrail changes.
+//
+// SkillSecurityReview is deliberately omitted: even outside a guardrail domain a
+// security review must hard-stop under auto, so it must never appear here even
+// though ReviewCompanionSkillCanCarryBlockers does list it. This divergence is
+// pinned by TestSecurityReviewDivergesAcrossAutoBoundaries.
 func SkillIsPurePacingAutoSafe(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
 	case SkillIntakeClarification,

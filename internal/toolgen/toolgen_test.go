@@ -1738,6 +1738,7 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	for _, phrase := range []string{
 		"`security-review` boundaries",
 		"sensitive/guardrail confirmations",
+		"the intake Approved Summary",
 		"decision/human_action checkpoints",
 		"stale or unknown-freshness checkpoints",
 		"evidence gates",
@@ -1782,6 +1783,7 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 		"Auto mode never relaxes governance.",
 		"`security-review` boundaries",
 		"sensitive/guardrail confirmations",
+		"the intake Approved Summary",
 		"decision and human_action checkpoints",
 		"stale or unknown-freshness checkpoints",
 		"every evidence gate",
