@@ -1250,6 +1250,21 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	assert.Contains(t, content, "auto mode auto-acknowledges",
 		"run command must describe auto-ack without duplicated wording")
 	assert.NotContains(t, content, "auto auto-acknowledges")
+
+	normalized := strings.Join(strings.Fields(content), " ")
+	for _, phrase := range []string{
+		"Under auto (`execution.auto` or `slipway run --auto`)",
+		"`--auto`/`--no-auto`: override `execution.auto` for this run",
+		"Auto never crosses sensitive/guardrail confirmations",
+		"`security-review` boundaries",
+		"the intake Approved Summary",
+		"decision/human_action checkpoints",
+		"stale or unknown-freshness checkpoints",
+		"evidence gates",
+	} {
+		assert.Contains(t, normalized, phrase,
+			"run command auto-mode redline phrase missing")
+	}
 }
 
 func TestStatusCommandEntryUsesGovernanceSummaryContract(t *testing.T) {

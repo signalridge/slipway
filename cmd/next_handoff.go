@@ -203,7 +203,7 @@ func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef, r
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview); err != nil {
+	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview, false); err != nil {
 		return nil, nil, err
 	}
 	return &change, &execCtx, nil

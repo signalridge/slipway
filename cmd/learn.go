@@ -49,7 +49,11 @@ type learnSignals struct {
 	ReviewIntentDriftChanges       []string       `json:"review_intent_drift_changes,omitempty"`
 	CheckpointOpened               int            `json:"checkpoint_opened"`
 	CheckpointResolved             int            `json:"checkpoint_resolved"`
+	CheckpointResolvedManual       int            `json:"checkpoint_resolved_manual"`
+	CheckpointResolvedAuto         int            `json:"checkpoint_resolved_auto"`
 	CheckpointResolutionRate       float64        `json:"checkpoint_resolution_rate"`
+	CheckpointManualResolutionRate float64        `json:"checkpoint_manual_resolution_rate"`
+	CheckpointAutoResolutionRate   float64        `json:"checkpoint_auto_resolution_rate"`
 	InterruptionCount              int            `json:"interruption_count"`
 	InterruptionResumeSuccesses    int            `json:"interruption_resume_successes"`
 	InterruptionResumeSuccessRate  float64        `json:"interruption_resume_success_rate"`
@@ -206,6 +210,11 @@ func analyzeChangeForLearning(root string, change model.Change, view *learnView)
 			view.Signals.CheckpointOpened++
 		case "checkpoint.resolved":
 			view.Signals.CheckpointResolved++
+			if lifecycleEventHasSideEffect(event, autoCheckpointAcknowledgedSideEffect) {
+				view.Signals.CheckpointResolvedAuto++
+			} else {
+				view.Signals.CheckpointResolvedManual++
+			}
 		case "abort.marked":
 			if event.Result == "interrupted" || event.Action == "execution_interrupted" {
 				interrupted = true
@@ -384,7 +393,14 @@ func computeLearnDerivedSignals(view *learnView) {
 	view.Signals.ClarificationBlockRate = learnRate(view.Signals.RequiredSkillMissing["intake-clarification"], analyzed)
 	view.Signals.PlanAuditStallRate = learnRate(view.Signals.PlanAuditStalled, analyzed)
 	view.Signals.ReviewIntentDriftFailureRate = learnRate(view.Signals.ReviewIntentDrift, analyzed)
+	// checkpoint_resolution_rate stays the TOTAL resolved/opened rate it has always
+	// been; the manual/auto split is exposed as the two attribution rates below so
+	// the existing public metric keeps its meaning. CheckpointResolved equals
+	// CheckpointResolvedManual + CheckpointResolvedAuto, so manual_rate + auto_rate
+	// equals checkpoint_resolution_rate.
 	view.Signals.CheckpointResolutionRate = learnRate(view.Signals.CheckpointResolved, view.Signals.CheckpointOpened)
+	view.Signals.CheckpointManualResolutionRate = learnRate(view.Signals.CheckpointResolvedManual, view.Signals.CheckpointOpened)
+	view.Signals.CheckpointAutoResolutionRate = learnRate(view.Signals.CheckpointResolvedAuto, view.Signals.CheckpointOpened)
 	view.Signals.InterruptionResumeSuccessRate = learnRate(view.Signals.InterruptionResumeSuccesses, view.Signals.InterruptionCount)
 }
 
@@ -437,6 +453,19 @@ func learnRate(numerator, denominator int) float64 {
 		return 0
 	}
 	return float64(numerator) / float64(denominator)
+}
+
+func lifecycleEventHasSideEffect(event state.LifecycleEvent, kind string) bool {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return false
+	}
+	for _, effect := range event.SideEffects {
+		if strings.TrimSpace(effect.Kind) == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func governanceActionControlFromLearnBlocker(blocker model.ReasonCode) string {

@@ -77,7 +77,7 @@ Docs render.
 				return slug
 			},
 			execute: func(t *testing.T, root, slug string) nextView {
-				view, err := runGovernedLoop(root, changeRef{Slug: slug}, "", false)
+				view, err := runGovernedLoop(root, changeRef{Slug: slug}, "", false, false)
 				require.NoError(t, err)
 				return view
 			},
