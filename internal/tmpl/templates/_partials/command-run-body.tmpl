@@ -47,9 +47,11 @@ or `slipway next --json`:
 - `context_budget` appears only when `guard_action` is `warn` or `stop`; do not assume the field exists.
 - If `context_budget.guard_action` equals `warn`, trim non-essential context.
 - If `context_budget.guard_action` equals `stop`, stop execution, preserve the returned recovery paths, and resume in a fresh context.
-- When continuation context is needed, write `.git/slipway/runtime/handoff.md`
-  using the workflow skill's Runtime Session Handoff contract. The handoff is
-  advisory only; it does not replace `slipway status --json`,
+- When continuation context is needed for an active governed change, write the
+  per-change `.git/slipway/runtime/changes/<slug>/handoff.md` using the workflow
+  skill's Runtime Session Handoff contract. Resolve `<slug>` from fresh
+  `slipway status --json` / `slipway next --json`, not from the handoff body.
+  The handoff is advisory only; it does not replace `slipway status --json`,
   `slipway next --json`, lifecycle gates, freshness, or evidence checks.
 
 ## Fresh Reviewer Pause Rule

@@ -11,20 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIssue232ResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthorityMissing
-// reproduces #232: an archived DONE change whose active bundle directory survived
-// (its change.yaml was moved to the archive) made `slipway validate`/`slipway next`
-// dead-end on change_state_load_failed because resolveExplicitChange only attempted
-// the archived fallback on os.ErrNotExist. LoadChange reports a missing-authority
-// error for the surviving directory, so the fallback must also trigger on
-// state.IsMissingBundleAuthority — mirroring status's predicate.
-func TestIssue232ResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthorityMissing(t *testing.T) {
+// TestResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthorityMissing
+// covers an archived DONE change whose active bundle directory survived (its
+// change.yaml was moved to the archive), which made `slipway validate`/`slipway
+// next` dead-end on change_state_load_failed because resolveExplicitChange only
+// attempted the archived fallback on os.ErrNotExist. LoadChange reports a
+// missing-authority error for the surviving directory, so the fallback must also
+// trigger on state.IsMissingBundleAuthority — mirroring status's predicate.
+//
+// issue #232
+func TestResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthorityMissing(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := "issue232-archived-missing-active-authority"
+	slug := "archived-missing-active-authority"
 	change := model.NewChange(slug)
 	change.Status = model.ChangeStatusDone
 	change.CurrentState = model.StateDone
@@ -56,18 +58,20 @@ func TestIssue232ResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthori
 	assert.NotEqual(t, "change_state_load_failed", cliErr.ErrorCode)
 }
 
-// TestIssue232ResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed
-// pins the fail-closed nuance from #232: broadening the archived-fallback trigger
-// must NOT soften a genuine missing-authority error into no_active_change when
-// there is no archived record. The surviving orphan directory is real
-// active-bundle corruption and must fail closed to a recovery/integrity blocker.
-func TestIssue232ResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed(t *testing.T) {
+// TestResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed pins the
+// fail-closed nuance: broadening the archived-fallback trigger must NOT soften a
+// genuine missing-authority error into no_active_change when there is no archived
+// record. The surviving orphan directory is real active-bundle corruption and
+// must fail closed to a recovery/integrity blocker.
+//
+// issue #232
+func TestResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "issue232 orphaned active bundle")
+	slug := createGovernedRequest(t, root, "L2", "orphaned active bundle")
 	// Drop change.yaml but leave a stray file so the bundle directory survives;
 	// LoadChange then reports a missing-authority error with no archived record.
 	activePath := state.BundleChangeFilePath(root, slug)
@@ -88,17 +92,20 @@ func TestIssue232ResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed(
 	assert.Contains(t, cliErr.Remediation, "slipway delete")
 }
 
-// TestIssue232ResolveExplicitChangeMalformedActiveAuthorityFailsClosed confirms
-// the os.ErrNotExist-only fall-through to change_state_load_failed still fires for
+// TestResolveExplicitChangeMalformedActiveAuthorityFailsClosed confirms the
+// os.ErrNotExist-only fall-through to change_state_load_failed still fires for
 // genuinely corrupt active state (a malformed change.yaml is neither NotExist nor
-// missing-authority), so the #232 broadening did not mask real corruption.
-func TestIssue232ResolveExplicitChangeMalformedActiveAuthorityFailsClosed(t *testing.T) {
+// missing-authority), so broadening the archived fallback did not mask real
+// corruption.
+//
+// issue #232
+func TestResolveExplicitChangeMalformedActiveAuthorityFailsClosed(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "issue232 malformed active authority")
+	slug := createGovernedRequest(t, root, "L2", "malformed active authority")
 	require.NoError(t, os.WriteFile(state.BundleChangeFilePath(root, slug), []byte("slug: ["), 0o644))
 
 	_, resolveErr := resolveExplicitChange(root, slug)

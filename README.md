@@ -271,6 +271,8 @@ inventory.
 | `artifacts/changes/<slug>/verification/` | Skill verification records consumed by the ship gate. |
 | `artifacts/changes/<slug>/events/lifecycle.jsonl` | Append-only lifecycle mutation trace. |
 | `.git/slipway/runtime/changes/<slug>/evidence/` | Git-local task evidence and runtime proof. |
+| `.git/slipway/runtime/changes/<slug>/handoff.md` | Optional per-change advisory continuation notes for fresh AI sessions; never lifecycle authority, evidence, freshness, or a gate. |
+| `.git/slipway/locks/change-create.lock`, `.git/slipway/locks/repair.lock` | Workspace/scope-level coordination locks for change creation and repair. They are intentionally not per-change because they protect operations that begin before or outside a stable change slug. |
 | `artifacts/changes/archived/<slug>/` | Terminal record after `slipway done`. |
 | `artifacts/codebase/` | Repo-scoped context map used for brownfield planning and review. |
 | `.worktrees/<branch>/` | Dedicated governed worktrees when a change is isolated. |
@@ -278,6 +280,9 @@ inventory.
 AI-tool sessions read generated host surfaces from the project root. A governed
 worktree holds the code changes, but root host adapter files are not copied into
 each worktree.
+Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are
+reported as local runtime hygiene findings and are not used as current change
+authority.
 
 </details>
 

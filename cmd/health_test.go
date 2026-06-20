@@ -49,6 +49,42 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 	})
 }
 
+func TestHealthCommandReportsLegacyRuntimeHandoff(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		legacyPath := filepath.Join(state.GitRuntimeDir(root), "handoff-s3.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
+		require.NoError(t, os.WriteFile(legacyPath, []byte("old handoff"), 0o644))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeHealthCmd())
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view healthView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		found := false
+		for _, finding := range view.Findings {
+			if finding.Category != "runtime_hygiene" {
+				continue
+			}
+			if !healthFindingHasReasonCode(finding, "legacy_runtime_handoff") {
+				continue
+			}
+			found = true
+			assert.False(t, finding.Repairable)
+			assert.Contains(t, finding.RepairHint, "runtime/changes/<slug>/handoff.md")
+			require.NotEmpty(t, finding.Reasons)
+			assert.Equal(t, "legacy_runtime_handoff", finding.Reasons[0].Code)
+			assert.Contains(t, finding.Reasons[0].Detail, "handoff-s3.md")
+		}
+		assert.True(t, found, "expected legacy runtime handoff finding")
+	})
+}
+
 func TestHealthCommandMarksCodebaseMapWarningNonBlockingForActiveChange(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
