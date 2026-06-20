@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -479,8 +481,13 @@ func TestNextPreviewUnderAutoHasNoSideEffect(t *testing.T) {
 	assert.Equal(t, beforeBytes, afterBytes, "preview must not rewrite change.yaml")
 }
 
-// (f) Auto must NOT auto-write the intake Approved Summary: the intake boundary
-// still surfaces a hard-stop confirmation requiring operator authorship.
+// (f) Auto must NOT auto-author the intake Approved Summary. The fixture sits at
+// the confirm sub-step with an empty `## Approved Summary`, so the only thing
+// between intake and S1 is operator authorship. Under auto the engine must still
+// fail closed: it must not write the summary, must not advance out of S0_INTAKE,
+// and must keep surfacing the intake_confirmation_incomplete blocker. That
+// blocker's presence is itself proof the summary was not auto-authored — the
+// engine drops it the moment the section becomes non-empty.
 func TestAutoDoesNotAutoWriteIntakeApprovedSummary(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -488,25 +495,48 @@ func TestAutoDoesNotAutoWriteIntakeApprovedSummary(t *testing.T) {
 	initTestWorkspace(t, root)
 	writeAutoConfig(t, root, true)
 
-	slug := createIntakeChangeFixture(t, root, "auto must not author intake approved summary")
-	before, err := state.LoadChange(root, slug)
-	require.NoError(t, err)
+	slug := createGovernedChangeFixture(t, root, "auto must not author intake approved summary", func(change *model.Change) {
+		change.CurrentState = model.StateS0Intake
+		change.IntakeSubStep = model.IntakeSubStepConfirm
+	})
 
-	// Advancing path with auto on at intake: the intake confirmation boundary must
-	// remain (no Approved Summary auto-authorship), and the change must not jump
-	// out of S0_INTAKE.
+	intentPath := filepath.Join(root, "artifacts", "changes", slug, "intent.md")
+	const intentBody = "# Intent\n\n## In Scope\nShip the feature.\n\n## Out of Scope\nUnrelated work.\n\n## Acceptance Signals\n- It works.\n\n## Approved Summary\n"
+	require.NoError(t, os.WriteFile(intentPath, []byte(intentBody), 0o644))
+
+	// Advancing path with auto on at the Approved-Summary confirm boundary.
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, "", false, true, false, "run", true)
 	require.NoError(t, err)
 
 	after, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	assert.Equal(t, model.StateS0Intake, after.CurrentState, "auto must not advance past the intake authorship boundary")
-	assert.Equal(t, before.CurrentState, after.CurrentState)
-	// The intake boundary is still a confirmation requirement, not a softened
+
+	// Read intent.md back: the Approved Summary section must stay empty.
+	gotIntent, err := os.ReadFile(intentPath)
+	require.NoError(t, err)
+	assert.Empty(t, approvedSummarySection(string(gotIntent)),
+		"auto must not write the intake Approved Summary")
+
+	// The boundary is the specific intake confirmation blocker, not a softened
 	// continuation: auto only softens review_batch / non-sensitive skill_handoff.
-	assert.True(t, view.ConfirmationRequirement.Required || view.ConfirmationRequirement.Boundary == "hard_stop" ||
-		len(view.Blockers) > 0,
-		"intake must still require operator confirmation under auto")
+	assert.True(t, hasReasonCode(view.Blockers, "intake_confirmation_incomplete"),
+		"intake confirmation must still block on operator-authored Approved Summary under auto")
+}
+
+// approvedSummarySection returns the trimmed body of the `## Approved Summary`
+// section, or "" when the heading is absent or the section has no content.
+func approvedSummarySection(intent string) string {
+	const heading = "## Approved Summary"
+	idx := strings.Index(intent, heading)
+	if idx < 0 {
+		return ""
+	}
+	body := intent[idx+len(heading):]
+	if next := strings.Index(body, "\n## "); next >= 0 {
+		body = body[:next]
+	}
+	return strings.TrimSpace(body)
 }
 
 // (g) light auto-pass eligibility is unchanged under auto: the auto-on and
