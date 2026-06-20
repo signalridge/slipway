@@ -60,7 +60,7 @@ func CollectHealthReport(root string, activeSlugOpt ...string) (HealthReport, er
 		return HealthReport{}, err
 	}
 	for _, slug := range orphanSlugs {
-		findings = append(findings, HealthFinding{
+		finding := HealthFinding{
 			Severity:   model.ReasonSeverityWarning,
 			Category:   "bundle_integrity",
 			Slug:       slug,
@@ -68,7 +68,19 @@ func CollectHealthReport(root string, activeSlugOpt ...string) (HealthReport, er
 			Repairable: false,
 			RepairHint: "Inspect the orphan bundle directory and remove it manually if it contains no useful state.",
 			Reasons:    []model.ReasonCode{model.NewReasonCode("orphan_bundle_directory", slug)},
-		})
+		}
+		// Cross-check git worktrees/branches before suggesting manual removal: a slug
+		// whose live worktree Slipway does not manage (or whose ownership cannot be
+		// verified) must fail closed to preserve-first guidance, never "remove it
+		// manually" (issue #285). The status/CLI recovery surfaces use the same check.
+		if match, ok, err := FindSlugWorktreeMatch(root, slug); err != nil {
+			finding.Message = "Bundle directory exists without change.yaml and its worktree ownership could not be verified: " + slug
+			finding.RepairHint = "Could not verify whether a live git worktree holds this slug's work; inspect for a live worktree or branch named after the slug and preserve any unmerged work before removing anything."
+		} else if ok && !match.SlipwayManaged {
+			finding.Message = "Bundle directory exists without change.yaml, but a live git worktree Slipway does not manage holds work for it: " + slug
+			finding.RepairHint = "A live git worktree Slipway did not provision holds work for this slug; inspect and preserve that worktree and its branch first — never remove a worktree Slipway did not provision. Discard only the stale bundle residue once its work is saved."
+		}
+		findings = append(findings, finding)
 	}
 
 	changes, issues, err := ListChangesBestEffortWithIssues(root)

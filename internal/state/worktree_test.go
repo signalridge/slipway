@@ -21,6 +21,15 @@ func hasReasonCode(reasons []model.ReasonCode, code string) bool {
 	return false
 }
 
+func recordsContainPath(records []gitWorktreeRecord, path string) bool {
+	for _, rec := range records {
+		if rec.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPersistScopeWorktreeMetadata(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("slug")
@@ -99,36 +108,28 @@ func TestListGitWorktreesCachedWithListerReusesCacheUntilProbeChanges(t *testing
 	worktreeA := filepath.Join(repoRoot, "wt-a")
 	worktreeB := filepath.Join(repoRoot, "wt-b")
 	calls := 0
-	current := map[string]struct{}{
-		worktreeA: {},
-	}
-	lister := func(string) (map[string]struct{}, error) {
+	current := []gitWorktreeRecord{{Path: worktreeA}}
+	lister := func(string) ([]gitWorktreeRecord, error) {
 		calls++
-		out := make(map[string]struct{}, len(current))
-		for path := range current {
-			out[path] = struct{}{}
-		}
-		return out, nil
+		return cloneWorktreeRecords(current), nil
 	}
 
-	first, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	first, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, first, worktreeA)
+	require.True(t, recordsContainPath(first, worktreeA))
 
-	second, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	second, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, second, worktreeA)
+	require.True(t, recordsContainPath(second, worktreeA))
 	assert.Equal(t, 1, calls, "unchanged worktree probe should reuse cached listing")
 
-	current = map[string]struct{}{
-		worktreeB: {},
-	}
+	current = []gitWorktreeRecord{{Path: worktreeB}}
 	later := time.Now().Add(2 * time.Second)
 	require.NoError(t, os.Chtimes(worktreesDir, later, later))
 
-	third, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	third, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, third, worktreeB)
+	require.True(t, recordsContainPath(third, worktreeB))
 	assert.Equal(t, 2, calls, "worktree probe changes must invalidate the cache")
 }
 
@@ -143,38 +144,30 @@ func TestListGitWorktreesCachedWithListerInvalidatesWhenEntryFingerprintChanges(
 	worktreeA := filepath.Join(repoRoot, "wt-a")
 	worktreeB := filepath.Join(repoRoot, "wt-b")
 	calls := 0
-	current := map[string]struct{}{
-		worktreeA: {},
-	}
-	lister := func(string) (map[string]struct{}, error) {
+	current := []gitWorktreeRecord{{Path: worktreeA}}
+	lister := func(string) ([]gitWorktreeRecord, error) {
 		calls++
-		out := make(map[string]struct{}, len(current))
-		for path := range current {
-			out[path] = struct{}{}
-		}
-		return out, nil
+		return cloneWorktreeRecords(current), nil
 	}
 
 	fixed := time.Unix(1_700_000_000, 0).UTC()
 	require.NoError(t, os.Chtimes(worktreesDir, fixed, fixed))
 
-	first, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	first, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, first, worktreeA)
+	require.True(t, recordsContainPath(first, worktreeA))
 	assert.Equal(t, 1, calls)
 
 	require.NoError(t, os.RemoveAll(initialEntry))
 	require.NoError(t, os.MkdirAll(filepath.Join(worktreesDir, "entry-b"), 0o755))
 	require.NoError(t, os.Chtimes(worktreesDir, fixed, fixed))
 
-	current = map[string]struct{}{
-		worktreeB: {},
-	}
+	current = []gitWorktreeRecord{{Path: worktreeB}}
 
-	second, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	second, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, second, worktreeB)
-	assert.NotContains(t, second, worktreeA)
+	require.True(t, recordsContainPath(second, worktreeB))
+	assert.False(t, recordsContainPath(second, worktreeA))
 	assert.Equal(t, 2, calls, "entry-name changes must invalidate the cache even when directory modtime is restored")
 }
 
@@ -189,24 +182,24 @@ func TestListGitWorktreesCachedWithListerDoesNotCacheStaleResultWhenProbeChanges
 	worktreeA := filepath.Join(repoRoot, "wt-a")
 	worktreeB := filepath.Join(repoRoot, "wt-b")
 	calls := 0
-	lister := func(string) (map[string]struct{}, error) {
+	lister := func(string) ([]gitWorktreeRecord, error) {
 		calls++
 		if calls == 1 {
 			require.NoError(t, os.RemoveAll(initialEntry))
 			require.NoError(t, os.MkdirAll(filepath.Join(worktreesDir, "entry-b"), 0o755))
-			return map[string]struct{}{worktreeA: {}}, nil
+			return []gitWorktreeRecord{{Path: worktreeA}}, nil
 		}
-		return map[string]struct{}{worktreeB: {}}, nil
+		return []gitWorktreeRecord{{Path: worktreeB}}, nil
 	}
 
-	first, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	first, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, first, worktreeA)
+	require.True(t, recordsContainPath(first, worktreeA))
 
-	second, err := listGitWorktreesCachedWithLister(repoRoot, lister)
+	second, err := listGitWorktreeRecordsCachedWithLister(repoRoot, lister)
 	require.NoError(t, err)
-	require.Contains(t, second, worktreeB)
-	assert.NotContains(t, second, worktreeA)
+	require.True(t, recordsContainPath(second, worktreeB))
+	assert.False(t, recordsContainPath(second, worktreeA))
 	assert.Equal(t, 2, calls, "probe changes during listing must prevent caching stale worktree sets")
 }
 
