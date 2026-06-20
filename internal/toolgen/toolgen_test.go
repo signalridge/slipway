@@ -1725,10 +1725,26 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 
 	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
 	require.NoError(t, err)
+	normalizedRunEntry := strings.Join(strings.Fields(runEntry), " ")
+	runArguments := CommandArguments("run")
+	assert.Contains(t, runArguments, "[--auto|--no-auto]",
+		"run registry arguments must expose per-run auto overrides")
 	assert.Contains(t, runEntry, "Shortcut driver for the current lifecycle stage")
 	assert.Contains(t, runEntry, "`run` is an auto-driver shortcut")
 	assert.Contains(t, runEntry, "JSON output includes `delegated_to`")
 	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
+	assert.Contains(t, normalizedRunEntry, "`--auto`/`--no-auto`: override `execution.auto` for this run",
+		"run command entry must document the override behavior")
+	for _, phrase := range []string{
+		"`security-review` boundaries",
+		"sensitive/guardrail confirmations",
+		"decision/human_action checkpoints",
+		"stale or unknown-freshness checkpoints",
+		"evidence gates",
+	} {
+		assert.Contains(t, normalizedRunEntry, phrase,
+			"run command entry missing auto-mode redline phrase")
+	}
 
 	for _, commandID := range []string{"intake", "plan", "implement"} {
 		commandID := commandID
@@ -1758,6 +1774,21 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 	assert.Contains(t, readme, "`slipway run`")
 	assert.Contains(t, readme, "`artifacts/changes/`")
 	assert.Contains(t, readme, "`artifacts/codebase/`")
+	normalizedReadme := strings.Join(strings.Fields(readme), " ")
+	for _, phrase := range []string{
+		"overridden per run with `slipway run --auto`",
+		"`slipway run --no-auto` forces a single run back to manual pacing",
+		"the per-run `--auto` / `--no-auto` overrides live only on `slipway run`",
+		"Auto mode never relaxes governance.",
+		"`security-review` boundaries",
+		"sensitive/guardrail confirmations",
+		"decision and human_action checkpoints",
+		"stale or unknown-freshness checkpoints",
+		"every evidence gate",
+	} {
+		assert.Contains(t, normalizedReadme, phrase,
+			"README auto-mode safety phrase missing")
+	}
 	assert.NotContains(t, readme, "request intake")
 	assert.NotContains(t, readme, "active request resolution")
 	assert.NotContains(t, readme, "`openspec/`")

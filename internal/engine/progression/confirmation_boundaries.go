@@ -60,8 +60,29 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 	}
 }
 
-// SkillRequiresManualAutoBoundary reports selected skills that must not be
-// softened by execution.auto even when the change has no guardrail domain.
+// SkillIsPurePacingAutoSafe reports skills whose handoff is only a pacing
+// boundary and may be softened by execution.auto for non-guardrail changes.
+func SkillIsPurePacingAutoSafe(skillName string) bool {
+	switch strings.TrimSpace(skillName) {
+	case SkillIntakeClarification,
+		SkillResearchOrchestration,
+		SkillPlanAudit,
+		SkillWaveOrchestration,
+		SkillSpecComplianceReview,
+		SkillCodeQualityReview,
+		SkillIndependentReview,
+		SkillGoalVerification,
+		SkillFinalCloseout:
+		return true
+	default:
+		return false
+	}
+}
+
+// SkillRequiresManualAutoBoundary reports skills that must not be softened by
+// execution.auto even when the change has no guardrail domain. Unknown non-empty
+// skill names fail closed until explicitly classified as pure-pacing auto-safe.
 func SkillRequiresManualAutoBoundary(skillName string) bool {
-	return strings.TrimSpace(skillName) == SkillSecurityReview
+	name := strings.TrimSpace(skillName)
+	return name != "" && !SkillIsPurePacingAutoSafe(name)
 }

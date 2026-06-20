@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const autoCheckpointAcknowledgedSideEffect = "auto_checkpoint_acknowledged"
+
 type nextView struct {
 	Command                   string                               `json:"command,omitempty"`
 	DelegatedTo               string                               `json:"delegated_to,omitempty"`
@@ -54,7 +56,8 @@ type nextView struct {
 	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
 	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
 
-	consumeActiveCheckpoint bool
+	consumeActiveCheckpoint                 bool
+	consumeActiveCheckpointAutoAcknowledged bool
 	// planLocked records whether the lifecycle G_plan gate has approved the plan.
 	// It is unexported (never serialized) and drives whether a parsed decision.md
 	// selection is reported as a locked or pending skill_constraint (issue #140).
@@ -334,7 +337,7 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next", auto)
+				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next", auto, false)
 				if err != nil {
 					return err
 				}
@@ -367,10 +370,20 @@ func makeNextCmd() *cobra.Command {
 }
 
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run", false)
+	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run", false, false)
 }
 
-func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, command string, auto bool) (nextView, error) {
+func buildNextViewForCommand(
+	root string,
+	ref changeRef,
+	resumeResponse string,
+	preview bool,
+	autoSkipEvidence bool,
+	skipAutoPass bool,
+	command string,
+	auto bool,
+	autoCheckpointAcknowledged bool,
+) (nextView, error) {
 	// READ-ONLY PREVIEW INVARIANT: only the advancing path (run/stage) carries
 	// auto into advancement so the engine preset auto-confirm can fire. A preview
 	// query (`slipway next`) must never trigger an auto-confirm side effect, so
@@ -406,7 +419,7 @@ func buildNextViewForCommand(root string, ref changeRef, resumeResponse string, 
 		return view, nil
 	}
 
-	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref, resumeResponse, preview)
+	governedChange, execCtx, err := buildNextContextByModeWithCheckpointAck(root, &view, ref, resumeResponse, preview, autoCheckpointAcknowledged)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -509,11 +522,16 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 	}
 	if change == nil || change.ActiveCheckpoint == nil {
 		view.consumeActiveCheckpoint = false
+		view.consumeActiveCheckpointAutoAcknowledged = false
 		return nil
 	}
 
 	beforeChange := *change
 	checkpoint := *change.ActiveCheckpoint
+	sideEffects := []state.LifecycleSideEffect{{Kind: "active_checkpoint_cleared"}}
+	if view.consumeActiveCheckpointAutoAcknowledged {
+		sideEffects = append(sideEffects, state.LifecycleSideEffect{Kind: autoCheckpointAcknowledgedSideEffect})
+	}
 	change.ActiveCheckpoint = nil
 	if err := state.SaveChange(root, *change); err != nil {
 		return err
@@ -527,12 +545,13 @@ func consumeNextCheckpoint(root string, change *model.Change, view *nextView) er
 		BeforeState:   beforeChange.CurrentState,
 		AfterState:    change.CurrentState,
 		Diagnostics:   []string{"task_id=" + checkpoint.PausedTaskID},
-		SideEffects:   []state.LifecycleSideEffect{{Kind: "active_checkpoint_cleared"}},
+		SideEffects:   sideEffects,
 		ClearedFields: []string{"active_checkpoint"},
 	}); err != nil {
 		return err
 	}
 	view.consumeActiveCheckpoint = false
+	view.consumeActiveCheckpointAutoAcknowledged = false
 	return nil
 }
 
@@ -688,11 +707,11 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 }
 
 func deriveConfirmationRequirement(view nextView) confirmationRequirement {
-	// Auto softens pure-pacing confirmation boundaries into a
-	// standing-authorization continuation, but only when the change is NOT in a
-	// guardrail/sensitive domain and the surfaced handoff is not a selected
-	// security review. Preset, decision, human_action, stale-checkpoint, and
-	// evidence-gate boundaries keep their hard_stop even under auto.
+	// Auto softens explicitly allowlisted pure-pacing confirmation boundaries into
+	// a standing-authorization continuation, but only when the change is NOT in a
+	// guardrail/sensitive domain. Preset, decision, human_action,
+	// stale-checkpoint, unclassified skill, and evidence-gate boundaries keep
+	// their hard_stop even under auto.
 	autoSoftens := view.auto &&
 		!isGuardrailSensitive(view.GuardrailDomain) &&
 		!viewRequiresManualAutoBoundary(view)

@@ -79,9 +79,10 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 					return err
 				}
 				effectiveResumeResponse := resumeResponse
+				autoCheckpointAcknowledged := false
 				if spec.SupportsResume {
 					var err error
-					effectiveResumeResponse, err = autoAckResumeResponse(root, ref, auto, resume, resumeResponse)
+					effectiveResumeResponse, autoCheckpointAcknowledged, err = autoAckResumeResponse(root, ref, auto, resume, resumeResponse)
 					if err != nil {
 						return err
 					}
@@ -89,7 +90,7 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 						return err
 					}
 				}
-				view, err := runStageLoop(root, ref, spec, effectiveResumeResponse, auto)
+				view, err := runStageLoop(root, ref, spec, effectiveResumeResponse, auto, autoCheckpointAcknowledged)
 				if err != nil {
 					return err
 				}
@@ -140,20 +141,22 @@ func validateStageCommandEntry(root string, ref changeRef, spec stageCommandSpec
 	)
 }
 
-func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeResponse string, auto bool) (nextView, error) {
+func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeResponse string, auto bool, autoCheckpointAcknowledged bool) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
 	nextResumeResponse := resumeResponse
+	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, spec.Name, auto)
+		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, spec.Name, auto, nextAutoCheckpointAcknowledged)
 		if err != nil {
 			return nextView{}, err
 		}
 		view.Command = spec.Name
 		view.DelegatedTo = spec.Name
 		nextResumeResponse = ""
+		nextAutoCheckpointAcknowledged = false
 		lastView = view
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)
