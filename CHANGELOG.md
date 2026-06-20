@@ -5,6 +5,20 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0](https://github.com/signalridge/slipway/compare/v0.30.1...v0.31.0) (2026-06-20)
+
+
+### Features
+
+* **execution:** add opt-in auto mode that auto-advances pure-pacing pauses ([#280](https://github.com/signalridge/slipway/issues/280)) ([9910d9f](https://github.com/signalridge/slipway/commit/9910d9f6f2e0dd698884e1472666bac456711358))
+
+
+### Bug Fixes
+
+* **repair:** route tasks.md parse-failure drift to fixing tasks.md ([#275](https://github.com/signalridge/slipway/issues/275)) ([#278](https://github.com/signalridge/slipway/issues/278)) ([15af266](https://github.com/signalridge/slipway/commit/15af2662090412a95ad0d9130dd1a6a1780d86e4))
+* **runtime:** isolate handoff state per change ([#276](https://github.com/signalridge/slipway/issues/276)) ([708aca4](https://github.com/signalridge/slipway/commit/708aca4694d3c65f38199e8fbee98d11f0187049))
+* **toolgen:** bootstrap legacy adapter refreshes ([ea95b37](https://github.com/signalridge/slipway/commit/ea95b370d37492ca8a5b068a214744eadb0f94b1))
+
 ## [0.30.1](https://github.com/signalridge/slipway/compare/v0.30.0...v0.30.1) (2026-06-19)
 
 
