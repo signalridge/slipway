@@ -75,3 +75,34 @@ func TestFindArchivedChangeForWorktreeIgnoresProjectRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "the project root must not match any archived change's dedicated worktree")
 }
+
+func TestFindArchivedChangeForWorktreeIgnoresProjectRootOnArchivedBranch(t *testing.T) {
+	t.Parallel()
+	slug := "archived-root-on-feature-branch"
+	root, worktreePath := setupArchivedChangeWorktree(t, slug)
+	runGit(t, worktreePath, "checkout", "--detach")
+	runGit(t, root, "checkout", DefaultWorktreeBranch(slug))
+
+	_, ok, err := FindArchivedChangeForWorktree(root, root)
+	require.NoError(t, err)
+	assert.False(t, ok, "the project root must not match by archived branch alone")
+}
+
+func TestFindArchivedChangeForWorktreeFailsClosedOnCorruptLocalArchive(t *testing.T) {
+	t.Parallel()
+	slug := "archived-corrupt-local"
+	root, worktreePath := setupArchivedChangeWorktree(t, slug)
+
+	archivePath, err := ArchivedChangeFilePathForRead(root, slug)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(archivePath, []byte("slug: ["), 0o644))
+
+	_, ok, err := FindArchivedChangeForWorktree(root, worktreePath)
+	require.Error(t, err)
+	assert.False(t, ok)
+
+	var loadErr *ArchivedChangeLoadError
+	require.ErrorAs(t, err, &loadErr)
+	assert.Equal(t, slug, loadErr.Slug)
+	assert.Contains(t, loadErr.WorktreePath, filepath.Join(".worktrees", slug))
+}

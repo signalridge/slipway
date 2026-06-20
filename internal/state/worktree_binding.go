@@ -32,6 +32,28 @@ type worktreeBinding struct {
 	GitCommonDir string `yaml:"git_common_dir,omitempty"`
 }
 
+// ArchivedChangeLoadError reports a candidate archived change that should have
+// been local to the invocation worktree but could not be loaded.
+type ArchivedChangeLoadError struct {
+	Slug         string
+	WorktreePath string
+	Err          error
+}
+
+func (err *ArchivedChangeLoadError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("load archived change %q for worktree %q: %v", err.Slug, err.WorktreePath, err.Err)
+}
+
+func (err *ArchivedChangeLoadError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Err
+}
+
 // WorktreeBindingPath returns the git-local worktree-binding record path for slug.
 func WorktreeBindingPath(root, slug string) string {
 	return filepath.Join(ChangeDir(root, slug), worktreeBindingFileName)
@@ -166,7 +188,14 @@ func FindArchivedChangeForWorktree(root, worktreePath string) (model.Change, boo
 	for _, slug := range archivedWorktreeSlugCandidates(normalizedWorktree, branch) {
 		change, err := LoadArchivedChange(root, slug)
 		if err != nil {
-			continue
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return model.Change{}, false, &ArchivedChangeLoadError{
+				Slug:         slug,
+				WorktreePath: normalizedWorktree,
+				Err:          err,
+			}
 		}
 		if archivedChangeBoundToWorktree(root, change, normalizedWorktree, branch) {
 			return change, true, nil
@@ -204,13 +233,17 @@ func archivedWorktreeSlugCandidates(worktreePath, branch string) []string {
 
 // archivedChangeBoundToWorktree confirms a candidate archived change actually
 // owns the invocation worktree via authority that survives archival: either the
-// default dedicated worktree path matches, or the archived bundle's recorded
-// worktree_branch matches the worktree's current branch. The project root never
-// matches (its path is not `.worktrees/<slug>` and no archived change records a
-// `feat/<slug>` branch for it).
+// default dedicated worktree path matches, or a non-root worktree's branch
+// matches the archived bundle's recorded worktree_branch. The project root never
+// matches by branch alone; root invocations must fall through to active/global
+// resolution.
 func archivedChangeBoundToWorktree(root string, change model.Change, worktreePath, branch string) bool {
 	if defaultPath, err := NormalizePath(DefaultWorktreePath(root, change.Slug)); err == nil && defaultPath == worktreePath {
 		return true
+	}
+	normalizedRoot, err := NormalizePath(root)
+	if err != nil || normalizedRoot == worktreePath {
+		return false
 	}
 	recordedBranch := strings.TrimSpace(change.WorktreeBranch)
 	return recordedBranch != "" && branch != "" && recordedBranch == branch

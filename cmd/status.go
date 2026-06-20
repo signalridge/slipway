@@ -406,7 +406,11 @@ func statusArchivedChangeForCurrentWorktree(root string) (model.Change, bool, er
 	if strings.TrimSpace(worktreePath) == "" {
 		return model.Change{}, false, nil
 	}
-	return state.FindArchivedChangeForWorktree(root, worktreePath)
+	change, ok, err := state.FindArchivedChangeForWorktree(root, worktreePath)
+	if err != nil {
+		return model.Change{}, false, wrapArchivedWorktreeResolutionError(err)
+	}
+	return change, ok, nil
 }
 
 func shouldFallbackStatusMultiSummary(err error) bool {
