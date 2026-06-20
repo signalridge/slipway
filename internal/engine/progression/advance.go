@@ -45,6 +45,13 @@ type AdvanceOptions struct {
 	// Command names the mutating surface that requested advancement. It is
 	// recorded in lifecycle trace events only; it does not affect progression.
 	Command string
+	// Auto enables config/flag-driven auto-advancement. When true, a pending
+	// workflow-preset confirmation is auto-confirmed UPGRADE-ONLY to the
+	// suggested/effective preset (never auto-downgraded) so advancement
+	// continues without a manual preset hard-stop. Auto introduces no
+	// force-close, bypass, or private-attestation path: every evidence gate and
+	// guardrail-domain control still blocks exactly as in the non-auto path.
+	Auto bool
 }
 
 // Advance advances a change through its lifecycle.

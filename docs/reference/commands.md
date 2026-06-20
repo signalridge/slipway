@@ -103,6 +103,32 @@ slipway run --json --diagnostics
 If a mutation fails closed, rerun the current read-only checks and follow the
 named recovery command.
 
+Config-level `execution.auto` applies to `intake`, `plan`, and `implement`.
+Those stage commands do not accept per-invocation `--auto` or `--no-auto`
+override flags; use `slipway run --auto` or `slipway run --no-auto` when one-run
+override behavior is needed.
+
+## Run Auto Mode
+
+`slipway run` can auto-advance pure-pacing pauses so a governed change keeps
+moving without a fresh human stop at every routine handoff. Enable it per repo
+with the `execution.auto` config, or override it for a single invocation:
+
+```bash
+slipway run --auto --json
+slipway run --no-auto --json
+```
+
+`--auto` and `--no-auto` take precedence over the `execution.auto` config for
+that one run. Under auto, Slipway auto-advances pure-pacing pauses (review
+batches without `security-review`, non-sensitive/non-security-review skill
+handoffs, fresh non-guardrail `human_verify` checkpoints) on prior authorization
+and auto-confirms a pending workflow-preset upgrade-only (never downgraded).
+`security-review` boundaries, sensitive and guardrail confirmations, the intake
+Approved Summary, decision and human_action checkpoints, stale or
+unknown-freshness checkpoints, and every evidence gate still hard-stop and are
+never auto-advanced.
+
 ## Surface Manifest
 
 `docs/SURFACE-MANIFEST.json` is regenerated from Slipway-owned Go authorities:

@@ -47,6 +47,8 @@ type ToolConfig struct {
 
 const (
 	settingsKindPiRegistration = "pi-registration"
+	stageAutoModeNote          = "Config-level `execution.auto` applies to this stage command; there are no per-stage `--auto`/`--no-auto` flags. Under auto, only pure-pacing boundaries may continue on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale checkpoints, and evidence gates still stop."
+	nextAutoModeNote           = "`slipway next` is query-only: it reflects config-level `execution.auto` in displayed confirmation requirements, has no `--auto`/`--no-auto` flags, and never mutates pending preset confirmations. Per-run `slipway run --auto` behavior is visible on `run`."
 )
 
 var toolRegistry = map[string]ToolConfig{
@@ -259,18 +261,21 @@ var commandRegistry = []CommandDef{
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S0_INTAKE."},
 		Notes: []string{
 			"`slipway intake` is the explicit S0 stage command. `slipway run` delegates here when the current state is S0_INTAKE.",
+			stageAutoModeNote,
 		}},
 	{ID: "plan", Class: CommandClassMutation, Description: "Author or amend the governed plan artifacts for the active change", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--diagnostics] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S1_PLAN."},
 		Notes: []string{
 			"`slipway plan` is the explicit S1 stage command. Same-intent change amendments update the current bundle without a separate recovery command.",
+			stageAutoModeNote,
 		}},
 	{ID: "implement", Class: CommandClassMutation, Description: "Execute governed implementation waves for the active change", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S2_IMPLEMENT with a materialized wave plan."},
 		Notes: []string{
 			"`slipway implement` is the explicit S2 stage command. `slipway run` delegates here when the current state is S2_IMPLEMENT.",
+			stageAutoModeNote,
 		}},
 	{ID: "review", Class: CommandClassMutation, Description: "Run review convergence for artifact-code alignment and feedback repairs", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--diagnostics] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
@@ -283,11 +288,15 @@ var commandRegistry = []CommandDef{
 			"After the repair subagent edits code/artifacts, rerun and record the affected reviewer evidence, then run `slipway review`.",
 		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--diagnostics] [--context-guard] [--no-auto-pass] [--change <slug>]"},
+		Arguments: "[--json] [--diagnostics] [--context-guard] [--no-auto-pass] [--change <slug>]",
+		Notes: []string{
+			nextAutoModeNote,
+		}},
 	{ID: "run", Class: CommandClassMutation, Description: "Shortcut driver for the current lifecycle stage", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--change <slug>]",
+		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--auto|--no-auto] [--change <slug>]",
 		Notes: []string{
 			"`slipway run` is an auto-driver shortcut. JSON output includes `delegated_to` so hosts can see the primary stage command it invoked.",
+			"`--auto`/`--no-auto` override `execution.auto` for one run: auto-advances pure-pacing pauses (review batches, non-sensitive skill handoffs, fresh human-verify checkpoints) on prior authorization and auto-confirms a pending workflow-preset upgrade-only (never downgraded), while sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and every evidence gate still hard-stop.",
 		}},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",

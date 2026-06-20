@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -17,6 +18,8 @@ func makeRunCmd() *cobra.Command {
 		resumeResponse string
 		diagnostics    bool
 		changeSlug     string
+		auto           bool
+		noAuto         bool
 	)
 
 	cmd := &cobra.Command{
@@ -37,11 +40,26 @@ func makeRunCmd() *cobra.Command {
 				return err
 			}
 
+			effectiveAuto, err := resolveEffectiveAuto(root, cmd, auto, noAuto)
+			if err != nil {
+				return err
+			}
+
 			return withChangeStateLock(root, ref.Slug, "run", func() error {
-				if err := validateRunEntry(root, ref, resume, resumeResponse); err != nil {
+				// Auto-acknowledge a non-sensitive human_verify checkpoint at the
+				// entry path so entry validation passes and the loop continues past
+				// it. The injected response flows through both entry validation and
+				// the loop, so the checkpoint is consumed exactly as an operator
+				// --resume-response would. Decision/human_action/guardrail checkpoints
+				// are deliberately left untouched and still fail closed.
+				effectiveResumeResponse, err := autoAckResumeResponse(root, ref, effectiveAuto, resume, resumeResponse)
+				if err != nil {
 					return err
 				}
-				view, err := runGovernedLoop(root, ref, resumeResponse)
+				if err := validateRunEntry(root, ref, resume, effectiveResumeResponse); err != nil {
+					return err
+				}
+				view, err := runGovernedLoop(root, ref, effectiveResumeResponse, effectiveAuto)
 				if err != nil {
 					return err
 				}
@@ -87,8 +105,93 @@ func makeRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave when no active checkpoint exists")
 	cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused checkpoint")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
+	cmd.Flags().BoolVar(&auto, "auto", false, "Force auto-advance execution for this run, overriding execution.auto config")
+	cmd.Flags().BoolVar(&noAuto, "no-auto", false, "Force manual advancement for this run, overriding execution.auto config")
+	cmd.MarkFlagsMutuallyExclusive("auto", "no-auto")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
+}
+
+// resolveEffectiveAuto resolves the tri-state auto override. `--auto` forces auto
+// for the run; `--no-auto` forces manual. Otherwise the project config value
+// (execution.auto) is the effective setting. The flags are mutually exclusive
+// (enforced by cobra) so at most one is ever Changed. A negative `--no-auto=false`
+// is NOT an affirmative auto override: it falls through to config rather than
+// flipping auto on, so the negative safety flag can never enable auto by itself.
+func resolveEffectiveAuto(root string, cmd *cobra.Command, auto, noAuto bool) (bool, error) {
+	if cmd != nil {
+		if cmd.Flags().Changed("auto") {
+			return auto, nil
+		}
+		if cmd.Flags().Changed("no-auto") && noAuto {
+			return false, nil
+		}
+	}
+	cfg, err := loadConfigAtRoot(root)
+	if err != nil {
+		return false, err
+	}
+	return cfg.Execution.AutoEnabled(), nil
+}
+
+// autoAckResumeResponse returns the resume response to use for entry validation
+// and the run loop. When auto is effective, no operator response was supplied,
+// and an active checkpoint is a non-sensitive human_verify, it injects a
+// standing auto acknowledgment so the entry validator permits continuation and
+// the loop consumes the checkpoint. Decision and human_action checkpoints, and
+// any checkpoint in a guardrail/sensitive domain, are never auto-acknowledged —
+// they keep failing closed exactly as in the non-auto path.
+func autoAckResumeResponse(root string, ref changeRef, auto, resume bool, resumeResponse string) (string, error) {
+	if !auto || resume || strings.TrimSpace(resumeResponse) != "" {
+		return resumeResponse, nil
+	}
+	change, err := state.LoadChange(root, ref.Slug)
+	if err != nil {
+		return "", err
+	}
+	eligible, err := autoAckEligibleCheckpoint(root, change)
+	if err != nil {
+		return "", err
+	}
+	if !eligible {
+		return resumeResponse, nil
+	}
+	return autoAcknowledgedResponse, nil
+}
+
+// autoAckEligibleCheckpoint reports whether the change has an active checkpoint
+// that may be auto-acknowledged under auto: a FRESH human_verify checkpoint in a
+// non-guardrail change. Decision and human_action checkpoints, and any checkpoint
+// in a guardrail/sensitive domain, are excluded so they remain manual. A stale or
+// unknown-freshness checkpoint is also excluded: auto must never silently consume
+// outdated checkpoint state, so it keeps failing closed to the manual hard stop
+// exactly as in the non-auto path.
+func autoAckEligibleCheckpoint(root string, change model.Change) (bool, error) {
+	if change.ActiveCheckpoint == nil {
+		return false, nil
+	}
+	if isGuardrailSensitive(change.GuardrailDomain) {
+		return false, nil
+	}
+	if model.CheckpointKind(change.ActiveCheckpoint.CheckpointType) != model.CheckpointHumanVerify {
+		return false, nil
+	}
+	execCtx, err := loadExecutionContext(root, change)
+	if err != nil {
+		return false, err
+	}
+	freshness := projectFreshnessForExecMode(root, change, execCtx.Summary, execCtx.SummaryBlockers)
+	return freshness == string(ctxpack.EvidenceFreshnessFresh), nil
+}
+
+// autoAcknowledgedResponse is the standing response injected for an
+// auto-acknowledged non-sensitive human_verify checkpoint.
+const autoAcknowledgedResponse = "auto-acknowledged"
+
+// isGuardrailSensitive reports whether a change's guardrail domain marks it as a
+// sensitive domain that must keep failing closed to manual review under auto.
+func isGuardrailSensitive(guardrailDomain string) bool {
+	return strings.TrimSpace(guardrailDomain) != ""
 }
 
 func validateRunFlags(resume bool, resumeResponse string) error {
@@ -203,7 +306,7 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 	return planHash != "" && currentHash != "" && planHash != currentHash
 }
 
-func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextView, error) {
+func runGovernedLoop(root string, ref changeRef, resumeResponse string, auto bool) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
@@ -214,7 +317,7 @@ func runGovernedLoop(root string, ref changeRef, resumeResponse string) (nextVie
 		delegatedTo = primaryCommandForState(change.CurrentState)
 	}
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run")
+		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run", auto)
 		if err != nil {
 			return nextView{}, err
 		}

@@ -244,7 +244,7 @@ Stable manifest tokens for JSON contract coverage:
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
-| run JSON | `slipway run --json` |
+| run JSON | `slipway run [--auto\|--no-auto] --json` |
 | stats JSON | `slipway stats --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
@@ -255,8 +255,15 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 
 - `next_skill.display_name`, `next_skill.blocking_name`, and `next_skill.resolution_reason` when the conceptual stage differs from the actionable missing skill.
 - `next_skill.review_context.required_artifact_layers` and `next_skill.review_context.required_implementation_layers`, which map to exact gate tokens such as `layer:R0=pass`, `layer:R3=pass`, `layer:IR1=pass`, and `layer:IR3=pass`.
-- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, whether `--resume-response` is supported at this stop (`resume_response_supported`), the next operator action as human prose (`next_action`), a machine-readable `next_action_kind` (`skill_handoff` | `checkpoint_resume` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`), and the exact `next_command` to run when one is runnable as-is. `next_command` is empty for stops that need operator-supplied input — notably `checkpoint_resume`, which requires a `--resume-response` argument and is therefore signaled by `resume_response_supported` rather than an exact command. Branch on `next_action_kind`/`next_command`; treat `next_action` as display prose only.
+- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, whether `--resume-response` is supported at this stop (`resume_response_supported`), the next operator action as human prose (`next_action`), a machine-readable `next_action_kind` (`skill_handoff` | `checkpoint_resume` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`), and the exact `next_command` to run when one is runnable as-is. `next_command` is empty for stops that need operator-supplied input — notably `checkpoint_resume`, which requires a `--resume-response` argument and is therefore signaled by `resume_response_supported` rather than an exact command. Branch on `next_action_kind`/`next_command`; treat `next_action` as display prose only.
 - `freshness_diagnostics`, which reports stale source/evidence pairs, field-level execution input mismatches, path authority, and the next regeneration action.
+
+`run --auto` / `run --no-auto` override `execution.auto` for one invocation.
+Config-level `execution.auto` also applies to `intake`, `plan`, and
+`implement`; those stage commands have no override flags. Auto only crosses
+pure-pacing boundaries. `security-review` boundaries, sensitive/guardrail
+confirmations, the intake Approved Summary, decision/human_action checkpoints,
+stale or unknown-freshness checkpoints, and evidence gates remain stops.
 
 `validate --json` is the active-readiness authority: it answers whether the
 current governed state can advance now and mirrors actionable review handoff
