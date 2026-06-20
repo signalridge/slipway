@@ -19,7 +19,8 @@ import (
 )
 
 // repairSummary reports the results of bounded local integrity repairs.
-// Cleanup operations: CleanedAtomicTemps, StaleLockCleaned.
+// Cleanup operations: CleanedAtomicTemps, StaleLockCleaned, CleanedLockAnchors,
+// RemovedLegacyRuntimeDirs.
 // Restore-to-contract: ConfigBackupPath (backs up corrupt config before
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
@@ -27,6 +28,7 @@ type repairSummary struct {
 	CleanedAtomicTemps        []string                                 `json:"cleaned_atomic_temps,omitempty"`
 	ConfigBackupPath          string                                   `json:"config_backup_path,omitempty"`
 	StaleLockCleaned          bool                                     `json:"stale_lock_cleaned"`
+	CleanedLockAnchors        []string                                 `json:"cleaned_lock_anchors,omitempty"`
 	WorktreeScopeRepairs      []string                                 `json:"worktree_scope_repairs,omitempty"`
 	MaterializedWavePlans     []string                                 `json:"materialized_wave_plans,omitempty"`
 	RecoveredWaveRuns         []string                                 `json:"recovered_wave_runs,omitempty"`
@@ -35,6 +37,7 @@ type repairSummary struct {
 	PrunedTaskEvidence        []string                                 `json:"pruned_task_evidence,omitempty"`
 	RebuiltExecutionSummaries []string                                 `json:"rebuilt_execution_summaries,omitempty"`
 	RemovedEmptyOrphanBundles []string                                 `json:"removed_empty_orphan_bundles,omitempty"`
+	RemovedLegacyRuntimeDirs  []string                                 `json:"removed_legacy_runtime_dirs,omitempty"`
 	NonRepairableFindings     []string                                 `json:"non_repairable_findings,omitempty"`
 	AppliedRepairs            []repairAppliedFinding                   `json:"applied_repairs,omitempty"`
 	UnrepairedDrift           []repairDriftFinding                     `json:"unrepaired_drift,omitempty"`
@@ -101,6 +104,11 @@ func makeRepairCmd() *cobra.Command {
 					return err
 				}
 				summary.RemovedEmptyOrphanBundles = removedEmptyOrphans
+				removedLegacyRuntimeDirs, err := repairEmptyLegacyRuntimeDirs(root)
+				if err != nil {
+					return err
+				}
+				summary.RemovedLegacyRuntimeDirs = removedLegacyRuntimeDirs
 
 				cfg, err := loadConfigAtRoot(root)
 				if err != nil {
@@ -142,6 +150,11 @@ func makeRepairCmd() *cobra.Command {
 						summary.StaleLockCleaned = true
 					}
 				}
+				cleanedLockAnchors, err := cleanupUnheldLockAnchors(root, staleLockPaths)
+				if err != nil {
+					return err
+				}
+				summary.CleanedLockAnchors = cleanedLockAnchors
 
 				execRepair, err := state.RepairExecutionState(root, now, staleAfter)
 				if err != nil {
@@ -203,7 +216,7 @@ func makeRepairCmd() *cobra.Command {
 				}
 				for _, finding := range healthReport.Findings {
 					switch finding.Category {
-					case "bundle_integrity", "execution_summary":
+					case "bundle_integrity", "execution_summary", "runtime_hygiene":
 						if message := repairSummaryForHealthFinding(finding); message != "" {
 							summary.NonRepairableFindings = append(summary.NonRepairableFindings, message)
 						}
@@ -295,6 +308,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	}
 
 	writeRepairSection("Cleaned atomic temp artifacts", summary.CleanedAtomicTemps)
+	writeRepairSection("Cleaned lock anchors", summary.CleanedLockAnchors)
 	writeRepairSection("Worktree scope repairs", summary.WorktreeScopeRepairs)
 	writeRepairSection("Materialized wave plans", summary.MaterializedWavePlans)
 	writeRepairSection("Recovered wave runs", summary.RecoveredWaveRuns)
@@ -303,6 +317,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
 	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
 	writeRepairSection("Removed empty orphan bundles", summary.RemovedEmptyOrphanBundles)
+	writeRepairSection("Removed legacy runtime directories", summary.RemovedLegacyRuntimeDirs)
 	writeRepairSection("Non-repairable findings", summary.NonRepairableFindings)
 	writeRepairSection("Applied repairs", repairAppliedFindingStrings(summary.AppliedRepairs))
 	writeRepairSection("Unrepaired drift", repairDriftFindingStrings(summary.UnrepairedDrift))
@@ -310,6 +325,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	if len(summary.CleanedAtomicTemps) == 0 &&
 		strings.TrimSpace(summary.ConfigBackupPath) == "" &&
 		!summary.StaleLockCleaned &&
+		len(summary.CleanedLockAnchors) == 0 &&
 		len(summary.WorktreeScopeRepairs) == 0 &&
 		len(summary.MaterializedWavePlans) == 0 &&
 		len(summary.RecoveredWaveRuns) == 0 &&
@@ -318,6 +334,7 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.PrunedTaskEvidence) == 0 &&
 		len(summary.RebuiltExecutionSummaries) == 0 &&
 		len(summary.RemovedEmptyOrphanBundles) == 0 &&
+		len(summary.RemovedLegacyRuntimeDirs) == 0 &&
 		len(summary.NonRepairableFindings) == 0 &&
 		len(summary.AppliedRepairs) == 0 &&
 		len(summary.UnrepairedDrift) == 0 {
@@ -339,6 +356,7 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 		}
 	}
 	appendItems("cleaned_atomic_temp", summary.CleanedAtomicTemps)
+	appendItems("cleaned_lock_anchor", summary.CleanedLockAnchors)
 	appendItems("worktree_scope_repair", summary.WorktreeScopeRepairs)
 	appendItems("materialized_wave_plan", summary.MaterializedWavePlans)
 	appendItems("recovered_wave_run", summary.RecoveredWaveRuns)
@@ -347,6 +365,7 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
 	appendItems("rebuilt_execution_summary", summary.RebuiltExecutionSummaries)
 	appendItems("empty_orphan_bundle", summary.RemovedEmptyOrphanBundles)
+	appendItems("legacy_runtime_dir", summary.RemovedLegacyRuntimeDirs)
 	if summary.StaleLockCleaned {
 		findings = append(findings, repairAppliedFinding{Kind: "stale_lock_cleaned", Target: "workspace"})
 	}
@@ -360,6 +379,63 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 		return strings.Compare(a.Target, b.Target)
 	})
 	return findings
+}
+
+func repairEmptyLegacyRuntimeDirs(root string) ([]string, error) {
+	legacyDir := state.LegacyChangesDir(root)
+	info, err := os.Stat(legacyDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(legacyDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) > 0 {
+		return nil, nil
+	}
+	if err := os.Remove(legacyDir); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return []string{state.DisplayPath(root, legacyDir)}, nil
+}
+
+func cleanupUnheldLockAnchors(root string, lockPaths []string) ([]string, error) {
+	seen := map[string]struct{}{}
+	unique := make([]string, 0, len(lockPaths))
+	for _, lockPath := range lockPaths {
+		lockPath = strings.TrimSpace(lockPath)
+		if lockPath == "" {
+			continue
+		}
+		if _, ok := seen[lockPath]; ok {
+			continue
+		}
+		seen[lockPath] = struct{}{}
+		unique = append(unique, lockPath)
+	}
+	slices.Sort(unique)
+
+	cleanedPaths := []string{}
+	for _, lockPath := range unique {
+		cleaned, err := fsutil.NewStateLock(lockPath).CleanupUnheldAnchorWithoutMeta()
+		if err != nil {
+			return nil, err
+		}
+		if cleaned {
+			cleanedPaths = append(cleanedPaths, state.DisplayPath(root, lockPath))
+		}
+	}
+	return cleanedPaths, nil
 }
 
 func buildUnrepairedDriftFindings(findings []string) []repairDriftFinding {
@@ -715,8 +791,45 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 			}
 			return fmt.Sprintf("%s: execution summary unreadable: %s", slug, reason.Detail)
 		}
+	case "runtime_hygiene":
+		if finding.Repairable {
+			return ""
+		}
+		switch {
+		case healthFindingHasReasonCode(finding, "legacy_runtime_handoff"):
+			return fmt.Sprintf(
+				"legacy runtime handoff requires manual migration: %s; replacement=.git/slipway/runtime/changes/<slug>/handoff.md",
+				runtimeHygieneReasonDetail(finding, "legacy_runtime_handoff"),
+			)
+		case healthFindingHasReasonCode(finding, "legacy_runtime_changes_dir"):
+			return fmt.Sprintf(
+				"legacy runtime changes directory requires manual inspection: %s",
+				runtimeHygieneReasonDetail(finding, "legacy_runtime_changes_dir"),
+			)
+		}
 	}
 	return ""
+}
+
+func healthFindingHasReasonCode(finding state.HealthFinding, code string) bool {
+	for _, reason := range finding.Reasons {
+		if reason.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeHygieneReasonDetail(finding state.HealthFinding, code string) string {
+	for _, reason := range finding.Reasons {
+		if reason.Code != code {
+			continue
+		}
+		if detail := strings.TrimSpace(reason.Detail); detail != "" {
+			return detail
+		}
+	}
+	return "workspace"
 }
 
 func dropRepairedExecutionSummaryFindings(findings []string, rebuiltSlugs []string) []string {

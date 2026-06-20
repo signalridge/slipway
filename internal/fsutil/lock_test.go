@@ -161,6 +161,62 @@ func TestCleanupStaleLockRequiresDeadHolderAndAge(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestCleanupUnheldAnchorWithoutMetaRemovesOnlyUnlockedAnchor(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("windows cannot safely remove a locked anchor file while proving ownership")
+	}
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "locks", "state.lock")
+	lock := NewStateLock(lockPath)
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o755))
+	require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
+
+	cleaned, err := lock.CleanupUnheldAnchorWithoutMeta()
+	require.NoError(t, err)
+	assert.True(t, cleaned)
+	assert.NoFileExists(t, lockPath)
+}
+
+func TestCleanupUnheldAnchorWithoutMetaPreservesAnchorsWithMeta(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "locks", "state.lock")
+	lock := NewStateLock(lockPath)
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o755))
+	require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
+	require.NoError(t, lock.WriteMeta(LockMeta{
+		HolderPID:  12345,
+		AcquiredAt: time.Now().UTC(),
+		Command:    "slipway active",
+	}))
+
+	cleaned, err := lock.CleanupUnheldAnchorWithoutMeta()
+	require.NoError(t, err)
+	assert.False(t, cleaned)
+	assert.FileExists(t, lockPath)
+	assert.FileExists(t, lockPath+".meta")
+}
+
+func TestCleanupUnheldAnchorWithoutMetaPreservesHeldAnchor(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "locks", "state.lock")
+	require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o755))
+
+	held := flock.New(lockPath)
+	require.NoError(t, held.Lock())
+	defer func() { _ = held.Unlock() }()
+
+	cleaned, err := NewStateLock(lockPath).CleanupUnheldAnchorWithoutMeta()
+	require.NoError(t, err)
+	assert.False(t, cleaned)
+	assert.FileExists(t, lockPath)
+}
+
 func TestHeldLockReleaseJoinsUnlockAndRemoveErrors(t *testing.T) {
 	t.Parallel()
 

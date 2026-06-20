@@ -189,3 +189,42 @@ func (s *StateLock) CleanupStale(staleAfter time.Duration, now time.Time, isPIDA
 	}
 	return cleaned, nil
 }
+
+// CleanupUnheldAnchorWithoutMeta removes an orphan lock anchor only after a
+// non-blocking lock check proves the anchor is not currently held.
+func (s *StateLock) CleanupUnheldAnchorWithoutMeta() (bool, error) {
+	if _, err := os.Stat(s.metaPath); err == nil {
+		return false, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+
+	if _, err := os.Stat(s.lockPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	fl := flock.New(s.lockPath)
+	locked, err := fl.TryLock()
+	if err != nil {
+		return false, err
+	}
+	if !locked {
+		return false, nil
+	}
+	defer func() {
+		_ = fl.Unlock()
+	}()
+
+	if runtime.GOOS == "windows" {
+		return false, nil
+	}
+	if err := os.Remove(s.lockPath); err == nil {
+		return true, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+	return false, nil
+}

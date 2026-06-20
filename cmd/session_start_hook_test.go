@@ -19,9 +19,12 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, "L2", "session-start compiled handoff")
 
-		handoffPath := filepath.Join(state.GitStateDir(root), "runtime", "handoff.md")
+		handoffPath := state.ChangeHandoffPath(root, slug)
 		require.NoError(t, os.MkdirAll(filepath.Dir(handoffPath), 0o755))
 		require.NoError(t, os.WriteFile(handoffPath, []byte("handoff body must not be embedded"), 0o644))
+		legacyPath := filepath.Join(state.GitRuntimeDir(root), "handoff.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
+		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy handoff body must not be embedded"), 0o644))
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
@@ -36,6 +39,51 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		assert.Contains(t, body, "session_handoff_present: true")
 		assert.Contains(t, body, "session_handoff_path: "+handoffPath)
 		assert.NotContains(t, body, "handoff body must not be embedded")
+		assert.NotContains(t, body, legacyPath)
+		assert.NotContains(t, body, "legacy handoff body must not be embedded")
+	})
+}
+
+func TestSessionStartHookReportsOnlyCurrentChangeHandoffAcrossBoundWorktrees(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		currentSlug := createGovernedRequest(t, root, "L2", "current worktree handoff")
+		currentChange, err := state.LoadChange(root, currentSlug)
+		require.NoError(t, err)
+		currentChange.WorktreePath = root
+		require.NoError(t, state.SaveChange(root, currentChange))
+
+		otherWorktreePath := filepath.Join(t.TempDir(), "other-worktree")
+		runGit(t, root, "worktree", "add", otherWorktreePath, "-b", "other-worktree")
+		otherChange := model.NewChange("other-bound-change")
+		otherChange.CurrentState = model.StateS1Plan
+		otherChange.PlanSubStep = model.PlanSubStepBundle
+		otherChange.WorktreePath = otherWorktreePath
+		require.NoError(t, state.SaveChange(root, otherChange))
+
+		currentHandoffPath := state.ChangeHandoffPath(root, currentSlug)
+		otherHandoffPath := state.ChangeHandoffPath(root, otherChange.Slug)
+		require.NoError(t, os.MkdirAll(filepath.Dir(currentHandoffPath), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Dir(otherHandoffPath), 0o755))
+		require.NoError(t, os.WriteFile(currentHandoffPath, []byte("current body must not be embedded"), 0o644))
+		require.NoError(t, os.WriteFile(otherHandoffPath, []byte("other body must not be embedded"), 0o644))
+
+		cmd := makeHookCmd()
+		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		body := out.String()
+		assert.Contains(t, body, `"slug": "`+currentSlug+`"`)
+		assert.Contains(t, body, "session_handoff_present: true")
+		assert.Contains(t, body, "session_handoff_path: "+currentHandoffPath)
+		assert.NotContains(t, body, otherHandoffPath)
+		assert.NotContains(t, body, "current body must not be embedded")
+		assert.NotContains(t, body, "other body must not be embedded")
 	})
 }
 

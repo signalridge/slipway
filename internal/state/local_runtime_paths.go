@@ -363,6 +363,11 @@ func GitRuntimeDir(root string) string {
 	return filepath.Join(GitStateDir(root), "runtime")
 }
 
+// ChangeHandoffPath returns the per-change advisory session handoff path.
+func ChangeHandoffPath(root, slug string) string {
+	return filepath.Join(ChangeDir(root, slug), "handoff.md")
+}
+
 // lockDir returns the git-internal directory for local lock files.
 func lockDir(root string) string {
 	return filepath.Join(GitStateDir(root), "locks")
