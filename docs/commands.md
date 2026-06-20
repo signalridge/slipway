@@ -244,7 +244,7 @@ Stable manifest tokens for JSON contract coverage:
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
-| run JSON | `slipway run [--auto|--no-auto] --json` |
+| run JSON | `slipway run [--auto\|--no-auto] --json` |
 | stats JSON | `slipway stats --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
