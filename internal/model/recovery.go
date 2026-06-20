@@ -314,6 +314,15 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway next",
 		Class:           RecoveryClassRerunSkill,
 	},
+	"orphaned_bundle_unmanaged_worktree": {
+		// Emitted as orphaned_bundle_unmanaged_worktree:<slug>. The bundle lost its
+		// change.yaml, but a live git worktree Slipway never provisioned still holds
+		// work for the slug. Lead with inspect/preserve and NEVER suggest --worktree:
+		// recovery must not endanger externally-managed, possibly-unmerged work.
+		Remediation:     "Governed bundle {subject} lost its change.yaml, but a live git worktree Slipway does not manage still holds work for this slug. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change {subject}` (never pass --worktree).",
+		CommandTemplate: "slipway delete --change {subject}",
+		Class:           RecoveryClassDiscardChange,
+	},
 	"orphaned_change_bundle": {
 		// Emitted as orphaned_change_bundle:<slug>. The governed bundle directory
 		// survived without its change.yaml authority (a partially-deleted change),

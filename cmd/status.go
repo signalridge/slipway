@@ -453,11 +453,21 @@ func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
 		ExecutionMode:     "diagnostics",
 		EvidenceFreshness: "unknown",
 	}
+	var plainOrphans []string
 	for _, slug := range orphans {
+		// Cross-check git worktrees/branches before recommending discard: a slug
+		// whose live worktree Slipway does not manage maps to externally-managed,
+		// possibly-unmerged work, so it must recover non-destructively (issue #285).
+		if match, ok, mErr := state.FindSlugWorktreeMatch(root, slug); mErr == nil && ok && !match.SlipwayManaged {
+			view.Diagnostics = append(view.Diagnostics, unmanagedWorktreeOrphanRemediation(slug, match))
+			view.Blockers = append(view.Blockers, model.NewReasonCode("orphaned_bundle_unmanaged_worktree", slug))
+			continue
+		}
 		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
 			"governed bundle %q is missing its change.yaml authority; discard it with `slipway delete --change %s`",
 			slug, slug,
 		))
+		plainOrphans = append(plainOrphans, slug)
 	}
 	for _, slug := range stale {
 		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
@@ -465,7 +475,7 @@ func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
 			slug, slug,
 		))
 	}
-	view.Blockers = append(view.Blockers, orphanedChangeBundleReasons(orphans)...)
+	view.Blockers = append(view.Blockers, orphanedChangeBundleReasons(plainOrphans)...)
 	view.Blockers = append(view.Blockers, staleRuntimeBindingReasons(stale)...)
 	view.Recovery = model.BuildRecovery(view.Blockers)
 	return view

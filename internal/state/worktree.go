@@ -541,6 +541,119 @@ func listGitWorktreesUncached(repoRoot string) (map[string]struct{}, error) {
 	return worktrees, nil
 }
 
+// SlugWorktreeMatch describes a live git worktree (and its branch) whose
+// identity corresponds to a change slug. It lets orphan-bundle recovery avoid
+// recommending destructive cleanup of a slug whose live, possibly-unmerged work
+// lives in a worktree Slipway does not manage.
+type SlugWorktreeMatch struct {
+	// WorktreePath is the normalized path of the matching live worktree.
+	WorktreePath string
+	// Branch is the worktree's checked-out branch (empty for a detached HEAD).
+	Branch string
+	// SlipwayManaged is true only when the match follows Slipway's own
+	// .worktrees/<slug> path or feat/<slug> branch convention, i.e. a worktree
+	// Slipway itself provisioned. False marks an externally-managed worktree that
+	// recovery must never recommend removing.
+	SlipwayManaged bool
+}
+
+// FindSlugWorktreeMatch reports whether any live git worktree corresponds to
+// slug, matched either by Slipway's own worktree/branch convention or by a
+// branch whose slugified identity equals slug. It returns the strongest match,
+// preferring a Slipway-managed worktree when one exists. ok is false when no
+// live worktree matches, or root is not a git repository.
+func FindSlugWorktreeMatch(root, slug string) (match SlugWorktreeMatch, ok bool, err error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return SlugWorktreeMatch{}, false, nil
+	}
+	repoRoot, err := gitWorkspaceRoot(root)
+	if err != nil {
+		if gitCommandReportsNotRepository(err) {
+			return SlugWorktreeMatch{}, false, nil
+		}
+		return SlugWorktreeMatch{}, false, err
+	}
+	records, err := listGitWorktreeRecords(repoRoot)
+	if err != nil {
+		return SlugWorktreeMatch{}, false, err
+	}
+	defaultPath, perr := NormalizePath(DefaultWorktreePath(repoRoot, slug))
+	if perr != nil {
+		defaultPath = filepath.Clean(DefaultWorktreePath(repoRoot, slug))
+	}
+	defaultBranch := DefaultWorktreeBranch(slug)
+	normalizedRepoRoot, perr := NormalizePath(repoRoot)
+	if perr != nil {
+		normalizedRepoRoot = filepath.Clean(repoRoot)
+	}
+
+	var external *SlugWorktreeMatch
+	for _, rec := range records {
+		normPath, nerr := NormalizePath(rec.Path)
+		if nerr != nil {
+			normPath = filepath.Clean(rec.Path)
+		}
+		// The main checkout is never the slug's dedicated worktree.
+		if normPath == normalizedRepoRoot {
+			continue
+		}
+		managed := normPath == defaultPath || rec.Branch == defaultBranch
+		if !managed && model.SlugifyTitle(rec.Branch) != slug {
+			continue
+		}
+		candidate := SlugWorktreeMatch{WorktreePath: normPath, Branch: rec.Branch, SlipwayManaged: managed}
+		if managed {
+			// A Slipway-managed worktree is the authoritative match; existing
+			// discard recovery already owns this case safely.
+			return candidate, true, nil
+		}
+		if external == nil {
+			c := candidate
+			external = &c
+		}
+	}
+	if external != nil {
+		return *external, true, nil
+	}
+	return SlugWorktreeMatch{}, false, nil
+}
+
+type gitWorktreeRecord struct {
+	Path   string
+	Branch string
+}
+
+// listGitWorktreeRecords parses `git worktree list --porcelain` into path+branch
+// records. Unlike listGitWorktrees it preserves each worktree's checked-out
+// branch so callers can map a worktree back to a change slug.
+func listGitWorktreeRecords(repoRoot string) ([]gitWorktreeRecord, error) {
+	cmd := exec.Command("git", "-C", repoRoot, "worktree", "list", "--porcelain") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("list git worktrees: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	var records []gitWorktreeRecord
+	var current *gitWorktreeRecord
+	for _, raw := range bytes.Split(out, []byte("\n")) {
+		line := string(raw)
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			if current != nil {
+				records = append(records, *current)
+			}
+			current = &gitWorktreeRecord{Path: strings.TrimSpace(strings.TrimPrefix(line, "worktree "))}
+		case strings.HasPrefix(line, "branch ") && current != nil:
+			ref := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		}
+	}
+	if current != nil {
+		records = append(records, *current)
+	}
+	return records, nil
+}
+
 // ResolveGitWorkspaceRoot returns the git worktree root for root.
 func ResolveGitWorkspaceRoot(root string) (string, error) {
 	return gitWorkspaceRoot(root)

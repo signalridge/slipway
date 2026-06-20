@@ -458,6 +458,22 @@ func TestBuildRecoveryOrphanedChangeBundleRoutesToDelete(t *testing.T) {
 	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
 }
 
+func TestBuildRecoveryUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
+	t.Parallel()
+
+	// #285: when an orphan bundle's slug names a live worktree Slipway does not
+	// manage, recovery must lead with inspect/preserve and must never recommend
+	// removing that worktree (no --worktree escalation).
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("orphaned_bundle_unmanaged_worktree", "abandoned-change"),
+	})
+	require.NotNil(t, got)
+	require.Len(t, got.Steps, 1)
+	assert.Contains(t, got.PrimaryAction, "Inspect and preserve")
+	assert.Contains(t, got.PrimaryAction, "never pass --worktree")
+	assert.NotContains(t, got.PrimaryAction, "add --worktree")
+}
+
 func TestBuildRecoveryStaleRuntimeBindingRoutesToDelete(t *testing.T) {
 	t.Parallel()
 

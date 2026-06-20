@@ -473,8 +473,26 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 	if err != nil || len(orphans) == 0 {
 		return nil
 	}
-	reasons := orphanedChangeBundleReasons(orphans)
 	primarySlug := orphans[0]
+	// Before routing to a destructive discard, cross-check git worktrees/branches:
+	// if the slug names a live worktree Slipway does not manage, the residue maps to
+	// externally-managed, possibly-unmerged work — recover non-destructively instead
+	// of recommending deletion of a worktree Slipway never provisioned (issue #285).
+	if match, ok, mErr := state.FindSlugWorktreeMatch(root, primarySlug); mErr == nil && ok && !match.SlipwayManaged {
+		return newCLIErrorWithReasons(
+			categoryPrecondition,
+			"orphaned_bundle_unmanaged_worktree",
+			fmt.Sprintf("governed bundle %q lost its change.yaml authority, but a live git worktree Slipway does not manage still holds work for this slug", primarySlug),
+			unmanagedWorktreeOrphanRemediation(primarySlug, match),
+			primarySlug,
+			[]model.ReasonCode{model.NewReasonCode("orphaned_bundle_unmanaged_worktree", primarySlug)},
+			map[string]any{
+				"unmanaged_worktree_path":   match.WorktreePath,
+				"unmanaged_worktree_branch": match.Branch,
+			},
+		)
+	}
+	reasons := orphanedChangeBundleReasons(orphans)
 	message := fmt.Sprintf("governed bundle %q is missing its change.yaml authority", primarySlug)
 	remediation := fmt.Sprintf("Discard it with `slipway delete --change %s` (add --worktree to also remove its worktree).", primarySlug)
 	if len(orphans) > 1 {
@@ -491,6 +509,20 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 		map[string]any{
 			"orphaned_change_bundles": orphans,
 		},
+	)
+}
+
+// unmanagedWorktreeOrphanRemediation renders non-destructive recovery prose for
+// an orphan bundle whose slug names a live worktree Slipway does not manage. It
+// leads with inspect/preserve and never recommends removing that worktree.
+func unmanagedWorktreeOrphanRemediation(slug string, match state.SlugWorktreeMatch) string {
+	location := match.WorktreePath
+	if strings.TrimSpace(match.Branch) != "" {
+		location = fmt.Sprintf("%s (branch %s)", match.WorktreePath, match.Branch)
+	}
+	return fmt.Sprintf(
+		"A live git worktree Slipway does not manage holds work for %q at %s. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change %s` (never pass --worktree).",
+		slug, location, slug,
 	)
 }
 
