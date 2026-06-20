@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.1](https://github.com/signalridge/slipway/compare/v0.31.0...v0.31.1) (2026-06-20)
+
+
+### Bug Fixes
+
+* **plan-audit:** flag shared-type changes whose target_files omit the blast radius ([#281](https://github.com/signalridge/slipway/issues/281)) ([88241d2](https://github.com/signalridge/slipway/commit/88241d2bcf341a9db155eedf9aac80b7bc33d270)), closes [#277](https://github.com/signalridge/slipway/issues/277)
+
 ## [0.31.0](https://github.com/signalridge/slipway/compare/v0.30.1...v0.31.0) (2026-06-20)
 
 
