@@ -108,6 +108,28 @@ slipway done --json
 `slipway run --json --diagnostics` is the shortcut driver. It delegates to the
 current primary stage command and stops at operator-facing boundaries.
 
+### Execution auto mode
+
+`execution.auto` in `.slipway.yaml` is **off by default**. When opted in (or
+overridden per run with `slipway run --auto`), `slipway run` auto-advances
+pure-pacing pauses on prior authorization — review batches, non-sensitive skill
+handoffs, and **fresh** human-verify checkpoints — without stopping for a fresh
+confirmation. `slipway run --no-auto` forces a single run back to manual pacing
+(`--no-auto=false` is not an affirmative override and falls through to config).
+
+Config-level `execution.auto` also applies to the stage commands
+(`slipway intake` / `slipway plan` / `slipway implement`), which auto-advance
+consistently with `run` but expose no per-stage flag; the per-run `--auto` /
+`--no-auto` overrides live only on `slipway run`.
+
+Auto mode never relaxes governance. `security-review` boundaries,
+sensitive/guardrail confirmations, the intake Approved Summary, decision and
+human_action checkpoints, stale or unknown-freshness checkpoints, and every
+evidence gate are **never** auto-advanced; they always hard-stop for explicit
+operator input and fresh evidence. The upgrade-only preset auto-confirm only
+ever raises governance strictness (never lowers it), so it is not one of these
+red lines.
+
 </details>
 
 ## How It Works

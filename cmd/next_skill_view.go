@@ -762,12 +762,7 @@ func skillHasPassingEvidence(evidenceMap map[string]model.VerificationRecord, sk
 }
 
 func isRequiredSkillBlocker(code string) bool {
-	switch strings.TrimSpace(code) {
-	case "required_skill_missing", "required_skill_not_ready", "required_skill_not_passed", "required_skill_blockers_present", "required_skill_stale":
-		return true
-	default:
-		return false
-	}
+	return progression.IsRequiredSkillBlockerCode(code)
 }
 
 // requiredSkillStaleSet collects the skills carrying a required_skill_stale

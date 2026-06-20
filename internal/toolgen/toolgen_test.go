@@ -1720,6 +1720,8 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	assert.Contains(t, normalizedNextEntry, "without advancing lifecycle state")
 	assert.Contains(t, nextEntry, "`next_skill.name` is the authoritative governed-host handoff")
 	assert.Contains(t, nextEntry, "Run `slipway run --json` when evidence is ready")
+	assert.Contains(t, nextEntry, "has no `--auto`/`--no-auto` flags")
+	assert.Contains(t, nextEntry, "never mutates pending preset confirmations")
 
 	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
 	require.NoError(t, err)
@@ -1727,6 +1729,18 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	assert.Contains(t, runEntry, "`run` is an auto-driver shortcut")
 	assert.Contains(t, runEntry, "JSON output includes `delegated_to`")
 	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
+
+	for _, commandID := range []string{"intake", "plan", "implement"} {
+		commandID := commandID
+		t.Run(commandID+"_auto_mode_note", func(t *testing.T) {
+			t.Parallel()
+			entry, renderErr := renderCommandEntry(toolRegistry["claude"], commandID)
+			require.NoError(t, renderErr)
+			assert.Contains(t, entry, "Config-level `execution.auto` applies to this stage command")
+			assert.Contains(t, entry, "there are no per-stage")
+			assert.Contains(t, entry, "sensitive/guardrail confirmations")
+		})
+	}
 }
 
 func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {

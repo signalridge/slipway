@@ -19,8 +19,10 @@ slipway next --json
 - Use only paths returned under `input_context`.
 - Do not expect inline policy-pack prose; read policy-pack content only by path when diagnostics or local config provide one.
 - `confirmation_requirement.resume_response_supported` is true only when `--resume-response` can satisfy the current stop.
-- Branch on `confirmation_requirement.next_action_kind` (`skill_handoff` | `checkpoint_resume` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`) and run `confirmation_requirement.next_command` when present; `next_action` is human prose, not a contract to parse.
+- Branch on `confirmation_requirement.next_action_kind` (`skill_handoff` | `checkpoint_resume` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`) and run `confirmation_requirement.next_command` when present; `next_action` is human prose, not a contract to parse.
 - `context_budget` appears only when `guard_action` is `warn` or `stop`; absence means no budget guard is active.
+- `next` is query-only: it reflects config-level `execution.auto`, has no `--auto`/`--no-auto` flags, and never mutates pending preset confirmations; per-run `slipway run --auto` behavior is on `run`.
+- Under auto, only pure-pacing pauses auto-advance on prior authorization; mutating run/stage commands may auto-confirm an upgrade-only preset. Still hard-stop at `security-review`, sensitive/guardrail confirmations, intake Approved Summary, decision/human_action checkpoints, stale/unknown-freshness checkpoints, and evidence gates.
 - Write evidence to `next_skill.verification_dir`.
 - If `blockers` is non-empty, resolve the blockers before executing the skill.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.

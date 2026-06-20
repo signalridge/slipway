@@ -67,16 +67,29 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 				return err
 			}
 
+			// Stage commands carry the project's effective auto setting (no per-stage
+			// flag), so config-level auto-advance applies consistently with `run`.
+			auto, err := resolveEffectiveAuto(root, nil, false, false)
+			if err != nil {
+				return err
+			}
+
 			return withChangeStateLock(root, ref.Slug, spec.Name, func() error {
 				if err := validateStageCommandEntry(root, ref, spec); err != nil {
 					return err
 				}
+				effectiveResumeResponse := resumeResponse
 				if spec.SupportsResume {
-					if err := validateResumeEntryForCommand(root, ref, resume, resumeResponse, spec.Name); err != nil {
+					var err error
+					effectiveResumeResponse, err = autoAckResumeResponse(root, ref, auto, resume, resumeResponse)
+					if err != nil {
+						return err
+					}
+					if err := validateResumeEntryForCommand(root, ref, resume, effectiveResumeResponse, spec.Name); err != nil {
 						return err
 					}
 				}
-				view, err := runStageLoop(root, ref, spec, resumeResponse)
+				view, err := runStageLoop(root, ref, spec, effectiveResumeResponse, auto)
 				if err != nil {
 					return err
 				}
@@ -127,14 +140,14 @@ func validateStageCommandEntry(root string, ref changeRef, spec stageCommandSpec
 	)
 }
 
-func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeResponse string) (nextView, error) {
+func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeResponse string, auto bool) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
 	nextResumeResponse := resumeResponse
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, spec.Name)
+		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, spec.Name, auto)
 		if err != nil {
 			return nextView{}, err
 		}

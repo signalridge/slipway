@@ -702,6 +702,9 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.Contains(t, content, "`context_budget` appears only when `guard_action` is `warn` or `stop`")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
 	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
+	assert.Contains(t, content, "`next` is query-only")
+	assert.Contains(t, content, "has no `--auto`/`--no-auto` flags")
+	assert.Contains(t, content, "never mutates pending preset confirmations")
 	assert.NotContains(t, content, "single-step progression command")
 	assert.NotContains(t, content, "state progression context")
 	assert.NotContains(t, content, "systematic-debugging")
@@ -1228,6 +1231,9 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 
 	assert.Contains(t, content, "user_response_payload",
 		"run skill missing checkpoint response handoff guidance")
+	assert.Contains(t, content, "auto mode auto-acknowledges",
+		"run command must describe auto-ack without duplicated wording")
+	assert.NotContains(t, content, "auto auto-acknowledges")
 }
 
 func TestStatusCommandEntryUsesGovernanceSummaryContract(t *testing.T) {
@@ -1570,6 +1576,24 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
 		assert.Contains(t, content, "`slipway run --json`")
 		assert.NotContains(t, content, "Tool-Specific Dispatch")
+	})
+
+	t.Run("stage commands describe config auto without override flags", func(t *testing.T) {
+		for commandID, bodyTemplate := range map[string]string{
+			"intake":    "command-intake-body",
+			"plan":      "command-plan-body",
+			"implement": "command-implement-body",
+		} {
+			commandID, bodyTemplate := commandID, bodyTemplate
+			t.Run(commandID, func(t *testing.T) {
+				content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", commandID, bodyTemplate, "claude")
+				assert.Contains(t, content, "Config-level `execution.auto` applies to this stage command")
+				assert.Contains(t, content, "there are no per-stage auto override flags")
+				assert.Contains(t, content, "sensitive/guardrail confirmations")
+				assert.NotContains(t, content, "- `--auto`")
+				assert.NotContains(t, content, "- `--no-auto`")
+			})
+		}
 	})
 
 	t.Run("codex command skill renders body without prompt transport", func(t *testing.T) {
