@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/state"
@@ -50,8 +49,9 @@ func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 	var (
 		diagnostics []string
 		handoffInfo string
+		changeSlug  string
 	)
-	nextJSON, err := sessionStartNextJSON(cmd, root)
+	nextJSON, changeSlug, err := sessionStartNextJSON(cmd, root)
 	if err != nil {
 		// A change bound to another worktree is an expected, informational state
 		// when a session opens with no active change of its own: point the host
@@ -61,7 +61,7 @@ func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 		}
 	}
 
-	handoffSummary := sessionStartHandoffSummary(root)
+	handoffSummary := sessionStartHandoffSummary(root, changeSlug)
 	if nextJSON == "" && handoffInfo == "" && handoffSummary == "" && len(diagnostics) == 0 {
 		return nil
 	}
@@ -100,10 +100,10 @@ func firstBoundChange(details map[string]any) (slug, worktreePath string) {
 	return changes[0]["slug"], changes[0]["worktree_path"]
 }
 
-func sessionStartNextJSON(cmd *cobra.Command, root string) (string, error) {
+func sessionStartNextJSON(cmd *cobra.Command, root string) (string, string, error) {
 	ref, err := resolveActiveChangeRef(root, "")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var out string
@@ -120,14 +120,15 @@ func sessionStartNextJSON(cmd *cobra.Command, root string) (string, error) {
 		out = string(raw)
 		return nil
 	})
-	return out, err
+	return out, ref.Slug, err
 }
 
-func sessionStartHandoffSummary(root string) string {
-	handoffPath := filepath.Join(state.GitStateDir(root), "runtime", "handoff.md")
-	if strings.TrimSpace(handoffPath) == "" {
+func sessionStartHandoffSummary(root, slug string) string {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
 		return ""
 	}
+	handoffPath := state.ChangeHandoffPath(root, slug)
 	present := "false"
 	if _, err := os.Stat(handoffPath); err == nil {
 		present = "true"

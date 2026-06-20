@@ -29,6 +29,7 @@ Slipway keeps these core surfaces separate:
 | `artifacts/changes/<slug>/*.md` | Intent, research, requirements, decisions, task plan, and assurance records. |
 | `artifacts/changes/<slug>/events/` and `verification/` | Bundle-local lifecycle traces and skill verification records. |
 | `.git/slipway/runtime/changes/<slug>/evidence/**` | Git-local runtime task evidence consumed by wave execution and freshness diagnostics. |
+| `.git/slipway/runtime/changes/<slug>/handoff.md` | Optional per-change advisory continuation notes; not lifecycle authority, evidence, freshness, or a gate. |
 | `artifacts/codebase/**` | Durable repo-scoped context for brownfield planning and review. |
 
 `status`, `validate`, and `next` recompute readiness without mutating state.

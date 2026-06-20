@@ -91,7 +91,8 @@ func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
 	flat := strings.Join(strings.Fields(content), " ")
 
 	assert.Contains(t, content, "## Runtime Session Handoff")
-	assert.Contains(t, flat, "Use `.git/slipway/runtime/handoff.md` only as advisory continuation notes for a fresh session.")
+	assert.Contains(t, flat, "Use `.git/slipway/runtime/changes/<slug>/handoff.md` only as advisory continuation notes for a fresh session on an active governed change.")
+	assert.Contains(t, flat, "Resolve `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from the handoff body.")
 	assert.Contains(t, content, "Author it as a compact narrative:")
 	assert.Contains(t, content, "- current position:")
 	assert.Contains(t, content, "- session work completed:")
@@ -107,7 +108,7 @@ func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
 	assert.Contains(t, content, "`next_skill.selected_review_skills`")
 	assert.Contains(t, content, "`confirmation_requirement.*`")
 	assert.Contains(t, flat, "do not infer a governed host from the handoff body")
-	assert.Contains(t, flat, "`handoff.md` is not lifecycle authority, governed evidence, freshness input, or a gate.")
+	assert.Contains(t, flat, "The per-change `handoff.md` is not lifecycle authority, governed evidence, freshness input, or a gate.")
 	assert.Contains(t, flat, "A fresh session must still run `slipway status --json` and `slipway next --json`")
 	assert.Contains(t, flat, "rely on CLI-owned freshness and evidence checks before advancing.")
 }
@@ -147,6 +148,8 @@ func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
 	}
 
 	flatRun := strings.Join(strings.Fields(runCommand), " ")
+	assert.Contains(t, flatRun, "per-change `.git/slipway/runtime/changes/<slug>/handoff.md`")
+	assert.Contains(t, flatRun, "Resolve `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from the handoff body.")
 	assert.Contains(t, flatRun, "using the workflow skill's Runtime Session Handoff contract.")
 	assert.Contains(t, flatRun, "The handoff is advisory only; it does not replace `slipway status --json`, `slipway next --json`, lifecycle gates, freshness, or evidence checks.")
 }

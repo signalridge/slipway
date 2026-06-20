@@ -270,6 +270,18 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Bulk finalization could not record a lifecycle event",
 	},
+	"legacy_runtime_handoff": {
+		Severity: ReasonSeverityWarning,
+		Message:  "A legacy repo-level runtime handoff file exists and requires manual migration",
+	},
+	"legacy_runtime_changes_dir": {
+		Severity: ReasonSeverityWarning,
+		Message:  "A retired repo-level runtime changes directory exists with content and requires manual inspection",
+	},
+	"legacy_runtime_changes_dir_empty": {
+		Severity: ReasonSeverityWarning,
+		Message:  "An empty retired repo-level runtime changes directory exists and can be cleaned by repair",
+	},
 	"list_changes_failed": {
 		Severity: ReasonSeverityError,
 		Message:  "Bulk finalization could not list active changes",
