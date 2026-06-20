@@ -36,8 +36,8 @@ type worktreeListProbe struct {
 }
 
 type worktreeListCacheEntry struct {
-	Probe     worktreeListProbe
-	Worktrees map[string]struct{}
+	Probe   worktreeListProbe
+	Records []gitWorktreeRecord
 }
 
 var worktreeListCache = struct {
@@ -465,11 +465,30 @@ func ParseWorktreePreflightReferences(references []string) (path string, branch 
 	return path, branch, baselineVerifyCmd, stringutil.UniqueSorted(reasons)
 }
 
+// listGitWorktrees returns the set of normalized worktree paths registered in
+// the repository. It projects the cached path+branch records to a path set so a
+// single porcelain listing serves both path and branch lookups per repo probe.
 func listGitWorktrees(repoRoot string) (map[string]struct{}, error) {
-	return listGitWorktreesCachedWithLister(repoRoot, listGitWorktreesUncached)
+	records, err := listGitWorktreeRecords(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return worktreeRecordPathSet(records)
 }
 
-func listGitWorktreesCachedWithLister(repoRoot string, lister func(string) (map[string]struct{}, error)) (map[string]struct{}, error) {
+func worktreeRecordPathSet(records []gitWorktreeRecord) (map[string]struct{}, error) {
+	set := make(map[string]struct{}, len(records))
+	for _, rec := range records {
+		normalized, err := NormalizePath(rec.Path)
+		if err != nil {
+			return nil, err
+		}
+		set[normalized] = struct{}{}
+	}
+	return set, nil
+}
+
+func listGitWorktreeRecordsCachedWithLister(repoRoot string, lister func(string) ([]gitWorktreeRecord, error)) ([]gitWorktreeRecord, error) {
 	normalizedRoot, err := NormalizePath(repoRoot)
 	if err != nil {
 		normalizedRoot = filepath.Clean(repoRoot)
@@ -480,11 +499,11 @@ func listGitWorktreesCachedWithLister(repoRoot string, lister func(string) (map[
 	entry, ok := worktreeListCache.entries[normalizedRoot]
 	if ok && worktreeListProbeMatches(entry.Probe, probeBefore) {
 		worktreeListCache.mu.Unlock()
-		return cloneWorktreeSet(entry.Worktrees), nil
+		return cloneWorktreeRecords(entry.Records), nil
 	}
 	worktreeListCache.mu.Unlock()
 
-	worktrees, err := lister(normalizedRoot)
+	records, err := lister(normalizedRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -493,16 +512,16 @@ func listGitWorktreesCachedWithLister(repoRoot string, lister func(string) (map[
 	worktreeListCache.mu.Lock()
 	if entry, ok := worktreeListCache.entries[normalizedRoot]; ok && worktreeListProbeMatches(entry.Probe, probeAfter) {
 		worktreeListCache.mu.Unlock()
-		return cloneWorktreeSet(entry.Worktrees), nil
+		return cloneWorktreeRecords(entry.Records), nil
 	}
 	if worktreeListProbeMatches(probeBefore, probeAfter) {
 		worktreeListCache.entries[normalizedRoot] = worktreeListCacheEntry{
-			Probe:     probeAfter,
-			Worktrees: cloneWorktreeSet(worktrees),
+			Probe:   probeAfter,
+			Records: cloneWorktreeRecords(records),
 		}
 	}
 	worktreeListCache.mu.Unlock()
-	return cloneWorktreeSet(worktrees), nil
+	return cloneWorktreeRecords(records), nil
 }
 
 func invalidateWorktreeListCache(repoRoot string) {
@@ -515,30 +534,13 @@ func invalidateWorktreeListCache(repoRoot string) {
 	worktreeListCache.mu.Unlock()
 }
 
-func listGitWorktreesUncached(repoRoot string) (map[string]struct{}, error) {
+func listGitWorktreeRecordsUncached(repoRoot string) ([]gitWorktreeRecord, error) {
 	cmd := exec.Command("git", "-C", repoRoot, "worktree", "list", "--porcelain") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("list git worktrees: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
-
-	worktrees := map[string]struct{}{}
-	lines := bytes.Split(out, []byte("\n"))
-	for _, line := range lines {
-		if len(line) == 0 {
-			continue
-		}
-		if !bytes.HasPrefix(line, []byte("worktree ")) {
-			continue
-		}
-		path := strings.TrimSpace(strings.TrimPrefix(string(line), "worktree "))
-		normalized, err := NormalizePath(path)
-		if err != nil {
-			return nil, err
-		}
-		worktrees[normalized] = struct{}{}
-	}
-	return worktrees, nil
+	return parseGitWorktreePorcelain(out), nil
 }
 
 // SlugWorktreeMatch describes a live git worktree (and its branch) whose
@@ -550,10 +552,11 @@ type SlugWorktreeMatch struct {
 	WorktreePath string
 	// Branch is the worktree's checked-out branch (empty for a detached HEAD).
 	Branch string
-	// SlipwayManaged is true only when the match follows Slipway's own
-	// .worktrees/<slug> path or feat/<slug> branch convention, i.e. a worktree
-	// Slipway itself provisioned. False marks an externally-managed worktree that
-	// recovery must never recommend removing.
+	// SlipwayManaged is true only when the match carries positive proof Slipway
+	// itself provisioned the worktree: BOTH its default .worktrees/<slug> path and
+	// its feat/<slug> branch. False marks an externally-managed worktree (e.g. one
+	// a user placed at .worktrees/<slug> on a hand-named branch) that recovery must
+	// never recommend removing.
 	SlipwayManaged bool
 }
 
@@ -594,14 +597,29 @@ func FindSlugWorktreeMatch(root, slug string) (match SlugWorktreeMatch, ok bool,
 		if nerr != nil {
 			normPath = filepath.Clean(rec.Path)
 		}
-		// The main checkout is never the slug's dedicated worktree.
+		// Skip the checkout we resolved from: the workspace root is never the
+		// slug's own dedicated worktree.
 		if normPath == normalizedRepoRoot {
 			continue
 		}
-		managed := normPath == defaultPath || rec.Branch == defaultBranch
-		if !managed && model.SlugifyTitle(rec.Branch) != slug {
+		branch := strings.TrimSpace(rec.Branch)
+		pathMatches := normPath == defaultPath
+		branchMatches := branch == defaultBranch
+		// A branch whose slugified identity equals slug also corresponds to the
+		// slug, but only when the worktree actually carries a branch: a detached
+		// HEAD has no branch and must not borrow SlugifyTitle's "change" fallback
+		// to collide with a literal "change" slug.
+		slugMatches := branch != "" && model.SlugifyTitle(branch) == slug
+		if !pathMatches && !branchMatches && !slugMatches {
 			continue
 		}
+		// Slipway-managed requires positive proof Slipway itself provisioned the
+		// worktree: BOTH its default .worktrees/<slug> path AND its feat/<slug>
+		// branch. A path or branch that merely coincides with the slug — e.g. an
+		// external worktree a user placed at .worktrees/<slug> on a hand-named
+		// branch (issue #285) — is NOT managed, and recovery must never recommend
+		// removing it.
+		managed := pathMatches && branchMatches
 		candidate := SlugWorktreeMatch{WorktreePath: normPath, Branch: rec.Branch, SlipwayManaged: managed}
 		if managed {
 			// A Slipway-managed worktree is the authoritative match; existing
@@ -624,15 +642,17 @@ type gitWorktreeRecord struct {
 	Branch string
 }
 
-// listGitWorktreeRecords parses `git worktree list --porcelain` into path+branch
-// records. Unlike listGitWorktrees it preserves each worktree's checked-out
-// branch so callers can map a worktree back to a change slug.
+// listGitWorktreeRecords returns each registered worktree's path and checked-out
+// branch (empty for a detached HEAD), cached behind the same repo probe as the
+// rest of the worktree listing so callers can map a worktree back to a change
+// slug without re-forking git.
 func listGitWorktreeRecords(repoRoot string) ([]gitWorktreeRecord, error) {
-	cmd := exec.Command("git", "-C", repoRoot, "worktree", "list", "--porcelain") // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("list git worktrees: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
+	return listGitWorktreeRecordsCachedWithLister(repoRoot, listGitWorktreeRecordsUncached)
+}
+
+// parseGitWorktreePorcelain parses `git worktree list --porcelain` output into
+// path+branch records. Paths are left as reported by git; callers normalize.
+func parseGitWorktreePorcelain(out []byte) []gitWorktreeRecord {
 	var records []gitWorktreeRecord
 	var current *gitWorktreeRecord
 	for _, raw := range bytes.Split(out, []byte("\n")) {
@@ -651,7 +671,7 @@ func listGitWorktreeRecords(repoRoot string) ([]gitWorktreeRecord, error) {
 	if current != nil {
 		records = append(records, *current)
 	}
-	return records, nil
+	return records
 }
 
 // ResolveGitWorkspaceRoot returns the git worktree root for root.
@@ -724,11 +744,12 @@ func worktreeListProbeMatches(a, b worktreeListProbe) bool {
 	return a.ModTime.Equal(b.ModTime) && slices.Equal(a.EntryNames, b.EntryNames)
 }
 
-func cloneWorktreeSet(in map[string]struct{}) map[string]struct{} {
-	out := make(map[string]struct{}, len(in))
-	for path := range in {
-		out[path] = struct{}{}
+func cloneWorktreeRecords(in []gitWorktreeRecord) []gitWorktreeRecord {
+	if in == nil {
+		return nil
 	}
+	out := make([]gitWorktreeRecord, len(in))
+	copy(out, in)
 	return out
 }
 

@@ -475,17 +475,27 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 	}
 	primarySlug := orphans[0]
 	// Before routing to a destructive discard, cross-check git worktrees/branches:
-	// if the slug names a live worktree Slipway does not manage, the residue maps to
+	// if a slug names a live worktree Slipway does not manage, the residue maps to
 	// externally-managed, possibly-unmerged work — recover non-destructively instead
 	// of recommending deletion of a worktree Slipway never provisioned (issue #285).
-	if match, ok, mErr := state.FindSlugWorktreeMatch(root, primarySlug); mErr == nil && ok && !match.SlipwayManaged {
+	//
+	// orphans carries a single slug when called for a specific change, but several
+	// when called with an empty slug (the no-target delete-recovery path), so scan
+	// every orphan and route whichever one names an unmanaged worktree to the
+	// non-destructive recovery for that exact slug before any orphan is folded into
+	// the plural discard guidance below.
+	for _, candidate := range orphans {
+		match, ok, mErr := state.FindSlugWorktreeMatch(root, candidate)
+		if mErr != nil || !ok || match.SlipwayManaged {
+			continue
+		}
 		return newCLIErrorWithReasons(
 			categoryPrecondition,
 			"orphaned_bundle_unmanaged_worktree",
-			fmt.Sprintf("governed bundle %q lost its change.yaml authority, but a live git worktree Slipway does not manage still holds work for this slug", primarySlug),
-			unmanagedWorktreeOrphanRemediation(primarySlug, match),
-			primarySlug,
-			[]model.ReasonCode{model.NewReasonCode("orphaned_bundle_unmanaged_worktree", primarySlug)},
+			fmt.Sprintf("governed bundle %q lost its change.yaml authority, but a live git worktree Slipway does not manage still holds work for this slug", candidate),
+			unmanagedWorktreeOrphanRemediation(candidate, match),
+			candidate,
+			[]model.ReasonCode{model.NewReasonCode("orphaned_bundle_unmanaged_worktree", candidate)},
 			map[string]any{
 				"unmanaged_worktree_path":   match.WorktreePath,
 				"unmanaged_worktree_branch": match.Branch,
