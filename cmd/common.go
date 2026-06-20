@@ -468,17 +468,158 @@ func deleteRecoveryError(root, slug string) *CLIError {
 	return staleRuntimeBindingError(root, slug)
 }
 
+// unmanagedOrphan pairs an orphan-bundle slug with the live, externally-managed
+// worktree match that makes its recovery non-destructive (issue #285).
+type unmanagedOrphan struct {
+	Slug  string
+	Match state.SlugWorktreeMatch
+}
+
+// unknownOrphan pairs an orphan-bundle slug with the git cross-check error that
+// prevented classifying whether a live worktree holds its work. Recovery must
+// fail closed: work whose ownership could not be verified is never routed to the
+// destructive discard path (issue #285).
+type unknownOrphan struct {
+	Slug string
+	Err  error
+}
+
+// orphanClassification splits orphan-bundle slugs into the unmanaged-worktree
+// case (preserve-first, never discard), the ownership-unknown case (the git
+// cross-check failed, so fail closed to preserve-first), and the plain
+// discardable residue.
+type orphanClassification struct {
+	Unmanaged []unmanagedOrphan
+	Unknown   []unknownOrphan
+	Plain     []string
+}
+
+// classifyOrphanBundles cross-checks each orphan slug against git
+// worktrees/branches so the destructive-discard decision is made per orphan, not
+// just for the first. A slug naming a live worktree Slipway does not manage maps
+// to externally-managed, possibly-unmerged work and is classified Unmanaged; a
+// slug whose git cross-check FAILS is classified Unknown and fails closed to
+// preserve-first (never the destructive discard path); a slug with no live
+// worktree (or one Slipway itself provisioned, which the discard path already
+// owns safely) is Plain. It is the single classifier shared by the CLI error and
+// status recovery surfaces so they never diverge (#285).
+type slugWorktreeMatcher func(root, slug string) (state.SlugWorktreeMatch, bool, error)
+
+func classifyOrphanBundles(root string, orphans []string) orphanClassification {
+	return classifyOrphanBundlesWith(root, orphans, state.FindSlugWorktreeMatch)
+}
+
+func classifyOrphanBundlesWith(root string, orphans []string, match slugWorktreeMatcher) orphanClassification {
+	var class orphanClassification
+	for _, slug := range orphans {
+		m, ok, err := match(root, slug)
+		if err != nil {
+			// Fail closed: a git worktree/branch cross-check failure means we cannot
+			// prove the slug's work is safe to discard, so it never enters the
+			// destructive discard path (#285).
+			class.Unknown = append(class.Unknown, unknownOrphan{Slug: slug, Err: err})
+			continue
+		}
+		if ok && !m.SlipwayManaged {
+			class.Unmanaged = append(class.Unmanaged, unmanagedOrphan{Slug: slug, Match: m})
+			continue
+		}
+		class.Plain = append(class.Plain, slug)
+	}
+	return class
+}
+
+func unmanagedOrphanSlugs(orphans []unmanagedOrphan) []string {
+	slugs := make([]string, 0, len(orphans))
+	for _, o := range orphans {
+		slugs = append(slugs, o.Slug)
+	}
+	return slugs
+}
+
+func unknownOrphanSlugs(orphans []unknownOrphan) []string {
+	slugs := make([]string, 0, len(orphans))
+	for _, o := range orphans {
+		slugs = append(slugs, o.Slug)
+	}
+	return slugs
+}
+
 func orphanedChangeBundleError(root, slug string) *CLIError {
 	orphans, err := orphanedChangeBundleSlugs(root, slug)
 	if err != nil || len(orphans) == 0 {
 		return nil
 	}
-	reasons := orphanedChangeBundleReasons(orphans)
-	primarySlug := orphans[0]
+	// orphans carries a single slug when called for a specific change, but several
+	// when called with an empty slug (the no-target delete-recovery path). Classify
+	// EVERY orphan so a mixed no-target recovery preserves a blocker for each one,
+	// instead of returning only the first unmanaged match and dropping the rest.
+	class := classifyOrphanBundles(root, orphans)
+
+	reasons := make([]model.ReasonCode, 0, len(orphans))
+	for _, u := range class.Unmanaged {
+		reasons = append(reasons, model.NewReasonCode("orphaned_bundle_unmanaged_worktree", u.Slug))
+	}
+	for _, u := range class.Unknown {
+		reasons = append(reasons, model.NewReasonCode("orphaned_bundle_ownership_unknown", u.Slug))
+	}
+	reasons = append(reasons, orphanedChangeBundleReasons(class.Plain)...)
+
+	// A non-destructive case (a live worktree Slipway does not manage, or one whose
+	// ownership could not be verified) is the dangerous one: it leads the error so
+	// its preserve-first remediation reaches the operator before any discardable
+	// residue is folded in. Unmanaged leads when present (it carries a concrete
+	// path/branch); otherwise the ownership-unknown case leads.
+	if len(class.Unmanaged) > 0 || len(class.Unknown) > 0 {
+		var (
+			errorCode   string
+			primarySlug string
+			message     string
+			remediation string
+		)
+		details := map[string]any{}
+		if len(class.Unmanaged) > 0 {
+			primary := class.Unmanaged[0]
+			errorCode = "orphaned_bundle_unmanaged_worktree"
+			primarySlug = primary.Slug
+			message = fmt.Sprintf("governed bundle %q lost its change.yaml authority, but a live git worktree Slipway does not manage still holds work for this slug", primary.Slug)
+			remediation = unmanagedWorktreeOrphanRemediation(primary.Slug, primary.Match)
+			details["unmanaged_worktree_path"] = primary.Match.WorktreePath
+			details["unmanaged_worktree_branch"] = primary.Match.Branch
+			details["unmanaged_worktree_orphans"] = unmanagedOrphanSlugs(class.Unmanaged)
+			if len(class.Unknown) > 0 {
+				unknown := unknownOrphanSlugs(class.Unknown)
+				details["ownership_unknown_orphans"] = unknown
+				remediation += fmt.Sprintf(" Ownership could not be verified for: %s (git worktree cross-check failed); inspect those for live worktrees and preserve any unmerged work before discarding anything.", strings.Join(unknown, ", "))
+			}
+		} else {
+			primary := class.Unknown[0]
+			errorCode = "orphaned_bundle_ownership_unknown"
+			primarySlug = primary.Slug
+			message = fmt.Sprintf("governed bundle %q lost its change.yaml authority and its git worktree ownership could not be verified", primary.Slug)
+			remediation = ownershipUnknownOrphanRemediation(primary.Slug, primary.Err)
+			details["ownership_unknown_orphans"] = unknownOrphanSlugs(class.Unknown)
+		}
+		if len(class.Plain) > 0 {
+			details["orphaned_change_bundles"] = class.Plain
+			remediation += fmt.Sprintf(" Separately, the abandoned residue with no live worktree can be discarded with `slipway delete --change %s` for: %s.", class.Plain[0], strings.Join(class.Plain, ", "))
+		}
+		return newCLIErrorWithReasons(
+			categoryPrecondition,
+			errorCode,
+			message,
+			remediation,
+			primarySlug,
+			reasons,
+			details,
+		)
+	}
+
+	primarySlug := class.Plain[0]
 	message := fmt.Sprintf("governed bundle %q is missing its change.yaml authority", primarySlug)
 	remediation := fmt.Sprintf("Discard it with `slipway delete --change %s` (add --worktree to also remove its worktree).", primarySlug)
-	if len(orphans) > 1 {
-		message = "governed bundles are missing their change.yaml authority: " + strings.Join(orphans, ", ")
+	if len(class.Plain) > 1 {
+		message = "governed bundles are missing their change.yaml authority: " + strings.Join(class.Plain, ", ")
 		remediation = fmt.Sprintf("Discard each abandoned change with `slipway delete --change <slug>`; first suggested command: `slipway delete --change %s`.", primarySlug)
 	}
 	return newCLIErrorWithReasons(
@@ -489,8 +630,36 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 		primarySlug,
 		reasons,
 		map[string]any{
-			"orphaned_change_bundles": orphans,
+			"orphaned_change_bundles": class.Plain,
 		},
+	)
+}
+
+// unmanagedWorktreeOrphanRemediation renders non-destructive recovery prose for
+// an orphan bundle whose slug names a live worktree Slipway does not manage. It
+// leads with inspect/preserve and never recommends removing that worktree.
+func unmanagedWorktreeOrphanRemediation(slug string, match state.SlugWorktreeMatch) string {
+	location := match.WorktreePath
+	if strings.TrimSpace(match.Branch) != "" {
+		location = fmt.Sprintf("%s (branch %s)", match.WorktreePath, match.Branch)
+	}
+	return fmt.Sprintf(
+		"A live git worktree Slipway does not manage holds work for %q at %s. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change %s` (never pass --worktree).",
+		slug, location, slug,
+	)
+}
+
+// ownershipUnknownOrphanRemediation renders preserve-first prose for an orphan
+// bundle whose git worktree ownership could not be verified (the cross-check
+// failed). It must never recommend `--worktree` and must lead with inspect/preserve.
+func ownershipUnknownOrphanRemediation(slug string, cause error) string {
+	detail := ""
+	if cause != nil {
+		detail = fmt.Sprintf(" (%v)", cause)
+	}
+	return fmt.Sprintf(
+		"A live git worktree may hold work for %q, but Slipway could not verify its ownership because the git worktree/branch cross-check failed%s. Do not discard this bundle yet: inspect for a live worktree or branch named after %q and preserve any unmerged work first. Once you have confirmed no unmerged work remains, discard only the stale bundle residue with `slipway delete --change %s` (never pass --worktree).",
+		slug, detail, slug, slug,
 	)
 }
 

@@ -54,6 +54,7 @@ type RecoveryClass string
 
 const (
 	RecoveryClassConfirmPreset   RecoveryClass = "confirm_preset"
+	RecoveryClassPreserveWork    RecoveryClass = "preserve_work"
 	RecoveryClassDiscardChange   RecoveryClass = "discard_change"
 	RecoveryClassNewChange       RecoveryClass = "new_change"
 	RecoveryClassSatisfyControl  RecoveryClass = "satisfy_control"
@@ -71,6 +72,10 @@ const (
 // higher priority for selecting the single primary command.
 var recoveryClassPriority = []RecoveryClass{
 	RecoveryClassConfirmPreset,
+	// PreserveWork outranks DiscardChange so that when a no-target recovery
+	// surfaces both an unmanaged-worktree orphan and a plain discardable orphan,
+	// the non-destructive preserve-first action is chosen as primary (#285).
+	RecoveryClassPreserveWork,
 	RecoveryClassNewChange,
 	RecoveryClassDiscardChange,
 	RecoveryClassSatisfyControl,
@@ -313,6 +318,31 @@ var blockerRemediations = map[string]blockerRemediation{
 		Remediation:     "Complete the governed workflow gates before finalizing this change.",
 		CommandTemplate: "slipway next",
 		Class:           RecoveryClassRerunSkill,
+	},
+	"orphaned_bundle_ownership_unknown": {
+		// Emitted as orphaned_bundle_ownership_unknown:<slug>. The bundle lost its
+		// change.yaml and the git worktree/branch cross-check that proves ownership
+		// FAILED, so we cannot show it is safe to discard. Fail closed: this is a
+		// PRESERVE-first recovery, never a discard. CommandTemplate is empty so no
+		// primary_command routes to `slipway delete`; the prose carries the action and
+		// never recommends --worktree.
+		Remediation:     "Governed bundle {subject} lost its change.yaml, and Slipway could not verify whether a live git worktree holds its work (the worktree cross-check failed). Do not discard it yet: inspect for a live worktree or branch named after {subject} and preserve any unmerged work first. Only after confirming no unmerged work remains, discard the stale residue with `slipway delete --change {subject}` (never pass --worktree).",
+		CommandTemplate: "",
+		Class:           RecoveryClassPreserveWork,
+	},
+	"orphaned_bundle_unmanaged_worktree": {
+		// Emitted as orphaned_bundle_unmanaged_worktree:<slug>. The bundle lost its
+		// change.yaml, but a live git worktree Slipway never provisioned still holds
+		// work for the slug. This is a PRESERVE-first recovery, not a discard: the
+		// structured surface must NOT route to `slipway delete` as the primary
+		// command and must NOT carry the discard_change class (#285). The CommandTemplate
+		// is deliberately empty — preservation is a manual, multi-step judgment with no
+		// single safe automated command — so primary_command is omitted and the prose
+		// carries the action. `slipway delete --change <slug>` survives only in prose as
+		// the FINAL residue cleanup after the work is saved, and never with --worktree.
+		Remediation:     "Governed bundle {subject} lost its change.yaml, but a live git worktree Slipway does not manage still holds work for this slug. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change {subject}` (never pass --worktree).",
+		CommandTemplate: "",
+		Class:           RecoveryClassPreserveWork,
 	},
 	"orphaned_change_bundle": {
 		// Emitted as orphaned_change_bundle:<slug>. The governed bundle directory
