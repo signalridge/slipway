@@ -214,13 +214,26 @@ func (s *StateLock) CleanupUnheldAnchorWithoutMeta() (bool, error) {
 	if !locked {
 		return false, nil
 	}
+
+	if runtime.GOOS == "windows" {
+		// Windows keeps the lock file open while the flock handle is held, so it
+		// cannot be removed until the handle is closed. Release the lock (which
+		// closes the handle) before removing. If a concurrent acquirer re-opens
+		// the anchor in the gap, os.Remove fails with a sharing violation; treat
+		// that as "not cleaned" rather than an error so best-effort hygiene does
+		// not fail the whole repair.
+		if err := fl.Unlock(); err != nil {
+			return false, err
+		}
+		if err := os.Remove(s.lockPath); err == nil {
+			return true, nil
+		}
+		return false, nil
+	}
+
 	defer func() {
 		_ = fl.Unlock()
 	}()
-
-	if runtime.GOOS == "windows" {
-		return false, nil
-	}
 	if err := os.Remove(s.lockPath); err == nil {
 		return true, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {

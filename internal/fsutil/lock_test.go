@@ -163,10 +163,6 @@ func TestCleanupStaleLockRequiresDeadHolderAndAge(t *testing.T) {
 
 func TestCleanupUnheldAnchorWithoutMetaRemovesOnlyUnlockedAnchor(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("windows cannot safely remove a locked anchor file while proving ownership")
-	}
-
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, "locks", "state.lock")
 	lock := NewStateLock(lockPath)
