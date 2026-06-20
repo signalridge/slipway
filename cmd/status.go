@@ -254,6 +254,25 @@ func makeStatusCmd() *cobra.Command {
 				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 			}
 
+			// When the invocation worktree hosts a local archived change, prefer it
+			// over a global active change bound to a different worktree. Otherwise
+			// unscoped status silently reports that unrelated active change as if it
+			// were local, switching the review context out from under an
+			// archived-change review (#283).
+			if change, ok, err := statusArchivedChangeForCurrentWorktree(root); err != nil {
+				return err
+			} else if ok {
+				effectiveView := resolveEffectiveFocus("status", explicitFocus)
+				hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
+				if hydrate {
+					hydrateKeys, err = selectHydrateKeys(hydrateKeys, hydrateRefs)
+					if err != nil {
+						return err
+					}
+				}
+				return showArchivedStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
+			}
+
 			changes, err := state.ListChanges(root)
 			if err != nil {
 				// A partially-deleted change (a governed bundle directory that
@@ -373,6 +392,21 @@ func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, er
 		return model.Change{}, false, nil
 	}
 	return model.Change{}, false, wrapResolutionError(err)
+}
+
+// statusArchivedChangeForCurrentWorktree resolves the archived change whose
+// dedicated worktree is the current invocation worktree, so unscoped status in
+// an archived-change worktree reports that local archived change instead of an
+// unrelated global active change bound elsewhere (#283).
+func statusArchivedChangeForCurrentWorktree(root string) (model.Change, bool, error) {
+	worktreePath, err := currentWorktreeRoot()
+	if err != nil {
+		return model.Change{}, false, wrapResolutionError(err)
+	}
+	if strings.TrimSpace(worktreePath) == "" {
+		return model.Change{}, false, nil
+	}
+	return state.FindArchivedChangeForWorktree(root, worktreePath)
 }
 
 func shouldFallbackStatusMultiSummary(err error) bool {

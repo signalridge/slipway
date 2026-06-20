@@ -323,6 +323,14 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 	if worktreePath != "" {
 		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
 		if err != nil {
+			// Before surfacing "no active change here" or "bound to another
+			// worktree", prefer this worktree's own archived change when it hosts
+			// one, so an archived-change worktree reports its own terminal state
+			// (archived_change_not_validatable) instead of an unrelated active
+			// change bound to a different worktree (#283).
+			if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr == nil && ok {
+				return resolveExplicitChange(root, archived.Slug)
+			}
 			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
 				return changeRef{}, recoveryErr
 			}
