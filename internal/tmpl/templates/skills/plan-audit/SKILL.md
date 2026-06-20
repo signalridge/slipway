@@ -154,7 +154,7 @@ dimension:
 2. **Completeness**: each task has objective, dependencies, and expected outputs.
 3. **Dependency Integrity**: every `depends_on` reference resolves and has no cycles, and every dependency is a real execution-order dependency — reject fabricated or narrative-only dependencies that needlessly serialize the computed waves.
 4. **Key Links**: each task names concrete `target_files` for the files or evidence targets it changes or verifies.
-5. **Scope Control**: task targets stay inside declared scope.
+5. **Scope Control**: task targets stay inside declared scope, and the plan's `target_files` cover the full edit set the tasks' own objectives force — not just the definition sites. When a `task_kind=code` task changes a shared or widely-referenced type or contract (adding a case to a non-exhaustive/non-sealed enum, reshaping a widely-constructed struct/record, or changing a shared signature), the consumer edits it forces — the exhaustive-match or construction sites that will otherwise stop compiling — must be owned by some task's `target_files` (this task or a dependent one). If no task claims that blast radius, S2 cannot satisfy both the post-wave integration gate and keeping `changed_files` covered by `target_files`, so the conflict only surfaces mid-implementation as a compile failure plus a latent scope escape. Size the blast radius from the codebase map and flag the under-scoped task here.
 6. **Context Compliance**: task metadata supports context-safe execution (`task_kind` where present).
 7. **Test Coverage Mapping**: acceptance criteria map to automated checks; new scaffolding is an explicit dependency.
 8. **Alternatives Considered**: required/present `decision.md` names at least 2 approaches, tradeoffs, and the selected approach.
