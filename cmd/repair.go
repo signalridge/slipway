@@ -602,6 +602,14 @@ func repairDriftNextAction(reason, target string) string {
 	switch {
 	case strings.Contains(lower, "evidence digest"), strings.Contains(lower, "required_skill_stale"):
 		return governanceDigestRunNextAction(target)
+	case strings.Contains(lower, "unknown metadata key"), strings.Contains(lower, "wave_plan_load_failed"):
+		// tasks.md is unparseable (an unsupported/unknown task metadata key, or a
+		// wave-plan derivation failure), so the wave plan cannot be rebuilt and
+		// advancing would just fail again: the operator must fix the governed
+		// tasks.md first. This is checked before the "wave plan" case so a
+		// rematerialization error that wraps the unknown-key cause still routes to
+		// fixing tasks.md rather than to a rebuild that cannot succeed.
+		return "edit tasks.md to fix or remove the unsupported metadata key, then re-run `slipway repair` / `slipway validate`"
 	case strings.Contains(lower, "wave plan"):
 		return "run `slipway repair` to rebuild wave-plan.yaml from current tasks.md, then run `slipway run` to refresh affected execution evidence"
 	case strings.Contains(lower, "execution summary"):
