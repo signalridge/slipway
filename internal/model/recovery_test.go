@@ -484,6 +484,24 @@ func TestBuildRecoveryUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
 	assert.Equal(t, RecoveryClassPreserveWork, got.Steps[0].RecoveryClass)
 }
 
+func TestBuildRecoveryOwnershipUnknownOrphanIsNonDestructive(t *testing.T) {
+	t.Parallel()
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("orphaned_bundle_ownership_unknown", "mystery-change"),
+	})
+	require.NotNil(t, got)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, RecoveryClassPreserveWork, got.RecoveryClass)
+	assert.Empty(t, got.PrimaryCommand)
+	assert.NotContains(t, got.PrimaryCommand, "slipway delete")
+	assert.Empty(t, got.Steps[0].Command)
+	// The prose must forbid the destructive escalation, never recommend it: it says
+	// "never pass --worktree" and must NOT carry the "add --worktree" escalation.
+	assert.NotContains(t, got.PrimaryAction, "add --worktree")
+	assert.Contains(t, got.PrimaryAction, "never pass --worktree")
+	assert.Contains(t, got.PrimaryAction, "mystery-change")
+}
+
 func TestBuildRecoveryUnmanagedOrphanOutranksPlainDiscard(t *testing.T) {
 	t.Parallel()
 

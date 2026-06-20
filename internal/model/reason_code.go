@@ -338,6 +338,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The governed change is not ready for finalization",
 	},
+	"orphaned_bundle_ownership_unknown": {
+		Severity: ReasonSeverityError,
+		Message:  "A governed bundle lost its change.yaml authority and its live-worktree ownership could not be verified",
+	},
 	"orphaned_bundle_unmanaged_worktree": {
 		Severity: ReasonSeverityError,
 		Message:  "A governed bundle lost its change.yaml authority but a live worktree Slipway does not manage holds work for its slug",

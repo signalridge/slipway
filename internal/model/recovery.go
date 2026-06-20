@@ -319,6 +319,17 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway next",
 		Class:           RecoveryClassRerunSkill,
 	},
+	"orphaned_bundle_ownership_unknown": {
+		// Emitted as orphaned_bundle_ownership_unknown:<slug>. The bundle lost its
+		// change.yaml and the git worktree/branch cross-check that proves ownership
+		// FAILED, so we cannot show it is safe to discard. Fail closed: this is a
+		// PRESERVE-first recovery, never a discard. CommandTemplate is empty so no
+		// primary_command routes to `slipway delete`; the prose carries the action and
+		// never recommends --worktree.
+		Remediation:     "Governed bundle {subject} lost its change.yaml, and Slipway could not verify whether a live git worktree holds its work (the worktree cross-check failed). Do not discard it yet: inspect for a live worktree or branch named after {subject} and preserve any unmerged work first. Only after confirming no unmerged work remains, discard the stale residue with `slipway delete --change {subject}` (never pass --worktree).",
+		CommandTemplate: "",
+		Class:           RecoveryClassPreserveWork,
+	},
 	"orphaned_bundle_unmanaged_worktree": {
 		// Emitted as orphaned_bundle_unmanaged_worktree:<slug>. The bundle lost its
 		// change.yaml, but a live git worktree Slipway never provisioned still holds

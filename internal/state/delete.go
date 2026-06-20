@@ -270,6 +270,17 @@ func planWorktreeTargetWithResolver(root, slug string, opts DeleteOptions, resol
 		target.Reason = "bound worktree directory is already missing; git worktree metadata will be removed"
 		return target
 	}
+	provisioned, perr := worktreeIsSlipwayProvisioned(root, slug, worktreePath)
+	if perr != nil {
+		target.Action = DeleteActionRefused
+		target.Reason = fmt.Sprintf("cannot verify whether Slipway provisioned this worktree: %v", perr)
+		return target
+	}
+	if !provisioned {
+		target.Action = DeleteActionRefused
+		target.Reason = "refusing to remove a worktree Slipway did not provision (not .worktrees/<slug> on feat/<slug>); preserve it or remove it yourself — Slipway never removes a worktree it did not provision"
+		return target
+	}
 	refusal, derr := worktreeRemovalRefusalReason(worktreePath, slug, opts.Force)
 	if derr != nil {
 		target.Action = DeleteActionRefused
@@ -373,6 +384,37 @@ func RemoveChangeWorktree(root, slug, worktreePath string, force bool) error {
 	_ = exec.Command("git", "-C", repoRoot, "worktree", "prune").Run() // #nosec G204 -- command and arguments are constructed by Slipway helpers and executed without shell interpolation.
 	invalidateWorktreeListCache(repoRoot)
 	return nil
+}
+
+// worktreeIsSlipwayProvisioned reports whether the worktree at worktreePath is one
+// Slipway itself provisioned for slug: positive proof is BOTH its default
+// .worktrees/<slug> path AND its feat/<slug> branch. Anything else is treated as
+// externally managed and must never be removed by `slipway delete --worktree`,
+// even with --force (issue #285). A non-git context yields (false, nil).
+func worktreeIsSlipwayProvisioned(root, slug, worktreePath string) (bool, error) {
+	repoRoot, err := gitWorkspaceRoot(root)
+	if err != nil {
+		if gitCommandReportsNotRepository(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defaultPath, err := NormalizePath(DefaultWorktreePath(repoRoot, slug))
+	if err != nil {
+		return false, err
+	}
+	normalized, err := NormalizePath(worktreePath)
+	if err != nil {
+		normalized = filepath.Clean(worktreePath)
+	}
+	if normalized != defaultPath {
+		return false, nil
+	}
+	branch, err := resolveWorktreeActualBranch(worktreePath)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(branch) == DefaultWorktreeBranch(slug), nil
 }
 
 // resolveChangeWorktreePath returns the bound worktree path for slug, reading

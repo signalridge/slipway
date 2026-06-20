@@ -184,6 +184,30 @@ func TestFindSlugWorktreeMatch_ExternalSlugifiedBranchCustomPath(t *testing.T) {
 	assert.Equal(t, normalize(t, customPath), match.WorktreePath)
 }
 
+// TestFindSlugWorktreeMatch_ExternalFeatBranchCustomPath covers branchMatches &&
+// !pathMatches: a worktree on the EXACT feat/<slug> branch but at a CUSTOM path.
+// SlugifyTitle("feat/<slug>") != slug, so ONLY the exact-branch rule makes it
+// correspond; a custom path is no proof Slipway provisioned it -> not managed.
+func TestFindSlugWorktreeMatch_ExternalFeatBranchCustomPath(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+
+	const slug = "demo"
+	branch := DefaultWorktreeBranch(slug) // feat/demo
+	require.NotEqual(t, slug, model.SlugifyTitle(branch),
+		"feat/<slug> must NOT slugify back to slug, so only branchMatches can match")
+
+	customPath := addCustomWorktree(t, root, "feat-elsewhere", branch)
+
+	match, ok, err := FindSlugWorktreeMatch(root, slug)
+	require.NoError(t, err)
+	require.True(t, ok, "a custom-path worktree on the exact feat/<slug> branch must correspond")
+	assert.False(t, match.SlipwayManaged, "a custom path is no proof Slipway provisioned the worktree")
+	assert.Equal(t, branch, match.Branch)
+	assert.Equal(t, normalize(t, customPath), match.WorktreePath)
+}
+
 // TestFindSlugWorktreeMatch_BranchSwitchInvalidatesCache is the regression for
 // the worktree-list cache probe: an in-place branch switch (no worktree
 // add/remove) rewrites .git/worktrees/<entry>/HEAD but leaves the entry set and

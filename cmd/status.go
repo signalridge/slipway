@@ -462,6 +462,10 @@ func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
 		view.Diagnostics = append(view.Diagnostics, unmanagedWorktreeOrphanRemediation(u.Slug, u.Match))
 		view.Blockers = append(view.Blockers, model.NewReasonCode("orphaned_bundle_unmanaged_worktree", u.Slug))
 	}
+	for _, u := range class.Unknown {
+		view.Diagnostics = append(view.Diagnostics, ownershipUnknownOrphanRemediation(u.Slug, u.Err))
+		view.Blockers = append(view.Blockers, model.NewReasonCode("orphaned_bundle_ownership_unknown", u.Slug))
+	}
 	for _, slug := range class.Plain {
 		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(
 			"governed bundle %q is missing its change.yaml authority; discard it with `slipway delete --change %s`",

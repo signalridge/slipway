@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestClassifyOrphanBundlesFailsClosedOnMatcherError proves the injectable
+// classifier never lands a cross-check failure in the discardable Plain bucket:
+// ownership it cannot verify must fail closed into Unknown (#285).
+func TestClassifyOrphanBundlesFailsClosedOnMatcherError(t *testing.T) {
+	failing := func(_, slug string) (state.SlugWorktreeMatch, bool, error) {
+		return state.SlugWorktreeMatch{}, false, errors.New("git worktree list failed")
+	}
+	class := classifyOrphanBundlesWith("/does/not/matter", []string{"mystery-slug"}, failing)
+	require.Empty(t, class.Plain, "a cross-check error must NOT land in the discardable Plain bucket")
+	require.Empty(t, class.Unmanaged)
+	require.Len(t, class.Unknown, 1)
+	assert.Equal(t, "mystery-slug", class.Unknown[0].Slug)
+}
 
 // orphanRecoveryWorkspace creates a real git repo (so git worktree records are
 // queryable by FindSlugWorktreeMatch), initializes the Slipway workspace, and
@@ -99,6 +114,15 @@ func TestOrphanedChangeBundleErrorUnmanagedWorktreeRoute(t *testing.T) {
 	require.NotNil(t, cliErr.Details)
 	assert.Equal(t, match.WorktreePath, cliErr.Details["unmanaged_worktree_path"])
 	assert.Equal(t, externalBranch, cliErr.Details["unmanaged_worktree_branch"])
+
+	// A single-unmanaged case must NOT also fold in the plain discard reason or
+	// details: there is no discardable residue here, only the preserved worktree.
+	for _, r := range cliErr.Reasons {
+		assert.NotEqual(t, "orphaned_change_bundle", string(r.Code),
+			"a single unmanaged orphan must not carry the plain discard reason")
+	}
+	assert.Nil(t, cliErr.Details["orphaned_change_bundles"],
+		"a single unmanaged orphan must not carry plain discard details")
 }
 
 // TestOrphanedChangeBundleErrorManagedWorktreeRoute confirms a worktree Slipway
@@ -182,6 +206,23 @@ func assertNonDestructiveUnmanagedRecovery(t *testing.T, payload map[string]any,
 
 	assert.NotContains(t, stdout, "add --worktree", "must never suggest the destructive --worktree escalation")
 	assert.Contains(t, stdout, "never pass --worktree")
+
+	// The single-unmanaged status case carries no plain discard blocker, and no
+	// recovery step may route to the destructive discard.
+	assert.False(t, statusBlockerHasCode(t, payload, "orphaned_change_bundle"),
+		"a single unmanaged orphan must not surface the plain discard blocker")
+	steps, _ := recovery["steps"].([]any)
+	for _, s := range steps {
+		sm, ok := s.(map[string]any)
+		if !ok {
+			continue
+		}
+		assert.NotEqual(t, "discard_change", sm["recovery_class"],
+			"no recovery step may be classed discard_change for a preserved worktree")
+		cmd, _ := sm["command"].(string)
+		assert.NotContains(t, cmd, "slipway delete",
+			"no recovery step command may route to the destructive discard")
+	}
 }
 
 // TestStatusJSONUnmanagedWorktreeOrphanIsNonDestructive is the #285 status --json
@@ -221,4 +262,38 @@ func TestStatusJSONUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
 	assert.True(t, statusBlockerHasCode(t, payload, "orphaned_bundle_unmanaged_worktree"),
 		"explicit blockers must include the orphaned_bundle_unmanaged_worktree reason")
 	assertNonDestructiveUnmanagedRecovery(t, payload, stdout)
+}
+
+// TestOrphanedChangeBundleErrorMixedOrphansClassifyEach is the #285 no-target
+// path: an unmanaged-worktree orphan AND a plain discardable orphan together.
+// The error must LEAD with the non-destructive unmanaged case, keep a reason for
+// EACH orphan, and name the CONCRETE plain slug in the residue prose (never a
+// literal "<slug>").
+func TestOrphanedChangeBundleErrorMixedOrphansClassifyEach(t *testing.T) {
+	root := orphanRecoveryWorkspace(t)
+	const unmanaged = "fix-283"
+	const plain = "lonely-slug"
+	writeOrphanBundle(t, root, unmanaged)
+	writeOrphanBundle(t, root, plain)
+	addWorktreeOnBranch(t, root, state.DefaultWorktreePath(root, unmanaged), "fix/issue-283-archived-worktree-resolution")
+
+	cliErr := orphanedChangeBundleError(root, "") // empty slug -> all orphans
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "orphaned_bundle_unmanaged_worktree", cliErr.ErrorCode, "the non-destructive case must lead")
+
+	codes := map[string]bool{}
+	for _, r := range cliErr.Reasons {
+		codes[string(r.Code)] = true
+	}
+	assert.True(t, codes["orphaned_bundle_unmanaged_worktree"], "unmanaged orphan keeps its reason")
+	assert.True(t, codes["orphaned_change_bundle"], "plain orphan must not be dropped")
+
+	require.NotNil(t, cliErr.Details)
+	assert.Contains(t, cliErr.Details["unmanaged_worktree_orphans"], unmanaged)
+	assert.Contains(t, cliErr.Details["orphaned_change_bundles"], plain)
+
+	// F5: residue prose names the concrete plain slug, never a literal placeholder.
+	assert.Contains(t, cliErr.Remediation, "slipway delete --change "+plain)
+	assert.NotContains(t, cliErr.Remediation, "--change <slug>")
+	assert.Contains(t, cliErr.Remediation, "never pass --worktree")
 }

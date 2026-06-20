@@ -119,6 +119,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"not_done_ready",
 		"orphan_bundle_directory",
 		"orphan_task_evidence",
+		"orphaned_bundle_ownership_unknown",
 		"orphaned_bundle_unmanaged_worktree",
 		"orphaned_change_bundle",
 		"parallel_wave_changed_file_overlap",
