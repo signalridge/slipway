@@ -1,0 +1,39 @@
+version: 1
+slug: fix-issue-275-residual-root-cause-slipway-repair-drift-next
+description: 'Fix issue #275 residual root cause: slipway repair drift next_action falls through to a misleading "run slipway run" suggestion for tasks.md parse-failure drift (unknown metadata key / wave_plan_load_failed). Add a dedicated repairDriftNextAction case so such drift routes to fix-tasks.md guidance aligned with validate/run remediation, plus a regression test.'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-20T03:26:07.844946Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-issue-275-residual-root-cause-slipway-repair-drift-next
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 114a5e90ff2f8674e8ab2c78b70ad34c22fb87ae90b6aebcabc5e2da1600903a
+        updated_at: 2026-06-20T05:01:14.306668922Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: e823fd5e0b15b1f4d0f91a0a802758fd729ac64158a5f26cc82c16dce6e694c3
+        updated_at: 2026-06-20T05:07:25.900063082Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 36a23a103525a994497f5a74f00a4b0d3f619921ba794101daa928320d4987ee
+        updated_at: 2026-06-20T05:34:20.703455618Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/code-quality-review.yaml
+    goal-verification: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/goal-verification.yaml
+    independent-review: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-issue-275-residual-root-cause-slipway-repair-drift-next/artifacts/changes/fix-issue-275-residual-root-cause-slipway-repair-drift-next/verification/wave-orchestration.yaml
