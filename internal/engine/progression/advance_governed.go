@@ -22,6 +22,7 @@ import (
 const planAuditLastCheckerFeedbackKey = "plan_audit.last_checker_feedback"
 
 var applyGovernedFileTransaction = fsutil.ApplyFileTransaction
+var appendLifecycleEvent = state.AppendLifecycleEvent
 
 func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary AdvanceSummary, err error) {
 	var options AdvanceOptions
@@ -577,7 +578,7 @@ func autoConfirmPendingPreset(root string, change *model.Change, auto bool, poli
 	if command == "" {
 		command = "advance"
 	}
-	if _, err := state.AppendLifecycleEvent(root, *change, state.LifecycleEvent{
+	if _, err := appendLifecycleEvent(root, *change, state.LifecycleEvent{
 		Command:       command,
 		EventType:     "preset.changed",
 		Action:        "confirmed",
@@ -592,6 +593,11 @@ func autoConfirmPendingPreset(root string, change *model.Change, auto bool, poli
 			{Kind: "auto_preset_confirmed", Detail: fmt.Sprintf("%s->%s", beforePreset, change.WorkflowPreset)},
 		},
 	}); err != nil {
+		change.WorkflowPreset = ""
+		change.SuggestedWorkflowPreset = beforePreset
+		if restoreErr := state.SaveChange(root, *change); restoreErr != nil {
+			return false, errors.Join(err, restoreErr)
+		}
 		return false, err
 	}
 
@@ -817,11 +823,11 @@ func recordAdvanceLifecycleEvent(root string, before, after model.Change, summar
 		SideEffects:   lifecycleSideEffects(summary.SideEffects),
 		ClearedFields: append([]string(nil), summary.ClearedFields...),
 	}
-	if _, err := state.AppendLifecycleEvent(root, after, event); err != nil {
+	if _, err := appendLifecycleEvent(root, after, event); err != nil {
 		return err
 	}
 	for _, derived := range derivedAdvanceLifecycleEvents(root, after, event, summary) {
-		if _, err := state.AppendLifecycleEvent(root, after, derived); err != nil {
+		if _, err := appendLifecycleEvent(root, after, derived); err != nil {
 			return err
 		}
 	}

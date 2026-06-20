@@ -60,7 +60,7 @@ type nextView struct {
 	// selection is reported as a locked or pending skill_constraint (issue #140).
 	planLocked bool
 	// auto records whether auto-advance execution is in effect for this view. It is
-	// unexported (never serialized) and only softens pure-pacing host confirmation
+	// unexported (never serialized) and only softens pure-pacing confirmation
 	// boundaries in deriveConfirmationRequirement for non-guardrail changes; it
 	// never weakens an evidence gate or a guardrail/sensitive boundary.
 	auto bool
@@ -688,11 +688,12 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 }
 
 func deriveConfirmationRequirement(view nextView) confirmationRequirement {
-	// Auto softens pure-pacing host confirmation boundaries (review_batch and a
-	// non-sensitive skill_handoff) into a standing-authorization continuation, but
-	// only when the change is NOT in a guardrail/sensitive domain. Preset,
-	// resume_checkpoint, and decision boundaries are NOT pure pacing, so they keep
-	// their hard_stop even under auto.
+	// Auto softens pure-pacing confirmation boundaries (review_batch, a
+	// non-sensitive skill_handoff, and a fresh non-sensitive human_verify
+	// checkpoint) into a standing-authorization continuation, but only when the
+	// change is NOT in a guardrail/sensitive domain. Preset, decision,
+	// human_action, stale-checkpoint, and evidence-gate boundaries keep their
+	// hard_stop even under auto.
 	autoSoftens := view.auto && !isGuardrailSensitive(view.GuardrailDomain)
 	switch {
 	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
@@ -702,6 +703,12 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 			return autoAcknowledgedHumanVerifyContinuation()
 		}
 		return confirmationHardStop("resume_checkpoint")
+	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
+		return confirmationCommandRequired("run_slipway_done_to_finalize")
+	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
+		return confirmationCommandRequired("run_slipway_run_to_advance")
+	case hasNonPacingBlocker(view):
+		return confirmationGovernanceBlocked()
 	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
 		if autoSoftens {
 			return autoStandingAuthorization("review_batch")
@@ -718,10 +725,6 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 			return autoStandingAuthorization(reason)
 		}
 		return confirmationHardStop(reason)
-	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
-		return confirmationCommandRequired("run_slipway_done_to_finalize")
-	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
-		return confirmationCommandRequired("run_slipway_run_to_advance")
 	case len(view.Blockers) > 0:
 		return confirmationCommandRequired("blocked_by_governance")
 	case len(view.AutoPassEligible) > 0:
@@ -742,6 +745,66 @@ func hasReasonCode(reasons []model.ReasonCode, code string) bool {
 		}
 	}
 	return false
+}
+
+func hasNonPacingBlocker(view nextView) bool {
+	for _, reason := range view.Blockers {
+		if confirmationBlockerCanRideHostHandoff(reason, view) {
+			continue
+		}
+		switch strings.TrimSpace(reason.Code) {
+		case "", "run_slipway_done_to_finalize", "run_slipway_run_to_advance", "no_skill_required":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+func confirmationBlockerCanRideHostHandoff(reason model.ReasonCode, view nextView) bool {
+	code := strings.TrimSpace(reason.Code)
+	if isRequiredSkillBlocker(code) || code == "review_alignment_required" {
+		return true
+	}
+	if !reviewCompanionBlockersCanRide(view) {
+		return false
+	}
+	switch code {
+	case "governance_action_required",
+		"closeout_assurance_attestation_missing",
+		"closeout_reviewer_independence_missing",
+		"context_origin_handle_invalid",
+		"high_risk_check_missing",
+		"verification_evidence_missing":
+		return true
+	default:
+		return false
+	}
+}
+
+func reviewCompanionBlockersCanRide(view nextView) bool {
+	if view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0 {
+		return true
+	}
+	if view.NextSkill == nil {
+		return false
+	}
+	name := strings.TrimSpace(view.NextSkill.BlockingName)
+	if name == "" {
+		name = strings.TrimSpace(view.NextSkill.Name)
+	}
+	switch name {
+	case progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillGoalVerification,
+		progression.SkillSecurityReview,
+		progression.SkillFinalCloseout:
+		return true
+	default:
+		return false
+	}
 }
 
 func confirmationHardStop(reason string) confirmationRequirement {
@@ -771,6 +834,18 @@ func confirmationCommandRequired(reason string) confirmationRequirement {
 		NextAction:                   commandBoundaryNextAction(reason),
 		NextActionKind:               kind,
 		NextCommand:                  command,
+	}
+}
+
+func confirmationGovernanceBlocked() confirmationRequirement {
+	return confirmationRequirement{
+		Required:                     true,
+		Boundary:                     "hard_stop",
+		FreshConfirmationRequired:    true,
+		PriorAuthorizationSufficient: false,
+		Reason:                       "blocked_by_governance",
+		NextAction:                   "resolve governance blockers before continuing",
+		NextActionKind:               "blocker_resolution",
 	}
 }
 

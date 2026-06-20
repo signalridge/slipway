@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -321,6 +322,67 @@ func TestAdvanceGoverned_AutoConfirmsPendingPresetInGuardrailDomain(t *testing.T
 	}
 	if !hasLifecycleReason(events, "auto_preset_confirmed") {
 		t.Fatalf("expected an auto_preset_confirmed lifecycle event, got %+v", events)
+	}
+}
+
+func TestAutoConfirmPendingPresetRollsBackWhenLifecycleEventAppendFails(t *testing.T) {
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("auto-preset-event-rollback")
+	change.CurrentState = model.StateS0Intake
+	change.IntakeSubStep = model.IntakeSubStepClarify
+	change.WorkflowPreset = ""
+	change.SuggestedWorkflowPreset = model.WorkflowPresetStrict
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+	writeAutoPresetIntent(t, root, change.Slug)
+
+	appendErr := errors.New("append lifecycle event failed")
+	originalAppend := appendLifecycleEvent
+	appendLifecycleEvent = func(string, model.Change, state.LifecycleEvent) (state.LifecycleEvent, error) {
+		return state.LifecycleEvent{}, appendErr
+	}
+	defer func() {
+		appendLifecycleEvent = originalAppend
+	}()
+
+	confirmed, err := autoConfirmPendingPreset(
+		root,
+		&change,
+		true,
+		governance.PresetPolicy{EffectivePreset: model.WorkflowPresetStrict},
+		"run",
+	)
+	if !errors.Is(err, appendErr) {
+		t.Fatalf("expected append error, got %v", err)
+	}
+	if confirmed {
+		t.Fatal("expected failed auto-confirm when lifecycle event append fails")
+	}
+	if change.WorkflowPreset != "" || change.SuggestedWorkflowPreset != model.WorkflowPresetStrict {
+		t.Fatalf("expected in-memory preset restored to pending, got preset=%q suggested=%q",
+			change.WorkflowPreset, change.SuggestedWorkflowPreset)
+	}
+
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.WorkflowPreset != "" || reloaded.SuggestedWorkflowPreset != model.WorkflowPresetStrict {
+		t.Fatalf("expected persisted preset restored to pending, got preset=%q suggested=%q",
+			reloaded.WorkflowPreset, reloaded.SuggestedWorkflowPreset)
+	}
+
+	events, err := state.ReadLifecycleEvents(root, reloaded)
+	if err != nil {
+		t.Fatalf("read lifecycle events: %v", err)
+	}
+	if hasLifecycleReason(events, "auto_preset_confirmed") {
+		t.Fatalf("failed auto-confirm must not record auto_preset_confirmed, got %+v", events)
 	}
 }
 

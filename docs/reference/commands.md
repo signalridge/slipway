@@ -103,6 +103,11 @@ slipway run --json --diagnostics
 If a mutation fails closed, rerun the current read-only checks and follow the
 named recovery command.
 
+Config-level `execution.auto` applies to `intake`, `plan`, and `implement`.
+Those stage commands do not accept per-invocation `--auto` or `--no-auto`
+override flags; use `slipway run --auto` or `slipway run --no-auto` when one-run
+override behavior is needed.
+
 ## Run Auto Mode
 
 `slipway run` can auto-advance pure-pacing pauses so a governed change keeps

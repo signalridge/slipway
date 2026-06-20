@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,6 +158,16 @@ func TestRunCmdRejectsBothAutoAndNoAuto(t *testing.T) {
 	// time via ValidateFlagGroups.
 	require.NoError(t, err)
 	require.Error(t, cmd.ValidateFlagGroups())
+
+	cmd = makeRunCmd()
+	cmd.SetArgs([]string{"--auto", "--no-auto"})
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auto")
+	assert.Contains(t, err.Error(), "no-auto")
 }
 
 // (b) auto + non-guardrail softens review_batch and skill_handoff to a
@@ -194,6 +205,134 @@ func TestDeriveConfirmationRequirementAutoSoftensNonGuardrail(t *testing.T) {
 		assert.False(t, req.FreshConfirmationRequired)
 		assert.Contains(t, req.Reason, "skill_handoff")
 		assert.NotEmpty(t, req.NextAction)
+	})
+}
+
+func TestDeriveConfirmationRequirementAutoDoesNotSoftenNonPacingBlockers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sensitive evidence blocker wins over skill handoff", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			NextSkill:       &nextSkillView{Name: "wave-orchestration"},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("sensitive_evidence_missing", "schema_migration:db/migrations/001.sql"),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "blocked_by_governance", req.Reason)
+		assert.Equal(t, "blocker_resolution", req.NextActionKind)
+	})
+
+	t.Run("scope contract blocker wins over review batch", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			ReviewBatch: &reviewBatchView{
+				Skills: []reviewBatchSkillView{{Name: "spec-compliance-review"}},
+			},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("scope_contract_drift", "cmd/next.go"),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "blocked_by_governance", req.Reason)
+		assert.Equal(t, "blocker_resolution", req.NextActionKind)
+	})
+
+	t.Run("required skill blocker still rides skill handoff", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			NextSkill:       &nextSkillView{Name: "wave-orchestration"},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("required_skill_missing", "wave-orchestration"),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "evidence_continuation", req.Boundary)
+		assert.True(t, req.PriorAuthorizationSufficient)
+		assert.False(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "skill_handoff:wave-orchestration", req.Reason)
+	})
+
+	t.Run("domain review action rides review batch only", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: model.GuardrailDomainAuthAuthZ,
+			ReviewBatch: &reviewBatchView{
+				Skills: []reviewBatchSkillView{{Name: "security-review"}},
+			},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("closeout_assurance_attestation_missing", ""),
+				model.NewReasonCode("closeout_reviewer_independence_missing", ""),
+				model.NewReasonCode("context_origin_handle_invalid", "spec-compliance-review"),
+				model.NewReasonCode("governance_action_required", "domain-review: run domain-aware review"),
+				model.NewReasonCode("high_risk_check_missing", "auth_authz.safety_baseline"),
+				model.NewReasonCode("verification_evidence_missing", ""),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "review_batch", req.Reason)
+		assert.Equal(t, "review_batch", req.NextActionKind)
+	})
+
+	t.Run("domain review action without review batch stays blocker", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			NextSkill:       &nextSkillView{Name: "wave-orchestration"},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("governance_action_required", "domain-review: run domain-aware review"),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "blocked_by_governance", req.Reason)
+		assert.Equal(t, "blocker_resolution", req.NextActionKind)
+	})
+
+	t.Run("review companion blockers ride goal verification handoff", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:      false,
+			NextSkill: &nextSkillView{Name: "goal-verification"},
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("closeout_assurance_attestation_missing", ""),
+				model.NewReasonCode("closeout_reviewer_independence_missing", ""),
+				model.NewReasonCode("high_risk_check_missing", "auth_authz.safety_baseline"),
+				model.NewReasonCode("verification_evidence_missing", ""),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "skill_handoff:goal-verification", req.Reason)
+		assert.Equal(t, "skill_handoff", req.NextActionKind)
 	})
 }
 
@@ -311,53 +450,50 @@ func TestDeriveConfirmationRequirementResumeCheckpointAutoMatrix(t *testing.T) {
 	})
 }
 
+func setupAutoModeCheckpoint(t *testing.T, guardrail, checkpointType string, fresh bool) (string, string, changeRef) {
+	t.Helper()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+	slug := createGovernedRequest(t, root, "L2", "auto ack entry "+checkpointType+" "+guardrail)
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = guardrail
+	require.NoError(t, state.SaveChange(root, change))
+	plan, err := state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	require.NotEmpty(t, plan.Waves)
+	require.NotEmpty(t, plan.Waves[0].Tasks)
+	taskID := plan.Waves[0].Tasks[0].TaskID
+	change.ActiveCheckpoint = &model.ActiveCheckpoint{
+		PausedTaskID:    taskID,
+		PausedWaveIndex: plan.Waves[0].WaveIndex,
+		CheckpointType:  checkpointType,
+	}
+	if model.CheckpointKind(checkpointType) == model.CheckpointDecision {
+		change.ActiveCheckpoint.AllowedResponses = []string{"approve", "reject"}
+	}
+	require.NoError(t, state.SaveChange(root, change))
+	if fresh {
+		writePassingExecutionSummary(t, root, slug, 1, taskID)
+		// The injected-response entry path validates active-checkpoint authority
+		// against the wave plan, which requires materialized wave run evidence.
+		writePassingWaveEvidence(t, root, slug, 1)
+	}
+	return root, slug, changeRef{Slug: slug}
+}
+
 // (d) ENTRY-LEVEL: auto-ack injects a response only for a non-guardrail
 // human_verify checkpoint; decision/human_action/guardrail stay manual.
 func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 	t.Parallel()
 
-	// setupCheckpoint builds an S2_IMPLEMENT change paused on the given checkpoint
-	// kind/guardrail. When fresh is true it also writes a passing execution summary
-	// for the paused task so projectFreshnessForExecMode reports "fresh"; otherwise
-	// the freshness stays unknown and the human_verify auto-ack gate fails closed.
-	setupCheckpoint := func(t *testing.T, guardrail, checkpointType string, fresh bool) (string, string, changeRef) {
-		t.Helper()
-		root := t.TempDir()
-		ensureTestGitRepo(t, root)
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "auto ack entry "+checkpointType+" "+guardrail)
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.GuardrailDomain = guardrail
-		require.NoError(t, state.SaveChange(root, change))
-		plan, err := state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, plan.Waves)
-		require.NotEmpty(t, plan.Waves[0].Tasks)
-		taskID := plan.Waves[0].Tasks[0].TaskID
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    taskID,
-			PausedWaveIndex: plan.Waves[0].WaveIndex,
-			CheckpointType:  checkpointType,
-		}
-		if model.CheckpointKind(checkpointType) == model.CheckpointDecision {
-			change.ActiveCheckpoint.AllowedResponses = []string{"approve", "reject"}
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		if fresh {
-			writePassingExecutionSummary(t, root, slug, 1, taskID)
-			// The injected-response entry path validates active-checkpoint authority
-			// against the wave plan, which requires materialized wave run evidence.
-			writePassingWaveEvidence(t, root, slug, 1)
-		}
-		return root, slug, changeRef{Slug: slug}
-	}
-
 	t.Run("non-guardrail human_verify permits continuation under auto", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointHumanVerify), true)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), true)
 
 		// auto-ack injects a standing response so entry validation passes.
 		effective, err := autoAckResumeResponse(root, ref, true, false, "")
@@ -368,7 +504,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 
 	t.Run("decision checkpoint stays manual under auto", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointDecision), false)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointDecision), false)
 
 		effective, err := autoAckResumeResponse(root, ref, true, false, "")
 		require.NoError(t, err)
@@ -381,7 +517,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 
 	t.Run("human_action checkpoint stays manual under auto", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointHumanAction), false)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanAction), false)
 
 		effective, err := autoAckResumeResponse(root, ref, true, false, "")
 		require.NoError(t, err)
@@ -394,7 +530,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 
 	t.Run("guardrail human_verify stays manual under auto", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, model.GuardrailDomainAuthAuthZ, string(model.CheckpointHumanVerify), false)
+		root, _, ref := setupAutoModeCheckpoint(t, model.GuardrailDomainAuthAuthZ, string(model.CheckpointHumanVerify), false)
 
 		effective, err := autoAckResumeResponse(root, ref, true, false, "")
 		require.NoError(t, err)
@@ -407,7 +543,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 
 	t.Run("operator response is never overwritten by auto-ack", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
 
 		effective, err := autoAckResumeResponse(root, ref, true, false, "operator says ok")
 		require.NoError(t, err)
@@ -416,7 +552,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 
 	t.Run("auto off never auto-acks", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
 
 		effective, err := autoAckResumeResponse(root, ref, false, false, "")
 		require.NoError(t, err)
@@ -428,7 +564,7 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 	// reports unknown freshness, so auto-ack keeps the passed-in empty response.
 	t.Run("non-guardrail human_verify with stale/unknown execution stays manual under auto", func(t *testing.T) {
 		t.Parallel()
-		root, _, ref := setupCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
+		root, _, ref := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), false)
 
 		effective, err := autoAckResumeResponse(root, ref, true, false, "")
 		require.NoError(t, err)
@@ -438,6 +574,52 @@ func TestAutoAckResumeResponseEntryLevel(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "resume_response_required", cliErr.ErrorCode)
+	})
+}
+
+func TestRunCommandAutoFlagsExerciseRealEntryPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("--auto auto-acknowledges fresh non-guardrail human_verify", func(t *testing.T) {
+		t.Parallel()
+		root, slug, _ := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), true)
+
+		cmd := commandForRoot(t, root, makeRunCmd())
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--auto"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		require.NoError(t, cmd.Execute(), buf.String())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		require.NotNil(t, view.InputContext.ResumeCheckpoint)
+		assert.Equal(t, autoAcknowledgedResponse, view.InputContext.ResumeCheckpoint.UserResponsePayload)
+
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Nil(t, change.ActiveCheckpoint, "run --auto must consume the eligible checkpoint through the real command path")
+	})
+
+	t.Run("--no-auto overrides config auto and keeps checkpoint manual", func(t *testing.T) {
+		t.Parallel()
+		root, slug, _ := setupAutoModeCheckpoint(t, "", string(model.CheckpointHumanVerify), true)
+		writeAutoConfig(t, root, true)
+
+		cmd := commandForRoot(t, root, makeRunCmd())
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--no-auto"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "resume_response_required", cliErr.ErrorCode)
+
+		change, loadErr := state.LoadChange(root, slug)
+		require.NoError(t, loadErr)
+		assert.NotNil(t, change.ActiveCheckpoint, "run --no-auto must not consume the checkpoint even when execution.auto is true")
 	})
 }
 
