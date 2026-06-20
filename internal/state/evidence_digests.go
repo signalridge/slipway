@@ -15,6 +15,16 @@ import (
 
 const EvidenceDigestsFileName = "evidence-digests.yaml"
 
+// errUnusableEvidenceCache marks an evidence-digests cache whose contents cannot
+// be decoded or validated as-is — e.g. a legacy file still carrying the removed
+// per-skill run_version key that KnownFields(true) now rejects, or any other
+// structurally invalid cache. evidence-digests.yaml is a gitignored,
+// freshness-bound runtime cache that the owning stage regenerates on its next
+// record, so optional readers treat an unusable cache as absent and let it
+// regenerate instead of hard-failing read-only surfaces (status/next/validate).
+// Genuine I/O errors are NOT marked with this sentinel and still surface.
+var errUnusableEvidenceCache = errors.New("evidence digests cache is unusable and must regenerate")
+
 func EvidenceDigestsPathForRead(root, slug string) string {
 	return filepath.Join(verificationDirPathForRead(root, slug), EvidenceDigestsFileName)
 }
@@ -44,6 +54,16 @@ func LoadOptionalEvidenceDigestsForChange(root string, change model.Change) (*mo
 	digests, err := LoadEvidenceDigestsForChange(root, change)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		// A decodable-but-unusable cache (a removed legacy key or otherwise
+		// structurally invalid content) is a regenerable runtime artifact, not a
+		// hard failure. Reading it as absent keeps read-only readiness surfaces
+		// working and forces the owning stage to re-record evidence (fail
+		// closed), which overwrites the stale cache — the "caches regenerate"
+		// contract carried by the public surface instead of a manual deletion.
+		// Genuine I/O errors are not marked with this sentinel and still surface.
+		if errors.Is(err, errUnusableEvidenceCache) {
 			return nil, nil
 		}
 		return nil, err
@@ -80,11 +100,11 @@ func loadEvidenceDigestsFromPath(path string) (model.EvidenceDigests, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&digests); err != nil {
-		return model.EvidenceDigests{}, fmt.Errorf("parse evidence digests: %w", err)
+		return model.EvidenceDigests{}, fmt.Errorf("parse evidence digests: %w: %w", errUnusableEvidenceCache, err)
 	}
 	digests.Normalize()
 	if err := digests.Validate(); err != nil {
-		return model.EvidenceDigests{}, fmt.Errorf("invalid evidence digests: %w", err)
+		return model.EvidenceDigests{}, fmt.Errorf("invalid evidence digests: %w: %w", errUnusableEvidenceCache, err)
 	}
 	return digests, nil
 }

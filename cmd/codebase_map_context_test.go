@@ -46,7 +46,7 @@ func TestNextSurfacesScaffoldCodebaseMapStatusOnBothSurfaces(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		slug := createGovernedRequest(t, root, "L2", "surface scaffold codebase map status")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "surface scaffold codebase map status")
 		writeScaffoldCodebaseMapDocs(t, root)
 
 		// Standard next view (diagnostics) carries the freshness status field.
@@ -71,7 +71,7 @@ func TestNextReportsMissingCodebaseMapStatusNotOmitted(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "missing codebase map status")
+		createGovernedRequest(t, root, levelNonDiscovery, "missing codebase map status")
 		require.NoError(t, os.RemoveAll(state.CodebaseMapDir(root)))
 
 		// No map present: the field must report the valid "missing" assessment
@@ -94,7 +94,7 @@ func TestNextIncludesDurableCodebaseMapPathsForGovernedRequests(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "durable codebase mapping paths")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "durable codebase mapping paths")
 
 		var out bytes.Buffer
 		cmd := makeNextCmd()
@@ -235,7 +235,7 @@ func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "gate status warning on malformed verification")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "gate status warning on malformed verification")
 	verificationPath := state.VerificationFilePath(root, slug, "plan-audit")
 	require.NoError(t, os.MkdirAll(filepath.Dir(verificationPath), 0o755))
 	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
@@ -254,7 +254,7 @@ func TestNextUsesWorktreeScopedCodebaseMapPathsForDedicatedWorktree(t *testing.T
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "worktree-scoped codebase map in worktree")
+		slug := createGovernedRequest(t, root, levelDiscovery, "worktree-scoped codebase map in worktree")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 

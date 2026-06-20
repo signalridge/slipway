@@ -23,7 +23,7 @@ func TestGateStatusUsesPlanningEvidenceAcrossStatusValidateAndNext(t *testing.T)
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
 
-	slug := createGovernedRequest(t, root, "L3", "gate status should stay stable outside planning")
+	slug := createGovernedRequest(t, root, levelDiscovery, "gate status should stay stable outside planning")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	worktreeRoot := filepath.Join(t.TempDir(), change.Slug)
@@ -133,7 +133,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "execution summary blockers should stay aligned")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "execution summary blockers should stay aligned")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -174,7 +174,7 @@ func TestExecutionEvidenceBlockersStayConsistentAcrossStatusValidateAndNext(t *t
 		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "stale execution evidence should stay aligned")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "stale execution evidence should stay aligned")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -207,7 +207,7 @@ func TestMissingReviewEvidenceBlockersIncludeSelectedReviewSetAcrossStatusValida
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "missing selected review evidence should stay aligned")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "missing selected review evidence should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -244,7 +244,7 @@ func TestReviewLayerBlockersStayConsistentAcrossStatusValidateNextAndReview(t *t
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "review layer blockers should stay aligned")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "review layer blockers should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -290,7 +290,7 @@ func TestSatisfiedDomainReviewAttributionStaysConsistentAcrossStatusValidateAndN
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "domain review attribution should stay aligned")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "domain review attribution should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -323,7 +323,7 @@ func TestDoneShipGateReasonsStayConsistentWithSharedReadiness(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "done should reuse shared ship gate result")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "done should reuse shared ship gate result")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -360,7 +360,7 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "ship-only blockers should stay aligned")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "ship-only blockers should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -402,7 +402,7 @@ func TestMissingArtifactBlockerStaysConsistentAcrossStatusValidateAndNextWithout
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "missing artifacts should block every read surface")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "missing artifacts should block every read surface")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS1Plan
@@ -439,7 +439,7 @@ func TestWorktreeBindingBlockerStaysConsistentAcrossStatusValidateAndNext(t *tes
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "invalid worktree binding should stay aligned")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "invalid worktree binding should stay aligned")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS1Plan
@@ -469,7 +469,7 @@ func TestNextIncludesGovernanceActionBlockersFromReadiness(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "next should surface governance blockers")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "next should surface governance blockers")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -488,7 +488,7 @@ func TestGovernanceSurfaceUsesReadinessSnapshotWithinInvocation(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "governance surface should reuse computed readiness snapshot")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "governance surface should reuse computed readiness snapshot")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS1Plan

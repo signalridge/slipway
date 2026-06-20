@@ -410,7 +410,7 @@ func TestDetectExistingTools(t *testing.T) {
 	assert.Equal(t, []string{"claude", "cursor"}, detected)
 }
 
-func TestDetectExistingToolsIgnoresBareP1HostDirectories(t *testing.T) {
+func TestDetectExistingToolsIgnoresBareUnmanagedHostDirectories(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 
@@ -427,7 +427,7 @@ func TestDetectExistingToolsIgnoresBareP1HostDirectories(t *testing.T) {
 	}
 
 	assert.Empty(t, DetectExistingTools(root),
-		"bare P1 host directories must not trigger refresh auto-detection without Slipway sentinels")
+		"bare unmanaged host directories must not trigger refresh auto-detection without Slipway sentinels")
 }
 
 func TestHasGeneratedAdapter(t *testing.T) {
@@ -2901,7 +2901,7 @@ func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T
 	require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
 	require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
 
-	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
+	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
 
 	first, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
@@ -2941,7 +2941,7 @@ func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T
 	)
 
 	// Refresh is idempotent: a second merge does not duplicate or mutate.
-	require.NoError(t, mergeHookSettingsJSON(root, cfg, true))
+	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
 	second, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second))

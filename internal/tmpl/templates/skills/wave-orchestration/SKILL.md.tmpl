@@ -31,7 +31,7 @@ documents into the coordinator just to prepare task briefs. Instead, pass
 paths to task executors along with `input_context.codebase_map_status` and
 `input_context.codebase_map_doc_states`.
 
-PR #112 preserves the codebase-map relevance/staleness self-check: it is
+The codebase-map relevance/staleness self-check is preserved: it is
 relocated to executor-owned relevance/staleness self-check work, not removed.
 `input_context.codebase_map_status` still reflects content presence, not scope
 relevance, and the codebase-map relevance advisory fires for `populated` and
@@ -175,7 +175,7 @@ gate unless a task owns a genuinely isolated command.
 - Pass file paths only; executors read source files in their own context.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
-- Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the PR #112 relevance/staleness self-check.
+- Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the codebase-map relevance/staleness self-check.
 - Outputs: `task_id`, `verdict`, `changed_files`, `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
 - For test-bearing work, isolate the `task_kind=test` test-authoring step from

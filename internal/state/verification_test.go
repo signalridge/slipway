@@ -208,7 +208,7 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 		Blockers:  []model.ReasonCode{},
 		Timestamp: time.Now().UTC(),
 	})
-	require.NoError(t, SaveWavePlan(root, slug, model.WavePlan{
+	require.NoError(t, saveWavePlanForTest(root, slug, model.WavePlan{
 		Version:       model.WavePlanVersion,
 		GeneratedAt:   time.Now().UTC(),
 		TasksPlanHash: "abc123",

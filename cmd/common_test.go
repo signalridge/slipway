@@ -83,7 +83,7 @@ func TestResolveExplicitChangeRejectsInactiveSlug(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "inactive explicit request")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "inactive explicit request")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.Status = model.ChangeStatusCancelled
@@ -142,7 +142,7 @@ func TestResolveExplicitChangeRejectsArchivedSlugWithConcreteDiagnostic(t *testi
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "archived explicit request")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "archived explicit request")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
@@ -167,7 +167,7 @@ func TestValidateChangeFlagRejectsArchivedSlugWithConcreteDiagnostic(t *testing.
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate archived explicit request")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate archived explicit request")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
@@ -194,7 +194,7 @@ func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "corrupt explicit governed request")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "corrupt explicit governed request")
 	require.NoError(t, os.WriteFile(
 		state.BundleChangeFilePath(root, slug),
 		[]byte("slug: ["),
@@ -214,7 +214,7 @@ func TestLoadActiveChangeRejectsInactiveStatus(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "inactive change helper")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "inactive change helper")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.Status = model.ChangeStatusDone
@@ -239,7 +239,7 @@ func TestLoadActiveChangeSurfacesCorruptStateIntegrity(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "corrupt change helper")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "corrupt change helper")
 	require.NoError(t, os.WriteFile(
 		state.BundleChangeFilePath(root, slug),
 		[]byte("slug: ["),
@@ -264,7 +264,7 @@ func TestLoadExecutionContextWrapsCorruptExecutionSummaryIntegrity(t *testing.T)
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "corrupt execution summary helper")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "corrupt execution summary helper")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -359,7 +359,7 @@ func TestLoadExecutionContextUsesAuthoritativeWorktreeSummaryForHiddenBoundChang
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "hidden worktree summary path should stay authoritative")
+		slug := createGovernedRequest(t, root, levelDiscovery, "hidden worktree summary path should stay authoritative")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -404,7 +404,7 @@ func TestProjectFreshnessIgnoresDerivedTaskCheckboxSync(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "freshness should ignore derived task checkbox sync")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "freshness should ignore derived task checkbox sync")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -469,7 +469,7 @@ func TestProjectFreshnessTracksTasksPlanHash(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "freshness tracks tasks plan hash")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "freshness tracks tasks plan hash")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -556,7 +556,7 @@ func TestProjectFreshnessFailsClosedWhenFreshnessArtifactIsUnreadable(t *testing
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "freshness fails closed on unreadable artifact")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "freshness fails closed on unreadable artifact")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -631,7 +631,7 @@ func TestStatusCommandFromBoundWorktreeUsesBoundScopeConfigCopy(t *testing.T) {
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "bound worktree should read main-scope config")
+		slug := createGovernedRequest(t, root, levelDiscovery, "bound worktree should read main-scope config")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -694,7 +694,7 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "nested bound worktree active change resolution")
+		slug := createGovernedRequest(t, root, levelDiscovery, "nested bound worktree active change resolution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement

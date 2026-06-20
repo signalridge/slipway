@@ -233,7 +233,7 @@ func TestNextChangeFromRootDerivesCodebaseMapStatusFromWorktree(t *testing.T) {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "workspace consistent codebase map status")
+		slug := createGovernedRequest(t, root, levelDiscovery, "workspace consistent codebase map status")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepAudit
@@ -298,7 +298,7 @@ func TestNextSurfacesCodebaseMapAdvisoryWarningEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "advisory warning surfaces end to end")
+		createGovernedRequest(t, root, levelNonDiscovery, "advisory warning surfaces end to end")
 		// createGovernedRequest lands at S1_PLAN/research, so research-orchestration
 		// is next; a scaffold_only map must trigger the consume-time advisory.
 		writeScaffoldCodebaseMapDocs(t, root)
@@ -327,7 +327,7 @@ func TestRunSurfacesBaselineCodebaseMapStatusAndAdvisory(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "run surfaces baseline codebase map advisory")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run surfaces baseline codebase map advisory")
 		writeBaselineCodebaseMapDocs(t, root)
 
 		var handoff nextHandoffView
@@ -354,7 +354,7 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPopulatedMap(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "relevance advisory for populated map")
+		createGovernedRequest(t, root, levelNonDiscovery, "relevance advisory for populated map")
 		writePopulatedCodebaseMapDocs(t, root)
 
 		var view nextView
@@ -390,7 +390,7 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForWaveOrchestration(t *testing
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		slug := createGovernedRequest(t, root, "L2", "relevance advisory at wave-orchestration")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "relevance advisory at wave-orchestration")
 		writePopulatedCodebaseMapDocs(t, root)
 
 		change, err := state.LoadChange(root, slug)
@@ -428,7 +428,7 @@ func TestNextSurfacesCodebaseMapRelevanceAdvisoryForPartialMap(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "relevance advisory for partial map")
+		createGovernedRequest(t, root, levelNonDiscovery, "relevance advisory for partial map")
 		writePartialCodebaseMapDocs(t, root)
 
 		var view nextView
@@ -467,7 +467,7 @@ func TestNextSurfacesMissingMapDiscoveryAdvisoryEndToEnd(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
 		// L3 => needs_discovery; lands at S1_PLAN/research with no map written.
-		createGovernedRequest(t, root, "L3", "missing map discovery advisory surfaces")
+		createGovernedRequest(t, root, levelDiscovery, "missing map discovery advisory surfaces")
 
 		var view nextView
 		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)
@@ -504,7 +504,7 @@ func TestNextOmitsDiscoveryAdvisoryForNonDiscoveryChange(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
-		createGovernedRequest(t, root, "L2", "non-discovery change omits discovery advisory")
+		createGovernedRequest(t, root, levelNonDiscovery, "non-discovery change omits discovery advisory")
 
 		var view nextView
 		decodeNextJSON(t, []string{"--json", "--diagnostics"}, &view)

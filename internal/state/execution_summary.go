@@ -259,18 +259,6 @@ func SaveExecutionSummary(root, slug string, summary model.ExecutionSummary) err
 	return fsutil.WriteFileAtomic(path, raw, 0o644)
 }
 
-func RemoveExecutionSummary(root, slug string) error {
-	dir, err := resolveVerificationDirForWrite(root, slug)
-	if err != nil {
-		return fmt.Errorf("resolve execution summary dir for %q: %w", slug, err)
-	}
-	path := filepath.Join(dir, ExecutionSummaryFileName)
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
 // LatestRelevantExecutionRunVersion returns the execution-summary run version
 // only for states that are expected to surface execution evidence. Callers
 // that already know the workflow state should prefer this helper.
@@ -395,32 +383,18 @@ func ApplyExecutionSummaryFreshnessInputs(summary *model.ExecutionSummary, chang
 	}
 }
 
-func ExecutionSummaryFreshness(root string, change model.Change, summary *model.ExecutionSummary) ctxpack.EvidenceFreshness {
-	if !ExecutionSummaryReady(summary) || strings.TrimSpace(change.Slug) == "" {
-		return ctxpack.EvidenceFreshnessUnknown
-	}
-
-	evidenceTimestamp := summary.CapturedAt.UTC()
-	latestRelevantUpdateAt := time.Time{}
-	evidenceArtifact := executionSummaryEvidenceArtifact(root, change)
-	freshness, _, _ := executionSummaryFreshnessEvaluation(root, change, summary, evidenceArtifact, latestRelevantUpdateAt, evidenceTimestamp)
-	return freshness
-}
-
 func executionSummaryFreshnessEvaluation(
 	root string,
 	change model.Change,
 	summary *model.ExecutionSummary,
 	evidenceArtifact string,
-	latestRelevantUpdateAt time.Time,
-	evidenceTimestamp time.Time,
 ) (ctxpack.EvidenceFreshness, []ExecutionTaskInputDifference, []ExecutionFreshnessPair) {
 	taskInputDiffs := taskFreshnessInputDiffs(root, change, summary)
 	planningPairs := stalePlanningPairs(root, change, summary, evidenceArtifact)
 	if len(taskInputDiffs) > 0 || len(planningPairs) > 0 {
 		return ctxpack.EvidenceFreshnessStale, taskInputDiffs, planningPairs
 	}
-	inputs := collectTaskEvidenceFreshnessInputs(change, summary, latestRelevantUpdateAt, evidenceTimestamp)
+	inputs := collectTaskEvidenceFreshnessInputs(change, summary)
 	if len(inputs) == 0 {
 		return ctxpack.EvidenceFreshnessUnknown, nil, nil
 	}
@@ -445,10 +419,8 @@ func ExecutionSummaryFreshnessDiagnostics(root string, change model.Change, summ
 	}
 
 	diagnostics.PathAuthority = ExecutionPathAuthorityDiagnostics(root, change, summary.RunSummaryVersion)
-	evidenceTimestamp := summary.CapturedAt.UTC()
-	latestRelevantUpdateAt := time.Time{}
 	evidenceArtifact := executionSummaryEvidenceArtifact(root, change)
-	freshness, taskInputDiffs, planningPairs := executionSummaryFreshnessEvaluation(root, change, summary, evidenceArtifact, latestRelevantUpdateAt, evidenceTimestamp)
+	freshness, taskInputDiffs, planningPairs := executionSummaryFreshnessEvaluation(root, change, summary, evidenceArtifact)
 	diagnostics.Status = string(freshness)
 
 	diagnostics.TaskInputDiffs = taskInputDiffs
@@ -820,8 +792,6 @@ func formatFreshnessTime(t time.Time) string {
 func collectTaskEvidenceFreshnessInputs(
 	change model.Change,
 	summary *model.ExecutionSummary,
-	latestRelevantUpdateAt time.Time,
-	defaultEvidenceTimestamp time.Time,
 ) []ctxpack.EvidenceFreshnessInput {
 	if !ExecutionSummaryReady(summary) {
 		return nil
@@ -829,16 +799,10 @@ func collectTaskEvidenceFreshnessInputs(
 
 	inputs := []ctxpack.EvidenceFreshnessInput{}
 	for _, task := range summary.Tasks {
-		evidenceTs := task.CapturedAt.UTC()
-		if evidenceTs.IsZero() {
-			evidenceTs = defaultEvidenceTimestamp
-		}
 		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID, summary.TasksPlanHash)
 		inputs = append(inputs, ctxpack.EvidenceFreshnessInput{
 			ExpectedStructuralInput: expected.FieldMap(),
 			CurrentStructuralInput:  task.FreshnessInputs.FieldMap(),
-			EvidenceTimestamp:       evidenceTs,
-			LatestRelevantUpdateAt:  latestRelevantUpdateAt,
 		})
 	}
 	return inputs

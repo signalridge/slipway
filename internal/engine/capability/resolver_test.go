@@ -137,7 +137,7 @@ func TestResolveHydrateDedupesAndSortsAcrossRouteAndSupports(t *testing.T) {
 	}
 }
 
-func TestResolvePR4aPreservesRouteAndSupportsInvariant(t *testing.T) {
+func TestResolvePreservesRouteAndSupportsInvariant(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
 	type supportSnapshot struct {
@@ -266,7 +266,7 @@ func TestResolveRetiredTddProofHydrateDoesNotLeak(t *testing.T) {
 	}
 }
 
-// TestResolveCiTriageNeverSurfacesHydrate enforces the Wave-3 PR-3 negative
+// TestResolveCiTriageNeverSurfacesHydrate enforces the negative
 // invariant: ci-triage is a scripts-only suggested-only skill with no
 // HydrateReferences, so its hydrate footprint is empty on every selection
 // path it owns (suggested on fix, and also on arbitrary hosts).

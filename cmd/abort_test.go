@@ -19,7 +19,7 @@ func TestAbortRequiresExecuteState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_ = createGovernedRequest(t, root, "L2", "abort wrong state")
+		_ = createGovernedRequest(t, root, levelNonDiscovery, "abort wrong state")
 
 		cmd := makeAbortCmd()
 		cmd.SetArgs([]string{"--json"})
@@ -41,7 +41,7 @@ func TestAbortRejectsUnexpectedArgs(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_ = createGovernedRequest(t, root, "L2", "abort rejects unexpected args")
+		_ = createGovernedRequest(t, root, levelNonDiscovery, "abort rejects unexpected args")
 
 		cmd := makeAbortCmd()
 		cmd.SetArgs([]string{"unexpected"})
@@ -61,7 +61,7 @@ func TestAbortOutsideExecuteDoesNotPreemptTrackedProcesses(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort should not preempt outside execute")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort should not preempt outside execute")
 
 		cfg := model.DefaultConfig()
 		cfg.Execution.CancelGracePeriodSeconds = 0
@@ -105,7 +105,7 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort preserve change")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort preserve change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestAbortRepairBranchGuidanceNamesRun(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort repair branch names run")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort repair branch names run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -182,7 +182,7 @@ func TestAbortTextUsesRunWhenNoResumableWaveStateExists(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort text should suggest fresh run")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort text should suggest fresh run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -206,7 +206,7 @@ func TestAbortTextUsesRunResumeWhenResumableWaveStateExists(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort text should suggest resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort text should suggest resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement

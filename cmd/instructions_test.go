@@ -233,7 +233,7 @@ func TestInstructionsChangeAwareAuthoringPayload(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "instructions change-aware payload")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "instructions change-aware payload")
 
 		// Exercise both done-status branches. decision.md depends on intent.md
 		// and requirements.md in the expanded schema. Author intent.md (present →
@@ -278,7 +278,7 @@ func TestInstructionsDependencyDoneRequiresValidUpstreamArtifact(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "instructions dependency validity")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "instructions dependency validity")
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "intent.md",

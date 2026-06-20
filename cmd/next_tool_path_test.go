@@ -17,7 +17,7 @@ func TestNextReturnsSkillNameWhenWorkspaceIsCodexOnly(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "codex-only next skill handoff")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "codex-only next skill handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -43,7 +43,7 @@ func TestNextSucceedsInMultiAdapterWorkspaceWithoutToolDisambiguation(t *testing
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude", "codex"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "multi-adapter next handoff")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "multi-adapter next handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 

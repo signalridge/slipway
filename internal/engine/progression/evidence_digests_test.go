@@ -1387,10 +1387,10 @@ func TestExecutionSummaryFreshnessUsesTaskPlanHashNotTaskMTime(t *testing.T) {
 
 	afterEvidence := capturedAt.Add(time.Hour)
 	require.NoError(t, os.Chtimes(tasksPath, afterEvidence, afterEvidence))
-	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, state.ExecutionSummaryFreshness(root, change, summary))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 
 	require.NoError(t, os.WriteFile(tasksPath, []byte(realChangedDigestTasks()), 0o644))
-	assert.Equal(t, ctxpack.EvidenceFreshnessStale, state.ExecutionSummaryFreshness(root, change, summary))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 }
 
 func TestWaveOrchestrationInputDigestUsesRuntimeTaskEvidenceNotExecutionSummary(t *testing.T) {

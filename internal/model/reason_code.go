@@ -714,10 +714,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Wave run task linkage does not match wave-plan.yaml",
 	},
-	"wave_test_impl_not_distinct": {
-		Severity: ReasonSeverityError,
-		Message:  "A task_kind=code task shares target files with no distinct preceding task_kind=test task",
-	},
 	"workspace_scope_config_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Bound worktree scope config is missing",

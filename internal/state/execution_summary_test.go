@@ -289,7 +289,7 @@ func TestExecutionSummaryFreshnessIgnoresSummaryCapturedAtForPerTaskFreshness(t 
 		},
 	}
 
-	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ExecutionSummaryFreshness(root, change, summary))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, summary)
 	assert.Equal(t, "fresh", diagnostics.Status)
 	assert.Empty(t, diagnostics.StalePairs)
@@ -317,7 +317,7 @@ func TestExecutionSummaryFreshnessTreatsReadySummaryWithoutTasksAsUnknown(t *tes
 	require.NoError(t, err)
 	require.True(t, ExecutionSummaryReady(&loaded))
 
-	assert.Equal(t, ctxpack.EvidenceFreshnessUnknown, ExecutionSummaryFreshness(root, change, &loaded))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessUnknown), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
 	assert.Equal(t, string(ctxpack.EvidenceFreshnessUnknown), diagnostics.Status)
 	assert.Empty(t, diagnostics.TaskInputDiffs)
@@ -444,7 +444,7 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	loaded, err := LoadExecutionSummary(root, change.Slug)
 	require.NoError(t, err)
 
-	assert.Equal(t, ctxpack.EvidenceFreshnessStale, ExecutionSummaryFreshness(root, change, &loaded))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)
@@ -517,7 +517,7 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanScopeHashMismatchAsS3TaskPlanDr
 
 	loaded, err := LoadExecutionSummary(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, ctxpack.EvidenceFreshnessStale, ExecutionSummaryFreshness(root, change, &loaded))
+	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)

@@ -1,6 +1,6 @@
 package capability
 
-// B4 change-shape + verification skills.
+// change-shape + verification skills.
 
 func multiReviewerCalibration() Skill {
 	return Skill{

@@ -12,11 +12,12 @@ import (
 )
 
 func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, closeoutRequired bool) []string {
-	return RequiredSkillsForStateWithRegistry(
+	return RequiredSkillsForStateWithRegistryWithReviewSelection(
 		definitionsToSortedSlice(defaultGovernanceRegistry),
 		needsDiscovery,
 		state,
 		closeoutRequired,
+		ReviewSkillSelection{},
 	)
 }
 

@@ -155,7 +155,7 @@ func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "run should stop at research orchestration")
+		slug := createGovernedRequest(t, root, levelDiscovery, "run should stop at research orchestration")
 
 		stdout, stderr, err := runRootCommandIn(root, []string{"run", "--json", "--change", slug})
 		require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "run resume-response e2e")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response e2e")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -233,7 +233,7 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort then resume e2e")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort then resume e2e")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -316,7 +316,7 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "sync e2e positive path")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "sync e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -351,17 +351,17 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndSuccessfulCheckpointAtS5(t *testing.T) {
+func TestCLIEndToEndSuccessfulCheckpointDuringImplementation(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "checkpoint e2e positive path")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "checkpoint e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
-		// Advance to S5_RUN_WAVES.
+		// Advance to S2_IMPLEMENT.
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
@@ -398,7 +398,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS3(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "review e2e positive path")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -447,7 +447,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "done e2e positive path")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "done e2e positive path")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -498,7 +498,7 @@ func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
 		initTestWorkspace(t, root)
 
 		// Create governed change via helper (request + scaffold + advance to S1).
-		slug := createGovernedRequest(t, root, "L2", "implement token rotation")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "implement token rotation")
 
 		// Write requirements in the change bundle (flat).
 		change, err := state.LoadChange(root, slug)

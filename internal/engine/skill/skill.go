@@ -155,23 +155,6 @@ func LookupDefinitionInRegistry(registry []Definition, name string) (Definition,
 	return def, ok
 }
 
-func RequiredSkillsForStateWithRegistry(
-	registry []Definition,
-	needsDiscovery bool,
-	state model.WorkflowState,
-	closeoutRequired bool,
-	planSubSteps ...model.PlanSubStep,
-) []string {
-	return RequiredSkillsForStateWithRegistryWithReviewSelection(
-		registry,
-		needsDiscovery,
-		state,
-		closeoutRequired,
-		ReviewSkillSelection{},
-		planSubSteps...,
-	)
-}
-
 func RequiredSkillsForStateWithRegistryWithReviewSelection(
 	registry []Definition,
 	needsDiscovery bool,
@@ -214,10 +197,6 @@ func RequiredSkillsForStateWithRegistryWithReviewSelection(
 	}
 	slices.Sort(required)
 	return required
-}
-
-func FilterRequiredSkillsForWorkflowProfile(required []string, profile model.WorkflowProfile) []string {
-	return FilterRequiredSkillsForWorkflowProfileWithReviewSelection(required, profile, ReviewSkillSelection{})
 }
 
 func FilterRequiredSkillsForWorkflowProfileWithReviewSelection(

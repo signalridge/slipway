@@ -38,7 +38,7 @@ func loadFrontmatter(t *testing.T, templates fs.FS, name string) frontmatter {
 	return fm
 }
 
-// TestFrontmatterMirrorsRegistryBindings is the B1 binding-compare gate.
+// TestFrontmatterMirrorsRegistryBindings is the binding-compare gate.
 // It parses each SKILL.md's frontmatter and asserts the bindings[] list
 // matches the Go-owned Skill entry exactly.
 func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
@@ -55,7 +55,7 @@ func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 	}
 }
 
-// TestFrontmatterMirrorsRegistryHydrateReferences is the PR-4a hydrate
+// TestFrontmatterMirrorsRegistryHydrateReferences is the hydrate
 // compare gate. Every catalog skill's SKILL.md frontmatter
 // `hydrate_references:` list must match the Go-owned Skill.HydrateReferences
 // record-for-record after sorting by name.
@@ -73,7 +73,7 @@ func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
 	}
 }
 
-// TestSizeBudgetsForRegisteredSkills enforces the B1 tier-aware size-lint
+// TestSizeBudgetsForRegisteredSkills enforces the tier-aware size-lint
 // gate. Sizes above target are warning-band; sizes above hard-max require
 // `size_rationale` in frontmatter.
 func TestSizeBudgetsForRegisteredSkills(t *testing.T) {
@@ -109,7 +109,7 @@ func TestTierSizeBudgetRequiresRationaleAboveHardMax(t *testing.T) {
 	require.NoError(t, checkTierSizeBudget(TierT3, 3*1024+1, "known false-positive due embedded table"))
 }
 
-// TestFrontmatterHasRequiredFields enforces the B1 schema-lint gate on
+// TestFrontmatterHasRequiredFields enforces the schema-lint gate on
 // required frontmatter keys. It does not re-run the full DSL validator
 // (that is covered by trigger_test.go); it pins the authoring contract.
 func TestFrontmatterHasRequiredFields(t *testing.T) {
@@ -241,9 +241,9 @@ func assertHydrateReferencesEqual(t *testing.T, sk Skill, frontRefs []frontHydra
 func tierSizeBudget(tier Tier) (target, hardMax int) {
 	switch tier {
 	case TierT1:
-		return 2560, 6 * 1024 // 2.5 KB target (PR-3 lift), hard-max 6 KB
+		return 2560, 6 * 1024 // 2.5 KB target, hard-max 6 KB
 	case TierT2:
-		return 3584, 8 * 1024 // 3.5 KB target (PR-3 lift), hard-max 8 KB
+		return 3584, 8 * 1024 // 3.5 KB target, hard-max 8 KB
 	case TierT3:
 		return 1536, 3 * 1024 // 1.5 KB target, rationale above 3 KB
 	default:
@@ -276,9 +276,9 @@ func TestSkillDirectoryNamesMatchRegistry(t *testing.T) {
 	}
 }
 
-// TestNoPrematureTiebreakPromises ensures llm_tiebreak (B7+) does not leak
-// into authoring metadata before B7 lands. hydrate_references may appear
-// from B2 onward (context-assembly owns the first real use).
+// TestNoPrematureTiebreakPromises ensures llm_tiebreak does not leak
+// into authoring metadata before it lands. hydrate_references may appear
+// for scale-foundation skills onward (context-assembly owns the first real use).
 func TestNoPrematureTiebreakPromises(t *testing.T) {
 	t.Parallel()
 	templates := skillsFS()
@@ -294,7 +294,7 @@ func TestNoPrematureTiebreakPromises(t *testing.T) {
 			return err
 		}
 		fm := extractFrontmatterBlock(t, string(raw))
-		assert.NotContains(t, fm, "llm_tiebreak", "%s: llm_tiebreak is a B7+ surface", name)
+		assert.NotContains(t, fm, "llm_tiebreak", "%s: llm_tiebreak is an unreleased surface", name)
 		return nil
 	})
 	require.NoError(t, err)

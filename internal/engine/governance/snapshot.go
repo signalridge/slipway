@@ -15,9 +15,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// SnapshotFileName is the canonical file name for the governance sidecar.
-const SnapshotFileName = "governance_snapshot.yaml"
-
 // SnapshotPath returns the canonical path for a change's governance snapshot.
 func SnapshotPath(root, slug string) string {
 	return state.GovernanceSnapshotCachePath(root, slug)

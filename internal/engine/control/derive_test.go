@@ -21,7 +21,6 @@ func TestDeriveControls_NoDomainSmallChangeNoDiscovery(t *testing.T) {
 	})
 
 	assert.Empty(t, result.ActiveControls, "no-domain small change with no discovery should produce no controls")
-	assert.Empty(t, result.NewActivations)
 }
 
 func TestDeriveControls_NeedsDiscoveryFalseSkipsExploration(t *testing.T) {
@@ -365,14 +364,6 @@ func TestDeriveControls_DisabledControlOverrideWithMonotonicPreservation(t *test
 	// DisabledControls removes new candidate, but monotonic merge preserves existing.
 	assert.Contains(t, controlIDs, model.ControlDomainReview,
 		"existing active control persists due to monotonic rule even when disabled")
-
-	// domain-review should NOT appear in NewActivations (it was existing, not newly added).
-	var newIDs []model.ControlID
-	for _, c := range result.NewActivations {
-		newIDs = append(newIDs, c.ControlID)
-	}
-	assert.NotContains(t, newIDs, model.ControlDomainReview,
-		"domain-review should not be a new activation since it came from existing controls")
 }
 
 func TestDeriveControls_ModeOverrideAdvisory(t *testing.T) {

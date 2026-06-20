@@ -1,6 +1,6 @@
 package capability
 
-// B6 test-design skills.
+// test-design skills.
 
 func testDesign() Skill {
 	return Skill{

@@ -1,6 +1,6 @@
 package capability
 
-// B3 security-cluster skills.
+// security-cluster skills.
 
 func threatModeling() Skill {
 	return Skill{

@@ -28,7 +28,6 @@ type DeriveControlsResult struct {
 	Summary        model.SignalSummary
 	Observations   []model.SignalObservation
 	ActiveControls []model.ControlActivation
-	NewActivations []model.ControlActivation
 }
 
 // DeriveControls computes governance signals and controls directly from Change
@@ -197,7 +196,6 @@ func DeriveControls(input DeriveControlsInput) DeriveControlsResult {
 		Summary:        summary,
 		Observations:   observations,
 		ActiveControls: merged.ActiveControls,
-		NewActivations: merged.NewActivations,
 	}
 }
 

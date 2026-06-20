@@ -186,7 +186,7 @@ func TestRepairExecutionStateUsesEffectiveParallelWhenRecoveringWaveRuns(t *test
 			}
 			require.Len(t, plan.Waves, 1)
 			plan.Waves[0].Parallel = tt.persistedParallel
-			require.NoError(t, SaveWavePlan(root, change.Slug, plan))
+			require.NoError(t, saveWavePlanForTest(root, change.Slug, plan))
 
 			// A valid parallel dispatch token lets the recovered run record a
 			// parallel mode when the wave is effectively parallel; the engine no

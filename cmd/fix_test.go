@@ -19,7 +19,7 @@ func TestFixJSONSurfacesReviewFindingRepairContract(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "fix should surface review findings")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "fix should surface review findings")
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestFixRejectsNonReviewState(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "fix should reject non review state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "fix should reject non review state")
 
 		cmd := commandForRoot(t, root, makeFixCmd())
 		cmd.SetArgs([]string{"--json", "--change", slug})

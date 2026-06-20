@@ -152,7 +152,7 @@ func TestHealthCommandDoctorOutputsPrioritizedRepairActions(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should surface wave repair")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should surface wave repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -225,7 +225,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRunsExist(t *testing.T
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should wait for wave runs before resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should wait for wave runs before resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -281,7 +281,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should not suggest resume before pre-summary wave plan repair")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should not suggest resume before pre-summary wave plan repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -348,7 +348,7 @@ func TestHealthCommandDoctorExplainsInterruptedExecution(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should explain interrupted execution")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should explain interrupted execution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -403,7 +403,7 @@ func TestHealthCommandDoctorIgnoresMissingPersistedWavePlanDuringS2(t *testing.T
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should ignore missing persisted wave cache")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should ignore missing persisted wave cache")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -461,7 +461,7 @@ func TestHealthCommandMarksUnreadableExecutionSummaryRepairableWhenWaveEvidenceE
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health should promote repairable execution summary finding")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health should promote repairable execution summary finding")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -503,7 +503,7 @@ func TestHealthCommandDoctorIgnoresPersistedWavePlanDriftDuringS2(t *testing.T) 
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should ignore stale persisted wave cache")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should ignore stale persisted wave cache")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -748,7 +748,7 @@ func TestHealthCommandDoesNotReportToolResolutionFailureForMultiAdapterWorkspace
 	withCommandWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex", "claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "health should stay query-only in multi-adapter workspace")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health should stay query-only in multi-adapter workspace")
 
 		var out bytes.Buffer
 		cmd := commandForRoot(t, root, makeHealthCmd())
@@ -838,7 +838,7 @@ func TestHealthCommandDoctorIncludesGovernanceFailuresWithoutExtraFlags(t *testi
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "doctor should include governance failures")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "doctor should include governance failures")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -891,7 +891,7 @@ func TestHealthCommandObservationsFlagIncludesSignalProvenance(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health observations")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health observations")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.GuardrailDomain = "auth_authz"
@@ -924,7 +924,7 @@ func TestHealthCommandGovernanceReportsUnreadableSnapshotInsteadOfFailing(t *tes
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health unreadable snapshot")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health unreadable snapshot")
 		snapshotPath := governance.SnapshotPath(root, slug)
 		require.NoError(t, os.MkdirAll(filepath.Dir(snapshotPath), 0o755))
 		require.NoError(t, os.WriteFile(
@@ -968,7 +968,7 @@ func TestHealthCommandDoctorSurfacesGaplessTraceabilityWarning(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health doctor gapless traceability")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health doctor gapless traceability")
 		snapshotPath := governance.SnapshotPath(root, slug)
 		require.NoError(t, os.MkdirAll(filepath.Dir(snapshotPath), 0o755))
 		require.NoError(t, os.WriteFile(snapshotPath, []byte("version: ["), 0o644))
@@ -1011,7 +1011,7 @@ func TestHealthCommandGovernanceObservationsStillRenderWhenSnapshotUnreadable(t 
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health unreadable snapshot observations")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health unreadable snapshot observations")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.GuardrailDomain = "auth_authz"
@@ -1047,7 +1047,7 @@ func TestHealthCommandGovernanceSkipsRecomputeWhenBoundWorktreeInvalid(t *testin
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health invalid bound worktree")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health invalid bound worktree")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1108,7 +1108,7 @@ func TestHealthCommandGovernanceRecomputesCurrentArtifacts(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health live recompute")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health live recompute")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1219,7 +1219,7 @@ func TestHealthCommandGovernanceRecomputeDropsResolvedClarificationControl(t *te
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health resolved clarification")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health resolved clarification")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1307,7 +1307,7 @@ func TestHealthCommandGovernancePreservesPersistedFreshnessSignal(t *testing.T) 
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health stale persisted snapshot")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health stale persisted snapshot")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1408,7 +1408,7 @@ func TestHealthCommandGovernanceUsesFreshnessFromRecomputedSnapshotWhenMaterialS
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "health refreshed snapshot")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health refreshed snapshot")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1517,7 +1517,7 @@ func TestHealthCommandGovernanceBlocksOnStateLock(t *testing.T) {
 		cfg.Execution.LockWaitTimeoutSeconds = 1
 		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
-		slug := createGovernedRequest(t, root, "L2", "health lock")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "health lock")
 		lockPath := state.ChangeStateLockPath(root, slug)
 		stopLockHolder := startStateLockHolder(t, lockPath)
 		defer stopLockHolder()
@@ -1773,7 +1773,7 @@ REQ-001: verified via tests
 			withCommandWorkspace(t, root, func() {
 				initTestWorkspace(t, root)
 
-				slug := createGovernedRequest(t, root, "L2", "assurance stage-aware doctor")
+				slug := createGovernedRequest(t, root, levelNonDiscovery, "assurance stage-aware doctor")
 				change, err := state.LoadChange(root, slug)
 				require.NoError(t, err)
 				change.CurrentState = tc.state

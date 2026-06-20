@@ -70,6 +70,43 @@ skills: {}
 	assert.Contains(t, err.Error(), "field unexpected")
 }
 
+// A legacy evidence-digests cache that still carries the removed per-skill
+// run_version key must not hard-fail the read-only readiness surfaces.
+// evidence-digests.yaml is a gitignored, regenerable runtime cache, so the
+// optional change-based reader treats an unusable cache as absent and lets the
+// owning stage regenerate it. The strict slug-based reader still rejects the
+// unknown legacy key.
+func TestLoadOptionalEvidenceDigestsSelfHealsUnusableLegacyCache(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	slug := "digest-legacy-run-version"
+	change := saveActiveChangeForTest(t, root, slug)
+
+	dir := VerificationDir(root, slug)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	legacy := []byte(`version: 1
+skills:
+  goal-verification:
+    run_version: 1
+    inputs:
+      some-input: sha256:abc
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, EvidenceDigestsFileName), legacy, 0o644))
+
+	// Optional change-based read self-heals: the unusable legacy cache is treated
+	// as absent (regenerate), not surfaced as a parse error that would block
+	// status/next/validate.
+	got, err := LoadOptionalEvidenceDigestsForChange(root, change)
+	require.NoError(t, err)
+	assert.Nil(t, got, "an unusable legacy run_version cache must read as absent so the owning stage regenerates it")
+
+	// The strict slug-based reader still rejects the removed legacy key.
+	_, strictErr := LoadEvidenceDigests(root, slug)
+	require.Error(t, strictErr)
+	assert.Contains(t, strictErr.Error(), "run_version")
+}
+
 // LoadEvidenceDigests and evidenceDigestsReadPath are slug-based read helpers
 // used only by these tests; production reads digests through the change-based
 // LoadEvidenceDigestsForChange path.

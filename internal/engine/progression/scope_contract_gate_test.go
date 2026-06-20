@@ -89,25 +89,31 @@ func TestScopeContractRepairTargetEmptyWhenSummaryNotReady(t *testing.T) {
 	assert.Empty(t, target.SkillName, "no repair without a ready execution summary")
 }
 
-// Out-of-scope drift (a changed file outside the plan) is non-destructive and
-// must block visibly instead of clearing wave evidence; missing task
-// changed-file evidence routes to explicit repair (issue #136).
-func TestScopeContractDriftOnly(t *testing.T) {
+// Out-of-scope drift (a task records a changed file outside its planned
+// target_files) must route to the same non-destructive S2_IMPLEMENT repair as
+// missing changed-file evidence, carrying the scope_contract_drift cause so the
+// gate blocks visibly instead of clearing wave evidence (issue #136). This
+// drives the real scopeContractRepairTarget gate rather than re-asserting a
+// hand-rolled drift predicate.
+func TestScopeContractRepairTargetRoutesDriftToS2Repair(t *testing.T) {
 	t.Parallel()
+	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	drift := model.NewReasonCode(scopecontract.ReasonScopeContractDrift, "scratch.txt")
-	missing := model.NewReasonCode(scopecontract.ReasonScopeContractChangedFilesMissing, "t-01")
+	// task-a is planned for cmd/next.go but records a changed file outside that
+	// scope, so the only contract failure is out-of-scope drift.
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"scratch.txt"}))
+	require.NoError(t, err)
 
-	assert.True(t, scopeContractDriftOnly([]model.ReasonCode{drift}),
-		"a sole drift blocker is drift-only")
-	assert.True(t, scopeContractDriftOnly([]model.ReasonCode{drift, drift}),
-		"multiple drift blockers are still drift-only")
-	assert.False(t, scopeContractDriftOnly([]model.ReasonCode{drift, missing}),
-		"a mix with missing-evidence is not drift-only")
-	assert.False(t, scopeContractDriftOnly([]model.ReasonCode{missing}),
-		"missing-evidence alone is not drift-only")
-	assert.False(t, scopeContractDriftOnly(nil),
-		"no blockers is not drift-only")
+	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
+	assert.Equal(t, model.StateS2Implement, target.State)
+
+	specs := model.ReasonSpecs(target.Blockers)
+	assert.Contains(t, specs, scopecontract.ReasonScopeContractDrift+":scratch.txt",
+		"drift must surface the out-of-scope file as the scope_contract_drift cause")
+	for _, spec := range specs {
+		assert.NotContains(t, spec, scopecontract.ReasonScopeContractChangedFilesMissing,
+			"a task that recorded changed files must not also report missing-evidence")
+	}
 }
 
 func TestSensitiveEvidenceRepairTargetReturnsS2RepairWhenMarkerMissing(t *testing.T) {

@@ -2,7 +2,6 @@ package enginecontext
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -16,8 +15,6 @@ func TestEvaluateEvidenceFreshness(t *testing.T) {
 		{
 			ExpectedStructuralInput: map[string]string{"task_id": "task-a"},
 			CurrentStructuralInput:  map[string]string{"task_id": "task-a"},
-			EvidenceTimestamp:       time.Now().UTC(),
-			LatestRelevantUpdateAt:  time.Now().UTC().Add(-time.Second),
 		},
 	})
 	assert.Equal(t, EvidenceFreshnessFresh, fresh)
@@ -29,14 +26,6 @@ func TestEvaluateEvidenceFreshness(t *testing.T) {
 		},
 	})
 	assert.Equal(t, EvidenceFreshnessStale, staleByStructuralInput)
-
-	timestampOnly := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
-		{
-			EvidenceTimestamp:      time.Now().UTC().Add(-2 * time.Minute),
-			LatestRelevantUpdateAt: time.Now().UTC().Add(-time.Minute),
-		},
-	})
-	assert.Equal(t, EvidenceFreshnessUnknown, timestampOnly)
 
 	unknownInsufficient := EvaluateEvidenceFreshness(true, []EvidenceFreshnessInput{
 		{},

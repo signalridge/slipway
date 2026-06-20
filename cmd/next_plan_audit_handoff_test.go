@@ -43,7 +43,7 @@ func TestNextBundleHandoffDoesNotAdvertiseEvidenceBeforeAudit(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "plan-audit bundle handoff")
+		slug := createGovernedRequest(t, root, levelDiscovery, "plan-audit bundle handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepBundle
@@ -81,7 +81,7 @@ func TestNextAuditHandoffStillAdvertisesEvidence(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "plan-audit audit handoff")
+		slug := createGovernedRequest(t, root, levelDiscovery, "plan-audit audit handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepAudit

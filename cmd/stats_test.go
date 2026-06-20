@@ -21,7 +21,7 @@ func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "stats view should summarize workflow state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "stats view should summarize workflow state")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.QualityMode = model.QualityModeFull
@@ -107,7 +107,7 @@ func TestStatsDoesNotTreatMissingReviewEvidenceAsStaleRunSummary(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should separate stale execution evidence from missing review evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should separate stale execution evidence from missing review evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -131,7 +131,7 @@ func TestStatsMarksStaleRunSummaryWhenExecutionEvidenceDrifts(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should still report stale execution evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should still report stale execution evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -157,7 +157,7 @@ func TestStatsIgnoresBrokenExecutionSummaryOutsideExecutionStates(t *testing.T) 
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should ignore irrelevant broken summary")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should ignore irrelevant broken summary")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS1Plan
@@ -180,7 +180,7 @@ func TestStatsReportsBrokenExecutionSummaryInExecutionStatesWithoutFailing(t *te
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should degrade when execution summary is corrupt")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should degrade when execution summary is corrupt")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -206,7 +206,7 @@ func TestStatsCountsArchivedOwnersAlongsideHiddenBoundWorktreeChanges(t *testing
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
 
-	slug := createGovernedRequest(t, root, "L3", "stats should still see hidden siblings and archived owners")
+	slug := createGovernedRequest(t, root, levelDiscovery, "stats should still see hidden siblings and archived owners")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -248,7 +248,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
 
-	slug := createGovernedRequest(t, root, "L3", "stats should keep hidden worktree closeout freshness authoritative")
+	slug := createGovernedRequest(t, root, levelDiscovery, "stats should keep hidden worktree closeout freshness authoritative")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -297,7 +297,7 @@ func TestStatsCountsMissingMandatoryIndependentReviewEvidence(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should count missing independent review evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should count missing independent review evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -332,7 +332,7 @@ func TestStatsCountsMissingSelectedSecurityReviewEvidence(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should count selected security review evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should count selected security review evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review

@@ -133,7 +133,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		view.planLocked = planLockedFromGates(readiness)
 	}
 	if view.CurrentState == model.StateS2Implement && governedChange != nil {
-		view.InputContext.WavePlan = buildWavePlan(root, governedChange, view.InputContext.ArtifactBundle)
+		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle)
 	}
 
 	if view.CurrentState == model.StateDone {

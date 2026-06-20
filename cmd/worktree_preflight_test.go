@@ -21,7 +21,7 @@ func TestNextBlocksL3AdvanceWithoutWorktreePreflightEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree gate")
+		slug := createGovernedRequest(t, root, levelDiscovery, "l3 worktree gate")
 
 		// Advance to S2_IMPLEMENT where the worktree gate is now checked.
 		change, err := state.LoadChange(root, slug)
@@ -80,7 +80,7 @@ func TestNextL3AdvancesAfterDedicatedWorktreePreflightEvidence(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree advance")
+		slug := createGovernedRequest(t, root, levelDiscovery, "l3 worktree advance")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -162,7 +162,7 @@ func TestNextUsesDedicatedWorktreePathsAfterPreflight(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 worktree paths")
+		slug := createGovernedRequest(t, root, levelDiscovery, "l3 worktree paths")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -203,7 +203,7 @@ func TestNextMovesGovernedBundleIntoDedicatedWorktreeAfterPreflight(t *testing.T
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
-	slug := createGovernedRequest(t, root, "L3", "l3 worktree bundle migration")
+	slug := createGovernedRequest(t, root, levelDiscovery, "l3 worktree bundle migration")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -237,7 +237,7 @@ func TestValidateBlocksL3WorktreePreflightWhenEvidenceTargetsMainWorkspace(t *te
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
-		slug := createGovernedRequest(t, root, "L3", "l3 invalid main worktree")
+		slug := createGovernedRequest(t, root, levelDiscovery, "l3 invalid main worktree")
 
 		// Advance to S2_IMPLEMENT where the worktree gate is now checked.
 		change, err := state.LoadChange(root, slug)
@@ -277,7 +277,7 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Implement(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
-	slug := createGovernedRequest(t, root, "L3", "l3 worktree deadlock regression")
+	slug := createGovernedRequest(t, root, levelDiscovery, "l3 worktree deadlock regression")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 

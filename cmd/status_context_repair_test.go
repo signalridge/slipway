@@ -41,7 +41,7 @@ func TestStatusCommandDefaultsToBoundWorktreeChangeWhenMultipleActiveChanges(t *
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		boundSlug := createGovernedRequest(t, root, "L3", "bound worktree status default route")
+		boundSlug := createGovernedRequest(t, root, levelDiscovery, "bound worktree status default route")
 		boundChange, err := state.LoadChange(root, boundSlug)
 		require.NoError(t, err)
 		boundChange.CurrentState = model.StateS2Implement
@@ -204,7 +204,7 @@ func TestBuildGovernedStatusView(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status governed builder")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status governed builder")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -225,7 +225,7 @@ func TestBuildGovernedStatusViewRecomputesGovernanceReadinessWithoutPersistingSn
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status governance recompute")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status governance recompute")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -314,7 +314,7 @@ func TestBuildGovernedStatusViewChecksInvalidBoundWorktreeBeforeBundle(t *testin
 	initGitRepoForWorktreeTests(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status invalid bound worktree")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status invalid bound worktree")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -336,7 +336,7 @@ func TestBuildMultiChangeSummaryView(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	governedSlug := createGovernedRequest(t, root, "L2", "status governed summary")
+	governedSlug := createGovernedRequest(t, root, levelNonDiscovery, "status governed summary")
 	createIntakeChangeFixture(t, root, "status admission summary")
 
 	changes, err := state.ListChanges(root)
@@ -361,7 +361,7 @@ func TestBuildGovernedStatusViewPlanAuditKeepsNextAction(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status plan finalized")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status plan finalized")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS1Plan
@@ -406,7 +406,7 @@ func assertReadOnlyArtifactReconcileDoesNotPersist(
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", description)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, description)
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -530,7 +530,7 @@ func TestResolveExplicitRequestInactiveRemediationDoesNotPointToUnsupportedStatu
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "inactive explicit request remediation")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "inactive explicit request remediation")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.Status = model.ChangeStatusDone
