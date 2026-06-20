@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.2](https://github.com/signalridge/slipway/compare/v0.31.1...v0.31.2) (2026-06-20)
+
+
+### Bug Fixes
+
+* **execution:** harden auto mode governance ([#288](https://github.com/signalridge/slipway/issues/288)) ([4ad740b](https://github.com/signalridge/slipway/commit/4ad740b3c36fe84f8719d60e280d307f1c8f7428))
+* **runtime:** prefer local archived change for unscoped status/validate in its worktree ([#283](https://github.com/signalridge/slipway/issues/283)) ([#284](https://github.com/signalridge/slipway/issues/284)) ([7993c06](https://github.com/signalridge/slipway/commit/7993c067f5ea1eb090d2f33bcbdc0f1b96d1b982))
+
 ## [0.31.1](https://github.com/signalridge/slipway/compare/v0.31.0...v0.31.1) (2026-06-20)
 
 
