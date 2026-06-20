@@ -82,6 +82,13 @@ func SkillIsPurePacingAutoSafe(skillName string) bool {
 // SkillRequiresManualAutoBoundary reports skills that must not be softened by
 // execution.auto even when the change has no guardrail domain. Unknown non-empty
 // skill names fail closed until explicitly classified as pure-pacing auto-safe.
+//
+// A blank name reports false by design, not as a fail-open gap: an empty skill
+// name means there is no skill handoff to gate, so there is nothing for auto to
+// soften. ReviewBatch skill names and NextSkill.Name are always populated, so
+// they never reach the blank case. NextSkill.BlockingName may be blank, but when
+// it is, nextSkillRequiresManualAutoBoundary still also checks the always-populated
+// Name, so a blank name never opens a softening path.
 func SkillRequiresManualAutoBoundary(skillName string) bool {
 	name := strings.TrimSpace(skillName)
 	return name != "" && !SkillIsPurePacingAutoSafe(name)

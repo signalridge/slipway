@@ -337,7 +337,13 @@ func makeNextCmd() *cobra.Command {
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextViewForCommand(root, ref, "", true, !jsonOutput, noAutoPass, "next", auto, false)
+				view, err := buildNextViewForCommand(root, ref, nextViewOptions{
+					Preview:          true,
+					AutoSkipEvidence: !jsonOutput,
+					SkipAutoPass:     noAutoPass,
+					Command:          "next",
+					Auto:             auto,
+				})
 				if err != nil {
 					return err
 				}
@@ -370,20 +376,44 @@ func makeNextCmd() *cobra.Command {
 }
 
 func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	return buildNextViewForCommand(root, ref, resumeResponse, preview, autoSkipEvidence, skipAutoPass, "run", false, false)
+	return buildNextViewForCommand(root, ref, nextViewOptions{
+		ResumeResponse:   resumeResponse,
+		Preview:          preview,
+		AutoSkipEvidence: autoSkipEvidence,
+		SkipAutoPass:     skipAutoPass,
+		Command:          "run",
+	})
 }
 
-func buildNextViewForCommand(
-	root string,
-	ref changeRef,
-	resumeResponse string,
-	preview bool,
-	autoSkipEvidence bool,
-	skipAutoPass bool,
-	command string,
-	auto bool,
-	autoCheckpointAcknowledged bool,
-) (nextView, error) {
+// nextViewOptions carries the per-command knobs for buildNextViewForCommand.
+// Grouping them in a named struct keeps the call sites self-documenting instead
+// of relying on a long tail of positional booleans.
+type nextViewOptions struct {
+	// ResumeResponse is the operator (or auto-injected) checkpoint response.
+	ResumeResponse string
+	// Preview makes the build read-only: no advancement side effects.
+	Preview bool
+	// AutoSkipEvidence advances but defers evidence prompts the caller surfaces.
+	AutoSkipEvidence bool
+	// SkipAutoPass advances state but suppresses auto-pass so the caller decides.
+	SkipAutoPass bool
+	// Command is the owning command name (e.g. "next", "run", a stage name).
+	Command string
+	// Auto carries execution.auto into advancement and confirmation softening.
+	Auto bool
+	// AutoCheckpointAcknowledged marks the consumed checkpoint as auto-resolved.
+	// Only the first iteration of an auto run sets it; later iterations pass false.
+	AutoCheckpointAcknowledged bool
+}
+
+func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (nextView, error) {
+	resumeResponse := opts.ResumeResponse
+	preview := opts.Preview
+	autoSkipEvidence := opts.AutoSkipEvidence
+	skipAutoPass := opts.SkipAutoPass
+	command := opts.Command
+	auto := opts.Auto
+	autoCheckpointAcknowledged := opts.AutoCheckpointAcknowledged
 	// READ-ONLY PREVIEW INVARIANT: only the advancing path (run/stage) carries
 	// auto into advancement so the engine preset auto-confirm can fire. A preview
 	// query (`slipway next`) must never trigger an auto-confirm side effect, so

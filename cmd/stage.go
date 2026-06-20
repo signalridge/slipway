@@ -149,7 +149,13 @@ func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeRespo
 	nextResumeResponse := resumeResponse
 	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, spec.Name, auto, nextAutoCheckpointAcknowledged)
+		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
+			ResumeResponse:             nextResumeResponse,
+			AutoSkipEvidence:           true,
+			Command:                    spec.Name,
+			Auto:                       auto,
+			AutoCheckpointAcknowledged: nextAutoCheckpointAcknowledged,
+		})
 		if err != nil {
 			return nextView{}, err
 		}

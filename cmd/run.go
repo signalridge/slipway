@@ -190,6 +190,11 @@ const autoAcknowledgedResponse = "auto-acknowledged"
 
 // isGuardrailSensitive reports whether a change's guardrail domain marks it as a
 // sensitive domain that must keep failing closed to manual review under auto.
+//
+// An empty domain reports non-sensitive on the authority of upstream intake
+// classification: a sensitive change carries a non-empty GuardrailDomain set by
+// the governed intake/plan stages, so a blank domain here means the classifier
+// found no sensitive domain rather than that classification was skipped.
 func isGuardrailSensitive(guardrailDomain string) bool {
 	return strings.TrimSpace(guardrailDomain) != ""
 }
@@ -308,7 +313,12 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 
 func runGovernedLoop(root string, ref changeRef, resumeResponse string, auto bool) (nextView, error) {
 	buildNext := func(nextResumeResponse string) (nextView, error) {
-		return buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run", auto, false)
+		return buildNextViewForCommand(root, ref, nextViewOptions{
+			ResumeResponse:   nextResumeResponse,
+			AutoSkipEvidence: true,
+			Command:          "run",
+			Auto:             auto,
+		})
 	}
 	return runGovernedLoopWithBuilder(root, ref, resumeResponse, buildNext)
 }
@@ -322,7 +332,13 @@ func runGovernedLoopWithCheckpointAck(
 ) (nextView, error) {
 	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
 	buildNext := func(nextResumeResponse string) (nextView, error) {
-		view, err := buildNextViewForCommand(root, ref, nextResumeResponse, false, true, false, "run", auto, nextAutoCheckpointAcknowledged)
+		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
+			ResumeResponse:             nextResumeResponse,
+			AutoSkipEvidence:           true,
+			Command:                    "run",
+			Auto:                       auto,
+			AutoCheckpointAcknowledged: nextAutoCheckpointAcknowledged,
+		})
 		nextAutoCheckpointAcknowledged = false
 		return view, err
 	}

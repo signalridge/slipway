@@ -112,7 +112,14 @@ func TestBuildLearnViewSplitsManualAndAutoCheckpointResolutionSignals(t *testing
 	assert.Equal(t, 2, view.Signals.CheckpointResolved)
 	assert.Equal(t, 1, view.Signals.CheckpointResolvedManual)
 	assert.Equal(t, 1, view.Signals.CheckpointResolvedAuto)
-	assert.Equal(t, 0.5, view.Signals.CheckpointResolutionRate)
+	// The manual/auto counts must partition the total resolved count exactly.
+	assert.Equal(t, view.Signals.CheckpointResolved,
+		view.Signals.CheckpointResolvedManual+view.Signals.CheckpointResolvedAuto)
+	// checkpoint_resolution_rate keeps its historical TOTAL meaning (resolved/opened);
+	// the manual/auto rates break that total down by attribution.
+	assert.Equal(t, 1.0, view.Signals.CheckpointResolutionRate)
+	assert.Equal(t, 0.5, view.Signals.CheckpointManualResolutionRate)
+	assert.Equal(t, 0.5, view.Signals.CheckpointAutoResolutionRate)
 }
 
 func TestBuildLearnViewToleratesArchivedChangeWithoutLifecycleEvents(t *testing.T) {

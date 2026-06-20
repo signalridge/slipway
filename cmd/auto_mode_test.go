@@ -859,7 +859,11 @@ func TestNextPreviewUnderAutoHasNoSideEffect(t *testing.T) {
 	advPath := state.BundleChangeFilePath(root, advSlug)
 	advBefore, err := os.ReadFile(advPath)
 	require.NoError(t, err)
-	_, err = buildNextViewForCommand(root, changeRef{Slug: advSlug}, "", false, true, false, "run", true, false)
+	_, err = buildNextViewForCommand(root, changeRef{Slug: advSlug}, nextViewOptions{
+		AutoSkipEvidence: true,
+		Command:          "run",
+		Auto:             true,
+	})
 	require.NoError(t, err)
 	advAfter, err := os.ReadFile(advPath)
 	require.NoError(t, err)
@@ -880,7 +884,12 @@ func TestNextPreviewUnderAutoHasNoSideEffect(t *testing.T) {
 
 	// preview=true is the `next` query path; auto is threaded for the displayed
 	// requirement but must never advance/mutate.
-	_, err = buildNextViewForCommand(root, changeRef{Slug: slug}, "", true, true, false, "next", true, false)
+	_, err = buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{
+		Preview:          true,
+		AutoSkipEvidence: true,
+		Command:          "next",
+		Auto:             true,
+	})
 	require.NoError(t, err)
 
 	after, err := state.LoadChange(root, slug)
@@ -920,7 +929,11 @@ func TestAutoDoesNotAutoWriteIntakeApprovedSummary(t *testing.T) {
 	require.NoError(t, os.WriteFile(intentPath, []byte(intentBody), 0o644))
 
 	// Advancing path with auto on at the Approved-Summary confirm boundary.
-	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, "", false, true, false, "run", true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{
+		AutoSkipEvidence: true,
+		Command:          "run",
+		Auto:             true,
+	})
 	require.NoError(t, err)
 
 	after, err := state.LoadChange(root, slug)
@@ -1062,7 +1075,11 @@ func TestLightAutoPassEligibilityUnchangedUnderAuto(t *testing.T) {
 		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		// skipAutoPass=true surfaces AutoPassEligible instead of auto-passing.
-		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, "", false, false, true, "run", auto, false)
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{
+			SkipAutoPass: true,
+			Command:      "run",
+			Auto:         auto,
+		})
 		require.NoError(t, err)
 		return view
 	}
