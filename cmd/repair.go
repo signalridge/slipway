@@ -150,11 +150,7 @@ func makeRepairCmd() *cobra.Command {
 						summary.StaleLockCleaned = true
 					}
 				}
-				cleanedLockAnchors, err := cleanupUnheldLockAnchors(root, staleLockPaths)
-				if err != nil {
-					return err
-				}
-				summary.CleanedLockAnchors = cleanedLockAnchors
+				summary.CleanedLockAnchors = cleanupUnheldLockAnchors(root, staleLockPaths)
 
 				execRepair, err := state.RepairExecutionState(root, now, staleAfter)
 				if err != nil {
@@ -409,7 +405,7 @@ func repairEmptyLegacyRuntimeDirs(root string) ([]string, error) {
 	return []string{state.DisplayPath(root, legacyDir)}, nil
 }
 
-func cleanupUnheldLockAnchors(root string, lockPaths []string) ([]string, error) {
+func cleanupUnheldLockAnchors(root string, lockPaths []string) []string {
 	seen := map[string]struct{}{}
 	unique := make([]string, 0, len(lockPaths))
 	for _, lockPath := range lockPaths {
@@ -427,15 +423,19 @@ func cleanupUnheldLockAnchors(root string, lockPaths []string) ([]string, error)
 
 	cleanedPaths := []string{}
 	for _, lockPath := range unique {
+		// Best-effort hygiene: a single anchor's I/O error must not abort the
+		// whole repair. This mirrors the tolerant CleanupStale loop above and the
+		// helper's own best-effort contract, so skip a failing anchor and keep
+		// cleaning the rest.
 		cleaned, err := fsutil.NewStateLock(lockPath).CleanupUnheldAnchorWithoutMeta()
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if cleaned {
 			cleanedPaths = append(cleanedPaths, state.DisplayPath(root, lockPath))
 		}
 	}
-	return cleanedPaths, nil
+	return cleanedPaths
 }
 
 func buildUnrepairedDriftFindings(findings []string) []repairDriftFinding {

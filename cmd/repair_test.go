@@ -236,6 +236,29 @@ func TestRepairSummaryForRuntimeHygieneRequiresCanonicalReasonCode(t *testing.T)
 	assert.Empty(t, repairSummaryForHealthFinding(unknownCodeFinding))
 }
 
+func TestCleanupUnheldLockAnchorsToleratesPerAnchorErrors(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	// An anchor whose parent path is a regular file makes the internal meta/anchor
+	// stat fail with a non-ENOENT (ENOTDIR) error, exercising the per-anchor error
+	// path. Best-effort hygiene must skip it rather than abort the whole repair.
+	notADir := filepath.Join(root, "notadir")
+	require.NoError(t, os.WriteFile(notADir, []byte(""), 0o644))
+	failingAnchor := filepath.Join(notADir, "state.lock")
+
+	// A normal unheld empty anchor that must still be cleaned despite the sibling
+	// failure listed before it.
+	cleanAnchor := filepath.Join(root, "locks", "state.lock")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cleanAnchor), 0o755))
+	require.NoError(t, os.WriteFile(cleanAnchor, []byte(""), 0o644))
+
+	cleaned := cleanupUnheldLockAnchors(root, []string{failingAnchor, cleanAnchor})
+
+	assert.Equal(t, []string{state.DisplayPath(root, cleanAnchor)}, cleaned)
+	assert.NoFileExists(t, cleanAnchor)
+}
+
 func TestRepairDoesNotCleanFreshAtomicTempArtifacts(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
