@@ -284,7 +284,7 @@ func TestAdvanceGoverned_AutoConfirmsPendingPresetInGuardrailDomain(t *testing.T
 	})
 
 	policy := governance.PresetPolicy{EffectivePreset: model.WorkflowPresetStrict}
-	confirmed, err := autoConfirmPendingPreset(root, &change, true, policy)
+	confirmed, err := autoConfirmPendingPreset(root, &change, true, policy, "run")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package progression
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,7 +61,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// UPGRADE-ONLY to the suggested/effective preset and advancement continues;
 	// this never downgrades and never bypasses a downstream evidence gate.
 	if blockers := PresetConfirmationBlockers(change); len(blockers) > 0 {
-		confirmed, err := autoConfirmPendingPreset(root, &change, options.Auto, presetPolicy)
+		confirmed, err := autoConfirmPendingPreset(root, &change, options.Auto, presetPolicy, options.Command)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -537,7 +538,7 @@ func autoPresetConfirmTarget(change model.Change, policy governance.PresetPolicy
 // distinct `auto_preset_confirmed` lifecycle event is appended. It returns false
 // (leaving the change untouched) when auto is off, nothing is pending, or the
 // confirm would be a downgrade.
-func autoConfirmPendingPreset(root string, change *model.Change, auto bool, policy governance.PresetPolicy) (bool, error) {
+func autoConfirmPendingPreset(root string, change *model.Change, auto bool, policy governance.PresetPolicy, command string) (bool, error) {
 	if change == nil || !auto {
 		return false, nil
 	}
@@ -550,30 +551,34 @@ func autoConfirmPendingPreset(root string, change *model.Change, auto bool, poli
 	change.WorkflowPreset = target
 	change.SuggestedWorkflowPreset = ""
 
-	// Replicate the manual confirm scaffold step (cmd/preset.go): at S0_INTAKE
-	// keep only intent.md so a pending confirm never materializes downstream
-	// artifacts from empty templates; otherwise scaffold the full governed bundle
-	// under the confirmed effective preset.
-	if change.CurrentState == model.StateS0Intake {
-		if err := artifact.ScaffoldIntentForChange(root, *change); err != nil {
-			return false, err
-		}
-	} else {
-		resolution := ResolveChangeSchemaDiagnostics(*change)
-		if len(resolution.Blockers) > 0 {
-			return false, fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
-		}
-		if err := artifact.ScaffoldGovernedBundleForChange(root, *change, target, resolution.Schema); err != nil {
-			return false, err
-		}
-	}
-
+	// Persist the confirmed preset to the authority file BEFORE scaffolding, then
+	// scaffold, mirroring the manual `slipway preset` confirm ordering
+	// (cmd/preset.go): authority-first plus restore-on-scaffold-failure. This
+	// removes the window where artifacts are scaffolded on disk while change.yaml
+	// still records the preset as pending.
 	if err := state.SaveChange(root, *change); err != nil {
 		return false, err
 	}
+	if scaffoldErr := autoConfirmScaffold(root, *change, target); scaffoldErr != nil {
+		// Restore the pending suggestion so a transient scaffold failure never
+		// strands a confirmed authority. Auto-confirm is always a first-time
+		// confirmation, so the pending state is (invalid preset, suggested=before).
+		change.WorkflowPreset = ""
+		change.SuggestedWorkflowPreset = beforePreset
+		if restoreErr := state.SaveChange(root, *change); restoreErr != nil {
+			return false, errors.Join(scaffoldErr, restoreErr)
+		}
+		return false, scaffoldErr
+	}
 
+	// Attribute the event to the command that drove advancement (run/intake/plan/
+	// implement), not a hardcoded "advance", so traces match normal advancement.
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "advance"
+	}
 	if _, err := state.AppendLifecycleEvent(root, *change, state.LifecycleEvent{
-		Command:       "advance",
+		Command:       command,
 		EventType:     "preset.changed",
 		Action:        "confirmed",
 		Reason:        "auto_preset_confirmed",
@@ -591,6 +596,22 @@ func autoConfirmPendingPreset(root string, change *model.Change, auto bool, poli
 	}
 
 	return true, nil
+}
+
+// autoConfirmScaffold materializes the artifacts a confirmed preset requires,
+// mirroring the manual `slipway preset` scaffold step: only intent.md at
+// S0_INTAKE (so a pending confirm never materializes downstream artifacts from
+// empty templates), otherwise the full governed bundle under the confirmed
+// effective preset.
+func autoConfirmScaffold(root string, change model.Change, target model.WorkflowPreset) error {
+	if change.CurrentState == model.StateS0Intake {
+		return artifact.ScaffoldIntentForChange(root, change)
+	}
+	resolution := ResolveChangeSchemaDiagnostics(change)
+	if len(resolution.Blockers) > 0 {
+		return fmt.Errorf("resolve artifact schema: %s", strings.Join(resolution.Blockers, ","))
+	}
+	return artifact.ScaffoldGovernedBundleForChange(root, change, target, resolution.Schema)
 }
 
 func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target EvidenceRepairTarget) AdvanceSummary {

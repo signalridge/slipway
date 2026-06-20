@@ -288,7 +288,7 @@ var commandRegistry = []CommandDef{
 		Arguments: "[--json] [--diagnostics] [--resume] [--resume-response \"<text>\"] [--auto|--no-auto] [--change <slug>]",
 		Notes: []string{
 			"`slipway run` is an auto-driver shortcut. JSON output includes `delegated_to` so hosts can see the primary stage command it invoked.",
-			"`--auto`/`--no-auto` override `execution.auto` for one run: auto-advances pure-pacing pauses (review batches, non-sensitive skill handoffs, fresh human-verify checkpoints) on prior authorization, while sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and every evidence gate still hard-stop.",
+			"`--auto`/`--no-auto` override `execution.auto` for one run: auto-advances pure-pacing pauses (review batches, non-sensitive skill handoffs, fresh human-verify checkpoints) on prior authorization and auto-confirms a pending workflow-preset upgrade-only (never downgraded), while sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and every evidence gate still hard-stop.",
 		}},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",

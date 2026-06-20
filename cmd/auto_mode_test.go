@@ -450,17 +450,45 @@ func TestNextPreviewUnderAutoHasNoSideEffect(t *testing.T) {
 	initTestWorkspace(t, root)
 	writeAutoConfig(t, root, true)
 
-	// A change with a pending preset upgrade confirmation: the auto preset
-	// auto-confirm would mutate it on an advancing path, so the preview must not.
-	slug := createGovernedChangeFixture(t, root, "next preview no side effect under auto", func(change *model.Change) {
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepResearch
-		change.WorkflowPreset = model.WorkflowPresetLight
-		change.SuggestedWorkflowPreset = model.WorkflowPresetStandard
-	})
+	// A GENUINELY pending preset confirmation: WorkflowPreset is unset (invalid)
+	// and a valid preset is suggested, so WorkflowPresetConfirmationPending() is
+	// true and the advancing auto path WOULD auto-confirm + SaveChange. (The prior
+	// fixture set WorkflowPreset=light, which is valid, so nothing was pending and
+	// the no-side-effect assertion held vacuously.)
+	newFixture := func(name string) string {
+		return createGovernedChangeFixture(t, root, name, func(change *model.Change) {
+			change.CurrentState = model.StateS1Plan
+			change.PlanSubStep = model.PlanSubStepResearch
+			change.WorkflowPreset = ""
+			change.SuggestedWorkflowPreset = model.WorkflowPresetStandard
+		})
+	}
 
+	// Positive control: on the advancing path (preview=false) the same fixture is
+	// auto-confirmed and change.yaml IS rewritten, proving the fixture can produce
+	// the mutation the preview must suppress (guards against a vacuous test).
+	advSlug := newFixture("advancing auto confirms pending preset")
+	advChange, err := state.LoadChange(root, advSlug)
+	require.NoError(t, err)
+	require.True(t, advChange.WorkflowPresetConfirmationPending(), "fixture must start with a pending preset")
+	advPath := state.BundleChangeFilePath(root, advSlug)
+	advBefore, err := os.ReadFile(advPath)
+	require.NoError(t, err)
+	_, err = buildNextViewForCommand(root, changeRef{Slug: advSlug}, "", false, true, false, "run", true)
+	require.NoError(t, err)
+	advAfter, err := os.ReadFile(advPath)
+	require.NoError(t, err)
+	require.NotEqual(t, advBefore, advAfter, "advancing auto path must auto-confirm and rewrite change.yaml")
+	advConfirmed, err := state.LoadChange(root, advSlug)
+	require.NoError(t, err)
+	require.False(t, advConfirmed.WorkflowPresetConfirmationPending(), "advancing auto path must confirm the pending preset")
+
+	// The assertion under test: the preview path leaves the pending preset and
+	// change.yaml untouched.
+	slug := newFixture("next preview no side effect under auto")
 	before, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
+	require.True(t, before.WorkflowPresetConfirmationPending(), "fixture must start with a pending preset")
 	changePath := state.BundleChangeFilePath(root, slug)
 	beforeBytes, err := os.ReadFile(changePath)
 	require.NoError(t, err)
@@ -475,6 +503,7 @@ func TestNextPreviewUnderAutoHasNoSideEffect(t *testing.T) {
 	assert.Equal(t, before.CurrentState, after.CurrentState)
 	assert.Equal(t, before.WorkflowPreset, after.WorkflowPreset)
 	assert.Equal(t, before.PlanSubStep, after.PlanSubStep)
+	assert.True(t, after.WorkflowPresetConfirmationPending(), "preview must not confirm the pending preset")
 
 	// The authoritative change.yaml must be byte-identical: no SaveChange ran.
 	afterBytes, err := os.ReadFile(changePath)

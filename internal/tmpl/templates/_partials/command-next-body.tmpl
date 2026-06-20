@@ -21,7 +21,7 @@ slipway next --json
 - `confirmation_requirement.resume_response_supported` is true only when `--resume-response` can satisfy the current stop.
 - Branch on `confirmation_requirement.next_action_kind` (`skill_handoff` | `checkpoint_resume` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`) and run `confirmation_requirement.next_command` when present; `next_action` is human prose, not a contract to parse.
 - `context_budget` appears only when `guard_action` is `warn` or `stop`; absence means no budget guard is active.
-- Under auto (`execution.auto` / `slipway run --auto`), only pure-pacing pauses auto-advance on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, decision and human_action checkpoints, stale checkpoints, and every evidence gate still hard-stop.
+- Under auto (`execution.auto` / `slipway run --auto`), only pure-pacing pauses auto-advance on prior authorization, and a pending workflow-preset confirmation is auto-confirmed upgrade-only (never downgraded); sensitive/guardrail confirmations, the intake Approved Summary, decision and human_action checkpoints, stale checkpoints, and every evidence gate still hard-stop.
 - Write evidence to `next_skill.verification_dir`.
 - If `blockers` is non-empty, resolve the blockers before executing the skill.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.

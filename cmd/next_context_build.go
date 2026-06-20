@@ -381,11 +381,14 @@ func buildResumeCheckpointProgress(
 	}
 	slices.Sort(ids)
 
+	// Pass the same summary blockers run uses (cmd/run.go autoAckEligibleCheckpoint)
+	// so the previewed checkpoint freshness matches what run will enforce; dropping
+	// them let next advertise an auto-ackable checkpoint that run would refuse.
 	freshness := projectFreshnessForExecMode(
 		root,
 		change,
 		execCtx.Summary,
-		nil,
+		execCtx.SummaryBlockers,
 	)
 
 	resumeWaveIndex := 0
