@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -537,6 +538,89 @@ func approvedSummarySection(intent string) string {
 		body = body[:next]
 	}
 	return strings.TrimSpace(body)
+}
+
+// (finding #5) Config-level execution.auto must reach the real command entry
+// points, not just the helper layer. These drive `slipway intake` through the
+// root cobra command and the `session-start` hook through makeHookCmd, with auto
+// set only via .slipway.yaml. At S0 intake the next skill is intake-clarification
+// (a skill_handoff), so non-guardrail auto softens the boundary to
+// evidence_continuation while a guardrail domain — and auto off — keep the
+// hard_stop. The guardrail-vs-non-guardrail pair proves both that auto was read
+// from config and threaded, and that the guardrail exclusion still fails closed
+// through these entries.
+func TestConfigAutoReachesStageAndHookEntries(t *testing.T) {
+	setup := func(t *testing.T, auto bool, guardrail string) string {
+		t.Helper()
+		root := t.TempDir()
+		ensureTestGitRepo(t, root)
+		initTestWorkspace(t, root)
+		writeAutoConfig(t, root, auto)
+		slug := createIntakeChangeFixture(t, root, "config auto reaches entries")
+		if guardrail != "" {
+			change, err := state.LoadChange(root, slug)
+			require.NoError(t, err)
+			change.GuardrailDomain = guardrail
+			require.NoError(t, state.SaveChange(root, change))
+		}
+		return root
+	}
+
+	t.Run("stage_command_intake", func(t *testing.T) {
+		stageJSON := func(t *testing.T, root string) string {
+			t.Helper()
+			var out string
+			withWorkspace(t, root, func() {
+				cmd := newRootCmd()
+				cmd.SetArgs([]string{"intake", "--json"})
+				var buf bytes.Buffer
+				cmd.SetOut(&buf)
+				require.NoError(t, cmd.Execute())
+				out = buf.String()
+			})
+			return out
+		}
+
+		soft := stageJSON(t, setup(t, true, ""))
+		assert.Contains(t, soft, "evidence_continuation",
+			"config auto must soften the non-guardrail intake skill_handoff through the stage command")
+		assert.NotContains(t, soft, "hard_stop")
+
+		guard := stageJSON(t, setup(t, true, string(model.GuardrailDomainAuthAuthZ)))
+		assert.Contains(t, guard, "hard_stop",
+			"guardrail domain must keep the stage entry hard-stop under auto")
+
+		off := stageJSON(t, setup(t, false, ""))
+		assert.Contains(t, off, "hard_stop", "auto off must keep the legacy hard_stop")
+	})
+
+	t.Run("session_start_hook", func(t *testing.T) {
+		hookJSON := func(t *testing.T, root string) string {
+			t.Helper()
+			var out string
+			withWorkspace(t, root, func() {
+				cmd := makeHookCmd()
+				cmd.SetArgs([]string{"session-start", "--tool", "claude"})
+				var buf bytes.Buffer
+				cmd.SetOut(&buf)
+				require.NoError(t, cmd.Execute())
+				out = buf.String()
+			})
+			return out
+		}
+
+		soft := hookJSON(t, setup(t, true, ""))
+		assert.Contains(t, soft, "evidence_continuation",
+			"config auto must thread into the session-start hook view")
+		assert.NotContains(t, soft, "hard_stop")
+
+		guard := hookJSON(t, setup(t, true, string(model.GuardrailDomainAuthAuthZ)))
+		assert.Contains(t, guard, "hard_stop",
+			"guardrail domain must keep the hook view hard-stop under auto")
+
+		off := hookJSON(t, setup(t, false, ""))
+		assert.Contains(t, off, "hard_stop", "auto off must keep the hook view hard-stop")
+	})
 }
 
 // (g) light auto-pass eligibility is unchanged under auto: the auto-on and
