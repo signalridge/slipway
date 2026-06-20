@@ -121,12 +121,13 @@ slipway run --no-auto --json
 
 `--auto` and `--no-auto` take precedence over the `execution.auto` config for
 that one run. Under auto, Slipway auto-advances pure-pacing pauses (review
-batches, non-sensitive skill handoffs, fresh `human_verify` checkpoints) on
-prior authorization and auto-confirms a pending workflow-preset upgrade-only
-(never downgraded). Sensitive and guardrail confirmations, the intake Approved
-Summary, decision and human_action checkpoints, stale or unknown-freshness
-checkpoints, and every evidence gate still hard-stop and are never
-auto-advanced.
+batches without `security-review`, non-sensitive/non-security-review skill
+handoffs, fresh non-guardrail `human_verify` checkpoints) on prior authorization
+and auto-confirms a pending workflow-preset upgrade-only (never downgraded).
+`security-review` boundaries, sensitive and guardrail confirmations, the intake
+Approved Summary, decision and human_action checkpoints, stale or
+unknown-freshness checkpoints, and every evidence gate still hard-stop and are
+never auto-advanced.
 
 ## Surface Manifest
 

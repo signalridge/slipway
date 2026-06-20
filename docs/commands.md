@@ -261,9 +261,9 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 `run --auto` / `run --no-auto` override `execution.auto` for one invocation.
 Config-level `execution.auto` also applies to `intake`, `plan`, and
 `implement`; those stage commands have no override flags. Auto only crosses
-pure-pacing boundaries. Sensitive/guardrail confirmations, the intake Approved
-Summary, decision/human_action checkpoints, stale checkpoints, and evidence
-gates remain stops.
+pure-pacing boundaries. `security-review` boundaries, sensitive/guardrail
+confirmations, the intake Approved Summary, decision/human_action checkpoints,
+stale or unknown-freshness checkpoints, and evidence gates remain stops.
 
 `validate --json` is the active-readiness authority: it answers whether the
 current governed state can advance now and mirrors actionable review handoff

@@ -13,7 +13,7 @@ slipway intake --json
 - It surfaces the current intake host skill, blocker, or transition out of intake.
 - `run` may delegate to `intake`, but `intake` is the primary stage command.
 - Same-intent clarification updates the current change authority; an intent conflict requires a new governed change.
-- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale checkpoints, and evidence gates still stop.
+- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and evidence gates still stop.
 - Treat default JSON as the action contract. Use `--diagnostics` only for full readiness fields.
 
 ## Flags

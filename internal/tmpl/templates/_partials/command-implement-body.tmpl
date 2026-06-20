@@ -17,7 +17,7 @@ slipway implement --resume-response "<response>" --json
 - Wave execution continues wave-to-wave inside the wave-orchestration host until a natural stop condition.
 - If implementation discovers same-intent scope gaps, record a change amendment and update the current artifacts before continuing.
 - Executor agents must not silently write outside declared task scope; they propose the amendment or return a blocker.
-- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale checkpoints, and evidence gates still stop.
+- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and evidence gates still stop.
 
 ## Flags
 - `--resume`: continue resumable non-checkpoint implementation from the latest incomplete wave

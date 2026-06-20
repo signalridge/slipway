@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -205,6 +206,60 @@ func TestDeriveConfirmationRequirementAutoSoftensNonGuardrail(t *testing.T) {
 		assert.False(t, req.FreshConfirmationRequired)
 		assert.Contains(t, req.Reason, "skill_handoff")
 		assert.NotEmpty(t, req.NextAction)
+	})
+}
+
+func TestDeriveConfirmationRequirementAutoKeepsSecurityReviewHardStop(t *testing.T) {
+	t.Parallel()
+
+	t.Run("review_batch with security review stays hard_stop without guardrail", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			ReviewBatch: &reviewBatchView{
+				Skills: []reviewBatchSkillView{{Name: progression.SkillSecurityReview}},
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "review_batch", req.Reason)
+	})
+
+	t.Run("skill_handoff to security review stays hard_stop without guardrail", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			NextSkill:       &nextSkillView{Name: progression.SkillSecurityReview},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "skill_handoff:security-review", req.Reason)
+	})
+
+	t.Run("security review blocking name stays hard_stop without guardrail", func(t *testing.T) {
+		t.Parallel()
+		view := nextView{
+			auto:            true,
+			GuardrailDomain: "",
+			NextSkill: &nextSkillView{
+				Name:         progression.SkillGoalVerification,
+				BlockingName: progression.SkillSecurityReview,
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+		assert.Equal(t, "hard_stop", req.Boundary)
+		assert.False(t, req.PriorAuthorizationSufficient)
+		assert.True(t, req.FreshConfirmationRequired)
+		assert.Equal(t, "skill_handoff:security-review", req.Reason)
 	})
 }
 

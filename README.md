@@ -122,12 +122,13 @@ Config-level `execution.auto` also applies to the stage commands
 consistently with `run` but expose no per-stage flag; the per-run `--auto` /
 `--no-auto` overrides live only on `slipway run`.
 
-Auto mode never relaxes governance. Sensitive/guardrail confirmations, the
-intake Approved Summary, decision and human_action checkpoints, stale checkpoints,
-and every evidence gate are **never** auto-advanced; they always hard-stop for
-explicit operator input and fresh evidence. The upgrade-only preset auto-confirm
-only ever raises governance strictness (never lowers it), so it is not one of
-these red lines.
+Auto mode never relaxes governance. `security-review` boundaries,
+sensitive/guardrail confirmations, the intake Approved Summary, decision and
+human_action checkpoints, stale or unknown-freshness checkpoints, and every
+evidence gate are **never** auto-advanced; they always hard-stop for explicit
+operator input and fresh evidence. The upgrade-only preset auto-confirm only
+ever raises governance strictness (never lowers it), so it is not one of these
+red lines.
 
 </details>
 

@@ -538,7 +538,9 @@ func autoPresetConfirmTarget(change model.Change, policy governance.PresetPolicy
 // confirmed effective preset. On success the change is persisted and a
 // distinct `auto_preset_confirmed` lifecycle event is appended. It returns false
 // (leaving the change untouched) when auto is off, nothing is pending, or the
-// confirm would be a downgrade.
+// confirm would be a downgrade. Guardrail domains do not disable this path:
+// upgrade-only confirmation can preserve or raise governance strictness, never
+// relax it.
 func autoConfirmPendingPreset(root string, change *model.Change, auto bool, policy governance.PresetPolicy, command string) (bool, error) {
 	if change == nil || !auto {
 		return false, nil

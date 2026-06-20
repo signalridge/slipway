@@ -688,13 +688,14 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 }
 
 func deriveConfirmationRequirement(view nextView) confirmationRequirement {
-	// Auto softens pure-pacing confirmation boundaries (review_batch, a
-	// non-sensitive skill_handoff, and a fresh non-sensitive human_verify
-	// checkpoint) into a standing-authorization continuation, but only when the
-	// change is NOT in a guardrail/sensitive domain. Preset, decision,
-	// human_action, stale-checkpoint, and evidence-gate boundaries keep their
-	// hard_stop even under auto.
-	autoSoftens := view.auto && !isGuardrailSensitive(view.GuardrailDomain)
+	// Auto softens pure-pacing confirmation boundaries into a
+	// standing-authorization continuation, but only when the change is NOT in a
+	// guardrail/sensitive domain and the surfaced handoff is not a selected
+	// security review. Preset, decision, human_action, stale-checkpoint, and
+	// evidence-gate boundaries keep their hard_stop even under auto.
+	autoSoftens := view.auto &&
+		!isGuardrailSensitive(view.GuardrailDomain) &&
+		!viewRequiresManualAutoBoundary(view)
 	switch {
 	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
 		return confirmationHardStop("preset_confirmation_required")
@@ -716,10 +717,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 		return confirmationHardStop("review_batch")
 	case view.NextSkill != nil:
 		reason := "skill_handoff"
-		if strings.TrimSpace(view.NextSkill.BlockingName) != "" {
-			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.BlockingName)
-		} else if strings.TrimSpace(view.NextSkill.Name) != "" {
-			reason = "skill_handoff:" + strings.TrimSpace(view.NextSkill.Name)
+		if name := nextSkillHandoffName(view.NextSkill); name != "" {
+			reason = "skill_handoff:" + name
 		}
 		if autoSoftens {
 			return autoStandingAuthorization(reason)
@@ -763,48 +762,55 @@ func hasNonPacingBlocker(view nextView) bool {
 }
 
 func confirmationBlockerCanRideHostHandoff(reason model.ReasonCode, view nextView) bool {
-	code := strings.TrimSpace(reason.Code)
-	if isRequiredSkillBlocker(code) || code == "review_alignment_required" {
+	if progression.HostHandoffBlockerCanRide(reason) {
 		return true
 	}
-	if !reviewCompanionBlockersCanRide(view) {
-		return false
-	}
-	switch code {
-	case "governance_action_required",
-		"closeout_assurance_attestation_missing",
-		"closeout_reviewer_independence_missing",
-		"context_origin_handle_invalid",
-		"high_risk_check_missing",
-		"verification_evidence_missing":
-		return true
-	default:
-		return false
-	}
+	return viewHasReviewCompanionHandoff(view) &&
+		progression.ReviewCompanionBlockerCanRide(reason)
 }
 
-func reviewCompanionBlockersCanRide(view nextView) bool {
+func viewHasReviewCompanionHandoff(view nextView) bool {
 	if view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0 {
 		return true
 	}
 	if view.NextSkill == nil {
 		return false
 	}
-	name := strings.TrimSpace(view.NextSkill.BlockingName)
-	if name == "" {
-		name = strings.TrimSpace(view.NextSkill.Name)
+	return progression.ReviewCompanionSkillCanCarryBlockers(
+		nextSkillHandoffName(view.NextSkill),
+	)
+}
+
+func viewRequiresManualAutoBoundary(view nextView) bool {
+	if view.ReviewBatch != nil {
+		for _, skill := range view.ReviewBatch.Skills {
+			if progression.SkillRequiresManualAutoBoundary(skill.Name) {
+				return true
+			}
+		}
 	}
-	switch name {
-	case progression.SkillSpecComplianceReview,
-		progression.SkillCodeQualityReview,
-		progression.SkillIndependentReview,
-		progression.SkillGoalVerification,
-		progression.SkillSecurityReview,
-		progression.SkillFinalCloseout:
-		return true
-	default:
+	if view.NextSkill == nil {
 		return false
 	}
+	return nextSkillRequiresManualAutoBoundary(view.NextSkill)
+}
+
+func nextSkillRequiresManualAutoBoundary(skill *nextSkillView) bool {
+	if skill == nil {
+		return false
+	}
+	return progression.SkillRequiresManualAutoBoundary(skill.BlockingName) ||
+		progression.SkillRequiresManualAutoBoundary(skill.Name)
+}
+
+func nextSkillHandoffName(skill *nextSkillView) string {
+	if skill == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(skill.BlockingName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(skill.Name)
 }
 
 func confirmationHardStop(reason string) confirmationRequirement {
