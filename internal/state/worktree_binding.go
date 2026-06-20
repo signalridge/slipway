@@ -32,6 +32,28 @@ type worktreeBinding struct {
 	GitCommonDir string `yaml:"git_common_dir,omitempty"`
 }
 
+// ArchivedChangeLoadError reports a candidate archived change that should have
+// been local to the invocation worktree but could not be loaded.
+type ArchivedChangeLoadError struct {
+	Slug         string
+	WorktreePath string
+	Err          error
+}
+
+func (err *ArchivedChangeLoadError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("load archived change %q for worktree %q: %v", err.Slug, err.WorktreePath, err.Err)
+}
+
+func (err *ArchivedChangeLoadError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Err
+}
+
 // WorktreeBindingPath returns the git-local worktree-binding record path for slug.
 func WorktreeBindingPath(root, slug string) string {
 	return filepath.Join(ChangeDir(root, slug), worktreeBindingFileName)
@@ -144,6 +166,87 @@ func FindActiveChangeByWorktreeBinding(root, currentWorktreePath string) (model.
 		return model.Change{}, ErrMultipleActiveChanges
 	}
 	return matches[0], nil
+}
+
+// FindArchivedChangeForWorktree resolves the archived change whose dedicated
+// worktree is the given invocation worktree. The git-local worktree-binding
+// record is removed at archive time, so the runtime-binding lookups used for
+// active changes cannot recover this association; instead it is reconstructed
+// from the portable archived bundle using the worktree authority that survives
+// archival: the default `.worktrees/<slug>` path convention and the bundle's
+// recorded worktree_branch.
+//
+// It returns (_, false, nil) when the invocation worktree hosts no local
+// archived change (the common case, including the project root and any active
+// worktree), so callers fall through to active-change resolution unchanged.
+func FindArchivedChangeForWorktree(root, worktreePath string) (model.Change, bool, error) {
+	normalizedWorktree, err := NormalizePath(worktreePath)
+	if err != nil {
+		return model.Change{}, false, fmt.Errorf("normalize worktree path: %w", err)
+	}
+	branch, _ := resolveWorktreeActualBranch(normalizedWorktree)
+	for _, slug := range archivedWorktreeSlugCandidates(normalizedWorktree, branch) {
+		change, err := LoadArchivedChange(root, slug)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return model.Change{}, false, &ArchivedChangeLoadError{
+				Slug:         slug,
+				WorktreePath: normalizedWorktree,
+				Err:          err,
+			}
+		}
+		if archivedChangeBoundToWorktree(root, change, normalizedWorktree, branch) {
+			return change, true, nil
+		}
+	}
+	return model.Change{}, false, nil
+}
+
+// archivedWorktreeSlugCandidates derives the archived slugs that could own the
+// invocation worktree from the worktree directory name and its git branch,
+// following Slipway's `.worktrees/<slug>` + `feat/<slug>` creation convention.
+// Deriving candidates (instead of enumerating every archived bundle) keeps
+// resolution delegated to LoadArchivedChange's own path authority.
+func archivedWorktreeSlugCandidates(worktreePath, branch string) []string {
+	seen := map[string]struct{}{}
+	candidates := make([]string, 0, 2)
+	add := func(slug string) {
+		slug = strings.TrimSpace(slug)
+		if slug == "" {
+			return
+		}
+		if err := ValidateChangeSlug(slug); err != nil {
+			return
+		}
+		if _, ok := seen[slug]; ok {
+			return
+		}
+		seen[slug] = struct{}{}
+		candidates = append(candidates, slug)
+	}
+	add(filepath.Base(worktreePath))
+	add(strings.TrimPrefix(strings.TrimSpace(branch), "feat/"))
+	return candidates
+}
+
+// archivedChangeBoundToWorktree confirms a candidate archived change actually
+// owns the invocation worktree via authority that survives archival: either the
+// default dedicated worktree path matches, or a non-root worktree's branch
+// matches the archived bundle's recorded worktree_branch. The project root never
+// matches by branch alone; root invocations must fall through to active/global
+// resolution.
+func archivedChangeBoundToWorktree(root string, change model.Change, worktreePath, branch string) bool {
+	if defaultPath, err := NormalizePath(DefaultWorktreePath(root, change.Slug)); err == nil && defaultPath == worktreePath {
+		return true
+	}
+	normalizedRoot, err := NormalizePath(root)
+	if err != nil || normalizedRoot == worktreePath {
+		return false
+	}
+	recordedBranch := strings.TrimSpace(change.WorktreeBranch)
+	return recordedBranch != "" && branch != "" && recordedBranch == branch
 }
 
 func gitCommonDirIdentity(root string) string {

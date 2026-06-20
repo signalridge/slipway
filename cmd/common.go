@@ -323,10 +323,32 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 	if worktreePath != "" {
 		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
 		if err != nil {
+			// Before surfacing "no active change here" or "bound to another
+			// worktree", prefer this worktree's own archived change when it hosts
+			// one, so an archived-change worktree reports its own terminal state
+			// (archived_change_not_validatable) instead of an unrelated active
+			// change bound to a different worktree (#283).
+			if shouldTryArchivedWorktreeFallback(err) {
+				if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
+					return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
+				} else if ok {
+					return resolveExplicitChange(root, archived.Slug)
+				}
+			}
 			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
 				return changeRef{}, recoveryErr
 			}
 			return changeRef{}, wrapResolutionError(err)
+		}
+		if strings.TrimSpace(change.WorktreePath) == "" {
+			// A single unbound active change is only a fallback. In an archived
+			// review worktree, local archived authority is more specific and must
+			// fail closed before commands operate on the unrelated unbound change.
+			if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
+				return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
+			} else if ok {
+				return resolveExplicitChange(root, archived.Slug)
+			}
 		}
 		return changeRef{Slug: change.Slug}, nil
 	}
@@ -339,6 +361,14 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 		return changeRef{}, wrapResolutionError(err)
 	}
 	return changeRef{Slug: change.Slug}, nil
+}
+
+func shouldTryArchivedWorktreeFallback(err error) bool {
+	if errors.Is(err, state.ErrNoActiveChange) {
+		return true
+	}
+	var boundElsewhere *state.ChangeBoundElsewhereError
+	return errors.As(err, &boundElsewhere)
 }
 
 func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
@@ -544,15 +574,35 @@ func staleRuntimeBindingReasons(slugs []string) []model.ReasonCode {
 // change's change.yaml cannot be loaded. All change-state loaders share it so
 // the error code, remediation, and metadata stay identical.
 func newChangeStateLoadFailedError(slug string, err error) *CLIError {
+	return newChangeStateLoadFailedErrorForPath(
+		slug,
+		filepath.Join("artifacts", "changes", slug, "change.yaml"),
+		err,
+	)
+}
+
+func newChangeStateLoadFailedErrorForPath(slug, path string, err error) *CLIError {
 	return newStateIntegrityError(
 		"change_state_load_failed",
 		fmt.Sprintf("failed to load change state for %q: %v", slug, err),
 		"Run `slipway repair` to inspect or repair change state files.",
 		slug,
 		map[string]any{
-			"path": filepath.Join("artifacts", "changes", slug, "change.yaml"),
+			"path": path,
 		},
 	)
+}
+
+func wrapArchivedWorktreeResolutionError(err error) error {
+	var archivedLoad *state.ArchivedChangeLoadError
+	if errors.As(err, &archivedLoad) {
+		return newChangeStateLoadFailedErrorForPath(
+			archivedLoad.Slug,
+			filepath.Join("artifacts", "changes", "archived", archivedLoad.Slug, "change.yaml"),
+			err,
+		)
+	}
+	return wrapResolutionError(err)
 }
 
 func wrapResolutionError(err error) error {
