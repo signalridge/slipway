@@ -952,6 +952,22 @@ func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
 	assert.NotContains(t, content, "S3 closeout")
 }
 
+func TestPlanAuditScopeControlFlagsSharedTypeBlastRadius(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+	flat := strings.Join(strings.Fields(content), " ")
+
+	// Scope Control must catch a code task that changes a shared/widely-referenced
+	// type whose forced consumer edits no task's target_files own — the plan that
+	// passes plan-audit but the S2 integration gate later rejects (issue #277).
+	assert.Contains(t, flat, "cover the full edit set the tasks' own objectives force")
+	assert.Contains(t, flat, "shared or widely-referenced type or contract")
+	assert.Contains(t, flat, "non-exhaustive/non-sealed enum")
+	assert.Contains(t, flat, "owned by some task's `target_files`")
+}
+
 func TestNextCommandDocumentsWorktreeSkillCatalogFallback(t *testing.T) {
 	t.Parallel()
 
