@@ -190,7 +190,7 @@ func TestIntakeClarificationInputDigestExcludesOnlyOpenQuestions(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
 	intentPath := filepath.Join(bundleDir, "intent.md")
-	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
+	require.NoError(t, os.WriteFile(intentPath, []byte(intakeDigestIntent("- [ ] Which digest boundary owns research resolution?\n")), 0o644))
 
 	baseIntake, err := certifiedSkillInputDigest(root, change, SkillIntakeClarification, nil)
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func TestIntakeClarificationInputDigestExcludesOnlyOpenQuestions(t *testing.T) {
 
 	resolvedOpenQuestions := "- [x] Which digest boundary owns research resolution?\n" +
 		"  Resolved: intake owns substantive scope; research owns this checklist state.\n"
-	require.NoError(t, os.WriteFile(intentPath, []byte(issue238Intent(resolvedOpenQuestions)), 0o644))
+	require.NoError(t, os.WriteFile(intentPath, []byte(intakeDigestIntent(resolvedOpenQuestions)), 0o644))
 
 	currentIntake, err := certifiedSkillInputDigest(root, change, SkillIntakeClarification, nil)
 	require.NoError(t, err)
@@ -218,7 +218,7 @@ func TestIntakeClarificationInputDigestExcludesOnlyOpenQuestions(t *testing.T) {
 		"plan-audit must keep consuming full intent.md")
 
 	require.NoError(t, os.WriteFile(intentPath, []byte(strings.Replace(
-		issue238Intent(resolvedOpenQuestions),
+		intakeDigestIntent(resolvedOpenQuestions),
 		"Fix issue #238.",
 		"Fix issue #238 with revised substantive scope.",
 		1,

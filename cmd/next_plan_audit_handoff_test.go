@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// runIssue229NextDiagnostics drives `next --json --diagnostics` for the given
-// change and returns the decoded view. --diagnostics selects the full view that
-// carries agent constraints (allowed_operations / required_outputs).
-func runIssue229NextDiagnostics(t *testing.T, root, slug string) nextView {
+// runNextDiagnostics drives `next --json --diagnostics` for the given change and
+// returns the decoded view. --diagnostics selects the full view that carries
+// agent constraints (allowed_operations / required_outputs).
+func runNextDiagnostics(t *testing.T, root, slug string) nextView {
 	t.Helper()
 	cmd := commandForRoot(t, root, makeNextCmd())
 	cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -29,25 +29,27 @@ func runIssue229NextDiagnostics(t *testing.T, root, slug string) nextView {
 	return view
 }
 
-// TestIssue229BundleHandoffDoesNotAdvertiseEvidenceBeforeAudit asserts that at
+// TestNextBundleHandoffDoesNotAdvertiseEvidenceBeforeAudit asserts that at
 // S1_PLAN/bundle the plan-audit handoff does NOT advertise write_evidence /
 // evidence_record. `slipway evidence skill --skill plan-audit` fails closed with
 // evidence_skill_wrong_plan_substep until the substep advances to audit, so
 // advertising evidence recording at bundle is a dead-end handoff. The
 // authoritative next action is to run the lifecycle into S1_PLAN/audit.
-func TestIssue229BundleHandoffDoesNotAdvertiseEvidenceBeforeAudit(t *testing.T) {
+//
+// issue #229
+func TestNextBundleHandoffDoesNotAdvertiseEvidenceBeforeAudit(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "issue229 bundle handoff")
+		slug := createGovernedRequest(t, root, "L3", "plan-audit bundle handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepBundle
 		require.NoError(t, state.SaveChange(root, change))
 
-		view := runIssue229NextDiagnostics(t, root, slug)
+		view := runNextDiagnostics(t, root, slug)
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
@@ -67,23 +69,25 @@ func TestIssue229BundleHandoffDoesNotAdvertiseEvidenceBeforeAudit(t *testing.T) 
 	})
 }
 
-// TestIssue229AuditHandoffStillAdvertisesEvidence asserts the audit-substep
-// behavior is unchanged: at S1_PLAN/audit, where `slipway evidence skill --skill
+// TestNextAuditHandoffStillAdvertisesEvidence asserts the audit-substep behavior
+// is unchanged: at S1_PLAN/audit, where `slipway evidence skill --skill
 // plan-audit` is accepted, the handoff still advertises write_evidence and
 // requires the evidence_record output.
-func TestIssue229AuditHandoffStillAdvertisesEvidence(t *testing.T) {
+//
+// issue #229
+func TestNextAuditHandoffStillAdvertisesEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "issue229 audit handoff")
+		slug := createGovernedRequest(t, root, "L3", "plan-audit audit handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepAudit
 		require.NoError(t, state.SaveChange(root, change))
 
-		view := runIssue229NextDiagnostics(t, root, slug)
+		view := runNextDiagnostics(t, root, slug)
 
 		require.NotNil(t, view.NextSkill)
 		assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
