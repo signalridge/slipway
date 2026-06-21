@@ -33,9 +33,12 @@ reviewers, and do not use a retired goal-stage context-origin handle.
 ## S3 Suite-Result Keystone
 Selected S3 reviewer freshness is anchored by
 `verification/suite-result.yaml`. As the full-suite verification peer, produce or
-refresh that keystone before recording a passing goal-verification verdict. It
-must match the current execution-summary run version and summarize the shared
-reviewer proof all S3 peers depend on:
+refresh that keystone with `slipway evidence suite-result` before recording a
+passing goal-verification verdict. Prefer `--full-suite-proof <path>` when the
+fresh proof exists as a workspace-relative transcript such as
+`verification/logs/suite-result-run2.txt`; use `--full-suite-digest <digest>`
+only when the digest is already computed by a trusted tool. It must match the current execution-summary
+run version and summarize the shared reviewer proof all S3 peers depend on:
 
 ```yaml
 version: 1
@@ -46,7 +49,9 @@ sast_digests:
 ```
 
 If the file is absent, malformed, or tied to a different run version, stop and
-produce fresh suite-result proof before recording goal-verification evidence.
+produce fresh suite-result proof with `slipway evidence suite-result` before
+recording goal-verification evidence; do not hand-edit the YAML or ask the host
+to compute a digest when a proof file is available.
 Selected S3 peer evidence is not fresh without this keystone.
 
 Do not treat S2 execution proof, execution-summary, or an earlier full-suite

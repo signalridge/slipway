@@ -335,10 +335,14 @@ Selected S3 reviewer digests also require
 is the shared digest keystone for the full-suite proof and any guardrail SAST
 proof consumed by spec-compliance-review, independent-review,
 goal-verification, code-quality-review when selected by the workflow profile,
-and security-review when selected by policy. If the file is absent, invalid, or
-tied to a different `run_summary_version`, selected S3 review evidence is not
-fresh. If a suite or SAST digest changes, the selected review set is
-conservatively staled.
+and security-review when selected by policy. Record it through `slipway evidence
+suite-result --full-suite-proof <path>` to hash a workspace-relative proof file
+(such as `verification/logs/suite-result-run2.txt`), or use
+`--full-suite-digest <digest>` when an external system already computed the
+digest. Repeat `--sast-proof name=path` or `--sast-digest name=digest` for
+guardrail SAST proof. If the file is absent, invalid, or tied to a different
+`run_summary_version`, selected S3 review evidence is not fresh. If a suite or
+SAST digest changes, the selected review set is conservatively staled.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
