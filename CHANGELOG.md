@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.3](https://github.com/signalridge/slipway/compare/v0.31.2...v0.31.3) (2026-06-21)
+
+
+### Refactoring
+
+* remove verified dead code, retire unwired gate, drop legacy compat ([#290](https://github.com/signalridge/slipway/issues/290)) ([dfd47a3](https://github.com/signalridge/slipway/commit/dfd47a3bf59a6e9aee674c83dafaf0d860295294))
+
 ## [0.31.2](https://github.com/signalridge/slipway/compare/v0.31.1...v0.31.2) (2026-06-20)
 
 
