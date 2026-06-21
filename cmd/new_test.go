@@ -1994,3 +1994,42 @@ func TestStatusPendingPresetShowsPresetHintNotNext(t *testing.T) {
 			"should not show generic next hint when preset is pending")
 	})
 }
+
+// TestNewDoesNotPersistAuthorityWhenLifecycleEventFails locks the atomic-creation
+// contract: change.yaml (the authority that makes a change active and
+// discoverable) must never be persisted when the first change.created lifecycle
+// event cannot be recorded. This guards the ordering in makeNewCmd's creation
+// path (event appended before SaveChange) so an active change can never exist
+// with an empty lifecycle log. It fails if SaveChange is moved back before the
+// event append.
+func TestNewDoesNotPersistAuthorityWhenLifecycleEventFails(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		appendCalled := false
+		original := appendChangeCreatedEvent
+		appendChangeCreatedEvent = func(string, model.Change, state.LifecycleEvent) (state.LifecycleEvent, error) {
+			appendCalled = true
+			return state.LifecycleEvent{}, &os.PathError{Op: "write", Path: "lifecycle.jsonl", Err: os.ErrPermission}
+		}
+		t.Cleanup(func() { appendChangeCreatedEvent = original })
+
+		cmd := makeNewCmd()
+		cmd.SetArgs([]string{"--json", "atomic creation contract probe"})
+		require.Error(t, cmd.Execute(), "new must fail when the first lifecycle event cannot be recorded")
+		require.True(t, appendCalled, "creation must reach the change.created event append (otherwise this test proves nothing)")
+
+		entries, err := os.ReadDir(state.ActiveBundlesDir(root))
+		if err != nil {
+			require.True(t, os.IsNotExist(err), "unexpected error reading active bundles dir: %v", err)
+			return
+		}
+		for _, e := range entries {
+			authority := filepath.Join(state.ActiveBundlesDir(root), e.Name(), "change.yaml")
+			_, statErr := os.Stat(authority)
+			assert.True(t, os.IsNotExist(statErr),
+				"change.yaml authority must not persist for %q when the change.created event failed", e.Name())
+		}
+	})
+}
