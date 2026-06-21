@@ -137,7 +137,7 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "governed", view.ExecutionMode)

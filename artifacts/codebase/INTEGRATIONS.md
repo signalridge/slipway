@@ -8,7 +8,7 @@
 - File formats and protocols: markdown templates under `internal/tmpl/templates`;
   generated skill frontmatter; governed artifacts under
   `artifacts/changes/<slug>/`; runtime handoff path
-  `.git/slipway/runtime/handoff.md`. Evidence:
+  `.git/slipway/runtime/changes/<slug>/handoff.md`. Evidence:
   `internal/tmpl/templates/skills/workflow/SKILL.md.tmpl:1-6`,
   `cmd/session_start_hook.go:126-135`.
 - Notes: the runtime handoff file is local runtime context, not a tracked

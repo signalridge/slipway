@@ -145,7 +145,7 @@ func TestNextL3AdvanceDefersResearchArtifactAuthoringAtScopeEntry(t *testing.T) 
 	runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
 	writeWorktreePreflightEvidence(t, root, change.Slug, worktreePath, branch)
 
-	view, err := buildNextView(root, changeRef{Slug: change.Slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: change.Slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	assert.Equal(t, model.StateS1Plan, view.CurrentState)
@@ -299,7 +299,7 @@ func TestNextL3WorktreePreflightEvidenceUnblocksS2Implement(t *testing.T) {
 	// Write passing worktree-preflight evidence referencing the real worktree.
 	writeWorktreePreflightEvidence(t, root, slug, normalizedWT, branch)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	// Key assertion: the advance must NOT deadlock. The worktree metadata

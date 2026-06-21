@@ -25,9 +25,6 @@ import (
 
 type ArtifactReadiness struct {
 	Ready       bool
-	Required    []string
-	Missing     []string
-	Unreadable  []string
 	Blockers    []model.ReasonCode
 	Diagnostics []string
 }
@@ -38,7 +35,6 @@ type ArtifactProjectionNode struct {
 	DependsOn []string
 	Ready     bool
 	Required  bool
-	Source    string
 }
 
 type ArtifactProjection struct {
@@ -295,7 +291,6 @@ func evaluateGovernanceReadinessBaseWithReaders(
 			cloned.ExemptContextFiles = exemptContextFiles
 			readiness.ScopeContract = &cloned
 			readiness.Blockers = append(readiness.Blockers, scopeReport.Blockers...)
-			readiness.Diagnostics = append(readiness.Diagnostics, scopeReport.Diagnostics...)
 			if scopeContractNeedsRecoveryGuidance(scopeReport) {
 				readiness.Diagnostics = append(readiness.Diagnostics, scopeContractRecoveryGuidanceDiagnostic)
 			}
@@ -621,7 +616,6 @@ func evaluateArtifactReadinessWithContext(root string, change model.Change, ctx 
 		change.WorkflowPreset,
 		ctx.requiredPreset,
 	)
-	result.Required = append(result.Required, required...)
 
 	base, err := state.GovernedBundleDir(root, change)
 	if err != nil {
@@ -670,18 +664,13 @@ func evaluateArtifactReadinessWithContext(root string, change model.Change, ctx 
 		if _, err := os.Stat(path); err != nil {
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
-				result.Missing = append(result.Missing, name)
 				result.Blockers = append(result.Blockers, model.NewReasonCode("missing_required_artifact", name))
 			default:
-				result.Unreadable = append(result.Unreadable, name)
 				result.Blockers = append(result.Blockers, model.NewReasonCode("required_artifact_unreadable", name))
 			}
 		}
 	}
 
-	sortStrings(&result.Required)
-	sortStrings(&result.Missing)
-	sortStrings(&result.Unreadable)
 	result.Blockers = model.NormalizeReasonCodes(result.Blockers)
 	result.Diagnostics = stringutil.UniqueSorted(result.Diagnostics)
 	result.Ready = len(result.Blockers) == 0
@@ -745,7 +734,7 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 	}
 
 	nodes := make([]ArtifactProjectionNode, 0, len(nodeNames))
-	appendNode := func(name string, required bool, source string) {
+	appendNode := func(name string, required bool) {
 		spec, hasSpec := specByName[name]
 		deps := make([]string, 0)
 		ready := true
@@ -767,7 +756,6 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 			DependsOn: deps,
 			Ready:     ready,
 			Required:  required,
-			Source:    source,
 		})
 	}
 
@@ -775,13 +763,13 @@ func projectArtifactProjectionWithContext(root string, change model.Change, ctx 
 		if _, ok := requiredSet[spec.Name]; !ok {
 			continue
 		}
-		appendNode(spec.Name, true, "filesystem_projection")
+		appendNode(spec.Name, true)
 	}
 	for _, name := range nodeNames {
 		if _, ok := requiredSet[name]; ok {
 			continue
 		}
-		appendNode(name, false, "change_state")
+		appendNode(name, false)
 	}
 	slices.SortFunc(nodes, func(a, b ArtifactProjectionNode) int {
 		return strings.Compare(a.Name, b.Name)
@@ -817,14 +805,6 @@ func projectionArtifactNodeName(as model.ArtifactState) string {
 		return "change.yaml"
 	}
 	return id + ".md"
-}
-
-func sortStrings(values *[]string) {
-	if len(*values) == 0 {
-		*values = nil
-		return
-	}
-	slices.Sort(*values)
 }
 
 func resolveArtifactEvaluationContext(change model.Change, requiredPreset model.WorkflowPreset) artifactEvaluationContext {

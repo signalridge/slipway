@@ -35,7 +35,6 @@ type Report struct {
 	SensitiveFiles  []SensitiveFile    `json:"sensitive_files,omitempty" yaml:"sensitive_files,omitempty"`
 	MissingEvidence []MissingEvidence  `json:"missing_evidence,omitempty" yaml:"missing_evidence,omitempty"`
 	Blockers        []model.ReasonCode `json:"blockers,omitempty" yaml:"blockers,omitempty"`
-	Diagnostics     []model.ReasonCode `json:"diagnostics,omitempty" yaml:"diagnostics,omitempty"`
 }
 
 type categoryRule struct {

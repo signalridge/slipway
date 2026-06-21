@@ -562,7 +562,7 @@ func runReadOnlyGovernanceViewsForChange(t *testing.T, root, slug string) (statu
 
 	go func() {
 		defer wg.Done()
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 		if err != nil {
 			errCh <- err
 			return
@@ -583,7 +583,7 @@ func runNextViewForChange(t *testing.T, root, slug string, extraArgs ...string) 
 	t.Helper()
 
 	require.Empty(t, extraArgs, "runNextViewForChange only supports default next --json semantics")
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 	return view
 }

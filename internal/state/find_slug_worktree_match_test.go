@@ -69,15 +69,15 @@ func addDetachedWorktree(t *testing.T, root, dirName string) string {
 	return path
 }
 
-// TestFindSlugWorktreeMatch_Issue285ExternalWorktreeNotManaged is the headline
-// regression for issue #285: an external worktree a user placed at the default
+// TestFindSlugWorktreeMatch_ExternalDefaultPathHandNamedBranchNotManaged is the
+// headline regression for issue #285: an external worktree a user placed at the default
 // .worktrees/<slug> path but on a hand-named branch (NOT feat/<slug>) must be
 // reported as a real, corresponding match yet SlipwayManaged==false, so
 // orphan-bundle recovery never recommends destroying the user's live work.
 //
 // Pre-fix, managed was pathMatches || branchMatches, so the default-path-only
 // match was wrongly classed SlipwayManaged==true.
-func TestFindSlugWorktreeMatch_Issue285ExternalWorktreeNotManaged(t *testing.T) {
+func TestFindSlugWorktreeMatch_ExternalDefaultPathHandNamedBranchNotManaged(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	initGitRepoAt(t, root)

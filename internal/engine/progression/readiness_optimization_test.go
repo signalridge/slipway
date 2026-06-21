@@ -657,7 +657,6 @@ func (s *stubArtifactReadinessReader) Evaluate(root string, change model.Change)
 	s.calls++
 	return ArtifactReadiness{
 		Ready:       false,
-		Required:    []string{"intent.md"},
 		Blockers:    []model.ReasonCode{model.NewReasonCode("missing_required_artifact", "tasks.md")},
 		Diagnostics: []string{"artifact_reader_contract_diagnostic"},
 	}, nil
@@ -675,7 +674,6 @@ func (s *stubArtifactProjectionReader) Project(root string, change model.Change)
 			State:    string(model.ArtifactLifecycleDraft),
 			Ready:    true,
 			Required: true,
-			Source:   "stub_projection",
 		}},
 		Diagnostics: []string{"projection_reader_contract_diagnostic"},
 	}, nil
@@ -710,7 +708,6 @@ func TestEvaluateGovernanceReadinessRoutesArtifactStateThroughReaderContracts(t 
 	assert.Contains(t, readiness.Diagnostics, "artifact_reader_contract_diagnostic")
 	require.NotNil(t, readiness.ArtifactProjection)
 	require.Len(t, readiness.ArtifactProjection.Nodes, 1)
-	assert.Equal(t, "stub_projection", readiness.ArtifactProjection.Nodes[0].Source)
 	assert.Contains(t, readiness.Diagnostics, "projection_reader_contract_diagnostic")
 }
 

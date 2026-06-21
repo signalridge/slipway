@@ -375,16 +375,6 @@ func makeNextCmd() *cobra.Command {
 	return cmd
 }
 
-func buildNextView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool) (nextView, error) {
-	return buildNextViewForCommand(root, ref, nextViewOptions{
-		ResumeResponse:   resumeResponse,
-		Preview:          preview,
-		AutoSkipEvidence: autoSkipEvidence,
-		SkipAutoPass:     skipAutoPass,
-		Command:          "run",
-	})
-}
-
 // nextViewOptions carries the per-command knobs for buildNextViewForCommand.
 // Grouping them in a named struct keeps the call sites self-documenting instead
 // of relying on a long tail of positional booleans.

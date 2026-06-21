@@ -5,7 +5,8 @@ import (
 	"github.com/signalridge/slipway/internal/model"
 )
 
-// ResolveNextSkill determines what skills should run at the given state.
+// ResolveNextSkillWithReviewSelection determines what skills should run at the
+// given state.
 //
 // It returns a skill set rather than a single skill: most states route to a
 // single skill, but S3_REVIEW dispatches BOTH spec-compliance-review and
@@ -18,10 +19,6 @@ import (
 //   - For S2_IMPLEMENT, it returns wave-orchestration.
 //   - For S3_REVIEW, it returns the workflow-profile-filtered selected review
 //     peer set (all run concurrently; none precedes another).
-func ResolveNextSkill(change model.Change) (skillNames []string, evidenceState string) {
-	return ResolveNextSkillWithReviewSelection(change, skill.ReviewSkillSelection{})
-}
-
 func ResolveNextSkillWithReviewSelection(
 	change model.Change,
 	reviewSelection skill.ReviewSkillSelection,

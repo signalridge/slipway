@@ -86,7 +86,7 @@ Pending.
 		},
 	}))
 
-	writeGovernanceVerification(t, root, change.Slug, skillWaveOrchestration, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, "wave-orchestration", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -218,7 +218,7 @@ func TestResolveRuntimeRequiredActionsDoesNotUseCodeQualityForIndependentReview(
 			},
 		},
 	}))
-	writeGovernanceVerification(t, root, change.Slug, skillCodeQualityReview, model.VerificationRecord{
+	writeGovernanceVerification(t, root, change.Slug, "code-quality-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
