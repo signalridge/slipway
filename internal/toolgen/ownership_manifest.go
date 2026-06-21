@@ -149,28 +149,6 @@ func buildOwnershipManifest(toolID string, generated map[string]ownershipManifes
 	}
 }
 
-func classifyOwnership(root string, manifest ownershipManifest, relPath string) (ownershipClassification, error) {
-	rel, err := normalizeOwnershipPath(relPath)
-	if err != nil {
-		return "", err
-	}
-	record, ok := manifest.index()[rel]
-	if !ok {
-		return ownershipUnknownUserFile, nil
-	}
-	sum, err := hashFile(filepath.Join(root, filepath.FromSlash(rel)))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return ownershipManagedMissingFile, nil
-		}
-		return "", err
-	}
-	if sum == record.SHA256 {
-		return ownershipPristineManagedFile, nil
-	}
-	return ownershipManagedModifiedFile, nil
-}
-
 func normalizeOwnershipPath(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {

@@ -21,7 +21,7 @@ func TestValidateIncludesRequirementsContractForGovernedChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate requirements contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate requirements contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		bundleDir, err := state.GovernedBundleDir(root, change)
@@ -51,7 +51,7 @@ func TestValidateReportsMissingRequirementsContract(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate missing requirements contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate missing requirements contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		bundleDir, err := state.GovernedBundleDir(root, change)
@@ -72,7 +72,7 @@ func TestValidateReportsInvalidRequirementsContract(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate invalid requirements contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate invalid requirements contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		bundleDir, err := state.GovernedBundleDir(root, change)
@@ -95,7 +95,7 @@ func TestValidateOmitsRequirementsContractWhenPresetConfirmationPending(t *testi
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate preset confirmation pending")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate preset confirmation pending")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = ""
@@ -134,7 +134,7 @@ func TestValidateUsesDedicatedWorktreePathInRequirementsContractSource(t *testin
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "validate worktree requirements contract")
+		slug := createGovernedRequest(t, root, levelDiscovery, "validate worktree requirements contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -178,7 +178,7 @@ func TestValidateOmitsRequirementsContractWhenRequirementsFileIsUnreadable(t *te
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate unreadable requirements contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate unreadable requirements contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan

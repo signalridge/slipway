@@ -16,7 +16,7 @@ func TestCheckpointSetsActiveCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test checkpoint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -51,7 +51,7 @@ func TestCheckpointDecisionWithAllowedResponses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test decision checkpoint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test decision checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -84,7 +84,7 @@ func TestCheckpointRejectsWrongState(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		_ = createGovernedRequest(t, root, "L2", "test wrong state")
+		_ = createGovernedRequest(t, root, levelNonDiscovery, "test wrong state")
 
 		cmd := makeCheckpointCmd()
 		cmd.SetArgs([]string{"--task-id", "task-01"})
@@ -98,7 +98,7 @@ func TestCheckpointRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test duplicate checkpoint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test duplicate checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -122,7 +122,7 @@ func TestCheckpointRequiresTaskID(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test missing task id")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test missing task id")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -147,7 +147,7 @@ func TestCheckpointDecisionRequiresAllowedResponses(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test decision no responses")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test decision no responses")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -168,7 +168,7 @@ func TestCheckpointRejectsTaskOutsideCurrentWave(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "test checkpoint current wave enforcement")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint current wave enforcement")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestCheckpointRejectsWhenWaveRunsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "checkpoint should fail closed when wave runs are missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "checkpoint should fail closed when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -292,7 +292,7 @@ func TestCheckpointSettableAtWaveBoundaryBeforeSkillEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "checkpoint wave boundary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "checkpoint wave boundary")
 		seedTwoWaveExecution(t, root, slug)
 
 		change, err := state.LoadChange(root, slug)
@@ -350,7 +350,7 @@ func TestCheckpointWaveOneDefaultWithoutTaskEvidence(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "checkpoint wave one default")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "checkpoint wave one default")
 		seedTwoWaveExecution(t, root, slug)
 
 		// wave-2 task rejected: wave 1 is still the current incomplete wave.

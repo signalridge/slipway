@@ -28,8 +28,9 @@ metadata instead:
 Each executor performs the relevance/staleness self-check before relying on a
 map document. Treat `scaffold_only`, `baseline`, or `missing` doc states as
 non-durable for that document, and report stale or irrelevant map guidance in
-`test_summary` or blocker evidence. This preserves PR #112 while keeping bulky
-map content out of the coordinator context.
+`test_summary` or blocker evidence. This preserves the codebase-map
+relevance/staleness self-check while keeping bulky map content out of the
+coordinator context.
 
 ## Runtime Boundary
 - A `parallel: true` wave (from `slipway next --json`) is dispatched concurrently by default: one fresh executor per task, spawned together, then wait for the whole wave.

@@ -70,7 +70,7 @@ func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair restores missing bound worktree scope metadata")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair restores missing bound worktree scope metadata")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -172,7 +172,7 @@ func TestRepairReportsLegacyRuntimeHandoffAndCleansSafeRuntimeArtifacts(t *testi
 			root := t.TempDir()
 			withWorkspace(t, root, func() {
 				initTestWorkspace(t, root)
-				slug := createGovernedRequest(t, root, "L2", "repair runtime hygiene")
+				slug := createGovernedRequest(t, root, levelNonDiscovery, "repair runtime hygiene")
 
 				legacyHandoffPath := filepath.Join(state.GitRuntimeDir(root), tt.filename)
 				require.NoError(t, os.MkdirAll(filepath.Dir(legacyHandoffPath), 0o755))
@@ -453,7 +453,7 @@ func TestRepairReportsHiddenUnreadableChangeAuthorityFinding(t *testing.T) {
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair reports hidden unreadable authority")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair reports hidden unreadable authority")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -496,7 +496,7 @@ func TestRepairReportsUnreadableExecutionSummaryFinding(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair reports unreadable execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair reports unreadable execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -533,7 +533,7 @@ func TestRepairRebuildsUnreadableExecutionSummaryWithoutResidualDrift(t *testing
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair should converge unreadable execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should converge unreadable execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -634,7 +634,7 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair should recover wave execution artifacts")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should recover wave execution artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -689,7 +689,7 @@ func TestRepairClearsStaleCheckpointWhenExecutionSummaryUnreadable(t *testing.T)
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair should clear stale checkpoint despite unreadable summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should clear stale checkpoint despite unreadable summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -750,7 +750,7 @@ func TestRepairRebuildsUnreadableWavePlanAndWaveRuns(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair should rebuild unreadable wave artifacts")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should rebuild unreadable wave artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -800,7 +800,7 @@ func TestRepairReportsMalformedTaskEvidenceWithoutFailing(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair reports malformed task evidence")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair reports malformed task evidence")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -846,7 +846,7 @@ func TestRepairRebuildsWavePlanButPreservesHistoricalExecutionEvidenceWhenTasksD
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair should not rewrite drifted historical execution")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should not rewrite drifted historical execution")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -937,7 +937,7 @@ func TestRepairRebuildsReadyButStaleExecutionSummaryDrift(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair reports stale ready execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair reports stale ready execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1031,7 +1031,7 @@ func TestRepairDoesNotRewriteReadyButStaleExecutionSummaryWhenTaskEvidenceInvali
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair leaves invalid task evidence alone")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair leaves invalid task evidence alone")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1119,7 +1119,7 @@ func TestRepairReportsMissingRuntimeTaskEvidenceWithCommandHint(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair reports missing task evidence source")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair reports missing task evidence source")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1156,7 +1156,7 @@ func TestRepairDoesNotRebuildWhenPlanningEvidenceIsStale(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair leaves stale planning evidence alone")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair leaves stale planning evidence alone")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1232,7 +1232,7 @@ func TestRepairRoutesStaleGovernanceDigestToSlipwayRun(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair routes stale digest to run")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair routes stale digest to run")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1323,7 +1323,7 @@ func TestRepairPathAuthorityUsesLinkedWorktreeInvocationWorkspace(t *testing.T) 
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "repair path authority linked worktree")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair path authority linked worktree")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review

@@ -1322,7 +1322,7 @@ func TestNewCommandAllowsBoundSiblingWorktreeActiveChange(t *testing.T) {
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
 
-		slug := createGovernedRequest(t, root, "L3", "existing hidden bound worktree change")
+		slug := createGovernedRequest(t, root, levelDiscovery, "existing hidden bound worktree change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -1369,7 +1369,7 @@ func TestNewCommandRejectsWhenActiveChangeIsBoundToCurrentWorktree(t *testing.T)
 		runGit(t, root, "add", ".")
 		runGit(t, root, "commit", "-m", "init")
 
-		slug := createGovernedRequest(t, root, "L3", "existing current bound worktree change")
+		slug := createGovernedRequest(t, root, levelDiscovery, "existing current bound worktree change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement

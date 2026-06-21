@@ -35,7 +35,7 @@ func TestToolMergeSARIFDeterministicAndSeparatedByTool(t *testing.T) {
 
 	first, err := os.ReadFile(outPath)
 	require.NoError(t, err)
-	stdout, stderr, err = runRootCommandWithInput([]string{"tool", "merge-sarif", raw, outPath}, "")
+	_, stderr, err = runRootCommandWithInput([]string{"tool", "merge-sarif", raw, outPath}, "")
 	require.NoError(t, err, stderr)
 	second, err := os.ReadFile(outPath)
 	require.NoError(t, err)

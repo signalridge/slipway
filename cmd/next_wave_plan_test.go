@@ -6,100 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestWavePlanViewFromModelSurfacesParallel(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	plan := model.WavePlan{
-		Version:    model.WavePlanVersion,
-		TotalTasks: 3,
-		Waves: []model.WavePlanWave{
-			{WaveIndex: 1, Parallel: true, Tasks: []model.WavePlanTask{{TaskID: "t-01"}, {TaskID: "t-02"}}},
-			{WaveIndex: 2, Parallel: false, Tasks: []model.WavePlanTask{{TaskID: "t-03"}}},
-		},
-	}
-
-	view := wavePlanViewFromModel(root, plan, true)
-	require.NotNil(t, view)
-	require.Len(t, view.Waves, 2)
-	assert.True(t, view.Waves[0].Parallel, "multi-task wave is surfaced as parallel")
-	assert.False(t, view.Waves[1].Parallel, "single-task wave is not parallel")
-}
-
-func TestAuthoritativeWavePlanViewReDerivesParallelFromCurrentConfig(t *testing.T) {
-	t.Parallel()
-
-	t.Run("stale persisted false becomes parallel by default", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		change := model.NewChange("stale-wave-plan-default")
-		change.CurrentState = model.StateS2Implement
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, state.SaveWavePlan(root, change.Slug, model.WavePlan{
-			Version: model.WavePlanVersion,
-			GeneratedAt: time.Date(2026, 6, 9, 1, 0, 0, 0,
-				time.UTC),
-			TotalTasks: 2,
-			Waves: []model.WavePlanWave{{
-				WaveIndex: 1,
-				Parallel:  false,
-				Tasks: []model.WavePlanTask{
-					{TaskID: "t-01"},
-					{TaskID: "t-02"},
-				},
-			}},
-		}))
-
-		view := authoritativeWavePlanView(root, change)
-		require.NotNil(t, view)
-		require.Empty(t, view.ParseError)
-		require.Len(t, view.Waves, 1)
-		assert.True(t, view.Waves[0].Parallel)
-	})
-
-	t.Run("parallelization off suppresses stale persisted true", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		change := model.NewChange("stale-wave-plan-off")
-		change.CurrentState = model.StateS2Implement
-		require.NoError(t, state.SaveChange(root, change))
-		require.NoError(t, os.WriteFile(
-			state.ConfigPath(root),
-			[]byte("execution:\n  parallelization: off\n"),
-			0o644,
-		))
-		require.NoError(t, state.SaveWavePlan(root, change.Slug, model.WavePlan{
-			Version: model.WavePlanVersion,
-			GeneratedAt: time.Date(2026, 6, 9, 1, 0, 0, 0,
-				time.UTC),
-			TotalTasks: 2,
-			Waves: []model.WavePlanWave{{
-				WaveIndex: 1,
-				Parallel:  true,
-				Tasks: []model.WavePlanTask{
-					{TaskID: "t-01"},
-					{TaskID: "t-02"},
-				},
-			}},
-		}))
-
-		view := authoritativeWavePlanView(root, change)
-		require.NotNil(t, view)
-		require.Empty(t, view.ParseError)
-		require.Len(t, view.Waves, 1)
-		assert.False(t, view.Waves[0].Parallel)
-	})
-}
 
 // wavelessDependencyTasksFixture is the retired-`wave:` contract: no task
 // declares a wave line; three dependency-free tasks with pairwise-disjoint
@@ -211,7 +123,7 @@ func TestMaterializeWavePlanComputesWavesFromDependencies(t *testing.T) {
 	change := model.NewChange("waveless-materialization")
 	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
-	writeWavePlanTasksFixture(t, root, change.Slug, wavelessDependencyTasksFixture)
+	bundle := writeWavePlanTasksFixture(t, root, change.Slug, wavelessDependencyTasksFixture)
 
 	plan, err := state.MaterializeWavePlan(root, change)
 	require.NoError(t, err,
@@ -226,7 +138,7 @@ func TestMaterializeWavePlanComputesWavesFromDependencies(t *testing.T) {
 	assert.Equal(t, []string{"t-04"}, wavePlanModelTaskIDs(plan.Waves[1]))
 	assert.False(t, plan.Waves[1].Parallel, "single-task wave is not parallel")
 
-	view := authoritativeWavePlanView(root, change)
+	view := derivedWavePlanView(root, bundle)
 	require.NotNil(t, view)
 	require.Empty(t, view.ParseError)
 	assert.Equal(t, 2, view.WaveCount)
@@ -322,159 +234,6 @@ func TestDerivedWavePlanViewPreservesExplicitNestedDirectoryAdvisory(t *testing.
 		"derived advisory analysis must preserve explicit nested directory targets whose trailing slash would otherwise be normalized away")
 }
 
-func TestWavePlanViewFromModelSurfacesNarrowingAdvisories(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".github"), 0o755))
-	plan := model.WavePlan{
-		Version:    model.WavePlanVersion,
-		TotalTasks: 3,
-		Waves: []model.WavePlanWave{
-			{WaveIndex: 1, Parallel: false, Tasks: []model.WavePlanTask{
-				// Persisted wave plans carry normalized public paths, so an
-				// explicit ".github/" directory target is read back as ".github".
-				{TaskID: "t-01", TargetFiles: []string{".github"}, TaskKind: model.TaskKindCode},
-			}},
-			{WaveIndex: 2, Parallel: false, Tasks: []model.WavePlanTask{
-				{TaskID: "t-02", DependsOn: []string{"t-01"}, TargetFiles: []string{"cmd/next.go"}, TaskKind: model.TaskKindCode},
-			}},
-			{WaveIndex: 3, Parallel: false, Tasks: []model.WavePlanTask{
-				{TaskID: "t-03", DependsOn: []string{"t-02"}, TargetFiles: []string{"cmd/run.go"}, TaskKind: model.TaskKindCode},
-			}},
-		},
-	}
-
-	view := wavePlanViewFromModel(root, plan, true)
-	require.NotNil(t, view)
-
-	assert.Contains(t, view.Advisories, "broad_target_files:t-01",
-		"from-model path must rebuild nodes and surface the directory-target cue")
-	assert.Contains(t, view.Advisories, "fully_serial_plan",
-		"from-model path must rebuild nodes and surface the linear-chain cue")
-}
-
-func TestWavePlanViewFromModelRestoresNestedDirectoryAdvisory(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "engine"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "scripts"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "scripts", "deploy"), []byte("#!/bin/sh\n"), 0o755))
-
-	plan := model.WavePlan{
-		Version:    model.WavePlanVersion,
-		TotalTasks: 2,
-		Waves: []model.WavePlanWave{{
-			WaveIndex: 1,
-			Parallel:  true,
-			Tasks: []model.WavePlanTask{
-				{
-					TaskID:      "t-01",
-					TargetFiles: []string{"internal/engine"},
-					TaskKind:    model.TaskKindCode,
-				},
-				{
-					TaskID:      "t-02",
-					TargetFiles: []string{"scripts/deploy"},
-					TaskKind:    model.TaskKindCode,
-				},
-			},
-		}},
-	}
-
-	view := wavePlanViewFromModel(root, plan, true)
-	require.NotNil(t, view)
-
-	assert.Contains(t, view.Advisories, "broad_target_files:t-01",
-		"from-model advisory analysis must recover nested directory targets whose trailing slash was removed by path normalization")
-	assert.NotContains(t, view.Advisories, "broad_target_files:t-02",
-		"an existing extensionless file must not be misreported as a broad directory target")
-}
-
-func TestAuthoritativeWavePlanViewPreservesExplicitDirectoryAdvisory(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	change := model.NewChange("explicit-directory-advisory")
-	change.CurrentState = model.StateS2Implement
-	require.NoError(t, state.SaveChange(root, change))
-	writeWavePlanTasksFixture(t, root, change.Slug, `# Tasks
-
-- [ ] `+"`t-01`"+` creates a new package directory
-  - target_files: ["internal/newpkg/"]
-  - task_kind: code
-`)
-
-	plan, err := state.MaterializeWavePlan(root, change)
-	require.NoError(t, err)
-	require.Equal(t, []string{"internal/newpkg"}, plan.Waves[0].Tasks[0].TargetFiles,
-		"materialized plans normalize away the explicit directory slash")
-
-	view := authoritativeWavePlanView(root, change)
-	require.NotNil(t, view)
-
-	assert.Contains(t, view.Advisories, "broad_target_files:t-01",
-		"authoritative view advisories must use tasks.md source targets, not only normalized wave-plan.yaml targets")
-}
-
-func TestWavePlanViewFromModelIgnoresNonEquivalentSourceTargets(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	plan := model.WavePlan{
-		Version:    model.WavePlanVersion,
-		TotalTasks: 1,
-		Waves: []model.WavePlanWave{{
-			WaveIndex: 1,
-			Tasks: []model.WavePlanTask{{
-				TaskID:      "t-01",
-				TargetFiles: []string{"cmd/next.go"},
-				TaskKind:    model.TaskKindCode,
-			}},
-		}},
-	}
-	sourceTargets := map[string][]string{
-		"t-01": {"internal/newpkg/"},
-	}
-
-	view := wavePlanViewFromModel(root, plan, true, sourceTargets)
-	require.NotNil(t, view)
-
-	assert.NotContains(t, view.Advisories, "broad_target_files:t-01",
-		"source targets that do not normalize to the materialized plan must not influence authoritative advisories")
-}
-
-func TestWavePlanViewFromModelRestoresExistingDirectoryAdvisoryWithSourceTargets(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "engine"), 0o755))
-
-	plan := model.WavePlan{
-		Version:    model.WavePlanVersion,
-		TotalTasks: 1,
-		Waves: []model.WavePlanWave{{
-			WaveIndex: 1,
-			Parallel:  true,
-			Tasks: []model.WavePlanTask{{
-				TaskID:      "t-01",
-				TargetFiles: []string{"internal/engine"},
-				TaskKind:    model.TaskKindCode,
-			}},
-		}},
-	}
-	sourceTargets := map[string][]string{
-		"t-01": {"internal/engine"},
-	}
-
-	view := wavePlanViewFromModel(root, plan, true, sourceTargets)
-	require.NotNil(t, view)
-
-	assert.Contains(t, view.Advisories, "broad_target_files:t-01",
-		"equivalent source targets must preserve existing-directory recovery on the authoritative from-model path")
-}
-
 func TestCleanParallelPlanEmitsNoNarrowingAdvisories(t *testing.T) {
 	t.Parallel()
 
@@ -497,7 +256,7 @@ func TestNarrowingAdvisoriesAreViewOnlyAndExcludedFromPersistedPlan(t *testing.T
 	change := model.NewChange("advisories-view-only")
 	change.CurrentState = model.StateS2Implement
 	require.NoError(t, state.SaveChange(root, change))
-	writeWavePlanTasksFixture(t, root, change.Slug, narrowingTasksFixture)
+	bundle := writeWavePlanTasksFixture(t, root, change.Slug, narrowingTasksFixture)
 
 	plan, err := state.MaterializeWavePlan(root, change)
 	require.NoError(t, err)
@@ -520,7 +279,7 @@ func TestNarrowingAdvisoriesAreViewOnlyAndExcludedFromPersistedPlan(t *testing.T
 	assert.NotContains(t, plan.TasksPlanScopeHash, "broad_target_files")
 
 	// The same plan, surfaced through the view, DOES carry the advisories.
-	view := wavePlanViewFromModel(root, plan, state.EffectiveForcedParallel(root))
+	view := derivedWavePlanView(root, bundle)
 	require.NotNil(t, view)
 	assert.Contains(t, view.Advisories, "broad_target_files:t-01")
 	assert.Contains(t, view.Advisories, "fully_serial_plan")

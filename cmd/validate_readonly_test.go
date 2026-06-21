@@ -75,7 +75,7 @@ func TestValidateArchivedExplicitSlugIsZeroWrite(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate archived zero write")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate archived zero write")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)

@@ -71,7 +71,7 @@ func TestResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed(t *testi
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "orphaned active bundle")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "orphaned active bundle")
 	// Drop change.yaml but leave a stray file so the bundle directory survives;
 	// LoadChange then reports a missing-authority error with no archived record.
 	activePath := state.BundleChangeFilePath(root, slug)
@@ -105,7 +105,7 @@ func TestResolveExplicitChangeMalformedActiveAuthorityFailsClosed(t *testing.T) 
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "malformed active authority")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "malformed active authority")
 	require.NoError(t, os.WriteFile(state.BundleChangeFilePath(root, slug), []byte("slug: ["), 0o644))
 
 	_, resolveErr := resolveExplicitChange(root, slug)

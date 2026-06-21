@@ -87,11 +87,7 @@ func Evaluate(summary *model.ExecutionSummary, extraChangedFiles []string) Repor
 			continue
 		}
 		report.Status = StatusFail
-		report.MissingEvidence = append(report.MissingEvidence, MissingEvidence{
-			File:     file.File,
-			Category: file.Category,
-			Marker:   file.Marker,
-		})
+		report.MissingEvidence = append(report.MissingEvidence, MissingEvidence(file))
 		report.Blockers = append(report.Blockers, model.NewReasonCode(
 			ReasonSensitiveEvidenceMissing,
 			file.Category+":"+file.File,

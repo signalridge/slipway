@@ -21,7 +21,7 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate should gate incomplete bundle")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should gate incomplete bundle")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestValidatePreAuditDefaultViewOmitsShipGateDebt(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should omit ship gate debt before verify")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should omit ship gate debt before verify")
 
 	view, err := buildValidateViewForSlug(root, slug)
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestNextBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "next should gate incomplete bundle")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "next should gate incomplete bundle")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -153,7 +153,7 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate should gate missing artifacts at plan audit")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should gate missing artifacts at plan audit")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -191,7 +191,7 @@ func TestValidateBlocksPlanAuditWhenDecisionIsTemplateOnly(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should gate template decision at plan audit")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should gate template decision at plan audit")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -255,7 +255,7 @@ func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *te
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should use filesystem artifact readiness")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should use filesystem artifact readiness")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -292,7 +292,7 @@ func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should expose artifact amendments")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should expose artifact amendments")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -334,7 +334,7 @@ func TestValidateOnlyRequiresActivePlanningSkillAtPlanAudit(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate should scope skill blockers to the active plan sub-step")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should scope skill blockers to the active plan sub-step")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -362,7 +362,7 @@ func TestValidateSkillsReadyScopesToActivePlanningSubStep(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L3", "validate should scope passing skills to the active plan sub-step")
+	slug := createGovernedRequest(t, root, levelDiscovery, "validate should scope passing skills to the active plan sub-step")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -393,7 +393,7 @@ func TestValidateExposesPlanningRecoveryState(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should expose plan recovery state")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should expose plan recovery state")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -413,7 +413,7 @@ func TestValidateDoesNotLeakBundleBlockersBeforeWorktreeBinding(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L3", "validate should not leak bundle blockers before worktree")
+	slug := createGovernedRequest(t, root, levelDiscovery, "validate should not leak bundle blockers before worktree")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -436,7 +436,7 @@ func TestValidateIncludesGovernanceActionBlockersAtReviewState(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate governance action blockers")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate governance action blockers")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -458,7 +458,7 @@ func TestValidateIncludesTaskChecklistAdvisories(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate task checklist advisories")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate task checklist advisories")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -495,7 +495,7 @@ func TestValidateIncludesTaskChecklistBlockers(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate task checklist blockers")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate task checklist blockers")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -532,7 +532,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate review evidence at ship gate")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate review evidence at ship gate")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -575,7 +575,7 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "validate should block stale evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should block stale evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 

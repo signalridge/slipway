@@ -167,7 +167,7 @@ func TestSkillConstraintsPopulatedInNextOutput(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "constraints test")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "constraints test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -205,7 +205,7 @@ func TestSkillConstraintsPendingDecisionsBeforePlanLock(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "pending decisions test")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "pending decisions test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -276,7 +276,7 @@ func TestSkillConstraintsLockedDecisionsAfterPlanLock(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "locked decisions test")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "locked decisions test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -479,7 +479,7 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L2", "guardrail domain test")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "guardrail domain test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 

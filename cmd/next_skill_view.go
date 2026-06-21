@@ -340,7 +340,7 @@ func assembleSkillViewWithOptions(
 		}
 	}
 
-	// Auto capability resolver: attach B1 catalog-skill hints on top of the
+	// Auto capability resolver: attach catalog-skill hints on top of the
 	// kernel's host selection. Never changes the next skill chosen by
 	// ResolveNextSkill; only enriches TechniqueHints.
 	ns.TechniqueHints = appendCatalogHints(ns.TechniqueHints, nextSkillName, governedChange, view)

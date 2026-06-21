@@ -7,7 +7,6 @@ import (
 // mergeResult holds the output of monotonic control merge.
 type mergeResult struct {
 	ActiveControls []model.ControlActivation
-	NewActivations []model.ControlActivation
 }
 
 // mergeMonotonic ensures controls are never silently removed.
@@ -29,7 +28,6 @@ func mergeMonotonic(existing, candidates []model.ControlActivation) mergeResult 
 	}
 
 	var active []model.ControlActivation
-	var newActivations []model.ControlActivation
 
 	// Keep all existing active controls, refreshing policy metadata from
 	// current candidates when available.
@@ -49,31 +47,12 @@ func mergeMonotonic(existing, candidates []model.ControlActivation) mergeResult 
 	for _, ctrl := range candidates {
 		if _, exists := existingSet[ctrl.ControlID]; !exists {
 			active = append(active, ctrl)
-			newActivations = append(newActivations, ctrl)
 		}
 	}
 
 	return mergeResult{
 		ActiveControls: active,
-		NewActivations: newActivations,
 	}
-}
-
-// DeactivateControl removes a specific control from the active list.
-func DeactivateControl(
-	existing []model.ControlActivation,
-	controlID model.ControlID,
-) []model.ControlActivation {
-	var updated []model.ControlActivation
-
-	for _, ctrl := range existing {
-		if ctrl.ControlID == controlID && ctrl.Active {
-			continue
-		}
-		updated = append(updated, ctrl)
-	}
-
-	return updated
 }
 
 // controlThresholds defines the trigger thresholds for each control.

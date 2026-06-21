@@ -16,7 +16,7 @@ func TestCLIEndToEndNextJSONHidesRetiredAgentFields(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L3", "next should expose skill handoff")
+		slug := createGovernedRequest(t, root, levelDiscovery, "next should expose skill handoff")
 
 		stdout, stderr, err := runRootCommand([]string{"next", "--json", "--change", slug})
 		require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestCLIEndToEndNextJSONFromBoundWorktreeDoesNotLeakRetiredAgentFields(t *te
 		runGit(t, root, "commit", "-m", "init")
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"claude"}, false))
 
-		slug := createGovernedRequest(t, root, "L3", "next should expose skill handoff from bound worktree")
+		slug := createGovernedRequest(t, root, levelDiscovery, "next should expose skill handoff from bound worktree")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 

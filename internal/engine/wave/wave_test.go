@@ -1,7 +1,6 @@
 package wave
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -585,21 +584,4 @@ func TestAnalyzeWaveNarrowingCauses(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-func TestExecutionResultJSONUsesTaskResultsKey(t *testing.T) {
-	t.Parallel()
-
-	raw, err := json.Marshal(ExecutionResult{
-		TaskResults: map[string]model.TaskRun{
-			"task-a": {
-				TaskID:            "task-a",
-				RunSummaryVersion: 1,
-				Verdict:           model.TaskVerdictPass,
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), `"task_results"`)
-	assert.NotContains(t, string(raw), `"task_runs"`)
 }

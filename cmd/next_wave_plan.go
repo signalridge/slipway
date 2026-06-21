@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,28 +15,8 @@ import (
 // buildWavePlan returns a live projection from the current tasks.md in S2.
 // The persisted wave-plan.yaml is an execution artifact/cache; it is not the
 // planning authority while implementation tasks are still being amended.
-func buildWavePlan(root string, change *model.Change, artifactBundle string) *wavePlanView {
-	if change != nil && change.CurrentState == model.StateS2Implement {
-		return derivedWavePlanView(root, artifactBundle)
-	}
+func buildWavePlan(root, artifactBundle string) *wavePlanView {
 	return derivedWavePlanView(root, artifactBundle)
-}
-
-func authoritativeWavePlanView(root string, change model.Change) *wavePlanView {
-	plan, err := state.LoadOptionalWavePlanForChange(root, change)
-	switch {
-	case err == nil && plan != nil:
-		return wavePlanViewFromModel(
-			root,
-			*plan,
-			state.EffectiveForcedParallel(root),
-			sourceTargetFilesByTaskForChange(root, change),
-		)
-	case err == nil:
-		return &wavePlanView{ParseError: "persisted wave-plan.yaml is missing; run `slipway repair`"}
-	default:
-		return &wavePlanView{ParseError: fmt.Sprintf("failed to load persisted wave-plan.yaml: %v", err)}
-	}
 }
 
 // derivedWavePlanView parses tasks.md and computes dependency-ordered waves.
@@ -108,60 +87,6 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 	return planView
 }
 
-func wavePlanViewFromModel(
-	root string,
-	plan model.WavePlan,
-	forcedParallel bool,
-	sourceTargetFilesByTask ...map[string][]string,
-) *wavePlanView {
-	plan = state.ApplyEffectiveParallel(plan, forcedParallel)
-	if len(plan.Waves) == 0 {
-		return nil
-	}
-
-	view := &wavePlanView{
-		TotalTasks: plan.TotalTasks,
-		WaveCount:  len(plan.Waves),
-		Waves:      make([]waveView, len(plan.Waves)),
-	}
-	// Rebuild planner nodes from the persisted plan so the view-only narrowing
-	// advisories (REQ-006) can be computed on the authoritative from-model path
-	// exactly as on the derived path.
-	analyzerNodes := make([]wave.Node, 0, plan.TotalTasks)
-	for i, plannedWave := range plan.Waves {
-		tasks := make([]waveTaskView, len(plannedWave.Tasks))
-		for j, task := range plannedWave.Tasks {
-			tasks[j] = waveTaskView{
-				TaskID:      task.TaskID,
-				Objective:   task.Objective,
-				DependsOn:   append([]string(nil), task.DependsOn...),
-				TargetFiles: append([]string(nil), task.TargetFiles...),
-				TaskKind:    string(task.TaskKind),
-			}
-			node := wave.Node{
-				TaskID:    task.TaskID,
-				Objective: task.Objective,
-				DependsOn: append([]string(nil), task.DependsOn...),
-				TargetFiles: analyzerTargetFilesForSource(
-					root,
-					task.TaskID,
-					task.TargetFiles,
-					sourceTargetFilesByTask...,
-				),
-				TaskKind: task.TaskKind,
-			}
-			analyzerNodes = append(analyzerNodes, node)
-		}
-		view.Waves[i] = waveView{
-			WaveIndex: plannedWave.WaveIndex,
-			Parallel:  plannedWave.Parallel,
-			Tasks:     tasks,
-		}
-	}
-	view.Advisories = wave.AnalyzeWaveNarrowingCauses(analyzerNodes)
-	return view
-}
-
 func analyzerNodesFromSourceTargets(
 	root string,
 	nodes []wave.Node,
@@ -219,18 +144,6 @@ func targetIsExistingDirectory(root, target string) bool {
 	}
 	info, err := os.Stat(filepath.Join(root, filepath.FromSlash(normalized)))
 	return err == nil && info.IsDir()
-}
-
-func sourceTargetFilesByTaskForChange(root string, change model.Change) map[string][]string {
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	if err != nil {
-		return nil
-	}
-	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- path is resolved from governed change authority.
-	if err != nil {
-		return nil
-	}
-	return sourceTargetFilesByTask(string(raw))
 }
 
 func sourceTargetFilesByTask(content string) map[string][]string {

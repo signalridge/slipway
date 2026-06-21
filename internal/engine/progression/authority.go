@@ -412,10 +412,6 @@ type proofReuseDigestCheck struct {
 	label     string
 }
 
-func CloseoutRecoveryRemediation() string {
-	return closeoutRecoveryRemediation
-}
-
 // closeoutAssuranceAttestationBlockers enforces Layer 1 of issue #47. When
 // assurance is required for the change's effective preset (standard/strict),
 // the passing final-closeout record must carry the assurance-complete
@@ -939,10 +935,6 @@ func crossStageContextDistinctBlockers(
 // goal/closeout stages to this lattice.
 func crossStageContextReviewStagesForSelectedSkills(selectedReviewSkills []string) map[string]struct{} {
 	return crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills)
-}
-
-func crossStageContextShipStagesForSelectedSkills(selectedReviewSkills []string) map[string]struct{} {
-	return crossStageContextReviewStagesForSelectedSkills(selectedReviewSkills)
 }
 
 func selectedReviewSkillsForAuthority(authority ReviewAuthority) []string {

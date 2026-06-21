@@ -79,7 +79,7 @@ func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	assert.Contains(t, flatContent, "keep the coordinator context to `input_context.wave_plan`")
 	assert.Contains(t, flatContent, "pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths")
 	assert.Contains(t, flatContent, "executor-owned relevance/staleness self-check")
-	assert.Contains(t, flatContent, "PR #112")
+	assert.Contains(t, flatContent, "codebase-map relevance/staleness self-check")
 	assert.Contains(t, flatContent, "input_context.codebase_map_doc_states")
 
 	ref, err := Content("skills/wave-orchestration/references/executor-dispatch-reference.md")

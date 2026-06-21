@@ -571,11 +571,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
-	"wave_test_impl_not_distinct": {
-		Remediation:     "A code task shares target files with no distinct preceding test task; split the work so a task_kind=test task is dispatched before its dependent task_kind=code task, then re-run wave-orchestration.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRefreshWave,
-	},
 	"degraded_dispatch_justification_missing": {
 		Remediation:     "A degraded_sequential dispatch needs a genuine tool-unavailable justification; record degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail> and re-run wave-orchestration.",
 		CommandTemplate: "slipway run",
@@ -995,10 +990,6 @@ func selectPrimaryStep(steps []RecoveryStep) RecoveryStep {
 }
 
 func lessRecoveryStep(a, b RecoveryStep) bool {
-	oa, ob := recoveryPrimaryOverrideRank(a), recoveryPrimaryOverrideRank(b)
-	if oa != ob {
-		return oa < ob
-	}
 	pa, pb := recoveryClassRank(a.RecoveryClass), recoveryClassRank(b.RecoveryClass)
 	if pa != pb {
 		return pa < pb
@@ -1013,8 +1004,6 @@ func lessRecoveryStep(a, b RecoveryStep) bool {
 	}
 	return a.Code < b.Code
 }
-
-func recoveryPrimaryOverrideRank(step RecoveryStep) int { return 1 }
 
 func recoveryClassRank(class RecoveryClass) int {
 	for i, c := range recoveryClassPriority {

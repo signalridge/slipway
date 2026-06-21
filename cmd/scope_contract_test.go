@@ -205,7 +205,7 @@ func writeScopeContractDriftFixtureInState(t *testing.T, workflowState model.Wor
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "scope contract drift fixture")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "scope contract drift fixture")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = workflowState

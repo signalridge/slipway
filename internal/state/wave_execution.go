@@ -69,14 +69,6 @@ func LoadOptionalWavePlanForChange(root string, change model.Change) (*model.Wav
 	return &plan, nil
 }
 
-func SaveWavePlan(root, slug string, plan model.WavePlan) error {
-	op, err := SaveWavePlanTransactionOp(root, slug, plan)
-	if err != nil {
-		return err
-	}
-	return fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op})
-}
-
 func SaveWavePlanTransactionOp(root, slug string, plan model.WavePlan) (fsutil.FileTransactionOp, error) {
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
@@ -423,18 +415,6 @@ func SaveWaveRuns(root, slug string, runVersion int, runs []model.WaveRun) error
 		}
 		path := filepath.Join(dir, fmt.Sprintf("wave-%02d.yaml", run.WaveIndex))
 		if err := fsutil.WriteFileAtomic(path, raw, 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ResetWaveExecution(root, slug string) error {
-	for _, path := range []string{
-		WaveEvidenceDir(root, slug),
-		filepath.Join(verificationDirPathForRead(root, slug), WavePlanFileName),
-	} {
-		if err := os.RemoveAll(path); err != nil {
 			return err
 		}
 	}

@@ -634,7 +634,7 @@ func TestScaffoldGovernedBundleMarkdownSizeBudget(t *testing.T) {
 	assert.LessOrEqual(t, total, 15000, "fresh artifact bundle scaffold must stay structural, not analytical")
 }
 
-func TestParseDecisionLockedDecisionsIgnoresUnconfirmedSeededTextWithoutDraftComment(t *testing.T) {
+func TestParseDecisionContractIgnoresUnconfirmedSeededTextWithoutDraftComment(t *testing.T) {
 	t.Parallel()
 
 	content := `# Decision
@@ -660,10 +660,10 @@ Start with the direct implementation path for update auth middleware timeout str
 Primary risk for update auth middleware timeout strategy is hidden coupling in the existing implementation. Mitigate with focused code inspection and regression coverage before broad structural changes. Confirm or replace this after risk review.
 `
 
-	assert.Nil(t, ParseDecisionLockedDecisions(content))
+	assert.Empty(t, ParseDecisionContract(content).Decisions)
 }
 
-func TestParseDecisionLockedDecisionsRejectsDeadStatus(t *testing.T) {
+func TestParseDecisionContractRejectsDeadStatus(t *testing.T) {
 	t.Parallel()
 
 	content := `# Decision
@@ -694,7 +694,7 @@ Revert this parser change if needed.
 Low risk.
 `
 
-	assert.Nil(t, ParseDecisionLockedDecisions(content))
+	assert.NotEmpty(t, ParseDecisionContract(content).StatusBlockers)
 }
 
 func TestStalePropagationOrderBFS(t *testing.T) {

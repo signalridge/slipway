@@ -4,27 +4,27 @@ package capability
 // skills come first, followed by later domain batches.
 func defaultSkills() []Skill {
 	return []Skill{
-		// B1 foundation set
+		// foundation set
 		independentReview(),
-		// B2 scale foundation
+		// scale foundation
 		contextAssembly(),
 		rootCauseTracing(),
 		securityReview(),
 		specTrace(),
-		// B3 security cluster
+		// security cluster
 		threatModeling(),
 		sastOrchestration(),
 		ghaSecurityReview(),
 		supplyChainAudit(),
-		// B4 change-shape + verification
+		// change-shape + verification
 		multiReviewerCalibration(),
 		variantAnalysis(),
 		coverageAnalysis(),
 		propertyTesting(),
 		mutationTesting(),
-		// B6 test-design
+		// test-design
 		testDesign(),
-		// B5 repair/CI + ops
+		// repair/CI + ops
 		ciTriage(),
 		reviewCommentTriage(),
 		gitRecovery(),

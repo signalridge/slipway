@@ -12,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// saveWavePlanForTest persists a wave plan by committing the wave-plan write
+// transaction op, mirroring how production materialization commits the plan.
+func saveWavePlanForTest(root, slug string, plan model.WavePlan) error {
+	op, err := SaveWavePlanTransactionOp(root, slug, plan)
+	if err != nil {
+		return err
+	}
+	return fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op})
+}
+
 func TestMaterializeWavePlanTransactionOpDefersWriteUntilApplied(t *testing.T) {
 	t.Parallel()
 

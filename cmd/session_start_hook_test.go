@@ -17,7 +17,7 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "session-start compiled handoff")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start compiled handoff")
 
 		handoffPath := state.ChangeHandoffPath(root, slug)
 		require.NoError(t, os.MkdirAll(filepath.Dir(handoffPath), 0o755))
@@ -50,7 +50,7 @@ func TestSessionStartHookReportsOnlyCurrentChangeHandoffAcrossBoundWorktrees(t *
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		currentSlug := createGovernedRequest(t, root, "L2", "current worktree handoff")
+		currentSlug := createGovernedRequest(t, root, levelNonDiscovery, "current worktree handoff")
 		currentChange, err := state.LoadChange(root, currentSlug)
 		require.NoError(t, err)
 		currentChange.WorktreePath = root
@@ -91,7 +91,7 @@ func TestSessionStartHookBareCommandOmitsUnknownToolAttribute(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "session-start bare command")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start bare command")
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start"})
@@ -164,7 +164,7 @@ func TestSessionStartHookFailsSilentOnUnusableInput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		createGovernedRequest(t, root, "L2", "session-start fail-silent input")
+		createGovernedRequest(t, root, levelNonDiscovery, "session-start fail-silent input")
 
 		tests := []struct {
 			name  string

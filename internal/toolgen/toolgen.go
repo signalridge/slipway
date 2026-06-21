@@ -1700,13 +1700,10 @@ func emitSkillSupportFiles(root string, cfg ToolConfig, skillID string, refresh 
 	return emitSkillSupportFilesFromFSWithPlan(tmpl.TemplateFS(), skillID, dstBase, refresh, plan)
 }
 
-// emitSkillSupportFilesFromFS is the testable core: it sources support files
-// from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin with
-// "skills/<id>/...") and writes them under dstBase on the local filesystem.
-func emitSkillSupportFilesFromFS(srcFS fs.FS, skillID, dstBase string, refresh bool) error {
-	return emitSkillSupportFilesFromFSWithPlan(srcFS, skillID, dstBase, refresh, nil)
-}
-
+// emitSkillSupportFilesFromFSWithPlan is the testable core: it sources support
+// files from an arbitrary fs.FS rooted like tmpl.TemplateFS() (so paths begin
+// with "skills/<id>/...") and writes them under dstBase on the local
+// filesystem.
 func emitSkillSupportFilesFromFSWithPlan(srcFS fs.FS, skillID, dstBase string, refresh bool, plan *toolRefreshPlan) error {
 	for _, sub := range optionalSkillSupportDirs {
 		dstDir := filepath.Join(dstBase, sub)
@@ -2089,10 +2086,6 @@ func defaultFileModeForPath(path string) os.FileMode {
 		return 0o755
 	}
 	return 0o644
-}
-
-func mergeHookSettingsJSON(root string, cfg ToolConfig, refresh bool) error {
-	return mergeHookSettingsJSONWithPlan(root, cfg, refresh, nil)
 }
 
 func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {

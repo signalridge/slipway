@@ -460,24 +460,3 @@ func sensitiveEvidenceRepairTarget(root string, change model.Change, summary *mo
 		Blockers:    report.Blockers,
 	}, nil
 }
-
-// scopeContractDriftOnly reports whether every scope-contract blocker is
-// out-of-scope drift (a changed file outside the plan) rather than missing task
-// changed-file evidence. Drift is non-destructive: the recorded wave evidence is
-// still valid — the worktree merely holds a file outside the plan (e.g. an
-// untracked scratch file or build artifact). Such a case must block visibly with
-// remediation, not silently clear wave-orchestration/execution-summary evidence
-// and mutate state. Missing task changed-file evidence
-// (scope_contract_changed_files_missing / scope_contract_missing) also blocks,
-// but its repair target points at S2_IMPLEMENT-owned task evidence.
-func scopeContractDriftOnly(blockers []model.ReasonCode) bool {
-	if len(blockers) == 0 {
-		return false
-	}
-	for _, blocker := range blockers {
-		if blocker.Code != scopecontract.ReasonScopeContractDrift {
-			return false
-		}
-	}
-	return true
-}
