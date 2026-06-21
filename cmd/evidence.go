@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 type evidenceTaskView struct {
@@ -40,6 +43,15 @@ type evidenceSkillView struct {
 	References []string `json:"references,omitempty"`
 }
 
+type evidenceSuiteResultView struct {
+	Slug              string            `json:"slug"`
+	RunSummaryVersion int               `json:"run_summary_version"`
+	FullSuiteDigest   string            `json:"full_suite_digest"`
+	SASTDigests       map[string]string `json:"sast_digests,omitempty"`
+	Path              string            `json:"path"`
+	Recorded          bool              `json:"recorded"`
+}
+
 func makeEvidenceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "evidence",
@@ -47,7 +59,277 @@ func makeEvidenceCmd() *cobra.Command {
 	}
 	cmd.AddCommand(makeEvidenceTaskCmd())
 	cmd.AddCommand(makeEvidenceSkillCmd())
+	cmd.AddCommand(makeEvidenceSuiteResultCmd())
 	return cmd
+}
+
+func makeEvidenceSuiteResultCmd() *cobra.Command {
+	var (
+		jsonOutput      bool
+		changeSlug      string
+		fullSuiteDigest string
+		fullSuiteProof  string
+		sastDigests     []string
+		sastProofs      []string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "suite-result",
+		Short: "Record CLI-owned suite-result verification evidence",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			root, err := projectRootFromCommand(cmd)
+			if err != nil {
+				return err
+			}
+			ref, err := resolveActiveChangeRef(root, changeSlug)
+			if err != nil {
+				return err
+			}
+
+			return withChangeStateLock(root, ref.Slug, "evidence suite-result", func() error {
+				change, err := loadActiveChange(
+					root,
+					ref.Slug,
+					"cannot record suite-result evidence for governed status %q",
+					"Suite-result evidence can only be recorded for an active governed change.",
+				)
+				if err != nil {
+					return err
+				}
+				if change.CurrentState != model.StateS3Review {
+					return newPreconditionError(
+						"evidence_suite_result_wrong_state",
+						fmt.Sprintf("cannot record suite-result evidence while change is in %s", change.CurrentState),
+						"Run S2 execution to completion, advance to S3 review, then record suite-result evidence.",
+						change.Slug,
+						map[string]any{
+							"current_state":  change.CurrentState,
+							"required_state": model.StateS3Review,
+						},
+					)
+				}
+
+				fullSuiteDigest, err = resolveSuiteResultFullSuiteDigest(root, change, fullSuiteDigest, fullSuiteProof)
+				if err != nil {
+					return err
+				}
+
+				summary, err := state.LoadExecutionSummaryForChange(root, change)
+				if err != nil {
+					return newStateIntegrityError(
+						"evidence_suite_result_run_summary_missing",
+						fmt.Sprintf("failed to load execution summary for suite-result evidence: %v", err),
+						"Materialize execution-summary.yaml from S2 execution evidence before recording suite-result evidence.",
+						change.Slug,
+						nil,
+					)
+				}
+
+				sastDigestMap, err := resolveSuiteResultSASTDigests(root, change, sastDigests, sastProofs)
+				if err != nil {
+					return err
+				}
+				record := model.SuiteResult{
+					Version:           model.SuiteResultVersion,
+					RunSummaryVersion: summary.RunSummaryVersion,
+					FullSuiteDigest:   fullSuiteDigest,
+					SASTDigests:       sastDigestMap,
+					CapturedAt:        time.Now().UTC(),
+				}
+				if err := record.Validate(); err != nil {
+					return newInvalidUsageError(
+						"evidence_suite_result_invalid",
+						fmt.Sprintf("invalid suite-result evidence: %v", err),
+						"Pass a non-empty full-suite digest and non-empty name=digest SAST digests.",
+						nil,
+					)
+				}
+
+				verificationDir := state.VerificationDir(root, change.Slug)
+				if err := os.MkdirAll(verificationDir, 0o755); err != nil { // #nosec G301 -- governed verification artifact directories are intentionally user-readable/searchable.
+					return err
+				}
+				path := filepath.Join(verificationDir, "suite-result.yaml")
+				raw, err := yaml.Marshal(record)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(path, raw, 0o644); err != nil { // #nosec G306 -- governed verification artifacts are intentionally user-readable.
+					return newStateIntegrityError(
+						"evidence_suite_result_write_failed",
+						fmt.Sprintf("failed to write suite-result evidence: %v", err),
+						"Fix the verification record inputs and rerun `slipway evidence suite-result`.",
+						change.Slug,
+						nil,
+					)
+				}
+
+				displayPath := state.DisplayPath(root, path)
+				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+					Command:     "evidence suite-result",
+					EventType:   "suite_result.evidence_recorded",
+					Action:      "recorded",
+					Result:      "recorded",
+					BeforeState: change.CurrentState,
+					AfterState:  change.CurrentState,
+					EvidenceRefs: map[string]string{
+						"suite-result": displayPath,
+					},
+					Diagnostics: []string{
+						fmt.Sprintf("run_summary_version=%d", summary.RunSummaryVersion),
+						"path=" + displayPath,
+					},
+				}); err != nil {
+					return err
+				}
+
+				view := evidenceSuiteResultView{
+					Slug:              change.Slug,
+					RunSummaryVersion: summary.RunSummaryVersion,
+					FullSuiteDigest:   fullSuiteDigest,
+					SASTDigests:       sastDigestMap,
+					Path:              displayPath,
+					Recorded:          true,
+				}
+				if jsonOutput {
+					return encodeJSONResponse(cmd, view)
+				}
+
+				writer := newFormatWriter(cmd.OutOrStdout())
+				writer.Writef("Suite-result evidence recorded: %s\n", view.Path)
+				return writer.Err()
+			})
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
+	cmd.Flags().StringVar(&fullSuiteDigest, "full-suite-digest", "", "Digest of the fresh full-suite proof artifact or transcript")
+	cmd.Flags().StringVar(&fullSuiteProof, "full-suite-proof", "", "Workspace-relative full-suite proof artifact or transcript to hash")
+	cmd.Flags().StringArrayVar(&sastDigests, "sast-digest", nil, "Guardrail SAST digest as name=digest; may be repeated")
+	cmd.Flags().StringArrayVar(&sastProofs, "sast-proof", nil, "Guardrail SAST proof as name=workspace-relative-path; may be repeated")
+
+	return cmd
+}
+
+func resolveSuiteResultFullSuiteDigest(root string, change model.Change, digest, proofPath string) (string, error) {
+	digest = strings.TrimSpace(digest)
+	proofPath = strings.TrimSpace(proofPath)
+	if digest != "" && proofPath != "" {
+		return "", newInvalidUsageError(
+			"evidence_suite_result_full_suite_conflict",
+			"pass either --full-suite-digest or --full-suite-proof, not both",
+			"Use --full-suite-proof when Slipway should hash a workspace-relative proof file, or --full-suite-digest when an external system already computed the digest.",
+			nil,
+		)
+	}
+	if digest != "" {
+		return digest, nil
+	}
+	if proofPath == "" {
+		return "", newInvalidUsageError(
+			"evidence_suite_result_full_suite_required",
+			"--full-suite-digest or --full-suite-proof is required",
+			"Pass the digest of the fresh full-suite proof, or pass a workspace-relative proof file for Slipway to hash.",
+			nil,
+		)
+	}
+	return digestSuiteResultProofFile(root, change, proofPath, "full-suite")
+}
+
+func resolveSuiteResultSASTDigests(root string, change model.Change, digestValues, proofValues []string) (map[string]string, error) {
+	digests := make(map[string]string, len(digestValues)+len(proofValues))
+	for i, value := range digestValues {
+		name, digest, err := parseSuiteResultNameValue(value, "--sast-digest", i)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := digests[name]; exists {
+			return nil, duplicateSuiteResultSASTInputError(name)
+		}
+		digests[name] = digest
+	}
+	for i, value := range proofValues {
+		name, proofPath, err := parseSuiteResultNameValue(value, "--sast-proof", i)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := digests[name]; exists {
+			return nil, duplicateSuiteResultSASTInputError(name)
+		}
+		digest, err := digestSuiteResultProofFile(root, change, proofPath, "SAST proof "+name)
+		if err != nil {
+			return nil, err
+		}
+		digests[name] = digest
+	}
+	if len(digests) == 0 {
+		return nil, nil
+	}
+	return digests, nil
+}
+
+func parseSuiteResultNameValue(value, flag string, index int) (string, string, error) {
+	name, digest, ok := strings.Cut(value, "=")
+	name = strings.TrimSpace(name)
+	digest = strings.TrimSpace(digest)
+	if !ok || name == "" || digest == "" {
+		return "", "", newInvalidUsageError(
+			"evidence_suite_result_named_value_invalid",
+			fmt.Sprintf("invalid %s %d: %q", flag, index, value),
+			"Pass values as name=value, for example credentials.safety_baseline=sha256:... or credentials.safety_baseline=verification/logs/sast.txt.",
+			nil,
+		)
+	}
+	return name, digest, nil
+}
+
+func duplicateSuiteResultSASTInputError(name string) error {
+	return newInvalidUsageError(
+		"evidence_suite_result_sast_duplicate",
+		fmt.Sprintf("duplicate SAST digest name %q", name),
+		"Pass each SAST digest name only once, using either --sast-digest or --sast-proof.",
+		nil,
+	)
+}
+
+func digestSuiteResultProofFile(root string, change model.Change, proofPath, label string) (string, error) {
+	if err := validateEvidencePath(proofPath); err != nil {
+		return "", newInvalidUsageError(
+			"evidence_suite_result_proof_path_invalid",
+			err.Error(),
+			"Pass a workspace-relative proof file path without absolute paths, empty segments, or parent traversal.",
+			nil,
+		)
+	}
+	workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_suite_result_workspace_resolve_failed",
+			fmt.Sprintf("failed to resolve proof workspace for %q: %v", change.Slug, err),
+			"Repair the governed change worktree binding and retry.",
+			change.Slug,
+			map[string]any{"path": proofPath},
+		)
+	}
+	path := filepath.Join(workspaceRoot, filepath.FromSlash(model.NormalizePublicPath(proofPath)))
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is validated as workspace-relative before reading.
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_suite_result_proof_read_failed",
+			fmt.Sprintf("failed to read %s proof file %q: %v", label, proofPath, err),
+			"Write the proof transcript to the referenced workspace-relative path and retry.",
+			change.Slug,
+			map[string]any{
+				"path":           proofPath,
+				"resolved_path":  state.DisplayPath(root, path),
+				"workspace_root": state.DisplayPath(root, workspaceRoot),
+			},
+		)
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func makeEvidenceSkillCmd() *cobra.Command {
