@@ -28,7 +28,6 @@ type learnSignals struct {
 	ActiveChanges                  int            `json:"active_changes"`
 	ArchivedChanges                int            `json:"archived_changes"`
 	LifecycleEventCount            int            `json:"lifecycle_event_count"`
-	MissingLifecycleLogs           []string       `json:"missing_lifecycle_logs,omitempty"`
 	GateBlockedByReason            map[string]int `json:"gate_blocked_by_reason,omitempty"`
 	RequiredSkillMissing           map[string]int `json:"required_skill_missing,omitempty"`
 	AutoPassByState                map[string]int `json:"auto_pass_by_state,omitempty"`
@@ -187,9 +186,6 @@ func analyzeChangeForLearning(root string, change model.Change, view *learnView)
 		return
 	}
 	if len(events) == 0 {
-		if change.Status == model.ChangeStatusActive {
-			view.Signals.MissingLifecycleLogs = append(view.Signals.MissingLifecycleLogs, change.Slug)
-		}
 		return
 	}
 	view.Signals.LifecycleEventCount += len(events)
@@ -334,29 +330,11 @@ func buildLearnProposals(signals learnSignals, now time.Time) []learnProposal {
 			"Relaxing review gates here would hide scope drift instead of fixing artifact quality.",
 		))
 	}
-	if len(signals.MissingLifecycleLogs) > 0 {
-		proposals = append(proposals, newLearnProposal(
-			now,
-			"legacy-event-log-gap",
-			"docs_clarification",
-			"Treat changes without lifecycle logs as legacy observations.",
-			"Lifecycle events were added after existing changes; missing logs should not be backfilled with invented state transitions.",
-			[]string{
-				fmt.Sprintf("missing_lifecycle_logs=%d", len(signals.MissingLifecycleLogs)),
-			},
-			signals.MissingLifecycleLogs,
-			map[string]float64{},
-			"Legacy snapshots are useful compatibility data but should not be converted into fabricated audit history.",
-			"Use change.yaml snapshots for compatibility, and rely on lifecycle.jsonl for new learning signals going forward.",
-			"Backfilling synthetic transitions would make audit history less trustworthy.",
-		))
-	}
 	return proposals
 }
 
 func finalizeLearnView(view *learnView) {
 	sortStatsStrings(&view.IntegrityIssues)
-	sortStatsStrings(&view.Signals.MissingLifecycleLogs)
 	sortStatsStrings(&view.Signals.InterruptedChanges)
 	sortStatsStrings(&view.Signals.PlanAuditAffectedChanges)
 	sortStatsStrings(&view.Signals.GovernanceActionBlockedChanges)

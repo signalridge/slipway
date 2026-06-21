@@ -19,8 +19,7 @@ import (
 )
 
 // repairSummary reports the results of bounded local integrity repairs.
-// Cleanup operations: CleanedAtomicTemps, StaleLockCleaned, CleanedLockAnchors,
-// RemovedLegacyRuntimeDirs.
+// Cleanup operations: CleanedAtomicTemps, StaleLockCleaned, CleanedLockAnchors.
 // Restore-to-contract: ConfigBackupPath (backs up corrupt config before
 // restoring to .slipway.yaml).
 // NonRepairableFindings require operator intervention (e.g. dual-active anomaly).
@@ -37,7 +36,6 @@ type repairSummary struct {
 	PrunedTaskEvidence        []string                                 `json:"pruned_task_evidence,omitempty"`
 	RebuiltExecutionSummaries []string                                 `json:"rebuilt_execution_summaries,omitempty"`
 	RemovedEmptyOrphanBundles []string                                 `json:"removed_empty_orphan_bundles,omitempty"`
-	RemovedLegacyRuntimeDirs  []string                                 `json:"removed_legacy_runtime_dirs,omitempty"`
 	NonRepairableFindings     []string                                 `json:"non_repairable_findings,omitempty"`
 	AppliedRepairs            []repairAppliedFinding                   `json:"applied_repairs,omitempty"`
 	UnrepairedDrift           []repairDriftFinding                     `json:"unrepaired_drift,omitempty"`
@@ -104,11 +102,6 @@ func makeRepairCmd() *cobra.Command {
 					return err
 				}
 				summary.RemovedEmptyOrphanBundles = removedEmptyOrphans
-				removedLegacyRuntimeDirs, err := repairEmptyLegacyRuntimeDirs(root)
-				if err != nil {
-					return err
-				}
-				summary.RemovedLegacyRuntimeDirs = removedLegacyRuntimeDirs
 
 				cfg, err := loadConfigAtRoot(root)
 				if err != nil {
@@ -313,7 +306,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
 	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
 	writeRepairSection("Removed empty orphan bundles", summary.RemovedEmptyOrphanBundles)
-	writeRepairSection("Removed legacy runtime directories", summary.RemovedLegacyRuntimeDirs)
 	writeRepairSection("Non-repairable findings", summary.NonRepairableFindings)
 	writeRepairSection("Applied repairs", repairAppliedFindingStrings(summary.AppliedRepairs))
 	writeRepairSection("Unrepaired drift", repairDriftFindingStrings(summary.UnrepairedDrift))
@@ -330,7 +322,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.PrunedTaskEvidence) == 0 &&
 		len(summary.RebuiltExecutionSummaries) == 0 &&
 		len(summary.RemovedEmptyOrphanBundles) == 0 &&
-		len(summary.RemovedLegacyRuntimeDirs) == 0 &&
 		len(summary.NonRepairableFindings) == 0 &&
 		len(summary.AppliedRepairs) == 0 &&
 		len(summary.UnrepairedDrift) == 0 {
@@ -361,7 +352,6 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
 	appendItems("rebuilt_execution_summary", summary.RebuiltExecutionSummaries)
 	appendItems("empty_orphan_bundle", summary.RemovedEmptyOrphanBundles)
-	appendItems("legacy_runtime_dir", summary.RemovedLegacyRuntimeDirs)
 	if summary.StaleLockCleaned {
 		findings = append(findings, repairAppliedFinding{Kind: "stale_lock_cleaned", Target: "workspace"})
 	}
@@ -375,34 +365,6 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 		return strings.Compare(a.Target, b.Target)
 	})
 	return findings
-}
-
-func repairEmptyLegacyRuntimeDirs(root string) ([]string, error) {
-	legacyDir := state.LegacyChangesDir(root)
-	info, err := os.Stat(legacyDir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if !info.IsDir() {
-		return nil, nil
-	}
-	entries, err := os.ReadDir(legacyDir)
-	if err != nil {
-		return nil, err
-	}
-	if len(entries) > 0 {
-		return nil, nil
-	}
-	if err := os.Remove(legacyDir); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return []string{state.DisplayPath(root, legacyDir)}, nil
 }
 
 func cleanupUnheldLockAnchors(root string, lockPaths []string) []string {
@@ -808,11 +770,6 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 			return fmt.Sprintf(
 				"legacy runtime handoff requires manual migration: %s; replacement=.git/slipway/runtime/changes/<slug>/handoff.md",
 				runtimeHygieneReasonDetail(finding, "legacy_runtime_handoff"),
-			)
-		case healthFindingHasReasonCode(finding, "legacy_runtime_changes_dir"):
-			return fmt.Sprintf(
-				"legacy runtime changes directory requires manual inspection: %s",
-				runtimeHygieneReasonDetail(finding, "legacy_runtime_changes_dir"),
 			)
 		}
 	}

@@ -75,9 +75,7 @@ Repair is intended for bounded local integrity issues such as stale locks,
 unheld lock anchors, interrupted archives, corrupt config, or repairable layout
 drift. It reports legacy repo-level runtime handoff files such as
 `.git/slipway/runtime/handoff.md` so an operator can migrate useful context to
-the current per-change handoff path before deleting them. Empty retired
-`.git/slipway/changes/` directories are removed; non-empty retired runtime
-directories remain operator-reviewed findings.
+the current per-change handoff path before deleting them.
 In JSON output, `applied_repairs` lists fixes that were performed, while
 `unrepaired_drift` lists drift that still needs operator action with a target,
 reason, and next action. Do not edit freshness fields or timestamps by hand;

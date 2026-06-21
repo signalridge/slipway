@@ -340,13 +340,8 @@ func metricFromClaudeUsage(usage map[string]any) (contextPressureMetric, bool) {
 }
 
 func contextPressureWindowTokens() int {
-	for _, key := range []string{"SLIPWAY_CONTEXT_WINDOW_TOKENS", "SPECLANE_CONTEXT_WINDOW_TOKENS"} {
-		raw := strings.TrimSpace(os.Getenv(key))
-		if raw == "" {
-			continue
-		}
-		parsed, err := strconv.Atoi(raw)
-		if err == nil && parsed > 0 {
+	if raw := strings.TrimSpace(os.Getenv("SLIPWAY_CONTEXT_WINDOW_TOKENS")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			return parsed
 		}
 	}

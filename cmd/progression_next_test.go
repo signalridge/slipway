@@ -3994,10 +3994,8 @@ func TestRunIncludesTransitionTrace(t *testing.T) {
 func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
-		t.Setenv("SPECLANE_CONTEXT_WINDOW_TOKENS", "1")
-		// Pin the higher-priority alias empty so an ambient SLIPWAY_CONTEXT_WINDOW_TOKENS
-		// cannot mask the legacy value this hard-stop assertion relies on.
-		t.Setenv("SLIPWAY_CONTEXT_WINDOW_TOKENS", "")
+		// Force a tiny context window so the estimated budget trips the hard stop.
+		t.Setenv("SLIPWAY_CONTEXT_WINDOW_TOKENS", "1")
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, levelNonDiscovery, "context hard stop")
 		change, err := state.LoadChange(root, slug)
