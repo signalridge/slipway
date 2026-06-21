@@ -503,20 +503,9 @@ func runtimeStateHealthFindings(change model.Change) []HealthFinding {
 	return findings
 }
 
-// LegacyChangesDir returns the retired repo-level active-change runtime layout.
-func LegacyChangesDir(root string) string {
-	return filepath.Join(GitStateDir(root), "changes")
-}
-
-// legacyRuntimeHandoffAliases lists retired repo-level handoff filenames that do
-// not match the handoff*.md glob and so must be probed explicitly. handoff.md
-// and handoff-review.md already match the glob and are intentionally absent.
-var legacyRuntimeHandoffAliases = []string{"review-fix-handoff.md"}
-
 // LegacyRuntimeHandoffPaths returns retired repo-level handoff files that must
 // no longer be treated as the current runtime session handoff surface. It scans
-// the git runtime dir for any non-directory handoff*.md file and unions that
-// with known legacy aliases that do not match the glob.
+// the git runtime dir for any non-directory handoff*.md file.
 func LegacyRuntimeHandoffPaths(root string) ([]string, error) {
 	runtimeDir := GitRuntimeDir(root)
 	globbed, err := filepath.Glob(filepath.Join(runtimeDir, "handoff*.md"))
@@ -524,29 +513,18 @@ func LegacyRuntimeHandoffPaths(root string) ([]string, error) {
 		return nil, err
 	}
 
-	candidates := append([]string(nil), globbed...)
-	for _, alias := range legacyRuntimeHandoffAliases {
-		candidates = append(candidates, filepath.Join(runtimeDir, alias))
-	}
-
-	seen := map[string]struct{}{}
 	paths := []string{}
-	for _, path := range candidates {
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
+	for _, path := range globbed {
 		info, err := os.Stat(path)
-		if err == nil {
-			if !info.IsDir() {
-				paths = append(paths, path)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
 			}
-			continue
+			return nil, err
 		}
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
+		if !info.IsDir() {
+			paths = append(paths, path)
 		}
-		return nil, err
 	}
 	slices.Sort(paths)
 	return paths, nil
@@ -571,51 +549,7 @@ func legacyRuntimeHygieneFindings(root string) ([]HealthFinding, error) {
 		})
 	}
 
-	legacyChangesDir := LegacyChangesDir(root)
-	info, err := os.Stat(legacyChangesDir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return findings, nil
-		}
-		return nil, err
-	}
-	if !info.IsDir() {
-		return findings, nil
-	}
-
-	displayDir := DisplayPath(root, legacyChangesDir)
-	empty, err := directoryIsEmpty(legacyChangesDir)
-	if err != nil {
-		return nil, err
-	}
-	if empty {
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityWarning,
-			Category:   "runtime_hygiene",
-			Message:    "Empty retired runtime changes directory exists",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to remove the empty retired `.git/slipway/changes` directory.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_changes_dir_empty", displayDir)},
-		})
-		return findings, nil
-	}
-	findings = append(findings, HealthFinding{
-		Severity:   model.ReasonSeverityWarning,
-		Category:   "runtime_hygiene",
-		Message:    "Retired runtime changes directory exists with content",
-		Repairable: false,
-		RepairHint: "Inspect `.git/slipway/changes`; move any useful context into current per-change runtime or artifacts before removing it manually.",
-		Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_changes_dir", displayDir)},
-	})
 	return findings, nil
-}
-
-func directoryIsEmpty(path string) (bool, error) {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return false, err
-	}
-	return len(entries) == 0, nil
 }
 
 func checkpointStaleAfter(root string) time.Duration {

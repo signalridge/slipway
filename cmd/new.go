@@ -60,6 +60,11 @@ const generateUniqueChangeSlugMaxAttempts = 10000
 var (
 	newCommandStdin      = os.Stdin
 	newCommandIsTerminal = term.IsTerminal
+	// appendChangeCreatedEvent is the seam used to record the first lifecycle
+	// event during creation. It exists so tests can force the event write to
+	// fail and assert the atomic-creation contract (no change.yaml authority is
+	// persisted when the event cannot be recorded).
+	appendChangeCreatedEvent = state.AppendLifecycleEvent
 )
 
 type stdinClassificationInput struct {
@@ -472,6 +477,27 @@ func createDirectGovernedChange(
 				return err
 			}
 		}
+		// Atomic creation contract: record the first lifecycle event BEFORE the
+		// change.yaml authority. change.yaml is what makes a change active and
+		// discoverable, so persisting it only after change.created is durably
+		// recorded guarantees the invariant "an active change always has at least
+		// one lifecycle event": if the event write fails, no authority is written,
+		// leaving at most a recoverable orphan bundle — never an active change with
+		// an empty log.
+		if _, err := appendChangeCreatedEvent(root, change, state.LifecycleEvent{
+			Command:      "new",
+			EventType:    "change.created",
+			Action:       "created",
+			Result:       "ok",
+			AfterState:   change.CurrentState,
+			AfterSubStep: string(change.IntakeSubStep),
+			SideEffects: []state.LifecycleSideEffect{
+				{Kind: "change_authority_written", Detail: "change.yaml"},
+				{Kind: "artifact_scaffolded", Detail: string(change.ArtifactSchema)},
+			},
+		}); err != nil {
+			return err
+		}
 		if err := state.SaveChange(root, change); err != nil {
 			return err
 		}
@@ -495,20 +521,6 @@ func createDirectGovernedChange(
 			if err := intake.SeedIntentFile(intentPath, fromDocContent, extractedFromDoc); err != nil {
 				return err
 			}
-		}
-		if _, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
-			Command:      "new",
-			EventType:    "change.created",
-			Action:       "created",
-			Result:       "ok",
-			AfterState:   change.CurrentState,
-			AfterSubStep: string(change.IntakeSubStep),
-			SideEffects: []state.LifecycleSideEffect{
-				{Kind: "change_authority_written", Detail: "change.yaml"},
-				{Kind: "artifact_scaffolded", Detail: string(change.ArtifactSchema)},
-			},
-		}); err != nil {
-			return err
 		}
 
 		var ctxOut *projectContextOutput

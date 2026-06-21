@@ -62,7 +62,7 @@ func TestCollectHealthReportFindsBrokenConfig(t *testing.T) {
 	assert.Contains(t, categories, "config")
 }
 
-func TestLegacyRuntimeHandoffPathsScansGlobAliasesAndSkipsDirs(t *testing.T) {
+func TestLegacyRuntimeHandoffPathsScansGlobAndSkipsDirs(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeRepoLayout(t)
@@ -71,7 +71,6 @@ func TestLegacyRuntimeHandoffPathsScansGlobAliasesAndSkipsDirs(t *testing.T) {
 	for _, name := range []string{
 		"handoff.md",
 		"handoff-s3.md",
-		"review-fix-handoff.md",
 	} {
 		require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, name), []byte("legacy"), 0o644))
 	}
@@ -84,7 +83,6 @@ func TestLegacyRuntimeHandoffPathsScansGlobAliasesAndSkipsDirs(t *testing.T) {
 	want := []string{
 		filepath.Join(runtimeDir, "handoff-s3.md"),
 		filepath.Join(runtimeDir, "handoff.md"),
-		filepath.Join(runtimeDir, "review-fix-handoff.md"),
 	}
 	slices.Sort(want)
 	assert.Equal(t, want, paths)
@@ -100,7 +98,6 @@ func TestCollectHealthReportReportsLegacyRuntimeHandoffFiles(t *testing.T) {
 	}{
 		{name: "base handoff", filename: "handoff.md"},
 		{name: "globbed handoff alias", filename: "handoff-old.md"},
-		{name: "explicit legacy alias", filename: "review-fix-handoff.md"},
 	}
 
 	for _, tt := range tests {
@@ -132,58 +129,6 @@ func TestCollectHealthReportReportsLegacyRuntimeHandoffFiles(t *testing.T) {
 				assert.Contains(t, finding.Reasons[0].Detail, tt.filename)
 			}
 			assert.True(t, found, "expected legacy handoff health finding")
-		})
-	}
-}
-
-func TestCollectHealthReportReportsRetiredRuntimeChangesDir(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		populate   bool
-		reasonCode string
-		repairable bool
-	}{
-		{
-			name:       "empty",
-			reasonCode: "legacy_runtime_changes_dir_empty",
-			repairable: true,
-		},
-		{
-			name:       "non-empty",
-			populate:   true,
-			reasonCode: "legacy_runtime_changes_dir",
-			repairable: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			root := createRuntimeRepoLayout(t)
-			legacyDir := LegacyChangesDir(root)
-			require.NoError(t, os.MkdirAll(legacyDir, 0o755))
-			if tt.populate {
-				require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "notes.md"), []byte("legacy"), 0o644))
-			}
-
-			report, err := CollectHealthReport(root)
-			require.NoError(t, err)
-
-			found := false
-			for _, finding := range report.Findings {
-				if finding.Category != "runtime_hygiene" {
-					continue
-				}
-				if !healthFindingHasReasonCode(finding, tt.reasonCode) {
-					continue
-				}
-				found = true
-				assert.Equal(t, tt.repairable, finding.Repairable)
-			}
-			assert.True(t, found, "expected retired runtime changes dir finding")
 		})
 	}
 }

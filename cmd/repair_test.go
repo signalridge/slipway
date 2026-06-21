@@ -178,9 +178,6 @@ func TestRepairReportsLegacyRuntimeHandoffAndCleansSafeRuntimeArtifacts(t *testi
 				require.NoError(t, os.MkdirAll(filepath.Dir(legacyHandoffPath), 0o755))
 				require.NoError(t, os.WriteFile(legacyHandoffPath, []byte("old handoff"), 0o644))
 
-				legacyChangesDir := state.LegacyChangesDir(root)
-				require.NoError(t, os.MkdirAll(legacyChangesDir, 0o755))
-
 				lockPath := state.ChangeStateLockPath(root, slug)
 				require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o755))
 				require.NoError(t, os.WriteFile(lockPath, []byte(""), 0o644))
@@ -194,7 +191,6 @@ func TestRepairReportsLegacyRuntimeHandoffAndCleansSafeRuntimeArtifacts(t *testi
 				var summary repairSummary
 				require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 				assert.Contains(t, summary.CleanedLockAnchors, state.DisplayPath(root, lockPath))
-				assert.Contains(t, summary.RemovedLegacyRuntimeDirs, state.DisplayPath(root, legacyChangesDir))
 
 				foundLegacyHandoff := false
 				for _, finding := range summary.NonRepairableFindings {
@@ -207,7 +203,6 @@ func TestRepairReportsLegacyRuntimeHandoffAndCleansSafeRuntimeArtifacts(t *testi
 				assert.True(t, foundLegacyHandoff, "expected legacy handoff migration finding")
 
 				assert.FileExists(t, legacyHandoffPath, "ambiguous handoff content must not be silently deleted")
-				assert.NoDirExists(t, legacyChangesDir)
 				assert.NoFileExists(t, lockPath)
 			})
 		})
