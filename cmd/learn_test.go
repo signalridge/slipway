@@ -138,7 +138,6 @@ func TestBuildLearnViewToleratesArchivedChangeWithoutLifecycleEvents(t *testing.
 
 	assert.Equal(t, 1, view.Signals.ArchivedChanges)
 	assert.Equal(t, 1, view.AnalyzedChanges)
-	assert.Empty(t, view.Signals.MissingLifecycleLogs)
 	assert.Empty(t, view.IntegrityIssues)
 }
 

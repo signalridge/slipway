@@ -79,19 +79,12 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 	}
 
 	assumedContextWindow := defaultContextWindowTokens
-	// Honor the first VALID override in priority order (SLIPWAY_ before the legacy
-	// SPECLANE_). A malformed or non-positive higher-priority value must not mask a
-	// valid lower-priority value or silently revert the guard to the default
-	// window, so only a successful parse stops the scan; anything else falls
-	// through. Mirrors contextPressureWindowTokens.
-	for _, key := range []string{"SLIPWAY_CONTEXT_WINDOW_TOKENS", "SPECLANE_CONTEXT_WINDOW_TOKENS"} {
-		raw := strings.TrimSpace(os.Getenv(key))
-		if raw == "" {
-			continue
-		}
+	// Honor a valid SLIPWAY_CONTEXT_WINDOW_TOKENS override; a malformed or
+	// non-positive value falls through to the default window. Mirrors
+	// contextPressureWindowTokens.
+	if raw := strings.TrimSpace(os.Getenv("SLIPWAY_CONTEXT_WINDOW_TOKENS")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			assumedContextWindow = parsed
-			break
 		}
 	}
 	utilization := (float64(total) / float64(assumedContextWindow)) * 100
