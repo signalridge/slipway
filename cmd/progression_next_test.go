@@ -142,7 +142,7 @@ func TestNextS3ReviewWithPassingPeerEvidenceReportsGoalVerificationHandoff(t *te
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 	require.NotNil(t, view.NextSkill)
 	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
@@ -161,7 +161,7 @@ func TestNextStalePlanningEvidenceReportsReviewAlignmentHandoff(t *testing.T) {
 	root := t.TempDir()
 	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.NextSkill)
@@ -226,7 +226,7 @@ Clarified workflow diagnostic fix.
 			RunVersion: 0,
 		})
 
-		view, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 		require.NoError(t, err)
 		assert.Nil(t, view.NextSkill)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "intake_confirmation_incomplete:intent.md requires non-empty 'Approved Summary'")
@@ -414,7 +414,7 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 	// Advancement is tested via buildNextView with preview=false (run path).
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "done_ready", view.Advanced.Action)
@@ -449,7 +449,7 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 
 	// Advancement with no-auto-pass is tested via buildNextView (run path).
 	// autoSkipEvidence=false mirrors the original --json path.
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, false, true)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{SkipAutoPass: true, Command: "run"})
 	require.NoError(t, err)
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "done_ready", view.Advanced.Action)
@@ -1457,7 +1457,7 @@ func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 
 	// Advancement blocking is tested via buildNextView (run path).
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.Advanced)
@@ -1575,7 +1575,7 @@ THEN the change advances to S2_IMPLEMENT.
 		References: planAuditOriginReferences(),
 	})
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.Advanced)
@@ -1609,7 +1609,7 @@ func TestNextReadOnlyReportsRunGuidanceAfterPassingPlanAudit(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 	})
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", true, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	assert.Nil(t, view.NextSkill)
@@ -1655,7 +1655,7 @@ func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 	})
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	// Bundle precondition blocks before the audit->validate recovery path.
@@ -1686,7 +1686,7 @@ func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 	change.WorktreeBranch = currentGitBranch(t, root)
 	require.NoError(t, state.SaveChange(root, change))
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.Advanced)
@@ -1919,7 +1919,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	writePassingReviewEvidencePack(t, root, slug, 1)
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.Advanced)
@@ -1967,7 +1967,7 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 	writePassingGoalVerificationEvidence(t, root, slug, 1)
 	writePassingFinalCloseoutEvidence(t, root, slug, 1)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	require.NotNil(t, view.Advanced)
@@ -4094,7 +4094,7 @@ func TestNextGovernedMaterializesExecutionSummaryAndRuntimeSummaryDuringImplemen
 	_, err = state.MaterializeWavePlan(root, change)
 	require.NoError(t, err)
 
-	_, err = buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	_, err = buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	summary, err := state.LoadExecutionSummary(root, slug)
@@ -4109,7 +4109,7 @@ func TestNextGovernedBlocksWithoutTaskEvidenceForWaveRunSummaryDuringImplementat
 	t.Parallel()
 	root, slug := prepareMissingTaskEvidenceForWaveRunSummaryFixture(t)
 
-	view, err := buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
 
 	var missingEvidenceBlocker string

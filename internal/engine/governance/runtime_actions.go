@@ -14,12 +14,9 @@ import (
 
 const (
 	skillSpecComplianceReview = "spec-compliance-review"
-	skillCodeQualityReview    = "code-quality-review"
 	skillIndependentReview    = "independent-review"
 	skillSecurityReview       = "security-review"
 	skillIntakeClarification  = "intake-clarification"
-	skillWaveOrchestration    = "wave-orchestration"
-	skillWorktreePreflight    = "worktree-preflight"
 
 	decisionRollbackTemplateText  = "Describe rollout sequencing, safeguards, and how the change would be rolled back if verification fails."
 	assuranceRollbackTemplateText = "Summarize rollback constraints, prerequisites, and verification status when rollback planning is required."

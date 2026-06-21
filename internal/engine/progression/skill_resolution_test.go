@@ -35,7 +35,7 @@ func TestResolveNextSkill_S0Intake_SubSteps(t *testing.T) {
 			CurrentState:  model.StateS0Intake,
 			IntakeSubStep: tt.subStep,
 		}
-		skills, evidenceState := ResolveNextSkill(change)
+		skills, evidenceState := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 		name := singleSkill(t, skills)
 		if name != tt.skill {
 			t.Errorf("ResolveNextSkill(S0_INTAKE, %s) = %q, want %q", tt.subStep, name, tt.skill)
@@ -62,7 +62,7 @@ func TestResolveNextSkill_S1Plan_SubSteps(t *testing.T) {
 			CurrentState: model.StateS1Plan,
 			PlanSubStep:  tt.subStep,
 		}
-		skills, evidenceState := ResolveNextSkill(change)
+		skills, evidenceState := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 		name := singleSkill(t, skills)
 		if name != tt.skill {
 			t.Errorf("ResolveNextSkill(S1_PLAN, %s) = %q, want %q", tt.subStep, name, tt.skill)
@@ -78,7 +78,7 @@ func TestResolveNextSkill_S2Implement(t *testing.T) {
 
 	// Without guardrail domain -> wave-orchestration
 	change := model.Change{CurrentState: model.StateS2Implement}
-	skills, state := ResolveNextSkill(change)
+	skills, state := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 	name := singleSkill(t, skills)
 	if name != SkillWaveOrchestration {
 		t.Errorf("expected %s, got %s", SkillWaveOrchestration, name)
@@ -89,7 +89,7 @@ func TestResolveNextSkill_S2Implement(t *testing.T) {
 
 	// With guardrail domain -> still wave-orchestration (no kernel-level dispatch override)
 	change.GuardrailDomain = model.GuardrailDomainAuthAuthZ
-	skills, _ = ResolveNextSkill(change)
+	skills, _ = ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 	name = singleSkill(t, skills)
 	if name != SkillWaveOrchestration {
 		t.Errorf("expected %s for guardrail domain, got %s", SkillWaveOrchestration, name)
@@ -99,7 +99,7 @@ func TestResolveNextSkill_S2Implement(t *testing.T) {
 func TestResolveNextSkill_S3Review(t *testing.T) {
 	t.Parallel()
 	change := model.Change{CurrentState: model.StateS3Review}
-	skills, state := ResolveNextSkill(change)
+	skills, state := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 	if state != string(model.StateS3Review) {
 		t.Errorf("expected %s, got %s", model.StateS3Review, state)
 	}
@@ -164,13 +164,13 @@ func TestResolveNextSkill_S3Review_ReviewSetIndependentOfEvidence(t *testing.T) 
 	wantPair := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
 
 	// No recorded review evidence.
-	skills, _ := ResolveNextSkill(base)
+	skills, _ := ResolveNextSkillWithReviewSelection(base, engineskill.ReviewSkillSelection{})
 	assertReviewPair(t, "no-evidence", skills, wantPair)
 
 	// Even with guardrail/sensitive domain set, the pair is unchanged.
 	sensitive := base
 	sensitive.GuardrailDomain = model.GuardrailDomainAuthAuthZ
-	skills, _ = ResolveNextSkill(sensitive)
+	skills, _ = ResolveNextSkillWithReviewSelection(sensitive, engineskill.ReviewSkillSelection{})
 	assertReviewPair(t, "sensitive-domain", skills, wantPair)
 }
 
@@ -198,7 +198,7 @@ func TestResolveNextSkill_Discovery_S1Plan_Discovery(t *testing.T) {
 		NeedsDiscovery: true,
 		WorktreePath:   "/tmp/worktree",
 	}
-	skills, state := ResolveNextSkill(change)
+	skills, state := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 	name := singleSkill(t, skills)
 	if name != SkillResearchOrchestration {
 		t.Errorf("expected %s, got %s", SkillResearchOrchestration, name)
@@ -216,7 +216,7 @@ func TestResolveNextSkill_S1Plan_Bundle_NoSkill(t *testing.T) {
 			PlanSubStep:    model.PlanSubStepBundle,
 			NeedsDiscovery: needsDiscovery,
 		}
-		skills, _ := ResolveNextSkill(change)
+		skills, _ := ResolveNextSkillWithReviewSelection(change, engineskill.ReviewSkillSelection{})
 		name := singleSkill(t, skills)
 		if name != "" {
 			t.Errorf("ResolveNextSkill(%v, S1_PLAN/bundle) = %q, want empty", needsDiscovery, name)

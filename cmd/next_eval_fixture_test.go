@@ -39,7 +39,7 @@ func TestGovernedAgentEvalFixtures(t *testing.T) {
 				return slug
 			},
 			execute: func(t *testing.T, root, slug string) nextView {
-				view, err := buildNextView(root, changeRef{Slug: slug}, "", true, true, false)
+				view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, AutoSkipEvidence: true, Command: "run"})
 				require.NoError(t, err)
 				return view
 			},

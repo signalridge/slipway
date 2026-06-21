@@ -151,14 +151,13 @@ type GateStatus string
 const (
 	GateStatusApproved GateStatus = "approved"
 	GateStatusBlocked  GateStatus = "blocked"
-	GateStatusPending  GateStatus = "pending"
 )
 
 func (s GateStatus) String() string { return string(s) }
 
 func (s GateStatus) IsValid() bool {
 	switch s {
-	case GateStatusApproved, GateStatusBlocked, GateStatusPending:
+	case GateStatusApproved, GateStatusBlocked:
 		return true
 	default:
 		return false

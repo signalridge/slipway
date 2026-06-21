@@ -182,7 +182,7 @@ func TestStaleEvidenceRepairIgnoresIntakeOpenQuestionResolution(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()))
 
-	change := model.NewChange("issue-238-open-question-resolution")
+	change := model.NewChange("intake-open-question-resolution")
 	change.CurrentState = model.StateS1Plan
 	change.PlanSubStep = model.PlanSubStepResearch
 	change.NeedsDiscovery = true

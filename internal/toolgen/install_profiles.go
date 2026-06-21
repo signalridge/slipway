@@ -31,14 +31,10 @@ type skillInstallMetadata struct {
 }
 
 type skillInstallClosure struct {
-	Profile     SkillInstallProfile
-	Skills      []skillInstallMetadata
-	byPublic    map[string]skillInstallMetadata
-	hostIDs     map[string]struct{}
-	commandIDs  map[string]struct{}
-	routerIDs   map[string]struct{}
-	routerByID  map[string]namespaceRouterDefinition
-	publicNames map[string]struct{}
+	Skills     []skillInstallMetadata
+	hostIDs    map[string]struct{}
+	commandIDs map[string]struct{}
+	routerIDs  map[string]struct{}
 }
 
 type namespaceRouterDefinition struct {
@@ -218,13 +214,9 @@ func installProfileClosure(profile SkillInstallProfile) (skillInstallClosure, er
 	}
 
 	closure := skillInstallClosure{
-		Profile:     normalized,
-		byPublic:    map[string]skillInstallMetadata{},
-		hostIDs:     map[string]struct{}{},
-		commandIDs:  map[string]struct{}{},
-		routerIDs:   map[string]struct{}{},
-		routerByID:  namespaceRouterDefinitionByID(),
-		publicNames: selected,
+		hostIDs:    map[string]struct{}{},
+		commandIDs: map[string]struct{}{},
+		routerIDs:  map[string]struct{}{},
 	}
 	for name := range selected {
 		closure.Skills = append(closure.Skills, all[name])
@@ -239,7 +231,6 @@ func installProfileClosure(profile SkillInstallProfile) (skillInstallClosure, er
 		return 0
 	})
 	for _, meta := range closure.Skills {
-		closure.byPublic[meta.PublicName] = meta
 		switch meta.Kind {
 		case generatedSkillKindHost:
 			closure.hostIDs[meta.SourceID] = struct{}{}
@@ -375,14 +366,6 @@ func uniqueStrings(in []string) []string {
 		out = append(out, value)
 	}
 	slices.Sort(out)
-	return out
-}
-
-func namespaceRouterDefinitionByID() map[string]namespaceRouterDefinition {
-	out := make(map[string]namespaceRouterDefinition, len(namespaceRouterDefinitions))
-	for _, def := range namespaceRouterDefinitions {
-		out[def.ID] = def
-	}
 	return out
 }
 

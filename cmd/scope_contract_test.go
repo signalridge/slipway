@@ -44,7 +44,7 @@ func TestValidateAndNextTreatS3ScopeContractDriftAsReviewInput(t *testing.T) {
 	assert.Contains(t, diagnostics, "scope amendment")
 	assert.Contains(t, diagnostics, "S3 review")
 
-	nextView, err := buildNextView(root, changeRef{Slug: slug}, "", true, false, false)
+	nextView, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 	assert.NotContains(t, model.ReasonSpecs(nextView.Blockers), "scope_contract_drift:cmd/review.go")
 	require.NotNil(t, nextView.ReviewBatch)

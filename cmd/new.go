@@ -31,7 +31,6 @@ type createOutput struct {
 	PresetConfirmationPending        bool                  `json:"preset_confirmation_pending,omitempty"`
 	CurrentState                     string                `json:"current_state"`
 	IntakeSubStep                    string                `json:"intake_substep,omitempty"`
-	PlanSubStep                      string                `json:"plan_substep,omitempty"`
 	Phase                            model.UserPhase       `json:"phase"`
 	NeedsDiscovery                   bool                  `json:"needs_discovery"`
 	ComplexityLevel                  string                `json:"complexity_level,omitempty"`
@@ -268,7 +267,7 @@ func makeNewCmd() *cobra.Command {
 				return err
 			}
 
-			return runNewCommand(cmd, description, qualityMode, parsedWorkflowProfile, workflowPreset, trivial, fromDoc)
+			return createDirectGovernedChange(cmd, description, qualityMode, parsedWorkflowProfile, workflowPreset, trivial, fromDoc)
 		},
 	}
 
@@ -280,18 +279,6 @@ func makeNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&workflowProfile, "profile", "", "Workflow profile: code|docs|research|config|meta")
 	cmd.Flags().Bool("json", false, "JSON output")
 	return cmd
-}
-
-func runNewCommand(
-	cmd *cobra.Command,
-	description string,
-	qualityMode model.QualityMode,
-	workflowProfile model.WorkflowProfile,
-	workflowPreset model.WorkflowPreset,
-	trivial bool,
-	fromDoc string,
-) error {
-	return createDirectGovernedChange(cmd, description, qualityMode, workflowProfile, workflowPreset, trivial, fromDoc)
 }
 
 // createDirectGovernedChange is the governed change creation path for `new`.

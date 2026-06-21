@@ -1027,7 +1027,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
 			},
 		}
-		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, crossStageContextOwnedShipStages, true)
+		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, map[string]struct{}{}, true)
 		assert.Empty(t, blockers, "spec<->code is review-owned and must not re-fire at ship")
 	})
 
@@ -1063,7 +1063,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
 			},
 		}
-		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStagesWithSecurity, crossStageContextOwnedShipStages, true)
+		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStagesWithSecurity, map[string]struct{}{}, true)
 		assert.Empty(t, blockers, "selected security peer collisions are review-owned and must not re-fire at ship")
 	})
 
@@ -1097,7 +1097,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
 			},
 		}
-		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, crossStageContextOwnedShipStages, true)
+		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, map[string]struct{}{}, true)
 		assert.Empty(t, blockers)
 		assert.False(t, hasReasonCode(blockers, "executor_agent_missing"),
 			"the distinct-context lattice must never emit executor_agent_missing")
