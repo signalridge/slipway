@@ -22,20 +22,6 @@ type Wave struct {
 	Nodes []Node `json:"nodes"`
 }
 
-type ControlDecision string
-
-const (
-	ControlDecisionRetry     ControlDecision = "retry"
-	ControlDecisionSkip      ControlDecision = "skip"
-	ControlDecisionAbortWave ControlDecision = "abort_wave"
-)
-
-type ControlCheckpoint struct {
-	WaveIndex        int               `json:"wave_index"`
-	NonPassTaskIDs   []string          `json:"non_pass_task_ids"`
-	AllowedDecisions []ControlDecision `json:"allowed_decisions"`
-}
-
 // PlanWaves computes the wave assignment for the given tasks from their
 // declared depends_on edges and their target_files. Nothing is declared by
 // the author: wave(task) = 1 for roots, otherwise max(wave of each

@@ -15,10 +15,10 @@ import (
 )
 
 func buildStatusViewFromChange(root string, change model.Change) (statusView, error) {
-	return buildGovernedStatusViewWithExecutionContext(root, change, nil)
+	return buildGovernedStatusView(root, change)
 }
 
-func buildGovernedStatusViewWithExecutionContext(root string, change model.Change, preloadedExecCtx *executionContext) (statusView, error) {
+func buildGovernedStatusView(root string, change model.Change) (statusView, error) {
 	var blockers []model.ReasonCode
 	presetFields, err := buildWorkflowPresetView(root, change)
 	if err != nil {
@@ -58,14 +58,9 @@ func buildGovernedStatusViewWithExecutionContext(root string, change model.Chang
 		return view, nil
 	}
 
-	var execCtx executionContext
-	if preloadedExecCtx != nil {
-		execCtx = *preloadedExecCtx
-	} else {
-		execCtx, err = loadExecutionContext(root, change)
-		if err != nil {
-			return statusView{}, err
-		}
+	execCtx, err := loadExecutionContext(root, change)
+	if err != nil {
+		return statusView{}, err
 	}
 	readiness, err := progression.EvaluateGovernanceReadiness(
 		root,

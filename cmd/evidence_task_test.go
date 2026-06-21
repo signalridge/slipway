@@ -82,7 +82,7 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 			RunVersion: 1,
 			References: []string{"task:evidence:t-01"},
 		})
-		_, err = buildNextView(root, changeRef{Slug: slug}, "", false, true, false)
+		_, err = buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 		require.NoError(t, err)
 
 		summary, err := state.LoadExecutionSummary(root, slug)

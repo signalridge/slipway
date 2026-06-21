@@ -113,13 +113,11 @@ func analyzerTargetFilesForSource(
 	root string,
 	taskID string,
 	targetFiles []string,
-	sourceTargetFilesByTask ...map[string][]string,
+	sourceTargetFilesByTask map[string][]string,
 ) []string {
-	if len(sourceTargetFilesByTask) > 0 {
-		if sourceTargets, ok := sourceTargetFilesByTask[0][taskID]; ok &&
-			normalizedTargetFilesEqual(sourceTargets, targetFiles) {
-			return analyzerTargetFilesFromModel(root, sourceTargets)
-		}
+	if sourceTargets, ok := sourceTargetFilesByTask[taskID]; ok &&
+		normalizedTargetFilesEqual(sourceTargets, targetFiles) {
+		return analyzerTargetFilesFromModel(root, sourceTargets)
 	}
 	return analyzerTargetFilesFromModel(root, targetFiles)
 }

@@ -13,7 +13,6 @@ type Attachment struct {
 	SkillID string
 	Kind    AttachmentMode
 	Reason  string
-	Score   int
 }
 
 // RouteSelection names a routed command choice. Mode carries the public
@@ -41,7 +40,6 @@ type Signals struct {
 	Blockers     []string
 	ChangedFiles []string
 	Paths        []string
-	UserText     string
 	// Focus names an explicit `--focus <alias>` selection resolved through
 	// surface policy. Empty means no explicit focus was requested.
 	Focus string

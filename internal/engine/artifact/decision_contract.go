@@ -31,10 +31,6 @@ type DecisionContractResult struct {
 // ParsedDecisionContract is the machine-readable subset of decision.md used by
 // readiness checks and next-skill constraints.
 type ParsedDecisionContract struct {
-	Status         string
-	StatusExplicit bool
-	StatusKnown    bool
-	StatusRejected bool
 	Decisions      []string
 	StatusBlockers []string
 }
@@ -136,7 +132,6 @@ func DecisionSubstanceBlockers(content string) []string {
 // files; an explicit unknown or rejected status fails closed.
 func ParseDecisionContract(content string) ParsedDecisionContract {
 	status, explicit := parseDecisionStatus(content)
-	known := true
 	rejected := ShouldRejectDecisionStatus(status)
 	var blockers []string
 
@@ -145,19 +140,13 @@ func ParseDecisionContract(content string) ParsedDecisionContract {
 		case rejected:
 			blockers = append(blockers, "decision_status_rejected:"+status)
 		case status == "":
-			known = false
 			blockers = append(blockers, "decision_status_unknown:empty")
 		case !isKnownDecisionStatus(status):
-			known = false
 			blockers = append(blockers, "decision_status_unknown:"+status)
 		}
 	}
 
 	return ParsedDecisionContract{
-		Status:         status,
-		StatusExplicit: explicit,
-		StatusKnown:    known,
-		StatusRejected: rejected,
 		Decisions:      parseDecisionSelectedItems(content),
 		StatusBlockers: blockers,
 	}

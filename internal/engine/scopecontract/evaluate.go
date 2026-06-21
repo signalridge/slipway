@@ -41,7 +41,6 @@ type Report struct {
 	// otherwise-silent exemption observable.
 	ExemptContextFiles []string           `json:"exempt_context_files,omitempty"`
 	Blockers           []model.ReasonCode `json:"blockers,omitempty"`
-	Diagnostics        []string           `json:"diagnostics,omitempty"`
 }
 
 func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummary, extraChangedFiles []string) Report {
@@ -289,6 +288,5 @@ func (r Report) Clone() Report {
 		MissingChangedFileTasks: append([]string(nil), r.MissingChangedFileTasks...),
 		ExemptContextFiles:      append([]string(nil), r.ExemptContextFiles...),
 		Blockers:                append([]model.ReasonCode(nil), r.Blockers...),
-		Diagnostics:             append([]string(nil), r.Diagnostics...),
 	}
 }

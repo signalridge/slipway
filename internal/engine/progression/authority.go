@@ -25,27 +25,18 @@ type runtimeGovernanceInputs struct {
 
 type ReviewAuthority struct {
 	Policy               governance.PresetPolicy
-	ExecutionSummaryCtx  state.RelevantExecutionSummaryContext
 	PassingSkills        map[string]model.VerificationRecord
 	SelectedReviewSkills []string
 	SkillBlockers        []model.ReasonCode
-	LayerBlockers        []model.ReasonCode
 	Blockers             []model.ReasonCode
 }
 
 type ShipAuthority struct {
-	ReviewAuthority        ReviewAuthority
-	Actions                []governance.RequiredAction
-	Paths                  state.ResolvedChangePaths
-	ManifestOK             bool
-	ManifestBlockers       []model.ReasonCode
-	ArtifactReady          bool
-	VerifyPassingSkills    map[string]model.VerificationRecord
-	VerifySkillBlockers    []model.ReasonCode
-	VerificationReady      bool
-	RequiredActionBlockers []model.ReasonCode
-	HighRiskChecks         map[string]bool
-	Result                 gate.GateEvaluation
+	ReviewAuthority     ReviewAuthority
+	Actions             []governance.RequiredAction
+	VerifyPassingSkills map[string]model.VerificationRecord
+	VerifySkillBlockers []model.ReasonCode
+	Result              gate.GateEvaluation
 }
 
 func loadRuntimeGovernanceInputs(root string, change model.Change) (runtimeGovernanceInputs, error) {
@@ -137,11 +128,9 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 
 	return ReviewAuthority{
 		Policy:               policy,
-		ExecutionSummaryCtx:  executionSummaryCtx,
 		PassingSkills:        passingSkills,
 		SelectedReviewSkills: selectedReviewSkills,
 		SkillBlockers:        model.ReasonCodesFromSpecs(skillBlockers),
-		LayerBlockers:        model.NormalizeReasonCodes(layerBlockers),
 		Blockers:             blockers,
 	}, nil
 }
@@ -344,7 +333,6 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 		len(reviewAuthority.Blockers) == 0 &&
 		ComputeVerificationReadiness(verifyPassingSkills, FinalCloseoutEvidenceRequired(inputs.Policy))
 	requiredActions := cloneRequiredActions(readiness.RequiredActions)
-	requiredActionBlockers := model.ReasonCodesFromSpecs(governance.RequiredActionBlockers(change, requiredActions))
 	highRiskChecks := ExtractHighRiskChecks(verifyPassingSkills)
 
 	unresolved := append([]model.ReasonCode{}, readiness.Blockers...)
@@ -364,17 +352,10 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
-		ReviewAuthority:        reviewAuthority,
-		Actions:                requiredActions,
-		Paths:                  inputs.Paths,
-		ManifestOK:             manifestOK,
-		ManifestBlockers:       model.ReasonCodesFromSpecs(manifestBlockers),
-		ArtifactReady:          artifactReady,
-		VerifyPassingSkills:    verifyPassingSkills,
-		VerifySkillBlockers:    model.NormalizeReasonCodes(verifySkillBlockers),
-		VerificationReady:      verificationReady,
-		RequiredActionBlockers: model.NormalizeReasonCodes(requiredActionBlockers),
-		HighRiskChecks:         highRiskChecks,
+		ReviewAuthority:     reviewAuthority,
+		Actions:             requiredActions,
+		VerifyPassingSkills: verifyPassingSkills,
+		VerifySkillBlockers: model.NormalizeReasonCodes(verifySkillBlockers),
 		Result: gate.EvaluateGShip(
 			change,
 			artifactReady,
@@ -768,12 +749,6 @@ func crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills []
 	}
 	return stages
 }
-
-// crossStageContextOwnedShipStages is intentionally empty in the folded S3
-// lifecycle. Ship authorization no longer owns goal/closeout context-origin
-// stages; selected reviewers all record stage=review, and final-closeout is
-// ordered by the review-set finalization protocol.
-var crossStageContextOwnedShipStages = map[string]struct{}{}
 
 // crossStageContextParticipants builds the lattice participants for the requested
 // single-handle stages plus the executor handle set and the plan auditor handle.

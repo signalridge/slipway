@@ -138,7 +138,6 @@ func RequirementSubstanceBlockers(content string) []string {
 type requirementSubstanceBlock struct {
 	name          string
 	stableID      string
-	text          string // full block, including the heading line
 	statementBody string // requirement statement region: after the heading, before the first scenario
 	scenarioText  string // scenario region: from the first "#### Scenario" to the end of the block ("" if none)
 }
@@ -179,7 +178,6 @@ func splitRequirementBlocksForSubstance(content string) []requirementSubstanceBl
 		blocks = append(blocks, requirementSubstanceBlock{
 			name:          heading.name,
 			stableID:      firstRequirementID(text),
-			text:          text,
 			statementBody: statementBody,
 			scenarioText:  scenarioText,
 		})
