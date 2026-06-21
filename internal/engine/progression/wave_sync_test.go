@@ -9,11 +9,22 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/wave"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// saveWavePlanForTest persists a wave plan by committing the wave-plan write
+// transaction op, mirroring how production materialization commits the plan.
+func saveWavePlanForTest(root, slug string, plan model.WavePlan) error {
+	op, err := state.SaveWavePlanTransactionOp(root, slug, plan)
+	if err != nil {
+		return err
+	}
+	return fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op})
+}
 
 func writeTasksAndMaterializeWavePlan(t *testing.T, root string, change model.Change, tasks string) string {
 	t.Helper()
@@ -181,53 +192,48 @@ func TestBuildExecutionSummaryPreservesDistinctTaskBlockerDetails(t *testing.T) 
 	assert.Len(t, summary.OpenBlockers, 2)
 }
 
-func TestTasksPlanChangedSinceTaskEvidenceBlockersTracksAllTasksWhenHashChanges(t *testing.T) {
+func TestTaskEvidencePlanHashBlockersTracksTasksWithDriftedHash(t *testing.T) {
 	t.Parallel()
 
-	tasksPlanUpdatedAt := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
-	blockers := tasksPlanChangedSinceTaskEvidenceBlockers(
-		"previous-hash",
+	blockers := taskEvidencePlanHashBlockers(
+		"current-hash",
 		[]model.ExecutionTaskSummary{
 			{
-				TaskID:     "fresh-task",
-				CapturedAt: tasksPlanUpdatedAt.Add(time.Second),
+				TaskID:          "fresh-task",
+				FreshnessInputs: model.ExecutionTaskFreshnessInputs{TasksPlanHash: "current-hash"},
 			},
 			{
-				TaskID:     "missing-capture",
-				CapturedAt: time.Time{},
+				TaskID:          "missing-hash",
+				FreshnessInputs: model.ExecutionTaskFreshnessInputs{TasksPlanHash: ""},
 			},
 			{
-				TaskID:     "stale-task",
-				CapturedAt: tasksPlanUpdatedAt.Add(-time.Second),
+				TaskID:          "stale-task",
+				FreshnessInputs: model.ExecutionTaskFreshnessInputs{TasksPlanHash: "previous-hash"},
 			},
 		},
-		"current-hash",
 	)
 
 	assert.Equal(t, []string{
-		"tasks_plan_changed_since_task_evidence:fresh-task",
-		"tasks_plan_changed_since_task_evidence:missing-capture",
+		"tasks_plan_changed_since_task_evidence:missing-hash",
 		"tasks_plan_changed_since_task_evidence:stale-task",
 	}, blockers)
 }
 
-func TestTasksPlanChangedSinceTaskEvidenceBlockersAppliesOnFirstExecution(t *testing.T) {
+func TestTaskEvidencePlanHashBlockersEmptyWhenExpectedHashMissing(t *testing.T) {
 	t.Parallel()
 
-	tasksPlanUpdatedAt := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
-	blockers := tasksPlanChangedSinceTaskEvidenceBlockers(
+	blockers := taskEvidencePlanHashBlockers(
 		"",
 		[]model.ExecutionTaskSummary{
 			{
-				TaskID:     "fresh-task",
-				CapturedAt: tasksPlanUpdatedAt.Add(time.Second),
+				TaskID:          "fresh-task",
+				FreshnessInputs: model.ExecutionTaskFreshnessInputs{TasksPlanHash: "current-hash"},
 			},
 			{
-				TaskID:     "stale-task",
-				CapturedAt: tasksPlanUpdatedAt.Add(-time.Second),
+				TaskID:          "stale-task",
+				FreshnessInputs: model.ExecutionTaskFreshnessInputs{TasksPlanHash: "previous-hash"},
 			},
 		},
-		"current-hash",
 	)
 
 	assert.Empty(t, blockers)
@@ -641,7 +647,7 @@ func TestSyncGovernedWaveExecutionUsesEffectiveParallelForDispatchMode(t *testin
 				RunVersion: 1,
 				References: tt.references,
 			})
-			require.NoError(t, state.SaveWavePlan(root, tt.slug, model.WavePlan{
+			require.NoError(t, saveWavePlanForTest(root, tt.slug, model.WavePlan{
 				Version:     model.WavePlanVersion,
 				GeneratedAt: recordedAt.Add(-time.Hour),
 				TotalTasks:  2,
@@ -2445,219 +2451,4 @@ func TestWaveRunsEqualDetectsDispatchModeChange(t *testing.T) {
 
 	assert.True(t, waveRunsEqual(base, base), "identical runs are equal")
 	assert.False(t, waveRunsEqual(base, flipped), "a dispatch_mode change must not be treated as equal")
-}
-
-func TestImplDistinctnessBlockersGate(t *testing.T) {
-	t.Parallel()
-
-	sharedTargets := []string{"internal/x.go"}
-
-	tests := []struct {
-		name     string
-		plan     model.WavePlan
-		enforced bool
-		want     bool // whether a wave_test_impl_not_distinct blocker for t-code is expected
-	}{
-		{
-			name: "shared-targets code without a preceding distinct test blocks",
-			plan: model.WavePlan{
-				Version: model.WavePlanVersion,
-				Waves: []model.WavePlanWave{
-					{WaveIndex: 1, Tasks: []model.WavePlanTask{
-						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-						{TaskID: "t-peer", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-					}},
-				},
-			},
-			enforced: true,
-			want:     true,
-		},
-		{
-			name: "preceding test wave overlapping targets passes",
-			plan: model.WavePlan{
-				Version: model.WavePlanVersion,
-				Waves: []model.WavePlanWave{
-					{WaveIndex: 1, Tasks: []model.WavePlanTask{
-						{TaskID: "t-test", TargetFiles: sharedTargets, TaskKind: model.TaskKindTest},
-					}},
-					{WaveIndex: 2, Tasks: []model.WavePlanTask{
-						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-					}},
-				},
-			},
-			enforced: true,
-			want:     false,
-		},
-		{
-			name: "disjoint targets carry no requirement",
-			plan: model.WavePlan{
-				Version: model.WavePlanVersion,
-				Waves: []model.WavePlanWave{
-					{WaveIndex: 1, Tasks: []model.WavePlanTask{
-						{TaskID: "t-code", TargetFiles: []string{"internal/a.go"}, TaskKind: model.TaskKindCode},
-						{TaskID: "t-peer", TargetFiles: []string{"internal/b.go"}, TaskKind: model.TaskKindCode},
-					}},
-				},
-			},
-			enforced: true,
-			want:     false,
-		},
-		{
-			name: "same-wave test does not satisfy (must precede)",
-			plan: model.WavePlan{
-				Version: model.WavePlanVersion,
-				Waves: []model.WavePlanWave{
-					{WaveIndex: 1, Tasks: []model.WavePlanTask{
-						{TaskID: "t-test", TargetFiles: sharedTargets, TaskKind: model.TaskKindTest},
-						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-					}},
-				},
-			},
-			enforced: true,
-			want:     true,
-		},
-		{
-			name: "advisory on light (enforced=false) raises nothing",
-			plan: model.WavePlan{
-				Version: model.WavePlanVersion,
-				Waves: []model.WavePlanWave{
-					{WaveIndex: 1, Tasks: []model.WavePlanTask{
-						{TaskID: "t-code", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-						{TaskID: "t-peer", TargetFiles: sharedTargets, TaskKind: model.TaskKindCode},
-					}},
-				},
-			},
-			enforced: false,
-			want:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			blockers := TestImplDistinctnessBlockers(tt.plan, tt.enforced)
-			assert.Equal(t, tt.want, hasWaveReasonCode(blockers, "wave_test_impl_not_distinct", "t-code"))
-		})
-	}
-}
-
-// TestImplDistinctnessBlockers_SessionIDIrrelevant proves the gate takes no
-// session_id and is decided only by task_kind + target_files + wave order
-// (REQ-003): the WavePlanTask struct carries no session_id field, so the same plan
-// yields the same verdict regardless of any host-chosen session value. The two
-// shared-target code tasks with no preceding test always block; flipping a
-// preceding distinct test always clears it — neither depends on a session id that
-// the structure cannot even express.
-func TestImplDistinctnessBlockers_SessionIDIrrelevant(t *testing.T) {
-	t.Parallel()
-
-	shared := []string{"internal/x.go"}
-	blockedPlan := model.WavePlan{
-		Version: model.WavePlanVersion,
-		Waves: []model.WavePlanWave{
-			{WaveIndex: 1, Tasks: []model.WavePlanTask{
-				{TaskID: "t-code", TargetFiles: shared, TaskKind: model.TaskKindCode},
-				{TaskID: "t-peer", TargetFiles: shared, TaskKind: model.TaskKindCode},
-			}},
-		},
-	}
-	clearedPlan := model.WavePlan{
-		Version: model.WavePlanVersion,
-		Waves: []model.WavePlanWave{
-			{WaveIndex: 1, Tasks: []model.WavePlanTask{
-				{TaskID: "t-test", TargetFiles: shared, TaskKind: model.TaskKindTest},
-			}},
-			{WaveIndex: 2, Tasks: []model.WavePlanTask{
-				{TaskID: "t-code", TargetFiles: shared, TaskKind: model.TaskKindCode},
-			}},
-		},
-	}
-
-	// Verdict is fully determined by plan structure; no session id participates.
-	assert.True(t, hasWaveReasonCode(TestImplDistinctnessBlockers(blockedPlan, true), "wave_test_impl_not_distinct", "t-code"))
-	assert.Empty(t, TestImplDistinctnessBlockers(clearedPlan, true))
-}
-
-// TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating proves
-// test/impl distinctness is not a S2 wave-execution hard blocker. The pure
-// analyzer still exists for review, but wave synchronization should not stop
-// execution before S3 review convergence.
-func TestSyncGovernedWaveExecutionTestImplDistinctnessPresetGating(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		preset  model.WorkflowPreset
-		slug    string
-		wantHit bool
-	}{
-		{name: "strict defers to review", preset: model.WorkflowPresetStrict, slug: "wave-sync-distinct-strict", wantHit: false},
-		{name: "light is advisory", preset: model.WorkflowPresetLight, slug: "wave-sync-distinct-light", wantHit: false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			root := t.TempDir()
-			slug := tt.slug
-			recordedAt := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
-			change := model.NewChange(slug)
-			change.CurrentState = model.StateS2Implement
-			change.PlanSubStep = model.PlanSubStepNone
-			change.WorkflowPreset = tt.preset
-			require.NoError(t, state.SaveChange(root, change))
-
-			writeVerificationForTest(t, root, slug, SkillWaveOrchestration, model.VerificationRecord{
-				Verdict:    model.VerificationVerdictPass,
-				Blockers:   []model.ReasonCode{},
-				Timestamp:  recordedAt,
-				RunVersion: 1,
-			})
-			// Two code tasks share internal/x.go with no preceding test task, so the
-			// shared-targets code task t-code has no distinct preceding test. The
-			// shared file forces them into one sequential wave (no parallel dispatch
-			// evidence needed), isolating the #5 distinctness gate.
-			writeTasksAndMaterializeWavePlan(t, root, change, `# Tasks
-
-- [x] `+"`t-code`"+` Implement the feature
-  - target_files: ["internal/x.go"]
-  - task_kind: code
-
-- [x] `+"`t-peer`"+` Extend the same file
-  - target_files: ["internal/x.go"]
-  - task_kind: code
-`)
-
-			writeTaskEvidence := func(taskID string) {
-				t.Helper()
-				taskEvidence := map[string]any{
-					"task_id":             taskID,
-					"run_summary_version": 1,
-					"task_kind":           "code",
-					"verdict":             "pass",
-					"changed_files":       []string{"internal/x.go"},
-					"target_files":        []string{"internal/x.go"},
-					"blockers":            []string{},
-					"evidence_ref":        "test:" + taskID,
-					"captured_at":         recordedAt.Format(time.RFC3339Nano),
-					"freshness_inputs":    expectedTaskFreshnessInputsForWavePlan(t, root, change, 1, taskID),
-				}
-				raw, err := json.Marshal(taskEvidence)
-				require.NoError(t, err)
-				taskPath := filepath.Join(state.EvidenceTasksDir(root, slug), taskID+".json")
-				require.NoError(t, os.MkdirAll(filepath.Dir(taskPath), 0o755))
-				require.NoError(t, os.WriteFile(taskPath, raw, 0o644))
-			}
-			writeTaskEvidence("t-code")
-			writeTaskEvidence("t-peer")
-
-			result, err := SyncGovernedWaveExecution(root, change)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantHit, hasWaveReasonCode(result.Blockers, "wave_test_impl_not_distinct", "t-code"),
-				"distinctness must not hard-block wave sync, got %+v", result.Blockers)
-		})
-	}
 }

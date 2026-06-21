@@ -12,19 +12,6 @@ func (c *Change) AdvancePlanSubStep(next PlanSubStep) {
 	c.PlanSubStep = next
 }
 
-// EnterIntake records a transition into S0_INTAKE and seeds its entry substep.
-func (c *Change) EnterIntake() []string {
-	c.CurrentState = StateS0Intake
-	c.IntakeSubStep = IntakeEntrySubStep()
-
-	var cleared []string
-	if c.PlanSubStep != PlanSubStepNone {
-		c.PlanSubStep = PlanSubStepNone
-		cleared = append(cleared, "plan_substep")
-	}
-	return cleared
-}
-
 // EnterPlanning records a transition into S1_PLAN and seeds the entry substep.
 func (c *Change) EnterPlanning(needsDiscovery bool) []string {
 	c.NeedsDiscovery = needsDiscovery
@@ -74,15 +61,6 @@ func (c *Change) TransitionTo(state WorkflowState) []string {
 	return cleared
 }
 
-// ClearActiveCheckpoint clears the active checkpoint authority, if present.
-func (c *Change) ClearActiveCheckpoint() bool {
-	if c.ActiveCheckpoint == nil {
-		return false
-	}
-	c.ActiveCheckpoint = nil
-	return true
-}
-
 // ClearAutoPassHistory clears the auto-pass trace carried on the current state.
 func (c *Change) ClearAutoPassHistory() bool {
 	if c.LastAutoPassedStates == nil {
@@ -90,14 +68,6 @@ func (c *Change) ClearAutoPassHistory() bool {
 	}
 	c.LastAutoPassedStates = nil
 	return true
-}
-
-// ResetEvidenceRefs clears runtime evidence references while preserving the
-// non-nil map convention used by Change normalization.
-func (c *Change) ResetEvidenceRefs() bool {
-	hadRefs := len(c.EvidenceRefs) > 0
-	c.EvidenceRefs = map[string]string{}
-	return hadRefs
 }
 
 // RecordEvidenceRef records or updates one evidence reference.
@@ -139,19 +109,5 @@ func (c *Change) RecordPlanAuditIterations(iterations int) bool {
 		return false
 	}
 	c.PlanAuditIterations = iterations
-	return true
-}
-
-// ResetPlanAuditIterations clears plan-audit loop history.
-func (c *Change) ResetPlanAuditIterations() bool {
-	return c.RecordPlanAuditIterations(0)
-}
-
-// ResetReviewIntentDriftFailures clears review intent-drift retry history.
-func (c *Change) ResetReviewIntentDriftFailures() bool {
-	if c.ReviewIntentDriftFailures == 0 {
-		return false
-	}
-	c.ReviewIntentDriftFailures = 0
 	return true
 }

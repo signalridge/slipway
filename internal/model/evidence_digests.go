@@ -19,7 +19,6 @@ type EvidenceDigests struct {
 type SkillDigest struct {
 	VerdictTimestamp time.Time         `yaml:"verdict_timestamp,omitempty" json:"verdict_timestamp,omitempty"`
 	Inputs           map[string]string `yaml:"inputs" json:"inputs"`
-	LegacyRunVersion int               `yaml:"run_version,omitempty" json:"-"`
 }
 
 type SuiteResult struct {
@@ -144,7 +143,6 @@ func (r SuiteResult) SharedReviewerInputDigests() (map[string]string, error) {
 }
 
 func (d *SkillDigest) Normalize() {
-	d.LegacyRunVersion = 0
 	if !d.VerdictTimestamp.IsZero() {
 		d.VerdictTimestamp = d.VerdictTimestamp.UTC()
 	}

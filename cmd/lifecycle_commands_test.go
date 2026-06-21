@@ -30,7 +30,7 @@ func TestDoneArchivesGovernedExecution(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service modules")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -54,7 +54,7 @@ func TestDoneArchivesGovernedAsTerminalDoneState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "archive terminal governed state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "archive terminal governed state")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -379,7 +379,7 @@ func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 		_, err := state.ArchiveChange(root, source, model.ChangeStatusDone)
 		require.NoError(t, err)
 
-		slug := createGovernedRequest(t, root, "L2", "fix archived workflow feedback")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "fix archived workflow feedback")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -426,7 +426,7 @@ func TestDoneRemediationSourceScanDoesNotFollowBundleSymlink(t *testing.T) {
 		_, err := state.ArchiveChange(root, source, model.ChangeStatusDone)
 		require.NoError(t, err)
 
-		slug := createGovernedRequest(t, root, "L2", "fix archived workflow feedback")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "fix archived workflow feedback")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -462,7 +462,7 @@ func TestDoneGovernedEmptyAssuranceReturnsInvalid(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service modules")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -486,7 +486,7 @@ func TestDoneGovernedValidAssuranceSucceeds(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service modules")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -533,7 +533,7 @@ func TestDoneQuickFullRevalidatesShipGateBeforeArchive(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "quick full closeout must be fresh")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "quick full closeout must be fresh")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.QualityMode = model.QualityModeFull
@@ -565,7 +565,7 @@ func TestDoneShipGateBlockedSurfacesStaleEvidenceRepair(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "done surfaces stale repair")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "done surfaces stale repair")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -602,7 +602,7 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review evidence must be fresh")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review evidence must be fresh")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -637,7 +637,7 @@ func TestDoneRejectsReviewLayerBlockersBeforeArchive(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review layer blockers must stop done")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review layer blockers must stop done")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -681,7 +681,7 @@ func TestDoneRejectsExecutionSummaryLevelBlockersBeforeArchive(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "summary blockers must stop done")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "summary blockers must stop done")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -719,7 +719,7 @@ func TestDoneRejectsChecklistBlockersBeforeArchive(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "tasks checklist blockers must stop done")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "tasks checklist blockers must stop done")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
@@ -751,7 +751,7 @@ func TestDoneRejectsPlanAuditChanges(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "plan audit change")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "plan audit change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -996,7 +996,7 @@ func TestCancelArchivesGovernedExecutionWithCancelledStatus(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service modules")
 
 		cancelCmd := commandForRoot(t, root, makeCancelCmd())
 		require.NoError(t, cancelCmd.Execute())
@@ -1520,7 +1520,7 @@ func TestChangeYamlStableAfterSave(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "refactor service modules")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service modules")
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -1572,7 +1572,7 @@ func TestArchiveMovesChangeDirAndArtifacts(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "archive migration test")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "archive migration test")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1643,14 +1643,25 @@ func createGovernedChangeFixture(t *testing.T, root, description string, mutate 
 // createGovernedRequest creates and routes a governed (L2/L3) request.
 // Returns the slug. The change exists in artifacts/changes/<slug>/change.yaml after routing.
 // The change is advanced to S1_PLAN to simulate having passed intake.
-func createGovernedRequest(t *testing.T, root, level, description string) string {
+// governedRequestLevel selects the discovery posture of a governed fixture
+// created by createGovernedRequest.
+type governedRequestLevel string
+
+const (
+	// levelNonDiscovery is a non-discovery governed request.
+	levelNonDiscovery governedRequestLevel = "non-discovery"
+	// levelDiscovery is a discovery-scoped governed request.
+	levelDiscovery governedRequestLevel = "discovery"
+)
+
+func createGovernedRequest(t *testing.T, root string, level governedRequestLevel, description string) string {
 	t.Helper()
 	return createGovernedChangeFixture(t, root, description, func(change *model.Change) {
 		// Advance past S0 intake to S1_PLAN (simulating intake completion).
 		change.CurrentState = model.StateS1Plan
 		change.IntakeSubStep = ""
 		change.PlanSubStep = model.PlanSubStepResearch
-		change.NeedsDiscovery = level == "L3"
+		change.NeedsDiscovery = level == levelDiscovery
 	})
 }
 

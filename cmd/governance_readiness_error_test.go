@@ -20,7 +20,7 @@ func TestStatsDoesNotMislabelMalformedVerificationAsExecutionSummaryFailure(t *t
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stats should classify readiness failures correctly")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats should classify readiness failures correctly")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -46,7 +46,7 @@ func TestNextReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should classify readiness failures correctly")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -80,7 +80,7 @@ func TestNextReadinessFailureEnvelopeJSON(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next JSON envelope should classify readiness failures correctly")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next JSON envelope should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -109,7 +109,7 @@ func TestStatusReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status should classify readiness failures correctly")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "status should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -141,7 +141,7 @@ func TestValidateReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "validate should classify readiness failures correctly")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -173,7 +173,7 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should classify readiness failures correctly")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should classify readiness failures correctly")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -208,7 +208,7 @@ func TestNextDiagnosticsProjectionFailureUsesGovernanceReadinessEnvelope(t *test
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should classify projection failures consistently")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should classify projection failures consistently")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -243,7 +243,7 @@ func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should not consume checkpoint on readiness failure")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should not consume checkpoint on readiness failure")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan

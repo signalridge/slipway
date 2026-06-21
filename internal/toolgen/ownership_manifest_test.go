@@ -39,15 +39,17 @@ func TestClassifyOwnership(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(modifiedPath, []byte("user edit"), 0o644))
 
-	got, err := classifyOwnership(root, manifest, ".claude/skills/slipway-new/SKILL.md")
+	plan := &toolRefreshPlan{root: root, previousIndex: manifest.index()}
+
+	got, err := plan.classifyExistingRelPath(".claude/skills/slipway-new/SKILL.md", false)
 	require.NoError(t, err)
 	assert.Equal(t, ownershipPristineManagedFile, got)
 
-	got, err = classifyOwnership(root, manifest, ".claude/skills/slipway-run/SKILL.md")
+	got, err = plan.classifyExistingRelPath(".claude/skills/slipway-run/SKILL.md", false)
 	require.NoError(t, err)
 	assert.Equal(t, ownershipManagedModifiedFile, got)
 
-	got, err = classifyOwnership(root, manifest, ".claude/skills/user-owned/SKILL.md")
+	got, err = plan.classifyExistingRelPath(".claude/skills/user-owned/SKILL.md", false)
 	require.NoError(t, err)
 	assert.Equal(t, ownershipUnknownUserFile, got)
 }

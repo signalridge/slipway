@@ -188,7 +188,7 @@ Cursor follows the same pattern, shipping
 These launchers only delegate to `slipway hook ...`; hook behavior lives in the
 Slipway binary.
 
-## P1 Adapter Notes
+## Additional Adapter Notes
 
 Copilot stores command prompts in `.github/prompts/` with the
 `.prompt.md` extension and generated skills in `.github/skills/`. Its sentinel

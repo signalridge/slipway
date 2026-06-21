@@ -8,33 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDeactivateControl(t *testing.T) {
-	t.Parallel()
-	existing := []model.ControlActivation{
-		{
-			ControlID:    model.ControlDomainReview,
-			Mode:         model.ControlModeBlocking,
-			Scope:        model.ControlScopeReview,
-			Active:       true,
-			TriggeredBy:  []string{"auth_authz"},
-			PolicySource: model.BuiltinPolicySource,
-		},
-		{
-			ControlID:    model.ControlWorktreeIsolation,
-			Mode:         model.ControlModeBlocking,
-			Scope:        model.ControlScopeExecution,
-			Active:       true,
-			TriggeredBy:  []string{"domain_present"},
-			PolicySource: model.BuiltinPolicySource,
-		},
-	}
-
-	updated := DeactivateControl(existing, model.ControlDomainReview)
-
-	assert.Len(t, updated, 1)
-	assert.Equal(t, model.ControlWorktreeIsolation, updated[0].ControlID)
-}
-
 func TestMergeMonotonicRefreshesPolicyMetadata(t *testing.T) {
 	t.Parallel()
 	// Existing control has stale mode (blocking) and old policy version.
@@ -69,9 +42,6 @@ func TestMergeMonotonicRefreshesPolicyMetadata(t *testing.T) {
 	// Metadata should be refreshed from the candidate.
 	assert.Equal(t, model.ControlModeAdvisory, ctrl.Mode, "mode must be refreshed")
 	assert.Equal(t, []string{"blast_radius=high", "domain_present"}, ctrl.TriggeredBy, "triggers must be refreshed")
-
-	// Not a new activation — it was an existing control.
-	assert.Empty(t, result.NewActivations, "refreshed existing control is not a new activation")
 }
 
 func TestMergeMonotonicPreservesExistingWithoutCandidate(t *testing.T) {

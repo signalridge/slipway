@@ -22,11 +22,6 @@ type Wave struct {
 	Nodes []Node `json:"nodes"`
 }
 
-type TaskResult struct {
-	TaskID       string   `json:"task_id"`
-	ChangedFiles []string `json:"changed_files,omitempty"`
-}
-
 type ControlDecision string
 
 const (
@@ -39,12 +34,6 @@ type ControlCheckpoint struct {
 	WaveIndex        int               `json:"wave_index"`
 	NonPassTaskIDs   []string          `json:"non_pass_task_ids"`
 	AllowedDecisions []ControlDecision `json:"allowed_decisions"`
-}
-
-type ExecutionResult struct {
-	TaskResults map[string]model.TaskRun `json:"task_results"`
-	Checkpoint  *ControlCheckpoint       `json:"checkpoint,omitempty"`
-	Aborted     bool                     `json:"aborted,omitempty"`
 }
 
 // PlanWaves computes the wave assignment for the given tasks from their

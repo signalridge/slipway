@@ -158,7 +158,6 @@ func inScopeProducedRecoverySpecs() []string {
 		"context_origin_handle_invalid",
 		"cross_stage_context_not_distinct:spec-compliance-review|code-quality-review",
 		"plan_audit_origin_invalid",
-		"wave_test_impl_not_distinct",
 		"degraded_dispatch_justification_missing",
 	}
 }

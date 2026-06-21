@@ -126,7 +126,7 @@ func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {
 	withWorkspace(t, root, func() {
 		require.NoError(t, bootstrap.InitWorkspace(root, []string{"codex"}, true))
 
-		slug := createGovernedRequest(t, root, "L2", "review hydrate/json rejection must be side-effect free")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review hydrate/json rejection must be side-effect free")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -231,7 +231,7 @@ func TestReviewExplicitRequestRejectsInactiveGovernedChange(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review inactive governed change")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review inactive governed change")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.Status = model.ChangeStatusCancelled
@@ -253,7 +253,7 @@ func TestReviewRejectsS2ImplementWithoutMutatingState(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should not advance S2")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should not advance S2")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -282,7 +282,7 @@ func TestReviewDiagnosticsFlagEmitsJSON(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review diagnostics json")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review diagnostics json")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -312,7 +312,7 @@ func TestReviewRequiresExecutionSummaryEvenWhenChecklistIsComplete(t *testing.T)
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review requires frozen execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review requires frozen execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -346,7 +346,7 @@ func TestReviewPassFromS3ReviewPreservesGovernedState(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should preserve governed done-ready state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should preserve governed done-ready state")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -458,7 +458,7 @@ func TestReviewRequiresStoredWaveRunsForExecutionSummary(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should use execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should use execution summary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -534,7 +534,7 @@ func TestReviewFailsClosedOnWaveRunsMissingEvenWhenReadinessIsAlreadyBlocked(t *
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should fail closed when wave runs are missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should fail closed when wave runs are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -599,7 +599,7 @@ func TestReviewFailsWhenWaveTaskLinkageIsMismatched(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "review should reject mismatched wave linkage")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "review should reject mismatched wave linkage")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -688,7 +688,7 @@ func TestReviewDoesNotPreGateOnStaleExecutionEvidence(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should fail on stale evidence")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should fail on stale evidence")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -732,7 +732,7 @@ func TestReviewAllDoesNotTreatImplementationEvidenceAsArtifactEvidence(t *testin
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should keep review evidence roles named")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should keep review evidence roles named")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -771,7 +771,7 @@ func TestReviewChangedOnlyUsesInMemoryArtifactReconcile(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review changed-only should follow stale artifact projection")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review changed-only should follow stale artifact projection")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -868,7 +868,7 @@ func TestReviewChangedOnlyIncludesNonRequiredRuntimeArtifacts(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review changed-only should include non-required runtime artifacts")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review changed-only should include non-required runtime artifacts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -967,7 +967,7 @@ func TestReviewFailsWhenTasksChecklistCoverageDrifts(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review should fail when requirement coverage drifts")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review should fail when requirement coverage drifts")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review

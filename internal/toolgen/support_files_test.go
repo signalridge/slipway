@@ -32,7 +32,7 @@ func TestEmitSupportFilesCopiesReferences(t *testing.T) {
 	}
 
 	dst := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "refs-only", dst, true))
+	require.NoError(t, emitSkillSupportFilesFromFSWithPlan(srcFS, "refs-only", dst, true, nil))
 
 	for _, name := range []string{"topic-a.md", "topic-b.md"} {
 		_, err := os.Stat(filepath.Join(dst, "references", name))
@@ -50,7 +50,7 @@ func TestEmitSupportFilesSkipsEmpty(t *testing.T) {
 	}
 
 	dst := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "bare", dst, true))
+	require.NoError(t, emitSkillSupportFilesFromFSWithPlan(srcFS, "bare", dst, true, nil))
 
 	entries, err := os.ReadDir(dst)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dst, "references", "stale.md"), []byte("# stale\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dst, "scripts", "stale.sh"), []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
 
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "sample", dst, true))
+	require.NoError(t, emitSkillSupportFilesFromFSWithPlan(srcFS, "sample", dst, true, nil))
 
 	_, err := os.Stat(filepath.Join(dst, "references", "stale.md"))
 	assert.True(t, os.IsNotExist(err), "refresh should prune stale reference files")
@@ -99,7 +99,7 @@ func TestEmitSupportFilesOmitsScriptArtifacts(t *testing.T) {
 	}
 
 	dst := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "python-helper", dst, true))
+	require.NoError(t, emitSkillSupportFilesFromFSWithPlan(srcFS, "python-helper", dst, true, nil))
 
 	_, err := os.Stat(filepath.Join(dst, "scripts", "merge-sarif.py"))
 	assert.True(t, os.IsNotExist(err), "script helpers must not be copied into generated skill trees")
@@ -117,7 +117,7 @@ func TestEmitSupportFilesOmitsSharedGitHubHelpers(t *testing.T) {
 	}
 
 	dst := t.TempDir()
-	require.NoError(t, emitSkillSupportFilesFromFS(srcFS, "review-comment-triage", dst, true))
+	require.NoError(t, emitSkillSupportFilesFromFSWithPlan(srcFS, "review-comment-triage", dst, true, nil))
 
 	_, err := os.Stat(filepath.Join(dst, "scripts", "gh-common.sh"))
 	assert.True(t, os.IsNotExist(err), "shared script helpers must not be copied into generated skill trees")

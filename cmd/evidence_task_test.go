@@ -177,7 +177,7 @@ func TestEvidenceSkillRejectsRunSummaryBoundSkillWithoutExecutionSummary(t *test
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "skill evidence command")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "skill evidence command")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -477,7 +477,7 @@ func TestEvidenceTaskRejectsNonWorkspaceRelativePathsWithoutWritingEvidence(t *t
 func createEvidenceTaskFixture(t *testing.T, root string) (string, model.Change) {
 	t.Helper()
 
-	slug := createGovernedRequest(t, root, "L2", "evidence task command")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence task command")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement

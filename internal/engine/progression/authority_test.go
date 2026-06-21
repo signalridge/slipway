@@ -993,8 +993,8 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 
 	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
 	selectedReviewersWithSecurity := engineskill.SelectedReviewSkills(engineskill.ReviewSkillSelection{SecurityReviewSelected: true})
-	shipStages := crossStageContextShipStagesForSelectedSkills(selectedReviewers)
-	shipStagesWithSecurity := crossStageContextShipStagesForSelectedSkills(selectedReviewersWithSecurity)
+	shipStages := crossStageContextReviewStagesForSelectedSkills(selectedReviewers)
+	shipStagesWithSecurity := crossStageContextReviewStagesForSelectedSkills(selectedReviewersWithSecurity)
 
 	t.Run("review-owned spec/code edge does not re-fire at ship", func(t *testing.T) {
 		t.Parallel()

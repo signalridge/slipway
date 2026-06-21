@@ -116,7 +116,7 @@ func TestBuildGovernedStatusViewPreAuditOmitsShipGateDebt(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should omit ship gate debt before verify")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should omit ship gate debt before verify")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -133,7 +133,7 @@ func TestBuildGovernedStatusViewExposesDoneReadyReadiness(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "done-ready status projection")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "done-ready status projection")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	markChangeReadyForDone(t, root, &change)
@@ -714,7 +714,7 @@ func TestBuildGovernedStatusViewUsesResumeResponseForActiveCheckpoint(t *testing
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should suggest checkpoint resume-response")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should suggest checkpoint resume-response")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -756,7 +756,7 @@ func TestBuildGovernedStatusViewUsesCurrentTasksForActiveCheckpointWhenWavePlanI
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should use current tasks for checkpoint resume")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should use current tasks for checkpoint resume")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -804,7 +804,7 @@ func TestBuildGovernedStatusViewSuggestsRepairForActiveCheckpointWhenWaveRunsAre
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should fail closed for checkpoint resume when wave runs are missing")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should fail closed for checkpoint resume when wave runs are missing")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -856,7 +856,7 @@ func TestBuildGovernedStatusViewUsesRunResumeForIncompleteWaveExecution(t *testi
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should suggest run resume")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should suggest run resume")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -892,7 +892,7 @@ func TestBuildGovernedStatusViewSurfacesInterruptedExecutionContext(t *testing.T
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should surface interrupted execution context")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should surface interrupted execution context")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -931,7 +931,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreIncomplete(t *testi
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should fail closed for incomplete wave evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should fail closed for incomplete wave evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -984,7 +984,7 @@ func TestBuildGovernedStatusViewSuggestsRepairWhenWaveRunsAreMissingDuringReview
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "status should surface missing wave runs during verify")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "status should surface missing wave runs during verify")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review

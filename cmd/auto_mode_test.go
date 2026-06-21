@@ -608,7 +608,7 @@ func setupAutoModeCheckpoint(t *testing.T, guardrail, checkpointType string, fre
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
-	slug := createGovernedRequest(t, root, "L2", "auto ack entry "+checkpointType+" "+guardrail)
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "auto ack entry "+checkpointType+" "+guardrail)
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -1061,7 +1061,7 @@ func TestLightAutoPassEligibilityUnchangedUnderAuto(t *testing.T) {
 		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "light autopass unchanged under auto")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "light autopass unchanged under auto")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = model.WorkflowPresetLight

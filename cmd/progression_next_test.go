@@ -64,7 +64,7 @@ func TestNextReturnsNextSkillForGovernedState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "add caching layer")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "add caching layer")
 
 		cmd := commandForRoot(t, root, makeNextCmd())
 		cmd.SetArgs([]string{"--json"})
@@ -131,7 +131,7 @@ func TestNextS3ReviewWithPassingPeerEvidenceReportsGoalVerificationHandoff(t *te
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "s3 run guidance")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "s3 run guidance")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -242,7 +242,7 @@ func TestNextS1BundleSurfacesPlanAuditHandoff(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "audit bundle handoff")
+		slug := createGovernedRequest(t, root, levelDiscovery, "audit bundle handoff")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.PlanSubStep = model.PlanSubStepBundle
@@ -270,7 +270,7 @@ func TestNextPreviewIncludesGovernanceSurfaceAndActionBlockers(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "governance blocker preview")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "governance blocker preview")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -332,7 +332,7 @@ func TestNextPreviewIgnoresUnreadableGovernanceSnapshot(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "recover from corrupt governance snapshot")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "recover from corrupt governance snapshot")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -373,7 +373,7 @@ func TestNextPreviewExposesPlanningRecoveryState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "preview should expose plan recovery state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview should expose plan recovery state")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -400,7 +400,7 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "light preset json autopass advisory")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "light preset json autopass advisory")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.WorkflowPreset = model.WorkflowPresetLight
@@ -434,7 +434,7 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "light preset explicit no-auto-pass advisory")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "light preset explicit no-auto-pass advisory")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.WorkflowPreset = model.WorkflowPresetLight
@@ -471,7 +471,7 @@ func TestNextDoesNotAutoPassLightPresetReviewWithoutExecutionSummary(t *testing.
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "light preset review still requires execution authority")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "light preset review still requires execution authority")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -503,7 +503,7 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "done-ready still requires goal verification")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "done-ready still requires goal verification")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = model.WorkflowPresetLight
@@ -548,7 +548,7 @@ func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "strict preset review")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "strict preset review")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.WorkflowPreset = model.WorkflowPresetStrict
@@ -579,7 +579,7 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "goal verification hint contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "goal verification hint contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -636,7 +636,7 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "final closeout run hint contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "final closeout run hint contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.QualityMode = model.QualityModeFull
@@ -670,7 +670,7 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "final closeout hint contract")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "final closeout hint contract")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -780,7 +780,7 @@ func TestNextReturnsSkillNameWithoutToolSpecificRuntimeFields(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test agent hint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test agent hint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -810,7 +810,7 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "refactor service module")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "refactor service module")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -918,7 +918,7 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "json evidence status surface")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "json evidence status surface")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -996,7 +996,7 @@ func TestBuildRequiredSkillEvidenceMarksDigestDriftedSkillStale(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "stale evidence status surface")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "stale evidence status surface")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1028,7 +1028,7 @@ func TestBuildRequiredSkillEvidenceNonPrecomputedMarksDigestDriftedSkillStale(t 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "non-precomputed stale evidence status")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "non-precomputed stale evidence status")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1063,7 +1063,7 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "consistent review next skill")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "consistent review next skill")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1188,7 +1188,7 @@ func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "docs review next skill")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "docs review next skill")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1317,7 +1317,7 @@ func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T)
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "path authority should not depend on execution freshness")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "path authority should not depend on execution freshness")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1369,7 +1369,7 @@ func TestNextNoReviewContextForNonReviewState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "add pagination")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "add pagination")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1399,7 +1399,7 @@ func TestAssembleSkillViewReusesPrecomputedEvidenceMap(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "reuse precomputed next evidence")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "reuse precomputed next evidence")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1447,7 +1447,7 @@ func TestNextBlocksWithoutPlanAuditEvidence(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "test gplan blocking")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "test gplan blocking")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1498,7 +1498,7 @@ func TestNextPreviewFailsWhenSkillEvidenceEvaluationFails(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review malformed skill registry handling")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review malformed skill registry handling")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1538,7 +1538,7 @@ func TestNextAdvancesWithPlanAuditEvidence(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "test gplan passing")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "test gplan passing")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1595,7 +1595,7 @@ func TestNextReadOnlyReportsRunGuidanceAfterPassingPlanAudit(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "report S1 audit advance guidance")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "report S1 audit advance guidance")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1630,7 +1630,7 @@ func TestNextBlocksWhenBundleMissingArtifacts(t *testing.T) {
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "test bundle missing")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "test bundle missing")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1675,7 +1675,7 @@ func TestNextBlocksOnInvalidBoundWorktreeBeforeBundleChecks(t *testing.T) {
 	initTestWorkspace(t, root)
 	initGitRepoForWorktreeTests(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "bundle invalid bound worktree")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "bundle invalid bound worktree")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1702,7 +1702,7 @@ func TestNextBlocksWhenTasksChecklistMissingTargetFiles(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "tasks checklist validation")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "tasks checklist validation")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1750,7 +1750,7 @@ func TestNextBlocksWhenTasksChecklistHasDependencyCycle(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "tasks checklist dependency cycle")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "tasks checklist dependency cycle")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1802,7 +1802,7 @@ func TestNextPreviewIncludesTaskChecklistBlockers(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "preview tasks checklist blockers")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview tasks checklist blockers")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1845,7 +1845,7 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "preview assurance contract blocker")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview assurance contract blocker")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -1873,7 +1873,7 @@ func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		_ = createGovernedRequest(t, root, "L2", "test no checkpoint")
+		_ = createGovernedRequest(t, root, levelNonDiscovery, "test no checkpoint")
 
 		cmd := commandForRoot(t, root, makeRunCmd())
 		cmd.SetArgs([]string{"--json", "--resume-response", "approved"})
@@ -1898,7 +1898,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "done ready contract")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "done ready contract")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1947,7 +1947,7 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "standard request done ready contract")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "standard request done ready contract")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 
@@ -1986,7 +1986,7 @@ func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "standard closeout diagnostics contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "standard closeout diagnostics contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2039,7 +2039,7 @@ func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "handoff-only done ready contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff-only done ready contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2109,7 +2109,7 @@ func TestNextJSONDefaultOmitsFreshnessDiagnosticsWhenDiagnosticsViewHasThem(t *t
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "handoff suppresses freshness diagnostics")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff suppresses freshness diagnostics")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -2164,7 +2164,7 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "handoff source stays narrow")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff source stays narrow")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -2463,7 +2463,7 @@ func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test checkpoint requires response")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint requires response")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2494,7 +2494,7 @@ func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort without wave-backed state should not require resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort without wave-backed state should not require resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -2527,7 +2527,7 @@ func TestRunRequiresExplicitResumeAfterAbortWithWaveBackedState(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "abort with wave-backed state should require resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "abort with wave-backed state should require resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -2600,7 +2600,7 @@ func TestRunDoesNotRequireResumeWhenPlanningEvidenceIsStale(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "stale planning should not resume old wave")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "stale planning should not resume old wave")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
@@ -2663,7 +2663,7 @@ func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test checkpoint resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2720,7 +2720,7 @@ func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when wave artifacts are missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response should fail closed when wave artifacts are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2771,7 +2771,7 @@ func TestRunRejectsResumeResponseWhenCheckpointTaskIsMissingFromCurrentTasks(t *
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "run resume-response should fail closed when checkpoint task is missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response should fail closed when checkpoint task is missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2811,7 +2811,7 @@ func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should fail closed when checkpoint wave artifacts are missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should fail closed when checkpoint wave artifacts are missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2862,7 +2862,7 @@ func TestNextRejectsCheckpointContextWhenCheckpointTaskIsMissingFromCurrentTasks
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should fail closed when checkpoint task is missing")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should fail closed when checkpoint task is missing")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2902,7 +2902,7 @@ func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "run resume should fail closed when wave evidence is incomplete")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume should fail closed when wave evidence is incomplete")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -2955,7 +2955,7 @@ func TestRunResumeUnavailableExplainsLifecycleBoundary(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "resume boundary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "resume boundary")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -2984,7 +2984,7 @@ func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test allowed responses")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test allowed responses")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3151,7 +3151,7 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "test freshness in checkpoint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test freshness in checkpoint")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3193,7 +3193,7 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "bundle checklist resume")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "bundle checklist resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3240,7 +3240,7 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "bundle checkpoint without skip-safe tasks")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "bundle checkpoint without skip-safe tasks")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3286,7 +3286,7 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "wave plan protocol version")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "wave plan protocol version")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3369,7 +3369,7 @@ func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
 					require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(tt.config), 0o644))
 				}
 
-				slug := createGovernedRequest(t, root, "L2", tt.name)
+				slug := createGovernedRequest(t, root, levelNonDiscovery, tt.name)
 				change, err := state.LoadChange(root, slug)
 				require.NoError(t, err)
 
@@ -3425,7 +3425,7 @@ func TestNextPreviewUsesCurrentTasksDuringS2Implementation(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "current tasks should drive S2 wave preview")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "current tasks should drive S2 wave preview")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3489,7 +3489,7 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "preview checkpoint bundle")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview checkpoint bundle")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3560,7 +3560,7 @@ func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "next should inspect active checkpoint without resume response")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should inspect active checkpoint without resume response")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3621,7 +3621,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "freshness stale after input update")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "freshness stale after input update")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3693,7 +3693,7 @@ func TestNextPreviewAdvancesAfterPassingResearchVerification(t *testing.T) {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		slug := createGovernedRequest(t, root, "L3", "passing research verification should advance to next skill")
+		slug := createGovernedRequest(t, root, levelDiscovery, "passing research verification should advance to next skill")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3851,7 +3851,7 @@ func TestNextPreviewDoesNotAdvanceState(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "preview should be read-only")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview should be read-only")
 
 		changeBefore, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -3880,7 +3880,7 @@ func TestNextPreviewDoesNotAppendLifecycleEvents(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "preview should not append lifecycle events")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview should not append lifecycle events")
 
 		changeBefore, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -3913,7 +3913,7 @@ func TestNextPreviewExposesArtifactAmendmentsWithoutPersistingReconcile(t *testi
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "preview should expose artifact amendments without persisting")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview should expose artifact amendments without persisting")
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -3963,7 +3963,7 @@ func TestRunIncludesTransitionTrace(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "run transition trace")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run transition trace")
 
 		// createGovernedRequest runs request + one next, leaving governed lane at S1.
 		changeBefore, err := state.LoadChange(root, slug)
@@ -3995,8 +3995,11 @@ func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		t.Setenv("SPECLANE_CONTEXT_WINDOW_TOKENS", "1")
+		// Pin the higher-priority alias empty so an ambient SLIPWAY_CONTEXT_WINDOW_TOKENS
+		// cannot mask the legacy value this hard-stop assertion relies on.
+		t.Setenv("SLIPWAY_CONTEXT_WINDOW_TOKENS", "")
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "context hard stop")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "context hard stop")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -4030,7 +4033,7 @@ func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "document diagnostics warning")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "document diagnostics warning")
 
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -4052,12 +4055,12 @@ func TestNextBlocksWhenGovernedChangeHasNoFrozenSchema(t *testing.T) {
 	})
 }
 
-func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.T) {
+func TestNextGovernedMaterializesExecutionSummaryAndRuntimeSummaryDuringImplementation(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
-	slug := createGovernedRequest(t, root, "L2", "materialize run summary")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "materialize run summary")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -4102,7 +4105,7 @@ func TestNextS6GovernedMaterializesExecutionSummaryAndRuntimeSummary(t *testing.
 	assert.Equal(t, model.TaskVerdictPass, summary.Tasks[0].Verdict)
 }
 
-func TestNextS6GovernedBlocksWithoutTaskEvidenceForWaveRunSummary(t *testing.T) {
+func TestNextGovernedBlocksWithoutTaskEvidenceForWaveRunSummaryDuringImplementation(t *testing.T) {
 	t.Parallel()
 	root, slug := prepareMissingTaskEvidenceForWaveRunSummaryFixture(t)
 
@@ -4160,7 +4163,7 @@ func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
-	slug := createGovernedRequest(t, root, "L2", "surface stale task evidence diagnostics")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "surface stale task evidence diagnostics")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -4258,7 +4261,7 @@ func prepareMissingTaskEvidenceForWaveRunSummaryFixture(t *testing.T) (string, s
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
-	slug := createGovernedRequest(t, root, "L2", "missing task evidence should block")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "missing task evidence should block")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS2Implement
@@ -4299,7 +4302,7 @@ func prepareStalePlanningRecoveryBaseFixture(t *testing.T, root string, currentS
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, "L2", "stale planning recovery")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stale planning recovery")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = currentState

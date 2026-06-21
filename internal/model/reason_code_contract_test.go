@@ -209,7 +209,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"wave_runs_missing",
 		"wave_runs_unreadable",
 		"wave_task_linkage_mismatch",
-		"wave_test_impl_not_distinct",
 		"workspace_scope_config_missing",
 		"workspace_scope_marker_missing",
 		"worktree_metadata_persist_failed",
@@ -287,6 +286,31 @@ func TestReviewOriginHandleVocabularyRetired(t *testing.T) {
 	_, inRemediations := blockerRemediations[retired]
 	assert.Falsef(t, inRemediations,
 		"the remediation vocabulary must not define the retired review-origin blocker %q", retired)
+
+	assert.Falsef(t, IsCanonicalReasonCode(retired),
+		"%q must no longer be recognized as a canonical reason code", retired)
+}
+
+// The REQ-003 test/impl distinctness gate is retired — it was never wired into
+// the live wave-execution blocker aggregator — so its blocker vocabulary must be
+// fully removed: no canonical reason definition, no remediation vocabulary entry,
+// and no public recognition as a canonical code, so nothing downgrades a stray
+// occurrence to `unknown_reason_code` by silently treating it as live. The
+// retired code is kept as a string literal on purpose: any Go identifier for it
+// is deleted together with the vocabulary, and this contract must keep compiling
+// after that.
+func TestWaveTestImplDistinctnessVocabularyRetired(t *testing.T) {
+	t.Parallel()
+
+	const retired = "wave_test_impl_not_distinct"
+
+	_, inRegistry := canonicalReasonDefinitions[retired]
+	assert.Falsef(t, inRegistry,
+		"the canonical reason registry must not define the retired test/impl distinctness blocker %q", retired)
+
+	_, inRemediations := blockerRemediations[retired]
+	assert.Falsef(t, inRemediations,
+		"the remediation vocabulary must not define the retired test/impl distinctness blocker %q", retired)
 
 	assert.Falsef(t, IsCanonicalReasonCode(retired),
 		"%q must no longer be recognized as a canonical reason code", retired)

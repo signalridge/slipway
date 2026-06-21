@@ -1,6 +1,6 @@
 package capability
 
-// B5 repair/CI + ops skills.
+// repair/CI + ops skills.
 
 func ciTriage() Skill {
 	return Skill{

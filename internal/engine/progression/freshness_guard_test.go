@@ -62,19 +62,24 @@ func TestGenericEvidenceFreshnessDoesNotUseTimestampOrdering(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := repositoryRootForFreshnessGuard(t)
-	contextFile := parseFreshnessGuardFile(t, repoRoot, "internal/engine/context/context.go")
-	disallowed := disallowedSelectorCalls(contextFile, []selectorCallMatch{
-		{receiverSuffix: "EvidenceTimestamp", selector: "Before"},
-		{receiverSuffix: "LatestRelevantUpdateAt", selector: "After"},
-		{receiverSuffix: "LatestRelevantUpdateAt", selector: "Before"},
-	})
-	if len(disallowed) > 0 {
-		t.Fatalf("generic evidence freshness must not compare timestamp ordering: %v", disallowed)
-	}
 
+	// The execution-summary freshness path must not resurrect an artifact-clock
+	// baseline helper.
 	summaryFile := parseFreshnessGuardFile(t, repoRoot, "internal/state/execution_summary.go")
 	if hasFunctionDecl(summaryFile, "latestExecutionRelevantUpdateAt") {
 		t.Fatalf("execution-summary freshness must not keep artifact-clock baseline helpers")
+	}
+
+	// The generic evidence-freshness evaluator (EvaluateEvidenceFreshness and its
+	// EvidenceFreshnessInput) is structural-only: it compares expected vs current
+	// structural inputs and must never reintroduce the removed timestamp fields
+	// (EvidenceTimestamp / LatestRelevantUpdateAt) or timestamp ordering. Importing
+	// "time" is the precondition for any of those, so forbid it outright at this
+	// boundary.
+	contextFile := parseFreshnessGuardFile(t, repoRoot, "internal/engine/context/context.go")
+	if fileImportsPackage(contextFile, "time") {
+		t.Fatalf("internal/engine/context/context.go must not import \"time\": " +
+			"generic evidence freshness must stay structural and must not reintroduce timestamp fields or ordering")
 	}
 }
 
@@ -214,6 +219,18 @@ func hasFunctionDecl(file *ast.File, name string) bool {
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if ok && fn.Name.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func fileImportsPackage(file *ast.File, importPath string) bool {
+	for _, imp := range file.Imports {
+		if imp.Path == nil {
+			continue
+		}
+		if strings.Trim(imp.Path.Value, "`\"") == importPath {
 			return true
 		}
 	}

@@ -21,7 +21,7 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill records plan audit")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill records plan audit")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
 		notesRel := filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "verification", "plan-audit-notes.md"))
@@ -89,7 +89,7 @@ func TestEvidenceSkillAllowsStaleResearchRestampFromAuditSubstep(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "evidence skill restamps stale research")
+		slug := createGovernedRequest(t, root, levelDiscovery, "evidence skill restamps stale research")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 		writeMinimalGovernedBundle(t, root, change)
 		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
@@ -157,7 +157,7 @@ func TestEvidenceSkillRejectsNonStaleResearchRestampFromAuditSubstep(t *testing.
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L3", "evidence skill rejects non-stale research restamp")
+		slug := createGovernedRequest(t, root, levelDiscovery, "evidence skill rejects non-stale research restamp")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 		writeMinimalGovernedBundle(t, root, change)
 		writeSkillVerification(t, root, slug, progression.SkillResearchOrchestration, model.VerificationRecord{
@@ -197,7 +197,7 @@ func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
 		runGit(t, root, "commit", "-m", "init")
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "evidence skill bound notes file")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill bound notes file")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
 		worktreeRoot := filepath.Join(t.TempDir(), slug)
@@ -248,7 +248,7 @@ func TestEvidenceSkillFailOverwritesPlanAuditAndPrunesDigest(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill fail prunes digest")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill fail prunes digest")
 		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
 		passCmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -293,7 +293,7 @@ func TestEvidenceSkillRecordsSelectedReviewPeerWithoutSpecPredecessor(t *testing
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill records unordered review peer")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill records unordered review peer")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -334,7 +334,7 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill restamps invalid review origin")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill restamps invalid review origin")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingReviewEvidencePack(t, root, slug, 1)
@@ -386,7 +386,7 @@ func TestEvidenceSkillRejectsSelectedReviewerRestampWithValidContextOrigin(t *te
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects valid review origin overwrite")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects valid review origin overwrite")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingReviewEvidencePack(t, root, slug, 1)
@@ -422,7 +422,7 @@ func TestEvidenceSkillRejectsUnselectedSecurityReview(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects unselected security")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects unselected security")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -452,7 +452,7 @@ func TestEvidenceSkillRejectsFinalCloseoutBeforeGoalVerification(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill rejects closeout ordering")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects closeout ordering")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
@@ -486,7 +486,7 @@ func TestEvidenceSkillRejectsRunSummaryBoundWithoutExecutionSummary(t *testing.T
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill requires execution summary")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill requires execution summary")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -584,7 +584,7 @@ func TestEvidenceSkillRejectsWrongState(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill wrong state")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill wrong state")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -609,7 +609,7 @@ func TestEvidenceSkillWrongStateForWaveOrchestrationInS3RoutesToReviewAndVerific
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill wave wrong state in review")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill wave wrong state in review")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -636,7 +636,7 @@ func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToCloseoutEvidence(t *t
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill wave wrong state in review")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill wave wrong state in review")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -660,7 +660,7 @@ func TestEvidenceSkillRejectsNotesConflict(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, "L2", "evidence skill notes conflict")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill notes conflict")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
 
 		notesPath := filepath.Join(root, "notes.md")

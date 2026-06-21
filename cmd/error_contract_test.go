@@ -73,7 +73,7 @@ func TestExecuteFailureEnvelopeStateIntegrityForMalformedGovernanceSkill(t *test
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review malformed governance skill")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review malformed governance skill")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -105,7 +105,7 @@ func assertMalformedGovernanceSkillCommandFailsStateIntegrity(t *testing.T, comm
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", description)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, description)
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review

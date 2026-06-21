@@ -1,6 +1,6 @@
 package capability
 
-// B2 scale-foundation skills.
+// scale-foundation skills.
 
 func contextAssembly() Skill {
 	return Skill{

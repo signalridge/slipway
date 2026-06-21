@@ -67,7 +67,7 @@ func TestStatusExplicitViewEmitsPublicAliasAndHydrateReferences(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "status route-surface command contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "status route-surface command contract")
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
@@ -88,7 +88,7 @@ func TestReviewFocusCalibrationEmitsPublicAliasAndHydrateReferences(t *testing.T
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, "L2", "review focus calibration route-surface contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "review focus calibration route-surface contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 

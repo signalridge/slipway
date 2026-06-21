@@ -31,7 +31,7 @@ func TestGovernedAgentEvalFixtures(t *testing.T) {
 		{
 			name: "plan audit missing evidence surfaces deterministic next skill and gate blockers",
 			setup: func(t *testing.T, root string) string {
-				slug := createGovernedRequest(t, root, "L2", "eval fixture plan audit missing")
+				slug := createGovernedRequest(t, root, levelNonDiscovery, "eval fixture plan audit missing")
 				change, err := state.LoadChange(root, slug)
 				require.NoError(t, err)
 				change.PlanSubStep = model.PlanSubStepAudit

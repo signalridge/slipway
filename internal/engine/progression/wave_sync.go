@@ -133,11 +133,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 
 	planDriftBlockers := taskEvidencePlanHashBlockers(tasksPlanHash, tasks)
 	executionSummary := BuildExecutionSummary(record.RunVersion, tasks, record.Timestamp, &record)
-	if len(planDriftBlockers) == 0 {
-		executionSummary.TasksPlanHash = tasksPlanHash
-	} else {
-		executionSummary.TasksPlanHash = tasksPlanHash
-	}
+	executionSummary.TasksPlanHash = tasksPlanHash
 	if len(parseIssues) > 0 || len(planDriftBlockers) > 0 {
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, model.ReasonCodesFromSpecs(append(parseIssues, planDriftBlockers...))...))
 		executionSummary.SyncDerivedFields()
@@ -147,19 +143,18 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	// "ready" summary exists, refineS2WaveExecutionSkillBlockers short-circuits
 	// the preview path, so a returned-only blocker would vanish from read-only
 	// surfaces after the partial summary is written (issue #95 REQ-001).
-	var incompleteBlockers []model.ReasonCode
-	incompleteBlockers = IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
+	incompleteBlockers := IncompleteExecutionTaskBlockers(wavePlan, executionSummary.TaskRunMap())
 	if len(incompleteBlockers) > 0 {
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, incompleteBlockers...))
 		executionSummary.SyncDerivedFields()
 	}
-	// Resolve the preset policy once here so the preset-sensitive safety nets
-	// (#5 test/impl distinctness, #6 degraded-dispatch justification) fail closed
-	// on standard/strict and stay advisory on light, without changing
-	// SyncGovernedWaveExecution's signature or its call sites. Both the mutate and
-	// preview paths flow through this point, so a single resolution covers them.
-	// authority.go in this same package already imports governance, so this adds no
-	// new cross-package edge. Fail closed on a resolution error.
+	// Resolve the preset policy once here so the preset-sensitive degraded-dispatch
+	// justification safety net fails closed on standard/strict and stays advisory
+	// on light, without changing SyncGovernedWaveExecution's signature or its call
+	// sites. Both the mutate and preview paths flow through this point, so a single
+	// resolution covers them. authority.go in this same package already imports
+	// governance, so this adds no new cross-package edge. Fail closed on a
+	// resolution error.
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
 		return WaveSyncResult{}, err
@@ -875,114 +870,6 @@ func waveStarted(wavePlanWave model.WavePlanWave, recorded map[string]struct{}) 
 	return false
 }
 
-// distinctnessPlanTask is the flattened (id, kind, targets, wave index) view of a
-// wave-plan task the test/impl-distinctness gate reasons over. It is derived
-// solely from engine-owned plan structure; no host-supplied session_id is read.
-type distinctnessPlanTask struct {
-	id        string
-	kind      model.TaskKind
-	targets   []string
-	waveIndex int
-}
-
-// TestImplDistinctnessBlockers enforces the relational test≠impl invariant
-// (REQ-003): for any task_kind=code task whose target_files are SHARED with at
-// least one other task, the plan MUST also dispatch — in an earlier wave — a
-// structurally distinct task_kind=test task that overlaps the same target_files.
-// The distinctness is derived only from engine-owned task_kind + target_files +
-// wave ordering; it NEVER keys on the host-supplied session_id (which is host-set,
-// excluded on the empty default, and therefore an invalid discriminator). A code
-// task whose target_files are not shared with any other task carries no
-// requirement and is skipped, so a single isolated implementation task is never
-// punished. Overlap uses wave.TargetCoversPath in both directions, the same scope
-// predicate the planner's conflict detection relies on, so "shares target_files"
-// here means exactly what "conflicts" means there. The gate is advisory on light
-// (enforced=false returns nil).
-func TestImplDistinctnessBlockers(plan model.WavePlan, enforced bool) []model.ReasonCode {
-	if !enforced || len(plan.Waves) == 0 {
-		return nil
-	}
-	flat := make([]distinctnessPlanTask, 0)
-	for _, planWave := range plan.Waves {
-		for _, planTask := range planWave.Tasks {
-			flat = append(flat, distinctnessPlanTask{
-				id:        planTask.TaskID,
-				kind:      planTask.TaskKind,
-				targets:   planTask.TargetFiles,
-				waveIndex: planWave.WaveIndex,
-			})
-		}
-	}
-	blockers := []model.ReasonCode{}
-	for _, code := range flat {
-		if code.kind != model.TaskKindCode {
-			continue
-		}
-		if !taskSharesTargets(code, flat) {
-			// Not shared with any peer task: no relational requirement.
-			continue
-		}
-		if hasPrecedingDistinctTest(code, flat) {
-			continue
-		}
-		blockers = append(blockers, model.NewReasonCode("wave_test_impl_not_distinct", code.id))
-	}
-	return model.NormalizeReasonCodes(blockers)
-}
-
-// taskSharesTargets reports whether task's target_files overlap any OTHER task's
-// target_files, using the planner's directional scope predicate in both
-// directions so a parent-directory target and a contained file count as shared.
-func taskSharesTargets(task distinctnessPlanTask, all []distinctnessPlanTask) bool {
-	for _, other := range all {
-		if other.id == task.id {
-			continue
-		}
-		if targetsOverlap(task.targets, other.targets) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasPrecedingDistinctTest reports whether a structurally distinct task_kind=test
-// task (different id) whose target_files overlap the code task's target_files is
-// dispatched before it (strictly earlier wave index).
-func hasPrecedingDistinctTest(code distinctnessPlanTask, all []distinctnessPlanTask) bool {
-	for _, candidate := range all {
-		if candidate.kind != model.TaskKindTest {
-			continue
-		}
-		if candidate.id == code.id {
-			continue
-		}
-		if candidate.waveIndex >= code.waveIndex {
-			continue
-		}
-		if targetsOverlap(candidate.targets, code.targets) {
-			return true
-		}
-	}
-	return false
-}
-
-// targetsOverlap reports whether two target_files sets share scope, evaluated as
-// mutual coverage via wave.TargetCoversPath (the planner's conflict primitive) so
-// the overlap notion matches the conflict detection used elsewhere.
-func targetsOverlap(left, right []string) bool {
-	for _, file := range right {
-		if wave.TargetCoversPath(left, file) {
-			return true
-		}
-	}
-	for _, file := range left {
-		if wave.TargetCoversPath(right, file) {
-			return true
-		}
-	}
-	return false
-}
-
 // ExecutorAgentBlockers reports, for every wave dispatched parallel_subagents,
 // each planned task that has no recorded executor_agent handle. A parallel_subagents
 // dispatch claims each task ran in its own subagent within the shared worktree;
@@ -1093,32 +980,6 @@ func BuildResumeCompletedTasks(summary model.ExecutionSummary) map[string]bool {
 		}
 	}
 	return completed
-}
-
-func tasksPlanChangedSinceTaskEvidenceBlockers(
-	previousHash string,
-	tasks []model.ExecutionTaskSummary,
-	currentHash string,
-) []string {
-	currentHash = strings.TrimSpace(currentHash)
-	previousHash = strings.TrimSpace(previousHash)
-	if currentHash == "" || previousHash == "" || len(tasks) == 0 {
-		return nil
-	}
-	if previousHash == currentHash && previousHash != "" {
-		return nil
-	}
-
-	staleTasks := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		staleTasks = append(staleTasks, task.TaskID)
-	}
-	slices.Sort(staleTasks)
-	blockers := make([]string, 0, len(staleTasks))
-	for _, taskID := range staleTasks {
-		blockers = append(blockers, "tasks_plan_changed_since_task_evidence:"+taskID)
-	}
-	return blockers
 }
 
 func taskEvidencePlanHashBlockers(
