@@ -300,12 +300,9 @@ optional `session_id`. A batch preflights every file, rejects duplicate
 Executor result files must not include ledger-owned fields
 (`run_summary_version`, `task_kind`, `target_files`, `captured_at`,
 `freshness_inputs`, or `input_hash`); Slipway derives them from the active wave
-plan and current task evidence run. Manual
-flag mode remains available with `--task-id`, `--run-summary-version`,
-`--task-kind`, `--verdict`, `--evidence-ref`, optional `--changed-file` and
-`--target-file` (each repeatable), `--blocker <code[:detail]>` (repeatable;
-supply for non-pass verdicts), `--captured-at <RFC3339Nano>` (defaults to now),
-`--session-id`, and `--change <slug>`. The command computes `freshness_inputs`,
+plan and current task evidence run. Manual flag mode remains available for
+host-internal or recovery fallback use; use `slipway evidence task --help` for
+the current flag contract. The command computes `freshness_inputs`,
 validates task kind/verdict/blockers, and refuses unknown or path-unsafe task IDs
 instead of relying on hand-written JSON.
 `freshness_inputs` includes the current task-derived `tasks_plan_hash` so task

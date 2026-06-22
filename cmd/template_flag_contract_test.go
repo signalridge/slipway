@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/toolgen"
@@ -223,40 +224,64 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 	// real flag to be absent from the reference.
 	exempt := map[string]map[string]bool{
 		"review": {"artifact": true}, // documented as "unsupported in MVP"
+		// `evidence task` still exposes manual-mode flags in Cobra and black-box
+		// help, but generated Arguments intentionally teach the result-file-only
+		// agent surface.
+		"evidence task": {
+			"blocker":             true,
+			"captured-at":         true,
+			"changed-file":        true,
+			"evidence-ref":        true,
+			"run-summary-version": true,
+			"session-id":          true,
+			"target-file":         true,
+			"task-id":             true,
+			"task-kind":           true,
+			"verdict":             true,
+		},
 	}
 
 	for id, cmd := range cmds {
 		args := toolgen.CommandArguments(id)
 		require.NotEmptyf(t, args, "registry Arguments missing for command %q", id)
-		for name := range collectVisibleFlags(cmd) {
-			if name == "help" || exempt[id][name] {
+		for _, ref := range collectVisibleFlagRefs(cmd, []string{id}) {
+			if ref.name == "help" || exempt[ref.commandPath][ref.name] {
 				continue
 			}
 			// Bound the match so "--hydrate" is not satisfied by "--hydrate-ref".
-			re := regexp.MustCompile("--" + regexp.QuoteMeta(name) + "([^a-zA-Z0-9-]|$)")
+			re := regexp.MustCompile("--" + regexp.QuoteMeta(ref.name) + "([^a-zA-Z0-9-]|$)")
 			assert.Truef(t, re.MatchString(args),
-				"command %q registers flag --%s but it is absent from registry Arguments %q; add it to commandRegistry[%q].Arguments or to the exemption list",
-				id, name, args, id)
+				"command path %q registers flag --%s but it is absent from registry Arguments %q; add it to commandRegistry[%q].Arguments or to the exemption list",
+				ref.commandPath, ref.name, args, id)
 		}
 	}
 }
 
-// collectVisibleFlags is collectCommandFlags restricted to non-hidden flags,
-// recursing into subcommands (e.g. `evidence task`).
-func collectVisibleFlags(cmd *cobra.Command) map[string]bool {
-	flags := map[string]bool{}
+type visibleFlagRef struct {
+	commandPath string
+	name        string
+}
+
+// collectVisibleFlagRefs is collectCommandFlags restricted to non-hidden flags,
+// recursing into subcommands while preserving the command path (e.g.
+// `evidence task`) so exemptions can stay narrow.
+func collectVisibleFlagRefs(cmd *cobra.Command, path []string) []visibleFlagRef {
 	if cmd == nil {
-		return flags
+		return nil
 	}
+	var refs []visibleFlagRef
+	commandPath := strings.Join(path, " ")
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if !f.Hidden {
-			flags[f.Name] = true
+			refs = append(refs, visibleFlagRef{
+				commandPath: commandPath,
+				name:        f.Name,
+			})
 		}
 	})
 	for _, child := range cmd.Commands() {
-		for name := range collectVisibleFlags(child) {
-			flags[name] = true
-		}
+		childPath := append(append([]string{}, path...), child.Name())
+		refs = append(refs, collectVisibleFlagRefs(child, childPath)...)
 	}
-	return flags
+	return refs
 }
