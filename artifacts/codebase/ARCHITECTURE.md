@@ -1,37 +1,39 @@
 # Architecture
 
-- Question: What code seams must Workstream A change to remove `checkpoint`,
-  `learn`, and `stats` from the product and agent-facing command surface while
-  preserving ledger-backed governed recovery?
-- Root command surface: the custom root help is grouped in `cmd/root.go`; it
-  currently exposes `checkpoint` under Situational and `learn`/`stats` under
-  Diagnostics. Command registration also still adds `makeLearnCmd`,
-  `makeStatsCmd`, and `makeCheckpointCmd`. Evidence: `cmd/root.go:28-90`,
-  `cmd/root.go:152-189`.
-- Checkpoint lifecycle state: `internal/model.Change` persists
-  `ActiveCheckpoint`, so deleting the concept is a model and state-schema
-  change, not just a command removal. Evidence: `internal/model/change.go:62-64`.
-- Checkpoint resume protocol: `run` and `implement` expose
-  `--resume-response` beside `--resume`; entry validation gives active
-  checkpoints priority over normal resumable wave execution. Evidence:
-  `cmd/run.go:104-111`, `cmd/run.go:202-291`, `cmd/stage.go:41-117`.
-- Next/status integration: `next` serializes `resume_checkpoint`, confirmation
-  metadata, checkpoint consumption side effects, and action kinds; `status`
-  surfaces `run --resume-response "<response>"` when `ActiveCheckpoint` exists.
-  Evidence: `cmd/next.go:190-206`, `cmd/next.go:539-575`,
-  `cmd/next.go:730-768`, `cmd/next.go:855-867`, `cmd/status_view_build.go:183-214`.
-- Wave/task metadata: the task-plan parser and wave node include
-  `checkpoint_type`, so A1 must remove that metadata from task planning,
-  hashing, parsing, and generated guidance. Evidence:
-  `internal/engine/wave/wave.go:12-19`, `internal/engine/wave/parse.go:103-127`,
-  `internal/engine/wave/parse.go:137-147`.
-- Surface generation: command metadata, workflow command groupings, namespace
-  routers, adapter contracts, docs, and generated skill inventories are derived
-  from `internal/toolgen`; removing A surfaces must update this registry rather
-  than only hiding Cobra commands. Evidence: `internal/toolgen/toolgen.go:273-300`,
-  `internal/toolgen/toolgen.go:310-352`, `internal/toolgen/toolgen.go:479-495`,
-  `internal/toolgen/install_profiles.go:49-84`.
-- Preserved recovery seam: non-checkpoint `run --resume` is already tied to
-  S2 execution summary readiness and `state.ResumeWaveIndex`; that seam must
-  remain after checkpoint deletion. Evidence: `cmd/common.go:930-950`,
-  `cmd/run.go:270-289`.
+- Question: What seams must Workstream B change to make task evidence recording
+  result-import based while keeping Slipway the execution ledger authority?
+- Public task evidence entrypoint: `makeEvidenceTaskCmd` in `cmd/evidence.go`
+  currently owns validation, wave-plan lookup, payload construction, runtime
+  task evidence writes, parser verification, and lifecycle events. It requires
+  `--task-id`, `--run-summary-version`, `--task-kind`, `--verdict`, and
+  `--evidence-ref`, then writes `.git/slipway/runtime/changes/<slug>/evidence/tasks/<task_id>.json`.
+  Evidence: `cmd/evidence.go:600-876`.
+- Current derivation split: `evidence task` already derives `captured_at` when
+  omitted, defaults `target_files` from the current wave plan when omitted, and
+  computes `freshness_inputs` through
+  `state.ExpectedExecutionTaskFreshnessInputs`; it still makes the agent supply
+  `run_summary_version` and `task_kind`. Evidence: `cmd/evidence.go:659-810`,
+  `internal/state/execution_summary.go:363-375`.
+- Wave-plan authority: `state.MaterializeWavePlanTransactionOpAt` builds
+  `wave-plan.yaml` from `tasks.md`, preserving each planned task's
+  `target_files` and `task_kind`, and applies effective parallel flags. The
+  current `model.WavePlan` has generated time and task hashes but no active
+  run-summary version. Evidence: `internal/state/wave_execution.go:141-190`,
+  `internal/model/wave_execution.go:14-43`.
+- Run-version gap: `model.Change` has no active execution run field, and the
+  only current run-version signal is agent-supplied task evidence plus
+  wave-orchestration skill evidence. Evidence: `internal/model/change.go:14-67`,
+  `cmd/evidence.go:949-1054`.
+- Execution summary sync: `SyncGovernedWaveExecution` uses the latest passing
+  wave-orchestration verification run version, loads task evidence for that
+  version, builds `wave-runs`, and writes `execution-summary.yaml`. Evidence:
+  `internal/engine/progression/wave_sync.go:82-205`.
+- Lifecycle boundary: the normal forward transition into S2 materializes the
+  wave plan in the same transaction as `change.yaml`; this is the safest
+  existing execution-run boundary. Evidence:
+  `internal/engine/progression/advance_governed.go:461-489`.
+- S3 repair boundary: `fix` is S3-only and surfaces a repair contract; the
+  current lifecycle path is forward-only and has no automatic S3-to-S2
+  rematerialization. Evidence: `cmd/fix.go:82-147`,
+  `internal/engine/action/workflow.go:10-17`,
+  `internal/engine/progression/advance_governed.go:745-754`.
