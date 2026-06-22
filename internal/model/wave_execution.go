@@ -14,6 +14,7 @@ const WavePlanVersion = 1
 type WavePlan struct {
 	Version                 int            `yaml:"version" json:"version"`
 	GeneratedAt             time.Time      `yaml:"generated_at" json:"generated_at"`
+	RunSummaryVersion       int            `yaml:"run_summary_version,omitempty" json:"run_summary_version,omitempty"`
 	TasksPlanHash           string         `yaml:"tasks_plan_hash,omitempty" json:"tasks_plan_hash,omitempty"`
 	TasksPlanStructuralHash string         `yaml:"tasks_plan_structural_hash,omitempty" json:"tasks_plan_structural_hash,omitempty"`
 	TasksPlanScopeHash      string         `yaml:"tasks_plan_scope_hash,omitempty" json:"tasks_plan_scope_hash,omitempty"`
@@ -52,6 +53,9 @@ func (p *WavePlan) Normalize() {
 	if !p.GeneratedAt.IsZero() {
 		p.GeneratedAt = p.GeneratedAt.Round(0).UTC()
 	}
+	if p.RunSummaryVersion == 0 {
+		p.RunSummaryVersion = 1
+	}
 	p.TasksPlanHash = strings.TrimSpace(p.TasksPlanHash)
 	p.TasksPlanStructuralHash = strings.TrimSpace(p.TasksPlanStructuralHash)
 	p.TasksPlanScopeHash = strings.TrimSpace(p.TasksPlanScopeHash)
@@ -82,6 +86,9 @@ func (p WavePlan) Validate() error {
 	}
 	if p.GeneratedAt.IsZero() {
 		return fmt.Errorf("generated_at is required")
+	}
+	if p.RunSummaryVersion < 1 {
+		return fmt.Errorf("run_summary_version must be >= 1")
 	}
 	if p.TotalTasks < 0 {
 		return fmt.Errorf("total_tasks must be >= 0")

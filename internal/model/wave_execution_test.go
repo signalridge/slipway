@@ -2,10 +2,38 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWavePlanNormalizeDefaultsRunSummaryVersion(t *testing.T) {
+	t.Parallel()
+
+	plan := WavePlan{
+		Version: WavePlanVersion,
+		GeneratedAt: time.Date(
+			2026,
+			6,
+			22,
+			1,
+			2,
+			3,
+			0,
+			time.UTC,
+		),
+		TotalTasks: 1,
+		Waves: []WavePlanWave{{
+			WaveIndex: 1,
+			Tasks:     []WavePlanTask{{TaskID: "t-01"}},
+		}},
+	}
+
+	plan.Normalize()
+	assert.Equal(t, 1, plan.RunSummaryVersion)
+	require.NoError(t, plan.Validate())
+}
 
 func TestWavePlanWaveParallelRequiresMultipleTasks(t *testing.T) {
 	t.Parallel()

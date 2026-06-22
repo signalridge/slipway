@@ -45,6 +45,7 @@ func TestMaterializeWavePlanTransactionOpDefersWriteUntilApplied(t *testing.T) {
 	plan, op, err := MaterializeWavePlanTransactionOpAt(root, change, generatedAt)
 	require.NoError(t, err)
 	assert.Equal(t, 1, plan.TotalTasks)
+	assert.Equal(t, 1, plan.RunSummaryVersion)
 
 	wavePlanPath := filepath.Join(bundleDir, "verification", WavePlanFileName)
 	_, err = os.Stat(wavePlanPath)
@@ -55,4 +56,5 @@ func TestMaterializeWavePlanTransactionOpDefersWriteUntilApplied(t *testing.T) {
 	loaded, err := LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
 	assert.Equal(t, generatedAt, loaded.GeneratedAt)
+	assert.Equal(t, 1, loaded.RunSummaryVersion)
 }

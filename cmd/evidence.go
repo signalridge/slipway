@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,14 @@ type evidenceTaskView struct {
 	FreshnessInputs   model.ExecutionTaskFreshnessInputs `json:"freshness_inputs"`
 }
 
+type evidenceTaskBatchView struct {
+	Slug              string             `json:"slug"`
+	RunSummaryVersion int                `json:"run_summary_version"`
+	Recorded          bool               `json:"recorded"`
+	RecordedCount     int                `json:"recorded_count"`
+	Tasks             []evidenceTaskView `json:"tasks"`
+}
+
 type evidenceSkillView struct {
 	Slug       string   `json:"slug"`
 	Skill      string   `json:"skill"`
@@ -42,6 +51,12 @@ type evidenceSkillView struct {
 	Stamped    bool     `json:"stamped"`
 	References []string `json:"references,omitempty"`
 }
+
+const (
+	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id; repeat --result-file to import multiple task results atomically."
+	maxEvidenceTaskResultFileBytes    = int64(1 << 20)
+	maxEvidenceTaskResultFiles        = 256
+)
 
 type evidenceSuiteResultView struct {
 	Slug              string            `json:"slug"`
@@ -606,6 +621,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 		taskKindRaw   string
 		verdictRaw    string
 		evidenceRef   string
+		resultFiles   []string
 		changedFiles  []string
 		targetFiles   []string
 		blockerSpecs  []string
@@ -647,6 +663,14 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					)
 				}
 
+				resultFiles = normalizeEvidenceTaskResultFileArgs(resultFiles)
+				if len(resultFiles) > 0 {
+					if err := rejectEvidenceTaskResultFileLedgerFlags(cmd); err != nil {
+						return err
+					}
+					return recordEvidenceTaskResultFiles(cmd, root, change, resultFiles, jsonOutput)
+				}
+
 				taskID = strings.TrimSpace(taskID)
 				if err := validateEvidenceTaskID(taskID); err != nil {
 					return newInvalidUsageError(
@@ -655,17 +679,6 @@ func makeEvidenceTaskCmd() *cobra.Command {
 						"Use a task ID from the current tasks.md-derived wave projection without path separators.",
 						map[string]any{"task_id": taskID},
 					)
-				}
-				if runSummary < 1 {
-					return newInvalidUsageError(
-						"evidence_task_run_summary_version_invalid",
-						"--run-summary-version must be >= 1",
-						"Pass the current wave-orchestration run_version as --run-summary-version; the first task-evidence run version is 1.",
-						nil,
-					)
-				}
-				if err := validateEvidenceTaskRunSummaryVersion(root, change, runSummary); err != nil {
-					return err
 				}
 
 				wavePlan, err := loadCurrentWavePlanForCommand(root, change)
@@ -686,6 +699,18 @@ func makeEvidenceTaskCmd() *cobra.Command {
 						"Use a task ID from the current tasks.md-derived wave projection and retry.",
 						map[string]any{"task_id": taskID},
 					)
+				}
+
+				if runSummary < 1 {
+					return newInvalidUsageError(
+						"evidence_task_run_summary_version_invalid",
+						"--run-summary-version must be >= 1",
+						"Pass the current wave-orchestration run_version as --run-summary-version; the first task-evidence run version is 1.",
+						nil,
+					)
+				}
+				if err := validateEvidenceTaskRunSummaryVersion(root, change, runSummary); err != nil {
+					return err
 				}
 
 				taskKind := model.TaskKind(strings.TrimSpace(taskKindRaw))
@@ -862,18 +887,322 @@ func makeEvidenceTaskCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	cmd.Flags().StringVar(&taskID, "task-id", "", "Task ID from the current tasks.md-derived wave projection (required)")
-	cmd.Flags().IntVar(&runSummary, "run-summary-version", 0, "Run summary version to attribute this task evidence to (>= 1; the first task-evidence run version is 1 -- pass the current wave-orchestration run_version) (required)")
-	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Task kind: code, test, doc, ops, verification, investigation, other (required)")
-	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Task verdict: pass, fail, blocked, incomplete, timeout (required)")
-	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Stable transcript, command, artifact, or note reference (required)")
-	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Changed file path for this task; may be repeated")
-	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Target file path for this task; may be repeated")
-	cmd.Flags().StringArrayVar(&blockerSpecs, "blocker", nil, "Task blocker as code or code:detail; may be repeated")
-	cmd.Flags().StringVar(&capturedAtRaw, "captured-at", "", "Evidence timestamp in RFC3339Nano; defaults to now")
-	cmd.Flags().StringVar(&sessionID, "session-id", "", "Optional executor session identifier")
+	cmd.Flags().StringVar(&taskID, "task-id", "", "Manual flag mode only: task ID from the current tasks.md-derived wave projection")
+	cmd.Flags().IntVar(&runSummary, "run-summary-version", 0, "Manual flag mode only: run summary version to attribute task evidence to (>= 1; the first task-evidence run version is 1 -- pass the current wave-orchestration run_version)")
+	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Manual flag mode only: task kind: code, test, doc, ops, verification, investigation, other")
+	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Manual flag mode only: task verdict: pass, fail, blocked, incomplete, timeout")
+	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Manual flag mode only: stable transcript, command, artifact, or note reference")
+	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id; may be repeated for atomic batch import; cannot be combined with manual task flags")
+	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Manual flag mode only: changed file path for this task; may be repeated")
+	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Manual flag mode only: target file path for this task; may be repeated")
+	cmd.Flags().StringArrayVar(&blockerSpecs, "blocker", nil, "Manual flag mode only: task blocker as code or code:detail; may be repeated")
+	cmd.Flags().StringVar(&capturedAtRaw, "captured-at", "", "Manual flag mode only: evidence timestamp in RFC3339Nano; defaults to now")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "Manual flag mode only: optional executor session identifier")
 
 	return cmd
+}
+
+type preparedEvidenceTaskResult struct {
+	payload progression.TaskEvidencePayload
+	path    string
+	view    evidenceTaskView
+}
+
+func normalizeEvidenceTaskResultFileArgs(resultFiles []string) []string {
+	normalized := make([]string, 0, len(resultFiles))
+	for _, resultFile := range resultFiles {
+		if trimmed := strings.TrimSpace(resultFile); trimmed != "" {
+			normalized = append(normalized, trimmed)
+		}
+	}
+	return normalized
+}
+
+func recordEvidenceTaskResultFiles(
+	cmd *cobra.Command,
+	root string,
+	change model.Change,
+	resultFiles []string,
+	jsonOutput bool,
+) error {
+	if len(resultFiles) == 0 {
+		return newInvalidUsageError(
+			"evidence_task_result_file_required",
+			"--result-file requires a path",
+			"Pass one or more workspace-relative executor result JSON file paths.",
+			nil,
+		)
+	}
+	if len(resultFiles) > maxEvidenceTaskResultFiles {
+		return newInvalidUsageError(
+			"evidence_task_result_file_batch_too_large",
+			fmt.Sprintf("--result-file may be repeated at most %d times, got %d", maxEvidenceTaskResultFiles, len(resultFiles)),
+			"Split very large task result imports into smaller batches.",
+			map[string]any{"max_files": maxEvidenceTaskResultFiles, "got": len(resultFiles)},
+		)
+	}
+
+	wavePlan, err := loadCurrentWavePlanForCommand(root, change)
+	if err != nil {
+		return newStateIntegrityError(
+			"evidence_task_wave_plan_unavailable",
+			fmt.Sprintf("task evidence requires a current S2 wave projection for %q: %v", change.Slug, err),
+			"Fix tasks.md so Slipway can derive the current S2 wave projection, then rerun `slipway implement` before recording task evidence.",
+			change.Slug,
+			map[string]any{"path": state.WavePlanPathForRead(root, change.Slug)},
+		)
+	}
+	runSummary, err := deriveEvidenceTaskRunSummaryVersion(root, change, wavePlan)
+	if err != nil {
+		return err
+	}
+	if err := validateEvidenceTaskRunSummaryVersion(root, change, runSummary); err != nil {
+		return err
+	}
+
+	prepared, err := prepareEvidenceTaskResultFiles(root, change, wavePlan, runSummary, resultFiles, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if err := writePreparedEvidenceTaskResults(prepared); err != nil {
+		return err
+	}
+	for _, item := range prepared {
+		if _, _, _, err := progression.ParseTaskEvidence(root, item.path, runSummary); err != nil {
+			return newStateIntegrityError(
+				"evidence_task_written_invalid",
+				fmt.Sprintf("written task evidence failed parser validation: %v", err),
+				"Rerun `slipway evidence task`; the batch transaction wrote invalid evidence.",
+				change.Slug,
+				map[string]any{"path": state.DisplayPath(root, item.path)},
+			)
+		}
+	}
+
+	taskIDs := make([]string, 0, len(prepared))
+	paths := make([]string, 0, len(prepared))
+	taskVerdicts := make([]string, 0, len(prepared))
+	views := make([]evidenceTaskView, 0, len(prepared))
+	for _, item := range prepared {
+		taskIDs = append(taskIDs, item.payload.TaskID)
+		paths = append(paths, item.view.Path)
+		taskVerdicts = append(taskVerdicts, fmt.Sprintf("%s:%s", item.payload.TaskID, item.payload.Verdict))
+		views = append(views, item.view)
+	}
+	if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
+		Command:     "evidence task",
+		EventType:   "task_evidence.recorded",
+		Action:      "recorded",
+		Result:      evidenceTaskBatchEventResult(prepared),
+		BeforeState: change.CurrentState,
+		AfterState:  change.CurrentState,
+		Diagnostics: []string{
+			fmt.Sprintf("task_ids=%s", strings.Join(taskIDs, ",")),
+			fmt.Sprintf("task_verdicts=%s", strings.Join(taskVerdicts, ",")),
+			fmt.Sprintf("run_summary_version=%d", runSummary),
+			fmt.Sprintf("paths=%s", strings.Join(paths, ",")),
+		},
+	}); err != nil {
+		return err
+	}
+
+	if len(views) == 1 {
+		if jsonOutput {
+			return encodeJSONResponse(cmd, views[0])
+		}
+		writer := newFormatWriter(cmd.OutOrStdout())
+		writer.Writef("Task evidence recorded: %s\n", views[0].Path)
+		return writer.Err()
+	}
+
+	view := evidenceTaskBatchView{
+		Slug:              change.Slug,
+		RunSummaryVersion: runSummary,
+		Recorded:          true,
+		RecordedCount:     len(views),
+		Tasks:             views,
+	}
+	if jsonOutput {
+		return encodeJSONResponse(cmd, view)
+	}
+	writer := newFormatWriter(cmd.OutOrStdout())
+	writer.Writef("Task evidence batch recorded: %d tasks\n", len(views))
+	for _, task := range views {
+		writer.Writef("- %s: %s\n", task.TaskID, task.Path)
+	}
+	return writer.Err()
+}
+
+func evidenceTaskBatchEventResult(prepared []preparedEvidenceTaskResult) string {
+	if len(prepared) == 0 {
+		return ""
+	}
+	result := string(prepared[0].payload.Verdict)
+	for _, item := range prepared[1:] {
+		if string(item.payload.Verdict) != result {
+			return "mixed"
+		}
+	}
+	return result
+}
+
+func prepareEvidenceTaskResultFiles(
+	root string,
+	change model.Change,
+	wavePlan model.WavePlan,
+	runSummary int,
+	resultFiles []string,
+	commandCapturedAt time.Time,
+) ([]preparedEvidenceTaskResult, error) {
+	seenTasks := map[string]string{}
+	prepared := make([]preparedEvidenceTaskResult, 0, len(resultFiles))
+	for _, resultFile := range resultFiles {
+		result, err := loadEvidenceTaskResultFile(root, change, resultFile)
+		if err != nil {
+			return nil, err
+		}
+		taskID := strings.TrimSpace(result.TaskID)
+		if err := validateEvidenceTaskID(taskID); err != nil {
+			return nil, newInvalidUsageError(
+				"evidence_task_id_invalid",
+				err.Error(),
+				"Use a task ID from the current tasks.md-derived wave projection without path separators.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+		if previous, ok := seenTasks[taskID]; ok {
+			return nil, newInvalidUsageError(
+				"evidence_task_result_file_duplicate_task",
+				fmt.Sprintf("multiple result files target task %q", taskID),
+				"Pass at most one result file per task in a single batch.",
+				map[string]any{"task_id": taskID, "first_result_file": previous, "duplicate_result_file": resultFile},
+			)
+		}
+		seenTasks[taskID] = resultFile
+
+		planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
+		if !ok {
+			return nil, newInvalidUsageError(
+				"evidence_task_unknown",
+				fmt.Sprintf("task %q is not present in the current wave plan", taskID),
+				"Use a task ID from the current tasks.md-derived wave projection and retry.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+
+		taskKind := planTask.TaskKind
+		if taskKind == "" {
+			taskKind = model.TaskKindOther
+		}
+		verdict := model.TaskVerdict(strings.TrimSpace(string(result.Verdict)))
+		if verdict == "" {
+			return nil, newInvalidUsageError(
+				"evidence_task_verdict_required",
+				"result-file task evidence requires verdict",
+				"Write executor result JSON with a valid task verdict such as pass or fail.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+		if !verdict.IsValid() {
+			return nil, newInvalidUsageError(
+				"evidence_task_verdict_invalid",
+				fmt.Sprintf("invalid task verdict: %q", verdict),
+				"Pass one of: pass, fail, blocked, incomplete, timeout.",
+				map[string]any{"verdict": string(verdict), "task_id": taskID, "result_file": resultFile},
+			)
+		}
+
+		evidenceRef := strings.TrimSpace(result.EvidenceRef)
+		if evidenceRef == "" {
+			return nil, newInvalidUsageError(
+				"evidence_task_ref_required",
+				"result-file task evidence requires evidence_ref",
+				"Provide a stable transcript, command, artifact, or note reference for this task.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+
+		blockers := model.ReasonCodesFromSpecs(result.Blockers)
+		for i, blocker := range blockers {
+			if err := blocker.Validate(); err != nil {
+				return nil, newInvalidUsageError(
+					"evidence_task_blocker_invalid",
+					fmt.Sprintf("blocker %d is invalid: %v", i, err),
+					"Pass blockers as code or code:detail values.",
+					map[string]any{"task_id": taskID, "result_file": resultFile},
+				)
+			}
+		}
+
+		changedFiles, err := normalizeEvidencePaths(result.ChangedFiles)
+		if err != nil {
+			return nil, newInvalidUsageError(
+				"evidence_task_changed_file_invalid",
+				err.Error(),
+				"Pass workspace-relative changed file paths without absolute paths, empty segments, or parent traversal.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+		if len(changedFiles) == 0 {
+			return nil, newInvalidUsageError(
+				"evidence_task_changed_file_required",
+				"result-file task evidence requires at least one changed_files entry",
+				"Write executor result JSON with changed_files containing the workspace-relative files changed by the task.",
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+
+		targetFiles, err := normalizeEvidencePaths(planTask.TargetFiles)
+		if err != nil {
+			return nil, newStateIntegrityError(
+				"evidence_task_wave_plan_target_invalid",
+				fmt.Sprintf("current wave projection target_files for task %q are invalid: %v", taskID, err),
+				"Fix the task target_files in tasks.md before recording task evidence.",
+				change.Slug,
+				map[string]any{"task_id": taskID, "result_file": resultFile},
+			)
+		}
+
+		payload := progression.TaskEvidencePayload{
+			TaskID:            taskID,
+			RunSummaryVersion: runSummary,
+			TaskKind:          taskKind,
+			Verdict:           verdict,
+			ChangedFiles:      changedFiles,
+			TargetFiles:       targetFiles,
+			EvidenceRef:       evidenceRef,
+			Blockers:          blockers,
+			CapturedAt:        commandCapturedAt.Format(time.RFC3339Nano),
+			FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
+			SessionID:         strings.TrimSpace(result.SessionID),
+		}
+		path := filepath.Join(state.EvidenceTasksDir(root, change.Slug), taskID+".json")
+		prepared = append(prepared, preparedEvidenceTaskResult{
+			payload: payload,
+			path:    path,
+			view: evidenceTaskView{
+				Slug:              change.Slug,
+				TaskID:            taskID,
+				RunSummaryVersion: runSummary,
+				Path:              state.DisplayPath(root, path),
+				Recorded:          true,
+				FreshnessInputs:   payload.FreshnessInputs,
+			},
+		})
+	}
+	return prepared, nil
+}
+
+func writePreparedEvidenceTaskResults(prepared []preparedEvidenceTaskResult) error {
+	ops := make([]fsutil.FileTransactionOp, 0, len(prepared))
+	for _, item := range prepared {
+		raw, err := marshalEvidenceTaskPayload(item.payload)
+		if err != nil {
+			return err
+		}
+		ops = append(ops, fsutil.WriteFileTransactionOp(item.path, raw, 0o644))
+	}
+	return fsutil.ApplyFileTransaction(ops)
 }
 
 func validateEvidenceSkillName(root, skillName string) (skill.Definition, error) {
@@ -923,6 +1252,19 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 	if err != nil {
 		return 0, nil, err
 	}
+	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Implement {
+		runVersion, taskErr := waveOrchestrationTaskEvidenceRunVersion(root, change)
+		if taskErr != nil {
+			return 0, nil, taskErr
+		}
+		if runVersion > execCtx.LatestRunVersion {
+			return runVersion, &model.ExecutionSummary{
+				Version:           model.ExecutionSummaryVersion,
+				RunSummaryVersion: runVersion,
+				CapturedAt:        time.Now().UTC(),
+			}, nil
+		}
+	}
 	if execCtx.LatestRunVersion >= 1 {
 		return execCtx.LatestRunVersion, execCtx.Summary, nil
 	}
@@ -947,70 +1289,47 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 }
 
 func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (int, error) {
-	dir := state.EvidenceTasksDir(root, change.Slug)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
+	versions, scanErr := scanEvidenceTaskRunSummaryVersions(root, change.Slug)
+	if scanErr != nil {
+		switch scanErr.Kind {
+		case evidenceTaskRunSummaryVersionsMissingDir:
 			return 0, newInvalidUsageError(
 				"evidence_skill_run_summary_missing",
 				"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-				"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+				taskEvidenceResultFileRemediation,
 				map[string]any{"skill": progression.SkillWaveOrchestration},
 			)
-		}
-		return 0, newStateIntegrityError(
-			"evidence_skill_task_evidence_load_failed",
-			fmt.Sprintf("failed to read task evidence for %q: %v", change.Slug, err),
-			"Repair the runtime task evidence directory before recording wave-orchestration evidence.",
-			change.Slug,
-			map[string]any{"path": state.DisplayPath(root, dir)},
-		)
-	}
-
-	versions := map[int]bool{}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
-		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway runtime evidence authority.
-		if err != nil {
+		case evidenceTaskRunSummaryVersionsReadDir, evidenceTaskRunSummaryVersionsReadFile:
 			return 0, newStateIntegrityError(
 				"evidence_skill_task_evidence_load_failed",
-				fmt.Sprintf("failed to read task evidence %q: %v", state.DisplayPath(root, path), err),
-				"Repair the runtime task evidence file before recording wave-orchestration evidence.",
+				fmt.Sprintf("failed to read task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
+				"Repair the runtime task evidence before recording wave-orchestration evidence.",
 				change.Slug,
-				map[string]any{"path": state.DisplayPath(root, path)},
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
 			)
-		}
-		var payload struct {
-			RunSummaryVersion int `json:"run_summary_version"`
-		}
-		if err := json.Unmarshal(raw, &payload); err != nil {
+		case evidenceTaskRunSummaryVersionsParseFile:
 			return 0, newStateIntegrityError(
 				"evidence_skill_task_evidence_invalid",
-				fmt.Sprintf("failed to parse task evidence %q: %v", state.DisplayPath(root, path), err),
+				fmt.Sprintf("failed to parse task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
 				"Regenerate task evidence with `slipway evidence task` before recording wave-orchestration evidence.",
 				change.Slug,
-				map[string]any{"path": state.DisplayPath(root, path)},
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
 			)
-		}
-		if payload.RunSummaryVersion < 1 {
+		case evidenceTaskRunSummaryVersionsInvalidVersion:
 			return 0, newStateIntegrityError(
 				"evidence_skill_task_evidence_invalid",
-				fmt.Sprintf("task evidence %q has invalid run_summary_version %d", state.DisplayPath(root, path), payload.RunSummaryVersion),
+				fmt.Sprintf("task evidence %q has invalid run_summary_version %d", state.DisplayPath(root, scanErr.Path), scanErr.RunSummaryVersion),
 				"Regenerate task evidence with a run_summary_version >= 1 before recording wave-orchestration evidence.",
 				change.Slug,
-				map[string]any{"path": state.DisplayPath(root, path)},
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
 			)
 		}
-		versions[payload.RunSummaryVersion] = true
 	}
 	if len(versions) == 0 {
 		return 0, newInvalidUsageError(
 			"evidence_skill_run_summary_missing",
 			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-			"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+			taskEvidenceResultFileRemediation,
 			map[string]any{"skill": progression.SkillWaveOrchestration},
 		)
 	}
@@ -1027,7 +1346,8 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 	for version := range versions {
 		runVersion = version
 	}
-	if tasks, issues, err := progression.LoadExecutionTasksFromEvidence(root, change.Slug, runVersion); err != nil {
+	tasks, issues, err := progression.LoadExecutionTasksFromEvidence(root, change.Slug, runVersion)
+	if err != nil {
 		return 0, newStateIntegrityError(
 			"evidence_skill_task_evidence_load_failed",
 			fmt.Sprintf("failed to load task evidence for run_summary_version=%d: %v", runVersion, err),
@@ -1035,7 +1355,8 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 			change.Slug,
 			map[string]any{"run_summary_version": runVersion},
 		)
-	} else if len(issues) > 0 {
+	}
+	if len(issues) > 0 {
 		return 0, newStateIntegrityError(
 			"evidence_skill_task_evidence_invalid",
 			fmt.Sprintf("task evidence for run_summary_version=%d is invalid: %s", runVersion, strings.Join(issues, "; ")),
@@ -1043,12 +1364,42 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 			change.Slug,
 			map[string]any{"run_summary_version": runVersion},
 		)
-	} else if len(tasks) == 0 {
+	}
+	if len(tasks) == 0 {
 		return 0, newInvalidUsageError(
 			"evidence_skill_run_summary_missing",
 			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-			"Record task evidence with `slipway evidence task --run-summary-version <n>` before recording wave-orchestration evidence.",
+			taskEvidenceResultFileRemediation,
 			map[string]any{"skill": progression.SkillWaveOrchestration},
+		)
+	}
+	wavePlan, err := loadCurrentWavePlanForCommand(root, change)
+	if err != nil {
+		return 0, newStateIntegrityError(
+			"evidence_skill_wave_plan_unavailable",
+			fmt.Sprintf("wave-orchestration evidence requires a current S2 wave projection for %q: %v", change.Slug, err),
+			"Fix tasks.md so Slipway can derive the current S2 wave projection before recording wave-orchestration evidence.",
+			change.Slug,
+			map[string]any{"path": state.WavePlanPathForRead(root, change.Slug)},
+		)
+	}
+	runs := make(map[string]model.TaskRun, len(tasks))
+	for _, task := range tasks {
+		runs[task.TaskID] = model.TaskRun{
+			TaskID:  task.TaskID,
+			Verdict: task.Verdict,
+		}
+	}
+	if blockers := progression.IncompleteExecutionTaskBlockers(wavePlan, runs); len(blockers) > 0 {
+		return 0, newInvalidUsageError(
+			"evidence_skill_task_evidence_incomplete",
+			"wave-orchestration evidence requires current task evidence for every planned task",
+			"Record task evidence for every planned task in the active execution run before recording wave-orchestration evidence.",
+			map[string]any{
+				"skill":               progression.SkillWaveOrchestration,
+				"run_summary_version": runVersion,
+				"blockers":            blockers,
+			},
 		)
 	}
 	return runVersion, nil
@@ -1308,6 +1659,12 @@ func validateEvidenceTaskRunSummaryVersion(root string, change model.Change, run
 	if !found || record.RunVersion < 1 || record.RunVersion == runSummary {
 		return nil
 	}
+	if plan, err := state.LoadOptionalWavePlanForChange(root, change); err == nil &&
+		plan != nil &&
+		plan.RunSummaryVersion == runSummary &&
+		plan.RunSummaryVersion > record.RunVersion {
+		return nil
+	}
 	return newInvalidUsageError(
 		"evidence_task_run_summary_version_mismatch",
 		fmt.Sprintf("--run-summary-version %d does not match existing wave-orchestration run_version %d", runSummary, record.RunVersion),
@@ -1337,6 +1694,370 @@ func parseEvidenceTaskCapturedAt(raw string, commandCapturedAt time.Time) (time.
 		return time.Time{}, fmt.Errorf("captured_at must not be in the future")
 	}
 	return capturedAt, nil
+}
+
+type evidenceTaskResultFile struct {
+	TaskID       string            `json:"task_id"`
+	Verdict      model.TaskVerdict `json:"verdict"`
+	EvidenceRef  string            `json:"evidence_ref"`
+	ChangedFiles []string          `json:"changed_files"`
+	Blockers     []string          `json:"blockers"`
+	SessionID    string            `json:"session_id"`
+}
+
+func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
+	for _, flagName := range []string{
+		"task-id",
+		"run-summary-version",
+		"task-kind",
+		"verdict",
+		"evidence-ref",
+		"changed-file",
+		"target-file",
+		"blocker",
+		"captured-at",
+		"session-id",
+	} {
+		if cmd.Flags().Changed(flagName) {
+			return newInvalidUsageError(
+				"evidence_task_result_file_mixed_mode",
+				fmt.Sprintf("--result-file cannot be combined with --%s", flagName),
+				"Use --result-file by itself for compact executor results; Slipway derives ledger fields from the current wave plan and reads task-owned verdict, evidence_ref, changed_files, blockers, and session_id from each result file.",
+				map[string]any{"flag": "--" + flagName},
+			)
+		}
+	}
+	return nil
+}
+
+func loadEvidenceTaskResultFile(root string, change model.Change, resultFile string) (evidenceTaskResultFile, error) {
+	resultFile = strings.TrimSpace(resultFile)
+	if resultFile == "" {
+		return evidenceTaskResultFile{}, newInvalidUsageError(
+			"evidence_task_result_file_required",
+			"--result-file requires a path",
+			"Pass a workspace-relative executor result JSON file path.",
+			nil,
+		)
+	}
+	path, err := resolveEvidenceTaskResultPath(root, change, resultFile)
+	if err != nil {
+		return evidenceTaskResultFile{}, err
+	}
+	// The result path is resolved and scoped before open. The file content is
+	// still fully revalidated after open, so a concurrent replacement can only
+	// produce invalid or out-of-scope evidence, not trusted ledger fields.
+	file, err := os.Open(path) // #nosec G304 -- path is validated, symlink-resolved, and scoped to the workspace root before opening.
+	if err != nil {
+		return evidenceTaskResultFile{}, newStateIntegrityError(
+			"evidence_task_result_file_read_failed",
+			fmt.Sprintf("failed to read task result file %q: %v", resultFile, err),
+			"Write the executor result JSON file and retry `slipway evidence task --result-file <path>`.",
+			change.Slug,
+			map[string]any{"path": resultFile},
+		)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return evidenceTaskResultFile{}, newStateIntegrityError(
+			"evidence_task_result_file_read_failed",
+			fmt.Sprintf("failed to stat task result file %q: %v", resultFile, err),
+			"Write the executor result JSON file and retry `slipway evidence task --result-file <path>`.",
+			change.Slug,
+			map[string]any{"path": resultFile},
+		)
+	}
+	if info.Size() > maxEvidenceTaskResultFileBytes {
+		return evidenceTaskResultFile{}, newInvalidUsageError(
+			"evidence_task_result_file_too_large",
+			fmt.Sprintf("task result file %q is too large: %d bytes exceeds %d bytes", resultFile, info.Size(), maxEvidenceTaskResultFileBytes),
+			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			map[string]any{
+				"path":      resultFile,
+				"size":      info.Size(),
+				"max_bytes": maxEvidenceTaskResultFileBytes,
+			},
+		)
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, maxEvidenceTaskResultFileBytes+1))
+	if err != nil {
+		return evidenceTaskResultFile{}, newStateIntegrityError(
+			"evidence_task_result_file_read_failed",
+			fmt.Sprintf("failed to read task result file %q: %v", resultFile, err),
+			"Write the executor result JSON file and retry `slipway evidence task --result-file <path>`.",
+			change.Slug,
+			map[string]any{"path": resultFile},
+		)
+	}
+	if int64(len(raw)) > maxEvidenceTaskResultFileBytes {
+		return evidenceTaskResultFile{}, newInvalidUsageError(
+			"evidence_task_result_file_too_large",
+			fmt.Sprintf("task result file %q is too large: exceeds %d bytes", resultFile, maxEvidenceTaskResultFileBytes),
+			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			map[string]any{
+				"path":      resultFile,
+				"max_bytes": maxEvidenceTaskResultFileBytes,
+			},
+		)
+	}
+	// Keep this deny-list aligned with evidenceTaskResultFile: that struct must
+	// remain executor-only, while Slipway owns every durable ledger field.
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return evidenceTaskResultFile{}, newInvalidUsageError(
+			"evidence_task_result_file_invalid",
+			fmt.Sprintf("task result file is not valid JSON: %v", err),
+			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			map[string]any{"path": resultFile},
+		)
+	}
+	for _, field := range []string{
+		"run_summary_version",
+		"task_kind",
+		"target_files",
+		"captured_at",
+		"freshness_inputs",
+		"input_hash",
+	} {
+		if _, ok := envelope[field]; ok {
+			return evidenceTaskResultFile{}, newInvalidUsageError(
+				"evidence_task_result_file_ledger_field",
+				fmt.Sprintf("task result file must not include Slipway-owned ledger field %q", field),
+				"Remove ledger-owned fields from the executor result; Slipway derives run_summary_version, task_kind, target_files, captured_at, and freshness_inputs.",
+				map[string]any{"field": field},
+			)
+		}
+	}
+
+	var result evidenceTaskResultFile
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return evidenceTaskResultFile{}, newInvalidUsageError(
+			"evidence_task_result_file_invalid",
+			fmt.Sprintf("task result file has invalid schema: %v", err),
+			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			map[string]any{"path": resultFile},
+		)
+	}
+	result.TaskID = strings.TrimSpace(result.TaskID)
+	result.EvidenceRef = strings.TrimSpace(result.EvidenceRef)
+	result.SessionID = strings.TrimSpace(result.SessionID)
+	return result, nil
+}
+
+func resolveEvidenceTaskResultPath(root string, change model.Change, resultFile string) (string, error) {
+	if filepath.IsAbs(resultFile) || model.PublicPathIsAbs(resultFile) {
+		return "", newInvalidUsageError(
+			"evidence_task_result_file_path_invalid",
+			fmt.Sprintf("path must be workspace-relative: %q", resultFile),
+			"Pass a workspace-relative result file path without absolute paths, empty segments, parent traversal, or symlink escapes.",
+			map[string]any{"path": resultFile},
+		)
+	}
+	if err := validateEvidencePath(resultFile); err != nil {
+		return "", newInvalidUsageError(
+			"evidence_task_result_file_path_invalid",
+			err.Error(),
+			"Pass a workspace-relative result file path without absolute paths, empty segments, parent traversal, or symlink escapes.",
+			map[string]any{"path": resultFile},
+		)
+	}
+	workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_task_result_file_workspace_resolve_failed",
+			fmt.Sprintf("failed to resolve workspace for %q: %v", change.Slug, err),
+			"Repair the governed change worktree binding and retry.",
+			change.Slug,
+			map[string]any{"path": resultFile},
+		)
+	}
+	resolvedRoot, err := fsutil.RealExistingPath(workspaceRoot)
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_task_result_file_workspace_resolve_failed",
+			fmt.Sprintf("failed to resolve workspace root for %q: %v", change.Slug, err),
+			"Repair the governed change worktree binding and retry.",
+			change.Slug,
+			map[string]any{"path": resultFile},
+		)
+	}
+	path := filepath.Join(workspaceRoot, filepath.FromSlash(model.NormalizePublicPath(resultFile)))
+	resolvedPath, err := fsutil.RealExistingPath(path)
+	if err != nil {
+		return "", newStateIntegrityError(
+			"evidence_task_result_file_read_failed",
+			fmt.Sprintf("failed to resolve task result file %q: %v", resultFile, err),
+			"Write the executor result JSON file inside the workspace and retry `slipway evidence task --result-file <path>`.",
+			change.Slug,
+			map[string]any{
+				"path":           resultFile,
+				"resolved_path":  state.DisplayPath(root, path),
+				"workspace_root": state.DisplayPath(root, workspaceRoot),
+			},
+		)
+	}
+	if !fsutil.PathWithin(resolvedRoot, resolvedPath) {
+		return "", newInvalidUsageError(
+			"evidence_task_result_file_path_invalid",
+			fmt.Sprintf("task result file %q resolves outside the workspace", resultFile),
+			"Pass a workspace-relative result file path that does not traverse or symlink outside the workspace.",
+			map[string]any{
+				"path":           resultFile,
+				"resolved_path":  state.DisplayPath(root, resolvedPath),
+				"workspace_root": state.DisplayPath(root, resolvedRoot),
+			},
+		)
+	}
+	return resolvedPath, nil
+}
+
+func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, wavePlan model.WavePlan) (int, error) {
+	if wavePlan.RunSummaryVersion < 1 {
+		return 0, newStateIntegrityError(
+			"evidence_task_run_summary_version_unavailable",
+			fmt.Sprintf("current wave plan for %q has invalid run_summary_version %d", change.Slug, wavePlan.RunSummaryVersion),
+			"Rematerialize the S2 wave plan before importing task result evidence.",
+			change.Slug,
+			map[string]any{"run_summary_version": wavePlan.RunSummaryVersion},
+		)
+	}
+	versions, err := existingEvidenceTaskRunSummaryVersions(root, change.Slug)
+	if err != nil {
+		return 0, err
+	}
+	if len(versions) > 1 {
+		return 0, newInvalidUsageError(
+			"evidence_task_run_summary_version_ambiguous",
+			"task evidence contains multiple run_summary_version values",
+			"Clear, repair, or re-record task evidence so every task belongs to the active execution run before importing more results.",
+			map[string]any{
+				"slug":                     change.Slug,
+				"active_run_summary":       wavePlan.RunSummaryVersion,
+				"remediation_command_hint": "slipway fix --start-reexecution",
+			},
+		)
+	}
+	for version := range versions {
+		if version > wavePlan.RunSummaryVersion {
+			return 0, newInvalidUsageError(
+				"evidence_task_run_summary_version_ambiguous",
+				"task evidence contains a run_summary_version newer than the active wave plan",
+				"Clear, repair, or re-record task evidence so every task belongs to the active execution run before importing more results.",
+				map[string]any{
+					"slug":                     change.Slug,
+					"active_run_summary":       wavePlan.RunSummaryVersion,
+					"existing_run_summary":     version,
+					"remediation_command_hint": "slipway fix --start-reexecution",
+				},
+			)
+		}
+	}
+	return wavePlan.RunSummaryVersion, nil
+}
+
+func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}, error) {
+	versions, scanErr := scanEvidenceTaskRunSummaryVersions(root, slug)
+	if scanErr != nil {
+		switch scanErr.Kind {
+		case evidenceTaskRunSummaryVersionsMissingDir:
+			return nil, nil
+		case evidenceTaskRunSummaryVersionsReadDir, evidenceTaskRunSummaryVersionsReadFile:
+			return nil, newStateIntegrityError(
+				"evidence_task_existing_evidence_load_failed",
+				fmt.Sprintf("failed to read existing task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
+				"Repair the runtime task evidence before importing task result evidence.",
+				slug,
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
+			)
+		case evidenceTaskRunSummaryVersionsParseFile:
+			return nil, newStateIntegrityError(
+				"evidence_task_existing_evidence_invalid",
+				fmt.Sprintf("failed to parse existing task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
+				"Repair or remove malformed task evidence before importing task result evidence.",
+				slug,
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
+			)
+		case evidenceTaskRunSummaryVersionsInvalidVersion:
+			return nil, newStateIntegrityError(
+				"evidence_task_existing_evidence_invalid",
+				fmt.Sprintf("existing task evidence %q has invalid run_summary_version %d", state.DisplayPath(root, scanErr.Path), scanErr.RunSummaryVersion),
+				"Repair or remove invalid task evidence before importing task result evidence.",
+				slug,
+				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
+			)
+		}
+	}
+	return versions, nil
+}
+
+const (
+	evidenceTaskRunSummaryVersionsMissingDir     = "missing_dir"
+	evidenceTaskRunSummaryVersionsReadDir        = "read_dir"
+	evidenceTaskRunSummaryVersionsReadFile       = "read_file"
+	evidenceTaskRunSummaryVersionsParseFile      = "parse_file"
+	evidenceTaskRunSummaryVersionsInvalidVersion = "invalid_version"
+)
+
+type evidenceTaskRunSummaryVersionsError struct {
+	Kind              string
+	Path              string
+	Err               error
+	RunSummaryVersion int
+}
+
+func scanEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}, *evidenceTaskRunSummaryVersionsError) {
+	dir := state.EvidenceTasksDir(root, slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, &evidenceTaskRunSummaryVersionsError{
+				Kind: evidenceTaskRunSummaryVersionsMissingDir,
+				Path: dir,
+				Err:  err,
+			}
+		}
+		return nil, &evidenceTaskRunSummaryVersionsError{
+			Kind: evidenceTaskRunSummaryVersionsReadDir,
+			Path: dir,
+			Err:  err,
+		}
+	}
+
+	versions := map[int]struct{}{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway runtime evidence authority.
+		if err != nil {
+			return nil, &evidenceTaskRunSummaryVersionsError{
+				Kind: evidenceTaskRunSummaryVersionsReadFile,
+				Path: path,
+				Err:  err,
+			}
+		}
+		var payload struct {
+			RunSummaryVersion int `json:"run_summary_version"`
+		}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, &evidenceTaskRunSummaryVersionsError{
+				Kind: evidenceTaskRunSummaryVersionsParseFile,
+				Path: path,
+				Err:  err,
+			}
+		}
+		if payload.RunSummaryVersion < 1 {
+			return nil, &evidenceTaskRunSummaryVersionsError{
+				Kind:              evidenceTaskRunSummaryVersionsInvalidVersion,
+				Path:              path,
+				RunSummaryVersion: payload.RunSummaryVersion,
+			}
+		}
+		versions[payload.RunSummaryVersion] = struct{}{}
+	}
+	return versions, nil
 }
 
 func findEvidenceWavePlanTask(plan model.WavePlan, taskID string) (model.WavePlanTask, bool) {
@@ -1391,12 +2112,20 @@ func writeEvidenceTaskPayload(path string, payload progression.TaskEvidencePaylo
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
-	raw, err := json.MarshalIndent(payload, "", "  ")
+	raw, err := marshalEvidenceTaskPayload(payload)
 	if err != nil {
 		return err
 	}
-	raw = append(raw, '\n')
 	return fsutil.WriteFileAtomic(path, raw, 0o644)
+}
+
+func marshalEvidenceTaskPayload(payload progression.TaskEvidencePayload) ([]byte, error) {
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	raw = append(raw, '\n')
+	return raw, nil
 }
 
 func readExistingVerificationRaw(root, slug, skillName string) ([]byte, bool, error) {

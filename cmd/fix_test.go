@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -71,5 +73,48 @@ func TestFixRejectsNonReviewState(t *testing.T) {
 		cliErr := asCLIError(err)
 		assert.Equal(t, "fix_state_invalid", cliErr.ErrorCode)
 		assert.Equal(t, "slipway plan", cliErr.Details["next_command"])
+	})
+}
+
+func TestFixStartReexecutionAdvancesWavePlanRunVersionAndReopensS2(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:stale-task-evidence",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+		writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictFail,
+			Blockers:   []model.ReasonCode{model.NewReasonCode("review_layer_failed", "R1")},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+		})
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS2Implement, reloaded.CurrentState)
+
+		plan, err := state.LoadWavePlanForChange(root, reloaded)
+		require.NoError(t, err)
+		assert.Equal(t, 2, plan.RunSummaryVersion)
+
+		_, err = os.Stat(filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json"))
+		assert.True(t, os.IsNotExist(err), "starting a fresh execution run must clear stale task evidence")
 	})
 }

@@ -307,7 +307,7 @@
       "name": "evidence-task-json",
       "source": "cmd/evidence.go",
       "docs": "docs/reference/commands.md",
-      "token": "slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref \"test:go-test\" --json"
+      "token": "slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json"
     },
     {
       "kind": "json-contract",

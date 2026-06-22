@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 )
@@ -27,6 +28,10 @@ type wavePlanRepairOutcome struct {
 }
 
 func RepairExecutionState(root string) (ExecutionRepairResult, error) {
+	return RepairExecutionStateAt(root, time.Time{})
+}
+
+func RepairExecutionStateAt(root string, now time.Time) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
 	if err != nil {
 		return ExecutionRepairResult{}, err
@@ -53,7 +58,7 @@ func RepairExecutionState(root string) (ExecutionRepairResult, error) {
 				summaryForPlan = nil
 			}
 
-			planRepair, err := ensureWavePlan(root, change, summaryForPlan)
+			planRepair, err := ensureWavePlan(root, change, summaryForPlan, now)
 			if err != nil {
 				result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: %v", change.Slug, err))
 			} else if planRepair.Materialized {
@@ -106,7 +111,7 @@ func relevantWaveExecutionState(state model.WorkflowState) bool {
 	}
 }
 
-func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSummary) (wavePlanRepairOutcome, error) {
+func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSummary, repairGeneratedAt time.Time) (wavePlanRepairOutcome, error) {
 	plan, err := LoadOptionalWavePlanForChange(root, change)
 	if err == nil && plan != nil {
 		planChanged, preserveHistoricalEvidence, err := wavePlanRepairDrift(root, change, *plan, summary)
@@ -131,7 +136,7 @@ func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSu
 	if err != nil {
 		return wavePlanRepairOutcome{}, err
 	}
-	materialized, materializeErr := MaterializeWavePlan(root, change)
+	materialized, materializeErr := materializeWavePlanForRepair(root, change, summary, unreadable, repairGeneratedAt)
 	if materializeErr != nil {
 		if unreadable {
 			return wavePlanRepairOutcome{}, fmt.Errorf("wave plan unreadable and could not be reconstructed: %w", materializeErr)
@@ -143,6 +148,33 @@ func ensureWavePlan(root string, change model.Change, summary *model.ExecutionSu
 		Materialized:                        true,
 		PreserveHistoricalExecutionEvidence: strings.TrimSpace(boundaryReason) != "",
 	}, nil
+}
+
+func materializeWavePlanForRepair(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	unreadable bool,
+	generatedAt time.Time,
+) (model.WavePlan, error) {
+	if !unreadable {
+		return MaterializeWavePlan(root, change)
+	}
+
+	runSummaryVersion := 1
+	if ExecutionSummaryReady(summary) && summary.RunSummaryVersion >= 1 {
+		runSummaryVersion = summary.RunSummaryVersion
+	}
+	if generatedAt.IsZero() {
+		if ExecutionSummaryReady(summary) && !summary.CapturedAt.IsZero() {
+			generatedAt = summary.CapturedAt
+		} else if !change.CreatedAt.IsZero() {
+			generatedAt = change.CreatedAt
+		} else {
+			generatedAt = time.Unix(1, 0).UTC()
+		}
+	}
+	return MaterializeWavePlanAtRunSummaryVersion(root, change, generatedAt.UTC(), runSummaryVersion)
 }
 
 func wavePlanRepairHint() string {

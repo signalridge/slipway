@@ -58,7 +58,7 @@ slipway abort --json
 slipway cancel --json
 slipway delete --change <slug> --json
 slipway repair --json
-slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json
+slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json

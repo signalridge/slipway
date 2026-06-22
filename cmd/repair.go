@@ -143,7 +143,7 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.CleanedLockAnchors = cleanupUnheldLockAnchors(root, staleLockPaths)
 
-				execRepair, err := state.RepairExecutionState(root)
+				execRepair, err := state.RepairExecutionStateAt(root, now)
 				if err != nil {
 					return err
 				}

@@ -5,8 +5,10 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/signalridge/slipway/internal/engine/progression"
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
@@ -49,6 +51,7 @@ func makeFixCmd() *cobra.Command {
 	var changeSlug string
 	var jsonOutput bool
 	var reviewer string
+	var startReexecution bool
 	cmd := &cobra.Command{
 		Use:   "fix",
 		Short: desc("fix"),
@@ -62,7 +65,7 @@ func makeFixCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			view, err := buildFixViewForSlug(root, ref.Slug, reviewer)
+			view, err := buildFixViewForSlug(root, ref.Slug, reviewer, startReexecution)
 			if err != nil {
 				return err
 			}
@@ -76,10 +79,11 @@ func makeFixCmd() *cobra.Command {
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().StringVar(&reviewer, "reviewer", "", "Limit repair target discovery to one selected review skill")
+	cmd.Flags().BoolVar(&startReexecution, "start-reexecution", false, "Start a fresh S2 execution run for review-driven implementation repairs")
 	return cmd
 }
 
-func buildFixViewForSlug(root, slug, reviewerFilter string) (fixView, error) {
+func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution bool) (fixView, error) {
 	change, err := loadActiveChange(
 		root,
 		slug,
@@ -133,6 +137,13 @@ func buildFixViewForSlug(root, slug, reviewerFilter string) (fixView, error) {
 	}
 	targets := reviewFixTargets(root, change, selected, reviewerFilter, verifications, readiness.Blockers)
 
+	if startReexecution {
+		change, err = startFixReexecution(root, change)
+		if err != nil {
+			return fixView{}, err
+		}
+	}
+
 	profile := buildChangeProfileView(change)
 	return fixView{
 		Slug:                 slug,
@@ -144,6 +155,81 @@ func buildFixViewForSlug(root, slug, reviewerFilter string) (fixView, error) {
 		Contract:             reviewFixContract(slug, selected),
 		Blockers:             model.NormalizeReasonCodes(readiness.Blockers),
 	}, nil
+}
+
+func startFixReexecution(root string, change model.Change) (model.Change, error) {
+	nextRunVersion, err := nextExecutionRunSummaryVersion(root, change)
+	if err != nil {
+		return model.Change{}, err
+	}
+
+	reexecution := change
+	reexecution.TransitionTo(model.StateS2Implement)
+	reexecution.ClearAutoPassHistory()
+
+	wavePlanOp, err := materializeReexecutionWavePlanOp(root, reexecution, nextRunVersion)
+	if err != nil {
+		return model.Change{}, err
+	}
+	changeOps, err := state.SaveChangeTransactionOps(root, reexecution)
+	if err != nil {
+		return model.Change{}, err
+	}
+	transactionOps := make([]fsutil.FileTransactionOp, 0, len(changeOps)+2)
+	transactionOps = append(transactionOps, fsutil.RemoveAllTransactionOp(state.EvidenceTasksDir(root, change.Slug)))
+	transactionOps = append(transactionOps, wavePlanOp)
+	transactionOps = append(transactionOps, changeOps...)
+	if err := fsutil.ApplyFileTransaction(transactionOps); err != nil {
+		return model.Change{}, err
+	}
+	if err := appendCLILifecycleEvent(root, reexecution, state.LifecycleEvent{
+		Command:     "fix",
+		EventType:   "execution.reopened",
+		Action:      "started_reexecution",
+		Result:      "advanced",
+		BeforeState: change.CurrentState,
+		AfterState:  reexecution.CurrentState,
+		Diagnostics: []string{
+			fmt.Sprintf("run_summary_version=%d", nextRunVersion),
+		},
+	}); err != nil {
+		return model.Change{}, err
+	}
+	return reexecution, nil
+}
+
+func materializeReexecutionWavePlanOp(
+	root string,
+	change model.Change,
+	runSummaryVersion int,
+) (fsutil.FileTransactionOp, error) {
+	_, op, err := state.MaterializeWavePlanTransactionOpAtRunSummaryVersion(
+		root,
+		change,
+		time.Now().UTC(),
+		runSummaryVersion,
+	)
+	return op, err
+}
+
+func nextExecutionRunSummaryVersion(root string, change model.Change) (int, error) {
+	latest := 0
+	if plan, err := state.LoadOptionalWavePlanForChange(root, change); err != nil {
+		return 0, err
+	} else if plan != nil && plan.RunSummaryVersion > latest {
+		latest = plan.RunSummaryVersion
+	}
+	execCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
+	if err != nil {
+		return 0, err
+	}
+	if execCtx.LatestRunVersion > latest {
+		latest = execCtx.LatestRunVersion
+	}
+	if latest < 1 {
+		return 1, nil
+	}
+	return latest + 1, nil
 }
 
 func reviewFixTargets(

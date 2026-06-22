@@ -41,7 +41,7 @@ type TaskEvidenceRunVersionMismatchError struct {
 	Got      int
 }
 
-const taskEvidenceRequiredFields = "task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs"
+const taskEvidenceResultSchema = "task_id,verdict,evidence_ref,changed_files,blockers,session_id"
 
 func taskEvidenceActionDetail(root, slug string, runSummaryVersion int) string {
 	parts := []string{}
@@ -51,8 +51,8 @@ func taskEvidenceActionDetail(root, slug string, runSummaryVersion int) string {
 	if strings.TrimSpace(root) != "" && strings.TrimSpace(slug) != "" {
 		parts = append(parts, "task_evidence_path="+state.DisplayPath(root, state.EvidenceTasksDir(root, slug)))
 	}
-	parts = append(parts, "record_command=slipway evidence task")
-	parts = append(parts, "required_fields="+taskEvidenceRequiredFields)
+	parts = append(parts, "record_command=slipway evidence task --result-file <path> --json")
+	parts = append(parts, "result_schema="+taskEvidenceResultSchema)
 	return strings.Join(parts, "; ")
 }
 
