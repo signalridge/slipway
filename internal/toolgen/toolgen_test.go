@@ -162,21 +162,6 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 5, query, "expected 5 query commands")
 	assert.Equal(t, 17, mutation, "expected 17 mutation commands")
 
-	var evidenceDef CommandDef
-	var foundEvidence bool
-	for _, def := range commandRegistry {
-		if def.ID == "evidence" {
-			evidenceDef = def
-			foundEvidence = true
-			break
-		}
-	}
-	require.True(t, foundEvidence)
-	assert.Contains(t, evidenceDef.Arguments, "task --result-file <path> [--result-file <path> ...]",
-		"evidence command registry should teach compact task result import")
-	assert.Contains(t, evidenceDef.Arguments, "| task --task-id <id>",
-		"evidence command registry should retain manual flag mode")
-
 	var fixDef CommandDef
 	var foundFix bool
 	for _, def := range commandRegistry {
@@ -202,6 +187,19 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
 	assert.NotContains(t, ids, "tool")
+}
+
+func TestEvidenceCommandArgumentsUseResultFileOnlyTaskSurface(t *testing.T) {
+	t.Parallel()
+
+	arguments := CommandArguments("evidence")
+	require.NotEmpty(t, arguments)
+	assert.Contains(t, arguments, "task --result-file <path> [--result-file <path> ...]",
+		"evidence command registry should teach compact task result import")
+	assert.NotContains(t, arguments, "| task --task-id <id>",
+		"evidence command registry should keep manual task mode out of agent-facing Arguments")
+	assert.NotContains(t, arguments, "--run-summary-version <n>",
+		"evidence command registry should keep manual task ledger fields out of agent-facing Arguments")
 }
 
 func TestGovernanceSurfaceExportSetsStayComplete(t *testing.T) {
@@ -2703,7 +2701,9 @@ func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
 
 	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
 	assert.Contains(t, body, "reproducible command or transcript reference")
-	assert.Contains(t, body, "with a valid task `--verdict`")
+	assert.Contains(t, body, "compact executor result JSON")
+	assert.Contains(t, body, "slipway evidence task --result-file")
+	assert.NotContains(t, body, "with a valid task `--verdict`")
 	assert.Contains(t, body, "not through a separate evidence-note command")
 	assert.NotContains(t, body, "recorded not-applicable via a `slipway evidence task` note")
 	assert.NotContains(t, body, "rather than a TDD verdict")

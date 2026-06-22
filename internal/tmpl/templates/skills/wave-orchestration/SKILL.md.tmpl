@@ -194,12 +194,12 @@ In result-file mode, put non-pass verdicts and blocker codes in each executor
 result JSON's `verdict` and `blockers` fields. Repeat `--result-file` to import
 multiple task results in one atomic batch; Slipway preflights every file,
 rejects duplicate `task_id` entries, and writes no task evidence if any member
-is invalid. Use CLI `--blocker` only in manual flag mode. Slipway computes
-`freshness_inputs` and `captured_at` unless `--captured-at` is explicitly
-provided in manual flag mode. Executor result JSON contains only `task_id`,
-`verdict`, `evidence_ref`, `changed_files`, `blockers`, and optional
-`session_id`; do not include ledger-owned fields such as `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
-`freshness_inputs`, or `input_hash`. A passing wave-orchestration record
+is invalid. Blockers belong in executor result JSON. Slipway computes
+`freshness_inputs` and `captured_at`; executor result JSON contains only
+`task_id`, `verdict`, `evidence_ref`, `changed_files`, `blockers`, and optional
+`session_id`. Do not include ledger-owned fields such as `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
+`freshness_inputs`, or `input_hash`. For host-internal or recovery fallback
+details, use `slipway evidence task --help`. A passing wave-orchestration record
 without task evidence blocks execution-summary generation.
 Executor agents may report evidence refs, but the coordinator records them
 through `slipway evidence task`; executors must not self-stamp governed
