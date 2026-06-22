@@ -59,7 +59,6 @@ var helpGroups = []commandGroup{
 			{Name: "cancel", Description: desc("cancel")},
 			{Name: "delete", Description: desc("delete")},
 			{Name: "repair", Description: desc("repair")},
-			{Name: "checkpoint", Description: desc("checkpoint")},
 			{Name: "evidence", Description: desc("evidence")},
 		},
 	},
@@ -74,8 +73,6 @@ var helpGroups = []commandGroup{
 		Title:       "Diagnostics",
 		Description: "Repo-local observability and integrity checks.",
 		Commands: []groupedCommand{
-			{Name: "learn", Description: desc("learn")},
-			{Name: "stats", Description: desc("stats")},
 			{Name: "health", Description: desc("health")},
 			{Name: "instructions", Description: desc("instructions")},
 		},
@@ -170,8 +167,6 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeNextCmd())
 	cmd.AddCommand(makeRunCmd())
 	cmd.AddCommand(makeStatusCmd())
-	cmd.AddCommand(makeLearnCmd())
-	cmd.AddCommand(makeStatsCmd())
 	cmd.AddCommand(makeHealthCmd())
 	cmd.AddCommand(makeInstructionsCmd())
 	cmd.AddCommand(makeRootPathCmd())
@@ -183,7 +178,6 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeFixCmd())
 	cmd.AddCommand(makeValidateCmd())
 	cmd.AddCommand(makeRepairCmd())
-	cmd.AddCommand(makeCheckpointCmd())
 	cmd.AddCommand(makeEvidenceCmd())
 	cmd.AddCommand(makeHookCmd())
 	cmd.AddCommand(makeToolCmd())

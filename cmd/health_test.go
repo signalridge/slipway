@@ -230,12 +230,6 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRunsExist(t *testing.T
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
 		writePassingExecutionSummary(t, root, slug, 1, "task-01")
@@ -246,7 +240,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRunsExist(t *testing.T
   - target_files: ["cmd/health.go"]
   - task_kind: code
 
-- [ ] `+"`task-02`"+` pending checkpointed wave
+- [ ] `+"`task-02`"+` pending second wave
   - depends_on: ["task-01"]
   - target_files: ["cmd/health.go"]
   - task_kind: code
@@ -266,7 +260,6 @@ func TestHealthCommandDoctorDoesNotSuggestResumeBeforeWaveRunsExist(t *testing.T
 
 		foundRepair := false
 		for _, action := range view.Doctor.Actions {
-			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
 			if action.Category == "wave_execution" && action.Slug == slug && action.Command == "slipway repair" {
 				foundRepair = true
 			}
@@ -286,12 +279,6 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
 		var out bytes.Buffer
@@ -305,7 +292,7 @@ func TestHealthCommandDoctorDoesNotSuggestResumeWhenWavePlanIsMissingBeforeExecu
 		require.NotNil(t, view.Doctor)
 
 		for _, action := range view.Doctor.Actions {
-			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
+			assert.NotEqual(t, "slipway run --resume", action.Command)
 		}
 	})
 }
@@ -1578,7 +1565,6 @@ func TestHealthCommandDoctorDoesNotFailWhenMultipleActiveChangesExist(t *testing
 
 		foundSelectionAction := false
 		for _, action := range view.Doctor.Actions {
-			assert.NotEqual(t, `slipway run --resume-response "<response>"`, action.Command)
 			if action.Category == "active_change_selection" && action.Command == "slipway status" {
 				foundSelectionAction = true
 			}

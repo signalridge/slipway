@@ -49,18 +49,18 @@ type contextBudgetHandoff struct {
 }
 
 type nextHandoffContext struct {
-	WorkspaceRoot        string            `json:"workspace_root"`
-	ArtifactBundle       string            `json:"artifact_bundle,omitempty"`
-	ChangeAuthority      string            `json:"change_authority,omitempty"`
-	CodebaseMapDir       string            `json:"codebase_map_dir,omitempty"`
-	CodebaseMapDocs      map[string]string `json:"codebase_map_docs,omitempty"`
-	CodebaseMapStatus    string            `json:"codebase_map_status,omitempty"`
-	CodebaseMapDocStates map[string]string `json:"codebase_map_doc_states,omitempty"`
-	WavePlan             *wavePlanView     `json:"wave_plan,omitempty"`
-	ResumeCheckpoint     *resumeCheckpoint `json:"resume_checkpoint,omitempty"`
+	WorkspaceRoot        string                  `json:"workspace_root"`
+	ArtifactBundle       string                  `json:"artifact_bundle,omitempty"`
+	ChangeAuthority      string                  `json:"change_authority,omitempty"`
+	CodebaseMapDir       string                  `json:"codebase_map_dir,omitempty"`
+	CodebaseMapDocs      map[string]string       `json:"codebase_map_docs,omitempty"`
+	CodebaseMapStatus    string                  `json:"codebase_map_status,omitempty"`
+	CodebaseMapDocStates map[string]string       `json:"codebase_map_doc_states,omitempty"`
+	WavePlan             *wavePlanView           `json:"wave_plan,omitempty"`
+	ExecutionResume      *executionResumeContext `json:"execution_resume,omitempty"`
 }
 
-func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse string, preview bool, autoSkipEvidence bool, skipAutoPass bool, auto bool) (nextView, error) {
+func buildNextHandoffSourceView(root string, ref changeRef, preview bool, autoSkipEvidence bool, skipAutoPass bool, auto bool) (nextView, error) {
 	advanced, err := advanceIfReady(root, ref, preview, skipAutoPass, "next")
 	if err != nil {
 		return nextView{}, err
@@ -86,7 +86,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 		return view, nil
 	}
 
-	governedChange, execCtx, err := buildNextHandoffContextByMode(root, &view, ref, resumeResponse, preview)
+	governedChange, execCtx, err := buildNextHandoffContextByMode(root, &view, ref)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -98,9 +98,6 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 	}
 	finalize := func() (nextView, error) {
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
-		if err := consumeNextCheckpoint(root, governedChange, &view); err != nil {
-			return nextView{}, err
-		}
 		return view, nil
 	}
 	view.Phase = model.PhaseFor(view.CurrentState)
@@ -168,7 +165,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, resumeResponse strin
 	return finalize()
 }
 
-func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef, resumeResponse string, preview bool) (*model.Change, *executionContext, error) {
+func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef) (*model.Change, *executionContext, error) {
 	change, err := state.LoadChange(root, ref.Slug)
 	if err != nil {
 		return nil, nil, err
@@ -203,7 +200,7 @@ func buildNextHandoffContextByMode(root string, view *nextView, ref changeRef, r
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview, false); err != nil {
+	if err := buildExecutionResumeContext(root, change, execCtx, view); err != nil {
 		return nil, nil, err
 	}
 	return &change, &execCtx, nil
@@ -251,7 +248,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			CodebaseMapStatus:    view.InputContext.CodebaseMapStatus,
 			CodebaseMapDocStates: view.InputContext.CodebaseMapDocStates,
 			WavePlan:             view.InputContext.WavePlan,
-			ResumeCheckpoint:     view.InputContext.ResumeCheckpoint,
+			ExecutionResume:      view.InputContext.ExecutionResume,
 		},
 		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),
 		Blockers:         view.Blockers,

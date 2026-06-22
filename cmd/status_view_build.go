@@ -192,13 +192,6 @@ func statusPrimaryAction(root string, change model.Change, execCtx executionCont
 }
 
 func projectStatusExecutionAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {
-	if change.ActiveCheckpoint != nil {
-		if err := validateActiveCheckpointAuthority(root, change, execCtx, "status"); err != nil {
-			blockers, diagnostics := statusWaveExecutionIssues(err)
-			return "repair", blockers, diagnostics
-		}
-		return `run --resume-response "<response>"`, nil, nil
-	}
 	if !execCtx.Ready || execCtx.LatestRunVersion < 1 {
 		return "run", nil, nil
 	}

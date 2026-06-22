@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 )
@@ -17,8 +16,6 @@ import (
 type ExecutionRepairResult struct {
 	MaterializedWavePlans []string
 	RecoveredWaveRuns     []string
-	ClearedCheckpoints    []string
-	RepairedCheckpoints   []string
 	PrunedTaskEvidence    []string
 	NonRepairableFindings []string
 }
@@ -29,7 +26,7 @@ type wavePlanRepairOutcome struct {
 	PreserveHistoricalExecutionEvidence bool
 }
 
-func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) (ExecutionRepairResult, error) {
+func RepairExecutionState(root string) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
 	if err != nil {
 		return ExecutionRepairResult{}, err
@@ -41,19 +38,16 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 			continue
 		}
 
-		changed := false
-
 		var summary *model.ExecutionSummary
 		var summaryErr error
 		if relevantWaveExecutionState(change.CurrentState) {
 			summary, summaryErr = LoadOptionalRelevantExecutionSummary(root, change)
 
-			// Wave-plan materialization and checkpoint repair must run even
-			// when the execution summary is unreadable, so a wedged or stale
-			// checkpoint can still self-heal. A corrupt summary is treated as
-			// absent for plan reconstruction so it cannot block plan repair;
-			// only the summary-dependent recovery/prune below is gated on a
-			// readable, ready summary.
+			// Wave-plan materialization must run even when the execution summary
+			// is unreadable. A corrupt summary is treated as absent for plan
+			// reconstruction so it cannot block plan repair; only the
+			// summary-dependent recovery/prune below is gated on a readable,
+			// ready summary.
 			summaryForPlan := summary
 			if summaryErr != nil {
 				summaryForPlan = nil
@@ -66,15 +60,6 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 				result.MaterializedWavePlans = append(result.MaterializedWavePlans, change.Slug)
 			}
 			plan := planRepair.Plan
-
-			if repaired, cleared := repairCheckpointAgainstWavePlan(&change, plan, now, staleAfter); repaired {
-				changed = true
-				if cleared {
-					result.ClearedCheckpoints = append(result.ClearedCheckpoints, change.Slug)
-				} else {
-					result.RepairedCheckpoints = append(result.RepairedCheckpoints, change.Slug)
-				}
-			}
 
 			if summaryErr != nil {
 				result.NonRepairableFindings = append(result.NonRepairableFindings, fmt.Sprintf("%s: execution summary unreadable: %v", change.Slug, summaryErr))
@@ -99,23 +84,14 @@ func RepairExecutionState(root string, now time.Time, staleAfter time.Duration) 
 			}
 		}
 
-		if changed {
-			if err := SaveChange(root, change); err != nil {
-				return ExecutionRepairResult{}, err
-			}
-		}
 	}
 
 	slices.Sort(result.MaterializedWavePlans)
 	slices.Sort(result.RecoveredWaveRuns)
-	slices.Sort(result.ClearedCheckpoints)
-	slices.Sort(result.RepairedCheckpoints)
 	slices.Sort(result.PrunedTaskEvidence)
 	slices.Sort(result.NonRepairableFindings)
 	result.MaterializedWavePlans = slices.Compact(result.MaterializedWavePlans)
 	result.RecoveredWaveRuns = slices.Compact(result.RecoveredWaveRuns)
-	result.ClearedCheckpoints = slices.Compact(result.ClearedCheckpoints)
-	result.RepairedCheckpoints = slices.Compact(result.RepairedCheckpoints)
 	result.PrunedTaskEvidence = slices.Compact(result.PrunedTaskEvidence)
 	result.NonRepairableFindings = slices.Compact(result.NonRepairableFindings)
 	return result, nil
@@ -240,36 +216,6 @@ func executionSummaryBoundaryDrift(root string, change model.Change, summary *mo
 	}
 
 	return "", nil
-}
-
-func repairCheckpointAgainstWavePlan(change *model.Change, plan *model.WavePlan, now time.Time, staleAfter time.Duration) (repaired bool, cleared bool) {
-	if change == nil || change.ActiveCheckpoint == nil {
-		return false, false
-	}
-	if change.CurrentState != model.StateS2Implement {
-		change.ActiveCheckpoint = nil
-		return true, true
-	}
-	if plan == nil {
-		return false, false
-	}
-	if staleAfter > 0 && !change.ActiveCheckpoint.PausedAt.IsZero() && now.UTC().Sub(change.ActiveCheckpoint.PausedAt) > staleAfter {
-		change.ActiveCheckpoint = nil
-		return true, true
-	}
-	expectedWaveIndex := plan.WaveIndexForTask(change.ActiveCheckpoint.PausedTaskID)
-	if expectedWaveIndex == 0 {
-		change.ActiveCheckpoint = nil
-		return true, true
-	}
-	if change.ActiveCheckpoint.PausedWaveIndex == expectedWaveIndex && !change.ActiveCheckpoint.PausedAt.IsZero() {
-		return false, false
-	}
-	change.ActiveCheckpoint.PausedWaveIndex = expectedWaveIndex
-	if change.ActiveCheckpoint.PausedAt.IsZero() {
-		change.ActiveCheckpoint.PausedAt = now.UTC()
-	}
-	return true, false
 }
 
 func recoverWaveRunsFromSummary(root, slug string, plan model.WavePlan, summary model.ExecutionSummary) (bool, error) {

@@ -256,8 +256,8 @@ func TestAdvanceGoverned_AutoConfirmsPendingPresetAndContinues(t *testing.T) {
 // domain-independent. A change in a GUARDRAIL/sensitive domain whose pending
 // suggested preset is an upgrade (rank >= current) STILL auto-confirms under
 // --auto — the guardrail domain gates pure-pacing confirmation softening
-// (resume_checkpoint / review_batch / skill_handoff), NOT the upgrade-only
-// preset confirm. Auto-confirm only mutates the preset/suggested-preset fields;
+// (review_batch / skill_handoff), NOT the upgrade-only preset confirm.
+// Auto-confirm only mutates the preset/suggested-preset fields;
 // it must not forge or clear evidence.
 func TestAdvanceGoverned_AutoConfirmsPendingPresetInGuardrailDomain(t *testing.T) {
 	t.Parallel()

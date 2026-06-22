@@ -705,24 +705,17 @@ func TestCollectHealthReportReportsWaveTaskLinkageMismatch(t *testing.T) {
 	assert.True(t, found, "expected wave/task linkage mismatch finding")
 }
 
-func TestCollectHealthReportReportsStaleCheckpoint(t *testing.T) {
+func TestCollectHealthReportReportsInterruptedExecution(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
-	cfg := model.DefaultConfig()
-	cfg.Execution.LockStaleAfterSeconds = 60
-	require.NoError(t, model.SaveConfig(ConfigPath(root), cfg))
 
-	change := model.NewChange("stale-checkpoint")
+	interruptedAt := time.Now().UTC().Add(-10 * time.Minute)
+	change := model.NewChange("interrupted-execution")
 	change.Status = model.ChangeStatusActive
 	change.CurrentState = model.StateS2Implement
 	change.PlanSubStep = model.PlanSubStepNone
-	change.ActiveCheckpoint = &model.ActiveCheckpoint{
-		PausedTaskID:    "t-01",
-		PausedWaveIndex: 1,
-		PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
-		CheckpointType:  string(model.CheckpointHumanVerify),
-	}
+	change.InterruptedExecutionAt = interruptedAt
 	require.NoError(t, SaveChange(root, change))
 
 	report, err := CollectHealthReport(root)
@@ -730,17 +723,18 @@ func TestCollectHealthReportReportsStaleCheckpoint(t *testing.T) {
 
 	found := false
 	for _, finding := range report.Findings {
-		if finding.Category != "execution_checkpoint" || finding.Slug != change.Slug {
+		if finding.Category != "execution_session" || finding.Slug != change.Slug {
 			continue
 		}
 		for _, reason := range finding.Reasons {
-			if reason.Code == "checkpoint_stale" {
+			if reason.Code == "execution_interrupted" {
 				found = true
-				assert.True(t, finding.Repairable)
+				assert.False(t, finding.Repairable)
+				assert.Contains(t, finding.RepairHint, "slipway run --resume")
 			}
 		}
 	}
-	assert.True(t, found, "expected stale checkpoint health finding")
+	assert.True(t, found, "expected interrupted execution health finding")
 }
 
 func TestCollectHealthReportFindsOrphanBundleDirsAcrossWorktrees(t *testing.T) {

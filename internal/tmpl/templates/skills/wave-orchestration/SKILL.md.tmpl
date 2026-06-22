@@ -16,9 +16,9 @@ Execute implementation tasks in dependency order, detect conflicts early, and
 keep wave results reviewable. This host owns the execution dispatch contract.
 
 ## Workflow Outline
-Read task/checkpoint state, group dependency-ordered waves, then execute every
-ready wave in sequence during this same host run until a natural execution stop
-point appears. Wave boundaries are internal scheduling boundaries, not operator
+Read task state, group dependency-ordered waves, then execute every ready wave
+in sequence during this same host run until a natural execution stop point
+appears. Wave boundaries are internal scheduling boundaries, not operator
 commands.
 
 ## Read Context
@@ -44,10 +44,6 @@ self-check; any per-doc `scaffold_only`, `baseline`, or `missing` entry is
 non-durable for that document. Populated is not the same as relevant; this
 advisory never blocks execution by itself, but stale map usage is not acceptable
 evidence.
-
-If `input_context.resume_checkpoint` is present, skip `completed_task_ids` only
-when `freshness` is `fresh`; stale checkpoints require rerunning everything.
-Carry `checkpoint_type` and any `user_response_payload` into evidence.
 
 Apply `slipway-coding-discipline` while splitting work: keep task scopes
 minimal, prefer simple changes, and reject executor plans that broaden beyond
@@ -138,11 +134,9 @@ until it is resolved — this is the same condition the engine audits as
 For each wave: describe the build goal before spawning, wait for all executors,
 spot-check the first 2 files from each task's `changed_files`, check blocker
 evidence, report what the wave enables next, and continue directly to the next
-wave unless a natural stop point is reached. After any checkpoint pause, continue
-with a **fresh** subagent context.
+wave unless a natural stop point is reached.
 
 Natural execution stop points:
-- an active checkpoint requires user input
 - target-overlap preflight or post-result changed-file conflict makes parallel
   dispatch unsafe
 - executor spawn, wait, result parsing, or handle cleanup fails
@@ -294,7 +288,6 @@ wave boundaries; wave-to-wave continuation belongs to this host run.
 - A spawned executor loses its handle, returns no parseable result, or stalls
   without an explicit operator recovery decision.
 - Retry budget is exhausted.
-- A checkpoint resumes without a fresh subagent context.
 - Task evidence was not recorded through the supported CLI.
 - Any planned task lacks passing evidence (`incomplete_execution_task`) and has
   not been removed by rescoping `tasks.md`.

@@ -573,7 +573,13 @@ func decodeChangeStrict(raw []byte, change *model.Change) error {
 	// unified runtime fields (artifacts, evidence_refs, etc.) which now
 	// have proper yaml tags in the Change struct.
 	decoder.KnownFields(true)
-	return decoder.Decode(change)
+	if err := decoder.Decode(change); err != nil {
+		if strings.Contains(err.Error(), "field active_checkpoint not found") {
+			return errors.New("unsupported retired change state: active_checkpoint was removed; recover by aborting or recreating the active change without checkpoint state")
+		}
+		return err
+	}
+	return nil
 }
 
 func decodeAndValidateChange(raw []byte) (model.Change, error) {

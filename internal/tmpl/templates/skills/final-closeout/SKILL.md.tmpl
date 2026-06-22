@@ -32,9 +32,7 @@ Run `slipway next --json` for the handoff, `slipway status --json` for the
 current `run_summary_version`, and `slipway validate --json` for current
 freshness/readiness state. Examine:
 - current `run_version` / `run_summary_version` from `slipway status --json`
-  (`progress.run_summary_version`) — `slipway validate --json` does NOT carry it,
-  and `slipway next --json` only carries it nested under
-  `input_context.resume_checkpoint`, which is absent at closeout
+  (`progress.run_summary_version`) — `slipway validate --json` does NOT carry it
 - freshness state (`evidence_freshness`, `freshness_diagnostics`) from
   `slipway validate --json`
 - verification index for prior skills

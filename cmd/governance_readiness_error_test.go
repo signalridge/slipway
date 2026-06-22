@@ -238,22 +238,20 @@ func TestNextDiagnosticsProjectionFailureUsesGovernanceReadinessEnvelope(t *test
 	})
 }
 
-func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
+func TestRunReadinessFailurePreservesInterruptedExecutionMarker(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should not consume checkpoint on readiness failure")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "run should preserve interrupted marker on readiness failure")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
 		change.PlanSubStep = model.PlanSubStepBundle
 		change.WorkflowPreset = model.WorkflowPresetStandard
 		change.SuggestedWorkflowPreset = ""
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:   "task-resume-01",
-			CheckpointType: string(model.CheckpointHumanVerify),
-		}
+		interruptedAt := time.Now().UTC().Add(-time.Minute)
+		change.InterruptedExecutionAt = interruptedAt
 		require.NoError(t, state.SaveChange(root, change))
 
 		intentPath := filepath.Join(root, "artifacts", "changes", slug, "intent.md")
@@ -262,7 +260,7 @@ func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRunCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug, "--resume-response", "verified"})
+		cmd.SetArgs([]string{"--json", "--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -270,9 +268,7 @@ func TestNextReadinessFailureDoesNotConsumeActiveCheckpoint(t *testing.T) {
 
 		after, loadErr := state.LoadChange(root, slug)
 		require.NoError(t, loadErr)
-		require.NotNil(t, after.ActiveCheckpoint, "failed next must not consume the active checkpoint")
-		assert.Equal(t, "task-resume-01", after.ActiveCheckpoint.PausedTaskID)
-		assert.Equal(t, string(model.CheckpointHumanVerify), after.ActiveCheckpoint.CheckpointType)
+		assert.True(t, after.InterruptedExecutionAt.Equal(interruptedAt), "failed run must not clear interrupted execution state")
 	})
 }
 

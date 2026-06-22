@@ -73,7 +73,6 @@ func makeAbortCmd() *cobra.Command {
 				}
 
 				beforeChange := change
-				change.ActiveCheckpoint = nil
 				change.InterruptedExecutionAt = time.Now().UTC()
 				if strings.TrimSpace(preemptionEvidenceRef) != "" {
 					key := fmt.Sprintf("abort_preemption_%d", time.Now().UTC().UnixNano())
@@ -83,16 +82,14 @@ func makeAbortCmd() *cobra.Command {
 					return err
 				}
 				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
-					Command:       "abort",
-					EventType:     "abort.marked",
-					Action:        "execution_interrupted",
-					Reason:        "operator_aborted_in_flight_execution",
-					Result:        "interrupted",
-					BeforeState:   beforeChange.CurrentState,
-					AfterState:    change.CurrentState,
-					Diagnostics:   lifecyclePIDDiagnostics(interrupted, forceKilled),
-					SideEffects:   []state.LifecycleSideEffect{{Kind: "active_checkpoint_cleared"}},
-					ClearedFields: []string{"active_checkpoint"},
+					Command:     "abort",
+					EventType:   "abort.marked",
+					Action:      "execution_interrupted",
+					Reason:      "operator_aborted_in_flight_execution",
+					Result:      "interrupted",
+					BeforeState: beforeChange.CurrentState,
+					AfterState:  change.CurrentState,
+					Diagnostics: lifecyclePIDDiagnostics(interrupted, forceKilled),
 				}); err != nil {
 					return err
 				}

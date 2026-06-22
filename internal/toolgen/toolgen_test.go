@@ -114,8 +114,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 25 commands across the same public groups as root help.
-	assert.Len(t, commandRegistry, 25)
+	// Verify registry has 22 commands across the same public groups as root help.
+	assert.Len(t, commandRegistry, 22)
 
 	// Verify all registry entries have the required fields.
 	validTiers := []string{"core", "discovery", "situational", "helpers", "diagnostics", "setup"}
@@ -155,18 +155,18 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 	assert.Equal(t, 10, core, "expected 10 core commands")
 	assert.Equal(t, 1, discovery, "expected 1 discovery command")
-	assert.Equal(t, 8, sit, "expected 8 situational commands")
+	assert.Equal(t, 7, sit, "expected 7 situational commands")
 	assert.Equal(t, 1, helpers, "expected 1 helper command")
-	assert.Equal(t, 4, diag, "expected 4 diagnostics commands")
+	assert.Equal(t, 2, diag, "expected 2 diagnostics commands")
 	assert.Equal(t, 1, setup, "expected 1 setup command")
-	assert.Equal(t, 7, query, "expected 7 query commands")
-	assert.Equal(t, 18, mutation, "expected 18 mutation commands")
+	assert.Equal(t, 5, query, "expected 5 query commands")
+	assert.Equal(t, 17, mutation, "expected 17 mutation commands")
 
 	// Verify commandIDs() returns a sorted list covering every command that
 	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
 	// but intentionally do not generate host prompt wrappers.
 	ids := commandIDs()
-	assert.Len(t, ids, 24)
+	assert.Len(t, ids, 21)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -1135,7 +1135,7 @@ func TestGeneratedSkillsReferenceValidCommands(t *testing.T) {
 		"new": true, "intake": true, "plan": true, "implement": true,
 		"next": true, "run": true, "status": true, "done": true, "fix": true,
 		"abort": true, "cancel": true, "review": true, "validate": true,
-		"preset": true, "repair": true, "init": true, "checkpoint": true,
+		"preset": true, "repair": true, "init": true,
 		"instructions": true,
 	}
 
@@ -1735,12 +1735,12 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
 	assert.Contains(t, normalizedRunEntry, "`--auto`/`--no-auto`: override `execution.auto` for this run",
 		"run command entry must document the override behavior")
+	assert.NotContains(t, runArguments, "--resume-response",
+		"run registry arguments must not advertise the deleted checkpoint resume surface")
 	for _, phrase := range []string{
 		"`security-review` boundaries",
 		"sensitive/guardrail confirmations",
 		"the intake Approved Summary",
-		"decision/human_action checkpoints",
-		"stale or unknown-freshness checkpoints",
 		"evidence gates",
 	} {
 		assert.Contains(t, normalizedRunEntry, phrase,
@@ -1784,8 +1784,6 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 		"`security-review` boundaries",
 		"sensitive/guardrail confirmations",
 		"the intake Approved Summary",
-		"decision and human_action checkpoints",
-		"stale or unknown-freshness checkpoints",
 		"every evidence gate",
 	} {
 		assert.Contains(t, normalizedReadme, phrase,

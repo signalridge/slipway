@@ -109,7 +109,6 @@ Situational commands:
 - `cancel` (`$slipway-cancel`)
 - `delete` (`$slipway-delete`)
 - `repair` (`$slipway-repair`)
-- `checkpoint` (`$slipway-checkpoint`)
 - `evidence` (`$slipway-evidence`; the wave-orchestration host records task evidence via `slipway evidence task ...`)
 
 Helpers:
@@ -118,8 +117,6 @@ Helpers:
 
 Diagnostics commands:
 
-- `learn` (`$slipway-learn`)
-- `stats` (`$slipway-stats`)
 - `health` (`$slipway-health`)
 - `instructions` (`$slipway-instructions`)
 

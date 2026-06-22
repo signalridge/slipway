@@ -127,7 +127,7 @@ func TestBuildNextContextFallsBackToProjectRootWithoutWorktreeBinding(t *testing
 	require.NoError(t, state.SaveChange(root, change))
 
 	var view nextView
-	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true, false)
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug})
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 
@@ -154,7 +154,7 @@ func TestBuildNextContextIncludesBoundedHandoffContext(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 
 	var view nextView
-	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true, false)
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug})
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 
@@ -202,7 +202,7 @@ terminology:
 	require.NoError(t, state.SaveChange(root, change))
 
 	var view nextView
-	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true, false)
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug})
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 
@@ -241,7 +241,7 @@ func TestBuildNextContextLeavesGateStatusToReadinessEvaluation(t *testing.T) {
 	require.NoError(t, os.WriteFile(verificationPath, []byte("verdict: ["), 0o644))
 
 	var view nextView
-	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: slug}, "", true, false)
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: slug})
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	assert.Nil(t, view.InputContext.GateStatus)
@@ -316,7 +316,7 @@ func TestBuildNextContextIncludesSelectedArchivedDependencyContext(t *testing.T)
 	require.NoError(t, state.SaveChange(root, change))
 
 	var view nextView
-	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug}, "", true, false)
+	loaded, _, err := buildNextContextByMode(root, &view, changeRef{Slug: change.Slug})
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 

@@ -159,6 +159,9 @@ Also block:
 - Populate `blockers[]` with failed criterion IDs
 - Run guardrail high-risk checks when applicable (see Guardrail Safety Baseline)
 - Use fresh test execution, not cached output
+- Include configured CI static checks in the fresh proof; for Go changes, run
+  `golangci-lint run ./...` when the repo provides golangci-lint locally or in
+  CI, and block completion on new lint findings
 - For performance or regression claims, require baseline and candidate measurements from the same environment
 
 ## Guardrail Safety Baseline

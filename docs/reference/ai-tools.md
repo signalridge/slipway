@@ -75,10 +75,7 @@ $slipway-abort
 $slipway-cancel
 $slipway-delete
 $slipway-repair
-$slipway-checkpoint
 $slipway-evidence
-$slipway-learn
-$slipway-stats
 $slipway-health
 $slipway-instructions
 $slipway-init

@@ -1,37 +1,37 @@
 # Architecture
 
-- Module responsibilities: adapter definitions and generation live in
-  `internal/toolgen/toolgen.go`. `ToolConfig` describes each host's skills,
-  commands, settings, hooks, trigger style, and auto-detect roots; `Registry()`
-  returns the sorted public adapter set. Evidence:
-  `internal/toolgen/toolgen.go:23-43`,
-  `internal/toolgen/toolgen.go:45-124`,
-  `internal/toolgen/toolgen.go:652-668`.
-- Dependency flow: `slipway init --tools` resolves tool IDs through
-  `ResolveTools`, then `GenerateWithInstallProfile` iterates selected
-  `ToolConfig` entries and writes host files. Generated surfaces route back to
-  the Slipway CLI; they are not lifecycle engines. Evidence:
-  `internal/toolgen/toolgen.go:711-719`,
-  `internal/toolgen/toolgen.go:763-786`,
-  `docs/reference/ai-tools.md:7-9`.
-- Generation boundary: host skills use `SkillPath(cfg, id)` and command prompts
-  are emitted from `CommandsDir` using either flat or nested style. Codex is the
-  existing exception that emits per-command skills via `CommandSkillSurface`.
-  Evidence: `internal/toolgen/toolgen.go:819-827`,
-  `internal/toolgen/toolgen.go:1030-1069`,
-  `internal/toolgen/toolgen_test.go:1829-1878`.
-- Ownership and refresh boundary: generated adapters are trusted only through a
-  per-tool sentinel plus project-local ownership manifest under
-  `<ToolRootPath>/slipway/`. Refresh writes generated files through
-  `toolRefreshPlan`, refuses unknown or user-modified files, and detects
-  existing adapters by sentinel, not by bare host directories. Evidence:
-  `internal/toolgen/toolgen.go:789-800`,
-  `internal/toolgen/toolgen.go:740-755`,
-  `internal/toolgen/ownership_manifest.go:74-80`,
-  `internal/toolgen/ownership_manifest.go:193-214`,
-  `internal/toolgen/ownership_manifest.go:394-414`.
-- Current change blast radius: adding Pi and any additional selected common
-  tools should stay inside the toolgen registry, command filename/extension
-  helpers, optional adapter settings support, docs, surface manifest, and
-  tests. It should not add new lifecycle states or host-specific governance.
-  Evidence: `artifacts/changes/expand-ai-tool-adapters/intent.md`.
+- Question: What code seams must Workstream A change to remove `checkpoint`,
+  `learn`, and `stats` from the product and agent-facing command surface while
+  preserving ledger-backed governed recovery?
+- Root command surface: the custom root help is grouped in `cmd/root.go`; it
+  currently exposes `checkpoint` under Situational and `learn`/`stats` under
+  Diagnostics. Command registration also still adds `makeLearnCmd`,
+  `makeStatsCmd`, and `makeCheckpointCmd`. Evidence: `cmd/root.go:28-90`,
+  `cmd/root.go:152-189`.
+- Checkpoint lifecycle state: `internal/model.Change` persists
+  `ActiveCheckpoint`, so deleting the concept is a model and state-schema
+  change, not just a command removal. Evidence: `internal/model/change.go:62-64`.
+- Checkpoint resume protocol: `run` and `implement` expose
+  `--resume-response` beside `--resume`; entry validation gives active
+  checkpoints priority over normal resumable wave execution. Evidence:
+  `cmd/run.go:104-111`, `cmd/run.go:202-291`, `cmd/stage.go:41-117`.
+- Next/status integration: `next` serializes `resume_checkpoint`, confirmation
+  metadata, checkpoint consumption side effects, and action kinds; `status`
+  surfaces `run --resume-response "<response>"` when `ActiveCheckpoint` exists.
+  Evidence: `cmd/next.go:190-206`, `cmd/next.go:539-575`,
+  `cmd/next.go:730-768`, `cmd/next.go:855-867`, `cmd/status_view_build.go:183-214`.
+- Wave/task metadata: the task-plan parser and wave node include
+  `checkpoint_type`, so A1 must remove that metadata from task planning,
+  hashing, parsing, and generated guidance. Evidence:
+  `internal/engine/wave/wave.go:12-19`, `internal/engine/wave/parse.go:103-127`,
+  `internal/engine/wave/parse.go:137-147`.
+- Surface generation: command metadata, workflow command groupings, namespace
+  routers, adapter contracts, docs, and generated skill inventories are derived
+  from `internal/toolgen`; removing A surfaces must update this registry rather
+  than only hiding Cobra commands. Evidence: `internal/toolgen/toolgen.go:273-300`,
+  `internal/toolgen/toolgen.go:310-352`, `internal/toolgen/toolgen.go:479-495`,
+  `internal/toolgen/install_profiles.go:49-84`.
+- Preserved recovery seam: non-checkpoint `run --resume` is already tied to
+  S2 execution summary readiness and `state.ResumeWaveIndex`; that seam must
+  remain after checkpoint deletion. Evidence: `cmd/common.go:930-950`,
+  `cmd/run.go:270-289`.

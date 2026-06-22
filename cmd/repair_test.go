@@ -624,7 +624,7 @@ func TestBuildUnrepairedDriftFindingsKeepsActionableTargets(t *testing.T) {
 	}
 }
 
-func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *testing.T) {
+func TestRepairMaterializesWavePlanAndRecoversWaveRuns(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -634,12 +634,6 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "t-01",
-			PausedWaveIndex: 1,
-			PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -662,10 +656,8 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
 		assert.Contains(t, summary.MaterializedWavePlans, slug)
 		assert.Contains(t, summary.RecoveredWaveRuns, slug)
-		assert.Contains(t, summary.ClearedCheckpoints, slug)
 		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "materialized_wave_plan", Target: slug})
 		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "recovered_wave_run", Target: slug})
-		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "cleared_checkpoint", Target: slug})
 
 		change, err = state.LoadChange(root, slug)
 		require.NoError(t, err)
@@ -674,69 +666,6 @@ func TestRepairMaterializesWavePlanRecoversWaveRunsAndClearsStaleCheckpoint(t *t
 		runs, err := state.LoadWaveRuns(root, slug, 1)
 		require.NoError(t, err)
 		require.Len(t, runs, 1)
-
-		assert.Nil(t, change.ActiveCheckpoint)
-	})
-}
-
-func TestRepairClearsStaleCheckpointWhenExecutionSummaryUnreadable(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair should clear stale checkpoint despite unreadable summary")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "t-01",
-			PausedWaveIndex: 1,
-			PausedAt:        time.Now().UTC().Add(-10 * time.Minute),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
-
-- [ ] `+"`t-01`"+` clear stale checkpoint despite unreadable summary
-  - depends_on: []
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-`)))
-
-		// Unreadable summary with no recoverable evidence: the summary cannot be
-		// rebuilt, so repair must still clear the stale checkpoint instead of
-		// leaving execution wedged behind an unreadable summary.
-		summaryPath := executionSummaryPathForTest(root, slug)
-		require.NoError(t, os.MkdirAll(filepath.Dir(summaryPath), 0o755))
-		require.NoError(t, os.WriteFile(summaryPath, []byte("version: ["), 0o644))
-
-		var out bytes.Buffer
-		cmd := makeRepairCmd()
-		cmd.SetArgs([]string{"--json"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		var summary repairSummary
-		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
-
-		assert.Contains(t, summary.ClearedCheckpoints, slug)
-		assert.Contains(t, summary.AppliedRepairs, repairAppliedFinding{Kind: "cleared_checkpoint", Target: slug})
-
-		unreadableReported := false
-		for _, finding := range summary.NonRepairableFindings {
-			if strings.Contains(finding, slug) && strings.Contains(finding, "execution summary unreadable") {
-				unreadableReported = true
-				break
-			}
-		}
-		assert.True(t, unreadableReported, "unreadable summary must still be reported alongside the checkpoint repair")
-
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Nil(t, change.ActiveCheckpoint, "stale checkpoint must be cleared even when the summary is unreadable")
 	})
 }
 
@@ -846,12 +775,6 @@ func TestRepairRebuildsWavePlanButPreservesHistoricalExecutionEvidenceWhenTasksD
 		require.NoError(t, err)
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "t-01",
-			PausedWaveIndex: 1,
-			PausedAt:        time.Now().UTC(),
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
@@ -895,7 +818,6 @@ func TestRepairRebuildsWavePlanButPreservesHistoricalExecutionEvidenceWhenTasksD
 
 		assert.Contains(t, summary.MaterializedWavePlans, slug)
 		assert.NotContains(t, summary.RecoveredWaveRuns, slug)
-		assert.Contains(t, summary.ClearedCheckpoints, slug)
 		assert.NotContains(t, summary.PrunedTaskEvidence, filepath.ToSlash(filepath.Join(slug, "t-01.json")))
 
 		foundBlocked := false
@@ -922,8 +844,6 @@ func TestRepairRebuildsWavePlanButPreservesHistoricalExecutionEvidenceWhenTasksD
 		plannedTasks := state.PlannedTaskIDSet(wavePlan)
 		assert.Contains(t, plannedTasks, "t-02")
 		assert.NotContains(t, plannedTasks, "t-01")
-
-		assert.Nil(t, change.ActiveCheckpoint, "repair should clear stale checkpoints that reference tasks outside the current plan")
 	})
 }
 

@@ -11,7 +11,6 @@ import (
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
-	"github.com/spf13/cobra"
 )
 
 type closeoutFreshnessStats struct {
@@ -29,35 +28,6 @@ type statsView struct {
 	ArchiveCount          int                    `json:"archive_count"`
 	CodebaseMap           state.CodebaseMapStats `json:"codebase_map"`
 	CloseoutFreshness     closeoutFreshnessStats `json:"closeout_freshness"`
-}
-
-func makeStatsCmd() *cobra.Command {
-	var jsonOutput bool
-
-	cmd := &cobra.Command{
-		Use:    "stats",
-		Short:  desc("stats"),
-		Args:   cobra.NoArgs,
-		Hidden: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromCommand(cmd)
-			if err != nil {
-				return err
-			}
-
-			view, err := buildStatsView(root, time.Now().UTC())
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return encodeJSONResponse(cmd, view)
-			}
-			return writeStatsText(cmd.OutOrStdout(), view)
-		},
-	}
-
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	return cmd
 }
 
 func buildStatsView(root string, now time.Time) (statsView, error) {

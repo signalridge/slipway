@@ -26,7 +26,7 @@ func twoWavePlanForResumeTest(t *testing.T) (string, model.Change) {
 	writeTasksAndMaterializeWavePlan(t, root, change, "# Tasks\n\n"+
 		"- [ ] `task-a` first wave task\n"+
 		"  - depends_on: []\n"+
-		"  - target_files: [\"cmd/checkpoint.go\"]\n"+
+		"  - target_files: [\"cmd/run.go\"]\n"+
 		"  - task_kind: code\n\n"+
 		"- [ ] `task-b` second wave task\n"+
 		"  - depends_on: [\"task-a\"]\n"+
@@ -71,11 +71,11 @@ func TestResumeWaveIndexFromTaskEvidenceNoEvidence(t *testing.T) {
 
 // With only wave 1's task recorded as passing, the resolver derives wave 2 as the
 // current incomplete wave — the boundary that the documented per-task-evidence
-// flow must be able to checkpoint before any run summary exists.
+// flow must be able to resume from before any run summary exists.
 func TestResumeWaveIndexFromTaskEvidenceCompletesFirstWave(t *testing.T) {
 	t.Parallel()
 	root, change := twoWavePlanForResumeTest(t)
-	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/run.go"})
 	plan, err := state.LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
 
@@ -90,7 +90,7 @@ func TestResumeWaveIndexFromTaskEvidenceCompletesFirstWave(t *testing.T) {
 func TestResumeWaveIndexFromTaskEvidenceAllWavesPassed(t *testing.T) {
 	t.Parallel()
 	root, change := twoWavePlanForResumeTest(t)
-	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/run.go"})
 	writeTaskEvidenceForResumeTest(t, root, change, "task-b", []string{"cmd/evidence.go"})
 	plan, err := state.LoadWavePlanForChange(root, change)
 	require.NoError(t, err)
@@ -103,13 +103,13 @@ func TestResumeWaveIndexFromTaskEvidenceAllWavesPassed(t *testing.T) {
 
 // A malformed task-evidence file must be soft-tolerated, exactly like the
 // read-only sibling surfaces (LoadExecutionTasksFromEvidence), instead of making
-// checkpoint hard-fail. The resolver reports the safe wave-1 default
+// resume derivation hard-fail. The resolver reports the safe wave-1 default
 // (derived=false) with no error.
 func TestResumeWaveIndexFromTaskEvidenceToleratesMalformedFile(t *testing.T) {
 	t.Parallel()
 	root, change := twoWavePlanForResumeTest(t)
 	// A valid wave-1 record plus a corrupt sibling file in the same directory.
-	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/run.go"})
 	corrupt := filepath.Join(state.EvidenceTasksDir(root, change.Slug), "task-b.json")
 	require.NoError(t, os.WriteFile(corrupt, []byte("{not valid json"), 0o644))
 
@@ -130,7 +130,7 @@ func TestResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.T) {
 	t.Parallel()
 	root, change := twoWavePlanForResumeTest(t)
 	// task-a at run version 1, task-b at run version 2 — two distinct versions.
-	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/run.go"})
 	dir := state.EvidenceTasksDir(root, change.Slug)
 	v2 := map[string]any{
 		"task_id":             "task-b",
@@ -162,7 +162,7 @@ func TestResumeWaveIndexFromTaskEvidenceAmbiguousRunVersions(t *testing.T) {
 func TestResumeWaveIndexFromTaskEvidenceSkipsNonJSONEntries(t *testing.T) {
 	t.Parallel()
 	root, change := twoWavePlanForResumeTest(t)
-	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/checkpoint.go"})
+	writeTaskEvidenceForResumeTest(t, root, change, "task-a", []string{"cmd/run.go"})
 	dir := state.EvidenceTasksDir(root, change.Slug)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not evidence\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0o755))

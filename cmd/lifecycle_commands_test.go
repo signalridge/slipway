@@ -1323,8 +1323,7 @@ func TestRunStalePlanningEvidenceRequiresReviewAlignmentAfterExecutionRefresh(t 
 	assert.NotContains(t, reasons, "review_alignment_required:intake-clarification")
 	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
 	assert.Equal(t, "review_batch", recoveryView.ConfirmationRequirement.Reason)
-	assert.False(t, recoveryView.ConfirmationRequirement.ResumeResponseSupported)
-	assert.Equal(t, "run the parallel S3 review batch and record evidence for each listed skill; --resume-response is only for active checkpoints", recoveryView.ConfirmationRequirement.NextAction)
+	assert.Equal(t, "run the parallel S3 review batch and record evidence for each listed skill", recoveryView.ConfirmationRequirement.NextAction)
 
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
