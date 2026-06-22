@@ -1342,6 +1342,12 @@ func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T
 		"wave-orchestration skill missing top-level IRON LAW")
 	assert.Contains(t, content, "slipway evidence task",
 		"wave-orchestration skill must route task evidence through the supported CLI")
+	assert.Contains(t, content, "--result-file",
+		"wave-orchestration skill must teach compact task result import")
+	assert.Contains(t, content, "`run_summary_version`, `task_kind`, `target_files`, `captured_at`,",
+		"wave-orchestration skill must identify ledger-owned fields")
+	assert.NotContains(t, content, `slipway evidence task --task-id "<task_id>" --run-summary-version`,
+		"wave-orchestration skill must not teach the long manual evidence command as the default")
 	assert.Contains(t, content, "Do not hand-write files under",
 		"wave-orchestration skill must forbid manual runtime task JSON edits")
 }
@@ -1536,6 +1542,13 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "status", "command-status-body", "cursor")
 		assert.NotContains(t, content, "{{.", "wrapper render must not leak template variables")
 		assert.Contains(t, content, "# Status")
+	})
+
+	t.Run("fix body distinguishes reexecution mode", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
+		assert.Contains(t, content, "Ordinary `fix` discovery does not advance lifecycle state")
+		assert.Contains(t, content, "`fix --start-reexecution` is the explicit review-driven reexecution mode")
+		assert.Contains(t, content, "--start-reexecution")
 	})
 
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {

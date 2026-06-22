@@ -281,10 +281,10 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--diagnostics] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with execution-summary evidence (run wave-orchestration first)."}},
 	{ID: "fix", Class: CommandClassMutation, Description: "Dispatch fresh-context fixes for S3 review findings", Tier: "core", HasPromptSurface: true,
-		Arguments:     "[--json] [--reviewer <skill>] [--change <slug>]",
+		Arguments:     "[--json] [--reviewer <skill>] [--start-reexecution] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with review findings to repair."},
 		Notes: []string{
-			"`slipway fix` does not run local-integrity repair and does not advance lifecycle state; it surfaces review repair targets and the fresh-context repair contract.",
+			"Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state; `slipway fix --start-reexecution` explicitly reopens S2 and materializes a fresh execution run for review-driven implementation repairs.",
 			"After the repair subagent edits code/artifacts, rerun and record the affected reviewer evidence, then run `slipway review`.",
 		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
@@ -331,7 +331,7 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]; suite-result (--full-suite-proof <path>|--full-suite-digest <digest>) [--sast-proof <name=path> ...] [--sast-digest <name=digest> ...] [--json] [--change <slug>]",
+		Arguments:     "task --result-file <path> [--result-file <path> ...] [--json] [--change <slug>] | task --task-id <id> --run-summary-version <n> --task-kind <kind> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] [--target-file <path> ...] [--blocker <code[:detail]> ...] [--captured-at <RFC3339Nano>] [--session-id <id>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]; suite-result (--full-suite-proof <path>|--full-suite-digest <digest>) [--sast-proof <name=path> ...] [--sast-digest <name=digest> ...] [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence.", "`suite-result` requires an active governed change in S3_REVIEW with a current execution-summary.yaml."}},
 	// Helpers (1)
 	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "helpers", HasPromptSurface: false,

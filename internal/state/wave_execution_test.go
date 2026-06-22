@@ -112,6 +112,27 @@ func TestMaterializeWavePlanGeneratedAtUsesMaterializationTime(t *testing.T) {
 	assert.False(t, tasksMTime.Equal(plan.GeneratedAt))
 }
 
+func TestCurrentWavePlanRunSummaryVersionFailsClosedOnCorruptWavePlan(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "corrupt-wave-plan-version")
+	verifyDir, err := verificationDirForChange(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(verifyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(verifyDir, WavePlanFileName), []byte("version: [\n"), 0o644))
+	require.NoError(t, SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		RunSummaryVersion: 7,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+	}))
+
+	runVersion, err := currentWavePlanRunSummaryVersion(root, change)
+	require.Error(t, err)
+	assert.Equal(t, 0, runVersion)
+	assert.Contains(t, err.Error(), "parse wave plan")
+}
+
 const (
 	twoIndependentTasksMD = "# Tasks\n\n" +
 		"- [ ] `t-01` first\n  - target_files: [\"a.go\"]\n  - task_kind: code\n" +

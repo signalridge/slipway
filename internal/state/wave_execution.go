@@ -138,7 +138,39 @@ func MaterializeWavePlanAt(root string, change model.Change, generatedAt time.Ti
 	return plan, nil
 }
 
+func MaterializeWavePlanAtRunSummaryVersion(
+	root string,
+	change model.Change,
+	generatedAt time.Time,
+	runSummaryVersion int,
+) (model.WavePlan, error) {
+	plan, op, err := MaterializeWavePlanTransactionOpAtRunSummaryVersion(root, change, generatedAt, runSummaryVersion)
+	if err != nil {
+		return model.WavePlan{}, err
+	}
+	if err := fsutil.ApplyFileTransaction([]fsutil.FileTransactionOp{op}); err != nil {
+		return model.WavePlan{}, err
+	}
+	return plan, nil
+}
+
 func MaterializeWavePlanTransactionOpAt(root string, change model.Change, generatedAt time.Time) (model.WavePlan, fsutil.FileTransactionOp, error) {
+	return MaterializeWavePlanTransactionOpAtRunSummaryVersion(root, change, generatedAt, 0)
+}
+
+func MaterializeWavePlanTransactionOpAtRunSummaryVersion(
+	root string,
+	change model.Change,
+	generatedAt time.Time,
+	runSummaryVersion int,
+) (model.WavePlan, fsutil.FileTransactionOp, error) {
+	if runSummaryVersion < 1 {
+		var err error
+		runSummaryVersion, err = currentWavePlanRunSummaryVersion(root, change)
+		if err != nil {
+			return model.WavePlan{}, fsutil.FileTransactionOp{}, err
+		}
+	}
 	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	if err != nil {
 		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
@@ -150,6 +182,7 @@ func MaterializeWavePlanTransactionOpAt(root string, change model.Change, genera
 	plan := model.WavePlan{
 		Version:                 model.WavePlanVersion,
 		GeneratedAt:             generatedAt.UTC(),
+		RunSummaryVersion:       runSummaryVersion,
 		TasksPlanHash:           hashes.Structural,
 		TasksPlanStructuralHash: hashes.Structural,
 		TasksPlanScopeHash:      hashes.Scope,
@@ -188,6 +221,24 @@ func MaterializeWavePlanTransactionOpAt(root string, change model.Change, genera
 		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
 	}
 	return plan, op, nil
+}
+
+func currentWavePlanRunSummaryVersion(root string, change model.Change) (int, error) {
+	plan, err := LoadOptionalWavePlanForChange(root, change)
+	if err != nil {
+		return 0, err
+	}
+	if plan == nil {
+		execCtx, ctxErr := LoadRelevantExecutionSummaryContext(root, change)
+		if ctxErr == nil && execCtx.LatestRunVersion >= 1 {
+			return execCtx.LatestRunVersion, nil
+		}
+		return 1, nil
+	}
+	if plan.RunSummaryVersion < 1 {
+		return 1, nil
+	}
+	return plan.RunSummaryVersion, nil
 }
 
 func CurrentTasksPlanStructuralState(root string, change model.Change) (string, error) {
