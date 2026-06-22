@@ -92,15 +92,14 @@ func TestStatusProgressReportsRunSummaryVersionWhenSummaryRecorded(t *testing.T)
 	assert.Equal(t, 1, decoded.RunSummaryVersion, "recorded run_summary_version must still serialize; got %s", raw)
 }
 
-// TestResumeCheckpointOmitsRunSummaryVersionWhenZero covers the `next --json`
-// half of REQ-002 (issue #211): the resume checkpoint is the only
-// run_summary_version emitter on the next surface, so it must omit the field when
-// no execution summary has been recorded yet (the zero sentinel `evidence task`
-// rejects) while still serializing a genuinely recorded version (>= 1).
-func TestResumeCheckpointOmitsRunSummaryVersionWhenZero(t *testing.T) {
+// TestExecutionResumeOmitsRunSummaryVersionWhenZero covers the `next --json`
+// half of REQ-002 (issue #211): the execution resume context must omit the field
+// when no execution summary has been recorded yet (the zero sentinel `evidence
+// task` rejects) while still serializing a genuinely recorded version (>= 1).
+func TestExecutionResumeOmitsRunSummaryVersionWhenZero(t *testing.T) {
 	t.Parallel()
 
-	rawZero, err := json.Marshal(&resumeCheckpoint{
+	rawZero, err := json.Marshal(&executionResumeContext{
 		CompletedTaskIDs: []string{"t-01"},
 		Freshness:        "fresh",
 	})
@@ -108,9 +107,9 @@ func TestResumeCheckpointOmitsRunSummaryVersionWhenZero(t *testing.T) {
 	var decodedZero map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(rawZero, &decodedZero))
 	_, present := decodedZero["run_summary_version"]
-	assert.False(t, present, "resume checkpoint must omit run_summary_version when zero; got %s", rawZero)
+	assert.False(t, present, "execution resume must omit run_summary_version when zero; got %s", rawZero)
 
-	rawReal, err := json.Marshal(&resumeCheckpoint{
+	rawReal, err := json.Marshal(&executionResumeContext{
 		RunSummaryVersion: 1,
 		CompletedTaskIDs:  []string{"t-01"},
 	})

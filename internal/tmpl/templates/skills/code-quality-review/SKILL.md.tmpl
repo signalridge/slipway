@@ -102,6 +102,9 @@ For bulky review artifacts, keep the coordinator thin:
   expectations
 - dependency updates do not silently raise the required compiler, runtime, or
   external tool version
+- configured CI static checks are part of the quality gate; for Go changes, run
+  `golangci-lint run ./...` when the repo provides golangci-lint locally or in
+  CI, and treat new lint findings as blockers
 
 ## Review Layers
 - `layer:IR1=pass|fail`: mandatory baseline implementation quality review.

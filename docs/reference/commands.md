@@ -29,11 +29,8 @@ setup-only.
 | `slipway cancel` | mutation | Cancel and archive an active change. |
 | `slipway delete` | mutation | Discard abandoned governed local state. |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
-| `slipway checkpoint` | mutation | Pause for task-level human input. |
 | `slipway evidence` | mutation | Record supported task or skill evidence. |
 | `slipway tool` | mutation | Run CLI-only helper tools used by generated skills. |
-| `slipway learn` | query | Preview governance learning proposals. |
-| `slipway stats` | query | Show repo-wide governance statistics. |
 | `slipway health` | query | Show repo-local integrity findings. |
 | `slipway instructions` | query | Show artifact or codebase-map authoring contracts. |
 | `slipway init` | mutation | Initialize runtime layout and optional adapters. |
@@ -61,11 +58,8 @@ slipway abort --json
 slipway cancel --json
 slipway delete --change <slug> --json
 slipway repair --json
-slipway checkpoint --task-id <id> --json
 slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json
 slipway evidence skill --skill <name> --verdict pass --json
-slipway learn --json
-slipway stats --json
 slipway health --json
 slipway instructions <artifact> --json
 ```
@@ -81,7 +75,6 @@ These commands inspect state without changing lifecycle authority:
 slipway status --json
 slipway validate --json
 slipway next --json --diagnostics
-slipway learn --preview
 ```
 
 Use them before choosing a mutation command.
@@ -122,12 +115,10 @@ slipway run --no-auto --json
 `--auto` and `--no-auto` take precedence over the `execution.auto` config for
 that one run. Under auto, Slipway auto-advances pure-pacing pauses (review
 batches without `security-review`, non-sensitive/non-security-review skill
-handoffs, fresh non-guardrail `human_verify` checkpoints) on prior authorization
-and auto-confirms a pending workflow-preset upgrade-only (never downgraded).
-`security-review` boundaries, sensitive and guardrail confirmations, the intake
-Approved Summary, decision and human_action checkpoints, stale or
-unknown-freshness checkpoints, and every evidence gate still hard-stop and are
-never auto-advanced.
+handoffs) on prior authorization and auto-confirms a pending workflow-preset
+upgrade-only (never downgraded). `security-review` boundaries, sensitive and
+guardrail confirmations, the intake Approved Summary, and every evidence gate
+still hard-stop and are never auto-advanced.
 
 ## Surface Manifest
 

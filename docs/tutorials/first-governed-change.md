@@ -202,7 +202,7 @@ Commit the README and archived Slipway record together if this was real work.
 ## What You Learned
 
 - `status`, `next`, and `validate` are read-only authority checks.
-- `run` advances only until a skill, blocker, checkpoint, or done-ready state.
+- `run` advances only until a skill, blocker, or done-ready state.
 - Artifacts are authored from `slipway instructions`, not copied from templates.
 - Implementation scope comes from `tasks.md` target files.
 - Stale evidence is repaired by rerunning the owning stage or reviewer.

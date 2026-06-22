@@ -65,6 +65,65 @@ func TestEvidenceSuiteResultRecordsCurrentRunSummaryVersion(t *testing.T) {
 	})
 }
 
+func TestEvidenceSuiteResultRecordsInBoundWorktreeVerificationDir(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("test\n"), 0o644))
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "init")
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "suite result bound worktree")
+		change := setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		branch := "feat/" + slug
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch, "HEAD")
+
+		bound := change
+		require.NoError(t, state.PersistScopeWorktreeMetadata(&bound, worktreeRoot, branch))
+		require.NoError(t, state.RelocateGovernedBundle(root, change, bound))
+		require.NoError(t, state.SaveChange(root, bound))
+		writePassingExecutionSummary(t, root, slug, 3, "t-01")
+
+		proofRel := "verification/logs/suite-result-run2.txt"
+		proofPath := filepath.Join(worktreeRoot, filepath.FromSlash(proofRel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(proofPath), 0o755))
+		require.NoError(t, os.WriteFile(proofPath, []byte("fresh full suite proof\n"), 0o644))
+		expectedDigest := sha256DigestForTest([]byte("fresh full suite proof\n"))
+
+		rootSuitePath := filepath.Join(state.VerificationDir(root, slug), "suite-result.yaml")
+		worktreeSuitePath := filepath.Join(worktreeRoot, "artifacts", "changes", slug, "verification", "suite-result.yaml")
+		require.NoError(t, os.Remove(worktreeSuitePath))
+		require.NoFileExists(t, rootSuitePath)
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{
+			"suite-result",
+			"--change", slug,
+			"--full-suite-proof", proofRel,
+			"--json",
+		})
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSuiteResultView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, state.DisplayPath(root, worktreeSuitePath), view.Path)
+		assert.Equal(t, expectedDigest, view.FullSuiteDigest)
+		assert.True(t, view.Recorded)
+
+		raw, err := os.ReadFile(worktreeSuitePath)
+		require.NoError(t, err)
+		var record model.SuiteResult
+		require.NoError(t, yaml.Unmarshal(raw, &record))
+		assert.Equal(t, 3, record.RunSummaryVersion)
+		assert.Equal(t, expectedDigest, record.FullSuiteDigest)
+		require.NoFileExists(t, rootSuitePath)
+	})
+}
+
 func TestEvidenceSuiteResultRejectsMissingExecutionSummary(t *testing.T) {
 	t.Parallel()
 

@@ -110,18 +110,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Bulk finalization skipped a non-active governed change",
 	},
-	"checkpoint_stale": {
-		Severity: ReasonSeverityWarning,
-		Message:  "Active checkpoint has exceeded the stale threshold",
-	},
-	"checkpoint_task_missing_from_wave_plan": {
-		Severity: ReasonSeverityError,
-		Message:  "Checkpoint task is not present in the current wave plan",
-	},
-	"checkpoint_wave_index_drift": {
-		Severity: ReasonSeverityError,
-		Message:  "Checkpoint wave index does not match the current wave plan",
-	},
 	"codebase_map_freshness_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Repo-scoped codebase map is missing",
@@ -557,10 +545,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"skill_registry_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Governance skill registry is invalid",
-	},
-	"stale_checkpoint_state": {
-		Severity: ReasonSeverityWarning,
-		Message:  "Active checkpoint exists outside S2_IMPLEMENT",
 	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,

@@ -168,7 +168,6 @@ func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *test
 	for _, id := range []string{
 		"abort",
 		"cancel",
-		"checkpoint",
 		"done",
 		"fix",
 		"implement",
@@ -211,13 +210,10 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 		"cancel":       makeCancelCmd(),
 		"review":       makeReviewCmd(),
 		"validate":     makeValidateCmd(),
-		"checkpoint":   makeCheckpointCmd(),
 		"preset":       makePresetCmd(),
 		"abort":        makeAbortCmd(),
 		"repair":       makeRepairCmd(),
 		"evidence":     makeEvidenceCmd(),
-		"learn":        makeLearnCmd(),
-		"stats":        makeStatsCmd(),
 		"health":       makeHealthCmd(),
 		"codebase-map": makeCodebaseMapCmd(),
 	}

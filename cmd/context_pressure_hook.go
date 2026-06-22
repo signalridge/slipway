@@ -432,9 +432,8 @@ func contextPressureMessage(result contextPressureResult) string {
 	case contextPressureCritical:
 		return fmt.Sprintf(
 			"CONTEXT CRITICAL: usage is approximately %d%%. Context pressure is high; "+
-				"run `slipway checkpoint` at the next safe S2 task boundary or write "+
-				"the per-change `.git/slipway/runtime/changes/<slug>/handoff.md` using "+
-				"the workflow handoff contract before continuing in a fresh context. "+
+				"write the per-change `.git/slipway/runtime/changes/<slug>/handoff.md` "+
+				"using the workflow handoff contract before continuing in a fresh context. "+
 				"The handoff is advisory; fresh sessions still run `slipway status --json` "+
 				"and `slipway next --json`.",
 			result.Percent,
@@ -442,9 +441,8 @@ func contextPressureMessage(result contextPressureResult) string {
 	default:
 		return fmt.Sprintf(
 			"CONTEXT WARNING: usage is approximately %d%%. Avoid starting new complex work; "+
-				"consider reaching a checkpoint or preserving the per-change "+
-				"`.git/slipway/runtime/changes/<slug>/handoff.md` with the workflow "+
-				"handoff contract before continuing.",
+				"preserve the per-change `.git/slipway/runtime/changes/<slug>/handoff.md` "+
+				"with the workflow handoff contract before continuing.",
 			result.Percent,
 		)
 	}

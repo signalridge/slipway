@@ -2,13 +2,12 @@
 # Run
 
 Shortcut-drive the current lifecycle stage until it surfaces a next skill,
-blocker, checkpoint, or done-ready outcome.
+blocker, or done-ready outcome.
 
 ## Invocation
 ```bash
 slipway run --json
 slipway run --resume --json
-slipway run --resume-response "<response>" --json
 ```
 
 ## Contract
@@ -16,16 +15,13 @@ slipway run --resume-response "<response>" --json
   `plan`, `implement`, `review`, and `done`.
 - JSON output includes `delegated_to` so hosts can see which primary stage
   command `run` invoked for the current state.
-- `run --resume` resumes governed execution from the latest incomplete wave when no active checkpoint exists.
-- `run --resume-response "<response>"` resumes an active checkpoint and consumes the checkpoint payload.
-- When returned JSON includes `input_context.resume_checkpoint.user_response_payload`, carry that response and `checkpoint_type` into the next execution skill; do not drop or rewrite operator input.
-- If an active checkpoint exists, plain `run` is rejected and `--resume-response` is required, unless auto mode auto-acknowledges a fresh non-guardrail `human_verify` checkpoint (see the auto rule below).
-- If resumable non-checkpoint execution exists, plain `run` is rejected and `--resume` is required.
+- `run --resume` resumes governed execution from the latest incomplete wave.
+- If resumable execution exists, plain `run` is rejected and `--resume` is required.
 - `run` reuses the same `next --json` contract for the returned next-skill / blocker surface.
 - `advanced` reports the mutation performed by this invocation; `blockers` reports the current stop condition after that mutation. A successful advance can still return error-severity blockers for the next required skill.
-- `confirmation_requirement.resume_response_supported` is true only when `--resume-response` can be used for the current stop; otherwise branch on `confirmation_requirement.next_action_kind` and run `confirmation_requirement.next_command` when present (`next_action` is human prose, not a contract to parse).
-- Under auto (`execution.auto` or `slipway run --auto`), prior authorization can cross only pure-pacing pauses: review batches without `security-review`, non-sensitive/non-security-review skill handoffs, and fresh non-guardrail human-verify checkpoints. Pending workflow-preset confirmation is auto-confirmed upgrade-only.
-- Auto never crosses sensitive/guardrail confirmations, `security-review` boundaries, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, or evidence gates.
+- Branch on `confirmation_requirement.next_action_kind` and run `confirmation_requirement.next_command` when present (`next_action` is human prose, not a contract to parse).
+- Under auto (`execution.auto` or `slipway run --auto`), prior authorization can cross only pure-pacing pauses: review batches without `security-review` and non-sensitive/non-security-review skill handoffs. Pending workflow-preset confirmation is auto-confirmed upgrade-only.
+- Auto never crosses sensitive/guardrail confirmations, `security-review` boundaries, the intake Approved Summary, or evidence gates.
 - Treat default JSON as the action contract. Use `slipway run --json --diagnostics` only for full readiness fields.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.
 - Do not expect inline policy-pack prose in default JSON; read policy-pack content only by path from diagnostics or config.
@@ -33,12 +29,10 @@ slipway run --resume-response "<response>" --json
 ## When To Use
 - You want Slipway to keep advancing / validating until the workflow surfaces the next skill or another stop condition.
 - You are resuming wave execution after a prior interruption.
-- You are resuming a paused checkpoint after obtaining the required human response.
 
 ## Pause Conditions
 - A next skill is surfaced.
 - Blockers are present.
-- A checkpoint is active.
 - The change is done-ready or done.
 
 ## Context Self-Monitoring (SHOULD)
@@ -66,13 +60,12 @@ implementation work. `final-closeout` is the last closeout step after the
 selected peer set, not a selected S3 peer.
 
 ## Fresh Context Boundary Rule (HARD RULE)
-Use a fresh subagent for checkpoint resume that consumes operator input
-(`--resume-response`) and for governed review handoffs, especially selected S3
-peer reviewers. A plain operator confirmation to run an advancing command after
+Use a fresh subagent for governed review handoffs, especially selected S3 peer
+reviewers. A plain operator confirmation to run an advancing command after
 already-recorded evidence does not by itself require spawning a subagent; the
 current host may run that lifecycle transition and then stop at any review
-batch, checkpoint, blocker, or next-skill handoff. Do not let the same
-implementation context perform its own selected S3 peer review evidence.
+batch, blocker, or next-skill handoff. Do not let the same implementation
+context perform its own selected S3 peer review evidence.
 
 ## Failure Handling
 1. On any command/runtime error, stop and show the error details.
@@ -80,8 +73,7 @@ implementation context perform its own selected S3 peer review evidence.
 3. If three consecutive skills fail, exit the loop and require manual intervention before retrying.
 
 ## Flags
-- `--resume`: continue resumable non-checkpoint execution from the latest incomplete wave
-- `--resume-response "<response>"`: resume an active checkpoint with explicit response text
+- `--resume`: continue resumable execution from the latest incomplete wave
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 - `--diagnostics`: include governance/readiness diagnostic fields

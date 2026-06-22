@@ -10,12 +10,11 @@ import (
 )
 
 type Node struct {
-	TaskID         string         `json:"task_id"`
-	Objective      string         `json:"objective,omitempty"`
-	DependsOn      []string       `json:"depends_on,omitempty"`
-	TargetFiles    []string       `json:"target_files,omitempty"`
-	TaskKind       model.TaskKind `json:"task_kind,omitempty"`
-	CheckpointType string         `json:"checkpoint_type,omitempty"`
+	TaskID      string         `json:"task_id"`
+	Objective   string         `json:"objective,omitempty"`
+	DependsOn   []string       `json:"depends_on,omitempty"`
+	TargetFiles []string       `json:"target_files,omitempty"`
+	TaskKind    model.TaskKind `json:"task_kind,omitempty"`
 }
 
 type Wave struct {

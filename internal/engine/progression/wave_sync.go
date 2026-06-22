@@ -364,12 +364,13 @@ func singleTaskEvidenceRunVersion(root, slug string) (int, error) {
 		version, err := taskEvidenceRunVersion(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			// A single unreadable/malformed task-evidence file must not make
-			// checkpoint harder-failing than the read-only sibling surfaces, which
-			// soft-tolerate the same file: LoadExecutionTasksFromEvidence records it
-			// as an issue and continues. Skip it for version detection; the
-			// len(issues) > 0 check in ResumeWaveIndexFromTaskEvidence still forces
-			// derived=false, so the caller keeps the safe, more-restrictive wave-1
-			// default rather than aborting (issue #227a review).
+			// resume-index derivation harder-failing than the read-only sibling
+			// surfaces, which soft-tolerate the same file:
+			// LoadExecutionTasksFromEvidence records it as an issue and continues.
+			// Skip it for version detection; the len(issues) > 0 check in
+			// ResumeWaveIndexFromTaskEvidence still forces derived=false, so the
+			// caller keeps the safe, more-restrictive wave-1 default rather than
+			// aborting (issue #227a review).
 			continue
 		}
 		versions[version] = struct{}{}

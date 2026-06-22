@@ -84,7 +84,7 @@ func TestContextPressureHookCommandEmitsAdditionalContextAtCriticalThreshold(t *
 	additionalContext, ok := hookOutput["additionalContext"].(string)
 	require.True(t, ok)
 	assert.Contains(t, additionalContext, "CONTEXT CRITICAL")
-	assert.Contains(t, additionalContext, "slipway checkpoint")
+	assert.Contains(t, additionalContext, ".git/slipway/runtime/changes/<slug>/handoff.md")
 	assert.Contains(t, additionalContext, "workflow handoff contract")
 	assert.Contains(t, additionalContext, "The handoff is advisory")
 	assert.Contains(t, additionalContext, "slipway status --json")
@@ -119,7 +119,7 @@ func TestContextPressureHookCommandReadsLiveUsageFromClaudeTranscript(t *testing
 	require.True(t, ok)
 	assert.Contains(t, additionalContext, "CONTEXT CRITICAL")
 	assert.Contains(t, additionalContext, "70%")
-	assert.Contains(t, additionalContext, "slipway checkpoint")
+	assert.Contains(t, additionalContext, "workflow handoff contract")
 }
 
 func TestContextPressureHookCommandIgnoresStaleTranscriptUsage(t *testing.T) {

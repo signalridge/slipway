@@ -52,7 +52,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, findings, 1)
 
-		stdout, stderr, err = runRootCommandIn(root, []string{"stats", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"status", "--stats", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statsPayload := decodeJSONMap(t, stdout)
@@ -75,7 +75,7 @@ func TestCLIEndToEndDiagnosticsAndCodebaseMapFlow(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, findings, 1)
 
-		stdout, stderr, err = runRootCommandIn(root, []string{"stats", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"status", "--stats", "--json"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		statsPayload = decodeJSONMap(t, stdout)
@@ -118,8 +118,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		stdout, stderr, err = runRootCommandIn(root, []string{"checkpoint", "--json", "--task-id", "task-01", "--type", "human_verify"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
-		checkpointPayload := decodeJSONMap(t, stderr)
-		assert.Equal(t, "checkpoint_wrong_state", checkpointPayload["error_code"])
+		assert.Contains(t, stderr, "unknown command")
 
 		stdout, stderr, err = runRootCommandIn(root, []string{"review", "--json"})
 		require.Error(t, err)
@@ -172,60 +171,6 @@ func TestCLIEndToEndRunBlocksOnNextGovernanceSkill(t *testing.T) {
 	})
 }
 
-func TestCLIEndToEndRunResumeResponseFlow(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response e2e")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  "human_verify",
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
-
-- [ ] `+"`task-01`"+` first wave
-  - depends_on: []
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` checkpointed second wave
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		stdout, stderr, err := runRootCommandIn(root, []string{"run", "--json", "--resume-response", "verified ok", "--change", slug})
-		require.NoError(t, err)
-		assert.Empty(t, stderr)
-
-		runPayload := decodeJSONMap(t, stdout)
-		inputContext, ok := runPayload["input_context"].(map[string]any)
-		require.True(t, ok, "expected input_context in run output")
-		resumeCheckpoint, ok := inputContext["resume_checkpoint"].(map[string]any)
-		require.True(t, ok, "expected resume_checkpoint in run output")
-		assert.Equal(t, "task-02", resumeCheckpoint["paused_task_id"])
-		assert.Equal(t, float64(2), resumeCheckpoint["paused_wave_index"])
-		assert.Equal(t, "verified ok", resumeCheckpoint["user_response_payload"])
-
-		after, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Nil(t, after.ActiveCheckpoint, "run --resume-response should consume the active checkpoint")
-	})
-}
-
 func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 	t.Parallel()
 
@@ -271,6 +216,12 @@ func TestCLIEndToEndAbortThenRunResumeFlow(t *testing.T) {
 		assert.Empty(t, stderr)
 		runPayload := decodeJSONMap(t, stdout)
 		assert.Equal(t, "S2_IMPLEMENT", runPayload["current_state"])
+		inputContext, ok := runPayload["input_context"].(map[string]any)
+		require.True(t, ok, "expected input_context in resumed run output")
+		executionResume, ok := inputContext["execution_resume"].(map[string]any)
+		require.True(t, ok, "expected execution_resume in resumed run output")
+		assert.Equal(t, []any{"task-01"}, executionResume["completed_task_ids"])
+		assert.Equal(t, float64(2), executionResume["resume_wave_index"])
 		nextSkill, ok := runPayload["next_skill"].(map[string]any)
 		require.True(t, ok, "expected next_skill in resumed run output")
 		assert.Equal(t, "wave-orchestration", nextSkill["name"])
@@ -348,47 +299,6 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		// Verify no published directory is created.
 		_, err = os.Stat(filepath.Join(root, "artifacts", "requirements", slug))
 		assert.True(t, os.IsNotExist(err))
-	})
-}
-
-func TestCLIEndToEndSuccessfulCheckpointDuringImplementation(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "checkpoint e2e positive path")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		// Advance to S2_IMPLEMENT.
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		require.NoError(t, state.SaveChange(root, change))
-		plan, err := state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-		require.NotEmpty(t, plan.Waves)
-		require.NotEmpty(t, plan.Waves[0].Tasks)
-		taskID := plan.Waves[0].Tasks[0].TaskID
-
-		out := bytes.NewBuffer(nil)
-		cmd := commandForRoot(t, root, makeCheckpointCmd())
-		cmd.SetOut(out)
-		cmd.SetErr(out)
-		cmd.SetArgs([]string{"--json", "--task-id", taskID, "--type", "human_verify"})
-		require.NoError(t, cmd.Execute())
-
-		var view checkpointView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.True(t, view.Set)
-		assert.Equal(t, taskID, view.PausedTaskID)
-		assert.Equal(t, "human_verify", view.CheckpointType)
-
-		// Verify persisted.
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
-		require.NotNil(t, change.ActiveCheckpoint)
-		assert.Equal(t, taskID, change.ActiveCheckpoint.PausedTaskID)
 	})
 }
 

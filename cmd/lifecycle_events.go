@@ -62,8 +62,6 @@ func lifecycleRepairDiagnostics(summary repairSummary) []string {
 	appendItems("worktree_scope_repairs", summary.WorktreeScopeRepairs)
 	appendItems("materialized_wave_plans", summary.MaterializedWavePlans)
 	appendItems("recovered_wave_runs", summary.RecoveredWaveRuns)
-	appendItems("cleared_checkpoints", summary.ClearedCheckpoints)
-	appendItems("repaired_checkpoints", summary.RepairedCheckpoints)
 	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
 	appendItems("rebuilt_execution_summaries", summary.RebuiltExecutionSummaries)
 	appendItems("non_repairable_findings", summary.NonRepairableFindings)

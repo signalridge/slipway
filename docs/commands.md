@@ -23,7 +23,7 @@ subcommands directly.
 | `slipway fix` | mutation | Dispatch fresh-context fixes for S3 review findings. |
 | `slipway done` | mutation | Finalize a done-ready change and archive it. |
 | `slipway next` | query | Inspect the next actionable skill or blocker without advancing state. |
-| `slipway run` | mutation | Shortcut-drive the current lifecycle stage until a skill, blocker, checkpoint, or done-ready outcome is surfaced. |
+| `slipway run` | mutation | Shortcut-drive the current lifecycle stage until a skill, blocker, or done-ready outcome is surfaced. |
 | `slipway status` | query | Show lifecycle state, blockers, progress, and next actions. |
 
 When a governed change has stale evidence, `slipway next` remains read-only and
@@ -97,7 +97,6 @@ paths stay ignored. Runtime task evidence lives under
 | `slipway cancel` | mutation | Cancel an active change and archive terminal state. |
 | `slipway delete` | mutation | Discard an abandoned governed change: its bundle, runtime binding, optional worktree, or an archived record (dry-run by default). |
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
-| `slipway checkpoint` | mutation | Pause execution for a task-level human response (S2_IMPLEMENT; `--task-id` required, `--allowed-responses` required for `--type decision`). |
 | `slipway evidence task` | mutation | Record supported runtime task evidence for wave execution. |
 
 `slipway cancel` and `slipway delete` are not the same operation. `cancel`
@@ -129,8 +128,6 @@ directly.
 
 | Command | Class | Purpose |
 | --- | --- | --- |
-| `slipway learn --preview` | query | Preview governance learning proposals from lifecycle evidence. |
-| `slipway stats` | query | Show repo-wide governance freshness and workflow statistics. |
 | `slipway health` | query | Show repo-local integrity and repairability findings. |
 | `slipway instructions <artifact>` | query | Show the template, quality bar, and — inside a change — resolved output path + dependency graph for a governed artifact or codebase-map doc. |
 
@@ -226,7 +223,6 @@ Stable manifest tokens for JSON contract coverage:
 | --- | --- |
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
-| checkpoint JSON | `slipway checkpoint --task-id <id> --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
@@ -237,7 +233,6 @@ Stable manifest tokens for JSON contract coverage:
 | implement JSON | `slipway implement --json` |
 | instructions JSON | `slipway instructions <artifact> --json` |
 | intake JSON | `slipway intake --json` |
-| learn JSON | `slipway learn --json` |
 | new JSON | `slipway new --json` |
 | next JSON | `slipway next --json` |
 | plan JSON | `slipway plan --json` |
@@ -245,7 +240,6 @@ Stable manifest tokens for JSON contract coverage:
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
 | run JSON | `slipway run [--auto\|--no-auto] --json` |
-| stats JSON | `slipway stats --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
 
@@ -255,15 +249,14 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 
 - `next_skill.display_name`, `next_skill.blocking_name`, and `next_skill.resolution_reason` when the conceptual stage differs from the actionable missing skill.
 - `next_skill.review_context.required_artifact_layers` and `next_skill.review_context.required_implementation_layers`, which map to exact gate tokens such as `layer:R0=pass`, `layer:R3=pass`, `layer:IR1=pass`, and `layer:IR3=pass`.
-- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, whether `--resume-response` is supported at this stop (`resume_response_supported`), the next operator action as human prose (`next_action`), a machine-readable `next_action_kind` (`skill_handoff` | `checkpoint_resume` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`), and the exact `next_command` to run when one is runnable as-is. `next_command` is empty for stops that need operator-supplied input — notably `checkpoint_resume`, which requires a `--resume-response` argument and is therefore signaled by `resume_response_supported` rather than an exact command. Branch on `next_action_kind`/`next_command`; treat `next_action` as display prose only.
+- top-level `confirmation_requirement`, which reports whether a hard stop needs fresh user confirmation, whether prior authorization is sufficient, the next operator action as human prose (`next_action`), a machine-readable `next_action_kind` (`skill_handoff` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`), and the exact `next_command` to run when one is runnable as-is. Branch on `next_action_kind`/`next_command`; treat `next_action` as display prose only.
 - `freshness_diagnostics`, which reports stale source/evidence pairs, field-level execution input mismatches, path authority, and the next regeneration action.
 
 `run --auto` / `run --no-auto` override `execution.auto` for one invocation.
 Config-level `execution.auto` also applies to `intake`, `plan`, and
 `implement`; those stage commands have no override flags. Auto only crosses
 pure-pacing boundaries. `security-review` boundaries, sensitive/guardrail
-confirmations, the intake Approved Summary, decision/human_action checkpoints,
-stale or unknown-freshness checkpoints, and evidence gates remain stops.
+confirmations, the intake Approved Summary, and evidence gates remain stops.
 
 `validate --json` is the active-readiness authority: it answers whether the
 current governed state can advance now and mirrors actionable review handoff
@@ -355,14 +348,7 @@ the advisory replaces a hard block. The active `artifacts/changes/<slug>/` bundl
 is excluded from the advisory because `done` rewrites it into
 `artifacts/changes/archived/<slug>/`; sibling or archived bundles are listed.
 
-## Resume And Checkpoints
-
-If execution pauses on a checkpoint:
-
-```bash
-slipway status --json
-slipway run --resume-response "approved"
-```
+## Resume Execution
 
 If an execution session is resumable:
 

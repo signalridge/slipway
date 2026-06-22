@@ -229,6 +229,30 @@ func TestLoadChangeRejectsUnknownFields(t *testing.T) {
 	require.Error(t, err, "unknown fields must be rejected by KnownFields(true)")
 }
 
+func TestLoadChangeRejectsRetiredActiveCheckpointWithRemediation(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeLayout(t)
+
+	st := model.NewChange("retired-active-checkpoint")
+	require.NoError(t, SaveChange(root, st))
+
+	path := BundleChangeFilePath(root, st.Slug)
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	raw = append(raw, []byte(`
+active_checkpoint:
+  paused_task_id: t-01
+  checkpoint_type: human_verify
+`)...)
+	require.NoError(t, os.WriteFile(path, raw, 0o644))
+
+	_, err = LoadChange(root, st.Slug)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported retired change state: active_checkpoint was removed")
+	assert.Contains(t, err.Error(), "recover by aborting or recreating the active change without checkpoint state")
+	assert.NotContains(t, err.Error(), "model.alias")
+}
+
 func TestFindActiveChangeSingle(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

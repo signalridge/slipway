@@ -1,6 +1,5 @@
 slipway-abort/SKILL.md	skill_md	non-exec
 slipway-cancel/SKILL.md	skill_md	non-exec
-slipway-checkpoint/SKILL.md	skill_md	non-exec
 slipway-ci-triage/SKILL.md	skill_md	non-exec
 slipway-ci-triage/references/fetch-pr-checks-shell-evaluation.md	reference	non-exec
 slipway-code-quality-review/SKILL.md	skill_md	non-exec
@@ -27,7 +26,6 @@ slipway-init/SKILL.md	skill_md	non-exec
 slipway-instructions/SKILL.md	skill_md	non-exec
 slipway-intake-clarification/SKILL.md	skill_md	non-exec
 slipway-intake/SKILL.md	skill_md	non-exec
-slipway-learn/SKILL.md	skill_md	non-exec
 slipway-new/SKILL.md	skill_md	non-exec
 slipway-next/SKILL.md	skill_md	non-exec
 slipway-plan-audit/SKILL.md	skill_md	non-exec
@@ -53,7 +51,6 @@ slipway-security-review/references/xss.md	reference	non-exec
 slipway-spec-compliance-review/SKILL.md	skill_md	non-exec
 slipway-spec-compliance-review/references/checklist-quality.md	reference	non-exec
 slipway-spec-trace/SKILL.md	skill_md	non-exec
-slipway-stats/SKILL.md	skill_md	non-exec
 slipway-status/SKILL.md	skill_md	non-exec
 slipway-tdd-governance/SKILL.md	skill_md	non-exec
 slipway-tdd-governance/references/tdd-evidence-patterns.md	reference	non-exec
@@ -70,4 +67,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:10995a25bf2e7bfc0a561bf257a88f2ba4af5f391592fecba6870b58bcdd7368
+# inventory_sha256:62bbbadf74c1ef1dc07107c17a598292b2e91db901a162202a41be6675462f08

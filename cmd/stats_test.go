@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -16,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
+func TestStatusStatsSummarizesRepoWideSignals(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -29,18 +28,24 @@ func TestStatsCommandSummarizesRepoWideSignals(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		var out bytes.Buffer
-		cmd := makeStatsCmd()
-		cmd.SetArgs([]string{"--json"})
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
+		stdout, stderr, err := runRootCommandIn(root, []string{"status", "--stats", "--json"})
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
 
 		var view statsView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NoError(t, json.Unmarshal([]byte(stdout), &view))
 		assert.Equal(t, 1, view.ActiveCount)
 		assert.Contains(t, view.MissingReviewEvidence, slug)
 		assert.Contains(t, view.CloseoutFreshness.Missing, slug)
 	})
+}
+
+func TestRootCommandDoesNotExposeStats(t *testing.T) {
+	t.Parallel()
+
+	for _, child := range newRootCmd().Commands() {
+		assert.NotEqual(t, "stats", child.Name())
+	}
 }
 
 func TestStatsUsesExecutionSummaryForFrozenEvidenceFreshness(t *testing.T) {

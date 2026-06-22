@@ -1866,32 +1866,6 @@ func TestNextPreviewIncludesAssuranceContractBlockersAtReview(t *testing.T) {
 	})
 }
 
-func TestRunRejectsResumeResponseWithoutCheckpoint(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		_ = createGovernedRequest(t, root, levelNonDiscovery, "test no checkpoint")
-
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--resume-response", "approved"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err := cmd.Execute()
-		require.Error(t, err)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "no_active_checkpoint", cliErr.ErrorCode)
-		assert.Equal(t, categoryPrecondition, cliErr.Category)
-		assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
-		assert.Contains(t, cliErr.Remediation, "active checkpoint")
-		assert.Contains(t, cliErr.Remediation, "skill evidence")
-	})
-}
-
 func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -2171,7 +2145,7 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, "", true, false, false, false)
+		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, true, false, false, false)
 		require.NoError(t, err)
 
 		require.NotNil(t, view.NextSkill)
@@ -2245,8 +2219,7 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.True(t, handoff.FreshConfirmationRequired)
 	assert.False(t, handoff.PriorAuthorizationSufficient)
 	assert.Equal(t, "skill_handoff:code-quality-review", handoff.Reason)
-	assert.False(t, handoff.ResumeResponseSupported)
-	assert.Equal(t, "run governance skill code-quality-review and record evidence; --resume-response is only for active checkpoints", handoff.NextAction)
+	assert.Equal(t, "run governance skill code-quality-review and record evidence", handoff.NextAction)
 	assert.Equal(t, "skill_handoff", handoff.NextActionKind)
 	assert.Empty(t, handoff.NextCommand)
 
@@ -2258,47 +2231,9 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.False(t, doneReady.FreshConfirmationRequired)
 	assert.True(t, doneReady.PriorAuthorizationSufficient)
 	assert.Equal(t, "run_slipway_done_to_finalize", doneReady.Reason)
-	assert.False(t, doneReady.ResumeResponseSupported)
 	assert.Equal(t, "run slipway done to finalize", doneReady.NextAction)
 	assert.Equal(t, "command", doneReady.NextActionKind)
 	assert.Equal(t, "slipway done", doneReady.NextCommand)
-
-	checkpoint := deriveConfirmationRequirement(nextView{
-		InputContext: nextContext{
-			ResumeCheckpoint: &resumeCheckpoint{
-				PausedTaskID:    "task-02",
-				PausedWaveIndex: 2,
-				CheckpointType:  string(model.CheckpointHumanVerify),
-			},
-		},
-	})
-	assert.True(t, checkpoint.Required)
-	assert.Equal(t, "hard_stop", checkpoint.Boundary)
-	assert.True(t, checkpoint.FreshConfirmationRequired)
-	assert.False(t, checkpoint.PriorAuthorizationSufficient)
-	assert.Equal(t, "resume_checkpoint", checkpoint.Reason)
-	assert.True(t, checkpoint.ResumeResponseSupported)
-	assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", checkpoint.NextAction)
-	assert.Equal(t, "checkpoint_resume", checkpoint.NextActionKind)
-	// next_command stays empty: checkpoint resume needs an operator-supplied
-	// response argument, so it is signaled via resume_response_supported.
-	assert.Empty(t, checkpoint.NextCommand)
-
-	checkpointWithSkill := deriveConfirmationRequirement(nextView{
-		NextSkill: &nextSkillView{Name: progression.SkillWaveOrchestration},
-		InputContext: nextContext{
-			ResumeCheckpoint: &resumeCheckpoint{
-				PausedTaskID:    "task-02",
-				PausedWaveIndex: 2,
-				CheckpointType:  string(model.CheckpointHumanVerify),
-			},
-		},
-	})
-	assert.Equal(t, "resume_checkpoint", checkpointWithSkill.Reason)
-	assert.True(t, checkpointWithSkill.ResumeResponseSupported)
-	assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", checkpointWithSkill.NextAction)
-	assert.Equal(t, "checkpoint_resume", checkpointWithSkill.NextActionKind)
-	assert.Empty(t, checkpointWithSkill.NextCommand)
 }
 
 func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
@@ -2329,8 +2264,8 @@ func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
 	require.Contains(t, payload, "confirmation_requirement")
 	confirmation := payload["confirmation_requirement"].(map[string]any)
 	require.Equal(t, "hard_stop", confirmation["boundary"])
-	assert.Equal(t, false, confirmation["resume_response_supported"])
-	assert.Equal(t, "run governance skill code-quality-review and record evidence; --resume-response is only for active checkpoints", confirmation["next_action"])
+	assert.NotContains(t, confirmation, "resume_response_supported")
+	assert.Equal(t, "run governance skill code-quality-review and record evidence", confirmation["next_action"])
 	assert.Equal(t, "skill_handoff", confirmation["next_action_kind"])
 }
 
@@ -2454,37 +2389,6 @@ func TestNextHandoffViewStopBudgetKeepsRecoveryPathsWithoutDiagnostics(t *testin
 	assert.NotContains(t, s, "required_actions")
 	assert.NotContains(t, s, "skill_evidence")
 	assert.NotContains(t, s, "breakdown")
-}
-
-func TestRunRequiresResumeResponseForActiveCheckpoint(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint requires response")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:   "task-01",
-			CheckpointType: "human_verify",
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--diagnostics"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--resume-response")
-		assert.Contains(t, err.Error(), "task-01")
-	})
 }
 
 func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
@@ -2656,245 +2560,6 @@ func TestRunDoesNotRequireResumeWhenPlanningEvidenceIsStale(t *testing.T) {
 	})
 }
 
-func TestRunResumesCheckpointWithValidResponse(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "test checkpoint resume")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  "human_verify",
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
-
-- [ ] `+"`task-01`"+` first wave
-  - depends_on: []
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` checkpointed second wave
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-
-		// Resume checkpoint should carry the response payload
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.Equal(t, "task-02", view.InputContext.ResumeCheckpoint.PausedTaskID)
-		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
-		assert.Equal(t, "verified ok", view.InputContext.ResumeCheckpoint.UserResponsePayload)
-
-		// Active checkpoint should be cleared from change state
-		change, err = state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Nil(t, change.ActiveCheckpoint)
-	})
-}
-
-func TestRunRejectsResumeResponseWhenWaveArtifactsAreMissing(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response should fail closed when wave artifacts are missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
-- [x] `+"`task-01`"+` completed first wave
-  - depends_on: []
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` pending checkpointed wave
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-	})
-}
-
-func TestRunRejectsResumeResponseWhenCheckpointTaskIsMissingFromCurrentTasks(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "run resume-response should fail closed when checkpoint task is missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--resume-response", "verified ok", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "checkpoint_task_missing_from_wave_plan", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-
-		after, loadErr := state.LoadChange(root, slug)
-		require.NoError(t, loadErr)
-		require.NotNil(t, after.ActiveCheckpoint)
-		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
-	})
-}
-
-func TestNextRejectsCheckpointContextWhenWaveArtifactsAreMissing(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should fail closed when checkpoint wave artifacts are missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		writePassingExecutionSummary(t, root, slug, 1, "task-01")
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`
-- [x] `+"`task-01`"+` completed first wave
-  - depends_on: []
-  - target_files: ["cmd/next.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` pending checkpointed wave
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/next.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		cmd := commandForRoot(t, root, makeNextCmd())
-		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "wave_runs_missing", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-	})
-}
-
-func TestNextRejectsCheckpointContextWhenCheckpointTaskIsMissingFromCurrentTasks(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should fail closed when checkpoint task is missing")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  string(model.CheckpointHumanVerify),
-		}
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := commandForRoot(t, root, makeNextCmd())
-		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "checkpoint_task_missing_from_wave_plan", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-
-		after, loadErr := state.LoadChange(root, slug)
-		require.NoError(t, loadErr)
-		require.NotNil(t, after.ActiveCheckpoint)
-		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
-	})
-}
-
 func TestRunRejectsResumeWhenWaveRunsAreIncomplete(t *testing.T) {
 	t.Parallel()
 
@@ -2977,193 +2642,44 @@ func TestRunResumeUnavailableExplainsLifecycleBoundary(t *testing.T) {
 	})
 }
 
-func TestRunRejectsInvalidAllowedResponse(t *testing.T) {
+func TestShouldStopRunLoopDoesNotStopForExecutionResumeContext(t *testing.T) {
+	t.Parallel()
+
+	view := nextView{
+		CurrentState: model.StateS2Implement,
+		Advanced:     &progression.AdvanceSummary{Action: "advanced"},
+		InputContext: nextContext{
+			ExecutionResume: &executionResumeContext{
+				RunSummaryVersion: 1,
+				CompletedTaskIDs:  []string{"task-01"},
+				ResumeWaveIndex:   2,
+			},
+		},
+	}
+
+	assert.False(t, shouldStopRunLoop(view))
+}
+
+func TestNextIncludesFreshnessInExecutionResume(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "test allowed responses")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:     "task-02",
-			PausedWaveIndex:  2,
-			CheckpointType:   "decision",
-			AllowedResponses: []string{"approve", "reject", "defer"},
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
-
-- [ ] `+"`task-01`"+` first wave
-  - depends_on: []
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` decision checkpoint
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/run.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		// Invalid response
-		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json", "--resume-response", "maybe"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		err = cmd.Execute()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "maybe")
-		assert.Contains(t, err.Error(), "approve")
-
-		// Valid response (case-insensitive)
-		cmd2 := commandForRoot(t, root, makeRunCmd())
-		cmd2.SetArgs([]string{"--json", "--resume-response", "Approve"})
-		buf.Reset()
-		cmd2.SetOut(&buf)
-		require.NoError(t, cmd2.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.Equal(t, "Approve", view.InputContext.ResumeCheckpoint.UserResponsePayload)
-	})
-}
-
-func TestValidateResumeResponseUnit(t *testing.T) {
-	t.Parallel()
-	t.Run("empty response rejected", func(t *testing.T) {
-		cp := &model.ActiveCheckpoint{
-			PausedTaskID:   "task-x",
-			CheckpointType: "human_verify",
-		}
-		err := validateResumeResponse(cp, "")
-		require.Error(t, err)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "resume_response_required", cliErr.ErrorCode)
-		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
-		assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
-	})
-
-	t.Run("free-form response accepted when no allowed list", func(t *testing.T) {
-		cp := &model.ActiveCheckpoint{
-			PausedTaskID:   "task-x",
-			CheckpointType: "human_verify",
-		}
-		err := validateResumeResponse(cp, "looks good")
-		require.NoError(t, err)
-	})
-
-	t.Run("response must match allowed list", func(t *testing.T) {
-		cp := &model.ActiveCheckpoint{
-			PausedTaskID:     "task-x",
-			CheckpointType:   "decision",
-			AllowedResponses: []string{"yes", "no"},
-		}
-		require.NoError(t, validateResumeResponse(cp, "yes"))
-		require.NoError(t, validateResumeResponse(cp, "YES"))
-		err := validateResumeResponse(cp, "maybe")
-		require.Error(t, err)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "resume_response_invalid", cliErr.ErrorCode)
-		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
-		assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
-	})
-
-	t.Run("decision checkpoints require configured allowed responses", func(t *testing.T) {
-		cp := &model.ActiveCheckpoint{
-			PausedTaskID:   "task-x",
-			CheckpointType: "decision",
-		}
-		err := validateResumeResponse(cp, "yes")
-		require.Error(t, err)
-		cliErr := asCLIError(err)
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "checkpoint_config_invalid", cliErr.ErrorCode)
-		assert.Equal(t, categoryStateIntegrity, cliErr.Category)
-		assert.Equal(t, exitCodeStateIntegrity, cliErr.ExitCode)
-	})
-}
-
-func TestShouldStopRunLoopOnlyForPendingCheckpoint(t *testing.T) {
-	t.Parallel()
-	t.Run("informational resume progress does not stop run", func(t *testing.T) {
-		view := nextView{
-			CurrentState: model.StateS2Implement,
-			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
-			InputContext: nextContext{
-				ResumeCheckpoint: &resumeCheckpoint{
-					RunSummaryVersion: 1,
-					CompletedTaskIDs:  []string{"task-01"},
-					ResumeWaveIndex:   2,
-				},
-			},
-		}
-		assert.False(t, shouldStopRunLoop(view))
-	})
-
-	t.Run("checkpoint response payload does not stop run", func(t *testing.T) {
-		view := nextView{
-			CurrentState: model.StateS2Implement,
-			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
-			InputContext: nextContext{
-				ResumeCheckpoint: &resumeCheckpoint{
-					PausedTaskID:        "task-02",
-					PausedWaveIndex:     2,
-					CheckpointType:      string(model.CheckpointHumanVerify),
-					UserResponsePayload: "approved",
-				},
-			},
-		}
-		assert.False(t, shouldStopRunLoop(view))
-	})
-
-	t.Run("pending checkpoint still stops run", func(t *testing.T) {
-		view := nextView{
-			CurrentState: model.StateS2Implement,
-			Advanced:     &progression.AdvanceSummary{Action: "advanced"},
-			InputContext: nextContext{
-				ResumeCheckpoint: &resumeCheckpoint{
-					PausedTaskID:    "task-02",
-					PausedWaveIndex: 2,
-					CheckpointType:  string(model.CheckpointHumanVerify),
-				},
-			},
-		}
-		assert.True(t, shouldStopRunLoop(view))
-	})
-}
-
-func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "test freshness in checkpoint")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "test freshness in execution resume")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
 		// Set to wave execution state with persisted execution summary
-		// and some completed tasks to trigger resume checkpoint.
+		// and some completed tasks to trigger execution resume context.
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "task-01")
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
-- [x] `+"`task-01`"+` refresh checkpoint freshness
+- [x] `+"`task-01`"+` refresh execution resume freshness
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -3178,15 +2694,15 @@ func TestNextIncludesFreshnessInResumeCheckpoint(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.NotEmpty(t, view.InputContext.ResumeCheckpoint.Freshness,
-			"resume checkpoint should include freshness field")
+		require.NotNil(t, view.InputContext.ExecutionResume)
+		assert.NotEmpty(t, view.InputContext.ExecutionResume.Freshness,
+			"execution resume should include freshness field")
 		assert.Contains(t, []string{"fresh", "stale", "unknown"},
-			view.InputContext.ResumeCheckpoint.Freshness)
+			view.InputContext.ExecutionResume.Freshness)
 	})
 }
 
-func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSummary(t *testing.T) {
+func TestNextDoesNotBuildExecutionResumeFromChecklistWithoutReadyExecutionSummary(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -3229,18 +2745,18 @@ func TestNextDoesNotBuildResumeCheckpointFromChecklistWithoutReadyExecutionSumma
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		assert.Nil(t, view.InputContext.ResumeCheckpoint)
+		assert.Nil(t, view.InputContext.ExecutionResume)
 	})
 }
 
-func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t *testing.T) {
+func TestNextDoesNotRetainExecutionResumeWhenOnlyChecklistMarksTasksComplete(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "bundle checkpoint without skip-safe tasks")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "bundle resume without skip-safe tasks")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -3275,7 +2791,7 @@ func TestNextDoesNotRetainResumeCheckpointWhenOnlyChecklistMarksTasksComplete(t 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		assert.Nil(t, view.InputContext.ResumeCheckpoint)
+		assert.Nil(t, view.InputContext.ExecutionResume)
 	})
 }
 
@@ -3482,24 +2998,19 @@ func TestNextPreviewUsesCurrentTasksDuringS2Implementation(t *testing.T) {
 	})
 }
 
-func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
+func TestNextPreviewIncludesExecutionResumeContext(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview checkpoint bundle")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "preview execution resume context")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-09",
-			PausedWaveIndex: 2,
-			CheckpointType:  "human_verify",
-		}
 		require.NoError(t, state.SaveChange(root, change))
 		writeExecutionSummary(t, root, slug, model.ExecutionSummary{
 			Version:           model.ExecutionSummaryVersion,
@@ -3519,11 +3030,11 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`# Tasks
 
-- [x] `+"`task-01`"+` preserve preview checkpoint context
+- [x] `+"`task-01`"+` preserve preview resume context
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 
-- [ ] `+"`task-09`"+` pending checkpoint task
+- [ ] `+"`task-09`"+` pending resume task
   - depends_on: ["task-01"]
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
@@ -3539,82 +3050,19 @@ func TestNextPreviewIncludesActiveCheckpointBundle(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.Equal(t, 3, view.InputContext.ResumeCheckpoint.RunSummaryVersion)
-		assert.Equal(t, "task-09", view.InputContext.ResumeCheckpoint.PausedTaskID)
-		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
-		assert.Equal(t, []string{"task-01"}, view.InputContext.ResumeCheckpoint.CompletedTaskIDs)
-		assert.NotEmpty(t, view.InputContext.ResumeCheckpoint.Freshness)
+		require.NotNil(t, view.InputContext.ExecutionResume)
+		assert.Equal(t, 3, view.InputContext.ExecutionResume.RunSummaryVersion)
+		assert.Equal(t, []string{"task-01"}, view.InputContext.ExecutionResume.CompletedTaskIDs)
+		assert.Equal(t, 2, view.InputContext.ExecutionResume.ResumeWaveIndex)
+		assert.NotEmpty(t, view.InputContext.ExecutionResume.Freshness)
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		require.NotNil(t, after.ActiveCheckpoint, "preview mode must not clear active checkpoint")
-		assert.Equal(t, "task-09", after.ActiveCheckpoint.PausedTaskID)
+		assert.Equal(t, model.StateS2Implement, after.CurrentState)
 	})
 }
 
-func TestNextIncludesActiveCheckpointWithoutRequiringResumeResponse(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "next should inspect active checkpoint without resume response")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-
-		change.CurrentState = model.StateS2Implement
-		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedTaskID:    "task-02",
-			PausedWaveIndex: 2,
-			CheckpointType:  "human_verify",
-		}
-		require.NoError(t, state.SaveChange(root, change))
-		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
-		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
-
-- [ ] `+"`task-01`"+` first wave
-  - depends_on: []
-  - target_files: ["cmd/next_context_build.go"]
-  - task_kind: code
-
-- [ ] `+"`task-02`"+` active checkpoint task
-  - depends_on: ["task-01"]
-  - target_files: ["cmd/next_context_build.go"]
-  - task_kind: code
-`)))
-		_, err = state.MaterializeWavePlan(root, change)
-		require.NoError(t, err)
-
-		cmd := commandForRoot(t, root, makeNextCmd())
-		cmd.SetArgs([]string{"--json"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.Equal(t, "task-02", view.InputContext.ResumeCheckpoint.PausedTaskID)
-		assert.Equal(t, "human_verify", view.InputContext.ResumeCheckpoint.CheckpointType)
-		assert.Empty(t, view.InputContext.ResumeCheckpoint.UserResponsePayload)
-		assert.True(t, view.ConfirmationRequirement.Required)
-		assert.Equal(t, "hard_stop", view.ConfirmationRequirement.Boundary)
-		assert.Equal(t, "resume_checkpoint", view.ConfirmationRequirement.Reason)
-		assert.True(t, view.ConfirmationRequirement.ResumeResponseSupported)
-		assert.Equal(t, "resume pending checkpoint with slipway run --resume-response", view.ConfirmationRequirement.NextAction)
-
-		after, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		require.NotNil(t, after.ActiveCheckpoint, "next inspection must not consume the active checkpoint")
-		assert.Equal(t, "task-02", after.ActiveCheckpoint.PausedTaskID)
-	})
-}
-
-func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
+func TestNextExecutionResumeFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -3663,7 +3111,7 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 		})
 		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
-- [x] `+"`task-01`"+` preserve stale freshness on resume
+- [x] `+"`task-01`"+` preserve stale freshness on execution resume
   - target_files: ["cmd/next_context_build.go"]
   - task_kind: code
 `)))
@@ -3680,8 +3128,8 @@ func TestNextResumeCheckpointFreshnessTurnsStaleAfterInputUpdate(t *testing.T) {
 
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.InputContext.ResumeCheckpoint)
-		assert.Equal(t, "stale", view.InputContext.ResumeCheckpoint.Freshness)
+		require.NotNil(t, view.InputContext.ExecutionResume)
+		assert.Equal(t, "stale", view.InputContext.ExecutionResume.Freshness)
 	})
 }
 

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -13,13 +12,12 @@ import (
 
 func makeRunCmd() *cobra.Command {
 	var (
-		jsonOutput     bool
-		resume         bool
-		resumeResponse string
-		diagnostics    bool
-		changeSlug     string
-		auto           bool
-		noAuto         bool
+		jsonOutput  bool
+		resume      bool
+		diagnostics bool
+		changeSlug  string
+		auto        bool
+		noAuto      bool
 	)
 
 	cmd := &cobra.Command{
@@ -29,9 +27,6 @@ func makeRunCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromCommand(cmd)
 			if err != nil {
-				return err
-			}
-			if err := validateRunFlags(resume, resumeResponse); err != nil {
 				return err
 			}
 
@@ -46,20 +41,10 @@ func makeRunCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "run", func() error {
-				// Auto-acknowledge a non-sensitive human_verify checkpoint at the
-				// entry path so entry validation passes and the loop continues past
-				// it. The injected response flows through both entry validation and
-				// the loop, so the checkpoint is consumed exactly as an operator
-				// --resume-response would. Decision/human_action/guardrail checkpoints
-				// are deliberately left untouched and still fail closed.
-				effectiveResumeResponse, autoCheckpointAcknowledged, err := autoAckResumeResponse(root, ref, effectiveAuto, resume, resumeResponse)
-				if err != nil {
+				if err := validateRunEntry(root, ref, resume); err != nil {
 					return err
 				}
-				if err := validateRunEntry(root, ref, resume, effectiveResumeResponse); err != nil {
-					return err
-				}
-				view, err := runGovernedLoop(root, ref, effectiveResumeResponse, effectiveAuto, autoCheckpointAcknowledged)
+				view, err := runGovernedLoop(root, ref, effectiveAuto)
 				if err != nil {
 					return err
 				}
@@ -102,8 +87,7 @@ func makeRunCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave when no active checkpoint exists")
-	cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused checkpoint")
+	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	cmd.Flags().BoolVar(&auto, "auto", false, "Force auto-advance execution for this run, overriding execution.auto config")
 	cmd.Flags().BoolVar(&noAuto, "no-auto", false, "Force manual advancement for this run, overriding execution.auto config")
@@ -134,60 +118,6 @@ func resolveEffectiveAuto(root string, cmd *cobra.Command, auto, noAuto bool) (b
 	return cfg.Execution.AutoEnabled(), nil
 }
 
-// autoAckResumeResponse returns the resume response to use for entry validation
-// and the run loop. When auto is effective, no operator response was supplied,
-// and an active checkpoint is a non-sensitive human_verify, it injects a
-// standing auto acknowledgment so the entry validator permits continuation and
-// the loop consumes the checkpoint. Decision and human_action checkpoints, and
-// any checkpoint in a guardrail/sensitive domain, are never auto-acknowledged —
-// they keep failing closed exactly as in the non-auto path.
-func autoAckResumeResponse(root string, ref changeRef, auto, resume bool, resumeResponse string) (string, bool, error) {
-	if !auto || resume || strings.TrimSpace(resumeResponse) != "" {
-		return resumeResponse, false, nil
-	}
-	change, err := state.LoadChange(root, ref.Slug)
-	if err != nil {
-		return "", false, err
-	}
-	eligible, err := autoAckEligibleCheckpoint(root, change)
-	if err != nil {
-		return "", false, err
-	}
-	if !eligible {
-		return resumeResponse, false, nil
-	}
-	return autoAcknowledgedResponse, true, nil
-}
-
-// autoAckEligibleCheckpoint reports whether the change has an active checkpoint
-// that may be auto-acknowledged under auto: a FRESH human_verify checkpoint in a
-// non-guardrail change. Decision and human_action checkpoints, and any checkpoint
-// in a guardrail/sensitive domain, are excluded so they remain manual. A stale or
-// unknown-freshness checkpoint is also excluded: auto must never silently consume
-// outdated checkpoint state, so it keeps failing closed to the manual hard stop
-// exactly as in the non-auto path.
-func autoAckEligibleCheckpoint(root string, change model.Change) (bool, error) {
-	if change.ActiveCheckpoint == nil {
-		return false, nil
-	}
-	if isGuardrailSensitive(change.GuardrailDomain) {
-		return false, nil
-	}
-	if model.CheckpointKind(change.ActiveCheckpoint.CheckpointType) != model.CheckpointHumanVerify {
-		return false, nil
-	}
-	execCtx, err := loadExecutionContext(root, change)
-	if err != nil {
-		return false, err
-	}
-	freshness := projectFreshnessForExecMode(root, change, execCtx.Summary, execCtx.SummaryBlockers)
-	return freshness == string(ctxpack.EvidenceFreshnessFresh), nil
-}
-
-// autoAcknowledgedResponse is the standing response injected for an
-// auto-acknowledged non-sensitive human_verify checkpoint.
-const autoAcknowledgedResponse = "auto-acknowledged"
-
 // isGuardrailSensitive reports whether a change's guardrail domain marks it as a
 // sensitive domain that must keep failing closed to manual review under auto.
 //
@@ -199,29 +129,14 @@ func isGuardrailSensitive(guardrailDomain string) bool {
 	return strings.TrimSpace(guardrailDomain) != ""
 }
 
-func validateRunFlags(resume bool, resumeResponse string) error {
-	if resume && strings.TrimSpace(resumeResponse) != "" {
-		return newCLIError(
-			categoryInvalidUsage,
-			"flag_conflict",
-			"--resume cannot be used with --resume-response",
-			"Use --resume for non-checkpoint resumes, or --resume-response for active checkpoints.",
-			"",
-			nil,
-		)
-	}
-	return nil
-}
-
-func validateRunEntry(root string, ref changeRef, resume bool, resumeResponse string) error {
-	return validateResumeEntryForCommand(root, ref, resume, resumeResponse, "run")
+func validateRunEntry(root string, ref changeRef, resume bool) error {
+	return validateResumeEntryForCommand(root, ref, resume, "run")
 }
 
 func validateResumeEntryForCommand(
 	root string,
 	ref changeRef,
 	resume bool,
-	resumeResponse string,
 	commandName string,
 ) error {
 	commandName = strings.TrimSpace(commandName)
@@ -235,24 +150,6 @@ func validateResumeEntryForCommand(
 	execCtx, err := loadExecutionContext(root, change)
 	if err != nil {
 		return err
-	}
-
-	if change.ActiveCheckpoint != nil {
-		if resume {
-			return newInvalidUsageError(
-				"resume_response_required",
-				"active checkpoint exists; use --resume-response instead of --resume",
-				"Resume the active checkpoint with `slipway "+commandName+" --resume-response \"<response>\"`.",
-				nil,
-			)
-		}
-		if strings.TrimSpace(resumeResponse) == "" {
-			return validateResumeResponse(change.ActiveCheckpoint, "")
-		}
-		if err := validateActiveCheckpointAuthority(root, change, execCtx, commandName); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, commandName)
@@ -314,47 +211,38 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 func runGovernedLoop(
 	root string,
 	ref changeRef,
-	resumeResponse string,
 	auto bool,
-	autoCheckpointAcknowledged bool,
 ) (nextView, error) {
-	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
-	buildNext := func(nextResumeResponse string) (nextView, error) {
+	buildNext := func() (nextView, error) {
 		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
-			ResumeResponse:             nextResumeResponse,
-			AutoSkipEvidence:           true,
-			Command:                    "run",
-			Auto:                       auto,
-			AutoCheckpointAcknowledged: nextAutoCheckpointAcknowledged,
+			AutoSkipEvidence: true,
+			Command:          "run",
+			Auto:             auto,
 		})
-		nextAutoCheckpointAcknowledged = false
 		return view, err
 	}
-	return runGovernedLoopWithBuilder(root, ref, resumeResponse, buildNext)
+	return runGovernedLoopWithBuilder(root, ref, buildNext)
 }
 
 func runGovernedLoopWithBuilder(
 	root string,
 	ref changeRef,
-	resumeResponse string,
-	buildNext func(string) (nextView, error),
+	buildNext func() (nextView, error),
 ) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
-	nextResumeResponse := resumeResponse
 	delegatedTo := "run"
 	if change, err := state.LoadChange(root, ref.Slug); err == nil {
 		delegatedTo = primaryCommandForState(change.CurrentState)
 	}
 	for i := 0; i < maxIterations; i++ {
-		view, err := buildNext(nextResumeResponse)
+		view, err := buildNext()
 		if err != nil {
 			return nextView{}, err
 		}
 		setRunDelegation(&view, delegatedTo)
-		nextResumeResponse = ""
 		lastView = view
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)
@@ -375,8 +263,6 @@ func shouldStopRunLoop(view nextView) bool {
 		return true
 	case len(view.Blockers) > 0:
 		return true
-	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
-		return true
 	case view.Advanced != nil && view.Advanced.Action == "done_ready":
 		return true
 	case view.NextSkill != nil:
@@ -386,14 +272,4 @@ func shouldStopRunLoop(view nextView) bool {
 	default:
 		return false
 	}
-}
-
-func hasPendingRunCheckpoint(checkpoint *resumeCheckpoint) bool {
-	if checkpoint == nil {
-		return false
-	}
-	if strings.TrimSpace(checkpoint.PausedTaskID) == "" {
-		return false
-	}
-	return strings.TrimSpace(checkpoint.UserResponsePayload) == ""
 }

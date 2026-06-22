@@ -16,7 +16,6 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 	commands := map[string]func() *cobra.Command{
 		"abort":        makeAbortCmd,
 		"cancel":       makeCancelCmd,
-		"checkpoint":   makeCheckpointCmd,
 		"codebase-map": makeCodebaseMapCmd,
 		"done":         makeDoneCmd,
 		"fix":          makeFixCmd,
@@ -24,7 +23,6 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 		"implement":    makeImplementCmd,
 		"init":         makeInitCmd,
 		"intake":       makeIntakeCmd,
-		"learn":        makeLearnCmd,
 		"new":          makeNewCmd,
 		"next":         makeNextCmd,
 		"plan":         makePlanCmd,
@@ -32,7 +30,6 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 		"repair":       makeRepairCmd,
 		"review":       makeReviewCmd,
 		"run":          makeRunCmd,
-		"stats":        makeStatsCmd,
 		"status":       makeStatusCmd,
 		"tool":         makeToolCmd,
 		"validate":     makeValidateCmd,

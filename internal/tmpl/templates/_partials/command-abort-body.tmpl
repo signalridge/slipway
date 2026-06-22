@@ -12,14 +12,13 @@ slipway abort --json
 - Only valid for an active change in `S2_IMPLEMENT`; outside `S2_IMPLEMENT` it errors
   `abort_state_invalid` — use `slipway cancel` (terminate + archive) instead.
 - Interrupts in-flight task processes using the standard preemption helpers.
-- Clears the active checkpoint, if any.
 - Preserves the governed change for later inspection or resume.
 - To continue later, run the exact command the abort/`status` output names — it is
   computed per state: `slipway run` (nothing resumable), `slipway run --resume`
-  (an incomplete wave is resumable), or `slipway run --resume-response "<text>"`
-  (a checkpoint is pending). Bare `slipway run` does not silently auto-resume: if
-  a wave is resumable it fails closed with `resume_required` and asks for
-  `--resume`. Use `slipway cancel` instead if the change should terminate and archive.
+  (an incomplete wave is resumable). Bare `slipway run` does not silently
+  auto-resume: if a wave is resumable it fails closed with `resume_required`
+  and asks for `--resume`. Use `slipway cancel` instead if the change should
+  terminate and archive.
 - If post-abort execution integrity is degraded, the CLI routes you to
   `slipway repair` to restore integrity, then `slipway run` to clear the
   interrupted-execution marker and continue.

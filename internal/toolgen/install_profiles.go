@@ -50,11 +50,10 @@ var namespaceRouterDefinitions = []namespaceRouterDefinition{
 	{
 		ID:      "surface-recovery",
 		Title:   "Recovery Surfaces",
-		Summary: "Use when a governed change needs recovery, cancellation, checkpoint, or repair routing without bypassing the lifecycle.",
+		Summary: "Use when a governed change needs recovery, cancellation, or repair routing without bypassing the lifecycle.",
 		CommandIDs: []string{
 			"repair",
 			"fix",
-			"checkpoint",
 			"cancel",
 			"delete",
 			"abort",
@@ -73,13 +72,11 @@ var namespaceRouterDefinitions = []namespaceRouterDefinition{
 	{
 		ID:      "surface-diagnostics",
 		Title:   "Diagnostic Surfaces",
-		Summary: "Use when you need status, health, statistics, learning, or generated-authoring diagnostics without changing lifecycle state.",
+		Summary: "Use when you need status, health, or generated-authoring diagnostics without changing lifecycle state.",
 		CommandIDs: []string{
 			"status",
 			"health",
 			"validate",
-			"learn",
-			"stats",
 			"instructions",
 		},
 		HostSkillIDs: []string{

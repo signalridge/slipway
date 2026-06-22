@@ -256,33 +256,6 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 
 	findings = append(findings, runtimeStateHealthFindings(change)...)
 
-	if change.ActiveCheckpoint != nil && change.CurrentState != model.StateS2Implement {
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityError,
-			Category:   "execution_checkpoint",
-			Slug:       change.Slug,
-			Message:    "Active checkpoint exists outside S2_IMPLEMENT",
-			Repairable: true,
-			RepairHint: "Run `slipway repair` to clear the stale checkpoint and rewrite execution state.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("stale_checkpoint_state", string(change.CurrentState))},
-		})
-	}
-	if change.ActiveCheckpoint != nil && change.CurrentState == model.StateS2Implement {
-		if staleAfter := checkpointStaleAfter(root); staleAfter > 0 &&
-			!change.ActiveCheckpoint.PausedAt.IsZero() &&
-			nowUTC().Sub(change.ActiveCheckpoint.PausedAt) > staleAfter {
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityWarning,
-				Category:   "execution_checkpoint",
-				Slug:       change.Slug,
-				Message:    "Active checkpoint has exceeded the stale threshold",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` to clear the stale checkpoint before resuming execution.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("checkpoint_stale", change.ActiveCheckpoint.PausedAt.UTC().Format(time.RFC3339))},
-			})
-		}
-	}
-
 	if !relevantWaveExecutionState(change.CurrentState) {
 		return findings, nil
 	}
@@ -353,32 +326,6 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_drift", currentHash)},
 			})
 			return findings, nil
-		}
-	}
-
-	if change.ActiveCheckpoint != nil {
-		expectedWaveIndex := plan.WaveIndexForTask(change.ActiveCheckpoint.PausedTaskID)
-		switch {
-		case expectedWaveIndex == 0:
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityError,
-				Category:   "execution_checkpoint",
-				Slug:       change.Slug,
-				Message:    "Checkpoint task is not present in the current wave plan",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` to clear the stale checkpoint before resuming execution.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("checkpoint_task_missing_from_wave_plan", change.ActiveCheckpoint.PausedTaskID)},
-			})
-		case change.ActiveCheckpoint.PausedWaveIndex != expectedWaveIndex:
-			findings = append(findings, HealthFinding{
-				Severity:   model.ReasonSeverityWarning,
-				Category:   "execution_checkpoint",
-				Slug:       change.Slug,
-				Message:    "Checkpoint wave index does not match the current wave plan",
-				Repairable: true,
-				RepairHint: "Run `slipway repair` to rewrite the checkpoint wave index.",
-				Reasons:    []model.ReasonCode{model.NewReasonCode("checkpoint_wave_index_drift", fmt.Sprintf("%d", expectedWaveIndex))},
-			})
 		}
 	}
 
@@ -550,14 +497,6 @@ func legacyRuntimeHygieneFindings(root string) ([]HealthFinding, error) {
 	}
 
 	return findings, nil
-}
-
-func checkpointStaleAfter(root string) time.Duration {
-	cfg, err := model.LoadConfig(ConfigPath(root))
-	if err != nil || cfg.Execution.LockStaleAfterSeconds <= 0 {
-		return 0
-	}
-	return time.Duration(cfg.Execution.LockStaleAfterSeconds) * time.Second
 }
 
 func dedicatedWorktreeHealthReasons(root string, change model.Change) ([]model.ReasonCode, error) {

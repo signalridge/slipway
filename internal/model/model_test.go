@@ -206,11 +206,6 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 		"plan-audit": "evidence/governance/plan-audit.json",
 	}
 	change.InterruptedExecutionAt = createdAt.Add(2 * time.Hour)
-	change.ActiveCheckpoint = &ActiveCheckpoint{
-		PausedTaskID:     "task-01",
-		CheckpointType:   string(CheckpointDecision),
-		AllowedResponses: []string{"approved", "needs_changes"},
-	}
 	change.Normalize()
 
 	raw, err := yaml.Marshal(change)
@@ -249,8 +244,6 @@ func TestChangeMarshalUnmarshalRoundTripNewFormat(t *testing.T) {
 	assert.Equal(t, change.EvidenceRefs, decoded.EvidenceRefs)
 	assert.Equal(t, change.ReviewIntentDriftFailures, decoded.ReviewIntentDriftFailures)
 	assert.True(t, change.InterruptedExecutionAt.Equal(decoded.InterruptedExecutionAt))
-	require.NotNil(t, decoded.ActiveCheckpoint)
-	assert.Equal(t, *change.ActiveCheckpoint, *decoded.ActiveCheckpoint)
 }
 
 func TestChangeUnmarshalYAMLParsesInterruptedExecutionAt(t *testing.T) {
@@ -716,19 +709,4 @@ func TestChangeAuthorityIncludesRuntimeFields(t *testing.T) {
 	assert.Contains(t, string(b), "evidence_refs:")
 	assert.Contains(t, string(b), "last_auto_passed_states:")
 	assert.Contains(t, string(b), "review_intent_drift_failures:")
-}
-
-func TestActiveCheckpointRequiresPausedTaskID(t *testing.T) {
-	t.Parallel()
-
-	cp := ActiveCheckpoint{
-		CheckpointType: string(CheckpointHumanVerify),
-	}
-	require.ErrorContains(t, cp.Validate(), "paused_task_id is required")
-
-	cp.PausedTaskID = "   "
-	require.ErrorContains(t, cp.Validate(), "paused_task_id is required")
-
-	cp.PausedTaskID = "task-01"
-	require.NoError(t, cp.Validate())
 }

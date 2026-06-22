@@ -749,20 +749,6 @@ func doctorResumeAction(root, changeSlug string) (*doctorAction, error) {
 	if err != nil {
 		return nil, nil
 	}
-	if change.ActiveCheckpoint != nil {
-		if err := validateActiveCheckpointAuthority(root, *change, execCtx, "doctor"); err != nil {
-			return nil, nil
-		}
-		return &doctorAction{
-			Priority:   90,
-			Category:   "execution_resume",
-			Slug:       change.Slug,
-			Summary:    "Execution can continue once the active checkpoint receives a response",
-			Command:    `slipway run --resume-response "<response>"`,
-			Repairable: false,
-		}, nil
-	}
-
 	if !execCtx.Ready {
 		return nil, nil
 	}

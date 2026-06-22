@@ -112,7 +112,6 @@ func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 			entry["covers"] = append([]string(nil), task.Covers...)
 			entry["evidence"] = strings.TrimSpace(task.Evidence)
 			entry["acceptance"] = strings.TrimSpace(task.Acceptance)
-			entry["checkpoint_type"] = strings.TrimSpace(task.CheckpointType)
 		case taskPlanHashScope:
 			entry["target_files"] = append([]string(nil), task.TargetFiles...)
 		default:
@@ -123,7 +122,6 @@ func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 			entry["covers"] = append([]string(nil), task.Covers...)
 			entry["evidence"] = strings.TrimSpace(task.Evidence)
 			entry["acceptance"] = strings.TrimSpace(task.Acceptance)
-			entry["checkpoint_type"] = strings.TrimSpace(task.CheckpointType)
 		}
 		tasks = append(tasks, entry)
 	}
@@ -137,13 +135,12 @@ func taskPlanHash(content string, mode taskPlanHashMode) (string, error) {
 // allowedMetadataKeys is the union of required + optional keys accepted by
 // the checkbox-native contract.
 var allowedMetadataKeys = map[string]struct{}{
-	"depends_on":      {},
-	"target_files":    {},
-	"task_kind":       {},
-	"covers":          {},
-	"evidence":        {},
-	"acceptance":      {},
-	"checkpoint_type": {},
+	"depends_on":   {},
+	"target_files": {},
+	"task_kind":    {},
+	"covers":       {},
+	"evidence":     {},
+	"acceptance":   {},
 }
 
 func parseCheckboxTaskPlan(content string) (TaskPlan, error) {
@@ -217,17 +214,16 @@ func parseCheckboxTaskPlan(content string) (TaskPlan, error) {
 }
 
 type taskNodeBuilder struct {
-	taskID         string
-	objective      string
-	dependsOn      []string
-	targetFiles    []string
-	taskKind       string
-	checkpointType string
-	covers         []string
-	evidence       string
-	acceptance     string
-	completed      bool
-	seenKeys       map[string]struct{}
+	taskID      string
+	objective   string
+	dependsOn   []string
+	targetFiles []string
+	taskKind    string
+	covers      []string
+	evidence    string
+	acceptance  string
+	completed   bool
+	seenKeys    map[string]struct{}
 }
 
 // applyStrictMetadata enforces the checkbox-native contract: rejects the
@@ -265,8 +261,6 @@ func (b *taskNodeBuilder) applyMetadata(key, value string) error {
 		b.acceptance = cleanValue(value)
 	case "objective":
 		b.objective = cleanValue(value)
-	case "checkpoint_type":
-		b.checkpointType = cleanValue(value)
 	}
 	return nil
 }
@@ -298,12 +292,11 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 
 	return TaskNode{
 		Node: Node{
-			TaskID:         b.taskID,
-			Objective:      b.objective,
-			DependsOn:      append([]string(nil), b.dependsOn...),
-			TargetFiles:    normalizeTargetFiles(b.targetFiles),
-			TaskKind:       kind,
-			CheckpointType: b.checkpointType,
+			TaskID:      b.taskID,
+			Objective:   b.objective,
+			DependsOn:   append([]string(nil), b.dependsOn...),
+			TargetFiles: normalizeTargetFiles(b.targetFiles),
+			TaskKind:    kind,
 		},
 		Completed:        b.completed,
 		Covers:           append([]string(nil), b.covers...),
