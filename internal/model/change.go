@@ -59,10 +59,6 @@ type Change struct {
 	CallerWorktreeBlastRadius          SignalLevel               `yaml:"caller_worktree_blast_radius,omitempty" json:"caller_worktree_blast_radius,omitempty"`
 	PlanAuditIterations                int                       `yaml:"plan_audit_iterations,omitempty" json:"plan_audit_iterations,omitempty"`
 
-	// Execution
-	ActiveCheckpoint *ActiveCheckpoint `yaml:"active_checkpoint,omitempty" json:"active_checkpoint,omitempty"`
-
-	// Runtime fields are part of change.yaml so active change state has one authority.
 	Artifacts                 map[string]ArtifactState `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
 	LastAutoPassedStates      []AutoPassedState        `yaml:"last_auto_passed_states,omitempty" json:"last_auto_passed_states,omitempty"`
 	EvidenceRefs              map[string]string        `yaml:"evidence_refs,omitempty" json:"evidence_refs,omitempty"`
@@ -239,14 +235,6 @@ func (c Change) Validate() error {
 			return fmt.Errorf("artifacts[%q] has invalid state: %q", key, artifact.State)
 		}
 	}
-	if c.ActiveCheckpoint != nil {
-		if !c.ActiveCheckpoint.PausedAt.IsZero() {
-			c.ActiveCheckpoint.PausedAt = c.ActiveCheckpoint.PausedAt.Round(0).UTC()
-		}
-		if err := c.ActiveCheckpoint.Validate(); err != nil {
-			return fmt.Errorf("active_checkpoint: %w", err)
-		}
-	}
 	// Runtime fields are now part of change.yaml. Validation ensures in-memory
 	// Change consistency for all callers.
 	for i, autoPassed := range c.LastAutoPassedStates {
@@ -285,34 +273,6 @@ func (c *Change) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-// CheckpointKind defines the typed checkpoint semantics for wave execution pauses.
-type CheckpointKind string
-
-const (
-	CheckpointHumanVerify CheckpointKind = "human_verify"
-	CheckpointDecision    CheckpointKind = "decision"
-	CheckpointHumanAction CheckpointKind = "human_action"
-)
-
-func (k CheckpointKind) IsValid() bool {
-	switch k {
-	case CheckpointHumanVerify, CheckpointDecision, CheckpointHumanAction:
-		return true
-	default:
-		return false
-	}
-}
-
-// ActiveCheckpoint tracks a paused checkpoint contract that requires user
-// input before wave execution can resume.
-type ActiveCheckpoint struct {
-	PausedTaskID     string    `yaml:"paused_task_id" json:"paused_task_id"`
-	PausedWaveIndex  int       `yaml:"paused_wave_index,omitempty" json:"paused_wave_index,omitempty"`
-	PausedAt         time.Time `yaml:"paused_at,omitempty" json:"paused_at,omitempty"`
-	CheckpointType   string    `yaml:"checkpoint_type" json:"checkpoint_type"`
-	AllowedResponses []string  `yaml:"allowed_responses,omitempty" json:"allowed_responses,omitempty"`
-}
-
 type AutoPassedState struct {
 	State  WorkflowState `yaml:"state" json:"state"`
 	Reason string        `yaml:"reason" json:"reason"`
@@ -324,23 +284,6 @@ func (s AutoPassedState) Validate() error {
 	}
 	if strings.TrimSpace(s.Reason) == "" {
 		return fmt.Errorf("auto-passed reason is required")
-	}
-	return nil
-}
-
-func (cp ActiveCheckpoint) Validate() error {
-	if strings.TrimSpace(cp.PausedTaskID) == "" {
-		return fmt.Errorf("paused_task_id is required")
-	}
-	if cp.PausedWaveIndex < 0 {
-		return fmt.Errorf("paused_wave_index must be >= 0")
-	}
-	kind := CheckpointKind(cp.CheckpointType)
-	if !kind.IsValid() {
-		return fmt.Errorf("invalid checkpoint_type %q; must be one of: human_verify, decision, human_action", cp.CheckpointType)
-	}
-	if kind == CheckpointDecision && len(cp.AllowedResponses) == 0 {
-		return fmt.Errorf("checkpoint_type=decision requires non-empty allowed_responses")
 	}
 	return nil
 }

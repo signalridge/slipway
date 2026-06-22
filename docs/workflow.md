@@ -56,7 +56,7 @@ Use `run` when you want Slipway to advance until an operator-facing stop:
 slipway run --json --diagnostics
 ```
 
-`run` stops on a surfaced skill, blocker, checkpoint, or done-ready outcome.
+`run` stops on a surfaced skill, blocker, or done-ready outcome.
 
 ## Independence Attestation Tokens
 
@@ -151,7 +151,6 @@ These commands inspect state without mutating lifecycle authority:
 - `slipway next`
 - `slipway status`
 - `slipway validate`
-- `slipway learn --preview`
 
 Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run` when you need gate details, artifact readiness, transition traces, or context-budget diagnostics.
 

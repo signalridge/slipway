@@ -54,9 +54,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"change_bundle_unreadable",
 		"change_is_done",
 		"change_not_active",
-		"checkpoint_stale",
-		"checkpoint_task_missing_from_wave_plan",
-		"checkpoint_wave_index_drift",
 		"closeout_assurance_attestation_missing",
 		"closeout_chain_order_invalid",
 		"closeout_goal_verification_reuse_invalid",
@@ -169,7 +166,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"skill_prompt_surface_missing",
 		"skill_prompt_surface_unreadable",
 		"skill_registry_invalid",
-		"stale_checkpoint_state",
 		"stale_execution_evidence",
 		"stale_planning_evidence",
 		"stale_runtime_binding",
@@ -221,7 +217,6 @@ func canonicalReasonSeveritySnapshot(codes []string) map[string]ReasonSeverity {
 	}
 	for code, severity := range map[string]ReasonSeverity{
 		"change_is_done":                       ReasonSeverityInfo,
-		"checkpoint_stale":                     ReasonSeverityWarning,
 		"codebase_map_freshness_partial":       ReasonSeverityWarning,
 		"codebase_map_freshness_scaffold_only": ReasonSeverityWarning,
 		"codebase_map_freshness_stale":         ReasonSeverityWarning,
@@ -233,7 +228,6 @@ func canonicalReasonSeveritySnapshot(codes []string) map[string]ReasonSeverity {
 		"run_slipway_done_to_finalize":         ReasonSeverityWarning,
 		"run_slipway_run_to_advance":           ReasonSeverityWarning,
 		"session_isolation_warning":            ReasonSeverityWarning,
-		"stale_checkpoint_state":               ReasonSeverityWarning,
 	} {
 		severities[code] = severity
 	}

@@ -18,7 +18,7 @@ page explains the mental model.
 | `done` | Archive terminal state after done-ready closeout. |
 
 `slipway run` is a shortcut driver. It advances until an operator-facing stop:
-a skill handoff, blocker, checkpoint, or done-ready state.
+a skill handoff, blocker, or done-ready state.
 
 ## Read-Only Before Mutation
 

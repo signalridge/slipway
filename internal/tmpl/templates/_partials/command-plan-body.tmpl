@@ -15,7 +15,7 @@ slipway plan --json
 - Same-intent scope changes are change amendments: update the current artifacts and evidence, then continue forward.
 - Do not use a separate recovery command for same-intent artifact changes.
 - Intent conflict is not a plan amendment; start a new governed change.
-- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and evidence gates still stop.
+- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, and evidence gates still stop.
 
 ## Flags
 - `--json`: JSON output

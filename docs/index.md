@@ -33,8 +33,8 @@ Slipway keeps these core surfaces separate:
 | `artifacts/codebase/**` | Durable repo-scoped context for brownfield planning and review. |
 
 `status`, `validate`, and `next` recompute readiness without mutating state.
-`run` advances only until Slipway reaches a skill handoff, blocker, checkpoint,
-or done-ready state.
+`run` advances only until Slipway reaches a skill handoff, blocker, or
+done-ready state.
 
 Completion is deliberately hard to fake: every governed stage owns evidence that
 the engine re-derives instead of trusting. Start with the tutorials when you want

@@ -31,8 +31,6 @@ type repairSummary struct {
 	WorktreeScopeRepairs      []string                                 `json:"worktree_scope_repairs,omitempty"`
 	MaterializedWavePlans     []string                                 `json:"materialized_wave_plans,omitempty"`
 	RecoveredWaveRuns         []string                                 `json:"recovered_wave_runs,omitempty"`
-	ClearedCheckpoints        []string                                 `json:"cleared_checkpoints,omitempty"`
-	RepairedCheckpoints       []string                                 `json:"repaired_checkpoints,omitempty"`
 	PrunedTaskEvidence        []string                                 `json:"pruned_task_evidence,omitempty"`
 	RebuiltExecutionSummaries []string                                 `json:"rebuilt_execution_summaries,omitempty"`
 	RemovedEmptyOrphanBundles []string                                 `json:"removed_empty_orphan_bundles,omitempty"`
@@ -145,14 +143,12 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.CleanedLockAnchors = cleanupUnheldLockAnchors(root, staleLockPaths)
 
-				execRepair, err := state.RepairExecutionState(root, now, staleAfter)
+				execRepair, err := state.RepairExecutionState(root)
 				if err != nil {
 					return err
 				}
 				summary.MaterializedWavePlans = execRepair.MaterializedWavePlans
 				summary.RecoveredWaveRuns = execRepair.RecoveredWaveRuns
-				summary.ClearedCheckpoints = execRepair.ClearedCheckpoints
-				summary.RepairedCheckpoints = execRepair.RepairedCheckpoints
 				summary.PrunedTaskEvidence = execRepair.PrunedTaskEvidence
 				summary.NonRepairableFindings = append(summary.NonRepairableFindings, execRepair.NonRepairableFindings...)
 
@@ -301,8 +297,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 	writeRepairSection("Worktree scope repairs", summary.WorktreeScopeRepairs)
 	writeRepairSection("Materialized wave plans", summary.MaterializedWavePlans)
 	writeRepairSection("Recovered wave runs", summary.RecoveredWaveRuns)
-	writeRepairSection("Cleared checkpoints", summary.ClearedCheckpoints)
-	writeRepairSection("Repaired checkpoints", summary.RepairedCheckpoints)
 	writeRepairSection("Pruned task evidence", summary.PrunedTaskEvidence)
 	writeRepairSection("Rebuilt execution summaries", summary.RebuiltExecutionSummaries)
 	writeRepairSection("Removed empty orphan bundles", summary.RemovedEmptyOrphanBundles)
@@ -317,8 +311,6 @@ func writeRepairText(w io.Writer, summary repairSummary) error {
 		len(summary.WorktreeScopeRepairs) == 0 &&
 		len(summary.MaterializedWavePlans) == 0 &&
 		len(summary.RecoveredWaveRuns) == 0 &&
-		len(summary.ClearedCheckpoints) == 0 &&
-		len(summary.RepairedCheckpoints) == 0 &&
 		len(summary.PrunedTaskEvidence) == 0 &&
 		len(summary.RebuiltExecutionSummaries) == 0 &&
 		len(summary.RemovedEmptyOrphanBundles) == 0 &&
@@ -347,8 +339,6 @@ func buildAppliedRepairFindings(summary repairSummary) []repairAppliedFinding {
 	appendItems("worktree_scope_repair", summary.WorktreeScopeRepairs)
 	appendItems("materialized_wave_plan", summary.MaterializedWavePlans)
 	appendItems("recovered_wave_run", summary.RecoveredWaveRuns)
-	appendItems("cleared_checkpoint", summary.ClearedCheckpoints)
-	appendItems("repaired_checkpoint", summary.RepairedCheckpoints)
 	appendItems("pruned_task_evidence", summary.PrunedTaskEvidence)
 	appendItems("rebuilt_execution_summary", summary.RebuiltExecutionSummaries)
 	appendItems("empty_orphan_bundle", summary.RemovedEmptyOrphanBundles)
@@ -583,8 +573,6 @@ func buildRepairPathAuthority(root string, changes []model.Change, summary repai
 
 	addTargets(summary.MaterializedWavePlans)
 	addTargets(summary.RecoveredWaveRuns)
-	addTargets(summary.ClearedCheckpoints)
-	addTargets(summary.RepairedCheckpoints)
 	addTargets(summary.PrunedTaskEvidence)
 	addTargets(summary.RebuiltExecutionSummaries)
 	for _, finding := range summary.UnrepairedDrift {

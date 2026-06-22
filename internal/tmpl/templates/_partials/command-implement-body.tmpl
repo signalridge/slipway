@@ -7,21 +7,19 @@ Run the explicit S2 implementation stage for the active governed change.
 ```bash
 slipway implement --json
 slipway implement --resume --json
-slipway implement --resume-response "<response>" --json
 ```
 
 ## Contract
 - `implement` is valid only while `current_state` is `S2_IMPLEMENT`.
-- It surfaces wave-orchestration, blockers, checkpoints, or transition to review.
+- It surfaces wave-orchestration, blockers, or transition to review.
 - `run` may delegate to `implement`, but `implement` is the primary stage command.
 - Wave execution continues wave-to-wave inside the wave-orchestration host until a natural stop condition.
 - If implementation discovers same-intent scope gaps, record a change amendment and update the current artifacts before continuing.
 - Executor agents must not silently write outside declared task scope; they propose the amendment or return a blocker.
-- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, decision/human_action checkpoints, stale or unknown-freshness checkpoints, and evidence gates still stop.
+- Config-level `execution.auto` applies to this stage command; there are no per-stage auto override flags. Under auto, only pure-pacing boundaries may continue on prior authorization; `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, and evidence gates still stop.
 
 ## Flags
-- `--resume`: continue resumable non-checkpoint implementation from the latest incomplete wave
-- `--resume-response "<response>"`: resume an active implementation checkpoint with explicit response text
+- `--resume`: continue resumable implementation from the latest incomplete wave
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 - `--diagnostics`: include governance/readiness diagnostic fields

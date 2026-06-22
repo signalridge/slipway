@@ -1,0 +1,62 @@
+version: 1
+slug: simplify-command-surface-a
+description: simplify command surface A
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-21T15:45:51.004643Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/simplify-command-surface-a
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 64d47b52d06d8c33fff320581ec5d5164971bbeb37aaf6c4d94321a560ba490c
+        updated_at: 2026-06-22T00:08:02.921867714Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: f7a11140d551caf9245c05ccd7e0db2a837ee5abb46440ff6e50a7f1ee1c3c90
+        updated_at: 2026-06-21T16:07:52.666653096Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: f5260a38eb3659f6dc1f4123569e66692c4cc1e6dc345f3f593a77e0cf1a1086
+        updated_at: 2026-06-21T16:08:16.909093186Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 00ac7ac7951cc0b3d580493516852f030cbca379cdd7ce3379ce5953e2888df6
+        updated_at: 2026-06-21T16:07:52.666390521Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: e9c475ff2f7ec5d83b38b021287dd4377716a2d104666df504a21877c1b4da1b
+        updated_at: 2026-06-21T16:05:24.567290364Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 989daffaed2604743cbab3f92231a47d088b7134a91ecd06433b688474b2ac81
+        updated_at: 2026-06-22T03:55:52.348159527Z
+evidence_refs:
+    code-quality-review: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/code-quality-review.yaml
+    final-closeout: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/final-closeout.yaml
+    goal-verification: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/goal-verification.yaml
+    independent-review: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/independent-review.yaml
+    intake-clarification: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/intake-clarification.yaml
+    plan-audit: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/plan-audit.yaml
+    research-orchestration: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/research-orchestration.yaml
+    security-review: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/security-review.yaml
+    spec-compliance-review: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/simplify-command-surface-a/artifacts/changes/simplify-command-surface-a/verification/wave-orchestration.yaml

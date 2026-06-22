@@ -126,7 +126,7 @@ func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
 		"CommandID":    "run",
 		"ToolID":       "claude",
 		"Trigger":      "/slipway:run",
-		"Description":  "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
+		"Description":  "Advance governed execution until a skill, blocker, or done-ready outcome is surfaced",
 		"BodyTemplate": "command-run-body",
 		"Arguments":    "--json",
 	})
@@ -303,6 +303,16 @@ func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	assert.NotContains(t, content, "review_context:skill=")
 }
 
+func TestCodeQualityReviewTemplateRequiresConfiguredGoLint(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/code-quality-review/SKILL.md.tmpl", nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "`golangci-lint run ./...`")
+	assert.Contains(t, content, "treat new lint findings as blockers")
+}
+
 func assertSelectedS3ReviewPeerSet(t *testing.T, content string) {
 	t.Helper()
 
@@ -388,6 +398,16 @@ func TestGoalVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	assert.Contains(t, content, "only if you still produce or refresh the")
 	assert.NotContains(t, content, "context_origin:stage=goal=<handle>")
 	assert.NotContains(t, content, "review_origin:skill=")
+}
+
+func TestGoalVerificationTemplateRequiresConfiguredGoLint(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, content, "`golangci-lint run ./...`")
+	assert.Contains(t, content, "block completion on new lint findings")
 }
 
 func TestFinalCloseoutTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T) {
@@ -697,8 +717,8 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.Contains(t, content, "Query the next governed host without advancing lifecycle state.")
 	assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
 	assert.Contains(t, content, "Treat the default JSON as an action contract")
-	assert.Contains(t, content, "confirmation_requirement.resume_response_supported")
 	assert.Contains(t, content, "confirmation_requirement.next_action")
+	assert.NotContains(t, content, "confirmation_requirement.resume_response_supported")
 	assert.Contains(t, content, "`context_budget` appears only when `guard_action` is `warn` or `stop`")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
 	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
@@ -1201,7 +1221,7 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"CommandID":    "run",
 		"ToolID":       "claude",
 		"Trigger":      "/slipway:run",
-		"Description":  "Advance governed execution until a skill, blocker, checkpoint, or done-ready outcome is surfaced",
+		"Description":  "Advance governed execution until a skill, blocker, or done-ready outcome is surfaced",
 		"BodyTemplate": "command-run-body",
 		"Arguments":    "--json",
 	}
@@ -1217,8 +1237,8 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"run command missing diagnostics boundary guidance")
 	assert.Contains(t, content, "`advanced` reports the mutation performed by this invocation",
 		"run command missing advanced/blockers boundary guidance")
-	assert.Contains(t, content, "confirmation_requirement.resume_response_supported",
-		"run command missing resume-response capability guidance")
+	assert.NotContains(t, content, "confirmation_requirement.resume_response_supported",
+		"run command must not advertise deleted resume-response capability guidance")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>",
 		"run command missing governance health handoff")
 
@@ -1238,17 +1258,19 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	assert.Contains(t, content, "plain operator confirmation",
 		"run command must not require fresh subagents for plain lifecycle confirmations")
 	assert.Contains(t, content, "does not by itself require spawning a subagent",
-		"run command must distinguish confirmation from checkpoint/review handoff")
+		"run command must distinguish confirmation from review handoff")
 	assert.NotContains(t, content, "After any checkpoint pause, user intervention, or governed review handoff",
 		"run command must not treat every user intervention as a fresh-subagent boundary")
 
 	assert.Contains(t, content, "three consecutive skills fail",
 		"run command missing 3-consecutive-failure exit rule")
 
-	assert.Contains(t, content, "user_response_payload",
-		"run skill missing checkpoint response handoff guidance")
-	assert.Contains(t, content, "auto mode auto-acknowledges",
-		"run command must describe auto-ack without duplicated wording")
+	assert.NotContains(t, content, "user_response_payload",
+		"run skill must not advertise deleted checkpoint response handoff guidance")
+	assert.NotContains(t, content, "--resume-response",
+		"run skill must not advertise deleted checkpoint resume flag")
+	assert.NotContains(t, content, "auto mode auto-acknowledges",
+		"run command must not describe deleted checkpoint auto-ack behavior")
 	assert.NotContains(t, content, "auto auto-acknowledges")
 
 	normalized := strings.Join(strings.Fields(content), " ")
@@ -1258,8 +1280,6 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"Auto never crosses sensitive/guardrail confirmations",
 		"`security-review` boundaries",
 		"the intake Approved Summary",
-		"decision/human_action checkpoints",
-		"stale or unknown-freshness checkpoints",
 		"evidence gates",
 	} {
 		assert.Contains(t, normalized, phrase,
@@ -1305,7 +1325,7 @@ func TestTemplateFSExcludesTransientPythonArtifacts(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) {
+func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
@@ -1314,10 +1334,10 @@ func TestWaveOrchestrationSkillIncludesCheckpointResponseGuidance(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "user_response_payload",
-		"wave-orchestration skill missing checkpoint response guidance")
-	assert.Contains(t, content, "checkpoint_type",
-		"wave-orchestration skill missing checkpoint type guidance")
+	assert.NotContains(t, content, "user_response_payload",
+		"wave-orchestration skill must not advertise deleted checkpoint response guidance")
+	assert.NotContains(t, content, "checkpoint_type",
+		"wave-orchestration skill must not advertise deleted checkpoint type guidance")
 	assert.Contains(t, content, "IRON LAW: NO TASK EXECUTION WITHOUT A GOVERNED PLAN AND CONFLICT DETECTION",
 		"wave-orchestration skill missing top-level IRON LAW")
 	assert.Contains(t, content, "slipway evidence task",
@@ -1520,7 +1540,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
-		require.Len(t, partials, 24)
+		require.Len(t, partials, 21)
 
 		for _, bodyTemplate := range partials {
 			commandID := strings.TrimSuffix(strings.TrimPrefix(bodyTemplate, "command-"), "-body")

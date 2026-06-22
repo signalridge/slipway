@@ -48,16 +48,13 @@ func missingCodebaseMapDocStates(docs map[string]string) map[string]string {
 }
 
 // buildNextContextByMode populates change-specific fields on the view
-// (state, lifecycle, artifacts, checkpoints).
+// (state, lifecycle, artifacts, and execution resume context).
 // Returns the loaded Change plus its execution context so downstream next-path
 // consumers can reuse the same execution-summary read.
 func buildNextContextByMode(
 	root string,
 	view *nextView,
 	ref changeRef,
-	resumeResponse string,
-	preview bool,
-	autoCheckpointAcknowledged bool,
 ) (*model.Change, *executionContext, error) {
 	change, err := state.LoadChange(root, ref.Slug)
 	if err != nil {
@@ -100,7 +97,7 @@ func buildNextContextByMode(
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := buildResumeCheckpoint(root, &change, execCtx, view, resumeResponse, preview, autoCheckpointAcknowledged); err != nil {
+	if err := buildExecutionResumeContext(root, change, execCtx, view); err != nil {
 		return nil, nil, err
 	}
 	return &change, &execCtx, nil
@@ -302,63 +299,22 @@ func buildHandoffRiskForReadiness(existing *handoffRiskView, controls []model.Co
 	return existing
 }
 
-// buildResumeCheckpoint handles active checkpoint validation and wave execution
-// resume checkpoint construction for governed changes.
-func buildResumeCheckpoint(
+// buildExecutionResumeContext attaches resumable wave execution progress for
+// governed changes without advancing or repairing runtime state.
+func buildExecutionResumeContext(
 	root string,
-	change *model.Change,
+	change model.Change,
 	execCtx executionContext,
 	view *nextView,
-	resumeResponse string,
-	preview bool,
-	autoCheckpointAcknowledged bool,
 ) error {
-	if err := validateActiveCheckpointAuthority(root, *change, execCtx, "next"); err != nil {
-		return err
-	}
-
-	completedTaskIDs, freshness, resumeWaveIndex, err := buildResumeCheckpointProgress(root, *change, execCtx)
+	completedTaskIDs, freshness, resumeWaveIndex, err := buildExecutionResumeProgress(root, change, execCtx)
 	if err != nil {
 		return err
 	}
 
-	if change.ActiveCheckpoint != nil {
-		checkpoint := &resumeCheckpoint{
-			RunSummaryVersion: execCtx.LatestRunVersion,
-			CompletedTaskIDs:  completedTaskIDs,
-			Freshness:         freshness,
-			ResumeWaveIndex:   resumeWaveIndex,
-			PausedTaskID:      change.ActiveCheckpoint.PausedTaskID,
-			PausedWaveIndex:   change.ActiveCheckpoint.PausedWaveIndex,
-			CheckpointType:    change.ActiveCheckpoint.CheckpointType,
-		}
-		if strings.TrimSpace(resumeResponse) != "" {
-			if err := validateResumeResponse(change.ActiveCheckpoint, resumeResponse); err != nil {
-				return err
-			}
-			checkpoint.UserResponsePayload = resumeResponse
-			if !preview {
-				// Run consumes the checkpoint only after the full next view succeeds
-				// so failed readiness/projection passes preserve the pending resume
-				// contract.
-				view.consumeActiveCheckpoint = true
-				view.consumeActiveCheckpointAutoAcknowledged = autoCheckpointAcknowledged
-			}
-		}
-		view.InputContext.ResumeCheckpoint = checkpoint
-	} else if strings.TrimSpace(resumeResponse) != "" {
-		return newPreconditionError(
-			"no_active_checkpoint",
-			"--resume-response provided but no active checkpoint exists",
-			"Remove --resume-response; it is only valid for active checkpoint resume. For missing governance skill evidence, follow `slipway next --json` and record the required skill evidence instead.",
-			"",
-			nil,
-		)
-	}
-
-	if change.CurrentState == model.StateS2Implement && execCtx.Ready && view.InputContext.ResumeCheckpoint == nil {
+	if change.CurrentState == model.StateS2Implement && execCtx.Ready {
 		if len(completedTaskIDs) > 0 {
-			view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
+			view.InputContext.ExecutionResume = &executionResumeContext{
 				RunSummaryVersion: execCtx.LatestRunVersion,
 				CompletedTaskIDs:  completedTaskIDs,
 				Freshness:         freshness,
@@ -366,22 +322,10 @@ func buildResumeCheckpoint(
 			}
 		}
 	}
-
-	if preview && change.ActiveCheckpoint != nil {
-		view.InputContext.ResumeCheckpoint = &resumeCheckpoint{
-			RunSummaryVersion: execCtx.LatestRunVersion,
-			CompletedTaskIDs:  completedTaskIDs,
-			Freshness:         freshness,
-			ResumeWaveIndex:   resumeWaveIndex,
-			PausedTaskID:      change.ActiveCheckpoint.PausedTaskID,
-			PausedWaveIndex:   change.ActiveCheckpoint.PausedWaveIndex,
-			CheckpointType:    change.ActiveCheckpoint.CheckpointType,
-		}
-	}
 	return nil
 }
 
-func buildResumeCheckpointProgress(
+func buildExecutionResumeProgress(
 	root string,
 	change model.Change,
 	execCtx executionContext,
@@ -397,9 +341,6 @@ func buildResumeCheckpointProgress(
 	}
 	slices.Sort(ids)
 
-	// Pass the same summary blockers run uses (cmd/run.go autoAckEligibleCheckpoint)
-	// so the previewed checkpoint freshness matches what run will enforce; dropping
-	// them let next advertise an auto-ackable checkpoint that run would refuse.
 	freshness := projectFreshnessForExecMode(
 		root,
 		change,

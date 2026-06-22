@@ -216,8 +216,6 @@ func commandSkillDocsToken(commandID string) string {
 
 func jsonContractDocsToken(commandID string) string {
 	switch commandID {
-	case "checkpoint":
-		return "slipway checkpoint --task-id <id> --json"
 	case "delete":
 		return "slipway delete --change <slug> --json"
 	case "instructions":

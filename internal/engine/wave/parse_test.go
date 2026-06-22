@@ -91,19 +91,19 @@ func TestParseTaskPlan_NoTasks(t *testing.T) {
 	assert.Empty(t, nodes)
 }
 
-func TestParseTaskPlan_CheckpointType(t *testing.T) {
+func TestParseTaskPlan_RejectsRetiredManualGateMetadata(t *testing.T) {
+	retiredKey := strings.Join([]string{"checkpoint", "type"}, "_")
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Manual task
   - task_kind: other
-  - checkpoint_type: human_verify
+  - ` + retiredKey + `: human_verify
 `
 
-	plan, err := ParseTaskPlan(md)
-	require.NoError(t, err)
-	nodes := plan.Nodes()
-	require.Len(t, nodes, 1)
-	assert.Equal(t, "human_verify", nodes[0].CheckpointType)
+	_, err := ParseTaskPlan(md)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown metadata key")
+	assert.Contains(t, err.Error(), retiredKey)
 }
 
 func TestParseTaskPlan_AcceptsEvidenceAndAcceptanceMetadata(t *testing.T) {

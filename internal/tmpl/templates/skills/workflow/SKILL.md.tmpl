@@ -83,9 +83,9 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 Use `.git/slipway/runtime/changes/<slug>/handoff.md` only as advisory
 continuation notes for a fresh session on an active governed change. Resolve
 `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from
-the handoff body. Write or refresh it when context is tight, when a checkpoint
-or review handoff will split work across sessions, or before stopping with
-useful continuation context.
+the handoff body. Write or refresh it when context is tight, when a review
+handoff will split work across sessions, or before stopping with useful
+continuation context.
 
 Author it as a compact narrative:
 - current position: change slug, lifecycle state/substep, active task or review,
@@ -120,8 +120,8 @@ directory `{{.CommandsDir}}`.{{end}}
 Every workflow command listed in `references/command-reference.md` ships a
 command surface, so you never need to fall back to guessing one for those
 commands — including discovery (`codebase-map`), situational execution helpers
-such as `evidence`, diagnostics (`learn`, `stats`, `health`, `instructions`),
-and setup (`init`). CLI-only helper namespaces such as `slipway tool` are
+such as `evidence`, diagnostics (`health`, `instructions`), and setup (`init`).
+CLI-only helper namespaces such as `slipway tool` are
 intentionally not generated as command surfaces; generated skills invoke helpers
 directly with `slipway tool ...`.
 

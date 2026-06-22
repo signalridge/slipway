@@ -24,8 +24,8 @@ func (k TaskKind) IsValid() bool {
 }
 
 // ShouldSkipOnResume returns true if a completed task of this kind can be
-// safely skipped during checkpoint resume. Code, doc, ops, other, and empty
-// kinds are skip-safe; test, verification, and investigation kinds are not.
+// safely skipped during resume. Code, doc, ops, other, and empty kinds are
+// skip-safe; test, verification, and investigation kinds are not.
 func (k TaskKind) ShouldSkipOnResume() bool {
 	switch k {
 	case TaskKindTest, TaskKindVerification, TaskKindInvestigation:

@@ -146,7 +146,17 @@ func makeEvidenceSuiteResultCmd() *cobra.Command {
 					)
 				}
 
-				verificationDir := state.VerificationDir(root, change.Slug)
+				governedBundleDir, err := state.GovernedBundleDir(root, change)
+				if err != nil {
+					return newStateIntegrityError(
+						"evidence_suite_result_bundle_resolve_failed",
+						fmt.Sprintf("failed to resolve governed bundle for suite-result evidence: %v", err),
+						"Repair the governed change worktree binding and retry.",
+						change.Slug,
+						nil,
+					)
+				}
+				verificationDir := filepath.Join(governedBundleDir, "verification")
 				if err := os.MkdirAll(verificationDir, 0o755); err != nil { // #nosec G301 -- governed verification artifact directories are intentionally user-readable/searchable.
 					return err
 				}

@@ -110,21 +110,6 @@ func (p WavePlan) TaskIDs() []string {
 	return out
 }
 
-func (p WavePlan) WaveIndexForTask(taskID string) int {
-	needle := strings.TrimSpace(taskID)
-	if needle == "" {
-		return 0
-	}
-	for _, wave := range p.Waves {
-		for _, task := range wave.Tasks {
-			if task.TaskID == needle {
-				return wave.WaveIndex
-			}
-		}
-	}
-	return 0
-}
-
 func (w *WavePlanWave) Normalize(index int) {
 	if w.WaveIndex == 0 {
 		w.WaveIndex = index

@@ -223,7 +223,7 @@ func TestRepairExecutionStateUsesEffectiveParallelWhenRecoveringWaveRuns(t *test
 				},
 			}))
 
-			result, err := RepairExecutionState(root, waveMaterializeTime.Add(time.Minute), time.Hour)
+			result, err := RepairExecutionState(root)
 			require.NoError(t, err)
 			assert.Contains(t, result.RecoveredWaveRuns, change.Slug)
 

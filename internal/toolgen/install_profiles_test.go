@@ -39,7 +39,6 @@ func TestInstallProfileClosurePreservesFailClosedSkills(t *testing.T) {
 	}
 
 	assert.False(t, core.includesCommandSkill("health"), "diagnostic command skills should route through core routers")
-	assert.False(t, core.includesCommandSkill("learn"), "diagnostic command skills should route through core routers")
 	assert.False(t, core.includesHostSkill("incident-response"), "optional diagnostic hosts should be full-profile only")
 }
 
@@ -65,7 +64,6 @@ func TestCoreInstallProfileGeneratesRoutersAndPrunesOptionalCodexSkills(t *testi
 	}
 	for _, id := range []string{
 		"health",
-		"learn",
 		"cancel",
 		"incident-response",
 	} {

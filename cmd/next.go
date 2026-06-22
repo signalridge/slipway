@@ -5,15 +5,12 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
 )
-
-const autoCheckpointAcknowledgedSideEffect = "auto_checkpoint_acknowledged"
 
 type nextView struct {
 	Command                   string                               `json:"command,omitempty"`
@@ -56,8 +53,6 @@ type nextView struct {
 	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
 	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
 
-	consumeActiveCheckpoint                 bool
-	consumeActiveCheckpointAutoAcknowledged bool
 	// planLocked records whether the lifecycle G_plan gate has approved the plan.
 	// It is unexported (never serialized) and drives whether a parsed decision.md
 	// selection is reported as a locked or pending skill_constraint (issue #140).
@@ -75,7 +70,6 @@ type confirmationRequirement struct {
 	FreshConfirmationRequired    bool   `json:"fresh_confirmation_required"`
 	PriorAuthorizationSufficient bool   `json:"prior_authorization_sufficient"`
 	Reason                       string `json:"reason"`
-	ResumeResponseSupported      bool   `json:"resume_response_supported"`
 	NextAction                   string `json:"next_action,omitempty"`
 	NextActionKind               string `json:"next_action_kind,omitempty"`
 	NextCommand                  string `json:"next_command,omitempty"`
@@ -199,7 +193,7 @@ type nextContext struct {
 	ContextDependencies    *model.ContextDependencies `json:"context_dependencies,omitempty"`
 	SelectedPriorContext   []selectedPriorContextView `json:"selected_prior_context,omitempty"`
 	UnresolvedDependencies []unresolvedDependencyView `json:"unresolved_dependencies,omitempty"`
-	ResumeCheckpoint       *resumeCheckpoint          `json:"resume_checkpoint,omitempty"`
+	ExecutionResume        *executionResumeContext    `json:"execution_resume,omitempty"`
 	GateStatus             map[string]string          `json:"gate_status,omitempty"`
 	ArtifactStatus         map[string]string          `json:"artifact_status,omitempty"`
 	WavePlan               *wavePlanView              `json:"wave_plan,omitempty"`
@@ -281,19 +275,15 @@ type waveTaskView struct {
 	TaskKind    string   `json:"task_kind"`
 }
 
-type resumeCheckpoint struct {
-	// RunSummaryVersion is omitted when zero. A resume checkpoint only exists once
+type executionResumeContext struct {
+	// RunSummaryVersion is omitted when zero. Execution resume only exists once
 	// an execution run has been recorded, so a real version is >=1; zero is the
 	// "no summary yet" sentinel that `evidence task` rejects and must not be
 	// surfaced as a recorded version (issue #211).
-	RunSummaryVersion   int      `json:"run_summary_version,omitempty"`
-	CompletedTaskIDs    []string `json:"completed_task_ids,omitempty"`
-	Freshness           string   `json:"freshness,omitempty"`
-	ResumeWaveIndex     int      `json:"resume_wave_index,omitempty"`
-	PausedTaskID        string   `json:"paused_task_id,omitempty"`
-	PausedWaveIndex     int      `json:"paused_wave_index,omitempty"`
-	CheckpointType      string   `json:"checkpoint_type,omitempty"`
-	UserResponsePayload string   `json:"user_response_payload,omitempty"`
+	RunSummaryVersion int      `json:"run_summary_version,omitempty"`
+	CompletedTaskIDs  []string `json:"completed_task_ids,omitempty"`
+	Freshness         string   `json:"freshness,omitempty"`
+	ResumeWaveIndex   int      `json:"resume_wave_index,omitempty"`
 }
 
 func makeNextCmd() *cobra.Command {
@@ -328,7 +318,7 @@ func makeNextCmd() *cobra.Command {
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
 				if jsonOutput && !diagnostics && !contextGuard {
-					view, err := buildNextHandoffSourceView(root, ref, "", true, false, noAutoPass, auto)
+					view, err := buildNextHandoffSourceView(root, ref, true, false, noAutoPass, auto)
 					if err != nil {
 						return err
 					}
@@ -379,8 +369,6 @@ func makeNextCmd() *cobra.Command {
 // Grouping them in a named struct keeps the call sites self-documenting instead
 // of relying on a long tail of positional booleans.
 type nextViewOptions struct {
-	// ResumeResponse is the operator (or auto-injected) checkpoint response.
-	ResumeResponse string
 	// Preview makes the build read-only: no advancement side effects.
 	Preview bool
 	// AutoSkipEvidence advances but defers evidence prompts the caller surfaces.
@@ -391,19 +379,14 @@ type nextViewOptions struct {
 	Command string
 	// Auto carries execution.auto into advancement and confirmation softening.
 	Auto bool
-	// AutoCheckpointAcknowledged marks the consumed checkpoint as auto-resolved.
-	// Only the first iteration of an auto run sets it; later iterations pass false.
-	AutoCheckpointAcknowledged bool
 }
 
 func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (nextView, error) {
-	resumeResponse := opts.ResumeResponse
 	preview := opts.Preview
 	autoSkipEvidence := opts.AutoSkipEvidence
 	skipAutoPass := opts.SkipAutoPass
 	command := opts.Command
 	auto := opts.Auto
-	autoCheckpointAcknowledged := opts.AutoCheckpointAcknowledged
 	// READ-ONLY PREVIEW INVARIANT: only the advancing path (run/stage) carries
 	// auto into advancement so the engine preset auto-confirm can fire. A preview
 	// query (`slipway next`) must never trigger an auto-confirm side effect, so
@@ -439,7 +422,7 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 		return view, nil
 	}
 
-	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref, resumeResponse, preview, autoCheckpointAcknowledged)
+	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -451,9 +434,6 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 	}
 	finalize := func() (nextView, error) {
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
-		if err := consumeNextCheckpoint(root, governedChange, &view); err != nil {
-			return nextView{}, err
-		}
 		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
 	}
@@ -534,45 +514,6 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 	}
 
 	return finalize()
-}
-
-func consumeNextCheckpoint(root string, change *model.Change, view *nextView) error {
-	if view == nil || !view.consumeActiveCheckpoint {
-		return nil
-	}
-	if change == nil || change.ActiveCheckpoint == nil {
-		view.consumeActiveCheckpoint = false
-		view.consumeActiveCheckpointAutoAcknowledged = false
-		return nil
-	}
-
-	beforeChange := *change
-	checkpoint := *change.ActiveCheckpoint
-	sideEffects := []state.LifecycleSideEffect{{Kind: "active_checkpoint_cleared"}}
-	if view.consumeActiveCheckpointAutoAcknowledged {
-		sideEffects = append(sideEffects, state.LifecycleSideEffect{Kind: autoCheckpointAcknowledgedSideEffect})
-	}
-	change.ActiveCheckpoint = nil
-	if err := state.SaveChange(root, *change); err != nil {
-		return err
-	}
-	if err := appendCLILifecycleEvent(root, *change, state.LifecycleEvent{
-		Command:       "run",
-		EventType:     "checkpoint.resolved",
-		Action:        "resolved",
-		Reason:        checkpoint.CheckpointType,
-		Result:        "response_recorded",
-		BeforeState:   beforeChange.CurrentState,
-		AfterState:    change.CurrentState,
-		Diagnostics:   []string{"task_id=" + checkpoint.PausedTaskID},
-		SideEffects:   sideEffects,
-		ClearedFields: []string{"active_checkpoint"},
-	}); err != nil {
-		return err
-	}
-	view.consumeActiveCheckpoint = false
-	view.consumeActiveCheckpointAutoAcknowledged = false
-	return nil
 }
 
 // advanceIfReady attempts state advancement unless in preview mode.
@@ -729,20 +670,14 @@ func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (
 func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 	// Auto softens explicitly allowlisted pure-pacing confirmation boundaries into
 	// a standing-authorization continuation, but only when the change is NOT in a
-	// guardrail/sensitive domain. Preset, decision, human_action,
-	// stale-checkpoint, unclassified skill, and evidence-gate boundaries keep
-	// their hard_stop even under auto.
+	// guardrail/sensitive domain. Preset, unclassified skill, and evidence-gate
+	// boundaries keep their hard_stop even under auto.
 	autoSoftens := view.auto &&
 		!isGuardrailSensitive(view.GuardrailDomain) &&
 		!viewRequiresManualAutoBoundary(view)
 	switch {
 	case view.PresetConfirmationPending || hasReasonCode(view.Blockers, "preset_confirmation_required"):
 		return confirmationHardStop("preset_confirmation_required")
-	case hasPendingRunCheckpoint(view.InputContext.ResumeCheckpoint):
-		if autoSoftens && resumeCheckpointAutoAcknowledgeable(view.InputContext.ResumeCheckpoint) {
-			return autoAcknowledgedHumanVerifyContinuation()
-		}
-		return confirmationHardStop("resume_checkpoint")
 	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
 		return confirmationCommandRequired("run_slipway_done_to_finalize")
 	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
@@ -854,16 +789,14 @@ func nextSkillHandoffName(skill *nextSkillView) string {
 
 func confirmationHardStop(reason string) confirmationRequirement {
 	reason = strings.TrimSpace(reason)
-	resumeResponseSupported := reason == "resume_checkpoint"
 	return confirmationRequirement{
 		Required:                     true,
 		Boundary:                     "hard_stop",
 		FreshConfirmationRequired:    true,
 		PriorAuthorizationSufficient: false,
 		Reason:                       reason,
-		ResumeResponseSupported:      resumeResponseSupported,
-		NextAction:                   hardStopNextAction(reason, resumeResponseSupported),
-		NextActionKind:               hardStopNextActionKind(reason, resumeResponseSupported),
+		NextAction:                   hardStopNextAction(reason),
+		NextActionKind:               hardStopNextActionKind(reason),
 	}
 }
 
@@ -909,43 +842,8 @@ func autoStandingAuthorization(reason string) confirmationRequirement {
 		FreshConfirmationRequired:    false,
 		PriorAuthorizationSufficient: true,
 		Reason:                       reason,
-		NextAction:                   hardStopNextAction(reason, false),
-		NextActionKind:               hardStopNextActionKind(reason, false),
-	}
-}
-
-// resumeCheckpointAutoAcknowledgeable reports whether a pending resume checkpoint
-// is the kind `slipway run` auto-acknowledges under auto: a FRESH human_verify
-// checkpoint. The caller's autoSoftens gate already excludes guardrail/sensitive
-// domains. Decision and human_action kinds, and stale or unknown-freshness
-// checkpoints, are never auto-acknowledged, so next keeps reporting their manual
-// hard stop — matching run.autoAckEligibleCheckpoint exactly so the next contract
-// never diverges from what run actually does.
-func resumeCheckpointAutoAcknowledgeable(cp *resumeCheckpoint) bool {
-	if cp == nil {
-		return false
-	}
-	if model.CheckpointKind(cp.CheckpointType) != model.CheckpointHumanVerify {
-		return false
-	}
-	return cp.Freshness == string(ctxpack.EvidenceFreshnessFresh)
-}
-
-// autoAcknowledgedHumanVerifyContinuation is the confirmation requirement reported
-// for a fresh non-sensitive human_verify checkpoint under auto. It mirrors the run
-// loop's auto-acknowledgment: not a hard stop, prior authorization sufficient, and
-// the next action is to run `slipway run`, which injects the acknowledgment and
-// continues. It never weakens an evidence gate.
-func autoAcknowledgedHumanVerifyContinuation() confirmationRequirement {
-	return confirmationRequirement{
-		Required:                     false,
-		Boundary:                     "evidence_continuation",
-		FreshConfirmationRequired:    false,
-		PriorAuthorizationSufficient: true,
-		Reason:                       "resume_checkpoint",
-		NextAction:                   "run `slipway run`; the non-sensitive human_verify checkpoint is auto-acknowledged under auto",
-		NextActionKind:               "command",
-		NextCommand:                  "slipway run",
+		NextAction:                   hardStopNextAction(reason),
+		NextActionKind:               hardStopNextActionKind(reason),
 	}
 }
 
@@ -973,18 +871,15 @@ func confirmationNoBoundary(reason string) confirmationRequirement {
 	}
 }
 
-func hardStopNextAction(reason string, resumeResponseSupported bool) string {
-	if resumeResponseSupported {
-		return "resume pending checkpoint with slipway run --resume-response"
-	}
+func hardStopNextAction(reason string) string {
 	if skillName, ok := strings.CutPrefix(reason, "skill_handoff:"); ok && strings.TrimSpace(skillName) != "" {
-		return "run governance skill " + strings.TrimSpace(skillName) + " and record evidence; --resume-response is only for active checkpoints"
+		return "run governance skill " + strings.TrimSpace(skillName) + " and record evidence"
 	}
 	switch reason {
 	case "preset_confirmation_required":
 		return "confirm workflow preset before continuing"
 	case "review_batch":
-		return "run the parallel S3 review batch and record evidence for each listed skill; --resume-response is only for active checkpoints"
+		return "run the parallel S3 review batch and record evidence for each listed skill"
 	default:
 		return "complete required confirmation before continuing"
 	}
@@ -1004,12 +899,9 @@ func commandBoundaryNextAction(reason string) string {
 }
 
 // hardStopNextActionKind returns the machine-readable action kind for a
-// hard-stop boundary. Hard stops do not expose next_command because checkpoint
-// resume requires an operator-supplied response argument.
-func hardStopNextActionKind(reason string, resumeResponseSupported bool) string {
+// hard-stop boundary.
+func hardStopNextActionKind(reason string) string {
 	switch {
-	case resumeResponseSupported:
-		return "checkpoint_resume"
 	case reason == "preset_confirmation_required":
 		return "preset_confirmation"
 	case reason == "review_batch":

@@ -51,7 +51,6 @@ type frozenToolContract struct {
 var frozenAdapterCommandIDs = []string{
 	"abort",
 	"cancel",
-	"checkpoint",
 	"codebase-map",
 	"delete",
 	"done",
@@ -62,7 +61,6 @@ var frozenAdapterCommandIDs = []string{
 	"init",
 	"instructions",
 	"intake",
-	"learn",
 	"new",
 	"next",
 	"plan",
@@ -70,7 +68,6 @@ var frozenAdapterCommandIDs = []string{
 	"repair",
 	"review",
 	"run",
-	"stats",
 	"status",
 	"validate",
 }

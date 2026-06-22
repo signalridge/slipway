@@ -113,7 +113,7 @@ func sessionStartNextJSON(cmd *cobra.Command, root string) (string, string, erro
 
 	var out string
 	err = withChangeStateLock(root, ref.Slug, "hook session-start", func() error {
-		view, err := buildNextHandoffSourceView(root, ref, "", true, false, false, auto)
+		view, err := buildNextHandoffSourceView(root, ref, true, false, false, auto)
 		if err != nil {
 			return err
 		}

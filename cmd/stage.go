@@ -40,11 +40,10 @@ func makeImplementCmd() *cobra.Command {
 
 func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 	var (
-		jsonOutput     bool
-		resume         bool
-		resumeResponse string
-		diagnostics    bool
-		changeSlug     string
+		jsonOutput  bool
+		resume      bool
+		diagnostics bool
+		changeSlug  string
 	)
 
 	cmd := &cobra.Command{
@@ -55,11 +54,6 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 			root, err := projectRootFromCommand(cmd)
 			if err != nil {
 				return err
-			}
-			if spec.SupportsResume {
-				if err := validateRunFlags(resume, resumeResponse); err != nil {
-					return err
-				}
 			}
 
 			ref, err := resolveActiveChangeRef(root, changeSlug)
@@ -78,19 +72,12 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 				if err := validateStageCommandEntry(root, ref, spec); err != nil {
 					return err
 				}
-				effectiveResumeResponse := resumeResponse
-				autoCheckpointAcknowledged := false
 				if spec.SupportsResume {
-					var err error
-					effectiveResumeResponse, autoCheckpointAcknowledged, err = autoAckResumeResponse(root, ref, auto, resume, resumeResponse)
-					if err != nil {
-						return err
-					}
-					if err := validateResumeEntryForCommand(root, ref, resume, effectiveResumeResponse, spec.Name); err != nil {
+					if err := validateResumeEntryForCommand(root, ref, resume, spec.Name); err != nil {
 						return err
 					}
 				}
-				view, err := runStageLoop(root, ref, spec, effectiveResumeResponse, auto, autoCheckpointAcknowledged)
+				view, err := runStageLoop(root, ref, spec, auto)
 				if err != nil {
 					return err
 				}
@@ -112,8 +99,7 @@ func makeStageCmd(spec stageCommandSpec) *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	if spec.SupportsResume {
-		cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed implementation from the latest incomplete wave when no active checkpoint exists")
-		cmd.Flags().StringVar(&resumeResponse, "resume-response", "", "Response text for a paused implementation checkpoint")
+		cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed implementation from the latest incomplete wave")
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	return cmd
@@ -141,28 +127,22 @@ func validateStageCommandEntry(root string, ref changeRef, spec stageCommandSpec
 	)
 }
 
-func runStageLoop(root string, ref changeRef, spec stageCommandSpec, resumeResponse string, auto bool, autoCheckpointAcknowledged bool) (nextView, error) {
+func runStageLoop(root string, ref changeRef, spec stageCommandSpec, auto bool) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
 
 	var lastView nextView
 	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
-	nextResumeResponse := resumeResponse
-	nextAutoCheckpointAcknowledged := autoCheckpointAcknowledged
 	for i := 0; i < maxIterations; i++ {
 		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
-			ResumeResponse:             nextResumeResponse,
-			AutoSkipEvidence:           true,
-			Command:                    spec.Name,
-			Auto:                       auto,
-			AutoCheckpointAcknowledged: nextAutoCheckpointAcknowledged,
+			AutoSkipEvidence: true,
+			Command:          spec.Name,
+			Auto:             auto,
 		})
 		if err != nil {
 			return nextView{}, err
 		}
 		view.Command = spec.Name
 		view.DelegatedTo = spec.Name
-		nextResumeResponse = ""
-		nextAutoCheckpointAcknowledged = false
 		lastView = view
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)

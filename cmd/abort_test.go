@@ -100,7 +100,7 @@ func TestAbortOutsideExecuteDoesNotPreemptTrackedProcesses(t *testing.T) {
 	})
 }
 
-func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
+func TestAbortPreservesActiveChangeAndMarksInterruptedExecution(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -111,11 +111,6 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 
 		change.CurrentState = model.StateS2Implement
 		change.PlanSubStep = model.PlanSubStepNone
-		change.ActiveCheckpoint = &model.ActiveCheckpoint{
-			PausedWaveIndex: 0,
-			PausedTaskID:    "task-01",
-			CheckpointType:  "human_verify",
-		}
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := makeAbortCmd()
@@ -138,7 +133,6 @@ func TestAbortClearsCheckpointAndPreservesActiveChange(t *testing.T) {
 
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
-		assert.Nil(t, after.ActiveCheckpoint)
 		assert.Equal(t, model.ChangeStatusActive, after.Status)
 		assert.Equal(t, model.StateS2Implement, after.CurrentState)
 		assert.False(t, after.InterruptedExecutionAt.IsZero())
