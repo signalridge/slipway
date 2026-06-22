@@ -87,18 +87,17 @@ Minimum record:
 - Stub-only tests: `fail`
 - Critical path changed without explicit test coverage: `fail`
 - Refactor-only tasks may skip test-first only when existing tests cover the refactor and were rerun green
-- `investigation` or `doc` tasks (per the `slipway evidence task --task-kind`
-  enum: code, test, doc, ops, verification, investigation, other) still use
-  `slipway evidence task` with a valid task `--verdict`; mark the TDD portion
-  not-applicable in the `--evidence-ref`, task references, or folded
-  wave-orchestration notes, not through a separate evidence-note command or a
-  non-existent not-applicable verdict
+- `investigation` or `doc` tasks still produce compact executor result JSON
+  and are imported with `slipway evidence task --result-file`; mark the TDD
+  portion not-applicable in the executor result's evidence reference, task
+  references, or folded wave-orchestration notes, not through a separate evidence-note command
+  or a non-existent not-applicable verdict
 
 ## Record Evidence (engine-consumed)
 The engine does not read `verification/tdd-governance.yaml`. Record per-task TDD
-outcomes through the engine-consumed evidence ledger with `slipway evidence task`
-(verdict + blockers + references), and fold the consolidated TDD verdict into
-wave-orchestration's gated record at
+outcomes by importing compact executor result JSON with
+`slipway evidence task --result-file`, and fold the consolidated TDD verdict
+into wave-orchestration's gated record at
 `artifacts/changes/{slug}/verification/wave-orchestration.yaml`. Keep this
 verdict shape; only the destination differs from a standalone file:
 ```yaml

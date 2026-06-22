@@ -1,0 +1,39 @@
+version: 1
+slug: workstream-c-of-issue-297-demote-the-low-level-task-evidence
+description: 'Workstream C of issue #297: demote the low-level task-evidence ledger flag protocol from agent-facing surfaces (tdd-governance + wave-orchestration skills, the evidence command-reference body, and toolgen Arguments) and align generated skills/docs/surface-manifest around the evidence-task --result-file result-import model and the slipway evidence suite-result keystone introduced by Workstreams A/B. Keep the still-supported manual flag CLI mode functional and discoverable via --help; posture is demote-not-erase so a supported fallback never becomes hidden knowledge. Regenerate .codex/.claude generated skills, docs/commands.md, docs/reference/*, and docs/SURFACE-MANIFEST.json; update affected contract tests.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-22T15:09:51.01327Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/workstream-c-of-issue-297-demote-the-low-level-task-evidence
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 7c980245a64dc7c684b7169e8ac611ce26984090a3f223b7bfa6017b753a623b
+        updated_at: 2026-06-22T15:39:56.099641958Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8c9eaadb7083d552ab511780de6978a2240c04466dd5e821500fc700c75aec12
+        updated_at: 2026-06-22T15:39:56.100451916Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b476899296eb6fdd749b454affa89a9fa37cdec36a2e5cabc238e9210d94f2d9
+        updated_at: 2026-06-22T16:27:06.535540593Z
+evidence_refs:
+    code-quality-review: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/code-quality-review.yaml
+    goal-verification: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/goal-verification.yaml
+    independent-review: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/independent-review.yaml
+    intake-clarification: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/intake-clarification.yaml
+    plan-audit: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/workstream-c-of-issue-297-demote-the-low-level-task-evidence/artifacts/changes/workstream-c-of-issue-297-demote-the-low-level-task-evidence/verification/wave-orchestration.yaml
