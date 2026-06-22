@@ -9,8 +9,7 @@ through the CLI instead of hand-editing verification files.
 
 ## Invocation
 ```bash
-slipway evidence task --task-id <id> --run-summary-version <n> --task-kind <kind> \
-  --verdict <pass|fail|blocked|incomplete|timeout> --evidence-ref "<ref>" --json
+slipway evidence task --result-file <path> [--result-file <path> ...] --json
 
 slipway evidence skill --skill <name> --verdict <pass|fail> \
   --reference "<ref>" --notes-file <path> --json
@@ -18,10 +17,22 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
 
 ## Contract
 - Only valid for an active change in `S2_IMPLEMENT` with a materialized wave plan.
-- `--task-id` must exist in `wave-plan.yaml`; `--task-kind` must match the planned kind.
-- `--target-file` defaults to the planned task's target files when omitted.
+- `--result-file` imports compact executor JSON with `task_id`, `verdict`,
+  `evidence_ref`, `changed_files`, `blockers`, and optional `session_id`.
+- `--result-file` may be repeated to import multiple task results in one
+  atomic batch; Slipway preflights every file, rejects duplicate `task_id`
+  entries, and writes no task evidence if any member is invalid.
+- Executor result files must not contain ledger-owned fields such as
+  `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
+  `freshness_inputs`, or `input_hash`; Slipway derives them from the active
+  wave plan and current task evidence run.
+- `--task-id` must exist in `wave-plan.yaml`; when using manual flags,
+  `--task-kind` must match the planned kind.
+- `--target-file` defaults to the planned task's target files when omitted in
+  manual flag mode.
 - The engine computes `freshness_inputs`; never hand-write the evidence JSON.
-- For a non-pass verdict, record blockers with `--blocker <code[:detail]>`.
+- In result-file mode, record non-pass verdicts and blockers inside the result
+  JSON; `--blocker <code[:detail]>` is manual flag mode only.
 - `evidence skill` validates the requested skill against the current lifecycle
   state and plan substep, and run-summary-bound skills require a ready
   `execution-summary.yaml`.
@@ -33,16 +44,19 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
 
 ### `evidence task`
 
-- `--task-id <id>`: task ID from `wave-plan.yaml` (required)
-- `--run-summary-version <n>`: current wave-orchestration run_version (required)
-- `--task-kind <kind>`: code, test, doc, ops, verification, investigation, other (required)
-- `--verdict <v>`: pass, fail, blocked, incomplete, timeout (required)
-- `--evidence-ref "<ref>"`: stable transcript/command/artifact/note reference (required)
-- `--changed-file <path>`: actual changed file (repeatable)
-- `--target-file <path>`: target file (repeatable; defaults to the plan's targets)
-- `--blocker <code[:detail]>`: task blocker (repeatable)
-- `--captured-at <RFC3339Nano>`: evidence timestamp (defaults to now)
-- `--session-id <id>`: executor session identifier
+- `--result-file <path>`: executor result JSON containing `task_id`, `verdict`,
+  `evidence_ref`, `changed_files`, `blockers`, and optional `session_id`;
+  repeat for atomic batch import
+- `--task-id <id>`: task ID from `wave-plan.yaml` (manual flag mode)
+- `--run-summary-version <n>`: current wave-orchestration run_version (manual flag mode)
+- `--task-kind <kind>`: code, test, doc, ops, verification, investigation, other (manual flag mode)
+- `--verdict <v>`: pass, fail, blocked, incomplete, timeout (manual flag mode)
+- `--evidence-ref "<ref>"`: stable transcript/command/artifact/note reference (manual flag mode)
+- `--changed-file <path>`: actual changed file (manual flag mode; repeatable)
+- `--target-file <path>`: target file (manual flag mode; repeatable; defaults to the plan's targets)
+- `--blocker <code[:detail]>`: task blocker (manual flag mode; repeatable)
+- `--captured-at <RFC3339Nano>`: evidence timestamp (manual flag mode; defaults to now)
+- `--session-id <id>`: executor session identifier (manual flag mode)
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 

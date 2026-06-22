@@ -101,9 +101,13 @@ summaries are treated as stale and must be regenerated.
 `status --json` expose freshness failures with stale source/evidence pairs,
 first stale cause, downstream evidence chain, expected/current task input
 values, authoritative bundle and runtime paths, and a safe next action.
-Missing task evidence blockers include the runtime task evidence directory and
-the required flat JSON fields:
-`task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`.
+Missing task evidence blockers include the runtime task evidence directory,
+`record_command=slipway evidence task --result-file <path> --json`, and the
+compact executor result schema:
+`task_id,verdict,evidence_ref,changed_files,blockers,session_id`.
+Repeat `--result-file` to import multiple task result files atomically; Slipway
+preflights the whole batch and writes no task evidence if any file is invalid or
+duplicates another task ID.
 The directory is `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for the
 active change; bundle-local `events/` and `verification/` remain under
 `artifacts/changes/<slug>/`.

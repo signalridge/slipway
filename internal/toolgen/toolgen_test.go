@@ -162,6 +162,37 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 5, query, "expected 5 query commands")
 	assert.Equal(t, 17, mutation, "expected 17 mutation commands")
 
+	var evidenceDef CommandDef
+	var foundEvidence bool
+	for _, def := range commandRegistry {
+		if def.ID == "evidence" {
+			evidenceDef = def
+			foundEvidence = true
+			break
+		}
+	}
+	require.True(t, foundEvidence)
+	assert.Contains(t, evidenceDef.Arguments, "task --result-file <path> [--result-file <path> ...]",
+		"evidence command registry should teach compact task result import")
+	assert.Contains(t, evidenceDef.Arguments, "| task --task-id <id>",
+		"evidence command registry should retain manual flag mode")
+
+	var fixDef CommandDef
+	var foundFix bool
+	for _, def := range commandRegistry {
+		if def.ID == "fix" {
+			fixDef = def
+			foundFix = true
+			break
+		}
+	}
+	require.True(t, foundFix)
+	assert.Contains(t, fixDef.Arguments, "--start-reexecution",
+		"fix command registry should expose the explicit reexecution mode")
+	require.NotEmpty(t, fixDef.Notes)
+	assert.Contains(t, fixDef.Notes[0], "Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state")
+	assert.Contains(t, fixDef.Notes[0], "`slipway fix --start-reexecution` explicitly reopens S2")
+
 	// Verify commandIDs() returns a sorted list covering every command that
 	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
 	// but intentionally do not generate host prompt wrappers.

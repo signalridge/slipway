@@ -21,6 +21,30 @@ func TestEvidenceTaskRunSummaryVersionHelpAdvertisesFirstVersionIsOne(t *testing
 		"--run-summary-version help must tell users the first task-evidence run version is 1, got %q", flag.Usage)
 }
 
+func TestEvidenceTaskManualFlagHelpIsScopedToManualMode(t *testing.T) {
+	t.Parallel()
+
+	flags := makeEvidenceTaskCmd().Flags()
+	for _, flagName := range []string{"task-id", "run-summary-version", "task-kind", "verdict", "evidence-ref", "changed-file", "target-file", "blocker", "captured-at", "session-id"} {
+		flag := flags.Lookup(flagName)
+		require.NotNil(t, flag, "evidence task must expose --%s", flagName)
+		assert.Contains(t, flag.Usage, "Manual flag mode only", "--%s help should be scoped to manual mode", flagName)
+		assert.NotContains(t, flag.Usage, "(required)", "--%s help must not be unconditionally required next to --result-file", flagName)
+	}
+}
+
+func TestEvidenceTaskResultFileHelpAdvertisesImportPath(t *testing.T) {
+	t.Parallel()
+
+	flag := makeEvidenceTaskCmd().Flags().Lookup("result-file")
+	require.NotNil(t, flag, "evidence task must expose a --result-file flag")
+	assert.Contains(t, flag.Usage, "executor result JSON")
+	assert.Contains(t, flag.Usage, "task_id")
+	assert.Contains(t, flag.Usage, "changed_files")
+	assert.Contains(t, flag.Usage, "may be repeated")
+	assert.Contains(t, flag.Usage, "atomic batch import")
+}
+
 func TestEvidenceTaskRunSummaryVersionZeroIsRejected(t *testing.T) {
 	t.Parallel()
 

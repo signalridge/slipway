@@ -40,7 +40,10 @@ materialization time for display/audit rather than freshness authority.
 
 `slipway fix` is the S3 review-finding repair surface. It discovers reviewer
 findings and alignment blockers, then returns a `repair_batch_id` and a contract
-for a fresh-context repair subagent. The host first collects the selected review
+for a fresh-context repair subagent. Ordinary discovery does not advance
+lifecycle state; `slipway fix --start-reexecution` is the explicit review-driven
+mode that reopens S2 and materializes a fresh execution run boundary for
+implementation repairs. The host first collects the selected review
 batch findings, consolidates them by root cause into one repair brief, and must
 not repair findings inline or one-by-one while other selected reviewers are still
 reporting. After the subagent changes code, artifacts, tests, or same-intent
@@ -213,7 +216,7 @@ slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
-slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json
+slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
 
@@ -227,7 +230,7 @@ Stable manifest tokens for JSON contract coverage:
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
-| evidence task JSON | `slipway evidence task --task-id t-01 --run-summary-version 1 --task-kind code --verdict pass --evidence-ref "test:go-test" --json` |
+| evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
 | health JSON | `slipway health --json` |
 | implement JSON | `slipway implement --json` |
@@ -289,8 +292,17 @@ explicitly in the `scope_contract.exempt_context_files` field, surfaced by
 
 `slipway evidence task` writes the flat runtime task JSON under
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration
-sync. Required flags: `--task-id`, `--run-summary-version`, `--task-kind`,
-`--verdict`, `--evidence-ref`. Optional: `--changed-file` and
+sync. The default S2 coordinator path is `--result-file <path>`, repeated when
+the coordinator wants one atomic batch import. Each executor result JSON
+contains `task_id`, `verdict`, `evidence_ref`, `changed_files`, `blockers`, and
+optional `session_id`. A batch preflights every file, rejects duplicate
+`task_id` entries, and writes no task evidence if any member is invalid.
+Executor result files must not include ledger-owned fields
+(`run_summary_version`, `task_kind`, `target_files`, `captured_at`,
+`freshness_inputs`, or `input_hash`); Slipway derives them from the active wave
+plan and current task evidence run. Manual
+flag mode remains available with `--task-id`, `--run-summary-version`,
+`--task-kind`, `--verdict`, `--evidence-ref`, optional `--changed-file` and
 `--target-file` (each repeatable), `--blocker <code[:detail]>` (repeatable;
 supply for non-pass verdicts), `--captured-at <RFC3339Nano>` (defaults to now),
 `--session-id`, and `--change <slug>`. The command computes `freshness_inputs`,
@@ -337,7 +349,7 @@ guardrail SAST proof. If the file is absent, invalid, or tied to a different
 `run_summary_version`, selected S3 review evidence is not fresh. If a suite or
 SAST digest changes, the selected review set is conservatively staled.
 
-`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task`, and the required flat JSON fields: `task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs`. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
+`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task --result-file <path> --json`, and the compact result schema: `task_id,verdict,evidence_ref,changed_files,blockers,session_id`; repeat `--result-file` for atomic batch import. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
 `done --json` archives done-ready worktree-bound changes even when source files
 or non-active governance artifacts are still uncommitted, returning a

@@ -3567,8 +3567,9 @@ func TestNextGovernedBlocksWithoutTaskEvidenceForWaveRunSummaryDuringImplementat
 	}
 	require.NotEmpty(t, missingEvidenceBlocker)
 	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks")
-	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task")
-	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs")
+	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task --result-file <path> --json")
+	assert.Contains(t, missingEvidenceBlocker, "result_schema=task_id,verdict,evidence_ref,changed_files,blockers,session_id")
+	assert.NotContains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind")
 	assert.Equal(t, model.StateS2Implement, view.CurrentState)
 }
 
@@ -3698,8 +3699,9 @@ func assertSingleRunSummaryMissingTaskEvidenceBlocker(t *testing.T, surface stri
 	missingEvidenceBlocker := matches[0]
 	assert.Contains(t, missingEvidenceBlocker, "run_summary_version=1", surface)
 	assert.Contains(t, missingEvidenceBlocker, ".git/slipway/runtime/changes/"+slug+"/evidence/tasks", surface)
-	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task", surface)
-	assert.Contains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind,verdict,evidence_ref,captured_at,freshness_inputs", surface)
+	assert.Contains(t, missingEvidenceBlocker, "record_command=slipway evidence task --result-file <path> --json", surface)
+	assert.Contains(t, missingEvidenceBlocker, "result_schema=task_id,verdict,evidence_ref,changed_files,blockers,session_id", surface)
+	assert.NotContains(t, missingEvidenceBlocker, "required_fields=task_id,run_summary_version,task_kind", surface)
 }
 
 func prepareMissingTaskEvidenceForWaveRunSummaryFixture(t *testing.T) (string, string) {
