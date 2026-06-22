@@ -5,6 +5,21 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0](https://github.com/signalridge/slipway/compare/v0.31.5...v0.32.0) (2026-06-22)
+
+
+### Features
+
+* **commands:** simplify Workstream A command surface ([#300](https://github.com/signalridge/slipway/issues/300)) ([139cc82](https://github.com/signalridge/slipway/commit/139cc8290030b699e90e3e23050f39cfd3adb796))
+* **evidence:** add task result import ([#305](https://github.com/signalridge/slipway/issues/305)) ([99d5be5](https://github.com/signalridge/slipway/commit/99d5be5739b2380818dd2df41cfa6f3966958407))
+* **evidence:** demote manual task evidence surface ([#306](https://github.com/signalridge/slipway/issues/306)) ([dfe4d4f](https://github.com/signalridge/slipway/commit/dfe4d4f81e4bc1588f18999aafae80144d31effe))
+
+
+### Dependencies
+
+* **actions:** bump actions/checkout from 6 to 7 in the actions group ([#304](https://github.com/signalridge/slipway/issues/304)) ([2a9a517](https://github.com/signalridge/slipway/commit/2a9a51704c65de8277be21ddaee27e35149a4885))
+* **docker:** bump golang from `7a3e500` to `3ad5730` ([#303](https://github.com/signalridge/slipway/issues/303)) ([a09663c](https://github.com/signalridge/slipway/commit/a09663cbfc16884d40c69f4487d95dcb71402897))
+
 ## [0.31.5](https://github.com/signalridge/slipway/compare/v0.31.4...v0.31.5) (2026-06-21)
 
 
