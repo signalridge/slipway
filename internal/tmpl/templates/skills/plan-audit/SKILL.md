@@ -169,7 +169,9 @@ failure modes, alternatives, tradeoffs, and concrete risks.
 
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
-- require each task to name its evidence shape (`verdict` / `artifact` / `checklist`)
+- require each task's acceptance criteria to name the concrete evidence that
+  will prove it done — a passing check, a produced artifact, or a satisfied
+  checklist
 - require task acceptance criteria to be satisfiable during S2 implementation; do
   not accept criteria that require future S3 review or closeout evidence
   before the workflow can legally reach those states
