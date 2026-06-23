@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0](https://github.com/signalridge/slipway/compare/v0.32.1...v0.33.0) (2026-06-23)
+
+
+### Features
+
+* **handoff:** add engine-owned per-change handoff ([#312](https://github.com/signalridge/slipway/issues/312)) ([4f0e036](https://github.com/signalridge/slipway/commit/4f0e036b9aa8d7e544d18d816051e3cddfd7d9a6))
+
+
+### Bug Fixes
+
+* **governance:** repair evidence-recording and recovery UX defects ([#310](https://github.com/signalridge/slipway/issues/310), [#311](https://github.com/signalridge/slipway/issues/311)) ([#314](https://github.com/signalridge/slipway/issues/314)) ([967cc9c](https://github.com/signalridge/slipway/commit/967cc9ca6ded0a54cca6d83094ede46909f1776d))
+
 ## [0.32.1](https://github.com/signalridge/slipway/compare/v0.32.0...v0.32.1) (2026-06-23)
 
 
