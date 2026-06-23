@@ -903,9 +903,10 @@ func makeEvidenceTaskCmd() *cobra.Command {
 }
 
 type preparedEvidenceTaskResult struct {
-	payload progression.TaskEvidencePayload
-	path    string
-	view    evidenceTaskView
+	payload    progression.TaskEvidencePayload
+	path       string
+	resultFile string
+	view       evidenceTaskView
 }
 
 func normalizeEvidenceTaskResultFileArgs(resultFiles []string) []string {
@@ -1080,6 +1081,7 @@ func prepareEvidenceTaskResultFiles(
 		}
 		seenTasks[taskID] = resultFile
 
+		sessionID := strings.TrimSpace(result.SessionID)
 		planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
 		if !ok {
 			return nil, newInvalidUsageError(
@@ -1174,12 +1176,13 @@ func prepareEvidenceTaskResultFiles(
 			Blockers:          blockers,
 			CapturedAt:        commandCapturedAt.Format(time.RFC3339Nano),
 			FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
-			SessionID:         strings.TrimSpace(result.SessionID),
+			SessionID:         sessionID,
 		}
 		path := filepath.Join(state.EvidenceTasksDir(root, change.Slug), taskID+".json")
 		prepared = append(prepared, preparedEvidenceTaskResult{
-			payload: payload,
-			path:    path,
+			payload:    payload,
+			path:       path,
+			resultFile: resultFile,
 			view: evidenceTaskView{
 				Slug:              change.Slug,
 				TaskID:            taskID,
@@ -1190,7 +1193,104 @@ func prepareEvidenceTaskResultFiles(
 			},
 		})
 	}
+	if err := rejectDuplicateEvidenceTaskResultSessions(root, change, runSummary, prepared); err != nil {
+		return nil, err
+	}
 	return prepared, nil
+}
+
+type evidenceTaskResultSessionOwner struct {
+	taskID     string
+	resultFile string
+}
+
+func rejectDuplicateEvidenceTaskResultSessions(root string, change model.Change, runSummary int, prepared []preparedEvidenceTaskResult) error {
+	replacedTasks := map[string]struct{}{}
+	for _, item := range prepared {
+		replacedTasks[item.payload.TaskID] = struct{}{}
+	}
+
+	sessionOwners, err := existingEvidenceTaskResultSessionOwners(root, change, runSummary, replacedTasks)
+	if err != nil {
+		return err
+	}
+	for _, item := range prepared {
+		sessionID := strings.TrimSpace(item.payload.SessionID)
+		if sessionID == "" {
+			continue
+		}
+		if previous, ok := sessionOwners[sessionID]; ok && previous.taskID != item.payload.TaskID {
+			return newInvalidUsageError(
+				"evidence_task_result_file_duplicate_session",
+				fmt.Sprintf("multiple task results use session_id %q", sessionID),
+				"Use a distinct session_id per task executor in the active run, or omit session_id when no executor identity is available.",
+				map[string]any{
+					"session_id":            sessionID,
+					"first_task_id":         previous.taskID,
+					"duplicate_task_id":     item.payload.TaskID,
+					"first_result_file":     previous.resultFile,
+					"duplicate_result_file": item.resultFile,
+				},
+			)
+		}
+		sessionOwners[sessionID] = evidenceTaskResultSessionOwner{
+			taskID:     item.payload.TaskID,
+			resultFile: item.resultFile,
+		}
+	}
+	return nil
+}
+
+func existingEvidenceTaskResultSessionOwners(
+	root string,
+	change model.Change,
+	runSummary int,
+	replacedTasks map[string]struct{},
+) (map[string]evidenceTaskResultSessionOwner, error) {
+	dir := state.EvidenceTasksDir(root, change.Slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]evidenceTaskResultSessionOwner{}, nil
+		}
+		return nil, newStateIntegrityError(
+			"evidence_task_existing_evidence_load_failed",
+			fmt.Sprintf("failed to read existing task evidence %q: %v", state.DisplayPath(root, dir), err),
+			"Repair the runtime task evidence before importing task result evidence.",
+			change.Slug,
+			map[string]any{"path": state.DisplayPath(root, dir)},
+		)
+	}
+
+	sessionOwners := map[string]evidenceTaskResultSessionOwner{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		task, _, sessionID, err := progression.ParseTaskEvidence(root, path, runSummary)
+		if err != nil {
+			var versionMismatch progression.TaskEvidenceRunVersionMismatchError
+			if errors.As(err, &versionMismatch) {
+				continue
+			}
+			return nil, newStateIntegrityError(
+				"evidence_task_existing_evidence_invalid",
+				fmt.Sprintf("failed to parse existing task evidence %q: %v", state.DisplayPath(root, path), err),
+				"Repair or remove malformed task evidence before importing task result evidence.",
+				change.Slug,
+				map[string]any{"path": state.DisplayPath(root, path)},
+			)
+		}
+		if _, replaced := replacedTasks[task.TaskID]; replaced || strings.TrimSpace(sessionID) == "" {
+			continue
+		}
+		sessionOwners[strings.TrimSpace(sessionID)] = evidenceTaskResultSessionOwner{
+			taskID:     task.TaskID,
+			resultFile: state.DisplayPath(root, path),
+		}
+	}
+	return sessionOwners, nil
 }
 
 func writePreparedEvidenceTaskResults(prepared []preparedEvidenceTaskResult) error {

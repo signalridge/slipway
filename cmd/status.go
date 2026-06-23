@@ -227,6 +227,9 @@ func makeStatusCmd() *cobra.Command {
 						return err
 					}
 				}
+				if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
+					return printStatusView(cmd, root, *diag, outputFormat, hydrate)
+				}
 				change, archived, err := loadStatusChangeBySlug(root, changeSlug)
 				if err != nil {
 					if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
@@ -465,6 +468,10 @@ func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
 	for _, u := range class.Unknown {
 		view.Diagnostics = append(view.Diagnostics, ownershipUnknownOrphanRemediation(u.Slug, u.Err))
 		view.Blockers = append(view.Blockers, model.NewReasonCode("orphaned_bundle_ownership_unknown", u.Slug))
+	}
+	for _, archived := range class.ArchivedResidue {
+		view.Diagnostics = append(view.Diagnostics, archivedActiveResidueRemediation(archived))
+		view.Blockers = append(view.Blockers, archivedActiveResidueReason(archived))
 	}
 	for _, slug := range class.Plain {
 		view.Diagnostics = append(view.Diagnostics, fmt.Sprintf(

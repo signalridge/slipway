@@ -265,6 +265,60 @@ func TestEvidenceTaskResultFileBatchRejectsDuplicateTaskWithoutWritingEvidence(t
 	})
 }
 
+func TestEvidenceTaskResultFileBatchRejectsDuplicateSessionWithoutWritingEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		writeTaskResultFileWithSessionID(t, filepath.Join(root, "task-result-t-01.json"), "t-01", "test:batch-t-01", "cmd/evidence.go", "executor-a")
+		writeTaskResultFileWithSessionID(t, filepath.Join(root, "task-result-t-02.json"), "t-02", "test:batch-t-02", "cmd/evidence_task_test.go", "executor-a")
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--result-file", "task-result-t-01.json",
+			"--result-file", "task-result-t-02.json",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_result_file_duplicate_session", cliErr.ErrorCode)
+		assert.Equal(t, "executor-a", cliErr.Details["session_id"])
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsDuplicateSessionFromExistingRunEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		writeTaskResultFileWithSessionID(t, filepath.Join(root, "task-result-t-01.json"), "t-01", "test:initial-t-01", "cmd/evidence.go", "executor-a")
+
+		firstCmd := commandForRoot(t, root, makeEvidenceCmd())
+		firstCmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		firstCmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, firstCmd.Execute())
+
+		writeTaskResultFileWithSessionID(t, filepath.Join(root, "task-result-t-02.json"), "t-02", "test:duplicate-session-t-02", "cmd/evidence_task_test.go", "executor-a")
+		secondCmd := commandForRoot(t, root, makeEvidenceCmd())
+		secondCmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-02.json"})
+		cliErr := asCLIError(secondCmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_result_file_duplicate_session", cliErr.ErrorCode)
+		assert.Equal(t, "executor-a", cliErr.Details["session_id"])
+		assert.Equal(t, "t-01", cliErr.Details["first_task_id"])
+		assert.Equal(t, "t-02", cliErr.Details["duplicate_task_id"])
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
 func TestEvidenceTaskResultFileBatchInvalidMemberWritesNoEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -1398,6 +1452,19 @@ func writeTaskResultFile(t *testing.T, path, taskID, evidenceRef, changedFile st
 	writeTaskResultFileWithVerdict(t, path, taskID, "pass", evidenceRef, changedFile, nil)
 }
 
+func writeTaskResultFileWithSessionID(t *testing.T, path, taskID, evidenceRef, changedFile, sessionID string) {
+	t.Helper()
+
+	writeTaskResultFilePayload(t, path, map[string]any{
+		"task_id":       taskID,
+		"verdict":       "pass",
+		"evidence_ref":  evidenceRef,
+		"changed_files": []string{changedFile},
+		"blockers":      []string{},
+		"session_id":    sessionID,
+	})
+}
+
 func writeTaskResultFileWithVerdict(
 	t *testing.T,
 	path string,
@@ -1409,13 +1476,19 @@ func writeTaskResultFileWithVerdict(
 ) {
 	t.Helper()
 
-	rawResult, err := json.Marshal(map[string]any{
+	writeTaskResultFilePayload(t, path, map[string]any{
 		"task_id":       taskID,
 		"verdict":       verdict,
 		"evidence_ref":  evidenceRef,
 		"changed_files": []string{changedFile},
 		"blockers":      blockers,
 	})
+}
+
+func writeTaskResultFilePayload(t *testing.T, path string, payload map[string]any) {
+	t.Helper()
+
+	rawResult, err := json.Marshal(payload)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, rawResult, 0o644))
 }

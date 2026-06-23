@@ -2236,6 +2236,135 @@ func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *test
 	assert.Equal(t, "slipway done", doneReady.NextCommand)
 }
 
+func TestNoSkillRequiredDiagnosticsUseAdvanceCommandBoundary(t *testing.T) {
+	t.Parallel()
+
+	t.Run("S1 injects advance recovery", func(t *testing.T) {
+		change := model.NewChange("ready-no-skill")
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepValidate
+		view := nextView{
+			CurrentState: model.StateS1Plan,
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("no_skill_required", string(model.StateS1Plan)),
+			},
+		}
+
+		applyReadyAdvanceDiagnostics(t.TempDir(), &change, &view)
+		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
+		view.Recovery = model.BuildRecovery(view.Blockers)
+
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_run_to_advance:S1_PLAN")
+		assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+		assert.Equal(t, "run slipway run to advance", view.ConfirmationRequirement.NextAction)
+		assert.Equal(t, "command", view.ConfirmationRequirement.NextActionKind)
+		assert.Equal(t, "slipway run", view.ConfirmationRequirement.NextCommand)
+		require.NotNil(t, view.Recovery)
+		assert.Equal(t, "slipway run", view.Recovery.PrimaryCommand)
+		assert.NotContains(t, view.ConfirmationRequirement.Reason, "blocked_by_governance")
+		assert.NotContains(t, view.ConfirmationRequirement.NextAction, "resolve governance blockers")
+	})
+
+	t.Run("S2 no skill info stays command boundary", func(t *testing.T) {
+		view := nextView{
+			CurrentState: model.StateS2Implement,
+			Blockers: []model.ReasonCode{
+				model.NewReasonCode("no_skill_required", string(model.StateS2Implement)),
+			},
+		}
+
+		req := deriveConfirmationRequirement(view)
+
+		assert.Equal(t, "run_slipway_run_to_advance", req.Reason)
+		assert.Equal(t, "run slipway run to advance", req.NextAction)
+		assert.Equal(t, "command", req.NextActionKind)
+		assert.Equal(t, "slipway run", req.NextCommand)
+		assert.NotContains(t, req.Reason, "blocked_by_governance")
+		assert.NotContains(t, req.NextAction, "resolve governance blockers")
+	})
+}
+
+// TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock is the
+// REQ-003 end-to-end command contract: a governed change sitting at a ready
+// S2_EXECUTE with passing fresh wave-orchestration evidence (no skill required)
+// must surface an advance handoff through the real `next --json --diagnostics`
+// surface, never the misleading blocked_by_governance dead-end. It exercises the
+// full command rather than the deriveConfirmationRequirement helper directly.
+func TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		// Reach a genuinely-ready S2_EXECUTE: a materialized single-task wave plan,
+		// runtime task evidence, and a passing wave-orchestration verification
+		// recorded through the public `slipway evidence skill` surface.
+		slug, _ := createEvidenceTaskFixture(t, root)
+		capturedAt := time.Now().UTC().Add(-time.Minute)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "go test ./cmd -run TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock",
+			"captured_at":   capturedAt.Format(time.RFC3339Nano),
+		})
+		evidenceCmd := commandForRoot(t, root, makeEvidenceCmd())
+		evidenceCmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillWaveOrchestration,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "wave-orchestration:pass",
+			"--notes", "Wave orchestration passed.",
+		})
+		var evidenceOut bytes.Buffer
+		evidenceCmd.SetOut(&evidenceOut)
+		require.NoError(t, evidenceCmd.Execute())
+
+		// Run the real command surface under test.
+		cmd := commandForRoot(t, root, makeNextCmd())
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
+
+		// The query-first surface stays read-only at a ready S2_EXECUTE.
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS2Implement, reloaded.CurrentState, "next --json --diagnostics must stay read-only")
+
+		// The decoded JSON must not mention the governance-block dead-end anywhere.
+		raw := buf.String()
+		assert.NotContains(t, raw, "blocked_by_governance",
+			"a ready no-skill S2 must not surface blocked_by_governance")
+		assert.NotContains(t, raw, "resolve governance blockers",
+			"a ready no-skill S2 must not tell the operator to resolve governance blockers")
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
+		assert.Equal(t, model.StateS2Implement, view.CurrentState)
+		assert.Nil(t, view.NextSkill, "a ready S2 advance state requires no skill handoff")
+
+		// The confirmation surface routes the operator to advance with `slipway run`.
+		assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+		assert.Equal(t, "slipway run", view.ConfirmationRequirement.NextCommand)
+		assert.Equal(t, "command", view.ConfirmationRequirement.NextActionKind)
+		assert.NotContains(t, view.ConfirmationRequirement.Reason, "blocked_by_governance")
+		assert.NotContains(t, view.ConfirmationRequirement.NextAction, "resolve governance blockers")
+
+		// The only blocker is the informational no-skill pacing cue, not an error.
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "no_skill_required:S2_IMPLEMENT")
+		for _, blocker := range view.Blockers {
+			assert.NotEqual(t, "blocked_by_governance", blocker.Code)
+			if blocker.Code == "no_skill_required" {
+				assert.NotEqual(t, model.ReasonSeverityError, blocker.Severity)
+			}
+		}
+	})
+}
+
 func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
 	t.Parallel()
 

@@ -225,8 +225,16 @@ evidence ledger and this verification record. If refreshing an earlier execution
 run, do not reuse a stale literal value; choose the refreshed run_version and
 record every task with that same value.
 
+`verification/wave-orchestration.yaml` is an engine-owned VerificationRecord
+written only by `slipway evidence skill`; do not hand-write it. Keep free-form
+prose out of it and put any verification notes in
+`verification/wave-orchestration-notes.md`, passed via `slipway evidence skill
+--skill wave-orchestration --notes-file verification/wave-orchestration-notes.md`.
+The fields below are the record's shape, not a file to author by hand.
+
 ```yaml
-# Write to: artifacts/changes/{slug}/verification/wave-orchestration.yaml
+# Engine-owned record shape (written by `slipway evidence skill`):
+# artifacts/changes/{slug}/verification/wave-orchestration.yaml
 verdict: pass
 blockers: []
 timestamp: "<ISO-8601-UTC>"

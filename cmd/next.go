@@ -433,6 +433,7 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 		view.GuardrailDomain = strings.TrimSpace(governedChange.GuardrailDomain)
 	}
 	finalize := func() (nextView, error) {
+		applyReadyAdvanceDiagnostics(root, governedChange, &view)
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
 		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
@@ -557,6 +558,25 @@ func shouldExposeAdvancedSummaryToCaller(summary progression.AdvanceSummary) boo
 	default:
 		return false
 	}
+}
+
+func applyReadyAdvanceDiagnostics(root string, change *model.Change, view *nextView) {
+	if change == nil || view == nil || view.NextSkill != nil {
+		return
+	}
+	if !hasReasonCode(view.Blockers, "no_skill_required") ||
+		hasReasonCode(view.Blockers, "run_slipway_run_to_advance") ||
+		hasNonPacingBlocker(*view) {
+		return
+	}
+	canAdvance, blockers := noSkillStateAdvanceReadiness(root, *change)
+	if !canAdvance || len(blockers) > 0 {
+		return
+	}
+	view.Blockers = model.NormalizeReasonCodes(append(
+		view.Blockers,
+		model.NewReasonCode("run_slipway_run_to_advance", string(view.CurrentState)),
+	))
 }
 
 func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advanced *progression.AdvanceSummary) error {
@@ -698,6 +718,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 			return autoStandingAuthorization(reason)
 		}
 		return confirmationHardStop(reason)
+	case hasReasonCode(view.Blockers, "no_skill_required") && !hasNonPacingBlocker(view):
+		return confirmationCommandRequired("run_slipway_run_to_advance")
 	case len(view.Blockers) > 0:
 		return confirmationCommandRequired("blocked_by_governance")
 	case len(view.AutoPassEligible) > 0:
