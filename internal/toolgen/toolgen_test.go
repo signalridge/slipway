@@ -3079,6 +3079,7 @@ func TestIsShellSafePath(t *testing.T) {
 		"/Users/dev/ghq/github.com/signalridge/slipway",
 		"/var/folders/qx/T/TestX_001",
 		"/repo-1.2_x+y@z",
+		"/home/RUNNER~1/repo", // 8.3-style short name (~) must stay launchable
 	} {
 		assert.Truef(t, isShellSafePath(p), "%q should be shell-safe", p)
 	}
@@ -3091,8 +3092,23 @@ func TestIsShellSafePath(t *testing.T) {
 		"/has'quote",
 		"/has(paren)",
 		"/tab\there",
+		"/has%var",   // cmd.exe %VAR% expansion
+		"/has,comma", // PowerShell array operator
+		"/has`tick",  // command substitution
+		"/has^caret", // cmd.exe escape
 	} {
 		assert.Falsef(t, isShellSafePath(p), "%q should be shell-unsafe", p)
+	}
+
+	// The OS path separator must be accepted so in-repo go-run hooks render with
+	// a native absolute path. On Windows that separator is the backslash; on a
+	// POSIX host a backslash is the shell escape and must be rejected instead.
+	if runtime.GOOS == "windows" {
+		assert.True(t, isShellSafePath(`C:\Users\RUNNER~1\AppData\Local\Temp\T_001`),
+			"a Windows absolute path must be shell-safe")
+	} else {
+		assert.False(t, isShellSafePath(`/has\backslash`),
+			"a backslash is the shell escape on POSIX and must be rejected")
 	}
 }
 
@@ -3178,6 +3194,8 @@ func TestStripSlipwayInvocation(t *testing.T) {
 		{"absolute binary", "/usr/local/bin/slipway hook context-pressure", "hook context-pressure", true},
 		{"go run", "go -C /repo run . hook session-start --tool codex", "hook session-start --tool codex", true},
 		{"go run no flags", "go -C /repo run . hook context-pressure", "hook context-pressure", true},
+		{"bare go run is user-owned, not a slipway launcher", "go run . hook session-start --local-mode", "", false},
+		{"go run without -C is user-owned", "go run ./cmd/slipway hook session-start", "", false},
 		{"go build is not a launcher", "go build ./...", "", false},
 		{"bash -lc is not slipway", `bash -lc "echo .claude"`, "", false},
 		{"empty", "", "", false},
@@ -3208,6 +3226,7 @@ func TestIsStaleDirectHookCommandAcrossLaunchers(t *testing.T) {
 		{"different event kept", "slipway hook context-pressure", "slipway hook session-start", false},
 		{"identical kept", "slipway hook session-start", "slipway hook session-start", false},
 		{"non-slipway kept", "echo user-owned", "slipway hook session-start", false},
+		{"user-authored go run kept", "go run . hook session-start --local-mode", "go -C /repo run . hook session-start", false},
 		{"empty current kept", "slipway hook session-start", "", false},
 	} {
 		tc := tc
@@ -3316,6 +3335,42 @@ func TestInRepoRefreshDoesNotDuplicateAcrossDevReleaseSwitch(t *testing.T) {
 	assert.Contains(t, releaseCommands, sessionStartHookCommand)
 	assert.NotContains(t, strings.Join(releaseCommands, "\n"), "go -C ", "stale go-run command must be pruned on release")
 	assert.Equal(t, 1, countCommandOccurrences(releaseCommands, sessionStartHookCommand))
+}
+
+// A user who hand-writes a `go run . hook ...` entry (a form Slipway never
+// generates — it always emits `go -C <root> run .`) must keep it across an
+// in-repo refresh: stale-hook pruning is scoped to Slipway-owned launcher forms.
+func TestInRepoRefreshKeepsUserAuthoredBareGoRunHook(t *testing.T) {
+	root := t.TempDir()
+	writeSlipwayGoMod(t, root)
+	abs, err := filepath.Abs(root)
+	require.NoError(t, err)
+	cfg := ToolConfig{
+		ID:           "claude",
+		SettingsPath: filepath.Join(".claude", "settings.json"),
+		SessionEvent: "SessionStart",
+		SessionHook:  filepath.Join(".claude", "hooks", "slipway-session-start"),
+	}
+
+	userHook := "go run . hook session-start --local-mode"
+	seed := fmt.Sprintf(`{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":"slipway hook session-start"}]},
+	      {"matcher":"*","hooks":[{"type":"command","command":%q}]}
+	    ]
+	  }
+	}`, userHook)
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
+	require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
+
+	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
+
+	commands := hookCommandsForEvent(t, settingsPath, "SessionStart")
+	assert.Contains(t, commands, "go -C "+abs+" run . hook session-start", "the managed go-run entry is merged in")
+	assert.NotContains(t, commands, "slipway hook session-start", "the stale bare release entry is pruned")
+	assert.Contains(t, commands, userHook, "a user-authored bare `go run .` hook must survive refresh")
 }
 
 func countCommandOccurrences(items []string, target string) int {

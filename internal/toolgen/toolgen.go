@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -2061,15 +2062,6 @@ const (
 	codexHooksBlockEnd         = "# END SLIPWAY MANAGED CODEX HOOKS"
 )
 
-// slipwayModulePath is the Go module path of this repository. When Slipway
-// generates host hooks inside its own source tree (in-repo dogfooding), the
-// hook commands launch the worktree source via `go run` instead of a
-// PATH-installed release, so hooks always exercise HEAD without shadowing
-// slipway globally. Generated adapter configs are git-ignored and regenerated
-// per machine, so the absolute module path embedded here never leaks into
-// shared history.
-const slipwayModulePath = "github.com/signalridge/slipway"
-
 // hookLaunch returns the command prefix and existence-probe binary that
 // generated hook invocations use to launch Slipway from root. Inside the
 // Slipway source module it returns ("go -C <root> run .", "go") so hooks track
@@ -2099,19 +2091,36 @@ func applyHookLaunchPrefix(command, root string) string {
 	return command
 }
 
-// slipwaySourceModuleRoot returns the absolute path of root when root is the
-// Slipway source module (its go.mod declares slipwayModulePath), else "".
+// slipwaySourceModuleRoot returns the absolute path of root when root's go.mod
+// declares the same module path this binary was built from, else "". Matching
+// against the running binary's own module path (rather than a hardcoded
+// "github.com/signalridge/slipway") makes in-repo detection fork-correct: a fork
+// built and run from its own checkout reports its renamed module path, so its
+// hooks dogfood the fork's HEAD instead of silently falling back to a release.
 func slipwaySourceModuleRoot(root string) string {
 	abs, err := filepath.Abs(root)
 	if err != nil {
+		return ""
+	}
+	self := selfModulePath()
+	if self == "" {
 		return ""
 	}
 	data, err := os.ReadFile(filepath.Join(abs, "go.mod")) // #nosec G304 -- reads the workspace's own go.mod to detect in-repo dogfooding.
 	if err != nil {
 		return ""
 	}
-	if modulePathFromGoMod(data) == slipwayModulePath {
+	if modulePathFromGoMod(data) == self {
 		return abs
+	}
+	return ""
+}
+
+// selfModulePath returns the Go module path this binary (or test binary) was
+// built from, or "" when build information is unavailable.
+func selfModulePath() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		return info.Main.Path
 	}
 	return ""
 }
@@ -2133,18 +2142,28 @@ func modulePathFromGoMod(data []byte) string {
 	return ""
 }
 
-// isShellSafePath reports whether p contains only characters that need no shell
-// quoting, so it can be embedded verbatim as a `go -C <p>` argument in a command
-// string executed by /bin/sh, cmd, or PowerShell.
+// isShellSafePath reports whether the absolute path p can be embedded verbatim
+// as a `go -C <p>` argument in a hook command string run by /bin/sh, cmd.exe, or
+// PowerShell, without quoting. Callers pass filepath.Abs output, so p always
+// starts with "/" or a drive letter — a leading '~' or '-' never occurs and only
+// mid-token metacharacters matter. p is rejected if it contains whitespace, a
+// control character, a character any of the three shells treats as active
+// (quoting, expansion, redirection, command separation, globbing, or cmd's
+// %VAR% expansion), or a backslash on a POSIX host (where '\' is the shell
+// escape, not the path separator). On Windows '\' is the path separator and is
+// allowed, so Windows absolute paths — including 8.3 short names like RUNNER~1 —
+// stay launchable.
 func isShellSafePath(p string) bool {
 	if p == "" {
 		return false
 	}
 	for _, r := range p {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case strings.ContainsRune("/._-+@:=,%", r):
-		default:
+		case r <= ' ' || r == 0x7f:
+			return false
+		case r == '\\' && os.PathSeparator != '\\':
+			return false
+		case strings.ContainsRune("\"'`$&|;<>(){}[]*?!^%,#", r):
 			return false
 		}
 	}
@@ -2153,19 +2172,20 @@ func isShellSafePath(p string) bool {
 
 // stripSlipwayInvocation removes a recognized Slipway launcher head from an
 // inline hook command and returns the remaining argument tail. It matches the
-// bare/absolute binary forms ("slipway ...", "/abs/slipway ...") and the
-// in-repo go-run form ("go [-C dir] run . ..."), so prune logic can identify a
-// Slipway-owned command regardless of which launch prefix generated it.
+// bare/absolute binary forms ("slipway ...", "/abs/slipway ...") and the exact
+// in-repo go-run form Slipway generates ("go -C <dir> run . ..."; see
+// hookLaunch), so prune logic can identify a Slipway-owned command regardless of
+// which launch prefix produced it. A bare `go run . ...` is deliberately not
+// matched: Slipway never emits it, so a user-authored `go run . hook ...` hook
+// is left untouched rather than misclassified as a stale Slipway entry.
 func stripSlipwayInvocation(command string) (string, bool) {
 	fields := strings.Fields(strings.TrimSpace(command))
 	if len(fields) == 0 {
 		return "", false
 	}
 	if fields[0] == "go" {
-		for i := 1; i+1 < len(fields); i++ {
-			if fields[i] == "run" && fields[i+1] == "." {
-				return strings.Join(fields[i+2:], " "), true
-			}
+		if len(fields) >= 5 && fields[1] == "-C" && fields[3] == "run" && fields[4] == "." {
+			return strings.Join(fields[5:], " "), true
 		}
 		return "", false
 	}
