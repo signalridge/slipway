@@ -19,7 +19,27 @@ const (
 	handoffHeaderOpen  = "<!-- slipway:handoff-machine-header"
 	handoffHeaderClose = "slipway:handoff-machine-header -->"
 	handoffTimeFormat  = time.RFC3339Nano
+
+	// handoffPendingPlaceholder is the body the engine writes for every section
+	// of a freshly scaffolded handoff. A section still carrying this exact body
+	// is unauthored and must not be surfaced as continuity content.
+	handoffPendingPlaceholder = "_Agent-authored narrative pending._"
+
+	// handoffExcerptSectionMaxRunes bounds each section body surfaced in the
+	// SessionStart excerpt so the host context budget stays protected. The fixed
+	// handoff template means the excerpt is deterministic; only oversized authored
+	// bodies are truncated, with a pointer to the full narrative.
+	handoffExcerptSectionMaxRunes = 400
 )
+
+// handoffExcerptSections is the fixed, ordered set of continuity sections
+// surfaced in the SessionStart excerpt. The handoff template is fixed, so the
+// excerpt always pulls the same well-known sections when authored.
+var handoffExcerptSections = []string{
+	"Current Position",
+	"Next Session Focus",
+	"Risks And Blockers",
+}
 
 var handoffSectionNames = []string{
 	"Current Position",
@@ -162,6 +182,76 @@ func HandoffBrief(doc HandoffDocument) string {
 	)
 }
 
+// HandoffExcerpt renders a bounded, host-injectable view of a handoff for
+// SessionStart context. It leads with the machine brief line, then appends the
+// authored continuity sections from the fixed handoff template. Unauthored
+// placeholder bodies are skipped; when no section is authored the excerpt
+// degrades to the brief plus an explicit unauthored marker so the host knows
+// the handoff exists but carries no continuity yet. A stale handoff is flagged
+// so the host re-authors before relying on it. Returns "" when the document
+// carries no slug.
+func HandoffExcerpt(doc HandoffDocument) string {
+	brief := HandoffBrief(doc)
+	if brief == "" {
+		return ""
+	}
+	var b strings.Builder
+	if strings.EqualFold(strings.TrimSpace(doc.Header.Staleness), "stale") {
+		b.WriteString("session_handoff_stale: true; lifecycle advanced after this handoff — re-author via `slipway handoff write` before relying on it\n")
+	}
+	b.WriteString(brief)
+	b.WriteByte('\n')
+
+	sections := authoredHandoffSections(doc.Narrative)
+	if len(sections) == 0 {
+		b.WriteString("session_handoff_unauthored: true; no continuity recorded — run `slipway handoff write --section \"Next Session Focus\"` to capture it")
+		return strings.TrimRight(b.String(), "\n")
+	}
+	b.WriteString("session_handoff_excerpt:\n")
+	for _, section := range sections {
+		b.WriteString("## ")
+		b.WriteString(section[0])
+		b.WriteByte('\n')
+		b.WriteString(truncateHandoffBody(section[1], handoffExcerptSectionMaxRunes))
+		b.WriteByte('\n')
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// authoredHandoffSections returns the fixed-template continuity sections that
+// carry real agent-authored content, in template order, skipping any section
+// whose body is still the engine placeholder.
+func authoredHandoffSections(narrative string) [][2]string {
+	out := make([][2]string, 0, len(handoffExcerptSections))
+	for _, section := range handoffExcerptSections {
+		body := strings.TrimSpace(extractHandoffSection(narrative, section))
+		if !handoffSectionAuthored(body) {
+			continue
+		}
+		out = append(out, [2]string{section, body})
+	}
+	return out
+}
+
+// handoffSectionAuthored reports whether a section body carries real content
+// rather than the engine's unauthored placeholder.
+func handoffSectionAuthored(body string) bool {
+	body = strings.TrimSpace(body)
+	return body != "" && body != handoffPendingPlaceholder
+}
+
+// truncateHandoffBody bounds a section body to maxRunes, appending a pointer to
+// the full narrative when truncated. Truncation is rune-aware so multibyte
+// content is never split mid-rune.
+func truncateHandoffBody(body string, maxRunes int) string {
+	body = strings.TrimSpace(body)
+	runes := []rune(body)
+	if len(runes) <= maxRunes {
+		return body
+	}
+	return strings.TrimSpace(string(runes[:maxRunes])) + " …(run `slipway handoff show` for full text)"
+}
+
 func HandoffStaleness(root string, change model.Change, updatedAt time.Time) string {
 	if updatedAt.IsZero() {
 		return "unknown"
@@ -227,7 +317,7 @@ func ensureHandoffNarrativeSkeleton(raw string) string {
 	for _, section := range handoffSectionNames {
 		body := extractHandoffSection(raw, section)
 		if strings.TrimSpace(body) == "" {
-			body = "_Agent-authored narrative pending._"
+			body = handoffPendingPlaceholder
 		}
 		b.WriteString("\n## ")
 		b.WriteString(section)

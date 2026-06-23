@@ -55,8 +55,15 @@ func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 	if err != nil {
 		// A change bound to another worktree is an expected, informational state
 		// when a session opens with no active change of its own: point the host
-		// at the bound change instead of an alarming next-failed diagnostic.
-		if handoffInfo = sessionStartBoundWorktreeHandoff(err); handoffInfo == "" {
+		// at the bound change instead of an alarming next-failed diagnostic, and
+		// thread that change's slug so its handoff excerpt is surfaced below. The
+		// bound change has no next --json here, so the handoff is the only
+		// continuity signal the next agent gets.
+		boundSlug, boundInfo := sessionStartBoundWorktreeHandoff(err)
+		if boundInfo != "" {
+			handoffInfo = boundInfo
+			changeSlug = boundSlug
+		} else {
 			diagnostics = append(diagnostics, "hook_diagnostic: slipway next --json failed: "+normalizeHookDiagnostic(err.Error()))
 		}
 	}
@@ -69,22 +76,23 @@ func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 }
 
 // sessionStartBoundWorktreeHandoff renders the friendly informational line for
-// the change_bound_to_other_worktree precondition. When a session opens where
-// no change is active for the current worktree while a change is bound
-// elsewhere, the host is pointed at that change instead of seeing an alarming
-// "next --json failed" diagnostic. Returns "" for any other error or when the
-// bound change details are incomplete, so the caller falls back to the
-// diagnostic path.
-func sessionStartBoundWorktreeHandoff(err error) string {
+// the change_bound_to_other_worktree precondition and returns the bound change
+// slug alongside it. When a session opens where no change is active for the
+// current worktree while a change is bound elsewhere, the host is pointed at
+// that change instead of seeing an alarming "next --json failed" diagnostic, and
+// the returned slug lets the caller surface that change's handoff excerpt.
+// Returns ("", "") for any other error or when the bound change details are
+// incomplete, so the caller falls back to the diagnostic path.
+func sessionStartBoundWorktreeHandoff(err error) (slug, info string) {
 	cliErr := asCLIError(err)
 	if cliErr == nil || cliErr.ErrorCode != "change_bound_to_other_worktree" {
-		return ""
+		return "", ""
 	}
 	slug, worktreePath := firstBoundChange(cliErr.Details)
 	if slug == "" || worktreePath == "" {
-		return ""
+		return "", ""
 	}
-	return fmt.Sprintf(
+	return slug, fmt.Sprintf(
 		"session_handoff_info: no active change in this worktree; active change %s is bound to %s; cd there or use --change %s to act",
 		slug, worktreePath, slug,
 	)
@@ -137,11 +145,10 @@ func sessionStartHandoffSummary(root, slug string) string {
 		return ""
 	}
 	handoffPath := state.ChangeHandoffPath(root, slug)
-	if brief, ok, err := handoffBriefForChange(root, slug); err == nil && ok {
-		if before, _, ok := strings.Cut(brief, " focus="); ok {
-			return before
+	if doc, ok, err := readHandoffDocument(root, slug); err == nil && ok {
+		if excerpt := strings.TrimSpace(state.HandoffExcerpt(doc)); excerpt != "" {
+			return excerpt
 		}
-		return brief
 	}
 	present := "false"
 	if _, err := os.Stat(handoffPath); err == nil {

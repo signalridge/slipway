@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,107 @@ func TestHandoffBriefIsBoundedDescriptor(t *testing.T) {
 	assert.Contains(t, brief, "Finish command tests.")
 	assert.NotContains(t, brief, "current_state")
 	assert.NotContains(t, brief, "next_skill")
+}
+
+func TestHandoffExcerptEmitsAuthoredSectionsAndSkipsPlaceholders(t *testing.T) {
+	doc := HandoffDocument{
+		Path: "/repo/.git/slipway/runtime/changes/demo/handoff.md",
+		Header: HandoffHeader{
+			Slug:       "demo",
+			Generation: 2,
+			UpdatedAt:  time.Date(2026, 6, 23, 1, 2, 3, 0, time.UTC),
+			Staleness:  "fresh",
+		},
+		Narrative: "## Current Position\nWave 2 of 3 implemented.\n\n## Next Session Focus\nResume wave-3 evidence capture.\n\n## Risks And Blockers\n" + handoffPendingPlaceholder + "\n",
+	}
+	excerpt := HandoffExcerpt(doc)
+	assert.Contains(t, excerpt, "session_handoff: slug=demo")
+	assert.Contains(t, excerpt, "session_handoff_excerpt:")
+	assert.Contains(t, excerpt, "## Current Position")
+	assert.Contains(t, excerpt, "Wave 2 of 3 implemented.")
+	assert.Contains(t, excerpt, "## Next Session Focus")
+	assert.Contains(t, excerpt, "Resume wave-3 evidence capture.")
+	// A placeholder section carries no continuity and must be skipped.
+	assert.NotContains(t, excerpt, "## Risks And Blockers")
+	assert.NotContains(t, excerpt, handoffPendingPlaceholder)
+	assert.NotContains(t, excerpt, "session_handoff_unauthored")
+	assert.NotContains(t, excerpt, "session_handoff_stale")
+}
+
+func TestHandoffExcerptDegradesToUnauthoredMarkerWhenAllPlaceholders(t *testing.T) {
+	doc := HandoffDocument{
+		Header: HandoffHeader{
+			Slug:      "demo",
+			UpdatedAt: time.Date(2026, 6, 23, 1, 2, 3, 0, time.UTC),
+			Staleness: "fresh",
+		},
+		Narrative: ensureHandoffNarrativeSkeleton(""),
+	}
+	excerpt := HandoffExcerpt(doc)
+	assert.Contains(t, excerpt, "session_handoff: slug=demo")
+	assert.Contains(t, excerpt, "session_handoff_unauthored: true")
+	assert.NotContains(t, excerpt, "session_handoff_excerpt:")
+}
+
+func TestHandoffExcerptFlagsStaleHandoffBeforeContent(t *testing.T) {
+	doc := HandoffDocument{
+		Header: HandoffHeader{
+			Slug:      "demo",
+			UpdatedAt: time.Date(2026, 6, 23, 1, 2, 3, 0, time.UTC),
+			Staleness: "stale",
+		},
+		Narrative: "## Next Session Focus\nResume wave-3.\n",
+	}
+	excerpt := HandoffExcerpt(doc)
+	assert.True(t, strings.HasPrefix(excerpt, "session_handoff_stale: true"), excerpt)
+	assert.Contains(t, excerpt, "Resume wave-3.")
+}
+
+func TestHandoffExcerptTruncatesOversizedSectionBody(t *testing.T) {
+	long := strings.Repeat("x", handoffExcerptSectionMaxRunes+50)
+	doc := HandoffDocument{
+		Header: HandoffHeader{
+			Slug:      "demo",
+			UpdatedAt: time.Date(2026, 6, 23, 1, 2, 3, 0, time.UTC),
+			Staleness: "fresh",
+		},
+		Narrative: "## Next Session Focus\n" + long + "\n",
+	}
+	excerpt := HandoffExcerpt(doc)
+	assert.Contains(t, excerpt, "run `slipway handoff show` for full text")
+	assert.NotContains(t, excerpt, long)
+}
+
+func TestHandoffExcerptReturnsEmptyWithoutSlug(t *testing.T) {
+	assert.Equal(t, "", HandoffExcerpt(HandoffDocument{Narrative: "## Next Session Focus\nx\n"}))
+}
+
+// TestArchiveChangeRemovesAdvisoryHandoff pins the invariant the SessionStart
+// excerpt relies on: SessionStart surfaces a handoff only for an open change,
+// because archive removes the handoff with the rest of the per-change runtime
+// state. Lives here (a handoff-owned file) rather than lifecycle_test.go so the
+// archive surface stays decoupled from handoff awareness.
+func TestArchiveChangeRemovesAdvisoryHandoff(t *testing.T) {
+	root := createRuntimeLayout(t)
+	slug := "handoff-archive"
+	change := model.NewChange(slug)
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	_, err := WriteHandoff(root, change, HandoffWriteOptions{Section: "Next Session Focus", SectionBody: "resume"})
+	require.NoError(t, err)
+	handoffPath := ChangeHandoffPath(root, slug)
+	_, err = os.Stat(handoffPath)
+	require.NoError(t, err)
+
+	_, err = ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	_, err = os.Stat(handoffPath)
+	require.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestHandoffHeaderKeysExcludeLifecycleAuthorityFields(t *testing.T) {

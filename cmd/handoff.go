@@ -163,15 +163,6 @@ func readHandoffDocument(root, changeSlug string) (state.HandoffDocument, bool, 
 	return doc, true, nil
 }
 
-func handoffBriefForChange(root, changeSlug string) (string, bool, error) {
-	doc, ok, err := readHandoffDocument(root, changeSlug)
-	if err != nil || !ok {
-		return "", ok, err
-	}
-	brief := state.HandoffBrief(doc)
-	return brief, strings.TrimSpace(brief) != "", nil
-}
-
 func resolveHandoffChangeRef(root, changeSlug string) (changeRef, bool, error) {
 	ref, err := resolveActiveChangeRef(root, changeSlug)
 	if err == nil {

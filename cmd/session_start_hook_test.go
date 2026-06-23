@@ -25,7 +25,7 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(handoffPath), 0o755))
 		writeCmd := commandForRoot(t, root, makeHandoffCmd())
 		writeCmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
-		writeCmd.SetIn(strings.NewReader("handoff body must not be embedded"))
+		writeCmd.SetIn(strings.NewReader("resume wave-3 evidence capture"))
 		writeCmd.SetOut(io.Discard)
 		require.NoError(t, writeCmd.Execute())
 		legacyPath := filepath.Join(state.GitRuntimeDir(root), "handoff.md")
@@ -44,35 +44,32 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		assert.Contains(t, body, "slipway_entry_skill:")
 		assert.Contains(t, body, "session_handoff: slug="+slug)
 		assert.Contains(t, body, "path="+handoffPath)
-		assert.NotContains(t, body, "handoff body must not be embedded")
+		// The authored continuity section is surfaced as a bounded excerpt.
+		assert.Contains(t, body, "session_handoff_excerpt:")
+		assert.Contains(t, body, "resume wave-3 evidence capture")
+		// The deprecated repo-global handoff is never embedded.
 		assert.NotContains(t, body, legacyPath)
 		assert.NotContains(t, body, "legacy handoff body must not be embedded")
 	})
 }
 
-func TestSessionStartHandoffSummaryUsesCommandOwnedBrief(t *testing.T) {
+func TestSessionStartHandoffSummaryEmitsAuthoredExcerpt(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start command owned brief")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start authored excerpt")
 
 		writeCmd := commandForRoot(t, root, makeHandoffCmd())
 		writeCmd.SetArgs([]string{"write", "--change", slug, "--section", "Next Session Focus"})
-		writeCmd.SetIn(strings.NewReader("hook should trim this body"))
+		writeCmd.SetIn(strings.NewReader("resume the worktree-preflight rewrite"))
 		writeCmd.SetOut(io.Discard)
 		require.NoError(t, writeCmd.Execute())
 
-		brief, ok, err := handoffBriefForChange(root, slug)
-		require.NoError(t, err)
-		require.True(t, ok)
-		expected := brief
-		if before, _, ok := strings.Cut(brief, " focus="); ok {
-			expected = before
-		}
-
 		summary := sessionStartHandoffSummary(root, slug)
-		assert.Equal(t, expected, summary)
-		assert.NotContains(t, summary, "hook should trim this body")
+		assert.Contains(t, summary, "session_handoff: slug="+slug)
+		assert.Contains(t, summary, "session_handoff_excerpt:")
+		assert.Contains(t, summary, "## Next Session Focus")
+		assert.Contains(t, summary, "resume the worktree-preflight rewrite")
 	})
 }
 
@@ -192,6 +189,40 @@ func TestSessionStartHookTreatsBoundWorktreeChangeAsInformational(t *testing.T) 
 		assert.Contains(t, body, "active change bound-change is bound to "+normalizedWorktreePath)
 		assert.Contains(t, body, "use --change bound-change to act")
 		assert.NotContains(t, body, "hook_diagnostic: slipway next --json failed:")
+	})
+}
+
+func TestSessionStartHookSurfacesBoundChangeHandoffExcerpt(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		worktreePath := filepath.Join(t.TempDir(), "bound-worktree")
+		runGit(t, root, "worktree", "add", worktreePath, "-b", "bound-worktree")
+		change := model.NewChange("bound-change")
+		change.WorktreePath = worktreePath
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetArgs([]string{"write", "--change", change.Slug, "--section", "Next Session Focus"})
+		writeCmd.SetIn(strings.NewReader("finish the bound-worktree migration"))
+		writeCmd.SetOut(io.Discard)
+		require.NoError(t, writeCmd.Execute())
+
+		cmd := makeHookCmd()
+		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		body := out.String()
+		// The pointer line and the bound change's handoff excerpt are both
+		// surfaced even though next --json is unavailable in this worktree.
+		assert.Contains(t, body, "session_handoff_info: no active change in this worktree")
+		assert.Contains(t, body, "session_handoff: slug=bound-change")
+		assert.Contains(t, body, "session_handoff_excerpt:")
+		assert.Contains(t, body, "finish the bound-worktree migration")
 	})
 }
 
