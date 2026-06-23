@@ -114,8 +114,19 @@ func executeRootCommand(cmd *cobra.Command) error {
 		defaultHelpFunc(c, args)
 	})
 
-	err := cmd.Execute()
+	executed, err := cmd.ExecuteC()
 	if err == nil {
+		return nil
+	}
+	// Hook subcommands are inlined into host automation (SessionStart,
+	// UserPromptSubmit, ...) and must never surface a blocking or non-zero
+	// failure. Their Run bodies already fail silent, but Cobra reports
+	// flag-parse and command-resolution errors before the body runs. A version
+	// skew between a generated hook invocation and an older installed binary
+	// (for example a newer `--tool` flag the binary does not yet know) would
+	// otherwise exit non-zero and block the host. Swallow any error from the
+	// hook subtree to a clean exit 0 with no diagnostic noise.
+	if isHookSubtreeCommand(executed) {
 		return nil
 	}
 	cliErr := asCLIError(err)
@@ -123,6 +134,19 @@ func executeRootCommand(cmd *cobra.Command) error {
 		return emitErr
 	}
 	return cliErr
+}
+
+// isHookSubtreeCommand reports whether c is the hook command or one of its
+// descendants. It enforces the fail-silent contract for host-inlined hooks
+// across every error path, including the pre-Run flag and command-resolution
+// errors Cobra raises before a hook's own fail-silent Run body executes.
+func isHookSubtreeCommand(c *cobra.Command) bool {
+	for cur := c; cur != nil; cur = cur.Parent() {
+		if cur.Name() == hookCommandName {
+			return true
+		}
+	}
+	return false
 }
 
 func writeRootHelp(w io.Writer) error {
