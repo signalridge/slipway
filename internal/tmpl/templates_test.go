@@ -672,7 +672,9 @@ func TestRenderCommandEntryTemplate(t *testing.T) {
 func TestRenderSessionStartHookTemplate(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{
-		"ToolID": "claude",
+		"ToolID":       "claude",
+		"LaunchPrefix": "slipway",
+		"ProbeBin":     "slipway",
 	}
 	content, err := Render("hooks/session-start.sh.tmpl", data)
 	require.NoError(t, err, "failed to render session-start.sh.tmpl")

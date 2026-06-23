@@ -41,11 +41,26 @@ type contextPressureMetric struct {
 	hasTimestamp  bool
 }
 
+// hookCommandName is the name of the parent command whose subtree is inlined
+// into host automation. Errors from this subtree are swallowed to a silent
+// exit 0 so a hook can never block the host (see isHookSubtreeCommand).
+const hookCommandName = "hook"
+
 func makeHookCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "hook",
+		Use:    hookCommandName,
 		Short:  "Run internal Slipway hook helpers",
 		Hidden: true,
+		// Hooks are inlined into host automation and must stay inert under
+		// version skew. If a generated config names a hook subcommand this
+		// binary does not have, Cobra would otherwise print parent usage to the
+		// host's hook output channel. Make the parent runnable so any
+		// unresolved invocation returns an error that executeRootCommand
+		// swallows to a silent exit 0 instead of emitting usage text.
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return errors.New("no hook subcommand resolved")
+		},
 	}
 	cmd.AddCommand(makeSessionStartHookCmd())
 	cmd.AddCommand(makeContextPressureHookCmd())
