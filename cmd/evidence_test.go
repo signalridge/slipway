@@ -81,14 +81,20 @@ func TestEvidenceRestampCommandIsNotRegistered(t *testing.T) {
 	})
 }
 
-func TestEvidenceTaskWrongStateInS3RoutesToGoalVerificationAndFinalCloseout(t *testing.T) {
+// TestEvidenceTaskWrongStateBeforeImplement asserts task evidence is rejected from
+// states that own neither wave execution nor its review convergence. S2_IMPLEMENT
+// (normal wave execution) and S3_REVIEW (in-place convergence for a folded-in task)
+// are the only recordable states; recording from S1_PLAN fails closed with a
+// remediation that names both valid states.
+func TestEvidenceTaskWrongStateBeforeImplement(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		_, change := createEvidenceTaskFixture(t, root)
-		change.CurrentState = model.StateS3Review
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepAudit
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -103,36 +109,7 @@ func TestEvidenceTaskWrongStateInS3RoutesToGoalVerificationAndFinalCloseout(t *t
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_task_wrong_state", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Remediation, "goal-verification")
-		assert.Contains(t, cliErr.Remediation, "final-closeout")
-	})
-}
-
-func TestEvidenceTaskWrongStateInS3RoutesToReviewAndVerificationEvidence(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		_, change := createEvidenceTaskFixture(t, root)
-		change.CurrentState = model.StateS3Review
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := commandForRoot(t, root, makeEvidenceCmd())
-		cmd.SetArgs([]string{
-			"task",
-			"--task-id", "t-01",
-			"--run-summary-version", "1",
-			"--task-kind", "verification",
-			"--verdict", "pass",
-			"--evidence-ref", "test:wrong-state",
-		})
-		cliErr := asCLIError(cmd.Execute())
-		require.NotNil(t, cliErr)
-		assert.Equal(t, "evidence_task_wrong_state", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Remediation, "spec-compliance-review")
-		assert.Contains(t, cliErr.Remediation, "code-quality-review")
-		assert.Contains(t, cliErr.Remediation, "goal-verification")
-		assert.Contains(t, cliErr.Remediation, "final-closeout")
+		assert.Contains(t, cliErr.Remediation, "S2_IMPLEMENT")
+		assert.Contains(t, cliErr.Remediation, "S3_REVIEW")
 	})
 }

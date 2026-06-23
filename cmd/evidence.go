@@ -543,9 +543,15 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				// error it returns is surfaced, never swallowed, so a partial or
 				// scope-failing run still fails closed instead of recording a clean
 				// summary.
+				// At S2 this first materializes execution-summary.yaml; at S3 it rebuilds
+				// it to fold in the just-attested task so the incomplete_execution_task
+				// blocker clears in place (the wave evidence was only recordable at S3
+				// while that convergence was pending). Both flow through the owning
+				// command so validate/status/next reflect the result immediately, and any
+				// error fails closed instead of leaving a stale summary.
 				if record.IsPassing() &&
 					skillName == progression.SkillWaveOrchestration &&
-					change.CurrentState == model.StateS2Implement {
+					(change.CurrentState == model.StateS2Implement || change.CurrentState == model.StateS3Review) {
 					if _, err := progression.SyncGovernedWaveExecution(root, change); err != nil {
 						return newStateIntegrityError(
 							"evidence_skill_execution_summary_sync_failed",
@@ -653,11 +659,11 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if change.CurrentState != model.StateS2Implement {
+				if change.CurrentState != model.StateS2Implement && change.CurrentState != model.StateS3Review {
 					remediation := evidenceTaskWrongStateRemediation(root, change)
 					return newInvalidUsageError(
 						"evidence_task_wrong_state",
-						fmt.Sprintf("task evidence requires S2_IMPLEMENT state, current: %s", change.CurrentState),
+						fmt.Sprintf("task evidence requires S2_IMPLEMENT or S3_REVIEW state, current: %s", change.CurrentState),
 						remediation,
 						nil,
 					)
@@ -699,6 +705,9 @@ func makeEvidenceTaskCmd() *cobra.Command {
 						"Use a task ID from the current tasks.md-derived wave projection and retry.",
 						map[string]any{"task_id": taskID},
 					)
+				}
+				if err := assertTaskEvidenceConvergenceAtReview(root, change, taskID); err != nil {
+					return err
 				}
 
 				if runSummary < 1 {
@@ -964,6 +973,11 @@ func recordEvidenceTaskResultFiles(
 	prepared, err := prepareEvidenceTaskResultFiles(root, change, wavePlan, runSummary, resultFiles, time.Now().UTC())
 	if err != nil {
 		return err
+	}
+	for _, item := range prepared {
+		if err := assertTaskEvidenceConvergenceAtReview(root, change, item.payload.TaskID); err != nil {
+			return err
+		}
 	}
 	if err := writePreparedEvidenceTaskResults(prepared); err != nil {
 		return err
@@ -1529,7 +1543,18 @@ func validateEvidenceSkillStage(root string, change model.Change, def skill.Defi
 		if err != nil {
 			return err
 		}
-		if !refreshRequired {
+		// In-place review convergence: wave-orchestration is S2-owned, but folding a
+		// task into tasks.md at S3 requires re-attesting the wave run so the fresh
+		// wave record post-dates the folded task's evidence (symmetric to S2, where
+		// wave evidence is always recorded last). This opens the door only while the
+		// summary still carries an incomplete_execution_task blocker; it never grants
+		// a bypass — the rebuilt summary fails closed on missing dispatch/handle
+		// evidence for the folded task.
+		convergence, err := reviewWaveConvergenceReRecordAllowed(root, change, def.Name)
+		if err != nil {
+			return err
+		}
+		if !refreshRequired && !convergence {
 			return newInvalidUsageError(
 				"evidence_skill_wrong_state",
 				fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
@@ -1650,13 +1675,72 @@ func selectedReviewContextOriginRefreshRequired(root string, change model.Change
 	return progression.SelectedReviewContextOriginInvalid(root, change, skillName)
 }
 
-func evidenceTaskWrongStateRemediation(root string, change model.Change) string {
-	switch change.CurrentState {
-	case model.StateS3Review:
-		return postReviewReplacementEvidenceRemediation(root, change, "task evidence")
-	default:
-		return "Record task evidence only during wave execution."
+func evidenceTaskWrongStateRemediation(_ string, _ model.Change) string {
+	// S2_IMPLEMENT and S3_REVIEW are both recordable states (S3 completes the
+	// in-place review convergence for a folded-in task), so this remediation is
+	// only reached from other states.
+	return "Record task evidence during wave execution (S2_IMPLEMENT), or to complete an in-place review convergence (S3_REVIEW)."
+}
+
+// assertTaskEvidenceConvergenceAtReview enforces the S3_REVIEW recording
+// contract: at review, task evidence may only COMPLETE the in-place convergence
+// — record proof for a task the re-materialized wave plan surfaced as incomplete
+// (a folded-in task with no evidence yet at the active run). An already-evidenced
+// task is frozen at review: its plan/code drift is realigned through the
+// diff-scoped reviewers, never by restamping task evidence (which would forge
+// fresh freshness state at review). It is a no-op outside S3_REVIEW.
+func assertTaskEvidenceConvergenceAtReview(root string, change model.Change, taskID string) error {
+	if change.CurrentState != model.StateS3Review {
+		return nil
 	}
+	taskID = strings.TrimSpace(taskID)
+	path := filepath.Join(state.EvidenceTasksDir(root, change.Slug), taskID+".json")
+	switch _, err := os.Stat(path); {
+	case err == nil:
+		return newInvalidUsageError(
+			"evidence_task_already_recorded_at_review",
+			fmt.Sprintf("task %q already has recorded evidence; at S3_REVIEW task evidence is recordable only for a task the plan surfaced as incomplete", taskID),
+			postReviewReplacementEvidenceRemediation(root, change, "task evidence"),
+			map[string]any{"task_id": taskID, "state": string(change.CurrentState)},
+		)
+	case os.IsNotExist(err):
+		return nil
+	default:
+		return newStateIntegrityError(
+			"evidence_task_review_state_unreadable",
+			fmt.Sprintf("cannot determine task evidence state for %q: %v", taskID, err),
+			"Repair the governed runtime directory and retry.",
+			change.Slug,
+			map[string]any{"task_id": taskID, "path": state.DisplayPath(root, path)},
+		)
+	}
+}
+
+// reviewWaveConvergenceReRecordAllowed reports whether wave-orchestration evidence
+// may be re-recorded at S3_REVIEW to complete an in-place convergence. When a task
+// is folded into tasks.md at review, the re-materialized wave plan surfaces it as
+// incomplete_execution_task and the existing wave record predates the folded
+// task's freshly recorded task evidence. Re-attesting the wave run — a fresh wave
+// record that accounts for the new task's dispatch — is the symmetric forward exit:
+// it is the same "wave-orchestration evidence is recorded last, after every task's
+// evidence" rule S2 already enforces, applied to the convergence. It carries no
+// bypass: the host must still supply dispatch/handle evidence for every planned
+// task, and the folded task's own evidence must exist, or the rebuilt summary stays
+// incomplete and fails closed. It opens ONLY at S3_REVIEW, ONLY for
+// wave-orchestration, and ONLY while the persisted execution summary still carries
+// an incomplete_execution_task blocker (the engine's own folded-task signal).
+func reviewWaveConvergenceReRecordAllowed(root string, change model.Change, skillName string) (bool, error) {
+	if change.CurrentState != model.StateS3Review {
+		return false, nil
+	}
+	if strings.TrimSpace(skillName) != progression.SkillWaveOrchestration {
+		return false, nil
+	}
+	summary, err := state.LoadOptionalExecutionSummary(root, change.Slug)
+	if err != nil {
+		return false, err
+	}
+	return progression.ExecutionSummaryHasIncompleteTask(summary), nil
 }
 
 func evidenceSkillWrongStateRemediation(root string, change model.Change, def skill.Definition) string {
@@ -2315,6 +2399,15 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 				"Run `slipway next --json` and record evidence only for a selected review skill.",
 				map[string]any{"skill": def.Name},
 			)
+		}
+		// Wave-orchestration is not a review skill, so the actionable-skill ordering
+		// below would reject it at review. Re-recording it IS the current action when
+		// a folded-in task is converging in place: allow it while that convergence is
+		// pending (gated identically to the wrong-state door above).
+		if convergence, err := reviewWaveConvergenceReRecordAllowed(root, change, def.Name); err != nil {
+			return err
+		} else if convergence {
+			return nil
 		}
 		actionable, err := currentActionableEvidenceSkill(root, change, runVersion)
 		if err != nil {

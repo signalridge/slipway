@@ -140,16 +140,19 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// (fail-closed). The lifecycle state is never regressed to S1/S2.
 	runWaveSync := fromState == model.StateS2Implement
 	if fromState == model.StateS3Review {
-		// Only re-materialize at review when tasks.md has actually drifted from the
-		// materialized wave plan (the convergence case — e.g. the author added a
-		// task at review). An unchanged plan keeps the existing read-only S3
-		// behavior so done-ready, light-preset, and other settled review flows are
-		// not perturbed by an unconditional re-sync.
-		drifted, err := tasksPlanDriftedFromWavePlan(root, change)
+		// Only re-sync at review when there is genuine convergence work to absorb:
+		// either tasks.md drifted from the materialized wave plan (the author added
+		// a task at review → re-materialize), or the per-task evidence ledger
+		// advanced past the persisted execution summary (a folded-in task's
+		// evidence was just recorded → rebuild the summary so its
+		// incomplete_execution_task blocker clears). A settled review keeps the
+		// existing read-only S3 behavior so done-ready, light-preset, and other
+		// settled review flows are not perturbed by an unconditional re-sync.
+		pending, err := reviewConvergencePending(root, change)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		runWaveSync = drifted
+		runWaveSync = pending
 	}
 	if runWaveSync {
 		syncResult, err := SyncGovernedWaveExecution(root, change)
@@ -676,6 +679,54 @@ func tasksPlanDriftedFromWavePlan(root string, change model.Change) (bool, error
 		return false, err
 	}
 	return strings.TrimSpace(current) != strings.TrimSpace(wavePlanStructuralHash(*plan)), nil
+}
+
+// reviewConvergencePending reports whether S3_REVIEW has in-place convergence
+// work to absorb on this run. It is true when either tasks.md structurally
+// drifted from the materialized wave plan (a task was added or restructured at
+// review → re-materialize the plan), or the per-task evidence ledger advanced
+// past the persisted execution summary (a folded-in task's evidence was recorded
+// → rebuild the summary so its incomplete_execution_task blocker clears). A
+// settled review — plan matches tasks.md and the summary reflects the ledger —
+// reports no pending work, preserving the read-only S3 behavior that done-ready
+// and light-preset flows rely on.
+func reviewConvergencePending(root string, change model.Change) (bool, error) {
+	drifted, err := tasksPlanDriftedFromWavePlan(root, change)
+	if err != nil {
+		return false, err
+	}
+	if drifted {
+		return true, nil
+	}
+	return executionSummaryTrailsTaskEvidence(root, change)
+}
+
+// executionSummaryTrailsTaskEvidence reports whether the per-task evidence ledger
+// records a task at the active run version that the persisted execution summary
+// does not yet reflect — i.e. evidence for a folded-in task was recorded since
+// the summary was last built. Re-syncing absorbs it and clears that task's
+// incomplete_execution_task blocker. A missing summary, or a ledger already
+// reflected in the summary, reports no trailing work so settled reviews stay
+// read-only.
+func executionSummaryTrailsTaskEvidence(root string, change model.Change) (bool, error) {
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	if err != nil {
+		return false, err
+	}
+	if summary == nil || summary.RunSummaryVersion < 1 {
+		return false, nil
+	}
+	ledgerTasks, _, err := LoadExecutionTasksFromEvidence(root, change.Slug, summary.RunSummaryVersion)
+	if err != nil {
+		return false, err
+	}
+	runMap := summary.TaskRunMap()
+	for _, task := range ledgerTasks {
+		if _, ok := runMap[task.TaskID]; !ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target EvidenceRepairTarget) AdvanceSummary {
