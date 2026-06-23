@@ -377,6 +377,15 @@ func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
 
 // resolveExplicitChange loads a change by slug and verifies it is active.
 func resolveExplicitChange(root string, slug string) (changeRef, error) {
+	slug = strings.TrimSpace(slug)
+	if err := state.ValidateChangeSlug(slug); err != nil {
+		return changeRef{}, newInvalidUsageError(
+			"invalid_change_slug",
+			fmt.Sprintf("invalid change slug %q: %v", slug, err),
+			"Use a canonical change slug containing lowercase letters, digits, and single hyphen separators.",
+			map[string]any{"slug": slug},
+		)
+	}
 	change, err := state.LoadChange(root, slug)
 	if err != nil {
 		// An archived DONE change can leave its active bundle directory behind
@@ -433,6 +442,15 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 			map[string]any{
 				"status": string(change.Status),
 			},
+		)
+	}
+	if err := state.ValidateChangeSlug(change.Slug); err != nil {
+		return changeRef{}, newStateIntegrityError(
+			"invalid_change_slug",
+			fmt.Sprintf("change %q has invalid embedded slug %q: %v", slug, change.Slug, err),
+			"Inspect the change authority file before running active governance commands.",
+			slug,
+			map[string]any{"embedded_slug": change.Slug},
 		)
 	}
 	return changeRef{Slug: change.Slug}, nil

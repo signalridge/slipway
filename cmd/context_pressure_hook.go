@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -52,7 +53,8 @@ func makeHookCmd() *cobra.Command {
 }
 
 func makeContextPressureHookCmd() *cobra.Command {
-	return &cobra.Command{
+	var toolID string
+	cmd := &cobra.Command{
 		Use:    "context-pressure",
 		Short:  "Evaluate PostToolUse context pressure",
 		Hidden: true,
@@ -61,9 +63,11 @@ func makeContextPressureHookCmd() *cobra.Command {
 			// Fail silent: this hook is inlined into automatic host hooks and must
 			// never surface a blocking or non-zero failure. Any internal error
 			// (read, JSON, path, classify, write) is swallowed to a clean exit 0.
-			_ = runContextPressureHook(cmd.InOrStdin(), cmd.OutOrStdout(), time.Now())
+			_ = runContextPressureHook(cmd.InOrStdin(), cmd.OutOrStdout(), time.Now(), toolID)
 		},
 	}
+	cmd.Flags().StringVar(&toolID, "tool", "", "Host tool ID")
+	return cmd
 }
 
 func classifyContextUtilization(tokensUsed, contextWindow int) (contextPressureResult, error) {
@@ -86,15 +90,21 @@ func classifyContextUtilization(tokensUsed, contextWindow int) (contextPressureR
 	return contextPressureResult{Percent: percent, State: state}, nil
 }
 
-func runContextPressureHook(r io.Reader, w io.Writer, now time.Time) error {
+func runContextPressureHook(r io.Reader, w io.Writer, now time.Time, toolID string) error {
 	raw, err := io.ReadAll(io.LimitReader(r, 1<<20))
 	if err != nil || len(strings.TrimSpace(string(raw))) == 0 {
+		if strings.EqualFold(strings.TrimSpace(toolID), "codex") {
+			return runCodexPromptHandoffNudge(w)
+		}
 		return nil
 	}
 
 	var input map[string]any
 	if err := json.Unmarshal(raw, &input); err != nil {
 		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(toolID), "codex") || strings.EqualFold(hookEventName(input, ""), "UserPromptSubmit") {
+		return runCodexPromptHandoffNudge(w)
 	}
 
 	metric, ok := resolveContextPressureMetric(input, now)
@@ -110,16 +120,52 @@ func runContextPressureHook(r io.Reader, w io.Writer, now time.Time) error {
 		return nil
 	}
 
-	eventName, _ := input["hook_event_name"].(string)
-	eventName = strings.TrimSpace(eventName)
-	if eventName == "" {
-		eventName = "PostToolUse"
-	}
+	eventName := hookEventName(input, "PostToolUse")
 
 	output := map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     eventName,
 			"additionalContext": contextPressureMessage(result),
+		},
+	}
+	encoded, err := json.Marshal(output)
+	if err != nil {
+		return nil
+	}
+	_, _ = w.Write(encoded)
+	return nil
+}
+
+func hookEventName(input map[string]any, fallback string) string {
+	eventName, _ := input["hook_event_name"].(string)
+	eventName = strings.TrimSpace(eventName)
+	if eventName == "" {
+		return fallback
+	}
+	return eventName
+}
+
+func runCodexPromptHandoffNudge(w io.Writer) error {
+	root, err := projectRootFromWD()
+	if err != nil {
+		return nil
+	}
+	ref, ok, err := resolveHandoffChangeRef(root, "")
+	if err != nil || !ok {
+		return nil
+	}
+	change, err := state.LoadChange(root, ref.Slug)
+	if err != nil {
+		return nil
+	}
+	doc, err := state.ReadHandoff(root, change)
+	if err == nil && doc.Header.Staleness == "fresh" {
+		return nil
+	}
+	output := map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":     "UserPromptSubmit",
+			"additionalContext": "HANDOFF NUDGE: the active change handoff is missing or stale; run `slipway handoff write` before stopping or splitting context. `slipway status` and `slipway next` remain authoritative.",
 		},
 	}
 	encoded, err := json.Marshal(output)
@@ -432,8 +478,8 @@ func contextPressureMessage(result contextPressureResult) string {
 	case contextPressureCritical:
 		return fmt.Sprintf(
 			"CONTEXT CRITICAL: usage is approximately %d%%. Context pressure is high; "+
-				"write the per-change `.git/slipway/runtime/changes/<slug>/handoff.md` "+
-				"using the workflow handoff contract before continuing in a fresh context. "+
+				"run `slipway handoff write` to refresh the per-change advisory handoff "+
+				"before continuing in a fresh context. "+
 				"The handoff is advisory; fresh sessions still run `slipway status --json` "+
 				"and `slipway next --json`.",
 			result.Percent,
@@ -441,8 +487,8 @@ func contextPressureMessage(result contextPressureResult) string {
 	default:
 		return fmt.Sprintf(
 			"CONTEXT WARNING: usage is approximately %d%%. Avoid starting new complex work; "+
-				"preserve the per-change `.git/slipway/runtime/changes/<slug>/handoff.md` "+
-				"with the workflow handoff contract before continuing.",
+				"run `slipway handoff write` to refresh the per-change advisory handoff "+
+				"before continuing.",
 			result.Percent,
 		)
 	}

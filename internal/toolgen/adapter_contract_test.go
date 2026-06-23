@@ -56,6 +56,7 @@ var frozenAdapterCommandIDs = []string{
 	"done",
 	"evidence",
 	"fix",
+	"handoff",
 	"health",
 	"implement",
 	"init",
@@ -119,6 +120,8 @@ var frozenToolContracts = map[string]frozenToolContract{
 		CommandExt:    ".md",
 		TriggerPrefix: "$slipway-",
 		TriggerStyle:  "dollar-mention",
+		SettingsPath:  ".codex/config.toml",
+		SettingsKind:  settingsKindCodexHooks,
 	},
 	"copilot": {
 		OwnershipRoot: ".github/copilot",
@@ -429,9 +432,26 @@ func assertFrozenSettingsContract(t *testing.T, root string, contract frozenTool
 	case settingsKindPiRegistration:
 		require.NotEmpty(t, contract.SettingsPath, "Pi registration settings require a settings path")
 		assertPiRegistrationSettings(t, filepath.Join(root, filepath.FromSlash(contract.SettingsPath)))
+	case settingsKindCodexHooks:
+		require.NotEmpty(t, contract.SettingsPath, "Codex hook settings require a config path")
+		assertCodexHooksConfig(t, filepath.Join(root, filepath.FromSlash(contract.SettingsPath)))
 	default:
 		t.Fatalf("unsupported frozen settings kind %q", contract.SettingsKind)
 	}
+}
+
+func assertCodexHooksConfig(t *testing.T, settingsPath string) {
+	t.Helper()
+
+	content, err := os.ReadFile(settingsPath)
+	require.NoError(t, err, "missing Codex config file")
+	settings := string(content)
+	assert.Contains(t, settings, "[[hooks.SessionStart]]")
+	assert.Contains(t, settings, `slipway hook session-start --tool codex`)
+	assert.Contains(t, settings, "[[hooks.UserPromptSubmit]]")
+	assert.Contains(t, settings, `slipway hook context-pressure --tool codex`)
+	assert.Contains(t, settings, "inert until Codex trusts this repo and each hook")
+	assert.Contains(t, settings, "Slipway never edits global Codex trust")
 }
 
 func assertShellNeutralHookCommand(t *testing.T, command string) {

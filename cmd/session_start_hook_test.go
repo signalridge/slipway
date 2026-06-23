@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +23,11 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 
 		handoffPath := state.ChangeHandoffPath(root, slug)
 		require.NoError(t, os.MkdirAll(filepath.Dir(handoffPath), 0o755))
-		require.NoError(t, os.WriteFile(handoffPath, []byte("handoff body must not be embedded"), 0o644))
+		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
+		writeCmd.SetIn(strings.NewReader("handoff body must not be embedded"))
+		writeCmd.SetOut(io.Discard)
+		require.NoError(t, writeCmd.Execute())
 		legacyPath := filepath.Join(state.GitRuntimeDir(root), "handoff.md")
 		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
 		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy handoff body must not be embedded"), 0o644))
@@ -36,11 +42,65 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 		assert.Contains(t, body, `<slipway-session-start tool="claude">`)
 		assert.Contains(t, body, `"slug": "`+slug+`"`)
 		assert.Contains(t, body, "slipway_entry_skill:")
-		assert.Contains(t, body, "session_handoff_present: true")
-		assert.Contains(t, body, "session_handoff_path: "+handoffPath)
+		assert.Contains(t, body, "session_handoff: slug="+slug)
+		assert.Contains(t, body, "path="+handoffPath)
 		assert.NotContains(t, body, "handoff body must not be embedded")
 		assert.NotContains(t, body, legacyPath)
 		assert.NotContains(t, body, "legacy handoff body must not be embedded")
+	})
+}
+
+func TestSessionStartHandoffSummaryUsesCommandOwnedBrief(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start command owned brief")
+
+		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetArgs([]string{"write", "--change", slug, "--section", "Next Session Focus"})
+		writeCmd.SetIn(strings.NewReader("hook should trim this body"))
+		writeCmd.SetOut(io.Discard)
+		require.NoError(t, writeCmd.Execute())
+
+		brief, ok, err := handoffBriefForChange(root, slug)
+		require.NoError(t, err)
+		require.True(t, ok)
+		expected := brief
+		if before, _, ok := strings.Cut(brief, " focus="); ok {
+			expected = before
+		}
+
+		summary := sessionStartHandoffSummary(root, slug)
+		assert.Equal(t, expected, summary)
+		assert.NotContains(t, summary, "hook should trim this body")
+	})
+}
+
+func TestSessionStartHookEmitsCodexAdditionalContext(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "codex session-start handoff")
+		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetOut(io.Discard)
+		require.NoError(t, writeCmd.Execute())
+
+		cmd := makeHookCmd()
+		cmd.SetArgs([]string{"session-start", "--tool", "codex"})
+		cmd.SetIn(strings.NewReader(`{"hook_event_name":"SessionStart","source":"compact"}`))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		body := out.String()
+		assert.NotContains(t, body, "<slipway-session-start")
+		assert.Contains(t, body, `"hookEventName":"SessionStart"`)
+		assert.Contains(t, body, "additionalContext")
+		var payload map[string]map[string]string
+		require.NoError(t, json.Unmarshal(out.Bytes(), &payload))
+		additionalContext := payload["hookSpecificOutput"]["additionalContext"]
+		assert.Contains(t, additionalContext, `"slug": "`+slug+`"`)
+		assert.Contains(t, additionalContext, "session_handoff: slug="+slug)
 	})
 }
 

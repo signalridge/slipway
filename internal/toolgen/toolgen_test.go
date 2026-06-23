@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -114,8 +115,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 22 commands across the same public groups as root help.
-	assert.Len(t, commandRegistry, 22)
+	// Verify registry has 23 commands across the same public groups as root help.
+	assert.Len(t, commandRegistry, 23)
 
 	// Verify all registry entries have the required fields.
 	validTiers := []string{"core", "discovery", "situational", "helpers", "diagnostics", "setup"}
@@ -155,12 +156,12 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 	assert.Equal(t, 10, core, "expected 10 core commands")
 	assert.Equal(t, 1, discovery, "expected 1 discovery command")
-	assert.Equal(t, 7, sit, "expected 7 situational commands")
+	assert.Equal(t, 8, sit, "expected 8 situational commands")
 	assert.Equal(t, 1, helpers, "expected 1 helper command")
 	assert.Equal(t, 2, diag, "expected 2 diagnostics commands")
 	assert.Equal(t, 1, setup, "expected 1 setup command")
 	assert.Equal(t, 5, query, "expected 5 query commands")
-	assert.Equal(t, 17, mutation, "expected 17 mutation commands")
+	assert.Equal(t, 18, mutation, "expected 18 mutation commands")
 
 	var fixDef CommandDef
 	var foundFix bool
@@ -182,7 +183,7 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
 	// but intentionally do not generate host prompt wrappers.
 	ids := commandIDs()
-	assert.Len(t, ids, 21)
+	assert.Len(t, ids, 22)
 	for i := 1; i < len(ids); i++ {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
@@ -620,6 +621,16 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		switch {
 		case cfg.SettingsKind == settingsKindPiRegistration:
 			assertPiRegistrationSettings(t, filepath.Join(root, cfg.SettingsPath))
+		case cfg.SettingsKind == settingsKindCodexHooks:
+			settingsPath := filepath.Join(root, cfg.SettingsPath)
+			content, err := os.ReadFile(settingsPath)
+			assert.NoError(t, err, "%s: missing Codex hook config", toolID)
+			settings := string(content)
+			assert.Contains(t, settings, "[[hooks.SessionStart]]", "%s: missing Codex SessionStart hook", toolID)
+			assert.Contains(t, settings, `slipway hook session-start --tool codex`, "%s: missing Codex session-start command", toolID)
+			assert.Contains(t, settings, "[[hooks.UserPromptSubmit]]", "%s: missing Codex UserPromptSubmit hook", toolID)
+			assert.Contains(t, settings, `slipway hook context-pressure --tool codex`, "%s: missing Codex prompt-submit command", toolID)
+			assert.Contains(t, settings, "inert until Codex trusts this repo and each hook", "%s: missing trust caveat", toolID)
 		case cfg.SettingsPath != "":
 			settingsPath := filepath.Join(root, cfg.SettingsPath)
 			content, err := os.ReadFile(settingsPath)
@@ -747,17 +758,10 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "`next_skill.prompt_path`", "%s: stale prompt_path contract leaked", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
 		assert.Contains(t, s, "## Runtime Session Handoff", "%s: missing runtime handoff contract", cfg.ID)
-		assert.Contains(t, sText, "Use `.git/slipway/runtime/changes/<slug>/handoff.md` only as advisory continuation notes", "%s: missing handoff advisory boundary", cfg.ID)
-		assert.Contains(t, sText, "Resolve `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from the handoff body.", "%s: missing handoff slug-source boundary", cfg.ID)
-		assert.Contains(t, s, "current position: change slug, lifecycle state/substep, active task or review", "%s: missing handoff current-position payload", cfg.ID)
-		assert.Contains(t, s, "session work completed: the material code, artifact, test, or investigation", "%s: missing handoff completed-work payload", cfg.ID)
-		assert.Contains(t, s, "next-session focus: the smallest useful next action", "%s: missing handoff next-focus payload", cfg.ID)
-		assert.Contains(t, s, "path references: point to intent, requirements, tasks, decisions, diffs", "%s: missing handoff path-reference payload", cfg.ID)
-		assert.Contains(t, s, "redaction: remove secrets, credentials, tokens, private keys", "%s: missing handoff redaction requirement", cfg.ID)
-		assert.Contains(t, s, "`next_skill.verification_dir`", "%s: missing handoff verification_dir token", cfg.ID)
-		assert.Contains(t, s, "`next_skill.selected_review_skills`", "%s: missing handoff selected_review_skills token", cfg.ID)
-		assert.Contains(t, s, "`confirmation_requirement.*`", "%s: missing handoff confirmation token", cfg.ID)
-		assert.Contains(t, sText, "The per-change `handoff.md` is not lifecycle authority, governed evidence, freshness input, or a gate.", "%s: missing handoff non-authority boundary", cfg.ID)
+		assert.Contains(t, s, "`slipway-handoff`", "%s: missing owned handoff surface pointer", cfg.ID)
+		assert.Contains(t, s, "`slipway handoff write`", "%s: missing handoff writer command", cfg.ID)
+		assert.Contains(t, s, "`slipway handoff show`", "%s: missing handoff reader command", cfg.ID)
+		assert.Contains(t, sText, "The handoff remains advisory only: it is not lifecycle authority, governed evidence, freshness input, or a gate.", "%s: missing handoff non-authority boundary", cfg.ID)
 		assert.Contains(t, sText, "A fresh session must still run `slipway status --json` and", "%s: missing status refresh requirement", cfg.ID)
 		assert.Contains(t, sText, "`slipway next --json`, obey lifecycle gates, and rely on CLI-owned freshness and", "%s: missing next/freshness requirement", cfg.ID)
 		assert.Contains(t, sText, "evidence checks before advancing", "%s: missing evidence-check requirement", cfg.ID)
@@ -1058,7 +1062,7 @@ func TestGeneratedAdapterSurfacesStayInSyncWithRegistry(t *testing.T) {
 			}
 		}
 
-		if cfg.SettingsPath != "" && cfg.SessionHook != "" {
+		if cfg.SettingsPath != "" && cfg.SettingsKind != settingsKindCodexHooks && cfg.SessionHook != "" {
 			assertHookCommandRegistered(
 				t,
 				filepath.Join(root, cfg.SettingsPath),
@@ -1580,14 +1584,69 @@ func TestGenerateRefreshWithoutOwnershipManifestRequiresBootstrapAuthority(t *te
 	})
 }
 
-func TestCodexGenerationOmitsProjectAgentSurfaces(t *testing.T) {
+func TestCodexGenerationCreatesHandoffHooksConfigWithoutAgents(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"codex"}, true))
 
 	_, err := os.Stat(filepath.Join(root, ".codex", "agents"))
 	assert.True(t, os.IsNotExist(err), "codex should not generate exported agents")
-	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-	assert.True(t, os.IsNotExist(err), "codex should not create project config on fresh init")
+	config, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
+	require.NoError(t, err, "codex should generate project-local hook config")
+	s := string(config)
+	assert.Contains(t, s, "[[hooks.SessionStart]]")
+	assert.Contains(t, s, `slipway hook session-start --tool codex`)
+	assert.Contains(t, s, "[[hooks.UserPromptSubmit]]")
+	assert.Contains(t, s, `slipway hook context-pressure --tool codex`)
+	assert.Contains(t, s, "inert until Codex trusts this repo and each hook")
+	assert.Contains(t, s, "never edits global Codex trust")
+}
+
+func TestCodexGenerationFromLinkedWorktreeWritesRootCheckoutConfig(t *testing.T) {
+	root := t.TempDir()
+	runToolgenGit(t, root, "init")
+	runToolgenGit(t, root, "config", "user.email", "slipway@example.invalid")
+	runToolgenGit(t, root, "config", "user.name", "Slipway Test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# repo\n"), 0o644))
+	runToolgenGit(t, root, "add", "README.md")
+	runToolgenGit(t, root, "commit", "-m", "initial")
+
+	worktreeRoot := filepath.Join(t.TempDir(), "linked-worktree")
+	runToolgenGit(t, root, "worktree", "add", worktreeRoot, "-b", "feature/codex-hooks")
+
+	require.NoError(t, Generate(worktreeRoot, []string{"codex"}, true))
+
+	rootConfig := filepath.Join(root, ".codex", "config.toml")
+	config, err := os.ReadFile(rootConfig)
+	require.NoError(t, err, "linked worktree generation should write Codex config in the root checkout")
+	assert.Contains(t, string(config), "[[hooks.SessionStart]]")
+	assert.Contains(t, string(config), `slipway hook session-start --tool codex`)
+
+	_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "config.toml"))
+	assert.True(t, os.IsNotExist(err), "linked worktree must not be the only Codex hook config location")
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".codex", "skills", "slipway-handoff", "SKILL.md"))
+}
+
+func runToolgenGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git %s failed: %s", strings.Join(args, " "), string(out))
+}
+
+func TestGeneratedHandoffSkillIsHookAgnostic(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, Generate(root, []string{"codex"}, true))
+
+	content, err := os.ReadFile(filepath.Join(root, ".codex", "skills", "slipway-handoff", "SKILL.md"))
+	require.NoError(t, err)
+	s := string(content)
+	assert.Contains(t, s, "slipway handoff write")
+	assert.Contains(t, s, "Write at meaningful moments")
+	assert.Contains(t, s, "Read on resume with `slipway handoff show`")
+	assert.Contains(t, s, "hook-agnostic")
+	assert.Contains(t, s, "never assume SessionStart, PreCompact, or any host hook fired")
+	assert.Contains(t, s, "`slipway status` and `slipway next` remain lifecycle authority")
 }
 
 func TestGeminiTOMLCommandFormat(t *testing.T) {
@@ -2015,16 +2074,19 @@ func TestGeneratedWaveOrchestrationSkillUsesWavePlanSummaryGuidance(t *testing.T
 	assert.NotContains(t, string(content), "{request_description}")
 }
 
-func TestCodexRefreshDoesNotCreateManagedConfigTOML(t *testing.T) {
+func TestCodexRefreshMaintainsManagedConfigTOML(t *testing.T) {
 	root := t.TempDir()
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
-	_, err := os.Stat(filepath.Join(root, ".codex", "config.toml"))
-	assert.True(t, os.IsNotExist(err), "fresh generation should not create config.toml")
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err, "fresh generation should create Codex hook config")
+	assert.Contains(t, string(content), "[[hooks.SessionStart]]")
 
 	require.NoError(t, Generate(root, []string{"codex"}, true))
-	_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-	assert.True(t, os.IsNotExist(err), "refresh should not create project config")
+	content, err = os.ReadFile(configPath)
+	require.NoError(t, err, "refresh should keep Codex hook config")
+	assert.Equal(t, 1, strings.Count(string(content), codexHooksBlockStart), "refresh should replace, not duplicate, managed block")
 }
 
 func TestCursorNoAgents(t *testing.T) {

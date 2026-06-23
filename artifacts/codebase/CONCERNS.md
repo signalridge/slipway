@@ -1,27 +1,27 @@
 # Concerns
 
-- Stale map risk resolved: this file replaces prior Workstream A context with
-  Workstream B-specific seams and risks.
-- Ledger authority risk: accepting `run_summary_version`, `task_kind`,
-  `target_files`, `captured_at`, or `freshness_inputs` from result JSON would
-  preserve the old ledger-clerk model. The result import must reject those
-  fields and derive them from Slipway state.
-- Run-boundary risk: simply reading the latest existing run version cannot
-  create a new execution run. Workstream B must introduce an engine-owned run
-  boundary at wave-plan materialization or another explicit execution-open
-  operation.
-- S3 repair risk: current `fix` and `review` commands do not reopen S2, so
-  acceptance around review-driven re-execution requires a deliberate path rather
-  than relying on existing lifecycle behavior.
-- Scope safety risk: `changed_files` is executor knowledge and feeds
-  scope-contract and same-wave overlap safety. The compact schema must retain it
-  for task kinds that require changed files.
-- Guidance drift risk: even if the CLI supports `--result-file`, generated
-  wave-orchestration guidance, command docs, manifest examples, and diagnostic
-  blockers can keep teaching the old long flag protocol.
-- Compatibility risk: the old flags may remain host-internal for this B slice if
-  needed, but generated/default agent guidance must prefer result import and
-  must not require agents to choose run versions or task kinds.
-- Reversibility: result import and engine-owned run metadata are additive, but
-  changing run-version authority affects execution freshness. Focused tests must
-  prove stale/mixed run versions still fail closed.
+- Second-authority risk: handoff content must never become lifecycle authority.
+  Machine header and `show --brief` output must omit lifecycle state/substep and
+  next_skill/next_command, and must point resumers to `slipway status` and
+  `slipway next` instead.
+- Context pollution risk: SessionStart can fire from the repo root or when
+  multiple changes exist. The hook must emit bounded slugs/paths or a count in
+  ambiguous contexts and never inject full handoff bodies or focus prose.
+- Hook portability risk: Claude and Codex payloads differ. Shared hook handlers
+  must fail silent, preserve existing Claude behavior, accept Codex SessionStart
+  and UserPromptSubmit payloads, and use Codex-compatible output only where
+  Codex expects it.
+- Trust risk: generating `.codex/config.toml` is not the same as enabling hooks.
+  The README and setup output must state that repo trust and hook trust are
+  user-granted and that Slipway never edits global Codex trust config.
+- Worktree placement risk: Slipway-provisioned worktrees may not be where Codex
+  reads project hooks. Toolgen must write Codex hook config where Codex actually
+  reads it for the root checkout while keeping governed code edits in the bound
+  worktree.
+- Generated-surface drift risk: adding a command must keep command registry,
+  command skills, surface manifest expectations, README command contracts, and
+  generated workflow guidance aligned. Stale negative tests that currently assert
+  no `.codex/config.toml` must be updated intentionally.
+- Advisory invariant risk: a stale, missing, or hand-edited handoff must not
+  affect lifecycle gates, evidence freshness, readiness, or bypass/force-close
+  paths. A dedicated invariant test should guard this.

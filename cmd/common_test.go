@@ -136,6 +136,36 @@ func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
 	assert.Equal(t, "slug-missing", cliErr.Slug)
 }
 
+func TestResolveExplicitChangeRejectsInvalidSlugBeforeStateLookup(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	tests := []struct {
+		name string
+		slug string
+	}{
+		{name: "parent traversal", slug: "../x"},
+		{name: "slash", slug: "bad/slug"},
+		{name: "backslash", slug: `bad\slug`},
+		{name: "dot", slug: "."},
+		{name: "dot dot", slug: ".."},
+		{name: "uppercase", slug: "Bad-Slug"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolveExplicitChange(root, tt.slug)
+			cliErr := asCLIError(err)
+			require.NotNil(t, cliErr)
+			assert.Equal(t, "invalid_change_slug", cliErr.ErrorCode)
+			assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+			assert.Equal(t, tt.slug, cliErr.Details["slug"])
+		})
+	}
+}
+
 func TestResolveExplicitChangeRejectsArchivedSlugWithConcreteDiagnostic(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

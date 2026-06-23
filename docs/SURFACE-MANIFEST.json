@@ -129,6 +129,13 @@
     },
     {
       "kind": "command",
+      "name": "handoff",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway handoff"
+    },
+    {
+      "kind": "command",
       "name": "health",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
@@ -315,6 +322,13 @@
       "source": "cmd/fix.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway fix --json"
+    },
+    {
+      "kind": "json-contract",
+      "name": "handoff-json",
+      "source": "cmd/handoff.go",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway handoff show --json"
     },
     {
       "kind": "json-contract",
@@ -525,6 +539,13 @@
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-goal-verification/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-handoff",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/reference/ai-tools.md",
+      "token": "$slipway-handoff"
     },
     {
       "kind": "skill",
