@@ -1415,18 +1415,34 @@ func validateEvidenceSkillStage(root string, change model.Change, def skill.Defi
 		)
 	}
 	if change.CurrentState != def.State {
-		return newInvalidUsageError(
-			"evidence_skill_wrong_state",
-			fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
-			evidenceSkillWrongStateRemediation(root, change, def),
-			map[string]any{
-				"skill":          def.Name,
-				"expected":       def.State,
-				"current":        change.CurrentState,
-				"required_state": string(def.State),
-				"current_state":  string(change.CurrentState),
-			},
-		)
+		// In-place stale re-cert: when this skill is the engine-flagged recoverable
+		// stale-repair target, allow recording its fresh evidence at the current
+		// state even though the change has advanced past the skill's owning state.
+		// This mirrors the wrong-substep exception below (1431) and closes the
+		// otherwise-circular dead end where an upstream skill (e.g. intake-clarification,
+		// owned by S0_INTAKE) goes stale after the change has advanced to S1_PLAN:
+		// `evidence skill` rejected it (wrong state), `intake`/`run` would not reopen
+		// to S0, so there was no public path to re-certify. Fail-closed: this opens
+		// ONLY for the skill the engine itself reports as a recoverable stale target,
+		// ONLY while it is stale (gated on staleEvidenceSkillRefreshRequired).
+		refreshRequired, err := staleEvidenceSkillRefreshRequired(root, change, def.Name)
+		if err != nil {
+			return err
+		}
+		if !refreshRequired {
+			return newInvalidUsageError(
+				"evidence_skill_wrong_state",
+				fmt.Sprintf("%s evidence requires %s state, current: %s", def.Name, def.State, change.CurrentState),
+				evidenceSkillWrongStateRemediation(root, change, def),
+				map[string]any{
+					"skill":          def.Name,
+					"expected":       def.State,
+					"current":        change.CurrentState,
+					"required_state": string(def.State),
+					"current_state":  string(change.CurrentState),
+				},
+			)
+		}
 	}
 	if def.State == model.StateS1Plan && def.PlanSubStep != model.PlanSubStepNone && change.PlanSubStep != def.PlanSubStep {
 		refreshRequired, err := staleEvidenceSkillRefreshRequired(root, change, def.Name)
