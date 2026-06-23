@@ -1,0 +1,29 @@
+{{- define "command-handoff-body" -}}
+# Handoff
+
+Write or read the per-change advisory runtime handoff. This is the portable
+continuity surface for fresh sessions and hosts that do not wire Slipway hooks.
+
+## Invocation
+```bash
+slipway handoff write
+slipway handoff write --section "Next Session Focus"
+slipway handoff show
+slipway handoff show --brief
+```
+
+## Contract
+- `slipway handoff` without a subcommand behaves as `slipway handoff write`.
+- Write at meaningful moments: task completion, before stopping, before a review split, or when a context-pressure nudge asks for continuity.
+- Read on resume with `slipway handoff show`; use `show --brief` for a bounded descriptor.
+- This surface is hook-agnostic: run write/show yourself and never assume SessionStart, PreCompact, or any host hook fired.
+- The machine header is engine-owned and carries identity/freshness fields only: slug, generation, session_owner, git branch/worktree, updated_at, and staleness.
+- The header must not snapshot lifecycle state, substeps, next_skill, or next_command.
+- The handoff is advisory only; `slipway status` and `slipway next` remain lifecycle authority.
+
+## Flags
+- `--change <slug>`: target a specific active change.
+- `write --section <name>`: update one narrative section from stdin while preserving the rest.
+- `show --json`: emit structured handoff data.
+- `show --brief`: emit the bounded descriptor for resume/session-start use.
+{{- end -}}

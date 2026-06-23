@@ -16,6 +16,7 @@ slipway-final-closeout/SKILL.md	skill_md	non-exec
 slipway-fix/SKILL.md	skill_md	non-exec
 slipway-git-recovery/SKILL.md	skill_md	non-exec
 slipway-goal-verification/SKILL.md	skill_md	non-exec
+slipway-handoff/SKILL.md	skill_md	non-exec
 slipway-health/SKILL.md	skill_md	non-exec
 slipway-implement/SKILL.md	skill_md	non-exec
 slipway-incident-response/SKILL.md	skill_md	non-exec
@@ -67,4 +68,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:62bbbadf74c1ef1dc07107c17a598292b2e91db901a162202a41be6675462f08
+# inventory_sha256:f2091effd559e72c9abf484721bc96383ef8ded22eef8ee79f5e8dab8c5e5b52

@@ -84,8 +84,7 @@ func TestContextPressureHookCommandEmitsAdditionalContextAtCriticalThreshold(t *
 	additionalContext, ok := hookOutput["additionalContext"].(string)
 	require.True(t, ok)
 	assert.Contains(t, additionalContext, "CONTEXT CRITICAL")
-	assert.Contains(t, additionalContext, ".git/slipway/runtime/changes/<slug>/handoff.md")
-	assert.Contains(t, additionalContext, "workflow handoff contract")
+	assert.Contains(t, additionalContext, "slipway handoff write")
 	assert.Contains(t, additionalContext, "The handoff is advisory")
 	assert.Contains(t, additionalContext, "slipway status --json")
 	assert.Contains(t, additionalContext, "slipway next --json")
@@ -119,7 +118,7 @@ func TestContextPressureHookCommandReadsLiveUsageFromClaudeTranscript(t *testing
 	require.True(t, ok)
 	assert.Contains(t, additionalContext, "CONTEXT CRITICAL")
 	assert.Contains(t, additionalContext, "70%")
-	assert.Contains(t, additionalContext, "workflow handoff contract")
+	assert.Contains(t, additionalContext, "slipway handoff write")
 }
 
 func TestContextPressureHookCommandIgnoresStaleTranscriptUsage(t *testing.T) {
@@ -235,11 +234,11 @@ func TestContextPressureMessagesKeepRuntimeHandoffAdvisory(t *testing.T) {
 		State:   contextPressureWarning,
 	})
 
-	assert.Contains(t, critical, "workflow handoff contract")
+	assert.Contains(t, critical, "slipway handoff write")
 	assert.Contains(t, critical, "The handoff is advisory")
 	assert.Contains(t, critical, "slipway status --json")
 	assert.Contains(t, critical, "slipway next --json")
-	assert.Contains(t, warning, "workflow handoff contract")
+	assert.Contains(t, warning, "slipway handoff write")
 
 	for name, message := range map[string]string{
 		"critical": critical,
@@ -251,6 +250,29 @@ func TestContextPressureMessagesKeepRuntimeHandoffAdvisory(t *testing.T) {
 		assert.NotContains(t, message, "handoff is a gate", name)
 		assert.NotContains(t, message, "governed host skill", name)
 	}
+}
+
+func TestCodexUserPromptSubmitNudgesOnlyWhenHandoffMissingOrStale(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, levelNonDiscovery, "codex handoff nudge")
+
+		payload := `{"hook_event_name":"UserPromptSubmit"}`
+		stdout, stderr, err := runRootCommandWithInput([]string{"hook", "context-pressure", "--tool", "codex"}, payload)
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		assert.Contains(t, stdout, "slipway handoff write")
+		assert.Contains(t, stdout, "UserPromptSubmit")
+
+		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		require.NoError(t, writeCmd.Execute())
+
+		stdout, stderr, err = runRootCommandWithInput([]string{"hook", "context-pressure", "--tool", "codex"}, payload)
+		require.NoError(t, err)
+		assert.Empty(t, stderr)
+		assert.Empty(t, stdout)
+	})
 }
 
 func jsonString(value string) string {

@@ -55,6 +55,7 @@ var helpGroups = []commandGroup{
 		Commands: []groupedCommand{
 			{Name: "preset", Description: desc("preset")},
 			{Name: "validate", Description: desc("validate")},
+			{Name: "handoff", Description: desc("handoff")},
 			{Name: "abort", Description: desc("abort")},
 			{Name: "cancel", Description: desc("cancel")},
 			{Name: "delete", Description: desc("delete")},
@@ -167,6 +168,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeNextCmd())
 	cmd.AddCommand(makeRunCmd())
 	cmd.AddCommand(makeStatusCmd())
+	cmd.AddCommand(makeHandoffCmd())
 	cmd.AddCommand(makeHealthCmd())
 	cmd.AddCommand(makeInstructionsCmd())
 	cmd.AddCommand(makeRootPathCmd())

@@ -133,7 +133,16 @@ func sessionStartHandoffSummary(root, slug string) string {
 	if slug == "" {
 		return ""
 	}
+	if err := state.ValidateChangeSlug(slug); err != nil {
+		return ""
+	}
 	handoffPath := state.ChangeHandoffPath(root, slug)
+	if brief, ok, err := handoffBriefForChange(root, slug); err == nil && ok {
+		if before, _, ok := strings.Cut(brief, " focus="); ok {
+			return before
+		}
+		return brief
+	}
 	present := "false"
 	if _, err := os.Stat(handoffPath); err == nil {
 		present = "true"
@@ -142,6 +151,25 @@ func sessionStartHandoffSummary(root, slug string) string {
 }
 
 func writeSessionStartHookOutput(w io.Writer, toolID, nextJSON, handoffInfo string, diagnostics []string, handoffSummary string) error {
+	if strings.EqualFold(strings.TrimSpace(toolID), "codex") {
+		output := map[string]any{
+			"hookSpecificOutput": map[string]any{
+				"hookEventName":     "SessionStart",
+				"additionalContext": sessionStartAdditionalContext(toolID, nextJSON, handoffInfo, diagnostics, handoffSummary),
+			},
+		}
+		encoded, err := json.Marshal(output)
+		if err != nil {
+			return nil
+		}
+		_, _ = w.Write(encoded)
+		return nil
+	}
+	_, err := io.WriteString(w, sessionStartXMLContext(toolID, nextJSON, handoffInfo, diagnostics, handoffSummary))
+	return err
+}
+
+func sessionStartXMLContext(toolID, nextJSON, handoffInfo string, diagnostics []string, handoffSummary string) string {
 	var b strings.Builder
 	b.WriteString(`<slipway-session-start`)
 	if strings.TrimSpace(toolID) != "" {
@@ -174,8 +202,15 @@ func writeSessionStartHookOutput(w io.Writer, toolID, nextJSON, handoffInfo stri
 		b.WriteByte('\n')
 	}
 	b.WriteString("</slipway-session-start>\n")
-	_, err := io.WriteString(w, b.String())
-	return err
+	return b.String()
+}
+
+func sessionStartAdditionalContext(toolID, nextJSON, handoffInfo string, diagnostics []string, handoffSummary string) string {
+	xml := sessionStartXMLContext(toolID, nextJSON, handoffInfo, diagnostics, handoffSummary)
+	xml = strings.TrimPrefix(xml, `<slipway-session-start tool="codex">`+"\n")
+	xml = strings.TrimPrefix(xml, "<slipway-session-start>\n")
+	xml = strings.TrimSuffix(xml, "</slipway-session-start>\n")
+	return strings.TrimSpace(xml)
 }
 
 func normalizeHookDiagnostic(raw string) string {

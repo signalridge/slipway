@@ -69,6 +69,7 @@ $slipway-next
 $slipway-run
 $slipway-status
 $slipway-codebase-map
+$slipway-handoff
 $slipway-preset
 $slipway-validate
 $slipway-abort
@@ -93,6 +94,9 @@ hand-edit generated files:
 - Pi writes `.pi/settings.json` with `enableSkillCommands=true` and registers
   `./skills` and `./prompts`.
 - Qwen writes `.qwen/settings.json` to register the session-start hook.
+- Codex writes `.codex/config.toml` hooks for `SessionStart` and
+  `UserPromptSubmit`; those hooks are inert until the repo and each hook are
+  trusted by the user, and Slipway never edits global Codex trust settings.
 
 Each adapter is tracked by a Slipway generated sentinel and ownership manifest
 under the adapter root's `slipway/` directory. Copilot stores that managed

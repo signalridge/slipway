@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/tmpl"
 	"gopkg.in/yaml.v3"
 )
@@ -47,6 +48,7 @@ type ToolConfig struct {
 
 const (
 	settingsKindPiRegistration = "pi-registration"
+	settingsKindCodexHooks     = "codex-hooks"
 	stageAutoModeNote          = "Config-level `execution.auto` applies to this stage command; there are no per-stage `--auto`/`--no-auto` flags. Under auto, only pure-pacing boundaries may continue on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, and evidence gates still stop."
 	nextAutoModeNote           = "`slipway next` is query-only: it reflects config-level `execution.auto` in displayed confirmation requirements, has no `--auto`/`--no-auto` flags, and never mutates pending preset confirmations. Per-run `slipway run --auto` behavior is visible on `run`."
 )
@@ -91,9 +93,12 @@ var toolRegistry = map[string]ToolConfig{
 		CommandStyle:        "",
 		CommandFormat:       "",
 		CommandSkillSurface: true,
-		SettingsPath:        "",
-		SessionEvent:        "",
-		SessionHook:         "",
+		SettingsPath:        ".codex/config.toml",
+		SettingsKind:        settingsKindCodexHooks,
+		SessionEvent:        "SessionStart",
+		SessionHook:         "slipway hook session-start --tool codex",
+		PostToolEvent:       "UserPromptSubmit",
+		PostToolHook:        "slipway hook context-pressure --tool codex",
 		TriggerPrefix:       "$slipway-",
 		TriggerStyle:        "dollar-mention",
 		AutoDetectPath: []string{
@@ -301,6 +306,15 @@ var commandRegistry = []CommandDef{
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
+	{ID: "handoff", Class: CommandClassMutation, Description: "Write or show per-change advisory session handoff notes", Tier: "situational", HasPromptSurface: true,
+		Arguments: "[write [--change <slug>] [--section <name>] | show [--change <slug>] [--json] [--brief]]",
+		Notes: []string{
+			"`slipway handoff` without a subcommand behaves as `slipway handoff write`.",
+			"Write at meaningful moments: task completion, before stopping, before a review split, or when a context-pressure nudge asks for continuity.",
+			"Read on resume with `slipway handoff show`; use `show --brief` for a bounded descriptor.",
+			"This generated surface is hook-agnostic: run write/show yourself and never assume SessionStart, PreCompact, or any host hook fired.",
+			"The handoff is advisory only; `slipway status` and `slipway next` remain lifecycle authority.",
+		}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
 	// Setup (1)
@@ -475,6 +489,7 @@ var workflowSituationalCommandIDs = []string{
 	"validate",
 	"repair",
 	"evidence",
+	"handoff",
 	"cancel",
 	"delete",
 	"preset",
@@ -1206,6 +1221,10 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		switch cfg.SettingsKind {
 		case settingsKindPiRegistration:
 			if err := mergePiRegistrationSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
+				return err
+			}
+		case settingsKindCodexHooks:
+			if err := mergeCodexHooksTOMLWithPlan(root, cfg, refresh, plan); err != nil {
 				return err
 			}
 		default:
@@ -2038,6 +2057,8 @@ func hookLauncherOutputs(basePath, hookTemplateBase string) []hookLauncherOutput
 const (
 	sessionStartHookCommand    = "slipway hook session-start"
 	contextPressureHookCommand = "slipway hook context-pressure"
+	codexHooksBlockStart       = "# BEGIN SLIPWAY MANAGED CODEX HOOKS"
+	codexHooksBlockEnd         = "# END SLIPWAY MANAGED CODEX HOOKS"
 )
 
 func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
@@ -2116,6 +2137,77 @@ func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refres
 		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
 	}
 	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project artifact where operator-readable mode is intentional.
+}
+
+func mergeCodexHooksTOMLWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+	settingsRoot := codexHookSettingsRoot(root)
+	settingsPath := filepath.Join(settingsRoot, cfg.SettingsPath)
+	if !refresh {
+		if _, err := os.Stat(settingsPath); err == nil {
+			return nil
+		}
+	}
+
+	existing := ""
+	if raw, err := os.ReadFile(settingsPath); err == nil { // #nosec G304 -- path is a project-local adapter config path.
+		existing = string(raw)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	content := mergeManagedCodexHooksBlock(existing, renderCodexHooksBlock(cfg))
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project artifact location.
+		return err
+	}
+	if refresh && plan != nil {
+		return plan.writeUnmanagedFile(settingsPath, []byte(content), 0o644)
+	}
+	return os.WriteFile(settingsPath, []byte(content), 0o644) // #nosec G306 G703 -- project-local adapter config path with user-readable config permissions.
+}
+
+func codexHookSettingsRoot(root string) string {
+	commonDir := state.GitCommonDir(root)
+	if filepath.Base(commonDir) == ".git" {
+		return filepath.Dir(commonDir)
+	}
+	return root
+}
+
+func renderCodexHooksBlock(cfg ToolConfig) string {
+	sessionCommand := strings.TrimSpace(cfg.SessionHook)
+	if sessionCommand == "" {
+		sessionCommand = "slipway hook session-start --tool codex"
+	}
+	promptCommand := strings.TrimSpace(cfg.PostToolHook)
+	if promptCommand == "" {
+		promptCommand = "slipway hook context-pressure --tool codex"
+	}
+	return strings.TrimSpace(fmt.Sprintf(`%s
+# Generated by Slipway. Hooks are inert until Codex trusts this repo and each hook; Slipway never edits global Codex trust.
+[[hooks.SessionStart]]
+hooks = [{ type = "command", command = %q }]
+
+[[hooks.UserPromptSubmit]]
+hooks = [{ type = "command", command = %q }]
+%s
+`, codexHooksBlockStart, sessionCommand, promptCommand, codexHooksBlockEnd)) + "\n"
+}
+
+func mergeManagedCodexHooksBlock(existing, block string) string {
+	existing = strings.TrimRight(existing, "\n")
+	start := strings.Index(existing, codexHooksBlockStart)
+	end := strings.Index(existing, codexHooksBlockEnd)
+	if start >= 0 && end >= start {
+		end += len(codexHooksBlockEnd)
+		merged := strings.TrimRight(existing[:start], "\n") + "\n\n" + strings.TrimSpace(block)
+		if tail := strings.TrimLeft(existing[end:], "\n"); tail != "" {
+			merged += "\n\n" + tail
+		}
+		return strings.TrimSpace(merged) + "\n"
+	}
+	if strings.TrimSpace(existing) == "" {
+		return block
+	}
+	return existing + "\n\n" + block
 }
 
 func mergeStringArraySetting(settings map[string]any, key, value string) error {
