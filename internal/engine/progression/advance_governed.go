@@ -128,14 +128,51 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(assuranceBlockers)), nil
 	}
 
-	// 3. Wave synchronization (only at S2_IMPLEMENT)
-	if fromState == model.StateS2Implement {
+	// 3. Wave synchronization at S2_IMPLEMENT and S3_REVIEW.
+	//
+	// At S2 this is the implement-stage sync. At S3 it is the in-place review
+	// convergence path: when the author discovers more work at review and edits
+	// tasks.md (for example adds a task), the wave plan re-materializes IN PLACE
+	// from the current tasks.md at the SAME run version, folding the delta into
+	// the review instead of forcing a backward rescope re-walk. Unchanged-task
+	// evidence is preserved; a newly added or structurally changed task surfaces
+	// as still-required work and blocks S3->S4 until its evidence is recorded
+	// (fail-closed). The lifecycle state is never regressed to S1/S2.
+	runWaveSync := fromState == model.StateS2Implement
+	if fromState == model.StateS3Review {
+		// Only re-sync at review when there is genuine convergence work to absorb:
+		// either tasks.md drifted from the materialized wave plan (the author added
+		// a task at review → re-materialize), or the per-task evidence ledger
+		// advanced past the persisted execution summary (a folded-in task's
+		// evidence was just recorded → rebuild the summary so its
+		// incomplete_execution_task blocker clears). A settled review keeps the
+		// existing read-only S3 behavior so done-ready, light-preset, and other
+		// settled review flows are not perturbed by an unconditional re-sync.
+		pending, err := reviewConvergencePending(root, change)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		runWaveSync = pending
+	}
+	if runWaveSync {
 		syncResult, err := SyncGovernedWaveExecution(root, change)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
-		if len(syncResult.Blockers) > 0 {
-			return blockedAdvanceSummary(fromState, syncResult.Blockers), nil
+		blockers := syncResult.Blockers
+		if fromState == model.StateS3Review {
+			// S3 absorbs the re-materialized plan delta in place: plan/evidence
+			// drift on already-evidenced tasks is realigned through the diff-scoped
+			// reviewers (who re-certify against the current plan), not replayed as a
+			// backward gate — the same drift tokens blockingExecutionSummaryIssues
+			// treats as review input. Genuinely missing or non-passing work
+			// (incomplete tasks, failed verdicts, safety-net violations) still fails
+			// closed here, so a task newly discovered at review cannot reach S4
+			// without its own evidence.
+			blockers = absorbedAtReviewWaveBlockers(blockers)
+		}
+		if len(blockers) > 0 {
+			return blockedAdvanceSummary(fromState, blockers), nil
 		}
 	}
 
@@ -622,6 +659,76 @@ func autoConfirmScaffold(root string, change model.Change, target model.Workflow
 	return artifact.ScaffoldGovernedBundleForChange(root, change, target, resolution.Schema)
 }
 
+// tasksPlanDriftedFromWavePlan reports whether the current tasks.md structural
+// projection differs from the materialized wave plan, i.e. the plan was edited
+// since it was last materialized. It is the S3_REVIEW trigger for in-place
+// convergence: only a real plan delta re-materializes the wave plan at review.
+// A missing wave plan reports no drift (there is nothing materialized to
+// converge against); the upstream bundle gate already guarantees a readable
+// tasks.md by this point, so a read error is surfaced rather than masked.
+func tasksPlanDriftedFromWavePlan(root string, change model.Change) (bool, error) {
+	plan, err := state.LoadOptionalWavePlanForChange(root, change)
+	if err != nil {
+		return false, err
+	}
+	if plan == nil {
+		return false, nil
+	}
+	current, err := state.CurrentTasksPlanStructuralState(root, change)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(current) != strings.TrimSpace(wavePlanStructuralHash(*plan)), nil
+}
+
+// reviewConvergencePending reports whether S3_REVIEW has in-place convergence
+// work to absorb on this run. It is true when either tasks.md structurally
+// drifted from the materialized wave plan (a task was added or restructured at
+// review → re-materialize the plan), or the per-task evidence ledger advanced
+// past the persisted execution summary (a folded-in task's evidence was recorded
+// → rebuild the summary so its incomplete_execution_task blocker clears). A
+// settled review — plan matches tasks.md and the summary reflects the ledger —
+// reports no pending work, preserving the read-only S3 behavior that done-ready
+// and light-preset flows rely on.
+func reviewConvergencePending(root string, change model.Change) (bool, error) {
+	drifted, err := tasksPlanDriftedFromWavePlan(root, change)
+	if err != nil {
+		return false, err
+	}
+	if drifted {
+		return true, nil
+	}
+	return executionSummaryTrailsTaskEvidence(root, change)
+}
+
+// executionSummaryTrailsTaskEvidence reports whether the per-task evidence ledger
+// records a task at the active run version that the persisted execution summary
+// does not yet reflect — i.e. evidence for a folded-in task was recorded since
+// the summary was last built. Re-syncing absorbs it and clears that task's
+// incomplete_execution_task blocker. A missing summary, or a ledger already
+// reflected in the summary, reports no trailing work so settled reviews stay
+// read-only.
+func executionSummaryTrailsTaskEvidence(root string, change model.Change) (bool, error) {
+	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
+	if err != nil {
+		return false, err
+	}
+	if summary == nil || summary.RunSummaryVersion < 1 {
+		return false, nil
+	}
+	ledgerTasks, _, err := LoadExecutionTasksFromEvidence(root, change.Slug, summary.RunSummaryVersion)
+	if err != nil {
+		return false, err
+	}
+	runMap := summary.TaskRunMap()
+	for _, task := range ledgerTasks {
+		if _, ok := runMap[task.TaskID]; !ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target EvidenceRepairTarget) AdvanceSummary {
 	blockers := append([]model.ReasonCode{}, target.Blockers...)
 	if strings.TrimSpace(target.SkillName) != "" {
@@ -631,6 +738,23 @@ func forwardOnlyStaleEvidenceSummary(fromState model.WorkflowState, target Evide
 	summary.Reason = "stale_evidence_requires_review_alignment"
 	summary.Message = "Stale evidence must be realigned through review convergence; the lifecycle state was not changed."
 	return summary
+}
+
+// reviewAbsorbedDriftToken reports whether a blocker code is plan/evidence drift
+// that S3_REVIEW absorbs as review input rather than blocking on. At review the
+// diff-scoped reviewers re-certify the bundle against the current plan, so a
+// tasks.md edit (or the stale planning/execution evidence it produces) is
+// realigned through review convergence instead of a backward replay. Missing or
+// non-passing work is NOT in this set and continues to fail closed.
+func reviewAbsorbedDriftToken(code string) bool {
+	switch strings.TrimSpace(code) {
+	case state.StalePlanningEvidenceBlockerToken,
+		state.StaleExecutionEvidenceBlockerToken,
+		"tasks_plan_changed_since_task_evidence":
+		return true
+	default:
+		return false
+	}
 }
 
 func blockingExecutionSummaryIssues(change model.Change, issues []string) []string {
@@ -643,14 +767,27 @@ func blockingExecutionSummaryIssues(change model.Change, issues []string) []stri
 		if len(reason) == 0 {
 			continue
 		}
-		switch strings.TrimSpace(reason[0].Code) {
-		case state.StalePlanningEvidenceBlockerToken,
-			state.StaleExecutionEvidenceBlockerToken,
-			"tasks_plan_changed_since_task_evidence":
+		if reviewAbsorbedDriftToken(reason[0].Code) {
 			continue
-		default:
-			filtered = append(filtered, issue)
 		}
+		filtered = append(filtered, issue)
+	}
+	return filtered
+}
+
+// absorbedAtReviewWaveBlockers drops the in-place-absorbed plan/evidence drift
+// tokens from a wave-sync result at S3_REVIEW, mirroring
+// blockingExecutionSummaryIssues so the re-materialize path and the
+// execution-summary path treat review drift identically. Hard blockers
+// (incomplete tasks, non-pass verdicts, safety-net violations) are preserved so
+// review convergence still fails closed on genuinely missing or broken work.
+func absorbedAtReviewWaveBlockers(blockers []model.ReasonCode) []model.ReasonCode {
+	filtered := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if reviewAbsorbedDriftToken(blocker.Code) {
+			continue
+		}
+		filtered = append(filtered, blocker)
 	}
 	return filtered
 }
