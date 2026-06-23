@@ -457,6 +457,29 @@ func TestBuildRecoveryOrphanedChangeBundleRoutesToDelete(t *testing.T) {
 	assert.Contains(t, got.Steps[0].Remediation, "slipway delete --change abandoned-change")
 }
 
+func TestBuildRecoveryArchivedSameSlugActiveResidueRoutesToDeleteWithoutWorktree(t *testing.T) {
+	t.Parallel()
+
+	got := BuildRecovery([]ReasonCode{
+		{
+			Code:     "orphaned_change_bundle",
+			Severity: ReasonSeverityError,
+			Message:  "Active-state residue for archived change \"archived-change\" remains; archived record and source commits are not deletion targets",
+			Detail:   "archived-change",
+		},
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway delete --change archived-change", got.PrimaryCommand)
+	assert.Equal(t, RecoveryClassDiscardChange, got.RecoveryClass)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, "archived-change", got.Steps[0].Subject)
+	assert.Contains(t, got.PrimaryAction, "active-state residue")
+	assert.Contains(t, got.PrimaryAction, "archived record")
+	assert.Contains(t, got.PrimaryAction, "source commits are not deletion targets")
+	assert.NotContains(t, got.PrimaryAction, "--worktree")
+	assert.NotContains(t, got.Steps[0].Remediation, "--worktree")
+}
+
 func TestBuildRecoveryUnmanagedWorktreeOrphanIsNonDestructive(t *testing.T) {
 	t.Parallel()
 

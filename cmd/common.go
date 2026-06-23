@@ -502,14 +502,23 @@ type unknownOrphan struct {
 	Err  error
 }
 
+// archivedResidueOrphan pairs an orphan active-bundle slug with the archived
+// terminal record for the same slug. Recovery deletes only active-state residue;
+// the archived record and source commits are retained.
+type archivedResidueOrphan struct {
+	Slug        string
+	ArchivePath string
+}
+
 // orphanClassification splits orphan-bundle slugs into the unmanaged-worktree
 // case (preserve-first, never discard), the ownership-unknown case (the git
 // cross-check failed, so fail closed to preserve-first), and the plain
 // discardable residue.
 type orphanClassification struct {
-	Unmanaged []unmanagedOrphan
-	Unknown   []unknownOrphan
-	Plain     []string
+	Unmanaged       []unmanagedOrphan
+	Unknown         []unknownOrphan
+	ArchivedResidue []archivedResidueOrphan
+	Plain           []string
 }
 
 // classifyOrphanBundles cross-checks each orphan slug against git
@@ -542,6 +551,10 @@ func classifyOrphanBundlesWith(root string, orphans []string, match slugWorktree
 			class.Unmanaged = append(class.Unmanaged, unmanagedOrphan{Slug: slug, Match: m})
 			continue
 		}
+		if archived, ok := archivedResidueOrphanForSlug(root, slug); ok {
+			class.ArchivedResidue = append(class.ArchivedResidue, archived)
+			continue
+		}
 		class.Plain = append(class.Plain, slug)
 	}
 	return class
@@ -563,6 +576,37 @@ func unknownOrphanSlugs(orphans []unknownOrphan) []string {
 	return slugs
 }
 
+func archivedResidueOrphanSlugs(orphans []archivedResidueOrphan) []string {
+	slugs := make([]string, 0, len(orphans))
+	for _, o := range orphans {
+		slugs = append(slugs, o.Slug)
+	}
+	return slugs
+}
+
+func archivedActiveResidueReason(orphan archivedResidueOrphan) model.ReasonCode {
+	return model.ReasonCode{
+		Code:     "orphaned_change_bundle",
+		Severity: model.ReasonSeverityError,
+		// Build the message from the shared model sentinel so the prose the model
+		// matcher (isArchivedActiveResidueReason) keys on cannot drift from the
+		// prose produced here across the package boundary (F2).
+		Message: fmt.Sprintf("%s%q remains; archived record and source commits are not deletion targets", model.ArchivedActiveResidueMessagePrefix, orphan.Slug),
+		Detail:  orphan.Slug,
+	}
+}
+
+func archivedResidueOrphanForSlug(root, slug string) (archivedResidueOrphan, bool) {
+	if _, err := state.LoadArchivedChange(root, slug); err != nil {
+		return archivedResidueOrphan{}, false
+	}
+	archivePath := filepath.ToSlash(filepath.Join("artifacts", "changes", "archived", slug, "change.yaml"))
+	if path, err := state.ArchivedChangeFilePathForRead(root, slug); err == nil {
+		archivePath = state.DisplayPath(root, path)
+	}
+	return archivedResidueOrphan{Slug: slug, ArchivePath: archivePath}, true
+}
+
 func orphanedChangeBundleError(root, slug string) *CLIError {
 	orphans, err := orphanedChangeBundleSlugs(root, slug)
 	if err != nil || len(orphans) == 0 {
@@ -580,6 +624,9 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 	}
 	for _, u := range class.Unknown {
 		reasons = append(reasons, model.NewReasonCode("orphaned_bundle_ownership_unknown", u.Slug))
+	}
+	for _, archived := range class.ArchivedResidue {
+		reasons = append(reasons, archivedActiveResidueReason(archived))
 	}
 	reasons = append(reasons, orphanedChangeBundleReasons(class.Plain)...)
 
@@ -622,12 +669,45 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 			details["orphaned_change_bundles"] = class.Plain
 			remediation += fmt.Sprintf(" Separately, the abandoned residue with no live worktree can be discarded with `slipway delete --change %s` for: %s.", class.Plain[0], strings.Join(class.Plain, ", "))
 		}
+		if len(class.ArchivedResidue) > 0 {
+			archived := class.ArchivedResidue[0]
+			details["orphaned_active_residue_archived_changes"] = archivedResidueOrphanSlugs(class.ArchivedResidue)
+			details["archive_path"] = archived.ArchivePath
+			remediation += " Separately, " + archivedActiveResidueRemediation(archived)
+		}
 		return newCLIErrorWithReasons(
 			categoryPrecondition,
 			errorCode,
 			message,
 			remediation,
 			primarySlug,
+			reasons,
+			details,
+		)
+	}
+
+	if len(class.ArchivedResidue) > 0 {
+		primary := class.ArchivedResidue[0]
+		message := fmt.Sprintf("active-state residue for archived change %q is missing its change.yaml authority", primary.Slug)
+		remediation := archivedActiveResidueRemediation(primary)
+		if len(class.ArchivedResidue) > 1 {
+			message = "active-state residue remains for archived changes: " + strings.Join(archivedResidueOrphanSlugs(class.ArchivedResidue), ", ")
+			remediation = fmt.Sprintf("Discard each stale active-state residue with `slipway delete --change <slug>`; first suggested command: `slipway delete --change %s`. Archived records and source commits are not deletion targets.", primary.Slug)
+		}
+		details := map[string]any{
+			"orphaned_active_residue_archived_changes": archivedResidueOrphanSlugs(class.ArchivedResidue),
+			"archive_path": primary.ArchivePath,
+		}
+		if len(class.Plain) > 0 {
+			details["orphaned_change_bundles"] = class.Plain
+			remediation += fmt.Sprintf(" Separately, abandoned residue with no archived record can be discarded with `slipway delete --change %s` for: %s.", class.Plain[0], strings.Join(class.Plain, ", "))
+		}
+		return newCLIErrorWithReasons(
+			categoryPrecondition,
+			"orphaned_active_residue_archived_change",
+			message,
+			remediation,
+			primary.Slug,
 			reasons,
 			details,
 		)
@@ -664,6 +744,13 @@ func unmanagedWorktreeOrphanRemediation(slug string, match state.SlugWorktreeMat
 	return fmt.Sprintf(
 		"A live git worktree Slipway does not manage holds work for %q at %s. Inspect and preserve that worktree and its branch first — Slipway never removes a worktree it did not provision. Once its work is merged or saved, discard only the stale bundle residue with `slipway delete --change %s` (never pass --worktree).",
 		slug, location, slug,
+	)
+}
+
+func archivedActiveResidueRemediation(orphan archivedResidueOrphan) string {
+	return fmt.Sprintf(
+		"Active-state residue for archived change %q remains under artifacts/changes/%s. Remove only that stale active-state residue with `slipway delete --change %s`. The archived record at %s and source commits are not deletion targets.",
+		orphan.Slug, orphan.Slug, orphan.Slug, orphan.ArchivePath,
 	)
 }
 

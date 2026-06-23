@@ -335,6 +335,18 @@ func decodeVerificationStrict(raw []byte, rec *model.VerificationRecord) error {
 	return decoder.Decode(rec)
 }
 
+func verificationRecordRecoveryGuidance(skillName string) string {
+	recordPath := filepath.ToSlash(filepath.Join("verification", skillName+".yaml"))
+	notesPath := filepath.ToSlash(filepath.Join("verification", skillName+"-notes.md"))
+	return fmt.Sprintf(
+		"%s is an engine-owned VerificationRecord file; move free-form notes to %s and pass them through `slipway evidence skill --skill %s --notes-file %s`",
+		recordPath,
+		notesPath,
+		skillName,
+		notesPath,
+	)
+}
+
 // loadVerificationFromPath reads and validates a verification record from a
 // specific file path, avoiding redundant directory resolution.
 func loadVerificationFromPath(path, skillName string) (model.VerificationRecord, error) {
@@ -344,11 +356,11 @@ func loadVerificationFromPath(path, skillName string) (model.VerificationRecord,
 	}
 	var rec model.VerificationRecord
 	if err := decodeVerificationStrict(b, &rec); err != nil {
-		return model.VerificationRecord{}, fmt.Errorf("parse verification %s: %w", skillName, err)
+		return model.VerificationRecord{}, fmt.Errorf("parse verification %s: %w; %s", skillName, err, verificationRecordRecoveryGuidance(skillName))
 	}
 	rec.Normalize()
 	if err := rec.Validate(); err != nil {
-		return model.VerificationRecord{}, fmt.Errorf("invalid verification %s: %w", skillName, err)
+		return model.VerificationRecord{}, fmt.Errorf("invalid verification %s: %w; %s", skillName, err, verificationRecordRecoveryGuidance(skillName))
 	}
 	return rec, nil
 }

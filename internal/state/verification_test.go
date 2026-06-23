@@ -141,6 +141,28 @@ func TestLoadVerificationRejectsUnknownFields(t *testing.T) {
 	assert.Contains(t, err.Error(), "field unexpected")
 }
 
+func TestLoadVerificationMalformedRecordExplainsEngineOwnedRecovery(t *testing.T) {
+	t.Parallel()
+	root := createRuntimeLayout(t)
+	slug := "malformed-guidance"
+	saveActiveChangeForTest(t, root, slug)
+
+	dir := VerificationDir(root, slug)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "plan-audit.yaml"),
+		[]byte("verdict: ["),
+		0o644,
+	))
+
+	_, err := LoadVerification(root, slug, "plan-audit")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "VerificationRecord")
+	assert.Contains(t, err.Error(), "verification/plan-audit.yaml")
+	assert.Contains(t, err.Error(), "verification/plan-audit-notes.md")
+	assert.Contains(t, err.Error(), "slipway evidence skill --skill plan-audit --notes-file verification/plan-audit-notes.md")
+}
+
 func TestLoadVerificationAcceptsStructuredReasonCodes(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

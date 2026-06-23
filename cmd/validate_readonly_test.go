@@ -116,3 +116,38 @@ func TestValidateOrphanActiveBundleIsZeroWrite(t *testing.T) {
 
 	assert.Equal(t, before, snapshotNonGitTree(t, root))
 }
+
+func TestValidateMalformedVerificationExplainsEngineOwnedRecovery(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "validate malformed verification recovery")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeMalformedVerificationFile(t, root, slug, "plan-audit")
+		before := snapshotNonGitTree(t, root)
+
+		cmd := commandForRoot(t, root, makeValidateCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		err = cmd.Execute()
+		require.Error(t, err)
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "verification_load_failed", cliErr.ErrorCode)
+		errorText := err.Error()
+		assert.Contains(t, errorText, "VerificationRecord")
+		assert.Contains(t, errorText, "verification/plan-audit.yaml")
+		assert.Contains(t, errorText, "verification/plan-audit-notes.md")
+		assert.Contains(t, errorText, "slipway evidence skill --skill plan-audit --notes-file verification/plan-audit-notes.md")
+		assert.Equal(t, before, snapshotNonGitTree(t, root))
+	})
+}
