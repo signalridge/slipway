@@ -212,6 +212,16 @@ partial execution does not reach S3_REVIEW. To intentionally drop a task, record
 a same-intent scope amendment in `tasks.md` so the wave plan no longer claims it;
 never skip its evidence.
 
+**S3 in-place convergence:** if you discover more work at `S3_REVIEW` and edit
+`tasks.md` (for example, adding a task), the wave plan re-materializes IN PLACE
+at the SAME run version — the lifecycle stays at `S3_REVIEW` and prior per-task
+evidence is preserved, with no backward rescope re-walk to S1/S2. A newly added
+or structurally changed task still fails closed on its own missing evidence
+(`incomplete_execution_task:<task_id>`) before `S3_REVIEW->S4`; record its
+evidence through `slipway evidence task` as usual. Plan/evidence drift on
+already-evidenced tasks is realigned through the diff-scoped reviewers, not
+replayed as a backward gate.
+
 ## Guardrails
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
 - Auto-fix only issues directly blocking the current task and directly caused by the current task's change.
