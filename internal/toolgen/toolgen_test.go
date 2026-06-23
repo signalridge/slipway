@@ -3244,12 +3244,16 @@ func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, Generate(root, []string{"codex", "claude", "cursor"}, true))
 
-	// Codex inline TOML hooks launch the worktree source via go run.
+	// Codex inline TOML hooks launch the worktree source via go run. The command
+	// is stored as a TOML basic string, so backslashes in a Windows path are
+	// escaped (C:\dir -> C:\\dir); the assertion mirrors that encoding. On POSIX
+	// abs has no backslashes, so this is a no-op.
 	codexConfig, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
 	require.NoError(t, err)
 	codex := string(codexConfig)
-	assert.Contains(t, codex, "go -C "+abs+" run . hook session-start --tool codex")
-	assert.Contains(t, codex, "go -C "+abs+" run . hook context-pressure --tool codex")
+	codexAbs := strings.ReplaceAll(abs, `\`, `\\`)
+	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook session-start --tool codex")
+	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook context-pressure --tool codex")
 	assert.NotContains(t, codex, `"slipway hook`, "in-repo codex hooks must not embed the bare release command")
 
 	// Claude inline settings.json hooks launch the worktree source via go run.
