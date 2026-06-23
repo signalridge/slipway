@@ -3210,42 +3210,33 @@ func TestIsStaleDirectHookCommandAcrossLaunchers(t *testing.T) {
 	}
 }
 
-// In-repo generation dogfoots the worktree build via `go run` ONLY on
-// launcher-file hosts, whose wrapper scripts probe `go`, discard stderr, and
-// force exit 0. The inline-settings surfaces (codex TOML, settings.json) cannot
-// fail-silent a pre-process `go run` failure, so they stay on the bare
-// `slipway hook ...` command even in-repo (the cmd/root.go floor keeps that
-// fail-silent under version skew).
-func TestInRepoGenerationKeepsInlineSettingsHooksBare(t *testing.T) {
+func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
 	root := t.TempDir()
 	writeSlipwayGoMod(t, root)
 	abs, err := filepath.Abs(root)
 	require.NoError(t, err)
 	require.NoError(t, Generate(root, []string{"codex", "claude", "cursor"}, true))
 
-	// Codex inline TOML hooks must stay on the bare release command and must not
-	// embed a go-run launch that could fail before Slipway starts.
+	// Codex inline TOML hooks launch the worktree source via go run. The command
+	// is stored as a TOML basic string, so backslashes in a Windows path are
+	// escaped (C:\dir -> C:\\dir); the assertion mirrors that encoding. On POSIX
+	// abs has no backslashes, so this is a no-op.
 	codexConfig, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
 	require.NoError(t, err)
 	codex := string(codexConfig)
-	assert.Contains(t, codex, "slipway hook session-start --tool codex")
-	assert.Contains(t, codex, "slipway hook context-pressure --tool codex")
-	assert.NotContains(t, codex, "go -C ", "in-repo codex inline hooks must not embed a go-run launch")
-	assert.NotContains(t, codex, "go run", "in-repo codex inline hooks must not embed a go-run launch")
+	codexAbs := strings.ReplaceAll(abs, `\`, `\\`)
+	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook session-start --tool codex")
+	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook context-pressure --tool codex")
+	assert.NotContains(t, codex, `"slipway hook`, "in-repo codex hooks must not embed the bare release command")
 
-	// Claude inline settings.json hooks must likewise stay bare.
+	// Claude inline settings.json hooks launch the worktree source via go run.
 	claudeSettings := filepath.Join(root, ".claude", "settings.json")
 	sessionCommands := hookCommandsForEvent(t, claudeSettings, "SessionStart")
-	assert.Contains(t, sessionCommands, sessionStartHookCommand)
-	assert.NotContains(t, strings.Join(sessionCommands, "\n"), "go -C ",
-		"in-repo settings.json inline hooks must not embed a go-run launch")
+	assert.Contains(t, sessionCommands, "go -C "+abs+" run . hook session-start")
 	postCommands := hookCommandsForEvent(t, claudeSettings, "PostToolUse")
-	assert.Contains(t, postCommands, contextPressureHookCommand)
-	assert.NotContains(t, strings.Join(postCommands, "\n"), "go -C ",
-		"in-repo settings.json inline hooks must not embed a go-run launch")
+	assert.Contains(t, postCommands, "go -C "+abs+" run . hook context-pressure")
 
-	// Cursor launcher scripts DO dogfood the worktree via go run, but only behind
-	// a fail-silent wrapper that probes `go` and forces exit 0.
+	// Cursor launcher scripts probe `go` and dispatch through go run.
 	launcher, err := os.ReadFile(filepath.Join(root, ".cursor", "hooks", "slipway-session-start"))
 	require.NoError(t, err)
 	l := string(launcher)
@@ -3267,15 +3258,11 @@ func TestNonRepoGenerationKeepsBareSlipwayHookCommands(t *testing.T) {
 	assert.NotContains(t, strings.Join(sessionCommands, "\n"), "go -C ")
 }
 
-// An earlier (buggy) build wrote an inline `go -C <root> run . hook ...` command
-// into settings.json. A refresh — in-repo or release — must prune that stale
-// go-run entry and replace it with the bare command, leaving exactly one Slipway
-// entry and preserving user-authored hooks. This is the upgrade path off the
-// version that embedded a non-fail-silent go-run launch inline.
-func TestRefreshConvertsStaleInlineGoRunHookToBare(t *testing.T) {
-	abs, err := filepath.Abs(t.TempDir())
+func TestInRepoRefreshDoesNotDuplicateAcrossDevReleaseSwitch(t *testing.T) {
+	root := t.TempDir()
+	writeSlipwayGoMod(t, root)
+	abs, err := filepath.Abs(root)
 	require.NoError(t, err)
-	staleGoRun := "go -C " + abs + " run . hook session-start"
 	cfg := ToolConfig{
 		ID:           "claude",
 		SettingsPath: filepath.Join(".claude", "settings.json"),
@@ -3283,49 +3270,58 @@ func TestRefreshConvertsStaleInlineGoRunHookToBare(t *testing.T) {
 		SessionHook:  filepath.Join(".claude", "hooks", "slipway-session-start"),
 	}
 
-	for _, tc := range []struct {
-		name   string
-		inRepo bool
-	}{
-		{"in-repo refresh", true},
-		{"release refresh", false},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			if tc.inRepo {
-				writeSlipwayGoMod(t, root)
-			}
-			seed := fmt.Sprintf(`{
-			  "hooks": {
-			    "SessionStart": [
-			      {"hooks":[{"type":"command","command":%q}]},
-			      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
-			    ]
-			  }
-			}`, staleGoRun)
-			settingsPath := filepath.Join(root, cfg.SettingsPath)
-			require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
-			require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
+	// A prior release install left the bare command; an in-repo refresh must
+	// replace it with the go-run form and leave exactly one Slipway entry.
+	seed := `{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":"slipway hook session-start"}]},
+	      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
+	    ]
+	  }
+	}`
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
+	require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
 
-			require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
+	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
 
-			commands := hookCommandsForEvent(t, settingsPath, "SessionStart")
-			assert.Contains(t, commands, sessionStartHookCommand, "the bare command replaces the stale go-run entry")
-			assert.NotContains(t, strings.Join(commands, "\n"), "go -C ", "the stale inline go-run command must be pruned")
-			assert.Equal(t, 1, countCommandOccurrences(commands, sessionStartHookCommand), "exactly one Slipway session-start entry")
-			assert.Contains(t, commands, "echo user-owned-hook", "user-authored hooks survive")
-		})
-	}
+	commands := hookCommandsForEvent(t, settingsPath, "SessionStart")
+	goRun := "go -C " + abs + " run . hook session-start"
+	assert.Contains(t, commands, goRun)
+	assert.NotContains(t, commands, "slipway hook session-start", "stale bare release command must be pruned")
+	assert.Equal(t, 1, countCommandOccurrences(commands, goRun), "exactly one go-run session-start entry")
+	assert.Contains(t, commands, "echo user-owned-hook", "user-authored hooks survive")
+
+	// Switching back to a release install (no slipway go.mod) prunes the go-run
+	// command and restores the bare form without leaving a duplicate.
+	releaseRoot := t.TempDir()
+	releaseSettings := filepath.Join(releaseRoot, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(releaseSettings), 0o755))
+	devOnRelease := fmt.Sprintf(`{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":%q}]}
+	    ]
+	  }
+	}`, goRun)
+	require.NoError(t, os.WriteFile(releaseSettings, []byte(devOnRelease), 0o644))
+
+	require.NoError(t, mergeHookSettingsJSONWithPlan(releaseRoot, cfg, true, nil))
+	releaseCommands := hookCommandsForEvent(t, releaseSettings, "SessionStart")
+	assert.Contains(t, releaseCommands, sessionStartHookCommand)
+	assert.NotContains(t, strings.Join(releaseCommands, "\n"), "go -C ", "stale go-run command must be pruned on release")
+	assert.Equal(t, 1, countCommandOccurrences(releaseCommands, sessionStartHookCommand))
 }
 
 // A user who hand-writes a `go run . hook ...` entry (a form Slipway never
-// generates — Slipway's go-run launches always carry the `-C <root>` flag) must
-// keep it across a refresh: stale-hook pruning is scoped to Slipway-owned
-// launcher forms. The managed entry stays the bare `slipway hook ...` command.
-func TestRefreshKeepsUserAuthoredBareGoRunHook(t *testing.T) {
+// generates — it always emits `go -C <root> run .`) must keep it across an
+// in-repo refresh: stale-hook pruning is scoped to Slipway-owned launcher forms.
+func TestInRepoRefreshKeepsUserAuthoredBareGoRunHook(t *testing.T) {
 	root := t.TempDir()
 	writeSlipwayGoMod(t, root)
+	abs, err := filepath.Abs(root)
+	require.NoError(t, err)
 	cfg := ToolConfig{
 		ID:           "claude",
 		SettingsPath: filepath.Join(".claude", "settings.json"),
@@ -3349,11 +3345,10 @@ func TestRefreshKeepsUserAuthoredBareGoRunHook(t *testing.T) {
 	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
 
 	commands := hookCommandsForEvent(t, settingsPath, "SessionStart")
-	assert.Contains(t, commands, sessionStartHookCommand, "the managed bare entry survives")
-	assert.Equal(t, 1, countCommandOccurrences(commands, sessionStartHookCommand), "no duplicate managed entry")
+	assert.Contains(t, commands, "go -C "+abs+" run . hook session-start", "the managed go-run entry is merged in")
+	assert.NotContains(t, commands, "slipway hook session-start", "the stale bare release entry is pruned")
 	assert.Contains(t, commands, userHook, "a user-authored bare `go run .` hook must survive refresh")
 }
-
 func countCommandOccurrences(items []string, target string) int {
 	n := 0
 	for _, item := range items {
