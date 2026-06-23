@@ -2084,3 +2084,83 @@ func TestWorkspacePathInputHashStableAcrossLineEndingRoundTrip(t *testing.T) {
 	assert.Equal(t, lfDigest, crlfDigest,
 		"evidence digest must be stable across an LF<->CRLF line-ending round-trip")
 }
+
+// TestWaveOrchestrationDigestStableAcrossWavePlanBookkeepingRematerialize is a
+// regression for #310.1: a successful `evidence skill --skill wave-orchestration`
+// stamp must not leave its OWN freshly written evidence stale when the persisted
+// wave-plan.yaml is later re-materialized with the same task structure but a
+// different lifecycle bookkeeping value (generated_at or run_summary_version).
+// The stamp path (StampEvidenceDigestForSkill) and the validate path
+// (skillDigestFreshnessBlockersWithSummary) share certifiedSkillInputDigest, so
+// the digest must depend only on task-plan content, not bookkeeping fields. Before
+// the fix the run_summary_version drift below produced
+// required_skill_stale:wave-orchestration:wave-plan.yaml.
+func TestWaveOrchestrationDigestStableAcrossWavePlanBookkeepingRematerialize(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("wave-orchestration-stamp-self-stale")
+	change.CurrentState = model.StateS2Implement
+	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	// Persist wave-plan.yaml as the engine materializes it before evidence:
+	// epoch-0 generated_at, run_summary_version derived from current state (1).
+	prePlan, err := state.MaterializeWavePlanAt(root, change, time.Unix(0, 0).UTC())
+	require.NoError(t, err)
+	require.Equal(t, 1, prePlan.RunSummaryVersion)
+
+	capturedAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
+	writeWaveDigestTaskEvidence(t, root, change, prePlan.TasksPlanHash, "test:wave", capturedAt)
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+	}
+
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt.Add(time.Minute),
+		RunVersion: 1,
+	}
+	// Stamp wave-orchestration evidence through the same code path `evidence skill`
+	// uses. The stamp must succeed.
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillWaveOrchestration, record, summary))
+	stamped, err := state.LoadEvidenceDigestsForChange(root, change)
+	require.NoError(t, err)
+	require.Contains(t, stamped.Skills, SkillWaveOrchestration)
+
+	// The just-stamped evidence must be fresh immediately.
+	blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, summary)
+	require.NoError(t, err)
+	require.Empty(t, blockers, "freshly stamped wave-orchestration evidence must not be stale")
+
+	// Re-materialize wave-plan.yaml with a different generated_at (display-only)
+	// AND an advanced run_summary_version (bookkeeping). The task structure is
+	// unchanged, so the freshly stamped evidence must remain fresh.
+	bumped, err := state.MaterializeWavePlanAtRunSummaryVersion(root, change, time.Now().UTC(), 2)
+	require.NoError(t, err)
+	require.Equal(t, 2, bumped.RunSummaryVersion)
+
+	blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, summary)
+	require.NoError(t, err)
+	assert.Empty(t, blockers,
+		"re-materializing wave-plan.yaml with new bookkeeping (generated_at/run_summary_version) "+
+			"but identical task structure must not stale the freshly stamped wave-orchestration evidence")
+
+	// A genuine task-plan change must still be detected (the digest is not inert).
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(bundleDir, "tasks.md"),
+		[]byte(scopeOnlyDigestTasks()),
+		0o644,
+	))
+	_, err = state.MaterializeWavePlanAt(root, change, time.Now().UTC())
+	require.NoError(t, err)
+	blockers, err = skillDigestFreshnessBlockersWithSummary(root, change, SkillWaveOrchestration, summary)
+	require.NoError(t, err)
+	assert.Contains(t, blockers, "required_skill_stale:wave-orchestration:wave-plan.yaml",
+		"a real task-plan scope change must still stale the wave-plan digest")
+}

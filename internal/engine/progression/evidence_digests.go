@@ -1083,8 +1083,22 @@ func addWaveOrchestrationInputs(
 	if err != nil {
 		return err
 	}
+	// Exclude lifecycle bookkeeping fields from the wave-plan content digest so a
+	// successful stamp does not immediately go stale when the persisted plan is
+	// re-materialized with the same task structure but a different bookkeeping
+	// value. generated_at is a materialization timestamp; run_summary_version is
+	// the execution iteration counter (its real freshness signal is carried
+	// independently by the runtime_task_evidence input below); the per-wave
+	// parallel flag is derived from config and is documented as excluded from the
+	// wave-plan freshness hashes (see model.WavePlanWave.Parallel). The structural,
+	// scope, and semantic task-plan hashes plus the wave/task shape remain in the
+	// digest, so genuine plan changes are still detected.
 	plan.GeneratedAt = time.Time{}
 	plan.Normalize()
+	plan.RunSummaryVersion = 0
+	for i := range plan.Waves {
+		plan.Waves[i].Parallel = false
+	}
 	planHash, err := model.ComputeInputHash(map[string]any{
 		"wave_plan": plan,
 	})

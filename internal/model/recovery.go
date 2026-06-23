@@ -818,7 +818,7 @@ func BuildRecovery(blockers []ReasonCode) *RecoverySummary {
 	groups := map[groupKey][]ReasonCode{}
 	var order []groupKey
 	for _, rc := range NormalizeReasonCodes(blockers) {
-		remediation, ok := blockerRemediations[rc.Code]
+		remediation, ok := recoveryRemediationForReason(rc)
 		if !ok {
 			continue
 		}
@@ -851,7 +851,7 @@ func BuildRecovery(blockers []ReasonCode) *RecoverySummary {
 func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 	rep := group[0]
 	rep.Normalize()
-	base := blockerRemediations[rep.Code]
+	base, _ := recoveryRemediationForReason(rep)
 	parsed := parseBlockerForRecovery(rep, base)
 	priority := recoveryPriority(base)
 	if parsed.Code == "missing_required_artifact" {
@@ -868,6 +868,34 @@ func recoveryStepForGroup(group []ReasonCode) RecoveryStep {
 		RecoveryClass: base.Class,
 		priority:      priority,
 	}
+}
+
+func recoveryRemediationForReason(rc ReasonCode) (blockerRemediation, bool) {
+	remediation, ok := blockerRemediations[rc.Code]
+	if !ok {
+		return blockerRemediation{}, false
+	}
+	if isArchivedActiveResidueReason(rc) {
+		return blockerRemediation{
+			Remediation:     "Active-state residue for archived change {subject} remains under artifacts/changes/{subject}. Remove only that stale active-state residue with `slipway delete --change {subject}`. The archived record and source commits are not deletion targets.",
+			CommandTemplate: "slipway delete --change {subject}",
+			Class:           RecoveryClassDiscardChange,
+		}, true
+	}
+	return remediation, true
+}
+
+// ArchivedActiveResidueMessagePrefix is the shared sentinel that marks an
+// orphaned_change_bundle reason as the archived-same-slug active-residue variant
+// (a stale active bundle whose authority moved to the archive). The message
+// producer in cmd/common.go builds its Message with this exact prefix, and
+// isArchivedActiveResidueReason matches on it, so the two prose strings cannot
+// silently drift across the package boundary.
+const ArchivedActiveResidueMessagePrefix = "Active-state residue for archived change "
+
+func isArchivedActiveResidueReason(rc ReasonCode) bool {
+	return rc.Code == "orphaned_change_bundle" &&
+		strings.Contains(rc.Message, ArchivedActiveResidueMessagePrefix)
 }
 
 func missingRequiredArtifactRecoveryPriority(subject string) int {
