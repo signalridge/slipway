@@ -189,6 +189,111 @@ func TestEvidenceSkillRejectsNonStaleResearchRestampFromAuditSubstep(t *testing.
 	})
 }
 
+func TestEvidenceSkillAllowsStaleUpstreamIntakeRecertAtS1Plan(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill recerts stale intake at S1")
+		// S0-owned intake-clarification certifies intent.md at S0_INTAKE, then the
+		// change advances into S1_PLAN. Keep the substep before audit so a fresh
+		// plan-audit cannot supersede the intake drift for this test.
+		change := setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepNone)
+		writeMinimalGovernedBundle(t, root, change)
+		writeSkillVerification(t, root, slug, progression.SkillIntakeClarification, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 0,
+			References: []string{"intake:pass"},
+			Notes:      "Original intake clarification.",
+		})
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillIntakeClarification)
+
+		// Mutate the certified intent.md body after the change advanced past S0, so
+		// the upstream intake-clarification evidence goes stale with no S0 reopen
+		// path. The change must land under a hashed heading (the Intent body), not
+		// the Open Questions section, which the intake digest intentionally ignores.
+		intentPath := filepath.Join(root, "artifacts", "changes", slug, "intent.md")
+		require.NoError(t, os.WriteFile(intentPath, []byte(`# Intent
+INT-001: test fixture intent, clarified scope after planning began.
+
+## Open Questions
+(none)
+`), 0o644))
+
+		// The engine flags the stale upstream skill as a recoverable repair target.
+		// (Readiness blockers intentionally omit intake-clarification staleness today
+		// — that view-path vs advance-path divergence is a tracked follow-up — so the
+		// in-place re-cert exception keys off the repair target, not readiness.)
+		target, ok, err := progression.StaleEvidenceRepairAvailable(root, change, nil)
+		require.NoError(t, err)
+		require.True(t, ok, "engine must flag the stale upstream intake skill as a recoverable repair target")
+		require.Equal(t, progression.SkillIntakeClarification, target.SkillName)
+
+		refreshRequired, err := staleEvidenceSkillRefreshRequired(root, change, progression.SkillIntakeClarification)
+		require.NoError(t, err)
+		require.True(t, refreshRequired, "the wrong-state guard must treat the flagged stale intake skill as refresh-required")
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--change", slug,
+			"--skill", progression.SkillIntakeClarification,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "intake:pass",
+			"--notes", "Intake re-certified after current intent updates.",
+		})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view evidenceSkillView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, progression.SkillIntakeClarification, view.SkillName)
+		assert.True(t, view.Recorded)
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillIntakeClarification)
+		require.NoError(t, err)
+		assert.Equal(t, "Intake re-certified after current intent updates.", rec.Notes)
+
+		target, ok, err = progression.StaleEvidenceRepairAvailable(root, change, nil)
+		require.NoError(t, err)
+		assert.False(t, ok, "intake re-cert should clear the stale evidence repair target")
+		assert.Empty(t, target.SkillName)
+	})
+}
+
+func TestEvidenceSkillRejectsNonStaleWrongStateSkill(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects non-stale wrong state")
+		// An S3-owned review skill at S1_PLAN is at the wrong state and is not a
+		// recoverable stale-repair target, so the wrong-state guard must still fail
+		// closed even with the in-place re-cert exception present.
+		setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", model.VerificationVerdictPass,
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
+		assert.Equal(t, progression.SkillSpecComplianceReview, cliErr.Details["skill"])
+		assert.Equal(t, string(model.StateS3Review), cliErr.Details["required_state"])
+		assert.Equal(t, string(model.StateS1Plan), cliErr.Details["current_state"])
+	})
+}
+
 func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
