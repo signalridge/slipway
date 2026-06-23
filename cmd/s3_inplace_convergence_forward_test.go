@@ -130,6 +130,59 @@ func TestRunAtS3ConvergesFoldedTaskThroughWaveReRecord(t *testing.T) {
 	})
 }
 
+// TestRunAtS3RejectsWaveReRecordBeforeFoldedTaskEvidence locks the S3 ordering
+// contract symmetric to S2: Door 2 (wave-orchestration re-record) must not write a
+// passing record before Door 1 (the folded task's evidence) is in the ledger. The
+// re-materialized wave plan surfaces the folded task as incomplete_execution_task,
+// so attempting the wave re-record first must fail closed with
+// evidence_skill_task_evidence_incomplete — the SAME completeness guard S2 enforces
+// — rather than saving a misleading out-of-order passing wave record.
+func TestRunAtS3RejectsWaveReRecordBeforeFoldedTaskEvidence(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+
+		recordTaskResult(t, root, "t-01", "test:original-t-01", "cmd/evidence.go")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` harden result file loading
+  - depends_on: []
+  - target_files: ["cmd/evidence.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` cover the newly discovered gap
+  - depends_on: []
+  - target_files: ["cmd/evidence_task_test.go"]
+  - task_kind: test
+  - covers: [REQ-001]
+`)))
+
+		// Fold the plan delta in place; t-02 surfaces as incomplete.
+		runOnce(t, root, slug)
+		require.True(t, summaryHasIncompleteTask(t, root, slug), "fold must surface incomplete_execution_task")
+
+		// Door 2 before Door 1: re-record wave-orchestration WITHOUT first recording
+		// the folded task's evidence. This must fail closed like S2, not save a passing
+		// out-of-order wave record.
+		err := recordWaveEvidenceErr(t, root, slug)
+		require.Error(t, err, "wave re-record before folded task evidence must fail closed")
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_task_evidence_incomplete", cliErr.ErrorCode)
+
+		// No passing wave-orchestration record may have been written out of order.
+		assert.True(t, summaryHasIncompleteTask(t, root, slug), "rejected re-record must leave the incomplete blocker intact")
+	})
+}
+
 func recordWaveEvidenceErr(t *testing.T, root, slug string) error {
 	t.Helper()
 	cmd := commandForRoot(t, root, makeEvidenceCmd())

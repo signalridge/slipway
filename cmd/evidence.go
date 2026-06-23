@@ -1366,7 +1366,18 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 	if err != nil {
 		return 0, nil, err
 	}
-	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Implement {
+	// wave-orchestration evidence must prove every planned task has fresh task
+	// evidence before its own record may be written — the "wave evidence is
+	// recorded last, after every task" rule (issue #95). This holds at S2_IMPLEMENT
+	// and, symmetrically, while completing an in-place S3_REVIEW convergence (a task
+	// folded into tasks.md whose Door 1 evidence must precede the Door 2 wave
+	// re-attestation). Without the S3 arm, Door 2 could write a misleading passing
+	// wave record before the folded task's evidence existed.
+	requiresWaveTaskCompleteness, err := waveOrchestrationEvidenceRequiresTaskCompleteness(root, change, def)
+	if err != nil {
+		return 0, nil, err
+	}
+	if requiresWaveTaskCompleteness {
 		runVersion, taskErr := waveOrchestrationTaskEvidenceRunVersion(root, change)
 		if taskErr != nil {
 			return 0, nil, taskErr
@@ -1382,7 +1393,7 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 	if execCtx.LatestRunVersion >= 1 {
 		return execCtx.LatestRunVersion, execCtx.Summary, nil
 	}
-	if def.Name == progression.SkillWaveOrchestration && change.CurrentState == model.StateS2Implement {
+	if requiresWaveTaskCompleteness {
 		runVersion, err := waveOrchestrationTaskEvidenceRunVersion(root, change)
 		if err != nil {
 			return 0, nil, err
@@ -1400,6 +1411,23 @@ func evidenceSkillRunContext(root string, change model.Change, def skill.Definit
 		change.Slug,
 		map[string]any{"skill": def.Name},
 	)
+}
+
+// waveOrchestrationEvidenceRequiresTaskCompleteness reports whether recording the
+// given skill's evidence must first prove every planned task has fresh task
+// evidence (the IncompleteExecutionTaskBlockers gate). It is true for
+// wave-orchestration at S2_IMPLEMENT and, symmetrically, while an in-place
+// S3_REVIEW convergence is still pending — keeping the S3 forward exit (Door 2)
+// under the SAME completeness ordering S2 enforces, so a folded task's evidence
+// (Door 1) must exist before the wave run is re-attested.
+func waveOrchestrationEvidenceRequiresTaskCompleteness(root string, change model.Change, def skill.Definition) (bool, error) {
+	if def.Name != progression.SkillWaveOrchestration {
+		return false, nil
+	}
+	if change.CurrentState == model.StateS2Implement {
+		return true, nil
+	}
+	return reviewWaveConvergenceReRecordAllowed(root, change, def.Name)
 }
 
 func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (int, error) {
