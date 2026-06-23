@@ -681,9 +681,34 @@ func IncompleteExecutionTaskBlockers(plan model.WavePlan, runs map[string]model.
 	slices.Sort(missing)
 	blockers := make([]model.ReasonCode, 0, len(missing))
 	for _, taskID := range missing {
-		blockers = append(blockers, model.NewReasonCode("incomplete_execution_task", taskID))
+		blockers = append(blockers, model.NewReasonCode(IncompleteExecutionTaskBlockerCode, taskID))
 	}
 	return model.NormalizeReasonCodes(blockers)
+}
+
+// IncompleteExecutionTaskBlockerCode marks a planned wave-plan task that has no
+// recorded run at the active run_summary_version (issue #95). It is also the
+// engine's durable signal that a task was folded into tasks.md at S3_REVIEW and
+// still needs its evidence before the in-place convergence completes.
+const IncompleteExecutionTaskBlockerCode = "incomplete_execution_task"
+
+// ExecutionSummaryHasIncompleteTask reports whether the persisted execution
+// summary still carries an incomplete_execution_task blocker — the engine's
+// durable signal that a task folded into tasks.md at S3_REVIEW has not yet had
+// its evidence recorded. It scopes the S3 wave-orchestration re-record window:
+// the host may re-attest the wave run in place only while genuine convergence
+// work remains, and the window closes once the rebuilt summary reflects the
+// folded task.
+func ExecutionSummaryHasIncompleteTask(summary *model.ExecutionSummary) bool {
+	if summary == nil {
+		return false
+	}
+	for _, blocker := range summary.OpenBlockers {
+		if strings.TrimSpace(blocker.Code) == IncompleteExecutionTaskBlockerCode {
+			return true
+		}
+	}
+	return false
 }
 
 // TaskChangedFileScopeEscapeBlockers reports, per task, every recorded changed

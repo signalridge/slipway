@@ -212,6 +212,28 @@ partial execution does not reach S3_REVIEW. To intentionally drop a task, record
 a same-intent scope amendment in `tasks.md` so the wave plan no longer claims it;
 never skip its evidence.
 
+**S3 in-place convergence:** if you discover more work at `S3_REVIEW` and edit
+`tasks.md` (for example, adding a task), the wave plan re-materializes IN PLACE
+at the SAME run version — the lifecycle stays at `S3_REVIEW` and prior per-task
+evidence is preserved, with no backward rescope re-walk to S1/S2. A newly added
+or structurally changed task still fails closed on its own missing evidence
+(`incomplete_execution_task:<task_id>`) before `S3_REVIEW->S4`. The forward exit
+is the SAME ordered flow as S2, run in place at `S3_REVIEW`:
+1. `slipway run` once so the re-materialized plan surfaces the folded task as
+   `incomplete_execution_task`.
+2. Record the folded task's evidence with `slipway evidence task` (recordable at
+   `S3_REVIEW` only for a task the plan surfaced as incomplete — already-evidenced
+   tasks stay frozen and are realigned through review, never restamped).
+3. Re-record wave-orchestration evidence with `slipway evidence skill` so the
+   fresh wave record post-dates the folded task's evidence — wave evidence is
+   always recorded LAST, after every task's evidence, exactly as at S2. This
+   rebuilds the execution summary in place and clears the
+   `incomplete_execution_task` blocker.
+4. `slipway run` to advance once the reviewers re-certify (the `tasks.md` edit
+   staled their evidence).
+Plan/evidence drift on already-evidenced tasks is realigned through the
+diff-scoped reviewers, not replayed as a backward gate.
+
 ## Guardrails
 - The orchestrator stays below 15% of context budget. Do not read task source files just to "help."
 - Auto-fix only issues directly blocking the current task and directly caused by the current task's change.

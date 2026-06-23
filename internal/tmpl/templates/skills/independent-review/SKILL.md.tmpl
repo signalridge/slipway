@@ -27,6 +27,15 @@ review-stage native subagents. This review is an unordered peer of the other S3
 reviewers; it does not wait for their verdicts and they do not wait for this
 verdict. `slipway next` previews the review set; it does not advance the state.
 
+`S3_REVIEW` is a convergence stage: if the author edits `tasks.md` at review (for
+example, discovering a task), the wave plan re-materializes IN PLACE at the same
+run version — the lifecycle stays at `S3_REVIEW` rather than rescoping back to
+S1/S2, and prior per-task evidence is preserved. Realigning that plan/evidence
+drift on already-evidenced tasks is your job through the diff-scoped review
+below; review the current plan and the current diff, not a remembered earlier
+plan. A newly added or structurally changed task still fails closed on its own
+missing evidence before the change can advance to S4.
+
 ## Review Contract
 Use fresh context; do not carry assumptions from the implementer or from peer
 reviews.
