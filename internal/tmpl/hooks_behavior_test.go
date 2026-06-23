@@ -25,7 +25,9 @@ if [ "$*" = "hook session-start --tool claude" ]; then
 fi
 `)
 	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
-		"ToolID": "claude",
+		"ToolID":       "claude",
+		"LaunchPrefix": "slipway",
+		"ProbeBin":     "slipway",
 	})
 
 	shPath, err := exec.LookPath("sh")
@@ -53,7 +55,9 @@ func TestSessionStartLauncherNoopsWhenSlipwayMissing(t *testing.T) {
 
 	root := t.TempDir()
 	scriptPath := writeRenderedHook(t, root, "hooks/session-start.sh.tmpl", map[string]string{
-		"ToolID": "claude",
+		"ToolID":       "claude",
+		"LaunchPrefix": "slipway",
+		"ProbeBin":     "slipway",
 	})
 
 	shPath, err := exec.LookPath("sh")
@@ -106,7 +110,7 @@ func TestHookLauncherTemplatesRenderForNativePlatforms(t *testing.T) {
 		{name: "session cmd", template: "hooks/session-start.cmd.tmpl", want: `hook session-start --tool "claude"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			content, err := Render(tc.template, map[string]string{"ToolID": "claude"})
+			content, err := Render(tc.template, map[string]string{"ToolID": "claude", "LaunchPrefix": "slipway", "ProbeBin": "slipway"})
 			require.NoError(t, err)
 			assert.NotContains(t, content, "{{.")
 			assert.Contains(t, content, tc.want)
@@ -122,7 +126,7 @@ func TestHookLauncherTemplateNamesStaySmall(t *testing.T) {
 		"hooks/session-start.ps1.tmpl",
 		"hooks/session-start.cmd.tmpl",
 	} {
-		content, err := Render(name, map[string]string{"ToolID": "claude"})
+		content, err := Render(name, map[string]string{"ToolID": "claude", "LaunchPrefix": "slipway", "ProbeBin": "slipway"})
 		require.NoError(t, err, fmt.Sprintf("render %s", name))
 		assert.LessOrEqual(t, len([]byte(content)), 700, "%s must stay a thin launcher", name)
 	}

@@ -275,6 +275,52 @@ func TestCodexUserPromptSubmitNudgesOnlyWhenHandoffMissingOrStale(t *testing.T) 
 	})
 }
 
+func TestHookSubtreeFailsSilentOnUsageErrors(t *testing.T) {
+	t.Parallel()
+
+	// Hooks are inlined into host automation and must never block or emit
+	// diagnostic noise, even when a generated invocation does not match this
+	// binary's surface. This is the version-skew case that motivated the fix: a
+	// newer generated config calling `slipway hook context-pressure --tool
+	// codex` against an older binary that lacks `--tool`. Every misuse of the
+	// hook subtree must exit silently: no error, no stdout, no stderr.
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "unknown flag on known subcommand", args: []string{"hook", "context-pressure", "--unknown-flag"}},
+		{name: "unknown flag with value", args: []string{"hook", "context-pressure", "--tool-typo", "codex"}},
+		{name: "unknown flag on session-start", args: []string{"hook", "session-start", "--unknown-flag"}},
+		{name: "unknown hook subcommand", args: []string{"hook", "definitely-not-a-subcommand"}},
+		{name: "bare hook with no subcommand", args: []string{"hook"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stdout, stderr, err := runRootCommandWithInput(tc.args, "")
+			require.NoError(t, err)
+			assert.Empty(t, stdout)
+			assert.Empty(t, stderr)
+		})
+	}
+}
+
+func TestNonHookUsageErrorStillSurfaces(t *testing.T) {
+	t.Parallel()
+
+	// The fail-silent swallow must be scoped to the hook subtree only: ordinary
+	// commands must still surface usage errors with the invalid-usage exit code
+	// and a structured diagnostic.
+	_, stderr, err := runRootCommandWithInput([]string{"status", "--definitely-not-a-flag"}, "")
+	require.Error(t, err)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
+	assert.Contains(t, stderr, "invalid_usage")
+}
+
 func jsonString(value string) string {
 	encoded, _ := json.Marshal(value)
 	return string(encoded)

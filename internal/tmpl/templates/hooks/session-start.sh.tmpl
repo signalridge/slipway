@@ -3,6 +3,6 @@
 # Slipway SessionStart launcher for {{.ToolID}}.
 # Behavior lives in `slipway hook session-start`; this file only dispatches.
 
-command -v slipway >/dev/null 2>&1 || exit 0
-slipway hook session-start --tool "{{.ToolID}}" 2>/dev/null || true
+command -v {{.ProbeBin}} >/dev/null 2>&1 || exit 0
+{{.LaunchPrefix}} hook session-start --tool "{{.ToolID}}" 2>/dev/null || true
 exit 0
