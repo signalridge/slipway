@@ -23,3 +23,17 @@
   `internal/tmpl/templates/skills/_shared/references/checklist-quality.md:1-6`.
 - Notes: codebase-map docs are advisory and should stay bounded to this
   change's surfaces.
+- New state helper files for this change should live under `internal/state/`
+  beside other git-runtime path and state helpers. The plan's
+  `internal/state/handoff.go` and `internal/state/handoff_test.go` targets are
+  consistent with the existing `ChangeHandoffPath` runtime-path owner in
+  `internal/state/local_runtime_paths.go`.
+- `cmd/handoff.go` should own Cobra command wiring and presentation for
+  `slipway handoff write/show`; hook handlers should call the command or shared
+  command-owned logic rather than parsing handoff files directly.
+- Codex project hook generation is structurally a toolgen concern. Existing
+  tests currently assert that fresh Codex generation does not create
+  `.codex/config.toml`; this change must update those contracts deliberately
+  rather than leaving stale negative assertions in place. Evidence:
+  `cmd/init_test.go:73-75`, `internal/toolgen/toolgen_test.go:1589-1590`,
+  `internal/toolgen/toolgen_test.go:2018-2026`.

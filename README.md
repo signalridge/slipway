@@ -92,6 +92,19 @@ In an AI-tool session, you usually describe the change in plain language. The
 generated entry skill should call the same CLI surfaces and stop when Slipway
 returns a skill handoff, blocker, checkpoint, or done-ready state.
 
+For cross-session continuity, use the command-owned advisory handoff:
+
+```bash
+slipway handoff write
+slipway handoff show --brief
+slipway handoff show
+```
+
+`slipway handoff write` refreshes the per-change runtime handoff skeleton and
+machine header. The header carries identity and freshness fields only; it does
+not snapshot lifecycle state or the next action. Fresh sessions still run
+`slipway status --json` and `slipway next --json` for authority.
+
 <details>
 <summary><strong>Command-first lifecycle</strong></summary>
 
@@ -230,7 +243,7 @@ customizations.
 | Tool | Generated surfaces |
 | --- | --- |
 | Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/settings.json` hook entries |
-| Codex | `.codex/skills/slipway-*/SKILL.md` entry, command, and governance skills |
+| Codex | `.codex/skills/slipway-*/SKILL.md` entry, command, and governance skills; `.codex/config.toml` SessionStart and UserPromptSubmit hook entries |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, session-start hook launchers |
 | Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/settings.json` hook entries |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, session-start hook launchers |
@@ -256,9 +269,10 @@ Exported generated skill rows are pinned by public skill directory:
 `slipway-wave-orchestration/SKILL.md`, and
 `slipway-worktree-preflight/SKILL.md`.
 
-Codex does not have a session-hook surface; its entry skill pulls governed state
-with `slipway status --json` when needed. The other adapters can inject compact
-session-start state through hook-capable host surfaces.
+Codex uses repo-local `.codex/config.toml` hooks for bounded SessionStart
+handoff pointers and staleness-conditioned UserPromptSubmit write nudges. These
+hooks are inert until the repo and each hook are trusted by the user; Slipway
+never edits global Codex trust configuration.
 
 See [AI Tool Adapters](docs/reference/ai-tools.md) and the generated
 [Surface Manifest](docs/SURFACE-MANIFEST.json) for the exact command and skill
@@ -278,7 +292,7 @@ inventory.
 | `artifacts/changes/<slug>/verification/` | Skill verification records consumed by the ship gate. |
 | `artifacts/changes/<slug>/events/lifecycle.jsonl` | Append-only lifecycle mutation trace. |
 | `.git/slipway/runtime/changes/<slug>/evidence/` | Git-local task evidence and runtime proof. |
-| `.git/slipway/runtime/changes/<slug>/handoff.md` | Optional per-change advisory continuation notes for fresh AI sessions; never lifecycle authority, evidence, freshness, or a gate. |
+| `.git/slipway/runtime/changes/<slug>/handoff.md` | Command-owned per-change advisory continuation notes written/read by `slipway handoff`; never lifecycle authority, evidence, freshness, or a gate. |
 | `.git/slipway/locks/change-create.lock`, `.git/slipway/locks/repair.lock` | Workspace/scope-level coordination locks for change creation and repair. They are intentionally not per-change because they protect operations that begin before or outside a stable change slug. |
 | `artifacts/changes/archived/<slug>/` | Terminal record after `slipway done`. |
 | `artifacts/codebase/` | Repo-scoped context map used for brownfield planning and review. |
@@ -286,7 +300,9 @@ inventory.
 
 AI-tool sessions read generated host surfaces from the project root. A governed
 worktree holds the code changes, but root host adapter files are not copied into
-each worktree.
+each worktree. Codex hooks generated in `.codex/config.toml` are inert until the
+repo is trusted and each hook is trusted by the user; Slipway never edits global
+Codex trust configuration.
 Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are
 reported as local runtime hygiene findings and are not used as current change
 authority.

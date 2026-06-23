@@ -70,9 +70,11 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
 		assert.True(t, os.IsNotExist(err), "codex should not have exported agents")
 
-		// Codex should not create project-local agent config on fresh init.
-		_, err = os.Stat(filepath.Join(root, ".codex", "config.toml"))
-		assert.True(t, os.IsNotExist(err), "codex should not create project-local agent config on fresh init")
+		// Codex creates project-local hook config, but it does not grant trust.
+		config, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
+		require.NoError(t, err, "codex should create project-local hook config")
+		assert.Contains(t, string(config), "[[hooks.SessionStart]]")
+		assert.Contains(t, string(config), "inert until Codex trusts this repo and each hook")
 
 		// Gemini commands should be TOML
 		_, err = os.Stat(filepath.Join(root, ".gemini", "commands", "slipway", "new.toml"))

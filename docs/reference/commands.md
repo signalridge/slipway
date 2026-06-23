@@ -23,6 +23,7 @@ setup-only.
 | `slipway run` | mutation | Drive the current stage until a stop condition. |
 | `slipway status` | query | Show lifecycle state and next actions. |
 | `slipway codebase-map` | mutation | Create or refresh durable repo-scoped context. |
+| `slipway handoff` | mutation | Write or show per-change advisory continuation notes. |
 | `slipway preset` | mutation | Confirm or change the active preset. |
 | `slipway validate` | query | Recompute readiness without advancing. |
 | `slipway abort` | mutation | Abort the active execution session. |
@@ -50,6 +51,7 @@ slipway fix --json
 slipway next --json
 slipway run --json
 slipway status --json
+slipway handoff show --json
 slipway validate --json
 slipway done --json
 slipway codebase-map --json

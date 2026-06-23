@@ -1,0 +1,40 @@
+version: 1
+slug: add-an-engine-owned-per-change-slipway-handoff-command-write
+description: 'Add an engine-owned, per-change `slipway handoff` command (write/show; bare handoff = write) that becomes the writer and reader for the runtime session handoff at .git/slipway/runtime/changes/<slug>/handoff.md. The engine stamps a deterministic machine header with identity and freshness fields only (slug, monotonic generation, session_owner, git branch/worktree, updated_at, staleness) and guarantees the narrative skeleton; the agent fills narrative substance. The header deliberately does not snapshot lifecycle position or next action: current_state/substep and next_skill/next_command remain owned by `slipway status` and `slipway next`, and the handoff only points resumers to those commands. Generate a hook-agnostic `slipway-handoff` command/skill surface via toolgen, re-point the existing PostToolUse context-pressure nudge to `slipway handoff write`, extend the existing SessionStart hook to surface `handoff show --brief` as a bounded pointer after the authoritative next-action block, and generate repo-local Codex hooks in `.codex/config.toml` (SessionStart bounded pointer plus staleness-conditioned UserPromptSubmit write nudge) through the same `slipway hook` handlers. Handoff remains advisory only - never lifecycle authority, governed evidence, freshness input, or a gate. Legacy repo-level handoff migration, a `migrate` subcommand, new Claude PreCompact hooks, and Codex trust grants are out of scope.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-22T19:12:02.15303Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/add-an-engine-owned-per-change-slipway-handoff-command-write
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 813f5f80538779b6775794f19dc9dabb6a7e08e4c4d7f7597308a243a3346a04
+        updated_at: 2026-06-23T03:47:05.942488115Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 83df0c7d4d6e309b8bae44a09a912769e4d3e2e51345be4ed6525c9836f7d03b
+        updated_at: 2026-06-23T05:56:04.007695027Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 302846e1393b214907b6e17dfcbb8ab9b518eb884f0d71681ca6161fa267652f
+        updated_at: 2026-06-23T08:15:04.133903109Z
+evidence_refs:
+    code-quality-review: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/code-quality-review.yaml
+    goal-verification: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/goal-verification.yaml
+    independent-review: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/independent-review.yaml
+    intake-clarification: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/intake-clarification.yaml
+    plan-audit: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/plan-audit.yaml
+    security-review: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/security-review.yaml
+    spec-compliance-review: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/add-an-engine-owned-per-change-slipway-handoff-command-write/artifacts/changes/add-an-engine-owned-per-change-slipway-handoff-command-write/verification/wave-orchestration.yaml

@@ -218,6 +218,8 @@ func jsonContractDocsToken(commandID string) string {
 	switch commandID {
 	case "delete":
 		return "slipway delete --change <slug> --json"
+	case "handoff":
+		return "slipway handoff show --json"
 	case "instructions":
 		return "slipway instructions <artifact> --json"
 	case "preset":
