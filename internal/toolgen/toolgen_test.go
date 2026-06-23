@@ -3,6 +3,7 @@ package toolgen
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -3036,4 +3037,293 @@ func TestMergeHookSettingsPrunesStaleHookFormsAndPreservesUserHooks(t *testing.T
 	second, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second))
+}
+
+// --- In-repo (dogfooding) go-run hook rendering ---
+
+// writeSlipwayGoMod writes a go.mod into dir declaring the Slipway module path so
+// hookLaunch detects dir as the in-repo source tree and renders go-run hooks.
+func writeSlipwayGoMod(t *testing.T, dir string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module github.com/signalridge/slipway\n\ngo 1.26\n"), 0o644))
+}
+
+func TestModulePathFromGoMod(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "module github.com/signalridge/slipway\n\ngo 1.26\n", "github.com/signalridge/slipway"},
+		{"leading tab", "\tmodule example.com/x\n", "example.com/x"},
+		{"trailing comment", "module example.com/x // legacy\n", "example.com/x"},
+		{"quoted", "module \"example.com/x\"\n", "example.com/x"},
+		{"not first line", "// header\n\nmodule example.com/x\n", "example.com/x"},
+		{"module-prefixed key ignored", "modulewide = 1\nmodule example.com/x\n", "example.com/x"},
+		{"missing", "go 1.26\n", ""},
+		{"empty", "", ""},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, modulePathFromGoMod([]byte(tc.in)))
+		})
+	}
+}
+
+func TestIsShellSafePath(t *testing.T) {
+	t.Parallel()
+	for _, p := range []string{
+		"/Users/dev/ghq/github.com/signalridge/slipway",
+		"/var/folders/qx/T/TestX_001",
+		"/repo-1.2_x+y@z",
+	} {
+		assert.Truef(t, isShellSafePath(p), "%q should be shell-safe", p)
+	}
+	for _, p := range []string{
+		"",
+		"/has space/repo",
+		"/has;semicolon",
+		"/has$var",
+		"/has\"quote",
+		"/has'quote",
+		"/has(paren)",
+		"/tab\there",
+	} {
+		assert.Falsef(t, isShellSafePath(p), "%q should be shell-unsafe", p)
+	}
+}
+
+func TestHookLaunchInRepoVsRelease(t *testing.T) {
+	t.Parallel()
+
+	t.Run("in-repo shell-safe path uses go run", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSlipwayGoMod(t, root)
+		abs, err := filepath.Abs(root)
+		require.NoError(t, err)
+		prefix, probe := hookLaunch(root)
+		assert.Equal(t, "go -C "+abs+" run .", prefix)
+		assert.Equal(t, "go", probe)
+	})
+
+	t.Run("foreign module falls back to bare slipway", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"),
+			[]byte("module example.com/other\n"), 0o644))
+		prefix, probe := hookLaunch(root)
+		assert.Equal(t, "slipway", prefix)
+		assert.Equal(t, "slipway", probe)
+	})
+
+	t.Run("no go.mod falls back to bare slipway", func(t *testing.T) {
+		t.Parallel()
+		prefix, probe := hookLaunch(t.TempDir())
+		assert.Equal(t, "slipway", prefix)
+		assert.Equal(t, "slipway", probe)
+	})
+
+	t.Run("unsafe module path falls back to bare slipway", func(t *testing.T) {
+		t.Parallel()
+		unsafe := filepath.Join(t.TempDir(), "has space")
+		require.NoError(t, os.MkdirAll(unsafe, 0o755))
+		writeSlipwayGoMod(t, unsafe)
+		prefix, probe := hookLaunch(unsafe)
+		assert.Equal(t, "slipway", prefix, "a shell-unsafe module root must not be embedded in a go-run command")
+		assert.Equal(t, "slipway", probe)
+	})
+}
+
+func TestApplyHookLaunchPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("release root leaves the command verbatim", func(t *testing.T) {
+		t.Parallel()
+		got := applyHookLaunchPrefix("slipway hook session-start --tool codex", t.TempDir())
+		assert.Equal(t, "slipway hook session-start --tool codex", got)
+	})
+
+	t.Run("in-repo root swaps the slipway head for go run", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSlipwayGoMod(t, root)
+		abs, err := filepath.Abs(root)
+		require.NoError(t, err)
+		got := applyHookLaunchPrefix("slipway hook session-start --tool codex", root)
+		assert.Equal(t, "go -C "+abs+" run . hook session-start --tool codex", got)
+	})
+
+	t.Run("non-slipway command is untouched in-repo", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSlipwayGoMod(t, root)
+		assert.Equal(t, "echo hello", applyHookLaunchPrefix("echo hello", root))
+	})
+}
+
+func TestStripSlipwayInvocation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		in     string
+		want   string
+		wantOK bool
+	}{
+		{"bare", "slipway hook session-start", "hook session-start", true},
+		{"bare with flags", "slipway hook session-start --tool codex", "hook session-start --tool codex", true},
+		{"absolute binary", "/usr/local/bin/slipway hook context-pressure", "hook context-pressure", true},
+		{"go run", "go -C /repo run . hook session-start --tool codex", "hook session-start --tool codex", true},
+		{"go run no flags", "go -C /repo run . hook context-pressure", "hook context-pressure", true},
+		{"go build is not a launcher", "go build ./...", "", false},
+		{"bash -lc is not slipway", `bash -lc "echo .claude"`, "", false},
+		{"empty", "", "", false},
+		{"unrelated", "echo hello", "", false},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := stripSlipwayInvocation(tc.in)
+			assert.Equal(t, tc.wantOK, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestIsStaleDirectHookCommandAcrossLaunchers(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		command string
+		current string
+		want    bool
+	}{
+		{"release pruned when switching to go-run", "slipway hook session-start", "go -C /repo run . hook session-start", true},
+		{"go-run pruned when switching to release", "go -C /old run . hook session-start", "slipway hook session-start", true},
+		{"tool-flag variant pruned", `slipway hook session-start --tool "claude"`, "slipway hook session-start", true},
+		{"shell-chained variant pruned", "slipway hook session-start || exit 0", "slipway hook session-start", true},
+		{"different event kept", "slipway hook context-pressure", "slipway hook session-start", false},
+		{"identical kept", "slipway hook session-start", "slipway hook session-start", false},
+		{"non-slipway kept", "echo user-owned", "slipway hook session-start", false},
+		{"empty current kept", "slipway hook session-start", "", false},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, isStaleDirectHookCommand(tc.command, tc.current))
+		})
+	}
+}
+
+func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
+	root := t.TempDir()
+	writeSlipwayGoMod(t, root)
+	abs, err := filepath.Abs(root)
+	require.NoError(t, err)
+	require.NoError(t, Generate(root, []string{"codex", "claude", "cursor"}, true))
+
+	// Codex inline TOML hooks launch the worktree source via go run.
+	codexConfig, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
+	require.NoError(t, err)
+	codex := string(codexConfig)
+	assert.Contains(t, codex, "go -C "+abs+" run . hook session-start --tool codex")
+	assert.Contains(t, codex, "go -C "+abs+" run . hook context-pressure --tool codex")
+	assert.NotContains(t, codex, `"slipway hook`, "in-repo codex hooks must not embed the bare release command")
+
+	// Claude inline settings.json hooks launch the worktree source via go run.
+	claudeSettings := filepath.Join(root, ".claude", "settings.json")
+	sessionCommands := hookCommandsForEvent(t, claudeSettings, "SessionStart")
+	assert.Contains(t, sessionCommands, "go -C "+abs+" run . hook session-start")
+	postCommands := hookCommandsForEvent(t, claudeSettings, "PostToolUse")
+	assert.Contains(t, postCommands, "go -C "+abs+" run . hook context-pressure")
+
+	// Cursor launcher scripts probe `go` and dispatch through go run.
+	launcher, err := os.ReadFile(filepath.Join(root, ".cursor", "hooks", "slipway-session-start"))
+	require.NoError(t, err)
+	l := string(launcher)
+	assert.Contains(t, l, "command -v go >/dev/null 2>&1 || exit 0")
+	assert.Contains(t, l, "go -C "+abs+` run . hook session-start --tool "cursor"`)
+}
+
+func TestNonRepoGenerationKeepsBareSlipwayHookCommands(t *testing.T) {
+	root := t.TempDir() // no slipway go.mod -> release path
+	require.NoError(t, Generate(root, []string{"codex", "claude"}, true))
+
+	codexConfig, err := os.ReadFile(filepath.Join(root, ".codex", "config.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(codexConfig), "slipway hook session-start --tool codex")
+	assert.NotContains(t, string(codexConfig), "go -C ")
+
+	sessionCommands := hookCommandsForEvent(t, filepath.Join(root, ".claude", "settings.json"), "SessionStart")
+	assert.Contains(t, sessionCommands, sessionStartHookCommand)
+	assert.NotContains(t, strings.Join(sessionCommands, "\n"), "go -C ")
+}
+
+func TestInRepoRefreshDoesNotDuplicateAcrossDevReleaseSwitch(t *testing.T) {
+	root := t.TempDir()
+	writeSlipwayGoMod(t, root)
+	abs, err := filepath.Abs(root)
+	require.NoError(t, err)
+	cfg := ToolConfig{
+		ID:           "claude",
+		SettingsPath: filepath.Join(".claude", "settings.json"),
+		SessionEvent: "SessionStart",
+		SessionHook:  filepath.Join(".claude", "hooks", "slipway-session-start"),
+	}
+
+	// A prior release install left the bare command; an in-repo refresh must
+	// replace it with the go-run form and leave exactly one Slipway entry.
+	seed := `{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":"slipway hook session-start"}]},
+	      {"matcher":"*","hooks":[{"type":"command","command":"echo user-owned-hook"}]}
+	    ]
+	  }
+	}`
+	settingsPath := filepath.Join(root, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o755))
+	require.NoError(t, os.WriteFile(settingsPath, []byte(seed), 0o644))
+
+	require.NoError(t, mergeHookSettingsJSONWithPlan(root, cfg, true, nil))
+
+	commands := hookCommandsForEvent(t, settingsPath, "SessionStart")
+	goRun := "go -C " + abs + " run . hook session-start"
+	assert.Contains(t, commands, goRun)
+	assert.NotContains(t, commands, "slipway hook session-start", "stale bare release command must be pruned")
+	assert.Equal(t, 1, countCommandOccurrences(commands, goRun), "exactly one go-run session-start entry")
+	assert.Contains(t, commands, "echo user-owned-hook", "user-authored hooks survive")
+
+	// Switching back to a release install (no slipway go.mod) prunes the go-run
+	// command and restores the bare form without leaving a duplicate.
+	releaseRoot := t.TempDir()
+	releaseSettings := filepath.Join(releaseRoot, cfg.SettingsPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(releaseSettings), 0o755))
+	devOnRelease := fmt.Sprintf(`{
+	  "hooks": {
+	    "SessionStart": [
+	      {"hooks":[{"type":"command","command":%q}]}
+	    ]
+	  }
+	}`, goRun)
+	require.NoError(t, os.WriteFile(releaseSettings, []byte(devOnRelease), 0o644))
+
+	require.NoError(t, mergeHookSettingsJSONWithPlan(releaseRoot, cfg, true, nil))
+	releaseCommands := hookCommandsForEvent(t, releaseSettings, "SessionStart")
+	assert.Contains(t, releaseCommands, sessionStartHookCommand)
+	assert.NotContains(t, strings.Join(releaseCommands, "\n"), "go -C ", "stale go-run command must be pruned on release")
+	assert.Equal(t, 1, countCommandOccurrences(releaseCommands, sessionStartHookCommand))
+}
+
+func countCommandOccurrences(items []string, target string) int {
+	n := 0
+	for _, item := range items {
+		if item == target {
+			n++
+		}
+	}
+	return n
 }

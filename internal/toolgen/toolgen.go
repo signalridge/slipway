@@ -1242,7 +1242,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		}
 	} else if strings.TrimSpace(cfg.SessionHook) != "" {
 		for _, launcher := range hookLauncherOutputs(cfg.SessionHook, "session-start") {
-			content, err := renderHookLauncher(cfg, launcher.template)
+			content, err := renderHookLauncher(cfg, launcher.template, root)
 			if err != nil {
 				return fmt.Errorf("render session hook launcher for %s: %w", cfg.ID, err)
 			}
@@ -2061,10 +2061,127 @@ const (
 	codexHooksBlockEnd         = "# END SLIPWAY MANAGED CODEX HOOKS"
 )
 
-func renderHookLauncher(cfg ToolConfig, templatePath string) (string, error) {
+// slipwayModulePath is the Go module path of this repository. When Slipway
+// generates host hooks inside its own source tree (in-repo dogfooding), the
+// hook commands launch the worktree source via `go run` instead of a
+// PATH-installed release, so hooks always exercise HEAD without shadowing
+// slipway globally. Generated adapter configs are git-ignored and regenerated
+// per machine, so the absolute module path embedded here never leaks into
+// shared history.
+const slipwayModulePath = "github.com/signalridge/slipway"
+
+// hookLaunch returns the command prefix and existence-probe binary that
+// generated hook invocations use to launch Slipway from root. Inside the
+// Slipway source module it returns ("go -C <root> run .", "go") so hooks track
+// the worktree build; everywhere else it returns ("slipway", "slipway") so the
+// inlined command resolves a release from PATH and the generated config stays
+// machine-portable. The go-run prefix is used only when the module root is
+// shell-safe (needs no quoting), so `go -C <root> run .` stays a bare,
+// shell-operator-free token sequence valid across /bin/sh, cmd, and PowerShell.
+func hookLaunch(root string) (prefix, probe string) {
+	if dir := slipwaySourceModuleRoot(root); dir != "" && isShellSafePath(dir) {
+		return "go -C " + dir + " run .", "go"
+	}
+	return "slipway", "slipway"
+}
+
+// applyHookLaunchPrefix rewrites the leading "slipway" token of an inline hook
+// command to the launch prefix for root. It is a no-op for the release prefix,
+// so non-repo generation keeps the bare, PATH-resolved command verbatim.
+func applyHookLaunchPrefix(command, root string) string {
+	prefix, _ := hookLaunch(root)
+	if prefix == "slipway" {
+		return command
+	}
+	if rest, ok := strings.CutPrefix(command, "slipway "); ok {
+		return prefix + " " + rest
+	}
+	return command
+}
+
+// slipwaySourceModuleRoot returns the absolute path of root when root is the
+// Slipway source module (its go.mod declares slipwayModulePath), else "".
+func slipwaySourceModuleRoot(root string) string {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(abs, "go.mod")) // #nosec G304 -- reads the workspace's own go.mod to detect in-repo dogfooding.
+	if err != nil {
+		return ""
+	}
+	if modulePathFromGoMod(data) == slipwayModulePath {
+		return abs
+	}
+	return ""
+}
+
+// modulePathFromGoMod extracts the module path from go.mod contents, or "".
+func modulePathFromGoMod(data []byte) string {
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		rest, ok := strings.CutPrefix(line, "module")
+		if !ok || rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+			continue
+		}
+		rest = strings.TrimSpace(rest)
+		if i := strings.Index(rest, "//"); i >= 0 {
+			rest = strings.TrimSpace(rest[:i])
+		}
+		return strings.Trim(rest, "\"`")
+	}
+	return ""
+}
+
+// isShellSafePath reports whether p contains only characters that need no shell
+// quoting, so it can be embedded verbatim as a `go -C <p>` argument in a command
+// string executed by /bin/sh, cmd, or PowerShell.
+func isShellSafePath(p string) bool {
+	if p == "" {
+		return false
+	}
+	for _, r := range p {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune("/._-+@:=,%", r):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// stripSlipwayInvocation removes a recognized Slipway launcher head from an
+// inline hook command and returns the remaining argument tail. It matches the
+// bare/absolute binary forms ("slipway ...", "/abs/slipway ...") and the
+// in-repo go-run form ("go [-C dir] run . ..."), so prune logic can identify a
+// Slipway-owned command regardless of which launch prefix generated it.
+func stripSlipwayInvocation(command string) (string, bool) {
+	fields := strings.Fields(strings.TrimSpace(command))
+	if len(fields) == 0 {
+		return "", false
+	}
+	if fields[0] == "go" {
+		for i := 1; i+1 < len(fields); i++ {
+			if fields[i] == "run" && fields[i+1] == "." {
+				return strings.Join(fields[i+2:], " "), true
+			}
+		}
+		return "", false
+	}
+	if path.Base(strings.Trim(fields[0], `"'`)) == "slipway" {
+		return strings.Join(fields[1:], " "), true
+	}
+	return "", false
+}
+
+func renderHookLauncher(cfg ToolConfig, templatePath, root string) (string, error) {
+	prefix, probe := hookLaunch(root)
 	data := map[string]string{
-		"ToolID":     cfg.ID,
-		"EntrySkill": workflowEntryPublicName,
+		"ToolID":       cfg.ID,
+		"EntrySkill":   workflowEntryPublicName,
+		"LaunchPrefix": prefix,
+		"ProbeBin":     probe,
 	}
 	return tmpl.Render(templatePath, data)
 }
@@ -2154,7 +2271,7 @@ func mergeCodexHooksTOMLWithPlan(root string, cfg ToolConfig, refresh bool, plan
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	content := mergeManagedCodexHooksBlock(existing, renderCodexHooksBlock(cfg))
+	content := mergeManagedCodexHooksBlock(existing, renderCodexHooksBlock(cfg, root))
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project artifact location.
 		return err
 	}
@@ -2172,7 +2289,7 @@ func codexHookSettingsRoot(root string) string {
 	return root
 }
 
-func renderCodexHooksBlock(cfg ToolConfig) string {
+func renderCodexHooksBlock(cfg ToolConfig, root string) string {
 	sessionCommand := strings.TrimSpace(cfg.SessionHook)
 	if sessionCommand == "" {
 		sessionCommand = "slipway hook session-start --tool codex"
@@ -2181,6 +2298,8 @@ func renderCodexHooksBlock(cfg ToolConfig) string {
 	if promptCommand == "" {
 		promptCommand = "slipway hook context-pressure --tool codex"
 	}
+	sessionCommand = applyHookLaunchPrefix(sessionCommand, root)
+	promptCommand = applyHookLaunchPrefix(promptCommand, root)
 	return strings.TrimSpace(fmt.Sprintf(`%s
 # Generated by Slipway. Hooks are inert until Codex trusts this repo and each hook; Slipway never edits global Codex trust.
 [[hooks.SessionStart]]
@@ -2260,13 +2379,15 @@ func mergeHookSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, pl
 		return fmt.Errorf("%s contains a non-object hooks field", cfg.SettingsPath)
 	}
 
+	sessionCmd := applyHookLaunchPrefix(sessionStartHookCommand, root)
+	promptCmd := applyHookLaunchPrefix(contextPressureHookCommand, root)
 	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
-		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionStartHookCommand)
-		mergeHookEventCommand(hooks, cfg.SessionEvent, sessionStartHookCommand)
+		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionCmd)
+		mergeHookEventCommand(hooks, cfg.SessionEvent, sessionCmd)
 	}
 	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, contextPressureHookCommand)
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, contextPressureHookCommand)
+		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, promptCmd)
+		mergeHookEventCommand(hooks, cfg.PostToolEvent, promptCmd)
 	}
 	settings["hooks"] = hooks
 
@@ -2395,18 +2516,29 @@ func isStaleSlipwayHookCommand(hook any, basePath, currentCommand string) bool {
 	return isStaleDirectHookCommand(command, currentCommand)
 }
 
+// isStaleDirectHookCommand reports whether command is a Slipway-owned inline hook
+// invocation for the same event as currentCommand but written with a different
+// launcher or trailing flags (e.g. a bare `slipway hook session-start` left from a
+// release install when the current command is the in-repo `go -C <root> run . hook
+// session-start`, or a `--tool`/`|| exit 0` variant). Both are reduced to their
+// post-launcher argument tail so the stale entry is pruned regardless of which
+// launch prefix produced it, leaving the freshly merged currentCommand as the sole
+// entry. Non-Slipway commands (no recognized launcher head) are never pruned.
 func isStaleDirectHookCommand(command, currentCommand string) bool {
+	command = strings.TrimSpace(command)
 	currentCommand = strings.TrimSpace(currentCommand)
 	if currentCommand == "" || command == currentCommand {
 		return false
 	}
-	if !strings.HasPrefix(command, currentCommand) {
+	tail, ok := stripSlipwayInvocation(currentCommand)
+	if !ok {
 		return false
 	}
-	suffix := strings.TrimSpace(strings.TrimPrefix(command, currentCommand))
-	return suffix == "|| exit 0" ||
-		strings.HasPrefix(suffix, "--tool ") ||
-		strings.HasPrefix(suffix, "--tool=")
+	rest, ok := stripSlipwayInvocation(command)
+	if !ok {
+		return false
+	}
+	return rest == tail || strings.HasPrefix(rest, tail+" ")
 }
 
 func legacyHookLauncherVariants(basePath string) []string {
