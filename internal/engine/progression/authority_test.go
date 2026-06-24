@@ -713,6 +713,66 @@ func TestCrossStageContextDistinctBlockers(t *testing.T) {
 		assert.Equal(t, model.StageContextFix+"|"+SkillSpecComplianceReview, blockers[0].Detail)
 	})
 
+	t.Run("multiple distinct fix handles emit no reviewer-missing blocker and union into the fix set", func(t *testing.T) {
+		t.Parallel()
+		root, change := newRoot(t, "lattice-multi-fix-context")
+		// A selected/passing reviewer carries one valid review handle PLUS two
+		// distinct fix handles. The now-multi-valued fix stage must not poison the
+		// record parse, so the reviewer's review handle still resolves (no
+		// context_origin_handle_invalid reviewer-missing blocker), and every fix
+		// handle must land in the fix participant set.
+		records := reviewContextRecords("handle-spec", "handle-code")
+		spec := records[SkillSpecComplianceReview]
+		spec.References = append(spec.References,
+			contextOriginRef(model.StageContextFix, "fix-handle-a"),
+			contextOriginRef(model.StageContextFix, "fix-handle-b"),
+		)
+		records[SkillSpecComplianceReview] = spec
+
+		// (a) No reviewer-missing blocker: the review handles are distinct and the
+		// fix handles collide with nothing, so the lattice is clean.
+		blockers := crossStageContextDistinctBlockers(root, change, records, reviewStages, ownedReview, true)
+		assert.Empty(t, blockers)
+		assert.False(t, hasReasonCode(blockers, "context_origin_handle_invalid"),
+			"multi-fix records must not emit the false reviewer-missing blocker")
+
+		// (b) The fix participant HandleSet must contain BOTH fix handles across the
+		// selected reviewers.
+		participants, invalid := crossStageContextParticipants(root, change, records, reviewStages)
+		require.Empty(t, invalid)
+		fixParticipant, ok := participants[model.StageContextFix]
+		require.True(t, ok, "fix participant must be present when any reviewer records a fix handle")
+		_, hasA := fixParticipant.HandleSet["fix-handle-a"]
+		_, hasB := fixParticipant.HandleSet["fix-handle-b"]
+		assert.True(t, hasA, "fix-handle-a must be unioned into the fix participant set")
+		assert.True(t, hasB, "fix-handle-b must be unioned into the fix participant set")
+		assert.Len(t, fixParticipant.HandleSet, 2, "exactly the two distinct fix handles are collected")
+	})
+
+	t.Run("fix handles union across multiple selected reviewers", func(t *testing.T) {
+		t.Parallel()
+		root, change := newRoot(t, "lattice-multi-reviewer-fix-context")
+		// Distinct fix handles recorded on DIFFERENT selected reviewers must all
+		// flow into one shared fix participant set, not just the first reviewer's.
+		records := reviewContextRecords("handle-spec", "handle-code")
+		spec := records[SkillSpecComplianceReview]
+		spec.References = append(spec.References, contextOriginRef(model.StageContextFix, "fix-from-spec"))
+		records[SkillSpecComplianceReview] = spec
+		code := records[SkillCodeQualityReview]
+		code.References = append(code.References, contextOriginRef(model.StageContextFix, "fix-from-code"))
+		records[SkillCodeQualityReview] = code
+
+		participants, invalid := crossStageContextParticipants(root, change, records, reviewStages)
+		require.Empty(t, invalid)
+		fixParticipant, ok := participants[model.StageContextFix]
+		require.True(t, ok)
+		_, hasSpecFix := fixParticipant.HandleSet["fix-from-spec"]
+		_, hasCodeFix := fixParticipant.HandleSet["fix-from-code"]
+		assert.True(t, hasSpecFix, "the spec reviewer's fix handle must be in the union")
+		assert.True(t, hasCodeFix, "the code reviewer's fix handle must be in the union")
+		assert.Len(t, fixParticipant.HandleSet, 2)
+	})
+
 	t.Run("present-passing record missing its handle fails closed", func(t *testing.T) {
 		t.Parallel()
 		root, change := newRoot(t, "lattice-missing-handle")

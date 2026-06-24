@@ -58,13 +58,29 @@ type ContextOriginHandle struct {
 	Handle string
 }
 
+// isMultiValuedContextOriginStage reports whether a context-origin stage may
+// legitimately record more than one distinct handle on a single record. Only
+// the fix stage is multi-valued: a reviewer's record accumulates one
+// context_origin:stage=fix handle per fresh-context repair subagent / batch, so
+// multiple distinct fix handles are expected rather than ambiguous. Every other
+// stage (review, plan_origin, audit_origin, executor) is single-valued and
+// stays fail-closed on conflicting handles.
+func isMultiValuedContextOriginStage(stage string) bool {
+	return stage == StageContextFix
+}
+
 // ContextOriginHandlesFromVerification extracts the per-stage context handles a
-// record attests via context_origin:stage=<stage>=<handle>. The result is keyed
-// by stage. ok is false when no well-formed handle is present, or when the
-// record carries conflicting handles for the same stage — ambiguous evidence
+// record attests via context_origin:stage=<stage>=<handle>, restricted to the
+// single-valued stages. The result is keyed by stage. ok is false when no
+// well-formed single-valued handle is present, or when the record carries
+// conflicting handles for the same single-valued stage — ambiguous evidence
 // fails closed (mirroring ExecutorAgentHandlesFromVerification) rather than
 // letting the last reference win. A repeated identical handle for a stage is
 // idempotent.
+//
+// Multi-valued stages (fix) are intentionally excluded: their references neither
+// poison the whole-record parse on multiplicity nor land in this single-valued
+// map. Use FixContextOriginHandleSetFromVerification to read the fix handle set.
 func ContextOriginHandlesFromVerification(record VerificationRecord) (map[string]ContextOriginHandle, bool) {
 	handles := map[string]ContextOriginHandle{}
 	for _, ref := range record.References {
@@ -72,10 +88,16 @@ func ContextOriginHandlesFromVerification(record VerificationRecord) (map[string
 		if !ok {
 			continue
 		}
+		if isMultiValuedContextOriginStage(stage) {
+			// Multi-valued stage handles are read as a set elsewhere; they do
+			// not participate in the single-valued fail-closed guard and are not
+			// stored here.
+			continue
+		}
 		if existing, seen := handles[stage]; seen && existing.Handle != handle {
-			// Two references naming the same stage with different handles are
-			// ambiguous; the gate fails closed rather than letting the last
-			// reference win.
+			// Two references naming the same single-valued stage with different
+			// handles are ambiguous; the gate fails closed rather than letting
+			// the last reference win.
 			return nil, false
 		}
 		handles[stage] = ContextOriginHandle{Stage: stage, Handle: handle}
@@ -148,6 +170,26 @@ func ReviewContextOriginHandleFromVerification(record VerificationRecord) (Conte
 		return ContextOriginHandle{}, false
 	}
 	return handle, true
+}
+
+// FixContextOriginHandleSetFromVerification flattens every
+// context_origin:stage=fix=<handle> reference a record attests into a deduped
+// set of fix context handles. The fix stage is multi-valued — a reviewer's
+// record accumulates one handle per fresh-context repair subagent / batch — so
+// this NEVER fails closed on multiplicity; it simply collects the distinct
+// handles. Blank handles are skipped by the parser. The result is never nil so
+// callers can range over it safely; an absence of fix handles yields an empty
+// set. This mirrors ExecutorParticipantHandleSetFromVerification.
+func FixContextOriginHandleSetFromVerification(record VerificationRecord) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, ref := range record.References {
+		stage, handle, ok := parseContextOriginReference(ref)
+		if !ok || stage != StageContextFix {
+			continue
+		}
+		set[handle] = struct{}{}
+	}
+	return set
 }
 
 func singleStageHandleFromVerification(record VerificationRecord, prefix, stage string) (ContextOriginHandle, bool) {
