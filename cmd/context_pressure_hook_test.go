@@ -88,8 +88,16 @@ func TestContextPressureHookCommandEmitsAdditionalContextAtCriticalThreshold(t *
 	assert.Contains(t, additionalContext, "The handoff is advisory")
 	assert.Contains(t, additionalContext, "slipway status --json")
 	assert.Contains(t, additionalContext, "slipway next --json")
+	assert.Contains(t, additionalContext, "70%")
+	// The CRITICAL message is an imperative "author the handoff now" directive that
+	// names the judgment sections to write via `slipway handoff write --section`.
+	assert.Contains(t, additionalContext, "NOW, before your next action")
+	assert.Contains(t, additionalContext, `slipway handoff write --section "Current Position"`)
+	assert.Contains(t, additionalContext, `slipway handoff write --section "Next Session Focus"`)
+	assert.Contains(t, additionalContext, `slipway handoff write --section "Risks And Blockers"`)
 	assert.NotContains(t, additionalContext, "lifecycle authority")
 	assert.NotContains(t, additionalContext, "governed evidence")
+	assert.NotContains(t, additionalContext, "freshness input")
 }
 
 func TestContextPressureHookCommandReadsLiveUsageFromClaudeTranscript(t *testing.T) {
@@ -239,6 +247,16 @@ func TestContextPressureMessagesKeepRuntimeHandoffAdvisory(t *testing.T) {
 	assert.Contains(t, critical, "slipway status --json")
 	assert.Contains(t, critical, "slipway next --json")
 	assert.Contains(t, warning, "slipway handoff write")
+
+	// The CRITICAL message is escalated into an imperative "author the handoff
+	// now" directive naming the judgment sections, while the WARNING message stays
+	// a soft suggestion that does not issue an imperative "now" directive.
+	assert.Contains(t, critical, "NOW, before your next action")
+	assert.Contains(t, critical, `slipway handoff write --section "Current Position"`)
+	assert.Contains(t, critical, `slipway handoff write --section "Next Session Focus"`)
+	assert.Contains(t, critical, `slipway handoff write --section "Risks And Blockers"`)
+	assert.NotContains(t, warning, "NOW, before your next action")
+	assert.NotContains(t, warning, "--section")
 
 	for name, message := range map[string]string{
 		"critical": critical,

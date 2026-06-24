@@ -676,14 +676,18 @@ func approvedSummarySection(intent string) string {
 }
 
 // (finding #5) Config-level execution.auto must reach the real command entry
-// points, not just the helper layer. These drive `slipway intake` through the
-// root cobra command and the `session-start` hook through makeHookCmd, with auto
-// set only via .slipway.yaml. At S0 intake the next skill is intake-clarification
-// (a skill_handoff), so non-guardrail auto softens the boundary to
-// evidence_continuation while a guardrail domain — and auto off — keep the
-// hard_stop. The guardrail-vs-non-guardrail pair proves both that auto was read
-// from config and threaded, and that the guardrail exclusion still fails closed
-// through these entries.
+// points, not just the helper layer. This drives `slipway intake` through the
+// root cobra command with auto set only via .slipway.yaml. At S0 intake the next
+// skill is intake-clarification (a skill_handoff), so non-guardrail auto softens
+// the boundary to evidence_continuation while a guardrail domain — and auto off —
+// keep the hard_stop. The guardrail-vs-non-guardrail pair proves both that auto
+// was read from config and threaded, and that the guardrail exclusion still fails
+// closed through this entry.
+//
+// The SessionStart hook is intentionally not exercised here: it no longer injects
+// the auto-softened `next --json` change-state view (REQ-004 retired that
+// auto-injection); it emits only the slipway_entry_skill routing pointer. The
+// stage command remains the real entry that threads execution.auto.
 func TestConfigAutoReachesStageAndHookEntries(t *testing.T) {
 	setup := func(t *testing.T, auto bool, guardrail string) string {
 		t.Helper()
@@ -727,34 +731,6 @@ func TestConfigAutoReachesStageAndHookEntries(t *testing.T) {
 
 		off := stageJSON(t, setup(t, false, ""))
 		assert.Contains(t, off, "hard_stop", "auto off must keep the legacy hard_stop")
-	})
-
-	t.Run("session_start_hook", func(t *testing.T) {
-		hookJSON := func(t *testing.T, root string) string {
-			t.Helper()
-			var out string
-			withWorkspace(t, root, func() {
-				cmd := makeHookCmd()
-				cmd.SetArgs([]string{"session-start", "--tool", "claude"})
-				var buf bytes.Buffer
-				cmd.SetOut(&buf)
-				require.NoError(t, cmd.Execute())
-				out = buf.String()
-			})
-			return out
-		}
-
-		soft := hookJSON(t, setup(t, true, ""))
-		assert.Contains(t, soft, "evidence_continuation",
-			"config auto must thread into the session-start hook view")
-		assert.NotContains(t, soft, "hard_stop")
-
-		guard := hookJSON(t, setup(t, true, string(model.GuardrailDomainAuthAuthZ)))
-		assert.Contains(t, guard, "hard_stop",
-			"guardrail domain must keep the hook view hard-stop under auto")
-
-		off := hookJSON(t, setup(t, false, ""))
-		assert.Contains(t, off, "hard_stop", "auto off must keep the hook view hard-stop")
 	})
 }
 
