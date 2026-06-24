@@ -1,0 +1,39 @@
+version: 1
+slug: fix-the-misleading-reviewer-context-origin-diagnostic-report
+description: 'Fix the misleading reviewer context-origin diagnostic reported in issue #319. When reviewer evidence records multiple context_origin:stage=fix handles (one per fresh-context repair subagent across S3 fix batches, exactly as the slipway fix command instructs) alongside the single context_origin:stage=review handle, `slipway validate` falsely reports that the selected reviewer recorded no context-origin handle and tells the user to re-run the reviewer in a fresh native subagent. Root cause: model.ContextOriginHandlesFromVerification (internal/model/context_attestation.go) treats every stage as single-valued and fails the entire record closed when any single stage carries multiple distinct handles; because the fix stage is inherently multi-valued, the multiple fix handles poison the parse so the unique, well-formed review handle becomes unreadable. The same single-valued constraint also defeats the fix-handle HandleSet collection in crossStageContextParticipants (internal/engine/progression/authority.go), which already expects a multi-valued fix participant. Make the documented review+fix evidence shape validate cleanly: parse fix as a multi-valued stage with set semantics while keeping single-valued stages (review, plan_origin, audit_origin) fail-closed on genuinely conflicting handles, so multiple fix handles no longer mask the review handle and the cross-stage independence lattice receives the full fix handle set. Keep the slipway fix command instructions aligned with the accepted shape. Must not weaken fail-closed safety for single-valued stages or introduce any attestation bypass.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-24T12:21:36.194328Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-the-misleading-reviewer-context-origin-diagnostic-report
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: f1ef8bd9eaec10b88db44760a231f2eea2c4f3aaea0342b1b350d483aaecf47b
+        updated_at: 2026-06-24T12:32:50.278777043Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 26775c4debbdcd3d147bd63c8aab3311eb9bcb96d86e0ff1afbf4e8fc96afc69
+        updated_at: 2026-06-24T12:43:33.183571408Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 01133b216cee24ce0828400330e79f54751846e0d1916061687e36b27081a518
+        updated_at: 2026-06-24T13:23:16.938637482Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/code-quality-review.yaml
+    independent-review: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/plan-audit.yaml
+    ship-verification: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-the-misleading-reviewer-context-origin-diagnostic-report/artifacts/changes/fix-the-misleading-reviewer-context-origin-diagnostic-report/verification/wave-orchestration.yaml

@@ -1575,6 +1575,16 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "--start-reexecution")
 	})
 
+	t.Run("fix body permits multiple fix-stage context origins per reviewer", func(t *testing.T) {
+		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
+		// A reviewer's evidence may accumulate more than one fix-stage origin
+		// handle (one per fresh-context repair subagent / batch) without
+		// invalidating the single review-stage handle.
+		assert.Contains(t, content, "A reviewer's evidence may accumulate multiple `context_origin:stage=fix=<repair-subagent-handle>` references")
+		assert.Contains(t, content, "one per fresh-context repair subagent / batch")
+		assert.Contains(t, content, "without invalidating the single `context_origin:stage=review` handle")
+	})
+
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
 		require.Len(t, partials, 22)
