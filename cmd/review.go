@@ -207,6 +207,11 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 	verdict, blockers, waveStatus := evaluateReviewVerdict(execCtx, waveCtx)
 	waveViews = waveStatus
 	blockers = append(blockers, readiness.Blockers...)
+	// The terminal ship-verification gate is owned by `slipway done` / G_ship, not
+	// the review surface. Per REQ-001 ship-verification is not a selected review
+	// peer, so its missing/stale requiredness must not fail review convergence;
+	// `slipway done` / EvaluateShipAuthority remains its fail-closed owner.
+	blockers = progression.DropTerminalShipGateRequiredSkillBlockers(blockers)
 	if reviewAll {
 		blockers = append(blockers, progression.EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, readiness.ArtifactProjection, true)...)
 	}

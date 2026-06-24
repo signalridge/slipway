@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -36,8 +37,97 @@ func TestStatusStatsSummarizesRepoWideSignals(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(stdout), &view))
 		assert.Equal(t, 1, view.ActiveCount)
 		assert.Contains(t, view.MissingReviewEvidence, slug)
-		assert.Contains(t, view.CloseoutFreshness.Missing, slug)
+		assert.Contains(t, view.ShipVerificationFreshness.Missing, slug)
 	})
+}
+
+// TestStatsReportsMissingShipVerificationForPlainStandardS3 is the regression for
+// the merged terminal gate. On plain standard (no quality_mode=full, not strict)
+// CloseoutRefreshRequired is false, yet the ship-verification gate (G_ship) is
+// still required at S3 and fails closed when the record is missing. The old stats
+// guard skipped the whole change on !CloseoutRefreshRequired, hiding the missing
+// terminal verification; the diagnostic must report it under
+// ship_verification_freshness.missing even with all selected reviews passing.
+func TestStatsReportsMissingShipVerificationForPlainStandardS3(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats must report missing ship-verification on plain standard S3")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	policy, err := governance.ResolvePresetPolicy(root, change)
+	require.NoError(t, err)
+	require.False(t, policy.CloseoutRefreshRequired,
+		"precondition: plain standard must NOT set CloseoutRefreshRequired — the retired guard skipped enforcement here")
+	require.True(t, progression.FinalCloseoutEvidenceRequired(policy),
+		"precondition: ship-verification evidence is still required on plain standard S3")
+
+	// Selected reviews all pass; only the terminal ship-verification record is absent.
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	view, err := buildStatsView(root, time.Now().UTC())
+	require.NoError(t, err)
+	assert.NotContainsf(t, view.MissingReviewEvidence, slug,
+		"selected reviews are passing; the gap is ship-verification, not review evidence (view=%+v)", view)
+	assert.Containsf(t, view.ShipVerificationFreshness.Missing, slug,
+		"plain standard S3 with a missing ship-verification record must be reported (view=%+v)", view)
+	assert.NotContainsf(t, view.ShipVerificationFreshness.Fresh, slug, "view=%+v", view)
+}
+
+// TestStatsReportsMissingShipVerificationForPlainLightS3 closes the residual gap
+// the plain-standard regression alone did not cover: on plain light,
+// FinalCloseoutEvidenceRequired is false (EffectivePreset==light and
+// !CloseoutRefreshRequired), so gating the freshness summary on that predicate —
+// as both the retired CloseoutRefreshRequired guard and its
+// FinalCloseoutEvidenceRequired successor did — silently drops light changes. But
+// the merged ship-verification gate is required on every preset: light enables
+// verify auto-pass, yet auto-pass only clears an already-Approved gate and never
+// synthesizes the ship record, so a reviews-passing but ship-missing light change
+// still fails closed and must be reported under ship_verification_freshness.missing.
+func TestStatsReportsMissingShipVerificationForPlainLightS3(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "stats must report missing ship-verification on plain light S3")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.WorkflowPreset = model.WorkflowPresetLight
+	require.NoError(t, state.SaveChange(root, change))
+
+	policy, err := governance.ResolvePresetPolicy(root, change)
+	require.NoError(t, err)
+	require.Equal(t, model.WorkflowPresetLight, policy.EffectivePreset, "precondition: plain light preset")
+	require.False(t, policy.CloseoutRefreshRequired,
+		"precondition: plain light must NOT set CloseoutRefreshRequired")
+	require.Falsef(t, progression.FinalCloseoutEvidenceRequired(policy),
+		"precondition: this is the exact case the preset-derived guard skipped — FinalCloseoutEvidenceRequired is false on plain light")
+	require.True(t, policy.VerifyAutoPassEnabled,
+		"precondition: light enables verify auto-pass, yet auto-pass cannot synthesize the missing ship record")
+
+	// Selected reviews all pass; only the terminal ship-verification record is absent.
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	view, err := buildStatsView(root, time.Now().UTC())
+	require.NoError(t, err)
+	assert.NotContainsf(t, view.MissingReviewEvidence, slug,
+		"selected reviews are passing; the gap is ship-verification, not review evidence (view=%+v)", view)
+	assert.Containsf(t, view.ShipVerificationFreshness.Missing, slug,
+		"plain light S3 with a missing ship-verification record must be reported, not silently dropped (view=%+v)", view)
+	assert.NotContainsf(t, view.ShipVerificationFreshness.Fresh, slug, "view=%+v", view)
 }
 
 func TestRootCommandDoesNotExposeStats(t *testing.T) {
@@ -276,14 +366,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
 	writePassingIndependentReviewEvidence(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
-	writeSkillVerification(t, root, slug, "final-closeout", model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 1,
-		References: []string{"closeout:pass"},
-	})
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	require.NoError(t, os.Remove(filepath.Join(normalizedWT, ".slipway.yaml")))
 
@@ -291,9 +374,9 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	require.NoError(t, err)
 	assert.Equal(t, 1, view.ActiveCount)
 	assert.NotContainsf(t, view.MissingReviewEvidence, slug, "view=%+v", view)
-	assert.Containsf(t, view.CloseoutFreshness.Fresh, slug, "view=%+v", view)
-	assert.NotContainsf(t, view.CloseoutFreshness.Missing, slug, "view=%+v", view)
-	assert.NotContainsf(t, view.CloseoutFreshness.Stale, slug, "view=%+v", view)
+	assert.Containsf(t, view.ShipVerificationFreshness.Fresh, slug, "view=%+v", view)
+	assert.NotContainsf(t, view.ShipVerificationFreshness.Missing, slug, "view=%+v", view)
+	assert.NotContainsf(t, view.ShipVerificationFreshness.Stale, slug, "view=%+v", view)
 }
 
 func TestStatsCountsMissingMandatoryIndependentReviewEvidence(t *testing.T) {

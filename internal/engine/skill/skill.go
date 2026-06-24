@@ -24,7 +24,6 @@ const (
 	reviewSkillSpecCompliance = "spec-compliance-review"
 	reviewSkillCodeQuality    = "code-quality-review"
 	reviewSkillIndependent    = "independent-review"
-	reviewSkillGoal           = "goal-verification"
 	reviewSkillSecurity       = "security-review"
 )
 
@@ -37,7 +36,6 @@ func SelectedReviewSkills(selection ReviewSkillSelection) []string {
 		reviewSkillSpecCompliance,
 		reviewSkillCodeQuality,
 		reviewSkillIndependent,
-		reviewSkillGoal,
 	}
 	if selection.SecurityReviewSelected {
 		selected = append(selected, reviewSkillSecurity)
@@ -55,7 +53,7 @@ func ReviewSkillSelected(skillName string, selection ReviewSkillSelection) bool 
 
 func IsReviewSkill(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
-	case reviewSkillSpecCompliance, reviewSkillCodeQuality, reviewSkillIndependent, reviewSkillGoal, reviewSkillSecurity:
+	case reviewSkillSpecCompliance, reviewSkillCodeQuality, reviewSkillIndependent, reviewSkillSecurity:
 		return true
 	default:
 		return false
@@ -128,23 +126,14 @@ var defaultGovernanceRegistry = map[string]Definition{
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record", "review_findings"},
 	},
-	"goal-verification": {
-		Name:              "goal-verification",
+	"ship-verification": {
+		Name:              "ship-verification",
 		State:             model.StateS3Review,
-		Mitigation:        "false completion claims",
+		Mitigation:        "false completion claims and stale final evidence before the governed ship decision",
 		RunSummaryBound:   true,
 		AllowedOperations: []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"},
 		RequiredOutputs:   []string{"evidence_record"},
 		HardGate:          "G_ship",
-	},
-	"final-closeout": {
-		Name:                "final-closeout",
-		State:               model.StateS3Review,
-		Mitigation:          "stale final evidence before governed ship decision",
-		RunSummaryBound:     true,
-		CloseoutConditional: true,
-		AllowedOperations:   []string{"read_codebase", "read_artifacts", "run_tests", "write_evidence"},
-		RequiredOutputs:     []string{"evidence_record"},
 	},
 }
 

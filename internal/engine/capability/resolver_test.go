@@ -39,17 +39,17 @@ func TestResolveIntakeHostDoesNotExposeRetiredScopeSkill(t *testing.T) {
 	assert.Empty(t, res.HydrateReferences)
 }
 
-func TestResolveGoalVerificationHostUsesIntentionalSupportSet(t *testing.T) {
+func TestResolveShipVerificationHostUsesIntentionalSupportSet(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	res := Resolve(reg, Signals{Host: "goal-verification"})
+	res := Resolve(reg, Signals{Host: "ship-verification"})
 
 	require.Len(t, res.Supports, 1)
 	assert.Equal(t, []Attachment{
 		{
 			SkillID: "coverage-analysis",
 			Kind:    AttachmentChecklist,
-			Reason:  "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the goal-verification host, or coverage-related user text.",
+			Reason:  "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the ship-verification host, or coverage-related user text.",
 		},
 	}, res.Supports)
 }
@@ -58,7 +58,7 @@ func TestResolveVerifyHostsDoNotExposeRetiredFreshEvidenceSupport(t *testing.T) 
 	t.Parallel()
 	reg := DefaultRegistry()
 
-	for _, host := range []string{"final-closeout", "tdd-governance"} {
+	for _, host := range []string{"tdd-governance"} {
 		host := host
 		t.Run(host, func(t *testing.T) {
 			t.Parallel()
@@ -66,6 +66,19 @@ func TestResolveVerifyHostsDoNotExposeRetiredFreshEvidenceSupport(t *testing.T) 
 			assert.Empty(t, res.Supports)
 		})
 	}
+}
+
+// final-closeout was merged into the terminal ship-verification gate. The
+// retired host name must resolve to nothing — no route, no support set, no
+// hydrate references leak through it.
+func TestResolveRetiredFinalCloseoutHostResolvesToNothing(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+
+	res := Resolve(reg, Signals{Host: "final-closeout"})
+	assert.Nil(t, res.Route)
+	assert.Empty(t, res.Supports)
+	assert.Empty(t, res.HydrateReferences)
 }
 
 func TestResolveNoMatchReturnsEmpty(t *testing.T) {

@@ -97,8 +97,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 		gitCommitAll(t, normalizedWT, "ship-ready bundle")
 		refreshPassingSkillDigestsForTest(t, normalizedWT, slug)
 
@@ -153,8 +152,7 @@ func TestDoneJSONWarnsButArchivesWhenWorktreeChangesAreUncommitted(t *testing.T)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -206,8 +204,7 @@ func TestDoneJSONAllowsUncommittedGovernedBundleArchive(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		previousWD, err := os.Getwd()
 		require.NoError(t, err)
@@ -255,8 +252,7 @@ func TestDoneJSONWarnsDirtyNonActiveChangeArtifact(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		// A sibling/archived change bundle left uncommitted is reported in the
 		// dirty advisory because only the active artifacts/changes/<slug>/ bundle
@@ -312,16 +308,14 @@ func TestDoneAllReadyWarnsDirtyBoundWorktree(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 		gitCommitAll(t, normalizedWT, "ship-ready bundle")
 		refreshPassingSkillDigestsForTest(t, normalizedWT, slug)
 
 		require.NoError(t, os.MkdirAll(filepath.Join(normalizedWT, "cmd"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(normalizedWT, "cmd", "done.go"), []byte("package cmd\n"), 0o644))
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		view := archiveAllDoneReady(root)
 		assert.Empty(t, view.Failed)
@@ -350,8 +344,7 @@ func TestDoneJSONOmitsArchiveCommitRequiredForRepoScopedChange(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
@@ -570,7 +563,7 @@ func TestDoneShipGateBlockedSurfacesStaleEvidenceRepair(t *testing.T) {
 		require.NoError(t, err)
 		markChangeReadyForDone(t, root, &change)
 
-		// Stale the final-closeout authority by mutating one of its certified
+		// Stale the ship-verification authority by mutating one of its certified
 		// inputs (assurance.md) after evidence was stamped. Structure stays valid
 		// so the block comes from the ship gate, not artifact validation.
 		assurancePath := filepath.Join(root, "artifacts", "changes", slug, "assurance.md")
@@ -610,7 +603,7 @@ func TestDoneRequiresReviewEvidenceBeforeArchive(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
 
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
@@ -1149,8 +1142,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 	waveOrchestrationPath := filepath.Join(verificationDir, progression.SkillWaveOrchestration+".yaml")
 	specReviewPath := filepath.Join(verificationDir, progression.SkillSpecComplianceReview+".yaml")
 	codeReviewPath := filepath.Join(verificationDir, progression.SkillCodeQualityReview+".yaml")
-	goalVerificationPath := filepath.Join(verificationDir, progression.SkillGoalVerification+".yaml")
-	finalCloseoutPath := filepath.Join(verificationDir, progression.SkillFinalCloseout+".yaml")
+	shipVerificationPath := filepath.Join(verificationDir, progression.SkillShipVerification+".yaml")
 	waveRunPath := filepath.Join(state.WaveEvidenceDir(root, slug), "wave-01.yaml")
 	taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
 
@@ -1161,8 +1153,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 		waveOrchestrationPath,
 		specReviewPath,
 		codeReviewPath,
-		goalVerificationPath,
-		finalCloseoutPath,
+		shipVerificationPath,
 		waveRunPath,
 		taskEvidencePath,
 	} {
@@ -1173,8 +1164,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 		progression.SkillPlanAudit,
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
-		progression.SkillGoalVerification,
-		progression.SkillFinalCloseout,
+		progression.SkillShipVerification,
 		progression.SkillWaveOrchestration,
 	)
 	preChange, err := state.LoadChange(root, slug)
@@ -1185,8 +1175,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 		progression.SkillPlanAudit,
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
-		progression.SkillGoalVerification,
-		progression.SkillFinalCloseout,
+		progression.SkillShipVerification,
 		progression.SkillWaveOrchestration,
 	} {
 		require.Contains(t, preDigests.Skills, skillName, "fixture should stamp a digest for %s", skillName)
@@ -1227,8 +1216,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 		waveOrchestrationPath,
 		specReviewPath,
 		codeReviewPath,
-		goalVerificationPath,
-		finalCloseoutPath,
+		shipVerificationPath,
 		waveRunPath,
 		taskEvidencePath,
 	} {
@@ -1241,8 +1229,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 		progression.SkillPlanAudit,
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
-		progression.SkillGoalVerification,
-		progression.SkillFinalCloseout,
+		progression.SkillShipVerification,
 		progression.SkillWaveOrchestration,
 	} {
 		assert.Contains(t, postDigests.Skills, skillName, "forward-only stale blocking must preserve %s digest", skillName)
@@ -1263,7 +1250,7 @@ func TestRunStalePlanningHumanOutputShowsReviewBatchWithoutUpstreamReplayBlocker
 
 	stdout := buf.String()
 	assert.Contains(t, stdout, "Change: "+slug+" (S3_REVIEW)")
-	assert.Contains(t, stdout, "Review Batch: spec-compliance-review, code-quality-review, independent-review, goal-verification")
+	assert.Contains(t, stdout, "Review Batch: spec-compliance-review, code-quality-review, independent-review")
 	assert.Contains(t, stdout, "required_skill_stale")
 	assert.NotContains(t, stdout, "review_alignment_required")
 	assert.NotContains(t, stdout, "stale_planning_evidence")
@@ -1750,12 +1737,10 @@ func gitCommitAll(t *testing.T, dir, message string) {
 // satisfied. The synthetic wave evidence declares degraded_sequential dispatch
 // and so contributes NO executor handles; none of these values may collide.
 const (
-	testPlanOriginHandle      = "plan-author-h"
-	testAuditOriginHandle     = "plan-auditor-h"
-	testSpecContextHandle     = "spec-compliance-context"
-	testCodeContextHandle     = "code-quality-context"
-	testGoalContextHandle     = "goal-verification-context"
-	testCloseoutContextHandle = "final-closeout-context"
+	testPlanOriginHandle  = "plan-author-h"
+	testAuditOriginHandle = "plan-auditor-h"
+	testSpecContextHandle = "spec-compliance-context"
+	testCodeContextHandle = "code-quality-context"
 )
 
 // planAuditOriginReferences returns the distinct plan_origin/audit_origin token
@@ -1940,10 +1925,7 @@ func markChangeReadyForDone(t *testing.T, root string, change *model.Change) {
 	writePassingExecutionSummary(t, root, change.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, change.Slug, 1)
 	writePassingReviewEvidencePack(t, root, change.Slug, 1)
-	writePassingGoalVerificationEvidence(t, root, change.Slug, 1)
-	if change.WorkflowPreset != model.WorkflowPresetLight {
-		writePassingFinalCloseoutEvidence(t, root, change.Slug, 1)
-	}
+	writePassingShipVerificationEvidence(t, root, change.Slug, 1)
 }
 
 func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
@@ -1986,7 +1968,7 @@ func writePassingWaveEvidence(t *testing.T, root, slug string, runSummaryVersion
 func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryVersion int) {
 	t.Helper()
 	// Stamp the mandatory review trio at one instant so the always-on final
-	// ordering invariant holds when final-closeout is stamped later. The reviews
+	// ordering invariant holds when ship-verification is stamped later. The reviews
 	// are unordered peers, each carrying a distinct selected-review context_origin
 	// handle so the cross-stage independence gate is satisfied.
 	reviewStampedAt := time.Now().UTC()
@@ -2033,31 +2015,25 @@ func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryV
 	)
 }
 
-func writePassingGoalVerificationEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
+// writePassingShipVerificationEvidence records the single terminal S3
+// ship-verification record that the merge collapsed goal-verification and
+// final-closeout into. It carries the re-homed assurance-complete and
+// reviewer-independence attestations and is stamped after the review set so the
+// always-on ordering invariant holds.
+func writePassingShipVerificationEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
 	t.Helper()
-	writeSkillVerification(t, root, slug, "goal-verification", model.VerificationRecord{
+	writeSkillVerification(t, root, slug, progression.SkillShipVerification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: runSummaryVersion,
 		References: []string{
 			"verification:pass",
-			model.ContextOriginReferencePrefix + model.StageContextReview + "=" + testGoalContextHandle,
+			"closeout:assurance_complete=pass",
+			"closeout:reviewer_independence=pass",
 		},
 	})
-	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillGoalVerification)
-}
-
-func writePassingFinalCloseoutEvidence(t *testing.T, root, slug string, runSummaryVersion int) {
-	t.Helper()
-	writeSkillVerification(t, root, slug, "final-closeout", model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: runSummaryVersion,
-		References: []string{"closeout:assurance_complete=pass", "closeout:reviewer_independence=pass", model.ContextOriginReferencePrefix + "closeout=" + testCloseoutContextHandle},
-	})
-	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillFinalCloseout)
+	refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillShipVerification)
 }
 
 func refreshPassingSkillDigestsForTest(t *testing.T, root, slug string, skillNames ...string) {
@@ -2069,9 +2045,6 @@ func refreshPassingSkillDigestsForTest(t *testing.T, root, slug string, skillNam
 	}
 	summary, err := state.LoadOptionalRelevantExecutionSummary(root, change)
 	require.NoError(t, err)
-	if state.ExecutionSummaryReady(summary) {
-		writeSuiteResultForCommandTest(t, root, slug, summary.RunSummaryVersion)
-	}
 
 	if len(skillNames) == 0 {
 		skillNames = []string{
@@ -2080,8 +2053,7 @@ func refreshPassingSkillDigestsForTest(t *testing.T, root, slug string, skillNam
 			progression.SkillCodeQualityReview,
 			progression.SkillSecurityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
-			progression.SkillFinalCloseout,
+			progression.SkillShipVerification,
 		}
 	}
 	for _, skillName := range skillNames {

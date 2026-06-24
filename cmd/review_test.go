@@ -381,8 +381,7 @@ THEN the governed review-state is preserved.
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingSelectedReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
@@ -398,7 +397,6 @@ THEN the governed review-state is preserved.
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 		}, view.SelectedReviewSkills)
 
 		change, err = state.LoadChange(root, slug)

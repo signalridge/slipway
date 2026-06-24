@@ -40,9 +40,9 @@ func buildSkillConstraints(root string, def skill.Definition, governedChange *mo
 			}
 		}
 
-		// Surface the exact high-risk reference tokens goal-verification must
+		// Surface the exact high-risk reference tokens ship-verification must
 		// record so a guardrail-domain change is never a dead-end (issue #88).
-		if def.Name == progression.SkillGoalVerification && governedChange.GuardrailDomain != "" {
+		if def.Name == progression.SkillShipVerification && governedChange.GuardrailDomain != "" {
 			sc.RequiredHighRiskTokens = requiredHighRiskTokenHints(governedChange.GuardrailDomain)
 		}
 	}
@@ -50,7 +50,7 @@ func buildSkillConstraints(root string, def skill.Definition, governedChange *mo
 	return sc
 }
 
-// requiredHighRiskTokenHints returns the recordable goal-verification reference
+// requiredHighRiskTokenHints returns the recordable ship-verification reference
 // tokens (one per required high-risk check) for a guardrail domain, e.g.
 // "high_risk_check:external_api_contracts.safety_baseline=pass".
 func requiredHighRiskTokenHints(domain string) []string {

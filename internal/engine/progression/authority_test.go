@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,100 +17,90 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCloseoutAssuranceAttestationBlockers covers Layer 1 of issue #47: under
-// standard/strict the passing final-closeout record must carry the
+// TestShipAssuranceAttestationBlockers covers the re-homed assurance attestation:
+// under standard/strict the passing ship-verification record must carry the
 // assurance-complete attestation, and its absence is a fail-closed blocker.
-func TestCloseoutAssuranceAttestationBlockers(t *testing.T) {
+func TestShipAssuranceAttestationBlockers(t *testing.T) {
 	t.Parallel()
 
-	// Standard/strict, passing closeout record but attestation missing -> blocker.
+	// Standard/strict, passing ship record but attestation missing -> blocker.
 	missing := map[string]model.VerificationRecord{
-		SkillFinalCloseout: {
+		SkillShipVerification: {
 			Verdict:    model.VerificationVerdictPass,
 			References: []string{"closeout:test_suite=pass:5/5"},
 		},
 	}
-	blockers := closeoutAssuranceAttestationBlockers(missing, true)
+	blockers := shipAssuranceAttestationBlockers(missing, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_assurance_attestation_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_assurance_attestation_missing", blockers[0].Code)
 
 	// Attestation present -> no blocker.
 	present := map[string]model.VerificationRecord{
-		SkillFinalCloseout: {
+		SkillShipVerification: {
 			Verdict:    model.VerificationVerdictPass,
 			References: []string{"closeout:test_suite=pass:5/5", "closeout:assurance_complete=pass"},
 		},
 	}
-	assert.Empty(t, closeoutAssuranceAttestationBlockers(present, true))
+	assert.Empty(t, shipAssuranceAttestationBlockers(present, true))
 
 	// Assurance optional (assuranceRequired=false, i.e. light preset) never
 	// enforces the attestation.
-	assert.Empty(t, closeoutAssuranceAttestationBlockers(missing, false))
+	assert.Empty(t, shipAssuranceAttestationBlockers(missing, false))
 
-	// No final-closeout record at all -> same fail-closed blocker. Plain
-	// standard does not require final-closeout through ComputeVerificationReadiness,
-	// so this Layer 1 check owns the missing-record path.
-	blockers = closeoutAssuranceAttestationBlockers(map[string]model.VerificationRecord{}, true)
+	// No ship-verification record at all -> same fail-closed blocker.
+	blockers = shipAssuranceAttestationBlockers(map[string]model.VerificationRecord{}, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_assurance_attestation_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_assurance_attestation_missing", blockers[0].Code)
 
 	// Surrounding whitespace on the reference is tolerated.
 	padded := map[string]model.VerificationRecord{
-		SkillFinalCloseout: {
+		SkillShipVerification: {
 			Verdict:    model.VerificationVerdictPass,
 			References: []string{"  closeout:assurance_complete=pass  "},
 		},
 	}
-	assert.Empty(t, closeoutAssuranceAttestationBlockers(padded, true))
+	assert.Empty(t, shipAssuranceAttestationBlockers(padded, true))
 }
 
 // TestBuildShipAuthorityAttestationPresetGating guards the two ship-authority
-// contract bugs in the Layer 1 wiring:
+// contract bugs in the attestation wiring:
 //  1. The attestation must be gated on the effective preset (required on every
 //     standard/strict preset), NOT on CloseoutRefreshRequired — which also trips for
 //     light + quality_mode=full (false positive) and is false for a plain
 //     standard change (false negative).
 //  2. When the attestation is missing, the specific, actionable
-//     closeout_assurance_attestation_missing code must surface in the G_ship
-//     reasons, not collapse into the generic verification_evidence_missing.
+//     ship_verification_assurance_attestation_missing code must surface in the
+//     G_ship reasons, not collapse into the generic ship_verification_evidence_missing.
 func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 	t.Parallel()
 
-	const attestationMissing = "closeout_assurance_attestation_missing"
+	const attestationMissing = "ship_verification_assurance_attestation_missing"
 	hasCode := func(codes []model.ReasonCode) bool {
 		return slices.ContainsFunc(codes, func(c model.ReasonCode) bool {
 			return c.Code == attestationMissing
 		})
 	}
-	passingGoalVerificationOnly := func() map[string]model.VerificationRecord {
+	// A passing ship-verification record that omits the assurance attestation.
+	passingShipNoAttestation := func() map[string]model.VerificationRecord {
 		return map[string]model.VerificationRecord{
-			SkillGoalVerification: {
-				Verdict: model.VerificationVerdictPass,
+			SkillShipVerification: {
+				Verdict:    model.VerificationVerdictPass,
+				References: []string{"closeout:test_suite=pass:5/5"},
 			},
 		}
 	}
-	// Passing goal-verification plus a passing final-closeout record that omits
-	// the assurance attestation.
-	passingGoalAndCloseoutNoAttestation := func() map[string]model.VerificationRecord {
-		passing := passingGoalVerificationOnly()
-		passing[SkillFinalCloseout] = model.VerificationRecord{
-			Verdict:    model.VerificationVerdictPass,
-			References: []string{"closeout:test_suite=pass:5/5"},
-		}
-		return passing
-	}
 
 	// Plain standard preset (no quality_mode=full, so CloseoutRefreshRequired is
-	// false). Final-closeout is still required for standard ship evidence, and
-	// the missing record must produce the Layer 1 blocker rather than only a
+	// false). ship-verification is required for standard ship evidence, and a
+	// missing record must produce the attestation blocker rather than only a
 	// generic verification failure.
-	t.Run("standard requires the attestation even without a closeout record", func(t *testing.T) {
+	t.Run("standard requires the attestation even without a ship record", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
-		change := model.NewChange("ship-standard-missing-closeout")
+		change := model.NewChange("ship-standard-missing-ship-record")
 		change.WorkflowPreset = model.WorkflowPresetStandard
 		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
@@ -120,23 +109,23 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, model.WorkflowPresetStandard, policy.EffectivePreset)
 		require.False(t, policy.CloseoutRefreshRequired,
-			"plain standard must NOT set CloseoutRefreshRequired — standard assurance is a separate final-closeout requirement")
+			"plain standard must NOT set CloseoutRefreshRequired — standard assurance is a separate ship-verification requirement")
 
 		ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},
-			PassingSkills:     passingGoalVerificationOnly(),
+			PassingSkills:     map[string]model.VerificationRecord{},
 			ReviewSurface:     &ReviewAuthority{},
 		})
 		require.NoError(t, err)
 		assert.True(t, hasCode(ship.VerifySkillBlockers),
-			"standard missing final-closeout must block as a missing assurance attestation")
+			"standard missing ship-verification must block as a missing assurance attestation")
 		assert.True(t, hasCode(ship.Result.ReasonCodes),
 			"the actionable blocker must surface in the G_ship reasons")
 	})
 
-	// Plain standard preset (no quality_mode=full, so CloseoutRefreshRequired is
-	// false). Assurance is still required on every standard/strict preset, so the
-	// attestation is required and the specific blocker must reach Result.ReasonCodes.
+	// Plain standard preset: assurance is required on every standard/strict preset,
+	// so a passing-but-unattested ship record blocks and the specific code must
+	// reach Result.ReasonCodes.
 	t.Run("standard requires and surfaces the attestation blocker", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
@@ -156,12 +145,12 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 
 		ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},
-			PassingSkills:     passingGoalAndCloseoutNoAttestation(),
+			PassingSkills:     passingShipNoAttestation(),
 			ReviewSurface:     &ReviewAuthority{},
 		})
 		require.NoError(t, err)
 		assert.True(t, hasCode(ship.VerifySkillBlockers),
-			"standard closeout missing the attestation must block verification")
+			"standard ship record missing the attestation must block verification")
 		assert.True(t, hasCode(ship.Result.ReasonCodes),
 			"the actionable blocker must surface in the G_ship reasons, not only as a side field")
 	})
@@ -189,7 +178,7 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 
 		ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
 			ArtifactReadiness: ArtifactReadiness{Ready: true},
-			PassingSkills:     passingGoalAndCloseoutNoAttestation(),
+			PassingSkills:     passingShipNoAttestation(),
 			ReviewSurface:     &ReviewAuthority{},
 		})
 		require.NoError(t, err)
@@ -200,378 +189,147 @@ func TestBuildShipAuthorityAttestationPresetGating(t *testing.T) {
 	})
 }
 
-func TestCloseoutGoalVerificationReuseBlockers(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	initGitWorkspaceForReadinessOptimizationTests(t, root)
-	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-
-	change := model.NewChange("ship-closeout-reuse")
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS3Review
-	require.NoError(t, state.SaveChange(root, change))
-	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
-
-	capturedAt := time.Now().UTC().Add(-time.Minute)
-	summary := closeoutReuseExecutionSummary(change, 1, capturedAt)
-	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:closeout-reuse-suite")
-	passing := passingCloseoutReuseRecords(1)
-	assert.Empty(t, closeoutGoalVerificationReuseBlockers(root, change, passing, nil, summary))
-
-	mismatchedGoal := passingCloseoutReuseRecords(1)
-	mismatchedGoal[SkillGoalVerification] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 2,
-	}
-	blockers := closeoutGoalVerificationReuseBlockers(root, change, mismatchedGoal, nil, summary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "goal-verification run_version mismatch")
-
-	missingRunReference := passingCloseoutReuseRecords(1)
-	missingRunReference[SkillFinalCloseout] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 1,
-		References: []string{
-			closeoutGoalVerificationReuseReference,
-			assuranceCompleteReference,
-		},
-	}
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, missingRunReference, nil, summary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, closeoutGoalVerificationReuseRunVersionPrefix)
-
-	executionAfterGoal := passingCloseoutReuseRecords(1)
-	goalAt := time.Now().UTC().Add(-2 * time.Minute)
-	executionAfterGoal[SkillGoalVerification] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt,
-		RunVersion: 1,
-	}
-	executionAfterGoal[SkillFinalCloseout] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  goalAt.Add(time.Minute),
-		RunVersion: 1,
-		References: []string{
-			closeoutGoalVerificationReuseReference,
-			closeoutGoalVerificationReuseRunVersionPrefix + "1",
-			assuranceCompleteReference,
-		},
-	}
-	executionAfterGoalSummary := closeoutReuseExecutionSummary(change, 1, goalAt.Add(time.Hour))
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, executionAfterGoal, nil, executionAfterGoalSummary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "latest execution evidence")
-
-	// The review<=goal and closeout>=goal ordering halves have moved out of this
-	// opt-in reuse gate into the always-on closeoutChainOrderBlockers invariant;
-	// they are asserted under closeout_chain_order_invalid in
-	// TestCloseoutChainOrderBlockers, not here.
-
-	changedContent := passingCloseoutReuseRecords(1)
-	changedGoalAt := changedContent[SkillGoalVerification].Timestamp.UTC()
-	targetRel := "internal/reuse-target.go"
-	targetPath := filepath.Join(root, targetRel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(targetPath), 0o755))
-	require.NoError(t, os.WriteFile(targetPath, []byte("package internal\n"), 0o644))
-	contentSummary := closeoutReuseExecutionSummaryWithFiles(change, 1, changedGoalAt.Add(-time.Minute), nil, []string{targetRel})
-	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillGoalVerification, changedContent[SkillGoalVerification], contentSummary))
-	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillFinalCloseout, changedContent[SkillFinalCloseout], contentSummary))
-	require.NoError(t, os.WriteFile(targetPath, []byte("package internal\nconst changed = true\n"), 0o644))
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, changedContent, nil, contentSummary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, targetRel)
-
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
-
-- [ ] `+"`task-a`"+` updated plan
-  - target_files: ["internal/reuse-target.go"]
-  - task_kind: code
-  - acceptance: stale plan is rejected before closeout reuse
-`), 0o644))
-	staleSummary := closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(-time.Hour))
-	staleSummary.TasksPlanHash = "previous-task-plan-hash"
-	blockers = closeoutGoalVerificationReuseBlockers(root, change, passing, nil, staleSummary)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "freshness must be fresh")
-}
-
-func TestProofReuseEdgeBlockersUsesConfiguredSourceAndConsumer(t *testing.T) {
-	t.Parallel()
-
-	change := model.NewChange("generic-proof-reuse-edge")
-	executionAt := time.Date(2026, 6, 4, 2, 0, 0, 0, time.UTC)
-	summary := closeoutReuseExecutionSummary(change, 7, executionAt)
-	passing := map[string]model.VerificationRecord{
-		"source-proof": {
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  executionAt,
-			RunVersion: 7,
-		},
-		"consumer-proof": {
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  executionAt.Add(time.Second),
-			RunVersion: 7,
-		},
-	}
-	edge := proofReuseEdge{
-		sourceSkill:                         "source-proof",
-		sourceLabel:                         "source-proof",
-		consumerSkill:                       "consumer-proof",
-		consumerLabel:                       "consumer-proof",
-		reuseRunVersion:                     7,
-		requireSourceAfterExecutionEvidence: true,
-		blocker:                             closeoutGoalVerificationReuseInvalidBlocker,
-	}
-
-	assert.Empty(t, proofReuseEdgeBlockers(t.TempDir(), change, passing, summary, edge))
-
-	missingSource := map[string]model.VerificationRecord{
-		"consumer-proof": passing["consumer-proof"],
-	}
-	blockers := proofReuseEdgeBlockers(t.TempDir(), change, missingSource, summary, edge)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "source-proof must be passing before consumer-proof can reuse it")
-
-	sourceRunMismatch := map[string]model.VerificationRecord{
-		"source-proof":   passing["source-proof"],
-		"consumer-proof": passing["consumer-proof"],
-	}
-	source := sourceRunMismatch["source-proof"]
-	source.RunVersion = 8
-	sourceRunMismatch["source-proof"] = source
-	blockers = proofReuseEdgeBlockers(t.TempDir(), change, sourceRunMismatch, summary, edge)
-	require.Len(t, blockers, 1)
-	assert.Contains(t, blockers[0].Detail, "source-proof run_version mismatch")
-
-	consumerRunMismatch := map[string]model.VerificationRecord{
-		"source-proof":   passing["source-proof"],
-		"consumer-proof": passing["consumer-proof"],
-	}
-	consumer := consumerRunMismatch["consumer-proof"]
-	consumer.RunVersion = 8
-	consumerRunMismatch["consumer-proof"] = consumer
-	blockers = proofReuseEdgeBlockers(t.TempDir(), change, consumerRunMismatch, summary, edge)
-	require.Len(t, blockers, 1)
-	assert.Contains(t, blockers[0].Detail, "consumer-proof run_version mismatch")
-
-	sourceBeforeExecutionEvidence := map[string]model.VerificationRecord{
-		"source-proof":   passing["source-proof"],
-		"consumer-proof": passing["consumer-proof"],
-	}
-	source = sourceBeforeExecutionEvidence["source-proof"]
-	source.Timestamp = executionAt.Add(-time.Second)
-	sourceBeforeExecutionEvidence["source-proof"] = source
-	blockers = proofReuseEdgeBlockers(t.TempDir(), change, sourceBeforeExecutionEvidence, summary, edge)
-	require.Len(t, blockers, 1)
-	assert.Contains(t, blockers[0].Detail, "source-proof timestamp must be at or after latest execution evidence")
-}
-
-func TestCloseoutGoalVerificationReuseRequiresSuiteResult(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	initGitWorkspaceForReadinessOptimizationTests(t, root)
-	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-
-	change := model.NewChange("ship-closeout-reuse-missing-suite-result")
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS3Review
-	require.NoError(t, state.SaveChange(root, change))
-	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
-
-	executionAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
-	passing := passingCloseoutReuseRecords(1)
-	goal := passing[SkillGoalVerification]
-	goal.Timestamp = executionAt.Add(time.Minute)
-	passing[SkillGoalVerification] = goal
-	closeout := passing[SkillFinalCloseout]
-	closeout.Timestamp = executionAt.Add(2 * time.Minute)
-	passing[SkillFinalCloseout] = closeout
-
-	blockers := closeoutGoalVerificationReuseBlockers(
-		root,
-		change,
-		passing,
-		nil,
-		closeoutReuseExecutionSummary(change, 1, executionAt),
-	)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_goal_verification_reuse_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, "goal-verification inputs changed")
-	assert.Contains(t, blockers[0].Detail, "required_skill_stale:goal-verification:input_digest_unavailable")
-}
-
-func TestBuildShipAuthoritySurfacesCloseoutReuseBlocker(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	initGitWorkspaceForReadinessOptimizationTests(t, root)
-	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-
-	change := model.NewChange("ship-closeout-reuse-blocked")
-	change.WorkflowPreset = model.WorkflowPresetStandard
-	change.CurrentState = model.StateS3Review
-	require.NoError(t, state.SaveChange(root, change))
-
-	passing := passingCloseoutReuseRecords(1)
-	passing[SkillGoalVerification] = model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 2,
-	}
-	ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
-		ExecutionSummary:  closeoutReuseExecutionSummary(change, 1, time.Now().UTC().Add(time.Minute)),
-		ArtifactReadiness: ArtifactReadiness{Ready: true},
-		PassingSkills:     passing,
-		ReviewSurface:     &ReviewAuthority{},
-	})
-	require.NoError(t, err)
-	assert.True(t, hasAdvanceReasonCode(ship.VerifySkillBlockers, "closeout_goal_verification_reuse_invalid"))
-	assert.True(t, hasAdvanceReasonCode(ship.Result.ReasonCodes, "closeout_goal_verification_reuse_invalid"))
-}
-
-func TestCloseoutGoalVerificationReuseInvalidBlockerRoutesS4Recovery(t *testing.T) {
-	t.Parallel()
-
-	blocker := closeoutGoalVerificationReuseInvalidBlocker("assurance.md changed after reused proof")
-	assert.Contains(t, blocker.Detail, "selected reviewer set")
-	assert.Contains(t, blocker.Detail, "final-closeout")
-	assert.Contains(t, blocker.Detail, "assurance.md")
-}
-
-// TestCloseoutReviewerIndependenceBlockers covers the P1 presence facet
-// (REQ-001): under standard/strict the passing final-closeout record must carry
+// TestShipReviewerIndependenceBlockers covers the re-homed independence presence
+// facet: under standard/strict the passing ship-verification record must carry
 // closeout:reviewer_independence=pass; absence fails closed, light is advisory.
-func TestCloseoutReviewerIndependenceBlockers(t *testing.T) {
+func TestShipReviewerIndependenceBlockers(t *testing.T) {
 	t.Parallel()
 
 	missing := map[string]model.VerificationRecord{
-		SkillFinalCloseout: {
+		SkillShipVerification: {
 			Verdict:    model.VerificationVerdictPass,
 			References: []string{"closeout:assurance_complete=pass"},
 		},
 	}
-	blockers := closeoutReviewerIndependenceBlockers(missing, true)
+	blockers := shipReviewerIndependenceBlockers(missing, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_reviewer_independence_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_reviewer_independence_missing", blockers[0].Code)
 
 	present := map[string]model.VerificationRecord{
-		SkillFinalCloseout: {
+		SkillShipVerification: {
 			Verdict:    model.VerificationVerdictPass,
 			References: []string{"  closeout:reviewer_independence=pass  "},
 		},
 	}
-	assert.Empty(t, closeoutReviewerIndependenceBlockers(present, true))
+	assert.Empty(t, shipReviewerIndependenceBlockers(present, true))
 
-	// No final-closeout record at all -> same fail-closed blocker.
-	blockers = closeoutReviewerIndependenceBlockers(map[string]model.VerificationRecord{}, true)
+	// No ship-verification record at all -> same fail-closed blocker.
+	blockers = shipReviewerIndependenceBlockers(map[string]model.VerificationRecord{}, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_reviewer_independence_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_reviewer_independence_missing", blockers[0].Code)
 
 	// Light preset (required=false) is advisory: never blocks.
-	assert.Empty(t, closeoutReviewerIndependenceBlockers(missing, false))
+	assert.Empty(t, shipReviewerIndependenceBlockers(missing, false))
 }
 
-// TestCloseoutChainOrderBlockers covers the always-on P1 ordering invariant:
-// final-closeout must be stamped after every selected S3 peer under its own
-// distinct closeout_chain_order_invalid code, advisory on light.
-func TestCloseoutChainOrderBlockers(t *testing.T) {
+// TestShipReviewSetOrderingBlockers covers the single retained S3 ordering
+// invariant: ship-verification must be stamped at or after every selected review
+// peer (spec/code/independent/security). A peer stamped after ship-verification is
+// a fail-closed ship_verification_ordering_invalid blocker, enforced on every
+// preset (no light advisory carveout — the invariant is causal validity, not a
+// quality attestation).
+func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	t.Parallel()
 
 	selectedReviewers := engineskill.SelectedReviewSkills(engineskill.ReviewSkillSelection{})
 	selectedReviewersWithSecurity := engineskill.SelectedReviewSkills(engineskill.ReviewSkillSelection{SecurityReviewSelected: true})
-	goalAt := time.Now().UTC()
-	inOrder := map[string]model.VerificationRecord{
-		SkillGoalVerification: {
+	shipAt := time.Now().UTC()
+	shipPassing := map[string]model.VerificationRecord{
+		SkillShipVerification: {
 			Verdict:   model.VerificationVerdictPass,
-			Timestamp: goalAt,
-		},
-		SkillFinalCloseout: {
-			Verdict:   model.VerificationVerdictPass,
-			Timestamp: goalAt.Add(time.Second),
+			Timestamp: shipAt,
 		},
 	}
-	reviewsBeforeGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
-	assert.Empty(t, closeoutChainOrderBlockers(inOrder, reviewsBeforeGoal, selectedReviewers, true),
-		"in-order chain with reviews before goal and goal before closeout must pass")
 
-	// selected reviewer after final-closeout -> blocker.
-	reviewsAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(time.Second), goalAt.Add(2*time.Second))
-	blockers := closeoutChainOrderBlockers(inOrder, reviewsAfterGoal, selectedReviewers, true)
+	// All selected reviewers before ship-verification -> no blocker.
+	reviewsBeforeShip := closeoutReuseReviewRecords(1, shipAt.Add(-2*time.Second), shipAt.Add(-time.Second))
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsBeforeShip, selectedReviewers),
+		"reviews stamped before ship-verification must pass")
+
+	// Boundary: a selected reviewer stamped at the EXACT ship-verification time
+	// must pass. The invariant is ship >= review (compared with After(), not a
+	// strict >), so an equal stamp is in order. Pins the >= boundary against a
+	// regression to a strict After()/Before() that would block equal timestamps.
+	reviewsAtShip := closeoutReuseReviewRecords(1, shipAt, shipAt)
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsAtShip, selectedReviewers),
+		"a reviewer stamped at the exact ship-verification time must pass (ship >= review)")
+
+	// A selected reviewer stamped after ship-verification -> blocker.
+	reviewsAfterShip := closeoutReuseReviewRecords(1, shipAt.Add(time.Second), shipAt.Add(2*time.Second))
+	blockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, "selected reviewer evidence")
 
-	// Every selected reviewer must be ordered before final-closeout, not only the
-	// historical spec/code pair.
-	selectedReviewsAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
-	selectedReviewsAfterGoal[SkillIndependentReview] = model.VerificationRecord{
+	// Every selected reviewer must be ordered before ship-verification, not only
+	// the historical spec/code pair.
+	independentAfterShip := closeoutReuseReviewRecords(1, shipAt.Add(-2*time.Second), shipAt.Add(-time.Second))
+	independentAfterShip[SkillIndependentReview] = model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(2 * time.Second),
+		Timestamp: shipAt.Add(2 * time.Second),
 	}
-	selectedReviewsAfterGoal[SkillSecurityReview] = model.VerificationRecord{
-		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(3 * time.Second),
-	}
-	blockers = closeoutChainOrderBlockers(inOrder, selectedReviewsAfterGoal, selectedReviewers, true)
+	blockers = shipReviewSetOrderingBlockers(shipPassing, independentAfterShip, selectedReviewers)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillIndependentReview)
 
-	unselectedSecurityAfterGoal := closeoutReuseReviewRecords(1, goalAt.Add(-2*time.Second), goalAt.Add(-time.Second))
-	unselectedSecurityAfterGoal[SkillSecurityReview] = model.VerificationRecord{
+	// Unselected security evidence after ship is silent unless the control selected it.
+	unselectedSecurityAfterShip := closeoutReuseReviewRecords(1, shipAt.Add(-2*time.Second), shipAt.Add(-time.Second))
+	unselectedSecurityAfterShip[SkillSecurityReview] = model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
-		Timestamp: goalAt.Add(2 * time.Second),
+		Timestamp: shipAt.Add(2 * time.Second),
 	}
-	assert.Empty(t, closeoutChainOrderBlockers(inOrder, unselectedSecurityAfterGoal, selectedReviewers, true),
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewers),
 		"security-review evidence is silent when the security control did not select it")
 
-	blockers = closeoutChainOrderBlockers(inOrder, unselectedSecurityAfterGoal, selectedReviewersWithSecurity, true)
+	blockers = shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewersWithSecurity)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillSecurityReview)
 
-	// closeout before goal-verification -> blocker because goal-verification is
-	// a selected review-set peer.
-	closeoutBeforeGoal := map[string]model.VerificationRecord{
-		SkillGoalVerification: {
-			Verdict:   model.VerificationVerdictPass,
-			Timestamp: goalAt,
-		},
-		SkillFinalCloseout: {
-			Verdict:   model.VerificationVerdictPass,
-			Timestamp: goalAt.Add(-time.Second),
-		},
+	// Genuinely-absent ship record: nothing to compare, no blocker (owned elsewhere).
+	assert.Empty(t, shipReviewSetOrderingBlockers(map[string]model.VerificationRecord{}, reviewsAfterShip, selectedReviewers))
+
+	// Always-on: the ordering invariant has NO preset carveout. The same
+	// out-of-order chain that blocks above must still block here — this is the
+	// regression guard against re-introducing a light advisory bypass, which would
+	// let a terminal ship verdict pass without having observed the final review
+	// evidence.
+	alwaysOnBlockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers)
+	require.Len(t, alwaysOnBlockers, 1)
+	assert.Equal(t, "ship_verification_ordering_invalid", alwaysOnBlockers[0].Code)
+}
+
+// TestExtractShipVerificationHighRiskChecksScopesToShipRecord pins REQ-005's
+// ownership: the guardrail SAST baseline that satisfies G_ship is read ONLY from
+// the ship-verification record. A review peer carrying the same high-risk
+// reference must NOT satisfy the gate, closing the fail-open path where any
+// passing peer could vouch for the safety baseline.
+func TestExtractShipVerificationHighRiskChecksScopesToShipRecord(t *testing.T) {
+	t.Parallel()
+
+	const baseline = "auth_authz.safety_baseline"
+	ref := "high_risk_check:" + baseline + "=pass"
+
+	// A review peer carrying the SAST token does not satisfy the ship-owned check.
+	peerOnly := map[string]model.VerificationRecord{
+		SkillIndependentReview: {Verdict: model.VerificationVerdictPass, References: []string{ref}},
 	}
-	blockers = closeoutChainOrderBlockers(closeoutBeforeGoal, nil, selectedReviewers, true)
-	require.Len(t, blockers, 1)
-	assert.Equal(t, "closeout_chain_order_invalid", blockers[0].Code)
-	assert.Contains(t, blockers[0].Detail, SkillGoalVerification)
+	assert.Empty(t, extractShipVerificationHighRiskChecks(peerOnly),
+		"a review peer's high-risk reference must not satisfy the ship-owned guardrail check")
 
-	// Genuinely-absent goal: nothing to compare, no blocker (owned elsewhere).
-	assert.Empty(t, closeoutChainOrderBlockers(map[string]model.VerificationRecord{}, reviewsAfterGoal, selectedReviewers, true))
+	// The same token on the ship-verification record is honored.
+	shipScoped := map[string]model.VerificationRecord{
+		SkillIndependentReview: {Verdict: model.VerificationVerdictPass, References: []string{ref}},
+		SkillShipVerification:  {Verdict: model.VerificationVerdictPass, References: []string{ref}},
+	}
+	checks := extractShipVerificationHighRiskChecks(shipScoped)
+	pass, ok := checks[baseline]
+	assert.True(t, ok, "ship-verification's own high-risk reference must be extracted")
+	assert.True(t, pass)
 
-	// Light preset (required=false) is advisory even on an out-of-order chain.
-	assert.Empty(t, closeoutChainOrderBlockers(closeoutBeforeGoal, reviewsAfterGoal, selectedReviewers, false))
+	// No ship record -> no checks (G_ship stays blocked with high_risk_check_missing).
+	assert.Empty(t, extractShipVerificationHighRiskChecks(map[string]model.VerificationRecord{}))
 }
 
 // contextOriginRef builds a per-stage context-origin handle reference token.
@@ -631,7 +389,7 @@ func TestCrossStageContextDistinctBlockersUsesSelectedReviewSkillParticipants(t 
 		return root, change
 	}
 
-	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
+	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
 	reviewStages := crossStageContextReviewStagesForSelectedSkills(selectedReviewers)
 	ownedReview := crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewers)
 
@@ -757,13 +515,11 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 	summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
 	summary.SyncDerivedFields()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
-	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:review-authority-suite")
 
 	selectedRecords := reviewSkillContextRecords(map[string]string{
 		SkillSpecComplianceReview: "ctx-spec-reviewer",
 		SkillCodeQualityReview:    "ctx-code-reviewer",
 		SkillIndependentReview:    "ctx-independent-reviewer",
-		SkillGoalVerification:     "ctx-goal-reviewer",
 	})
 	for skillName, record := range selectedRecords {
 		record.RunVersion = 1
@@ -783,6 +539,18 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 		References: []string{contextOriginRef(model.StageContextReview, "ctx-spec-reviewer")},
 	})
 
+	// ship-verification is the always-required terminal S3 skill; record a passing
+	// one so the required-skill set is satisfied and the test isolates reviewer
+	// selection behavior.
+	shipRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		RunVersion: 1,
+		Timestamp:  time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC),
+		References: []string{shipAssuranceCompleteReference, shipReviewerIndependenceReference},
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillShipVerification, shipRecord)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillShipVerification, shipRecord, summary))
+
 	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		change,
@@ -796,10 +564,10 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 	assert.Contains(t, passingSkills, SkillSpecComplianceReview)
 	assert.Contains(t, passingSkills, SkillCodeQualityReview)
 	assert.Contains(t, passingSkills, SkillIndependentReview)
-	assert.Contains(t, passingSkills, SkillGoalVerification)
+	assert.Contains(t, passingSkills, SkillShipVerification)
 	assert.NotContains(t, passingSkills, SkillSecurityReview)
 
-	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
+	selectedReviewers := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
 	assert.Empty(t, crossStageContextDistinctBlockers(
 		root,
 		change,
@@ -829,12 +597,10 @@ func TestReviewAuthorityDocsProfileIgnoresUnselectedCodeQualityEvidenceOnDisk(t 
 	summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
 	summary.SyncDerivedFields()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
-	writeSuiteResultForDigestTest(t, root, change, 1, "sha256:review-authority-docs-suite")
 
 	selectedRecords := reviewSkillContextRecords(map[string]string{
 		SkillSpecComplianceReview: "ctx-spec-reviewer",
 		SkillIndependentReview:    "ctx-independent-reviewer",
-		SkillGoalVerification:     "ctx-goal-reviewer",
 	})
 	for skillName, record := range selectedRecords {
 		record.RunVersion = 1
@@ -862,11 +628,9 @@ func TestReviewAuthorityDocsProfileIgnoresUnselectedCodeQualityEvidenceOnDisk(t 
 	assert.ElementsMatch(t, []string{
 		SkillSpecComplianceReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
 	}, authority.SelectedReviewSkills)
 	assert.Contains(t, authority.PassingSkills, SkillSpecComplianceReview)
 	assert.Contains(t, authority.PassingSkills, SkillIndependentReview)
-	assert.Contains(t, authority.PassingSkills, SkillGoalVerification)
 	assert.NotContains(t, authority.PassingSkills, SkillCodeQualityReview)
 	assert.NotContains(t, strings.Join(model.ReasonSpecs(authority.Blockers), "\n"), SkillCodeQualityReview)
 }
@@ -1006,9 +770,9 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
-		// spec and code share a handle (a review-owned collision), but goal and
-		// closeout are distinct. The ship gate owns only goal/closeout, so the
-		// spec<->code edge must NOT fire here.
+		// spec and code share a handle (a review-owned collision). The ship gate
+		// no longer adds goal/closeout participants, so the spec<->code edge must
+		// NOT fire through the ship-owned (empty) owned-stage set here.
 		merged := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
@@ -1017,14 +781,6 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			SkillCodeQualityReview: {
 				Verdict:    model.VerificationVerdictPass,
 				References: []string{contextOriginRef(model.StageContextReview, "shared-review")},
-			},
-			SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "handle-goal")},
-			},
-			SkillFinalCloseout: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
 			},
 		}
 		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, map[string]struct{}{}, true)
@@ -1054,47 +810,29 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 				Verdict:    model.VerificationVerdictPass,
 				References: []string{contextOriginRef(model.StageContextReview, "shared-security-review")},
 			},
-			SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "handle-goal")},
-			},
-			SkillFinalCloseout: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
-			},
 		}
 		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStagesWithSecurity, map[string]struct{}{}, true)
 		assert.Empty(t, blockers, "selected security peer collisions are review-owned and must not re-fire at ship")
 	})
 
-	t.Run("folded goal/spec review edge does not fire at ship", func(t *testing.T) {
+	t.Run("ship gate never emits executor_agent_missing", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
-		change := model.NewChange("ship-lattice-goal-collision")
+		change := model.NewChange("ship-lattice-executor")
 		change.WorkflowPreset = model.WorkflowPresetStandard
 		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
-		// goal-verification shares a handle with spec, but it is now a folded S3
-		// review peer. The review gate owns that edge; ship must not re-fire it.
 		merged := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-spec")},
+				References: []string{contextOriginRef(model.StageContextReview, "handle-spec")},
 			},
 			SkillCodeQualityReview: {
 				Verdict:    model.VerificationVerdictPass,
 				References: []string{contextOriginRef(model.StageContextReview, "handle-code")},
-			},
-			SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-spec")},
-			},
-			SkillFinalCloseout: {
-				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextCloseout, "handle-closeout")},
 			},
 		}
 		blockers := crossStageContextDistinctBlockers(root, change, merged, shipStages, map[string]struct{}{}, true)
@@ -1109,6 +847,10 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
 		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
 
+		// A passing review set with a security collision plus a passing
+		// ship-verification record carrying both re-homed attestations. The ship
+		// gate owns no context-origin lattice edges, so the security collision must
+		// not surface at ship.
 		reviewPassing := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
@@ -1124,23 +866,11 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			},
 			SkillSecurityReview: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-security")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-spec-security")},
 			},
 		}
 		verifyPassing := map[string]model.VerificationRecord{
-			SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				Timestamp:  time.Now().UTC(),
-				References: []string{contextOriginRef(model.StageContextReview, "shared-goal-security")},
-			},
-			SkillFinalCloseout: {
-				Verdict: model.VerificationVerdictPass,
-				References: []string{
-					contextOriginRef(model.StageContextCloseout, "handle-closeout"),
-					assuranceCompleteReference,
-					closeoutReviewerIndependenceReference,
-				},
-			},
+			SkillShipVerification: passingShipVerificationRecord(time.Now().UTC()),
 		}
 		selectedChange := model.NewChange("ship-lattice-security-selected")
 		selectedChange.WorkflowPreset = model.WorkflowPresetStandard
@@ -1180,7 +910,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 			"unselected security-review evidence must not become a ship lattice participant")
 	})
 
-	t.Run("ship blocker is dual-surfaced and advisory on light", func(t *testing.T) {
+	t.Run("ship no longer owns context lattice and is advisory on light", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		initGitWorkspaceForReadinessOptimizationTests(t, root)
@@ -1190,33 +920,21 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		change.CurrentState = model.StateS3Review
 		require.NoError(t, state.SaveChange(root, change))
 
-		// Build a passing set where folded goal and final-closeout carry colliding
-		// legacy-looking handles. Ship no longer owns context-origin lattice edges, so
-		// the collision stays silent here.
+		// Build a passing set where the review peers carry colliding handles, while
+		// ship-verification carries the re-homed attestations. The merged ship gate
+		// owns no context-origin lattice edges, so the collision stays silent here.
 		reviewPassing := map[string]model.VerificationRecord{
 			SkillSpecComplianceReview: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "handle-spec")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-spec-code")},
 			},
 			SkillCodeQualityReview: {
 				Verdict:    model.VerificationVerdictPass,
-				References: []string{contextOriginRef(model.StageContextReview, "handle-code")},
+				References: []string{contextOriginRef(model.StageContextReview, "shared-spec-code")},
 			},
 		}
 		verifyPassing := map[string]model.VerificationRecord{
-			SkillGoalVerification: {
-				Verdict:    model.VerificationVerdictPass,
-				Timestamp:  time.Now().UTC(),
-				References: []string{contextOriginRef(model.StageContextReview, "shared-go-close")},
-			},
-			SkillFinalCloseout: {
-				Verdict: model.VerificationVerdictPass,
-				References: []string{
-					contextOriginRef(model.StageContextCloseout, "shared-go-close"),
-					assuranceCompleteReference,
-					closeoutReviewerIndependenceReference,
-				},
-			},
+			SkillShipVerification: passingShipVerificationRecord(time.Now().UTC()),
 		}
 
 		ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
@@ -1226,7 +944,7 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.False(t, hasReasonCode(ship.VerifySkillBlockers, "cross_stage_context_not_distinct"),
-			"ship no longer owns goal/closeout context-origin lattice edges")
+			"ship no longer owns context-origin lattice edges")
 		assert.False(t, hasReasonCode(ship.Result.ReasonCodes, "cross_stage_context_not_distinct"),
 			"ship-owned context lattice blockers must not reach G_ship reasons after S3 folding")
 
@@ -1246,38 +964,18 @@ func TestShipCrossStageContextNoDoubleFire(t *testing.T) {
 	})
 }
 
-func closeoutReuseExecutionSummary(change model.Change, runVersion int, capturedAt time.Time) *model.ExecutionSummary {
-	return closeoutReuseExecutionSummaryWithFiles(change, runVersion, capturedAt, nil, nil)
-}
-
-func closeoutReuseExecutionSummaryWithFiles(
-	change model.Change,
-	runVersion int,
-	capturedAt time.Time,
-	changedFiles []string,
-	targetFiles []string,
-) *model.ExecutionSummary {
-	summary := model.ExecutionSummary{
-		Version:           model.ExecutionSummaryVersion,
-		RunSummaryVersion: runVersion,
-		CapturedAt:        capturedAt.UTC(),
-		OverallVerdict:    model.ExecutionVerdictPass,
-		CompletedTasks:    []string{"t-01"},
-		Tasks: []model.ExecutionTaskSummary{
-			{
-				TaskID:       "t-01",
-				Verdict:      model.TaskVerdictPass,
-				TaskKind:     model.TaskKindCode,
-				ChangedFiles: append([]string(nil), changedFiles...),
-				TargetFiles:  append([]string(nil), targetFiles...),
-				EvidenceRef:  "test:t-01",
-				CapturedAt:   capturedAt.UTC(),
-			},
+// passingShipVerificationRecord returns a passing ship-verification record
+// carrying both re-homed standard/strict attestations, stamped at the given time.
+func passingShipVerificationRecord(at time.Time) model.VerificationRecord {
+	return model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: at.UTC(),
+		References: []string{
+			shipAssuranceCompleteReference,
+			shipReviewerIndependenceReference,
 		},
 	}
-	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
-	summary.SyncDerivedFields()
-	return &summary
 }
 
 func closeoutReuseReviewRecords(runVersion int, specTimestamp time.Time, codeTimestamp time.Time) map[string]model.VerificationRecord {
@@ -1295,29 +993,6 @@ func closeoutReuseReviewRecords(runVersion int, specTimestamp time.Time, codeTim
 			Timestamp:  codeTimestamp.UTC(),
 			RunVersion: runVersion,
 			References: []string{"layer:IR1=pass"},
-		},
-	}
-}
-
-func passingCloseoutReuseRecords(runVersion int) map[string]model.VerificationRecord {
-	now := time.Now().UTC()
-	return map[string]model.VerificationRecord{
-		SkillGoalVerification: {
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  now,
-			RunVersion: runVersion,
-		},
-		SkillFinalCloseout: {
-			Verdict:    model.VerificationVerdictPass,
-			Blockers:   []model.ReasonCode{},
-			Timestamp:  now.Add(time.Second),
-			RunVersion: runVersion,
-			References: []string{
-				closeoutGoalVerificationReuseReference,
-				closeoutGoalVerificationReuseRunVersionPrefix + strconv.Itoa(runVersion),
-				assuranceCompleteReference,
-			},
 		},
 	}
 }

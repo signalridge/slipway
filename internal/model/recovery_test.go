@@ -146,15 +146,13 @@ func inScopeProducedRecoverySpecs() []string {
 		"incomplete_execution_task:t-19",
 		"high_risk_check_missing:external_api_contracts.safety_baseline",
 		"high_risk_check_failed:external_api_contracts.safety_baseline",
-		"closeout_goal_verification_reuse_invalid:goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout",
 		"manifest_r0_invalid:manifest_missing",
 		"manifest_r0_invalid:manifest_parse_invalid",
 		"manifest_r0_invalid:manifest_slug_mismatch",
 		"manifest_r0_invalid:manifest_base_ref_missing",
 		"sensitive_evidence_missing:schema_migration:db/migrations/001_create_users.sql",
 		"worktree_metadata_persist_failed:permission denied",
-		"closeout_reviewer_independence_missing",
-		"closeout_chain_order_invalid",
+		"ship_verification_reviewer_independence_missing",
 		"context_origin_handle_invalid",
 		"cross_stage_context_not_distinct:spec-compliance-review|code-quality-review",
 		"plan_audit_origin_invalid",
@@ -162,7 +160,7 @@ func inScopeProducedRecoverySpecs() []string {
 	}
 }
 
-func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
+func TestRecoveryTextNamesSelectedReviewAndShipVerification(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -176,22 +174,10 @@ func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 			want: []string{
 				"profile-filtered selected peer skills",
 				"selected peer skills",
-				"goal-verification",
+				"spec-compliance-review and independent-review",
 				"code-quality-review when selected by the workflow profile",
 				"security-review when selected by policy",
-			},
-		},
-		{
-			name: "closeout chain order selected peer set",
-			spec: "closeout_chain_order_invalid",
-			want: []string{
-				"selected S3 peer",
-				"independent-review",
-				"code-quality-review when selected by the workflow profile",
-				"security-review when selected by policy",
-				"goal-verification",
-				"unordered S3 peer",
-				"re-run final-closeout",
+				"always-required ship-verification terminal gate",
 			},
 		},
 	}
@@ -214,59 +200,60 @@ func TestRecoveryTextNamesSelectedReviewAndCloseoutPeers(t *testing.T) {
 
 func recoveryRelevantCanonicalCodes() []string {
 	exact := map[string]bool{
-		"archive_failed":                           true,
-		"assurance_structure_invalid":              true,
-		"assurance_contract_missing":               true,
-		"assurance_contract_path_invalid":          true,
-		"assurance_contract_unreadable":            true,
-		"assurance_section_placeholder":            true,
-		"artifact_not_ready":                       true,
-		"artifact_reconcile_failed":                true,
-		"artifact_schema_missing":                  true,
-		"artifact_validation_failed":               true,
-		"change_not_active":                        true,
-		"closeout_assurance_attestation_missing":   true,
-		"closeout_goal_verification_reuse_invalid": true,
-		"dedicated_worktree_branch_mismatch":       true,
-		"dedicated_worktree_metadata_required":     true,
-		"dedicated_worktree_path_invalid":          true,
-		"dedicated_worktree_required":              true,
-		"decision_contract_path_invalid":           true,
-		"decision_contract_unreadable":             true,
-		"decision_section_placeholder":             true,
-		"decision_status_rejected":                 true,
-		"decision_status_unknown":                  true,
-		"decision_structure_invalid":               true,
-		"governance_action_required":               true,
-		"governed_bundle_path_invalid":             true,
-		"high_risk_check_failed":                   true,
-		"high_risk_check_missing":                  true,
-		"incomplete_execution_task":                true,
-		"intake_clarification_incomplete":          true,
-		"intake_confirmation_incomplete":           true,
-		"intake_substep_invalid":                   true,
-		"lifecycle_event_write_failed":             true,
-		"list_changes_failed":                      true,
-		"load_change_failed":                       true,
-		"manifest_r0_invalid":                      true,
-		"missing_discovery_evidence":               true,
-		"missing_required_artifact":                true,
-		"missing_task_evidence_for_run_summary":    true,
-		"missing_worktree_branch":                  true,
-		"missing_worktree_path":                    true,
-		"non_pass_task":                            true,
-		"not_done_ready":                           true,
-		"preset_confirmation_required":             true,
-		"research_structure_invalid":               true,
-		"research_section_placeholder":             true,
-		"run_slipway_done_to_finalize":             true,
-		"run_slipway_run_to_advance":               true,
-		"ship_gate_blocked":                        true,
-		"tasks_checklist_invalid_format":           true,
-		"unknown_reason_code":                      true,
-		"verification_evidence_missing":            true,
-		"worktree_metadata_persist_failed":         true,
-		"worktree_validation_error":                true,
+		"archive_failed":                                  true,
+		"assurance_structure_invalid":                     true,
+		"assurance_contract_missing":                      true,
+		"assurance_contract_path_invalid":                 true,
+		"assurance_contract_unreadable":                   true,
+		"assurance_section_placeholder":                   true,
+		"artifact_not_ready":                              true,
+		"artifact_reconcile_failed":                       true,
+		"artifact_schema_missing":                         true,
+		"artifact_validation_failed":                      true,
+		"change_not_active":                               true,
+		"dedicated_worktree_branch_mismatch":              true,
+		"dedicated_worktree_metadata_required":            true,
+		"dedicated_worktree_path_invalid":                 true,
+		"dedicated_worktree_required":                     true,
+		"decision_contract_path_invalid":                  true,
+		"decision_contract_unreadable":                    true,
+		"decision_section_placeholder":                    true,
+		"decision_status_rejected":                        true,
+		"decision_status_unknown":                         true,
+		"decision_structure_invalid":                      true,
+		"governance_action_required":                      true,
+		"governed_bundle_path_invalid":                    true,
+		"high_risk_check_failed":                          true,
+		"high_risk_check_missing":                         true,
+		"incomplete_execution_task":                       true,
+		"intake_clarification_incomplete":                 true,
+		"intake_confirmation_incomplete":                  true,
+		"intake_substep_invalid":                          true,
+		"lifecycle_event_write_failed":                    true,
+		"list_changes_failed":                             true,
+		"load_change_failed":                              true,
+		"manifest_r0_invalid":                             true,
+		"missing_discovery_evidence":                      true,
+		"missing_required_artifact":                       true,
+		"missing_task_evidence_for_run_summary":           true,
+		"missing_worktree_branch":                         true,
+		"missing_worktree_path":                           true,
+		"non_pass_task":                                   true,
+		"not_done_ready":                                  true,
+		"preset_confirmation_required":                    true,
+		"research_structure_invalid":                      true,
+		"research_section_placeholder":                    true,
+		"run_slipway_done_to_finalize":                    true,
+		"run_slipway_run_to_advance":                      true,
+		"ship_gate_blocked":                               true,
+		"ship_verification_assurance_attestation_missing": true,
+		"ship_verification_evidence_missing":              true,
+		"ship_verification_ordering_invalid":              true,
+		"ship_verification_reviewer_independence_missing": true,
+		"tasks_checklist_invalid_format":                  true,
+		"unknown_reason_code":                             true,
+		"worktree_metadata_persist_failed":                true,
+		"worktree_validation_error":                       true,
 	}
 	prefixes := []string{
 		"plan_audit_",
@@ -310,10 +297,8 @@ func sampleRecoveryDetail(code string) string {
 		return "permission denied"
 	case "assurance_section_placeholder":
 		return "## Scope Summary"
-	case "closeout_assurance_attestation_missing":
-		return "final-closeout must record closeout:assurance_complete=pass on standard/strict"
-	case "closeout_goal_verification_reuse_invalid":
-		return "goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout"
+	case "ship_verification_assurance_attestation_missing":
+		return "ship-verification must record closeout:assurance_complete=pass on standard/strict"
 	case "governance_action_required":
 		return "domain-review:run domain-aware review"
 	case "governed_bundle_path_invalid":
@@ -357,7 +342,7 @@ func sampleRecoveryDetail(code string) string {
 	case "research_section_placeholder":
 		return "## Alternatives Considered"
 	case "ship_gate_blocked":
-		return "required_skill_missing:final-closeout"
+		return "required_skill_missing:ship-verification"
 	case "scope_contract_changed_files_missing", "scope_contract_missing", "wave_orchestration_stale_task_evidence":
 		return "t-01"
 	case "scope_contract_drift":
@@ -696,20 +681,20 @@ func TestPlanAuditRecoveryUsesRunWithoutRemovedCommands(t *testing.T) {
 func TestCloseoutAttestationMissingResolvesToRecovery(t *testing.T) {
 	t.Parallel()
 
-	// closeout_assurance_attestation_missing is a real G_ship blocker but was not
-	// canonicalized or in the remediation table, so BuildRecovery silently skipped
-	// it on real closeout output. It must now render a step with a remediation/command.
-	rc := NewReasonCode("closeout_assurance_attestation_missing",
-		"final-closeout must record closeout:assurance_complete=pass on standard/strict")
+	// ship_verification_assurance_attestation_missing is a real G_ship blocker; it
+	// must render a step with a remediation/command and keep its colon-bearing
+	// attestation token intact in Details.
+	rc := NewReasonCode("ship_verification_assurance_attestation_missing",
+		"ship-verification must record closeout:assurance_complete=pass on standard/strict")
 	step, ok := recoveryStepFor(rc)
-	require.True(t, ok, "closeout_assurance_attestation_missing must produce a recovery step")
+	require.True(t, ok, "ship_verification_assurance_attestation_missing must produce a recovery step")
 	assert.NotEmpty(t, step.Remediation)
 	assert.NotEmpty(t, step.Command)
-	assert.Contains(t, step.Remediation, "final-closeout")
+	assert.Contains(t, step.Remediation, "ship-verification")
 	assert.NotContains(t, step.Remediation, "{", "static remediation must not leak a placeholder")
 	assert.Empty(t, step.Subject, "opaque prose detail must not become a synthetic subject")
 	assert.Equal(t,
-		[]string{"final-closeout must record closeout:assurance_complete=pass on standard/strict"},
+		[]string{"ship-verification must record closeout:assurance_complete=pass on standard/strict"},
 		step.Details,
 		"the colon-bearing attestation token must stay intact in Details")
 	// Canonical message, not the old humanize fallback.
@@ -741,20 +726,21 @@ func TestBuildRecoveryCoversRealValidationAndShipBlockers(t *testing.T) {
 		"real validate/done blockers must not be silently skipped")
 }
 
-func TestBuildRecoveryPrioritizesSelectedPeerBeforeFinalCloseout(t *testing.T) {
+func TestBuildRecoveryPrioritizesEvidenceBeforeAttestation(t *testing.T) {
 	t.Parallel()
 
+	// When ship-verification reports both a missing-evidence blocker (priority 10)
+	// and a missing-attestation blocker (priority 20), recovery must lead with the
+	// higher-priority evidence blocker.
 	got := BuildRecovery([]ReasonCode{
-		NewReasonCode("closeout_assurance_attestation_missing",
-			"final-closeout must record closeout:assurance_complete=pass on standard/strict"),
-		NewReasonCode("closeout_goal_verification_reuse_invalid",
-			"goal-verification evidence was produced before final-closeout input changed; rerun goal-verification, then rerun final-closeout"),
-		NewReasonCode("verification_evidence_missing", "goal-verification"),
+		NewReasonCode("ship_verification_assurance_attestation_missing",
+			"ship-verification must record closeout:assurance_complete=pass on standard/strict"),
+		NewReasonCode("ship_verification_evidence_missing", "ship-verification"),
 	})
 	require.NotNil(t, got)
 	assert.Equal(t, RecoveryClassRerunSkill, got.RecoveryClass)
-	assert.Contains(t, got.PrimaryAction, "goal-verification",
-		"selected S3 peer recovery must precede final-closeout when both closeout blockers are present")
+	assert.Contains(t, got.PrimaryAction, "ship-verification evidence is missing",
+		"the missing-evidence blocker must win the primary slot over the attestation blocker")
 }
 
 func TestBuildRecoveryPrioritizesMissingArtifactsByAuthoringOrder(t *testing.T) {

@@ -36,8 +36,7 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 		"skills/code-quality-review/SKILL.md.tmpl",
 		"skills/independent-review/SKILL.md.tmpl",
 		"skills/security-review/SKILL.md.tmpl",
-		"skills/goal-verification/SKILL.md.tmpl",
-		"skills/final-closeout/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 	}
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range templatedSkills {
@@ -229,22 +228,23 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 	assert.NotContains(t, flatRef, "do not match the lockfile")
 }
 
-func TestFinalCloseoutTemplateRequiresAssuranceAttestationOnStandardStrict(t *testing.T) {
+func TestShipVerificationTemplateRequiresAssuranceAttestationOnStandardStrict(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:final-closeout",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
 
-	// The attestation is now part of the closeout references list and is
-	// described as required on standard/strict — the ship gate enforces it via
-	// closeout_assurance_attestation_missing. Light preset still omits it.
+	// The attestation token keeps its `closeout:` prefix and is part of the
+	// ship-verification references list, described as required on standard/strict;
+	// the ship gate enforces it via the canonical ship_verification_assurance_attestation_missing
+	// reason code. Light preset still omits it.
 	assert.Contains(t, content, `- "closeout:assurance_complete=pass"`)
 	assert.Contains(t, content, "`closeout:assurance_complete=pass` is REQUIRED")
-	assert.Contains(t, content, "closeout_assurance_attestation_missing")
+	assert.Contains(t, content, "ship_verification_assurance_attestation_missing")
 	assert.Contains(t, content, "On light preset, omit it")
 }
 
@@ -263,7 +263,6 @@ func TestSpecComplianceReviewTemplateEmitsReviewContextOriginHandle(t *testing.T
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
 	assertSelectedS3ReviewPeerSet(t, content)
-	assertSelectedS3SuiteResultKeystone(t, content)
 	// The retired review_origin grammar must be gone from the review template.
 	assert.NotContains(t, content, "review_origin:skill=")
 	// The colliding next/handoff JSON name must never be emitted as the token.
@@ -283,7 +282,6 @@ func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
 	assert.Contains(t, content, "MUST be DISTINCT")
 	assertSelectedS3ReviewPeerSet(t, content)
-	assertSelectedS3SuiteResultKeystone(t, content)
 	assert.NotContains(t, content, "review_origin:skill=")
 	assert.NotContains(t, content, "review_context:skill=")
 }
@@ -305,18 +303,14 @@ func assertSelectedS3ReviewPeerSet(t *testing.T, content string) {
 	assert.Contains(
 		t,
 		normalized,
-		"includes spec-compliance-review, independent-review, and goal-verification",
+		"includes spec-compliance-review and independent-review",
 	)
 	assert.Contains(t, normalized, "adds code-quality-review when the workflow profile requires code-quality review")
 	assert.Contains(t, normalized, "adds security-review when the security control is selected")
-}
-
-func assertSelectedS3SuiteResultKeystone(t *testing.T, content string) {
-	t.Helper()
-
-	assert.Contains(t, content, "verification/suite-result.yaml")
-	assert.Contains(t, content, "run_summary_version")
-	assert.Contains(t, content, "Selected S3")
+	// The merged terminal gate replaces the retired suite-result keystone; review
+	// peers no longer consume or produce a shared suite-result.
+	assert.NotContains(t, normalized, "goal-verification")
+	assert.NotContains(t, content, "verification/suite-result.yaml")
 }
 
 func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
@@ -342,7 +336,7 @@ func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
 			assert.Contains(t, content, "SHARED change worktree")
 			assert.Contains(t, content, "context_origin:stage=review=<handle>")
 			assert.Contains(t, content, "MUST be DISTINCT")
-			assertSelectedS3SuiteResultKeystone(t, content)
+			assert.NotContains(t, content, "verification/suite-result.yaml")
 			assert.NotContains(t, content, "host-embedded")
 			assert.NotContains(t, content, "base reader that both review hosts")
 			assert.NotContains(t, content, "review_origin:skill=")
@@ -366,41 +360,39 @@ func TestPlanAuditTemplateEmitsPlanAndAuditOriginHandles(t *testing.T) {
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
-func TestGoalVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
+func TestShipVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:goal-verification",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "context_origin:stage=review=<handle>")
-	assertSelectedS3SuiteResultKeystone(t, content)
-	assert.Contains(t, content, "full_suite_digest")
-	assert.Contains(t, content, "Do not treat S2 execution proof, execution-summary, or an earlier full-suite")
-	assert.Contains(t, content, "only if you still produce or refresh the")
+	// The retired suite-result keystone is gone; the authoritative suite runs here.
+	assert.NotContains(t, content, "verification/suite-result.yaml")
 	assert.NotContains(t, content, "context_origin:stage=goal=<handle>")
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
-func TestGoalVerificationTemplateRequiresConfiguredGoLint(t *testing.T) {
+func TestShipVerificationTemplateRequiresConfiguredGoLint(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "`golangci-lint run ./...`")
 	assert.Contains(t, content, "block completion on new lint findings")
 }
 
-func TestFinalCloseoutTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T) {
+func TestShipVerificationTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:final-closeout",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
@@ -410,48 +402,51 @@ func TestFinalCloseoutTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T
 	assert.NotContains(t, content, "review_origin:skill=")
 }
 
-func TestFinalCloseoutTemplateRequiresReviewerIndependenceAndChainOrder(t *testing.T) {
+func TestShipVerificationTemplateRequiresReviewerIndependenceAndChainOrder(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:final-closeout",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
 
-	// Pattern-A presence attestation, now engine-consumed.
+	// Pattern-A presence attestation, now engine-consumed. The attestation token
+	// keeps its `closeout:` prefix; the reason code is the canonical ship_verification_*.
 	assert.Contains(t, content, `- "closeout:reviewer_independence=pass"`)
-	assert.Contains(t, content, "closeout_reviewer_independence_missing")
-	// Always-on final-ordering invariant with its own distinct reason code.
-	assert.Contains(t, content, "final-closeout >= every selected S3 review peer")
-	assert.Contains(t, content, "spec-compliance-review, independent-review, and goal-verification")
+	assert.Contains(t, content, "ship_verification_reviewer_independence_missing")
+	// Always-on terminal-ordering invariant with its own distinct reason code.
+	assert.Contains(t, content, "ship-verification >= every selected S3 review peer")
+	assert.Contains(t, content, "includes spec-compliance-review and independent-review")
 	assert.Contains(t, content, "code-quality-review when the workflow profile requires code-quality review")
 	assert.Contains(t, content, "adds security-review when the security control is selected")
-	assert.Contains(t, content, "goal-verification")
-	assert.Contains(t, content, "every selected S3 review skill has passing verification")
-	assert.NotContains(t, content, "both review skills have passing verification")
+	assert.Contains(t, content, "every selected S3 review peer match the current `run_version`")
+	assert.NotContains(t, content, "goal-verification")
 	assert.NotContains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
-	assert.Contains(t, content, "closeout_chain_order_invalid")
+	// The retired chain-order code is gone; the ordering invariant now fails closed
+	// with its own ship_verification_ordering_invalid code, not the generic
+	// ship_verification_evidence_missing.
+	assert.Contains(t, content, "ship_verification_ordering_invalid")
+	assert.NotContains(t, content, "ship_verification_evidence_missing")
+	assert.NotContains(t, content, "closeout_chain_order_invalid")
 	assert.Contains(t, content, "Advisory on light")
 }
 
-func TestGoalVerificationTemplateDocumentsPeerReviewInvariant(t *testing.T) {
+func TestShipVerificationTemplateDocumentsTerminalGateInvariant(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:goal-verification",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "At `S3_REVIEW` as one selected review peer")
-	assert.Contains(t, content, "It runs in parallel with the other")
-	assert.Contains(t, content, "Final-closeout")
-	assert.Contains(t, content, "at or after every selected S3 peer")
+	assert.Contains(t, content, "At `S3_REVIEW` as the LAST step")
+	assert.Contains(t, content, "It is the sole hard `G_ship`")
+	assert.Contains(t, content, "after the selected adversarial review peers have")
 	assert.NotContains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
-	assert.NotContains(t, content, "closeout_chain_order_invalid")
 }
 
 func TestWaveOrchestrationTemplateRequiresDegradedJustification(t *testing.T) {
@@ -488,7 +483,7 @@ func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 
 	// Templated governance skills should also use outlines.
 	for _, name := range []string{
-		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
@@ -608,8 +603,7 @@ func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 	t.Parallel()
 	templates := []string{
 		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/final-closeout/SKILL.md.tmpl",
-		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
@@ -631,8 +625,7 @@ func TestTemplatedGovernanceSkillFrontmatterIncludesDescription(t *testing.T) {
 	t.Parallel()
 	templates := []string{
 		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/final-closeout/SKILL.md.tmpl",
-		"skills/goal-verification/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/wave-orchestration/SKILL.md.tmpl",
@@ -764,8 +757,7 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 		"skills/tdd-governance/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/goal-verification/SKILL.md.tmpl",
-		"skills/final-closeout/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
@@ -918,17 +910,17 @@ func TestPlanningSkillsFollowArtifactDependencyOrder(t *testing.T) {
 func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "YAML sequence of strings only")
 	assert.Contains(t, content, "do not write structured maps under `references`")
 }
 
-func TestGoalVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
+func TestShipVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	// The prescribed scan must run on stock Windows: no perl, no BSD/macOS-incompatible
@@ -1059,8 +1051,7 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 		"skills/wave-orchestration/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/goal-verification/SKILL.md.tmpl",
-		"skills/final-closeout/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
 	}
 	for _, name := range templatedSkills {
 		content, err := Render(name, data)
@@ -1143,13 +1134,8 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 			wantRunSources: []string{"slipway evidence skill", "current `run_summary_version`"},
 		},
 		{
-			name:           "goal verification",
-			templatePath:   "skills/goal-verification/SKILL.md.tmpl",
-			wantRunSources: []string{"run_version: <current run_summary_version from slipway status --json>"},
-		},
-		{
-			name:           "final closeout",
-			templatePath:   "skills/final-closeout/SKILL.md.tmpl",
+			name:           "ship verification",
+			templatePath:   "skills/ship-verification/SKILL.md.tmpl",
 			wantRunSources: []string{"run_version: <current run_summary_version from slipway status --json>"},
 		},
 	}
@@ -1182,26 +1168,18 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 
 func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	t.Parallel()
-	// Verify shared verification doctrine renders in goal-verification.
+	// Verify shared verification doctrine renders in ship-verification.
 	data := map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:goal-verification",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	}
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", data)
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", data)
 	require.NoError(t, err)
-	assert.Contains(t, content, `"should work"`, "banned-language partial should render into goal-verification")
+	assert.Contains(t, content, `"should work"`, "banned-language partial should render into ship-verification")
 	assert.Contains(t, content, "opinions, not evidence", "banned-language partial content missing")
 	assert.Contains(t, content, "Treat stale or missing verification as a blocker",
-		"verification-doctrine partial should render into goal-verification")
-
-	// Verify the same doctrine renders identically in final-closeout.
-	data["Trigger"] = "/slipway:final-closeout"
-	content2, err := Render("skills/final-closeout/SKILL.md.tmpl", data)
-	require.NoError(t, err)
-	assert.Contains(t, content2, `"should work"`, "banned-language partial should render into final-closeout")
-	assert.Contains(t, content2, "Treat stale or missing verification as a blocker",
-		"verification-doctrine partial should render into final-closeout")
+		"verification-doctrine partial should render into ship-verification")
 }
 
 func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
@@ -1235,12 +1213,14 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 		"run command missing fresh-reviewer pause mandate")
 	assert.Contains(t, content, "`independent-review`",
 		"run command missing independent-review handoff")
-	assert.Contains(t, content, "`goal-verification`",
-		"run command missing goal-verification selected peer handoff")
 	assert.Contains(t, content, "`security-review` when selected",
 		"run command missing selected security-review handoff")
-	assert.Contains(t, content, "`final-closeout` is the last closeout step",
-		"run command must classify final-closeout after selected peers")
+	assert.Contains(t, content, "`ship-verification` is the last terminal step",
+		"run command must classify ship-verification after selected peers")
+	assert.NotContains(t, content, "`goal-verification`",
+		"run command must not name the retired goal-verification peer")
+	assert.NotContains(t, content, "`final-closeout`",
+		"run command must not name the retired final-closeout step")
 
 	assert.Contains(t, content, "Fresh Context Boundary Rule (HARD RULE)",
 		"run command missing fresh-context boundary rule")
@@ -1314,7 +1294,7 @@ func TestEvidenceCommandEntryUsesResultFileOnlyTaskSurface(t *testing.T) {
 	assertNoManualTaskEvidenceFlags(t, taskSection, "evidence command task section")
 }
 
-func TestEvidenceCommandContractScopesTaskLifecycleWhenSuiteResultIsPresent(t *testing.T) {
+func TestEvidenceCommandContractScopesTaskLifecycleAndDropsSuiteResult(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
@@ -1338,8 +1318,12 @@ func TestEvidenceCommandContractScopesTaskLifecycleWhenSuiteResultIsPresent(t *t
 			t.Parallel()
 
 			content := renderPromptSurfaceForTest(t, tt.templateName, "evidence", "command-evidence-body", tt.toolID)
-			assert.Contains(t, content, "slipway evidence suite-result",
-				"regression guard only applies while suite-result is part of the evidence surface")
+			// The suite-result subcommand is retired; the authoritative suite and
+			// SAST proof are produced by the terminal ship-verification gate.
+			assert.NotContains(t, content, "slipway evidence suite-result",
+				"the retired suite-result subcommand must not be advertised")
+			assert.NotContains(t, content, "### `evidence suite-result`",
+				"the retired suite-result flag section must be removed")
 
 			contractStart := strings.Index(content, "## Contract")
 			require.NotEqual(t, -1, contractStart, "evidence command surface missing Contract section")
@@ -1352,8 +1336,8 @@ func TestEvidenceCommandContractScopesTaskLifecycleWhenSuiteResultIsPresent(t *t
 				"the S2 lifecycle precondition must be scoped to evidence task")
 			assert.NotContains(t, contract, "- Only valid for an active change in `S2_IMPLEMENT`",
 				"the shared Contract section must not make the whole evidence command S2-only")
-			assert.Contains(t, contract, "`evidence suite-result` records full-suite and SAST proof/digest references",
-				"the Contract section should keep suite-result review semantics visible")
+			assert.Contains(t, contract, "ship-verification",
+				"the Contract section should point full-suite/SAST proof at ship-verification")
 		})
 	}
 }
@@ -1426,40 +1410,6 @@ func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T
 		"wave-orchestration skill must forbid manual runtime task JSON edits")
 }
 
-func TestFinalCloseoutSkillDocumentsGoalVerificationReuseContract(t *testing.T) {
-	t.Parallel()
-
-	content, err := Render("skills/final-closeout/SKILL.md.tmpl", map[string]string{
-		"ToolID":  "claude",
-		"Trigger": "/slipway:final-closeout",
-	})
-	require.NoError(t, err)
-	flat := strings.Join(strings.Fields(content), " ")
-
-	assert.Contains(t, content, "## Goal-Verification Reuse Branch")
-	assert.Contains(t, content, "closeout:goal_verification_reuse=pass")
-	assert.Contains(t, content, "closeout:goal_verification_reuse_run_version=<current run_version>")
-	assert.Contains(t, content, "slipway validate --json")
-	assert.Contains(t, content, "captured at or after the latest execution")
-	assert.Contains(t, content, "Prefer this branch before rerunning duplicate full-suite or SAST proof")
-	assert.Contains(t, content, "engine-visible state")
-	assert.Contains(t, flat, "If the engine returns")
-	assert.Contains(t, content, "closeout_goal_verification_reuse_invalid")
-	assert.Contains(t, content, "rerun the normal closeout proof instead")
-	assert.Contains(t, flat, "Do not override the engine's reuse")
-	assert.Contains(t, content, "manual freshness judgment")
-
-	reuseBranch := content
-	if start := strings.Index(content, "## Goal-Verification Reuse Branch"); start >= 0 {
-		reuseBranch = content[start:]
-	}
-	if end := strings.Index(reuseBranch, "## Assurance Artifact Verification"); end >= 0 {
-		reuseBranch = reuseBranch[:end]
-	}
-	assert.NotContains(t, reuseBranch, "`slipway run`")
-	assert.Contains(t, reuseBranch, "Present and Advance section below after explicit confirmation")
-}
-
 func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
 	t.Parallel()
 
@@ -1488,7 +1438,7 @@ func TestCodingDisciplineSkillKeepsFourPrinciplesAndDesignStance(t *testing.T) {
 	assert.Contains(t, content, "## Goal-Driven Execution")
 	assert.Contains(t, content, "`slipway-plan-audit`")
 	assert.Contains(t, content, "`slipway-tdd-governance`")
-	assert.Contains(t, content, "`slipway-goal-verification`")
+	assert.Contains(t, content, "`slipway-ship-verification`")
 	assert.Contains(t, content, "`slipway-independent-review`")
 }
 

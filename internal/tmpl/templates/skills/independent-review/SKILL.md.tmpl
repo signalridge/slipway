@@ -45,15 +45,6 @@ reviews.
 - Do NOT trust "no duplication" claims without searching for similar patterns.
 - If something "looks fine at a glance", treat that as a signal to inspect it line-by-line.
 
-## S3 Suite-Result Keystone
-Selected S3 reviewer freshness depends on
-`verification/suite-result.yaml`. Before recording a passing review verdict,
-confirm that file exists, is valid, and matches the current
-`run_summary_version`. It carries the shared reviewer input digests for the full
-suite and guardrail SAST proof. If it is absent, malformed, or from a different
-run version, stop and require fresh suite-result proof before this review is
-recorded; otherwise the engine will stale the selected reviewer set.
-
 ## Disk-Handoff Contract
 For bulky review artifacts, keep the coordinator thin:
 - Pass required-reading paths from `slipway next --json`; do not paste artifact

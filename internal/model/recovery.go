@@ -188,12 +188,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway instructions decision",
 		Class:           RecoveryClassSatisfyControl,
 	},
-	"closeout_goal_verification_reuse_invalid": {
-		Remediation:     "Final-closeout cannot safely reuse goal-verification evidence; re-run goal-verification, then re-run final-closeout.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRerunSkill,
-		Priority:        15,
-	},
 	"change_not_active": {
 		Remediation:     "Inspect active changes and ignore or remove skipped non-active records before re-running bulk finalization.",
 		CommandTemplate: "slipway status",
@@ -250,12 +244,12 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"high_risk_check_failed": {
-		Remediation:     "The high-risk safety check {subject} failed in goal-verification; fix the SAST findings, re-run goal-verification, and record `high_risk_check:{subject}=pass` in its References before continuing.",
+		Remediation:     "The high-risk safety check {subject} failed in ship-verification; fix the SAST findings, re-run ship-verification, and record `high_risk_check:{subject}=pass` in its References before continuing.",
 		CommandTemplate: "slipway validate --focus sast",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"high_risk_check_missing": {
-		Remediation:     "Record the required high-risk safety check {subject} from goal-verification: run SAST (e.g. `slipway validate --focus sast`), triage findings, then add `high_risk_check:{subject}=pass` to the goal-verification References (use `=fail` to block ship); then continue.",
+		Remediation:     "Record the required high-risk safety check {subject} from ship-verification: run SAST (e.g. `slipway validate --focus sast`), triage findings, then add `high_risk_check:{subject}=pass` to the ship-verification References (use `=fail` to block ship); then continue.",
 		CommandTemplate: "slipway validate --focus sast",
 		Class:           RecoveryClassSatisfyControl,
 	},
@@ -442,7 +436,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"required_skill_missing": {
-		Remediation:     "Run the {subject} governance skill and record its skill evidence, then advance. In S3 this means the profile-filtered selected peer skills reported by selected_review_skills: spec-compliance-review, independent-review, goal-verification, plus code-quality-review when selected by the workflow profile and security-review when selected by policy.",
+		Remediation:     "Run the {subject} governance skill and record its skill evidence, then advance. In S3 this means the profile-filtered selected peer skills reported by selected_review_skills: spec-compliance-review and independent-review, plus code-quality-review when selected by the workflow profile and security-review when selected by policy, together with the always-required ship-verification terminal gate.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
@@ -526,32 +520,35 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
-	"verification_evidence_missing": {
-		Remediation:     "Required verification evidence is missing; re-run goal-verification, then final-closeout before done.",
+	"ship_verification_evidence_missing": {
+		Remediation:     "Required ship-verification evidence is missing; re-run ship-verification before done.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        10,
 	},
-	"closeout_assurance_attestation_missing": {
+	"ship_verification_ordering_invalid": {
+		// Detail carries a colon-bearing sentence (the out-of-order peer name), so
+		// the remediation/command are static and recovery treats the detail as
+		// opaque to avoid a misleading subject split.
+		Remediation:     "Ship-verification is stamped before a selected S3 review peer; re-stamp the stale reviewer, then re-run ship-verification so it observes the final review evidence.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+		Priority:        20,
+	},
+	"ship_verification_assurance_attestation_missing": {
 		// Detail carries a colon-bearing sentence, so this remediation/command are
 		// static and recovery treats the detail as opaque to avoid a misleading
 		// subject split.
-		Remediation:     "Final-closeout did not record the closeout assurance attestation (closeout:assurance_complete=pass) required on standard/strict workflows; re-run final-closeout and record it.",
+		Remediation:     "Ship-verification did not record the assurance attestation (closeout:assurance_complete=pass) required on standard/strict workflows; re-run ship-verification and record it.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        20,
 	},
-	"closeout_reviewer_independence_missing": {
-		Remediation:     "Final-closeout did not record the reviewer-independence attestation (closeout:reviewer_independence=pass) required on standard/strict workflows; re-run final-closeout and record it.",
+	"ship_verification_reviewer_independence_missing": {
+		Remediation:     "Ship-verification did not record the reviewer-independence attestation (closeout:reviewer_independence=pass) required on standard/strict workflows; re-run ship-verification and record it.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        20,
-	},
-	"closeout_chain_order_invalid": {
-		Remediation:     "Final-closeout is not later than one or more selected S3 peers; re-run final-closeout after the profile-filtered selected S3 peer skills reported by selected_review_skills have fresh evidence: spec-compliance-review, independent-review, goal-verification, plus code-quality-review when selected by the workflow profile and security-review when selected by policy. goal-verification is an unordered S3 peer, not a serialized post-review step.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRerunSkill,
-		Priority:        15,
 	},
 	"context_origin_handle_invalid": {
 		Remediation:     "A governed stage recorded a missing or invalid context-origin handle; re-run the owning stage in a fresh native subagent so it records a valid context-origin handle.",

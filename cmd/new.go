@@ -278,7 +278,7 @@ func makeNewCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&preset, "preset", "", "Governance preset: light|standard|strict")
 	cmd.Flags().BoolVar(&discuss, "discuss", false, "Persist unresolved gray areas into context before execution")
-	cmd.Flags().BoolVar(&full, "full", false, "Require refreshed final-closeout evidence before ship")
+	cmd.Flags().BoolVar(&full, "full", false, "Require refreshed ship-verification evidence at the terminal gate before ship")
 	cmd.Flags().BoolVar(&trivial, "trivial", false, "Force complexity=trivial, minimize intake depth")
 	cmd.Flags().StringVar(&fromDoc, "from-doc", "", "Seed intake from a document path (PRD, RFC, etc.)")
 	cmd.Flags().StringVar(&workflowProfile, "profile", "", "Workflow profile: code|docs|research|config|meta")
@@ -819,7 +819,7 @@ displays inferred project context and asks for the description.
 Use --trivial to force complexity=trivial and minimize intake depth.
 Use --from-doc to seed intake from an existing document (PRD, RFC, etc.).
 Use --discuss to persist unresolved gray areas into context before execution.
-Use --full to require refreshed final-closeout evidence before ship.
+Use --full to require refreshed ship-verification evidence at the terminal gate before ship.
 
 JSON stdin classification (requires --json):
   Supply intent classification on stdin to override safe-degrade defaults:

@@ -58,7 +58,7 @@ then makes the CLI recompute whether those pieces still agree.
 | **Thin AI adapters** | Generated host-adapter files (Claude, Codex, Cursor, Gemini, OpenCode, Copilot, Kilo, Kiro, Pi, Qwen, Windsurf) route agents back to the CLI instead of becoming separate workflow engines. |
 | **Plain-language entry** | After `slipway init --tools <id>`, users can describe a change normally; the generated entry skill routes the agent into the governed lifecycle. |
 | **Current-worktree authority** | `status`, `validate`, and `next` recompute state from the owning worktree instead of trusting stale summaries or archived records. |
-| **Context isolation checks** | Plan audit, implementation, selected S3 review peers, repair, goal verification, and final closeout carry distinct context-origin evidence and ordering checks. |
+| **Context isolation checks** | Plan audit, implementation, selected S3 review peers, repair, and the terminal `ship-verification` gate carry distinct context-origin evidence and ordering checks. |
 | **Worktree-bound execution** | Discovery-heavy changes can run in a dedicated `.worktrees/<branch>` checkout; worktree path and branch binding are validated before execution continues. |
 | **Actual-edit wave audit** | Dependency-ordered waves can run in parallel, then Slipway audits real changed files, executor handles, dispatch mode, and scope containment after implementation. |
 | **Repo-owned audit trail** | `artifacts/changes/`, `.git/slipway/runtime/`, lifecycle events, and archived bundles keep the record inspectable after the session ends. |
@@ -156,7 +156,7 @@ red lines.
 | `S0_INTAKE` | Intent, scope, open questions, risk class, and initial authorization. |
 | `S1_PLAN` | Research, requirements, decision, task plan, and plan-audit evidence. |
 | `S2_IMPLEMENT` | Dependency-ordered waves, changed files, and task evidence. |
-| `S3_REVIEW` | Selected peer reviews, repair evidence, goal verification, assurance, and final closeout. |
+| `S3_REVIEW` | Selected peer reviews, repair evidence, and a terminal `ship-verification` gate (one authoritative full suite, acceptance proof, freshness recheck, assurance, and reviewer-independence attestation). |
 | `done` | Terminal archive under `artifacts/changes/archived/<slug>/`. |
 
 `change.yaml` owns current lifecycle authority. Markdown artifacts explain the
@@ -174,8 +174,8 @@ Slipway follows three project rules:
 - **One current authority.** `change.yaml` owns lifecycle state; logs and
   Markdown support it but never replace it.
 - **Separated contexts, checked later.** Authoring, audit, review, repair, and
-  closeout evidence are recorded as separate participants; the gate checks that
-  the independence chain did not collapse.
+  ship-verification evidence are recorded as separate participants; the gate
+  checks that the independence chain did not collapse.
 - **Human-readable, machine-checkable.** People can review the artifacts, while
   the CLI re-derives freshness from structured inputs.
 - **Smallest useful control plane.** Host adapters stay thin; governance lives
@@ -195,7 +195,7 @@ trusting. These are the implementation axes that make a faked "done" fail:
 | Axis | Engine behavior |
 | --- | --- |
 | Attested fresh context | Review, plan audit, repair, and closeout records carry distinct context-origin evidence and ordering checks. |
-| Tamper-evident evidence | Freshness is derived from changed files, artifacts, run-summary version, suite-result records, and runtime task evidence, not from a file saying `pass`. |
+| Tamper-evident evidence | Freshness is derived from changed files, artifacts, run-summary version, the terminal `ship-verification` suite run, and runtime task evidence, not from a file saying `pass`. |
 | Two-sided parallel safety | Planned file-disjoint waves are followed by audits of the actual changed files, executor handles, dispatch mode, and scope contract. |
 | Scope containment | `target_files` and disclosed exemptions are checked against the real diff; out-of-lane edits fail closed. |
 | Drift-aware recovery | Plan or evidence drift reopens the change in place and `slipway next` names the forward repair command. |
@@ -258,12 +258,12 @@ Exported generated skill rows are pinned by public skill directory:
 `slipway/SKILL.md`, `slipway-ci-triage/SKILL.md`,
 `slipway-code-quality-review/SKILL.md`, `slipway-codebase-mapping/SKILL.md`,
 `slipway-coding-discipline/SKILL.md`, `slipway-context-assembly/SKILL.md`,
-`slipway-coverage-analysis/SKILL.md`, `slipway-final-closeout/SKILL.md`,
-`slipway-git-recovery/SKILL.md`, `slipway-goal-verification/SKILL.md`,
+`slipway-coverage-analysis/SKILL.md`, `slipway-git-recovery/SKILL.md`,
 `slipway-incident-response/SKILL.md`, `slipway-independent-review/SKILL.md`,
 `slipway-intake-clarification/SKILL.md`, `slipway-plan-audit/SKILL.md`,
 `slipway-research-orchestration/SKILL.md`,
 `slipway-root-cause-tracing/SKILL.md`, `slipway-security-review/SKILL.md`,
+`slipway-ship-verification/SKILL.md`,
 `slipway-spec-compliance-review/SKILL.md`, `slipway-spec-trace/SKILL.md`,
 `slipway-tdd-governance/SKILL.md`, `slipway-test-design/SKILL.md`,
 `slipway-wave-orchestration/SKILL.md`, and

@@ -1,14 +1,11 @@
 package progression
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	reviewengine "github.com/signalridge/slipway/internal/engine/review"
@@ -54,8 +51,11 @@ func loadRuntimeGovernanceInputs(root string, change model.Change) (runtimeGover
 	}, nil
 }
 
-// FinalCloseoutEvidenceRequired returns whether final-closeout is required as
-// closeout governance evidence for the resolved policy.
+// FinalCloseoutEvidenceRequired returns whether the closeout-conditional ship
+// governance evidence is required for the resolved policy. The merged
+// ship-verification gate is always required at S3 regardless of this value; the
+// helper is retained for the registry's CloseoutConditional filtering and for
+// caller-signature stability.
 func FinalCloseoutEvidenceRequired(policy governance.PresetPolicy) bool {
 	return policy.CloseoutRefreshRequired || policy.EffectivePreset != model.WorkflowPresetLight
 }
@@ -157,16 +157,6 @@ func loadFreshPassingRecordsForSkills(
 	return loadFreshPassingRecordsForSkillsWithRequirement(root, change, skillNames, summary, existing, true)
 }
 
-func loadOptionalFreshPassingRecordsForSkills(
-	root string,
-	change model.Change,
-	skillNames []string,
-	summary *model.ExecutionSummary,
-	existing map[string]model.VerificationRecord,
-) (map[string]model.VerificationRecord, []model.ReasonCode, error) {
-	return loadFreshPassingRecordsForSkillsWithRequirement(root, change, skillNames, summary, existing, false)
-}
-
 func loadFreshPassingRecordsForSkillsWithRequirement(
 	root string,
 	change model.Change,
@@ -252,77 +242,50 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	}
 	verifyPassingSkills := cloneVerificationRecords(readiness.PassingSkills)
 	selectedReviewSkills := selectedReviewSkillsForAuthority(reviewAuthority)
-	goalPassing, goalSkillBlockers, err := loadFreshPassingRecordsForSkills(
+	shipPassing, shipSkillBlockers, err := loadFreshPassingRecordsForSkills(
 		root,
 		change,
-		[]string{SkillGoalVerification},
+		[]string{SkillShipVerification},
 		readiness.ExecutionSummary,
 		verifyPassingSkills,
 	)
 	if err != nil {
 		return ShipAuthority{}, err
 	}
-	for skillName, record := range goalPassing {
-		verifyPassingSkills[skillName] = record
-	}
-	closeoutPassing, closeoutSkillBlockers, err := loadOptionalFreshPassingRecordsForSkills(
-		root,
-		change,
-		[]string{SkillFinalCloseout},
-		readiness.ExecutionSummary,
-		verifyPassingSkills,
-	)
-	if err != nil {
-		return ShipAuthority{}, err
-	}
-	for skillName, record := range closeoutPassing {
+	for skillName, record := range shipPassing {
 		verifyPassingSkills[skillName] = record
 	}
 	// Assurance attestation is required on every standard/strict effective preset,
-	// matching the Layer 2 floor (AssuranceContractBlockers
-	// and the done gate) — NOT CloseoutRefreshRequired. The latter also trips for
-	// light + quality_mode=full, where assurance.md is optional and the closeout
+	// matching the Layer 2 floor (AssuranceContractBlockers and the done gate) —
+	// NOT CloseoutRefreshRequired. The latter also trips for light +
+	// quality_mode=full, where assurance.md is optional and the ship-verification
 	// template instructs light to omit the reference; gating on it would block a
-	// valid light/full closeout and, conversely, miss a plain standard closeout
+	// valid light/full ship verification and, conversely, miss a plain standard one
 	// (CloseoutRefreshRequired is false there). EffectivePreset keeps both layers
-	// consistent.
+	// consistent. The attestation now lives on the single ship-verification record.
 	assuranceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
-	attestationBlockers := closeoutAssuranceAttestationBlockers(verifyPassingSkills, assuranceRequired)
-	// P1 (issue #47 follow-on): independence facets gated on the effective preset,
-	// matching the assurance attestation floor — required on standard/strict,
-	// advisory (omitted) on light.
+	attestationBlockers := shipAssuranceAttestationBlockers(verifyPassingSkills, assuranceRequired)
+	// Independence facets gated on the effective preset, matching the assurance
+	// attestation floor — required on standard/strict, advisory (omitted) on light.
 	independenceRequired := inputs.Policy.EffectivePreset != model.WorkflowPresetLight
-	independencePresenceBlockers := closeoutReviewerIndependenceBlockers(verifyPassingSkills, independenceRequired)
-	chainOrderBlockers := closeoutChainOrderBlockers(
+	independencePresenceBlockers := shipReviewerIndependenceBlockers(verifyPassingSkills, independenceRequired)
+	// The single retained ordering invariant: ship-verification must be timestamped
+	// at or after every selected review peer (spec/code/independent/security). The
+	// retired goal↔closeout chain-order and proof-reuse edges are gone. This is a
+	// causal-validity invariant — did the terminal gate observe the FINAL review
+	// evidence rather than precede it? — not a quality attestation, so it is
+	// enforced on every preset with no light carveout, unlike the assurance and
+	// reviewer-independence attestation facets above.
+	orderingBlockers := shipReviewSetOrderingBlockers(
 		verifyPassingSkills,
 		reviewAuthority.PassingSkills,
 		selectedReviewSkills,
-		independenceRequired,
-	)
-	reuseBlockers := closeoutGoalVerificationReuseBlockers(
-		root,
-		change,
-		verifyPassingSkills,
-		reviewAuthority.PassingSkills,
-		readiness.ExecutionSummary,
-	)
-	reviewSetFinalizationBlockers := s3ReviewSetFinalizationBlockers(
-		root,
-		change,
-		verifyPassingSkills,
-		reviewAuthority.PassingSkills,
-		selectedReviewSkills,
-		readiness.ExecutionSummary,
-		independenceRequired,
 	)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
-	verifySkillBlockers = append(verifySkillBlockers, goalSkillBlockers...)
-	verifySkillBlockers = append(verifySkillBlockers, closeoutSkillBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, shipSkillBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, attestationBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, independencePresenceBlockers...)
-	verifySkillBlockers = append(verifySkillBlockers, chainOrderBlockers...)
-	verifySkillBlockers = append(verifySkillBlockers, reuseBlockers...)
-	verifySkillBlockers = append(verifySkillBlockers, reviewSetFinalizationBlockers...)
+	verifySkillBlockers = append(verifySkillBlockers, orderingBlockers...)
 
 	manifestOK, manifestBlockers := ValidateChangeYamlR0(
 		filepath.Join(inputs.Paths.GovernedBundleDir, "change.yaml"),
@@ -333,22 +296,24 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 		len(reviewAuthority.Blockers) == 0 &&
 		ComputeVerificationReadiness(verifyPassingSkills, FinalCloseoutEvidenceRequired(inputs.Policy))
 	requiredActions := cloneRequiredActions(readiness.RequiredActions)
-	highRiskChecks := ExtractHighRiskChecks(verifyPassingSkills)
+	// G_ship's guardrail high-risk satisfaction is owned SOLELY by the
+	// ship-verification record (REQ-005). Extracting over the whole passing-skill
+	// map would let any selected review peer's record satisfy the SAST safety
+	// baseline, contradicting the ship-verification template's "no other
+	// satisfy-path" contract and diluting the gate's ownership. Scope to ship only.
+	highRiskChecks := extractShipVerificationHighRiskChecks(verifyPassingSkills)
 
 	unresolved := append([]model.ReasonCode{}, readiness.Blockers...)
 	unresolved = append(unresolved, model.ReasonCodesFromSpecs(manifestBlockers)...)
-	unresolved = append(unresolved, goalSkillBlockers...)
-	unresolved = append(unresolved, closeoutSkillBlockers...)
+	unresolved = append(unresolved, shipSkillBlockers...)
 	// Surface the attestation blocker as an actionable G_ship reason — the same
 	// channel the Layer 2 placeholder blocker travels (readiness.Blockers). Left
 	// only in verifySkillBlockers it would flip verificationReady but EvaluateGShip
-	// would emit only the generic verification_evidence_missing, hiding the
-	// specific, actionable closeout_assurance_attestation_missing code.
+	// would emit only the generic ship_verification_evidence_missing, hiding the
+	// specific, actionable ship_verification_assurance_attestation_missing code.
 	unresolved = append(unresolved, attestationBlockers...)
 	unresolved = append(unresolved, independencePresenceBlockers...)
-	unresolved = append(unresolved, chainOrderBlockers...)
-	unresolved = append(unresolved, reuseBlockers...)
-	unresolved = append(unresolved, reviewSetFinalizationBlockers...)
+	unresolved = append(unresolved, orderingBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	return ShipAuthority{
@@ -367,371 +332,130 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	}, nil
 }
 
-// assuranceCompleteReference is the AI-driven closeout attestation: the host's
-// structured judgment, recorded in the final-closeout verification record, that
-// every required assurance section is genuinely authored rather than scaffold.
-const assuranceCompleteReference = "closeout:assurance_complete=pass"
+// shipAssuranceCompleteReference is the AI-driven ship attestation: the host's
+// structured judgment, recorded in the ship-verification record, that every
+// required assurance section is genuinely authored rather than scaffold.
+const shipAssuranceCompleteReference = "closeout:assurance_complete=pass"
 
-const closeoutGoalVerificationReuseReference = "closeout:goal_verification_reuse=pass"
-const closeoutGoalVerificationReuseRunVersionPrefix = "closeout:goal_verification_reuse_run_version="
-const closeoutRecoveryRemediation = "rerun the selected reviewer set, then rerun final-closeout"
-
-type proofReuseEdge struct {
-	sourceSkill                         string
-	sourceLabel                         string
-	consumerSkill                       string
-	consumerLabel                       string
-	reuseRunVersion                     int
-	requireExecutionSummaryFreshness    bool
-	requireSourceAfterExecutionEvidence bool
-	digestChecks                        []proofReuseDigestCheck
-	blocker                             func(string) model.ReasonCode
-}
-
-type proofReuseDigestCheck struct {
-	skillName string
-	label     string
-}
-
-// closeoutAssuranceAttestationBlockers enforces Layer 1 of issue #47. When
-// assurance is required for the change's effective preset (standard/strict),
-// the passing final-closeout record must carry the assurance-complete
-// attestation. The kernel does not re-read assurance prose here; it only
-// requires the AI's attestation to be present, so a closeout cannot reach ship
-// without the host explicitly vouching for the assurance content. Missing
-// standard/strict final-closeout evidence is the same attestation failure as a
-// passing-but-unattested record. Light preset (assurance optional) is
-// unaffected.
-func closeoutAssuranceAttestationBlockers(passingSkills map[string]model.VerificationRecord, assuranceRequired bool) []model.ReasonCode {
+// shipAssuranceAttestationBlockers enforces the re-homed assurance attestation.
+// When assurance is required for the change's effective preset (standard/strict),
+// the passing ship-verification record must carry the assurance-complete
+// attestation. The kernel does not re-read assurance prose here; it only requires
+// the AI's attestation to be present, so ship-verification cannot reach the
+// governed ship decision without the host explicitly vouching for the assurance
+// content. A missing standard/strict ship-verification record is the same
+// attestation failure as a passing-but-unattested one. Light preset (assurance
+// optional) is unaffected.
+func shipAssuranceAttestationBlockers(passingSkills map[string]model.VerificationRecord, assuranceRequired bool) []model.ReasonCode {
 	if !assuranceRequired {
 		return nil
 	}
-	record, ok := passingSkills[SkillFinalCloseout]
+	record, ok := passingSkills[SkillShipVerification]
 	if !ok {
-		return []model.ReasonCode{closeoutAssuranceAttestationMissingBlocker()}
+		return []model.ReasonCode{shipAssuranceAttestationMissingBlocker()}
 	}
 	for _, ref := range record.References {
-		if strings.TrimSpace(ref) == assuranceCompleteReference {
+		if strings.TrimSpace(ref) == shipAssuranceCompleteReference {
 			return nil
 		}
 	}
-	return []model.ReasonCode{closeoutAssuranceAttestationMissingBlocker()}
+	return []model.ReasonCode{shipAssuranceAttestationMissingBlocker()}
 }
 
-func closeoutAssuranceAttestationMissingBlocker() model.ReasonCode {
+func shipAssuranceAttestationMissingBlocker() model.ReasonCode {
 	return model.NewReasonCode(
-		"closeout_assurance_attestation_missing",
-		"final-closeout must record "+assuranceCompleteReference+" on standard/strict",
+		"ship_verification_assurance_attestation_missing",
+		"ship-verification must record "+shipAssuranceCompleteReference+" on standard/strict",
 	)
 }
 
-func closeoutGoalVerificationReuseBlockers(
-	root string,
-	change model.Change,
-	passingSkills map[string]model.VerificationRecord,
-	reviewPassingSkills map[string]model.VerificationRecord,
-	summary *model.ExecutionSummary,
-) []model.ReasonCode {
-	closeoutRecord, ok := passingSkills[SkillFinalCloseout]
-	if !ok || !closeoutRecord.IsPassing() {
-		return nil
-	}
-	if !referencesContain(closeoutRecord.References, closeoutGoalVerificationReuseReference) {
-		return nil
-	}
-	reuseRunVersion, ok, err := closeoutGoalVerificationReuseRunVersion(closeoutRecord.References)
-	if err != nil {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(err.Error())}
-	}
-	if !ok {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker(
-			"final-closeout must record " + closeoutGoalVerificationReuseRunVersionPrefix + "<run_version>",
-		)}
-	}
-	if reuseRunVersion < 1 {
-		return []model.ReasonCode{closeoutGoalVerificationReuseInvalidBlocker("reuse run_version must be >= 1")}
-	}
-
-	blockers := proofReuseEdgeBlockers(root, change, passingSkills, summary, proofReuseEdge{
-		sourceSkill:                         SkillGoalVerification,
-		sourceLabel:                         "goal-verification",
-		consumerSkill:                       SkillFinalCloseout,
-		consumerLabel:                       "final-closeout",
-		reuseRunVersion:                     reuseRunVersion,
-		requireExecutionSummaryFreshness:    true,
-		requireSourceAfterExecutionEvidence: true,
-		digestChecks: []proofReuseDigestCheck{
-			{skillName: SkillGoalVerification, label: "goal-verification"},
-			{skillName: SkillFinalCloseout, label: "final-closeout"},
-		},
-		blocker: closeoutGoalVerificationReuseInvalidBlocker,
-	})
-	if len(blockers) > 0 {
-		return blockers
-	}
-	return nil
-}
-
-func proofReuseEdgeBlockers(
-	root string,
-	change model.Change,
-	passingSkills map[string]model.VerificationRecord,
-	summary *model.ExecutionSummary,
-	edge proofReuseEdge,
-) []model.ReasonCode {
-	blocker := edge.blocker
-	if blocker == nil {
-		blocker = func(detail string) model.ReasonCode {
-			return model.NewReasonCode("proof_reuse_invalid", strings.TrimSpace(detail))
-		}
-	}
-	if edge.reuseRunVersion < 1 {
-		return []model.ReasonCode{blocker("reuse run_version must be >= 1")}
-	}
-
-	sourceRecord, ok := passingSkills[edge.sourceSkill]
-	if !ok || !sourceRecord.IsPassing() {
-		return []model.ReasonCode{blocker(
-			proofReuseLabel(edge.sourceLabel, edge.sourceSkill) + " must be passing before " +
-				proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " can reuse it",
-		)}
-	}
-	consumerRecord, ok := passingSkills[edge.consumerSkill]
-	if !ok || !consumerRecord.IsPassing() {
-		return []model.ReasonCode{blocker(
-			proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " must be passing before it can reuse " +
-				proofReuseLabel(edge.sourceLabel, edge.sourceSkill),
-		)}
-	}
-	if sourceRecord.RunVersion != edge.reuseRunVersion {
-		return []model.ReasonCode{blocker(
-			fmtReuseRunMismatch(proofReuseLabel(edge.sourceLabel, edge.sourceSkill), edge.reuseRunVersion, sourceRecord.RunVersion),
-		)}
-	}
-	if consumerRecord.RunVersion != edge.reuseRunVersion {
-		return []model.ReasonCode{blocker(
-			fmtReuseRunMismatch(proofReuseLabel(edge.consumerLabel, edge.consumerSkill), edge.reuseRunVersion, consumerRecord.RunVersion),
-		)}
-	}
-	if !state.ExecutionSummaryReady(summary) {
-		return []model.ReasonCode{blocker(
-			"execution-summary.yaml must be ready before " +
-				proofReuseLabel(edge.consumerLabel, edge.consumerSkill) + " can reuse " +
-				proofReuseLabel(edge.sourceLabel, edge.sourceSkill),
-		)}
-	}
-	if summary.RunSummaryVersion != edge.reuseRunVersion {
-		return []model.ReasonCode{blocker(
-			fmtReuseRunMismatch("execution-summary", edge.reuseRunVersion, summary.RunSummaryVersion),
-		)}
-	}
-	if edge.requireSourceAfterExecutionEvidence {
-		latestExecutionEvidenceAt := summary.LatestRelevantUpdateAt().UTC()
-		if !latestExecutionEvidenceAt.IsZero() && sourceRecord.Timestamp.UTC().Before(latestExecutionEvidenceAt) {
-			return []model.ReasonCode{blocker(
-				proofReuseLabel(edge.sourceLabel, edge.sourceSkill) +
-					" timestamp must be at or after latest execution evidence",
-			)}
-		}
-	}
-	if edge.requireExecutionSummaryFreshness {
-		diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
-		freshness := state.ProjectExecutionFreshnessForState(model.StateS3Review, diagnostics)
-		if freshness != ctxpack.EvidenceFreshnessFresh {
-			return []model.ReasonCode{blocker(
-				"execution-summary freshness must be fresh, got " + string(freshness),
-			)}
-		}
-	}
-	for _, check := range edge.digestChecks {
-		label := proofReuseLabel(check.label, check.skillName)
-		blockers, err := skillDigestFreshnessBlockersWithSummary(root, change, check.skillName, summary)
-		if err != nil {
-			return []model.ReasonCode{blocker(label + " digest cannot be evaluated: " + err.Error())}
-		}
-		if len(blockers) > 0 {
-			return []model.ReasonCode{blocker(label + " inputs changed: " + strings.Join(blockers, ","))}
-		}
-	}
-	return nil
-}
-
-func proofReuseLabel(label, fallback string) string {
-	if trimmed := strings.TrimSpace(label); trimmed != "" {
-		return trimmed
-	}
-	return strings.TrimSpace(fallback)
-}
-
-// closeoutReviewerIndependenceReference is the engine-consumed presence facet of
-// the P1 independence contract: the final-closeout record's structured
-// attestation that the closeout judgment was produced by an independent reviewer
-// context. Pattern-A presence (analogue of assuranceCompleteReference): the
-// kernel only requires the token to be present, it does not re-derive
+// shipReviewerIndependenceReference is the engine-consumed presence facet of the
+// independence contract: the ship-verification record's structured attestation
+// that the ship judgment was produced by an independent reviewer context. The
+// kernel only requires the token to be present; it does not re-derive
 // independence here.
-const closeoutReviewerIndependenceReference = "closeout:reviewer_independence=pass"
+const shipReviewerIndependenceReference = "closeout:reviewer_independence=pass"
 
-// closeoutReviewerIndependenceBlockers enforces the P1 presence facet (REQ-001).
-// When required (standard/strict effective preset), the passing final-closeout
+// shipReviewerIndependenceBlockers enforces the independence presence facet. When
+// required (standard/strict effective preset), the passing ship-verification
 // record must carry the reviewer-independence attestation; a missing record or a
 // record lacking the token is a fail-closed blocker. Advisory (returns nil) on
 // light.
-func closeoutReviewerIndependenceBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
+func shipReviewerIndependenceBlockers(passingSkills map[string]model.VerificationRecord, required bool) []model.ReasonCode {
 	if !required {
 		return nil
 	}
-	record, ok := passingSkills[SkillFinalCloseout]
+	record, ok := passingSkills[SkillShipVerification]
 	if !ok {
-		return []model.ReasonCode{closeoutReviewerIndependenceMissingBlocker()}
+		return []model.ReasonCode{shipReviewerIndependenceMissingBlocker()}
 	}
 	for _, ref := range record.References {
-		if strings.TrimSpace(ref) == closeoutReviewerIndependenceReference {
+		if strings.TrimSpace(ref) == shipReviewerIndependenceReference {
 			return nil
 		}
 	}
-	return []model.ReasonCode{closeoutReviewerIndependenceMissingBlocker()}
+	return []model.ReasonCode{shipReviewerIndependenceMissingBlocker()}
 }
 
-func closeoutReviewerIndependenceMissingBlocker() model.ReasonCode {
+func shipReviewerIndependenceMissingBlocker() model.ReasonCode {
 	return model.NewReasonCode(
-		"closeout_reviewer_independence_missing",
-		"final-closeout must record "+closeoutReviewerIndependenceReference+" on standard/strict; rerun final-closeout",
+		"ship_verification_reviewer_independence_missing",
+		"ship-verification must record "+shipReviewerIndependenceReference+" on standard/strict; rerun ship-verification",
 	)
 }
 
-func s3ReviewSetFinalizationBlockers(
-	root string,
-	change model.Change,
+// shipReviewSetOrderingBlockers enforces the single retained S3 ordering
+// invariant: ship-verification must be timestamped at or after every selected
+// review peer (spec/code/independent/security). ship-verification is the terminal
+// gate, so it must observe the final review evidence rather than precede it. Each
+// peer is compared only when BOTH the ship record and that peer's record are
+// present, passing, and carry a non-zero timestamp; a genuinely absent record is
+// owned by the required-skill-missing blocker. Enforced on every preset: a ship
+// verdict that structurally predates a selected peer never observed that peer's
+// final evidence, which is fail-open regardless of blast radius, so unlike the
+// assurance/independence attestation facets there is no light advisory carveout.
+func shipReviewSetOrderingBlockers(
 	passingSkills map[string]model.VerificationRecord,
 	reviewPassingSkills map[string]model.VerificationRecord,
 	selectedReviewSkills []string,
-	summary *model.ExecutionSummary,
-	required bool,
 ) []model.ReasonCode {
-	closeoutRecord, closeoutOK := passingSkills[SkillFinalCloseout]
-	if !closeoutOK || !closeoutRecord.IsPassing() {
-		if required {
-			return []model.ReasonCode{model.NewReasonCode("required_skill_missing", SkillFinalCloseout)}
-		}
+	shipRecord, ok := passingSkills[SkillShipVerification]
+	if !ok || !shipRecord.IsPassing() || shipRecord.Timestamp.IsZero() {
 		return nil
 	}
-	cycleRunVersion, err := reviewerDigestCycleRunVersion(root, change, summary)
-	if err != nil {
-		return []model.ReasonCode{model.NewReasonCode("required_skill_not_ready", SkillFinalCloseout+":suite_result_invalid("+err.Error()+")")}
-	}
-	if cycleRunVersion < 1 {
-		return []model.ReasonCode{model.NewReasonCode("required_skill_not_ready", SkillFinalCloseout+":suite_result_missing")}
-	}
-
-	var blockers []model.ReasonCode
-	if closeoutRecord.RunVersion != cycleRunVersion {
-		blockers = append(blockers, runVersionMismatchBlocker(SkillFinalCloseout, cycleRunVersion, closeoutRecord.RunVersion))
-	}
-
-	reviewRecords := mergeContextHandleRecords(reviewPassingSkills, passingSkills)
-	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
-		record, ok := reviewRecords[skillName]
-		if !ok {
-			blockers = append(blockers, model.NewReasonCode("required_skill_missing", skillName))
-			continue
-		}
-		if !record.IsPassing() {
-			blockers = append(blockers, model.NewReasonCode(requiredSkillReadinessBlockerCode(record), skillName))
-			continue
-		}
-		if record.RunVersion != cycleRunVersion {
-			blockers = append(blockers, runVersionMismatchBlocker(skillName, cycleRunVersion, record.RunVersion))
-		}
-	}
-
-	reviewDigestBlockers, err := selectedReviewerDigestFreshnessBlockers(root, change, selectedReviewSkills, cycleRunVersion, summary)
-	if err != nil {
-		return []model.ReasonCode{model.NewReasonCode("required_skill_not_ready", SkillFinalCloseout+":review_digest_unavailable("+err.Error()+")")}
-	}
-	blockers = append(blockers, reviewDigestBlockers...)
-	if digestBlockers, err := skillDigestFreshnessBlockersWithSummary(root, change, SkillFinalCloseout, summary); err != nil {
-		return []model.ReasonCode{model.NewReasonCode("required_skill_not_ready", SkillFinalCloseout+":digest_unavailable("+err.Error()+")")}
-	} else {
-		blockers = append(blockers, model.ReasonCodesFromSpecs(digestBlockers)...)
-	}
-	return model.NormalizeReasonCodes(blockers)
-}
-
-func selectedReviewerDigestFreshnessBlockers(
-	root string,
-	change model.Change,
-	selectedReviewSkills []string,
-	cycleRunVersion int,
-	summary *model.ExecutionSummary,
-) ([]model.ReasonCode, error) {
-	var changedInputs []string
-	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
-		changed, err := reviewerDigestFreshAtCycle(root, change, skillName, cycleRunVersion, summary)
-		if err != nil {
-			return nil, err
-		}
-		changedInputs = append(changedInputs, changed...)
-	}
-	changedInputs = stringutil.UniqueSorted(changedInputs)
-	if len(changedInputs) == 0 {
-		return nil, nil
-	}
-	var blockers []model.ReasonCode
-	// The current reviewer input model has shared suite inputs plus an
-	// undifferentiated workspace diff. When one selected reviewer digest changes,
-	// ownership cannot prove a narrower reviewer, so stale the full selected set.
-	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
-		blockers = append(blockers, model.ReasonCodesFromSpecs(staleSkillDigestBlockers(skillName, changedInputs))...)
-	}
-	return model.NormalizeReasonCodes(blockers), nil
-}
-
-func runVersionMismatchBlocker(skillName string, expected, got int) model.ReasonCode {
-	return model.NewReasonCode(
-		"required_skill_not_ready",
-		fmt.Sprintf("%s:run_version_mismatch(got=%d,want=%d)", skillName, got, expected),
-	)
-}
-
-// closeoutChainOrderBlockers enforces the folded S3 ordering invariant:
-// final-closeout must be strictly last relative to the unordered selected S3
-// peer set. Goal-verification is one S3 peer, so there is no structural review
-// <= goal-verification edge here. Each pair is compared only when BOTH records
-// are present, passing, and carry a non-zero timestamp; a genuinely absent
-// record is owned by the required-skill-missing blocker. Advisory (returns nil)
-// on light.
-func closeoutChainOrderBlockers(
-	passingSkills map[string]model.VerificationRecord,
-	reviewPassingSkills map[string]model.VerificationRecord,
-	selectedReviewSkills []string,
-	required bool,
-) []model.ReasonCode {
-	closeoutRecord, ok := passingSkills[SkillFinalCloseout]
-	if !ok || !closeoutRecord.IsPassing() || closeoutRecord.Timestamp.IsZero() {
-		return nil
-	}
-	if !required {
-		return nil
-	}
-	closeoutAt := closeoutRecord.Timestamp.UTC()
+	shipAt := shipRecord.Timestamp.UTC()
 	reviewRecords := mergeContextHandleRecords(reviewPassingSkills, passingSkills)
 	for _, skillName := range normalizeReviewSkillNames(selectedReviewSkills) {
 		reviewRecord, ok := reviewRecords[skillName]
 		if !ok || !reviewRecord.IsPassing() || reviewRecord.Timestamp.IsZero() {
 			continue
 		}
-		reviewAt := reviewRecord.Timestamp.UTC()
-		if reviewAt.After(closeoutAt) {
-			return []model.ReasonCode{closeoutChainOrderInvalidBlocker(
-				"final-closeout must be at or after selected reviewer evidence: " + skillName,
+		if reviewRecord.Timestamp.UTC().After(shipAt) {
+			return []model.ReasonCode{shipReviewSetOrderingInvalidBlocker(
+				"ship-verification must be at or after selected reviewer evidence: " + skillName,
 			)}
 		}
 	}
 	return nil
 }
 
-func closeoutChainOrderInvalidBlocker(detail string) model.ReasonCode {
-	return model.NewReasonCode("closeout_chain_order_invalid", appendCloseoutRecovery(detail))
+func shipReviewSetOrderingInvalidBlocker(detail string) model.ReasonCode {
+	return model.NewReasonCode("ship_verification_ordering_invalid", appendShipRecovery(detail))
+}
+
+// extractShipVerificationHighRiskChecks returns the guardrail high-risk check
+// results that satisfy G_ship, read ONLY from the ship-verification record. The
+// terminal gate owns the guardrail SAST safety baseline (REQ-005): a review
+// peer's record carrying a high_risk_check reference must NOT satisfy the gate,
+// so a sensitive-domain change cannot reach the ship decision unless
+// ship-verification itself recorded the passing baseline. A missing ship record
+// yields no checks, leaving G_ship blocked with high_risk_check_missing.
+func extractShipVerificationHighRiskChecks(passingSkills map[string]model.VerificationRecord) map[string]bool {
+	record, ok := passingSkills[SkillShipVerification]
+	if !ok {
+		return map[string]bool{}
+	}
+	return ExtractHighRiskChecks(map[string]model.VerificationRecord{SkillShipVerification: record})
 }
 
 // crossStageContextOwnedReviewStagesForSelectedSkills is the set of lattice
@@ -751,8 +475,8 @@ func crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills []
 }
 
 // crossStageContextParticipants builds the lattice participants for the requested
-// single-handle stages plus the executor handle set and the plan auditor handle.
-// Only present-and-passing records contribute a participant; an absent or
+// single-handle stages plus the executor handle set and each selected review
+// peer handle. Only present-and-passing records contribute a participant; an absent or
 // non-passing record contributes nothing and is silent (its absence is owned by
 // the required-skill-missing blocker, not this gate). A present-passing record
 // that yields no well-formed context-origin handle fails closed with
@@ -777,21 +501,6 @@ func crossStageContextParticipants(
 			set := model.ExecutorParticipantHandleSetFromVerification(waveRecord)
 			if len(set) > 0 {
 				participants[model.StageContextExecutor] = model.ContextParticipant{HandleSet: set}
-			}
-		}
-	}
-
-	// audit_origin <- S1 plan-audit record's audit_origin handle. A present
-	// plan-audit record with no well-formed audit_origin handle fails closed.
-	if _, want := stages[model.StageContextAuditOrigin]; want {
-		if record, ok := loadPresentPassingVerification(root, change.Slug, SkillPlanAudit); ok {
-			handle, ok := model.AuditOriginHandleFromVerification(record)
-			if !ok {
-				invalid = append(invalid, contextOriginHandleInvalidBlocker(
-					SkillPlanAudit+" ("+model.StageContextAuditOrigin+") recorded no well-formed context-origin handle",
-				))
-			} else {
-				participants[model.StageContextAuditOrigin] = model.ContextParticipant{Handle: handle.Handle}
 			}
 		}
 	}
@@ -838,11 +547,11 @@ func crossStageContextParticipants(
 	return participants, model.NormalizeReasonCodes(invalid)
 }
 
-// mergeContextHandleRecords overlays the verify-stage passing records (goal,
-// closeout) onto the review-stage passing records so the ship lattice can
-// resolve every single-handle stage from one map. The review records are the
-// selected-reviewer source the review gate already used; the verify records win
-// on key collision since they are the ship gate's own surface.
+// mergeContextHandleRecords overlays the terminal ship-verification passing
+// record onto the review-stage passing records so the ship lattice can resolve
+// every single-handle stage from one map. The review records are the
+// selected-reviewer source the review gate already used; the ship-verification
+// record wins on key collision since it is the ship gate's own surface.
 func mergeContextHandleRecords(
 	reviewPassingSkills map[string]model.VerificationRecord,
 	verifyPassingSkills map[string]model.VerificationRecord,
@@ -855,20 +564,6 @@ func mergeContextHandleRecords(
 		merged[skillName] = record
 	}
 	return merged
-}
-
-func loadPresentPassingVerification(root, slug, skillName string) (model.VerificationRecord, bool) {
-	record, err := state.LoadVerification(root, slug, skillName)
-	if err != nil {
-		// An absent record (or any load failure) contributes no participant and is
-		// silent here; record presence/freshness is owned by the
-		// required-skill-missing and digest gates, not the distinct-context lattice.
-		return model.VerificationRecord{}, false
-	}
-	if !record.IsPassing() {
-		return model.VerificationRecord{}, false
-	}
-	return record, true
 }
 
 // crossStageContextDistinctBlockers enforces the generalized P2 distinct-context
@@ -1088,51 +783,20 @@ func proofReuseWorkspacePaths(workspaceRoot, rel string) ([]string, bool, error)
 	return []string{filepath.Join(workspaceRoot, filepath.FromSlash(trimmed))}, true, nil
 }
 
-func closeoutGoalVerificationReuseRunVersion(references []string) (int, bool, error) {
-	for _, ref := range references {
-		trimmed := strings.TrimSpace(ref)
-		if !strings.HasPrefix(trimmed, closeoutGoalVerificationReuseRunVersionPrefix) {
-			continue
-		}
-		raw := strings.TrimSpace(strings.TrimPrefix(trimmed, closeoutGoalVerificationReuseRunVersionPrefix))
-		if raw == "" {
-			return 0, true, strconv.ErrSyntax
-		}
-		runVersion, err := strconv.Atoi(raw)
-		if err != nil {
-			return 0, true, err
-		}
-		return runVersion, true, nil
-	}
-	return 0, false, nil
-}
+// shipRecoveryRemediation is the recovery suffix for the ship ordering invariant:
+// the only fix is to re-run the selected reviewer set and then re-run
+// ship-verification so its timestamp observes the final review evidence.
+const shipRecoveryRemediation = "rerun the selected reviewer set, then rerun ship-verification"
 
-func referencesContain(references []string, needle string) bool {
-	for _, ref := range references {
-		if strings.TrimSpace(ref) == needle {
-			return true
-		}
-	}
-	return false
-}
-
-func closeoutGoalVerificationReuseInvalidBlocker(detail string) model.ReasonCode {
-	return model.NewReasonCode("closeout_goal_verification_reuse_invalid", appendCloseoutRecovery(detail))
-}
-
-func fmtReuseRunMismatch(subject string, expected, got int) string {
-	return subject + " run_version mismatch: expected=" + strconv.Itoa(expected) + " got=" + strconv.Itoa(got)
-}
-
-func appendCloseoutRecovery(detail string) string {
+func appendShipRecovery(detail string) string {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
-		return closeoutRecoveryRemediation
+		return shipRecoveryRemediation
 	}
-	if strings.Contains(detail, "goal-verification") && strings.Contains(detail, "final-closeout") {
+	if strings.Contains(detail, "ship-verification") {
 		return detail
 	}
-	return detail + "; " + closeoutRecoveryRemediation
+	return detail + "; " + shipRecoveryRemediation
 }
 
 func EvaluateReviewLayerBlockersFromNamedEvidence(

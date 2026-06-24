@@ -315,7 +315,13 @@ func listVerificationsInDir(dir string) (map[string]model.VerificationRecord, er
 		if !strings.HasSuffix(name, ".yaml") {
 			continue
 		}
-		if name == ExecutionSummaryFileName || name == WavePlanFileName || name == EvidenceDigestsFileName || name == "suite-result.yaml" {
+		// suite-result.yaml is the retired suite keystone (REQ-003): the shared
+		// keystone is gone and the authoritative suite now runs inside
+		// ship-verification. A pre-merge in-flight bundle may still carry an
+		// orphaned verification/suite-result.yaml; skip it (never consume it) so a
+		// dir read does not strict-decode a retired non-skill file and hard-error.
+		if name == ExecutionSummaryFileName || name == WavePlanFileName ||
+			name == EvidenceDigestsFileName || name == "suite-result.yaml" {
 			continue
 		}
 		skillName := strings.TrimSuffix(name, ".yaml")

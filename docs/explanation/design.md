@@ -23,8 +23,8 @@ summarizes the concepts that matter most when deciding whether to use Slipway.
 
 Slipway does not trust a verdict just because a file says `pass`. It derives
 freshness from authoritative inputs such as the current bundle, task plan,
-execution run version, selected review set, suite-result record, and runtime
-task evidence.
+execution run version, selected review set, the terminal `ship-verification`
+suite run, and runtime task evidence.
 
 That is why stale proof fails closed. Recovery is to rerun the owning stage,
 reviewer, or task evidence path, not to restamp files.
