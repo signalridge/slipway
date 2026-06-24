@@ -271,12 +271,15 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	independencePresenceBlockers := shipReviewerIndependenceBlockers(verifyPassingSkills, independenceRequired)
 	// The single retained ordering invariant: ship-verification must be timestamped
 	// at or after every selected review peer (spec/code/independent/security). The
-	// retired goal↔closeout chain-order and proof-reuse edges are gone.
+	// retired goal↔closeout chain-order and proof-reuse edges are gone. This is a
+	// causal-validity invariant — did the terminal gate observe the FINAL review
+	// evidence rather than precede it? — not a quality attestation, so it is
+	// enforced on every preset with no light carveout, unlike the assurance and
+	// reviewer-independence attestation facets above.
 	orderingBlockers := shipReviewSetOrderingBlockers(
 		verifyPassingSkills,
 		reviewAuthority.PassingSkills,
 		selectedReviewSkills,
-		independenceRequired,
 	)
 	verifySkillBlockers := append([]model.ReasonCode(nil), readiness.SkillBlockers...)
 	verifySkillBlockers = append(verifySkillBlockers, shipSkillBlockers...)
@@ -293,7 +296,12 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 		len(reviewAuthority.Blockers) == 0 &&
 		ComputeVerificationReadiness(verifyPassingSkills, FinalCloseoutEvidenceRequired(inputs.Policy))
 	requiredActions := cloneRequiredActions(readiness.RequiredActions)
-	highRiskChecks := ExtractHighRiskChecks(verifyPassingSkills)
+	// G_ship's guardrail high-risk satisfaction is owned SOLELY by the
+	// ship-verification record (REQ-005). Extracting over the whole passing-skill
+	// map would let any selected review peer's record satisfy the SAST safety
+	// baseline, contradicting the ship-verification template's "no other
+	// satisfy-path" contract and diluting the gate's ownership. Scope to ship only.
+	highRiskChecks := extractShipVerificationHighRiskChecks(verifyPassingSkills)
 
 	unresolved := append([]model.ReasonCode{}, readiness.Blockers...)
 	unresolved = append(unresolved, model.ReasonCodesFromSpecs(manifestBlockers)...)
@@ -402,16 +410,15 @@ func shipReviewerIndependenceMissingBlocker() model.ReasonCode {
 // gate, so it must observe the final review evidence rather than precede it. Each
 // peer is compared only when BOTH the ship record and that peer's record are
 // present, passing, and carry a non-zero timestamp; a genuinely absent record is
-// owned by the required-skill-missing blocker. Advisory (returns nil) on light.
+// owned by the required-skill-missing blocker. Enforced on every preset: a ship
+// verdict that structurally predates a selected peer never observed that peer's
+// final evidence, which is fail-open regardless of blast radius, so unlike the
+// assurance/independence attestation facets there is no light advisory carveout.
 func shipReviewSetOrderingBlockers(
 	passingSkills map[string]model.VerificationRecord,
 	reviewPassingSkills map[string]model.VerificationRecord,
 	selectedReviewSkills []string,
-	required bool,
 ) []model.ReasonCode {
-	if !required {
-		return nil
-	}
 	shipRecord, ok := passingSkills[SkillShipVerification]
 	if !ok || !shipRecord.IsPassing() || shipRecord.Timestamp.IsZero() {
 		return nil
@@ -434,6 +441,21 @@ func shipReviewSetOrderingBlockers(
 
 func shipReviewSetOrderingInvalidBlocker(detail string) model.ReasonCode {
 	return model.NewReasonCode("ship_verification_ordering_invalid", appendShipRecovery(detail))
+}
+
+// extractShipVerificationHighRiskChecks returns the guardrail high-risk check
+// results that satisfy G_ship, read ONLY from the ship-verification record. The
+// terminal gate owns the guardrail SAST safety baseline (REQ-005): a review
+// peer's record carrying a high_risk_check reference must NOT satisfy the gate,
+// so a sensitive-domain change cannot reach the ship decision unless
+// ship-verification itself recorded the passing baseline. A missing ship record
+// yields no checks, leaving G_ship blocked with high_risk_check_missing.
+func extractShipVerificationHighRiskChecks(passingSkills map[string]model.VerificationRecord) map[string]bool {
+	record, ok := passingSkills[SkillShipVerification]
+	if !ok {
+		return map[string]bool{}
+	}
+	return ExtractHighRiskChecks(map[string]model.VerificationRecord{SkillShipVerification: record})
 }
 
 // crossStageContextOwnedReviewStagesForSelectedSkills is the set of lattice

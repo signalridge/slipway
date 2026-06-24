@@ -225,7 +225,9 @@ func TestShipReviewerIndependenceBlockers(t *testing.T) {
 // TestShipReviewSetOrderingBlockers covers the single retained S3 ordering
 // invariant: ship-verification must be stamped at or after every selected review
 // peer (spec/code/independent/security). A peer stamped after ship-verification is
-// a fail-closed ship_verification_ordering_invalid blocker, advisory on light.
+// a fail-closed ship_verification_ordering_invalid blocker, enforced on every
+// preset (no light advisory carveout — the invariant is causal validity, not a
+// quality attestation).
 func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	t.Parallel()
 
@@ -241,7 +243,7 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 
 	// All selected reviewers before ship-verification -> no blocker.
 	reviewsBeforeShip := closeoutReuseReviewRecords(1, shipAt.Add(-2*time.Second), shipAt.Add(-time.Second))
-	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsBeforeShip, selectedReviewers, true),
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsBeforeShip, selectedReviewers),
 		"reviews stamped before ship-verification must pass")
 
 	// Boundary: a selected reviewer stamped at the EXACT ship-verification time
@@ -249,12 +251,12 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	// strict >), so an equal stamp is in order. Pins the >= boundary against a
 	// regression to a strict After()/Before() that would block equal timestamps.
 	reviewsAtShip := closeoutReuseReviewRecords(1, shipAt, shipAt)
-	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsAtShip, selectedReviewers, true),
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsAtShip, selectedReviewers),
 		"a reviewer stamped at the exact ship-verification time must pass (ship >= review)")
 
 	// A selected reviewer stamped after ship-verification -> blocker.
 	reviewsAfterShip := closeoutReuseReviewRecords(1, shipAt.Add(time.Second), shipAt.Add(2*time.Second))
-	blockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers, true)
+	blockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, "selected reviewer evidence")
@@ -266,7 +268,7 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 		Verdict:   model.VerificationVerdictPass,
 		Timestamp: shipAt.Add(2 * time.Second),
 	}
-	blockers = shipReviewSetOrderingBlockers(shipPassing, independentAfterShip, selectedReviewers, true)
+	blockers = shipReviewSetOrderingBlockers(shipPassing, independentAfterShip, selectedReviewers)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillIndependentReview)
@@ -277,19 +279,57 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 		Verdict:   model.VerificationVerdictPass,
 		Timestamp: shipAt.Add(2 * time.Second),
 	}
-	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewers, true),
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewers),
 		"security-review evidence is silent when the security control did not select it")
 
-	blockers = shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewersWithSecurity, true)
+	blockers = shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewersWithSecurity)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillSecurityReview)
 
 	// Genuinely-absent ship record: nothing to compare, no blocker (owned elsewhere).
-	assert.Empty(t, shipReviewSetOrderingBlockers(map[string]model.VerificationRecord{}, reviewsAfterShip, selectedReviewers, true))
+	assert.Empty(t, shipReviewSetOrderingBlockers(map[string]model.VerificationRecord{}, reviewsAfterShip, selectedReviewers))
 
-	// Light preset (required=false) is advisory even on an out-of-order chain.
-	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers, false))
+	// Always-on: the ordering invariant has NO preset carveout. The same
+	// out-of-order chain that blocks above must still block here — this is the
+	// regression guard against re-introducing a light advisory bypass, which would
+	// let a terminal ship verdict pass without having observed the final review
+	// evidence.
+	alwaysOnBlockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers)
+	require.Len(t, alwaysOnBlockers, 1)
+	assert.Equal(t, "ship_verification_ordering_invalid", alwaysOnBlockers[0].Code)
+}
+
+// TestExtractShipVerificationHighRiskChecksScopesToShipRecord pins REQ-005's
+// ownership: the guardrail SAST baseline that satisfies G_ship is read ONLY from
+// the ship-verification record. A review peer carrying the same high-risk
+// reference must NOT satisfy the gate, closing the fail-open path where any
+// passing peer could vouch for the safety baseline.
+func TestExtractShipVerificationHighRiskChecksScopesToShipRecord(t *testing.T) {
+	t.Parallel()
+
+	const baseline = "auth_authz.safety_baseline"
+	ref := "high_risk_check:" + baseline + "=pass"
+
+	// A review peer carrying the SAST token does not satisfy the ship-owned check.
+	peerOnly := map[string]model.VerificationRecord{
+		SkillIndependentReview: {Verdict: model.VerificationVerdictPass, References: []string{ref}},
+	}
+	assert.Empty(t, extractShipVerificationHighRiskChecks(peerOnly),
+		"a review peer's high-risk reference must not satisfy the ship-owned guardrail check")
+
+	// The same token on the ship-verification record is honored.
+	shipScoped := map[string]model.VerificationRecord{
+		SkillIndependentReview: {Verdict: model.VerificationVerdictPass, References: []string{ref}},
+		SkillShipVerification:  {Verdict: model.VerificationVerdictPass, References: []string{ref}},
+	}
+	checks := extractShipVerificationHighRiskChecks(shipScoped)
+	pass, ok := checks[baseline]
+	assert.True(t, ok, "ship-verification's own high-risk reference must be extracted")
+	assert.True(t, pass)
+
+	// No ship record -> no checks (G_ship stays blocked with high_risk_check_missing).
+	assert.Empty(t, extractShipVerificationHighRiskChecks(map[string]model.VerificationRecord{}))
 }
 
 // contextOriginRef builds a per-stage context-origin handle reference token.

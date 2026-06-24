@@ -236,9 +236,12 @@ The ship gate consumes the independence attestation.
 - **Terminal ordering (always-on invariant):** see Terminal Ordering Invariant
   above; a stale-ordered record fails closed with `ship_verification_ordering_invalid`.
 
-Both facets fail closed at error severity on standard/strict and are advisory on
-light. There is no bypass, force-close, or self-stamp path; the engine remains the
-sole verdict stamper.
+The presence facet fails closed at error severity on standard/strict and is
+advisory on light. The terminal ordering invariant is always-on: it fails closed
+on every preset (no light carveout), because a ship verdict stamped before a
+selected peer never observed that peer's final evidence — fail-open regardless of
+blast radius. There is no bypass, force-close, or self-stamp path; the engine
+remains the sole verdict stamper.
 
 ## Aggregate Verdict
 - `pass`: every criterion passes at Exists, Substantive, and Wired levels, the
