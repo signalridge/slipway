@@ -424,7 +424,7 @@ func TestCollectHealthReportIgnoresPersistedWavePlanDriftDuringS2(t *testing.T) 
 	assert.False(t, found, "S2 health must ignore stale persisted wave-plan cache")
 }
 
-func TestCollectHealthReportIgnoresUnreadablePersistedWavePlanDuringS2(t *testing.T) {
+func TestCollectHealthReportReportsUnreadablePersistedWavePlanAsCacheDuringS2(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
@@ -475,18 +475,81 @@ func TestCollectHealthReportIgnoresUnreadablePersistedWavePlanDuringS2(t *testin
 	report, err := CollectHealthReport(root)
 	require.NoError(t, err)
 
-	found := false
-	for _, finding := range report.Findings {
-		if finding.Category != "wave_execution" || finding.Slug != change.Slug {
-			continue
-		}
-		for _, reason := range finding.Reasons {
-			if reason.Code == "wave_plan_unreadable" {
-				found = true
-			}
+	var waveFinding *HealthFinding
+	for i := range report.Findings {
+		if report.Findings[i].Category == "wave_execution" && report.Findings[i].Slug == change.Slug {
+			waveFinding = &report.Findings[i]
+			break
 		}
 	}
-	assert.False(t, found, "S2 health must ignore unreadable persisted wave-plan cache")
+	require.NotNil(t, waveFinding, "S2 health must surface the unreadable engine-owned wave-plan cache")
+
+	codes := make([]string, 0, len(waveFinding.Reasons))
+	for _, reason := range waveFinding.Reasons {
+		codes = append(codes, reason.Code)
+	}
+	// `currentWavePlanRunSummaryVersion` fails closed on a corrupt cache, so S2
+	// materialization surfaces it. It must mirror the command surface: a corrupt
+	// engine-owned cache is a cache problem (wave_plan_unreadable + `slipway
+	// repair`), never a tasks.md-derivation failure (wave_plan_load_failed).
+	assert.Contains(t, codes, "wave_plan_unreadable",
+		"corrupt persisted cache during S2 must surface as a cache-unreadable condition")
+	assert.NotContains(t, codes, "wave_plan_load_failed",
+		"a corrupt cache must not be misattributed to a tasks.md derivation failure")
+	assert.Contains(t, waveFinding.RepairHint, "slipway repair",
+		"cache-unreadable repair hint must point at regenerating the engine-owned cache")
+}
+
+// TestCollectHealthReportReportsUnschedulableTasksAsDerivationFailureDuringS2 is
+// the REQ-002 counterpart: when tasks.md itself cannot be scheduled (not a cache
+// parse failure), S2 health must stay wave_plan_load_failed with tasks.md-oriented
+// guidance and must NOT borrow the engine-owned cache vocabulary.
+func TestCollectHealthReportReportsUnschedulableTasksAsDerivationFailureDuringS2(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("unschedulable-tasks-derivation-failure")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	// Unschedulable: t-01 depends on a task that does not exist -> derivation
+	// fails during wave planning, not a cache parse failure.
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` broken dependency
+  - depends_on: ["t-missing"]
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	var waveFinding *HealthFinding
+	for i := range report.Findings {
+		if report.Findings[i].Category == "wave_execution" && report.Findings[i].Slug == change.Slug {
+			waveFinding = &report.Findings[i]
+			break
+		}
+	}
+	require.NotNil(t, waveFinding, "an unschedulable tasks.md must surface a wave_execution finding during S2")
+
+	codes := make([]string, 0, len(waveFinding.Reasons))
+	for _, reason := range waveFinding.Reasons {
+		codes = append(codes, reason.Code)
+	}
+	assert.Contains(t, codes, "wave_plan_load_failed",
+		"an unschedulable tasks.md must stay a derivation failure")
+	assert.NotContains(t, codes, "wave_plan_unreadable",
+		"a derivation failure must not be reported as a cache-unreadable condition")
+	// The generated repair guidance stays tasks.md-oriented and must not borrow
+	// the engine-owned cache-unreadable vocabulary (REQ-002). Catalog Message and
+	// recovery prose are asserted in the model package's vocabulary test.
+	assert.Contains(t, waveFinding.RepairHint, "tasks.md")
+	assert.NotContains(t, waveFinding.RepairHint, "slipway repair")
 }
 
 func TestCollectHealthReportReportsMissingWaveRuns(t *testing.T) {

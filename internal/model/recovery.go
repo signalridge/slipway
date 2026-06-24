@@ -671,7 +671,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_load_failed": {
-		Remediation:     "Repair or rebuild the task-derived wave projection so status can load wave execution state.",
+		Remediation:     "Update tasks.md so its task IDs, dependencies, and target files form a schedulable wave plan, then run `slipway repair` to rebuild wave-plan.yaml from it.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},
@@ -686,7 +686,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"wave_plan_unreadable": {
-		Remediation:     "Rebuild wave-plan.yaml from the current tasks.md before relying on wave execution state.",
+		Remediation:     "The engine-owned wave-plan.yaml cache is corrupt or carries unsupported fields; do not hand-edit it. Regenerate it with `slipway repair`, then refresh affected execution evidence with `slipway run`.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},

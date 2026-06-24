@@ -640,7 +640,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"wave_plan_load_failed": {
 		Severity: ReasonSeverityError,
-		Message:  "Wave plan authority could not be loaded",
+		Message:  "The current tasks.md could not be converted into a schedulable wave plan; update tasks.md so its task IDs, dependencies, and target files form a valid plan",
 	},
 	"wave_plan_missing": {
 		Severity: ReasonSeverityError,
@@ -652,7 +652,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"wave_plan_unreadable": {
 		Severity: ReasonSeverityError,
-		Message:  "Wave plan authority is unreadable",
+		Message:  "The engine-owned wave-plan.yaml cache is unreadable; regenerate it with `slipway repair` (do not hand-edit it)",
 	},
 	"wave_run_missing": {
 		Severity: ReasonSeverityError,

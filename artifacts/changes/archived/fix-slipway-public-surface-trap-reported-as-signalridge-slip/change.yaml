@@ -1,0 +1,39 @@
+version: 1
+slug: fix-slipway-public-surface-trap-reported-as-signalridge-slip
+description: 'Fix Slipway public-surface trap reported as signalridge/slipway#325: `slipway next --json --diagnostics` exposes `input_context.wave_plan`, a diagnostic-only projection (cmd/next.go wavePlanView) that carries view-only fields `wave_count` and `advisories`. Its shape diverges from the persistable engine-owned cache wave-plan.yaml (model.WavePlan), which has neither field. When an agent mirrors the visible projection into wave-plan.yaml, the strict KnownFields loader (internal/state/wave_execution.go) rejects the extra fields with wave_plan_load_failed, and the remediation misleadingly tells the user to update tasks.md. Make the public surface non-misleading: distinguish the diagnostic projection from the persistable cache, and make the wave_plan_load_failed remediation point at the engine-owned wave-plan cache (regenerate via the public flow / never hand-edit) instead of tasks.md. wave-plan.yaml must stay an engine-owned, non-hand-editable cache; view-only fields stay out of it.'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-24T12:17:24.269042Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/fix-slipway-public-surface-trap-reported-as-signalridge-slip
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: e2c6742fdadfcd493328d20d18a777e09cb63c590690a688883afda0a72e664e
+        updated_at: 2026-06-24T12:21:49.438584742Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: b6e886e9cf70ba81bad1d96dbcfa1d274837df40c34f4ecc2309771949d02464
+        updated_at: 2026-06-24T12:26:21.033976769Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: f98be2531368a153c9f81b5c48111bdd06b037fb615f3aa3ef2a572bab00310d
+        updated_at: 2026-06-24T16:17:31.005308148Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/code-quality-review.yaml
+    independent-review: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/plan-audit.yaml
+    ship-verification: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-slipway-public-surface-trap-reported-as-signalridge-slip/artifacts/changes/fix-slipway-public-surface-trap-reported-as-signalridge-slip/verification/wave-orchestration.yaml

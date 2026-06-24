@@ -759,3 +759,116 @@ func TestResolveActiveChangeRefFromNestedBoundWorktreeCWD(t *testing.T) {
 		assert.Equal(t, slug, ref.Slug)
 	})
 }
+
+// TestLoadAuthoritativeWaveExecutionCacheUnreadableNamesCacheNotTasks asserts
+// that when the engine-owned wave-plan.yaml cache carries unsupported/view-only
+// fields, the surfaced error is wave_plan_unreadable and its remediation names
+// the cache + regenerate path and never tells the user to edit tasks.md
+// (REQ-001).
+func TestLoadAuthoritativeWaveExecutionCacheUnreadableNamesCacheNotTasks(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "cache unreadable points at the engine-owned wave plan cache")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [x] `+"`t-01`"+` solo wave
+  - depends_on: []
+  - target_files: ["cmd/common.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`), 0o644))
+
+	now := time.Now().UTC()
+	require.NoError(t, state.SaveExecutionSummary(root, slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        now,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"t-01"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:       "t-01",
+			Verdict:      model.TaskVerdictPass,
+			TaskKind:     model.TaskKindVerification,
+			ChangedFiles: []string{"cmd/common.go"},
+			CapturedAt:   now,
+		}},
+	}))
+
+	change, err = state.LoadChange(root, slug)
+	require.NoError(t, err)
+	// Corrupt the engine-owned cache with view-only fields the persisted schema
+	// rejects under KnownFields(true). A non-S2 state loads the cache directly.
+	cachePath := state.WavePlanPathForRead(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(cachePath), 0o755))
+	require.NoError(t, os.WriteFile(cachePath, []byte("wave_count: 1\nadvisories: [\"narrow\"]\nwaves: []\n"), 0o644))
+
+	_, err = loadAuthoritativeWaveExecution(root, change, 1, "status")
+	require.Error(t, err)
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "wave_plan_unreadable", cliErr.ErrorCode)
+	assert.Contains(t, cliErr.Remediation, "wave-plan.yaml")
+	assert.Contains(t, cliErr.Remediation, "slipway repair")
+	assert.Contains(t, cliErr.Remediation, "must not be hand-edited",
+		"cache-unreadable remediation must describe the cache as engine-owned / not hand-editable")
+	// REQ-001: the remediation may cite tasks.md as the regenerate SOURCE
+	// (`slipway repair` rebuilds the cache from tasks.md), but it must NOT
+	// instruct the user to update/edit tasks.md themselves.
+	assert.NotContains(t, cliErr.Remediation, "Update tasks.md",
+		"cache-unreadable remediation must not tell the user to update tasks.md")
+}
+
+// TestLoadAuthoritativeWaveExecutionTasksDerivationFailureKeepsTasksGuidance
+// asserts a genuine tasks.md-derivation failure (S2, unschedulable tasks.md)
+// keeps the tasks.md-oriented remediation and stays wave_plan_load_failed
+// (REQ-002).
+func TestLoadAuthoritativeWaveExecutionTasksDerivationFailureKeepsTasksGuidance(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "tasks derivation failure keeps tasks guidance")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	// Unschedulable: t-01 depends on a task that does not exist -> derivation
+	// fails (not a cache parse failure).
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` broken dependency
+  - depends_on: ["t-missing"]
+  - target_files: ["cmd/common.go"]
+  - task_kind: code
+  - covers: [REQ-002]
+`), 0o644))
+
+	change, err = state.LoadChange(root, slug)
+	require.NoError(t, err)
+
+	_, err = loadAuthoritativeWaveExecution(root, change, 1, "implement")
+	require.Error(t, err)
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "wave_plan_load_failed", cliErr.ErrorCode)
+	assert.Contains(t, cliErr.Remediation, "tasks.md",
+		"a genuine tasks.md-derivation failure must keep tasks.md-oriented guidance")
+}

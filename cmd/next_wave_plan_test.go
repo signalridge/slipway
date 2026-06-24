@@ -267,11 +267,15 @@ func TestNarrowingAdvisoriesAreViewOnlyAndExcludedFromPersistedPlan(t *testing.T
 	require.NoError(t, err)
 	assert.NotContains(t, string(persistedJSON), "advisories",
 		"the persisted wave-plan model must not carry advisories")
+	assert.NotContains(t, string(persistedJSON), "wave_count",
+		"the persisted wave-plan model must not carry the view-only wave_count field")
 
 	rawYAML, err := os.ReadFile(state.WavePlanPathForRead(root, change.Slug))
 	require.NoError(t, err)
 	assert.NotContains(t, string(rawYAML), "advisories",
 		"wave-plan.yaml must not persist view-only narrowing advisories")
+	assert.NotContains(t, string(rawYAML), "wave_count",
+		"wave-plan.yaml must not persist the view-only wave_count field")
 	// Freshness hashes are computed and persisted before the view layer runs;
 	// none of them is empty and none is the advisory text.
 	assert.NotEmpty(t, plan.TasksPlanHash)

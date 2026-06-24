@@ -315,6 +315,39 @@ func TestWaveReasonCodesCarryRemediation(t *testing.T) {
 	}
 }
 
+// TestWavePlanLoadFailedVocabularyStaysTasksOriented locks the shared
+// reason/recovery vocabulary for wave_plan_load_failed to its only producer — a
+// tasks.md-derivation failure — so it never borrows the cache-unreadable story
+// that belongs solely to wave_plan_unreadable. Without this, a genuine
+// unschedulable-tasks.md health finding would carry recovery text telling the
+// user the engine-owned cache is corrupt and to run `slipway repair` (REQ-002).
+func TestWavePlanLoadFailedVocabularyStaysTasksOriented(t *testing.T) {
+	t.Parallel()
+
+	loadFailed, ok := canonicalReasonDefinitions["wave_plan_load_failed"]
+	require.True(t, ok)
+	assert.Contains(t, loadFailed.Message, "tasks.md",
+		"wave_plan_load_failed describes a tasks.md derivation failure")
+	assert.NotContains(t, loadFailed.Message, "engine-owned")
+	assert.NotContains(t, loadFailed.Message, "unreadable")
+	assert.NotContains(t, loadFailed.Message, "hand-edit")
+
+	loadRecovery, ok := blockerRemediations["wave_plan_load_failed"]
+	require.True(t, ok)
+	assert.Contains(t, loadRecovery.Remediation, "tasks.md")
+	assert.NotContains(t, loadRecovery.Remediation, "engine-owned")
+	assert.NotContains(t, loadRecovery.Remediation, "must not be hand-edited")
+
+	// The cache-unreadable story stays solely on wave_plan_unreadable.
+	unreadable, ok := canonicalReasonDefinitions["wave_plan_unreadable"]
+	require.True(t, ok)
+	assert.Contains(t, unreadable.Message, "wave-plan.yaml")
+	assert.Contains(t, unreadable.Message, "hand-edit")
+	unreadableRecovery, ok := blockerRemediations["wave_plan_unreadable"]
+	require.True(t, ok)
+	assert.Contains(t, unreadableRecovery.Remediation, "hand-edit")
+}
+
 func TestRequiredSkillStaleCarriesRemediation(t *testing.T) {
 	t.Parallel()
 
